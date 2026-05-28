@@ -183,6 +183,8 @@ const files = reactive({
 const circularConservation = reactive({
   enabled: false,
   source: 'losat',
+  losat_program: 'blastn',
+  subject_gencode: 1,
   reference: 'auto',
   labels: '',
   series: [],
@@ -337,6 +339,7 @@ const form = reactive({
 
 // Extended Advanced Config
 const adv = reactive({
+  rich_feature_popup: false,
   features: ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'repeat_region'],
   feature_shapes: { ...defaultFeatureShapes },
   window_size: null,
@@ -561,6 +564,14 @@ const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
 const clickedFeaturePos = reactive({ x: 0, y: 0 });
 const featurePopupRef = ref(null);
 const featurePopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
+const featurePopupSize = reactive({ width: 0, height: 0 });
+const featurePopupResize = reactive({
+  active: false,
+  startX: 0,
+  startY: 0,
+  startWidth: 0,
+  startHeight: 0
+});
 const clickedLabel = ref(null); // { key, text, sourceText, featureId }
 const clickedLabelPos = reactive({ x: 0, y: 0 });
 
@@ -940,6 +951,8 @@ export const state = {
   clickedFeaturePos,
   featurePopupRef,
   featurePopupDrag,
+  featurePopupSize,
+  featurePopupResize,
   clickedLabel,
   clickedLabelPos,
   colorScopeDialog,

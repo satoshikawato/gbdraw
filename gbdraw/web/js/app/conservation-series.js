@@ -44,6 +44,11 @@ export const normalizeConservationSeriesColor = (value, index) => {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
 };
 
+const normalizePositiveInteger = (value, fallback = 1) => {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback;
+};
+
 const fileSignature = (file, index) => {
   const fileName = String(file?.name || `source_${Number(index) + 1}`).trim();
   const size = Number.isFinite(Number(file?.size)) ? Number(file.size) : 0;
@@ -76,7 +81,8 @@ const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = n
     fileName: descriptor.fileName,
     sourceIndex: descriptor.sourceIndex,
     label: String(rawLabel || descriptor.defaultLabel).trim() || descriptor.defaultLabel,
-    color: normalizeConservationSeriesColor(previousEntry?.color, orderIndex)
+    color: normalizeConservationSeriesColor(previousEntry?.color, orderIndex),
+    losat_gencode: normalizePositiveInteger(previousEntry?.losat_gencode, 1)
   };
 };
 
@@ -159,6 +165,7 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
       ...descriptor,
       label: String(entry.label || descriptor.defaultLabel).trim() || descriptor.defaultLabel,
       color: normalizeConservationSeriesColor(entry.color, entries.length),
+      losat_gencode: normalizePositiveInteger(entry.losat_gencode, 1),
       orderIndex: entries.length
     });
   });
@@ -171,6 +178,7 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
       ...descriptor,
       label: String(fallbackLabel || descriptor.defaultLabel).trim() || descriptor.defaultLabel,
       color: normalizeConservationSeriesColor(null, entries.length),
+      losat_gencode: 1,
       orderIndex: entries.length
     });
   });

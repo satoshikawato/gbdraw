@@ -171,14 +171,60 @@
         .basic-settings .form-input.text-xs { font-size: 10px; }
         .feature-popup {
             width: min(720px, calc(100vw - 24px));
+            min-width: min(360px, calc(100vw - 24px));
+            min-height: min(220px, calc(100vh - 24px));
             max-height: calc(100vh - 24px);
-            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .feature-popup--simple {
+            width: min(440px, calc(100vw - 24px));
+            min-width: min(300px, calc(100vw - 24px));
+        }
+        .feature-popup-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            padding: 0 0.25rem 1.5rem 0;
+        }
+        .feature-popup-resize-handle {
+            position: absolute;
+            right: 0.25rem;
+            bottom: 0.25rem;
+            width: 1.5rem;
+            height: 1.5rem;
+            border: 0;
+            border-radius: 0.45rem;
+            background: rgba(248, 250, 252, 0.92);
+            color: #64748b;
+            cursor: nwse-resize;
+            z-index: 1;
+        }
+        .feature-popup-resize-handle::before {
+            content: "";
+            position: absolute;
+            right: 0.35rem;
+            bottom: 0.35rem;
+            width: 0.75rem;
+            height: 0.75rem;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            box-shadow: 4px 4px 0 -2px currentColor;
+            opacity: 0.75;
+        }
+        .feature-popup-resize-handle:hover {
+            background: #eff6ff;
+            color: #2563eb;
         }
         .feature-popup-grid {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             gap: 0.875rem;
             align-items: start;
+        }
+        .feature-popup--simple .feature-popup-grid {
+            grid-template-columns: minmax(0, 1fr);
         }
         @media (max-width: 760px) {
             .feature-popup-grid {
@@ -745,10 +791,10 @@
 
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-arrows-left-right"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSAT blastn comparison FASTA. Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
+                        <summary><i class="ph ph-arrows-left-right"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison FASTA. Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600"> LOSAT blastn</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600"> Run LOSAT</label>
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" class="text-blue-600"> Upload BLAST</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
@@ -768,14 +814,27 @@
                                 </div>
                             </div>
                             <div v-else class="space-y-2">
+                                <div>
+                                    <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Mode</div>
+                                    <div class="flex gap-4 text-sm font-bold">
+                                        <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.losat_program" value="blastn" class="text-blue-600"> LOSATN</label>
+                                        <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.losat_program" value="tblastx" class="text-blue-600"> TLOSATX</label>
+                                    </div>
+                                </div>
                                 <div class="grid grid-cols-1 gap-1">
-                                    <div>
-                                        <label class="text-[9px] flex items-center">Task <help-tip text="Browser LOSAT pairwise comparisons currently use blastn. The displayed circular sequence is the BLAST subject."></help-tip></label>
+                                    <div v-if="circularConservation.losat_program === 'blastn'">
+                                        <label class="text-[9px] flex items-center">Task <help-tip text="Browser LOSATN pairwise comparisons use the displayed circular sequence as the BLAST subject."></help-tip></label>
                                         <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
                                             <option value="megablast">megablast</option>
                                             <option value="blastn">blastn</option>
                                             <option value="dc-megablast">dc-megablast</option>
                                         </select>
+                                    </div>
+                                    <div v-else class="grid grid-cols-1 gap-1.5">
+                                        <div>
+                                            <label class="text-[9px] flex items-center">Reference gencode <help-tip text="Translation table for the displayed circular sequence used by TLOSATX."></help-tip></label>
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="flex gap-2">
@@ -787,6 +846,51 @@
                                     </button>
                                 </div>
                             </div>
+                            <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
+                                <label class="text-[9px] flex items-center">Series names <help-tip text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></label>
+                                <textarea v-model="circularConservation.labels" rows="2" class="form-input px-1 py-0.5 text-xs" placeholder="Ring A&#10;Ring B"></textarea>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                    {{ circularConservation.source === 'losat' ? 'LOSAT Settings' : 'BLAST Settings' }}
+                                    <help-tip :text="circularConservation.source === 'losat' ? 'Filter browser LOSAT alignments before drawing comparison rings.' : 'Filter uploaded BLAST alignments before drawing comparison rings.'"></help-tip>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Bitscore</label>
+                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">E-value</label>
+                                        <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Minimum Identity</label>
+                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Minimum Length</label>
+                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Comparison Track Settings</div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Ring Width</label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Ring Gap</label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                </div>
+                                <div v-if="circularConservationLayoutWarning" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">
+                                    <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                                    <span>{{ circularConservationLayoutWarning }}</span>
+                                </div>
+                            </div>
                             <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
                                 <label v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">Comparison FASTA files <help-tip text="Add one comparison FASTA per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order."></help-tip></label>
                                 <label v-else class="text-[9px] flex items-center">Series <help-tip text="Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order."></help-tip></label>
@@ -795,6 +899,10 @@
                                     <div class="min-w-0 space-y-0.5">
                                         <input type="text" v-model="circularConservation.series[row.index].label" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs">
                                         <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
+                                        <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
+                                            <label class="text-[9px] text-slate-500 truncate">Subject gencode</label>
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6">
+                                        </div>
                                     </div>
                                     <div class="flex items-center gap-0.5">
                                         <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!canMoveCircularConservationSeries(row.index, -1)" title="Move series outward"><i class="ph ph-arrow-up"></i></button>
@@ -813,42 +921,6 @@
                                 <button v-if="circularConservation.source === 'losat'" type="button" class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
                                     <i class="ph ph-plus"></i> Add Seq
                                 </button>
-                            </div>
-                            <div v-else-if="circularConservation.source === 'upload'">
-                                <label class="text-[9px] flex items-center">Series names <help-tip text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></label>
-                                <textarea v-model="circularConservation.labels" rows="2" class="form-input px-1 py-0.5 text-xs" placeholder="Ring A&#10;Ring B"></textarea>
-                            </div>
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <div>
-                                    <label class="input-label text-[10px]">Ring Width</label>
-                                    <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Ring Gap</label>
-                                    <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                            </div>
-                            <div v-if="circularConservationLayoutWarning" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">
-                                <i class="ph ph-warning-circle text-sm mt-0.5"></i>
-                                <span>{{ circularConservationLayoutWarning }}</span>
-                            </div>
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <div>
-                                    <label class="input-label text-[10px]">Bitscore</label>
-                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">E-value</label>
-                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Minimum Identity</label>
-                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Minimum Length</label>
-                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
-                                </div>
                             </div>
                         </div>
                     </details>
@@ -874,6 +946,14 @@
                                 </div>
                             </div>
                         </template>
+
+                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none rounded border border-slate-200 bg-slate-50 px-2 py-1.5">
+                            <input type="checkbox" v-model="adv.rich_feature_popup" class="form-checkbox">
+                            <span class="inline-flex items-center gap-1">
+                                Rich Feature Popup
+                                <help-tip text="When enabled, feature clicks show Details, Qualifiers, and Sequence tabs. Disable for the compact edit-only popup."></help-tip>
+                            </span>
+                        </label>
 
                     </div>
                 </div>
@@ -2247,8 +2327,11 @@
                     <div v-if="clickedFeature"
                          ref="featurePopupRef"
                          @mousedown="startFeaturePopupDrag"
-                         class="fixed z-50 feature-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
-                         :style="{ top: clickedFeaturePos.y + 'px', left: clickedFeaturePos.x + 'px' }">
+                         :class="[
+                           'fixed z-50 feature-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4',
+                           adv.rich_feature_popup ? '' : 'feature-popup--simple'
+                         ]"
+                         :style="featurePopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
                             <div class="w-4 h-4 rounded mt-1" :style="{ backgroundColor: clickedFeature.color }"></div>
                             <div class="min-w-0">
@@ -2272,7 +2355,46 @@
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
-                        <div class="feature-popup-grid">
+                        <div v-if="adv.rich_feature_popup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
+                            <button type="button"
+                                    @click="clickedFeature.activeTab = 'edit'"
+                                    :class="[
+                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      clickedFeature.activeTab === 'edit' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    ]">
+                                <i class="ph ph-sliders-horizontal shrink-0"></i>
+                                <span class="truncate">Edit</span>
+                            </button>
+                            <button type="button"
+                                    @click="clickedFeature.activeTab = 'details'"
+                                    :class="[
+                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      clickedFeature.activeTab === 'details' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    ]">
+                                <i class="ph ph-identification-card shrink-0"></i>
+                                <span class="truncate">Details</span>
+                            </button>
+                            <button type="button"
+                                    @click="clickedFeature.activeTab = 'qualifiers'"
+                                    :class="[
+                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      clickedFeature.activeTab === 'qualifiers' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    ]">
+                                <i class="ph ph-list-bullets shrink-0"></i>
+                                <span class="truncate">Qualifiers</span>
+                            </button>
+                            <button type="button"
+                                    @click="clickedFeature.activeTab = 'sequence'"
+                                    :class="[
+                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      clickedFeature.activeTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    ]">
+                                <i class="ph ph-text-columns shrink-0"></i>
+                                <span class="truncate">Sequence</span>
+                            </button>
+                        </div>
+                        <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
+                        <div v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="feature-popup-grid">
                         <div class="space-y-3">
                         <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 gap-2">
                             <button @click="openClickedOrthogroupInEditor"
@@ -2509,6 +2631,117 @@
                         </div>
                         </div>
                         </div>
+                        <div v-else-if="adv.rich_feature_popup && clickedFeature.activeTab === 'details'" class="space-y-3" data-nodrag="true">
+                            <div class="max-h-[24rem] overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
+                                <div v-for="row in clickedFeature.detailRows"
+                                     :key="`feature-detail-${row.key}`"
+                                     class="grid grid-cols-[7rem_minmax(0,1fr)_2rem] gap-2 items-start px-3 py-2 border-b border-slate-100 last:border-b-0">
+                                    <div class="text-[10px] font-medium uppercase text-slate-400">{{ row.label }}</div>
+                                    <div class="font-mono text-xs text-slate-700 break-all">{{ row.value }}</div>
+                                    <button type="button"
+                                            @click="copyText(row.value)"
+                                            class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                                            title="Copy">
+                                        <i class="ph ph-copy"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="clickedFeature.locationParts.length > 0">
+                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Location parts</div>
+                                <div class="max-h-32 overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
+                                    <div v-for="part in clickedFeature.locationParts"
+                                         :key="`feature-location-part-${part.index}`"
+                                         class="grid grid-cols-[minmax(0,1fr)_4rem_2rem] gap-2 items-center px-3 py-2 border-b border-slate-100 last:border-b-0">
+                                        <div class="font-mono text-xs text-slate-700 break-all">{{ part.display }}</div>
+                                        <div class="text-xs text-slate-500 text-right">{{ part.strand || '-' }}</div>
+                                        <button type="button"
+                                                @click="copyText(part.copyText)"
+                                                class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                                                title="Copy location part">
+                                            <i class="ph ph-copy"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else-if="adv.rich_feature_popup && clickedFeature.activeTab === 'qualifiers'" class="space-y-3" data-nodrag="true">
+                            <div v-if="clickedFeature.qualifierRows.length > 0" class="max-h-[28rem] overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
+                                <div v-for="row in clickedFeature.qualifierRows"
+                                     :key="`feature-qualifier-${row.key}`"
+                                     class="border-b border-slate-100 last:border-b-0">
+                                    <div class="bg-slate-50 px-3 py-2 flex items-center gap-2">
+                                        <div class="font-mono text-xs font-semibold text-slate-600 truncate">{{ row.key }}</div>
+                                        <span class="text-[10px] text-slate-400">{{ row.values.length }}</span>
+                                        <button type="button"
+                                                @click="copyText(row.copyText)"
+                                                class="ml-auto w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                                                title="Copy qualifier value">
+                                            <i class="ph ph-copy"></i>
+                                        </button>
+                                    </div>
+                                    <pre class="px-3 py-2 max-h-32 overflow-auto custom-scrollbar font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ row.displayValue }}</pre>
+                                </div>
+                            </div>
+                            <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
+                                No qualifiers available.
+                            </div>
+                        </div>
+                        <div v-else-if="adv.rich_feature_popup && clickedFeature.activeTab === 'sequence'" class="space-y-3" data-nodrag="true">
+                            <div v-if="clickedFeature.sequenceWarnings.length > 0" class="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2">
+                                <div v-for="warning in clickedFeature.sequenceWarnings"
+                                     :key="`feature-sequence-warning-${warning}`"
+                                     class="text-xs text-amber-700">
+                                    {{ warning }}
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Nucleotide</div>
+                                    <button type="button"
+                                            @click="copyText(clickedFeature.nucleotideSequence)"
+                                            :disabled="!clickedFeature.nucleotideSequence"
+                                            :class="[
+                                              'w-7 h-7 rounded-md flex items-center justify-center',
+                                              clickedFeature.nucleotideSequence ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                            ]"
+                                            title="Copy nucleotide sequence">
+                                        <i class="ph ph-copy"></i>
+                                    </button>
+                                </div>
+                                <pre v-if="clickedFeature.nucleotideSequence"
+                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.nucleotideSequence }}</pre>
+                                <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
+                                    No nucleotide sequence available.
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Amino acid</div>
+                                    <button type="button"
+                                            @click="copyText(clickedFeature.aminoAcidSequence)"
+                                            :disabled="!clickedFeature.aminoAcidSequence"
+                                            :class="[
+                                              'w-7 h-7 rounded-md flex items-center justify-center',
+                                              clickedFeature.aminoAcidSequence ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                            ]"
+                                            title="Copy amino acid sequence">
+                                        <i class="ph ph-copy"></i>
+                                    </button>
+                                </div>
+                                <pre v-if="clickedFeature.aminoAcidSequence"
+                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.aminoAcidSequence }}</pre>
+                                <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
+                                    No amino acid sequence available.
+                                </div>
+                            </div>
+                        </div>
+                        </div>
+                        <button type="button"
+                                class="feature-popup-resize-handle"
+                                @mousedown.stop.prevent="startFeaturePopupResize"
+                                title="Drag to resize"
+                                aria-label="Resize popup"
+                                data-nodrag="true"></button>
                     </div>
 
                     <!-- Label Text Scope Dialog -->

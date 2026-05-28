@@ -108,6 +108,77 @@ def test_index_includes_preprint_citation() -> None:
     assert PREPRINT_DOI in index_html
 
 
+def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    helper_source = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert "rich_feature_popup: false" in state_source
+    assert 'v-model="adv.rich_feature_popup"' in index_html
+    assert "Rich Feature Popup" in index_html
+    assert "feature-popup--simple" in index_html
+    assert "!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" in index_html
+    assert "adv?.rich_feature_popup === false ? 440 : 720" in svg_actions_source
+    assert "state.adv.rich_feature_popup = data?.adv?.rich_feature_popup === true;" in config_source
+    assert "clickedFeature.activeTab" in index_html
+    assert "Details" in index_html
+    assert "Qualifiers" in index_html
+    assert "Sequence" in index_html
+    assert "ph ph-copy" in index_html
+    assert "copyText(row.value)" in index_html
+    assert "qualifierRows" in svg_actions_source
+    assert "locationParts" in svg_actions_source
+    assert "nucleotideSequence" in svg_actions_source
+    assert "aminoAcidSequence" in svg_actions_source
+    assert "label: 'SVG ID'" not in svg_actions_source
+    assert "label: 'Record index'" not in svg_actions_source
+    assert "label: 'Strand'" not in svg_actions_source
+    assert "navigator.clipboard?.writeText" in app_setup_source
+    assert "location_parts" in helper_source
+    assert "nucleotide_sequence" in helper_source
+    assert "amino_acid_sequence" in helper_source
+    assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
+
+
+def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_exports() -> None:
+    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+
+    assert "gbdraw-interactive-feature-popup-v1" in export_source
+    assert "gbdraw-interactive-feature-metadata" in export_source
+    assert "gbdraw-interactive-feature-script" in export_source
+    assert "data-gbdraw-interactive-feature" in export_source
+    assert "state.adv.rich_feature_popup === false" in export_source
+    assert "buildStandaloneFeaturePayloads(svg)" in export_source
+    assert "nucleotide_sequence" in export_source
+    assert "amino_acid_sequence" in export_source
+    assert "getVisibleViewRect()" in export_source
+    assert "popupCssWidth" in export_source
+    assert "getPopupCssMetrics" in export_source
+    assert "var effectiveScaleX = safeScaleX * metrics.zoomScale;" in export_source
+    assert "var marginCss = metrics.margin;" in export_source
+    assert "var dragZoomScale = getBrowserZoomScale(getViewportClientRect());" in export_source
+    assert "--gfi-text-scale" in export_source
+    assert "getPopupTextScale" in export_source
+    assert "root.style.setProperty('--gfi-text-scale'" in export_source
+    assert "gbdraw-interactive-feature-glow" in export_source
+    assert "gbdraw-interactive-feature--hover" in export_source
+    assert "activePopupDrag" in export_source
+    assert 'data-drag-handle="true"' in export_source
+    assert "function startPopupDrag(event)" in export_source
+    assert "setFeatureHighlight" in export_source
+    assert "svg.addEventListener('mouseover'" in export_source
+    assert "['SVG ID'" not in export_source
+    assert "['Record index'" not in export_source
+    assert "['Strand'" not in export_source
+    assert "root.style.transform = 'scale('" in export_source
+    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
+    assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString();" in export_source
+
+
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "static.cloudflareinsights.com" not in index_html
@@ -302,6 +373,9 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "const circularConservation = reactive" in state_source
     assert "c_conservation_blasts: []" in state_source
     assert "c_conservation_fastas: []" in state_source
+    assert "losat_program: 'blastn'" in state_source
+    assert "subject_gencode: 1" in state_source
+    assert "losat_gencode: normalizePositiveInteger(entry.losat_gencode, 1)" in config_source
     assert "series: []" in state_source
     assert "'data-source-index'" in state_source
     assert "'data-reference-record-id'" in state_source
@@ -314,9 +388,16 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "removeCircularConservationSource" in app_setup_source
     assert "circularConservation: state.circularConservation" in config_source
     assert "normalizeCircularConservationSeries" in config_source
+    assert "normalizeCircularConservationLosatProgram" in config_source
     assert "c_conservation_blasts: await serializeFileArray" in config_source
     assert "normalizeCircularConservationReference" in config_source
     assert "Pairwise Comparisons" in index_html
+    assert 'v-model="circularConservation.losat_program"' in index_html
+    assert 'v-model.number="circularConservation.series[row.index].losat_gencode"' in index_html
+    assert 'v-model.number="circularConservation.query_gencode"' not in index_html
+    assert "Default subject gencode" not in index_html
+    assert "comparisonEntry?.losat_gencode" in run_source
+    assert "TLOSATX" in index_html
     assert "Conservation Rings" not in index_html
     assert 'v-model="circularConservation.enabled"' not in index_html
     assert "BLAST outfmt 6/7 files" in index_html
@@ -330,6 +411,8 @@ def test_web_wires_circular_conservation_options() -> None:
     assert '"conservation_colors": "--conservation_colors" in _source' in run_source
     assert "runCircularLosatConservation" in run_source
     assert "buildConservationSeries" in run_source
+    assert "program: circularLosatProgram" in run_source
+    assert "circularLosatProgram === 'tblastx'" in run_source
     assert "args.push('--conservation_colors', ...colors);" in run_source
     assert "args.push('--conservation_blast', ...conservationBlastPaths);" in run_source
     assert "args.push('--conservation_reference', conservationReference);" in run_source

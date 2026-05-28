@@ -17,7 +17,9 @@ export const createFeatureSvgActions = ({
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
-    skipCaptureBaseConfig
+    featurePopupSize,
+    skipCaptureBaseConfig,
+    adv
   } = state;
   const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
   const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -46,9 +48,69 @@ export const createFeatureSvgActions = ({
   };
 
   const buildFeatureLocation = (feat) => {
-    const startPos = Number.isFinite(feat.start) ? feat.start + 1 : feat.start;
-    const endPos = Number.isFinite(feat.end) ? feat.end : feat.end;
+    const startNumeric = Number(feat.start);
+    const endNumeric = Number(feat.end);
+    const startPos = Number.isFinite(startNumeric) ? startNumeric + 1 : feat.start;
+    const endPos = Number.isFinite(endNumeric) ? endNumeric : feat.end;
     return `${startPos}..${endPos}${feat.strand ? ` (${feat.strand})` : ''}`;
+  };
+
+  const normalizeStringArray = (value) => {
+    if (Array.isArray(value)) {
+      return value
+        .filter((item) => item !== null && item !== undefined)
+        .map((item) => String(item));
+    }
+    if (value === null || value === undefined || value === '') return [];
+    return [String(value)];
+  };
+
+  const normalizeQualifierRows = (qualifiers) => {
+    if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) return [];
+    return Object.entries(qualifiers)
+      .map(([key, value]) => {
+        const values = normalizeStringArray(value);
+        return {
+          key: String(key || ''),
+          values,
+          copyText: values.join('\n'),
+          displayValue: values.join('\n')
+        };
+      })
+      .filter((row) => row.key && row.values.length > 0)
+      .sort((left, right) => left.key.localeCompare(right.key));
+  };
+
+  const normalizeLocationParts = (parts) => {
+    if (!Array.isArray(parts)) return [];
+    return parts
+      .map((part, index) => {
+        const startValue = Number(part?.start);
+        const endValue = Number(part?.end);
+        const display = String(part?.display || '').trim() ||
+          `${Number.isFinite(startValue) ? startValue + 1 : ''}..${Number.isFinite(endValue) ? endValue : ''}`;
+        return {
+          index,
+          start: Number.isFinite(startValue) ? startValue : null,
+          end: Number.isFinite(endValue) ? endValue : null,
+          strand: String(part?.strand || '').trim(),
+          display,
+          copyText: display
+        };
+      })
+      .filter((part) => part.display && part.display !== '..');
+  };
+
+  const buildDetailRows = ({ defaultLabel, feat, locationText }) => {
+    const rows = [
+      { key: 'label', label: 'Label', value: defaultLabel },
+      { key: 'record_id', label: 'Record ID', value: feat.record_id },
+      { key: 'type', label: 'Feature type', value: feat.type },
+      { key: 'location', label: 'Location', value: locationText }
+    ];
+    return rows
+      .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
+      .filter((row) => row.value !== '');
   };
 
   const getFeatureElements = (svg, svgId) => {
@@ -85,6 +147,12 @@ export const createFeatureSvgActions = ({
     const defaultLabel = getFeatureCaption(feat);
     const existingOverride = featureColorOverrides[feat.id];
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
+    const locationText = buildFeatureLocation(feat);
+    const qualifierRows = normalizeQualifierRows(feat.qualifiers);
+    const locationParts = normalizeLocationParts(feat.location_parts);
+    const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
+    const nucleotideSequence = String(feat.nucleotide_sequence || '');
+    const aminoAcidSequence = String(feat.amino_acid_sequence || '');
 
     const currentColor = resolveColorToHex(
       featureElement?.getAttribute('fill') || getFeatureColor(feat)
@@ -98,9 +166,23 @@ export const createFeatureSvgActions = ({
       id: feat.id,
       svg_id: feat.svg_id,
       label: defaultLabel,
-      location: buildFeatureLocation(feat),
+      location: locationText,
       color: currentColor,
       feat,
+      activeTab: 'edit',
+      recordId: String(feat.record_id || ''),
+      recordIdx: Number.isInteger(Number(feat.record_idx)) ? Number(feat.record_idx) : null,
+      featureType: String(feat.type || ''),
+      start: Number.isFinite(Number(feat.start)) ? Number(feat.start) : null,
+      end: Number.isFinite(Number(feat.end)) ? Number(feat.end) : null,
+      strand: String(feat.strand || ''),
+      qualifiers: feat.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {},
+      qualifierRows,
+      locationParts,
+      sequenceWarnings,
+      nucleotideSequence,
+      aminoAcidSequence,
+      detailRows: buildDetailRows({ defaultLabel, feat, locationText }),
       legendName: effectiveCaption,
       appliedLegendName: effectiveCaption,
       strokeColor: currentStrokeColor,
@@ -133,8 +215,12 @@ export const createFeatureSvgActions = ({
     const featureElements = getFeatureElements(svg, feat.svg_id);
     const featureElement = featureElements[0] || null;
     clickedFeature.value = buildClickedFeaturePayload(feat, featureElement);
+    if (featurePopupSize) {
+      featurePopupSize.width = 0;
+      featurePopupSize.height = 0;
+    }
 
-    const popupPosition = getPopupPosition(eventLike);
+    const popupPosition = getPopupPosition(eventLike, adv?.rich_feature_popup === false ? 440 : 720);
     clickedFeaturePos.x = popupPosition.x;
     clickedFeaturePos.y = popupPosition.y;
     if (typeof onFeaturePopupOpened === 'function') {

@@ -50,6 +50,23 @@ const cloneStringMap = (source) => {
   return cloned;
 };
 
+const sanitizeExtractedFeatureForSession = (feature) => {
+  if (!feature || typeof feature !== 'object' || Array.isArray(feature)) return feature;
+  const {
+    nucleotide_sequence: _nucleotideSequence,
+    amino_acid_sequence: _aminoAcidSequence,
+    nucleotideSequence: _nucleotideSequenceAlias,
+    aminoAcidSequence: _aminoAcidSequenceAlias,
+    ...rest
+  } = feature;
+  return rest;
+};
+
+const sanitizeExtractedFeaturesForSession = (features) => {
+  if (!Array.isArray(features)) return [];
+  return features.map((feature) => sanitizeExtractedFeatureForSession(feature));
+};
+
 const replaceStringMap = (target, source) => {
   Object.keys(target).forEach((key) => delete target[key]);
   Object.entries(cloneStringMap(source)).forEach(([key, value]) => {
@@ -284,6 +301,11 @@ const normalizeCircularConservationSource = (value) => {
   return normalized === 'upload' ? 'upload' : 'losat';
 };
 
+const normalizeCircularConservationLosatProgram = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'tblastx' ? 'tblastx' : 'blastn';
+};
+
 const normalizeCircularConservationReference = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['auto', 'query', 'subject'].includes(normalized) ? normalized : 'auto';
@@ -308,7 +330,8 @@ const normalizeCircularConservationSeries = (series) => {
       fileName: String(entry.fileName || ''),
       sourceIndex: Number.isInteger(Number(entry.sourceIndex)) ? Number(entry.sourceIndex) : index,
       label: String(entry.label ?? entry.name ?? ''),
-      color: normalizeHexColor(entry.color, '#4e79a7')
+      color: normalizeHexColor(entry.color, '#4e79a7'),
+      losat_gencode: normalizePositiveInteger(entry.losat_gencode, 1)
     }));
 };
 
@@ -459,6 +482,7 @@ const restoreSessionCircularLayoutCaches = (ui = {}) => {
 const applyConfigData = (data) => {
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
+  state.adv.rich_feature_popup = data?.adv?.rich_feature_popup === true;
   if (state.adv.label_placement === 'on_feature') {
     state.adv.label_placement = 'above_feature';
   }
@@ -741,6 +765,10 @@ const applyConfigData = (data) => {
   }
   state.circularConservation.enabled = state.circularConservation.enabled === true;
   state.circularConservation.source = normalizeCircularConservationSource(state.circularConservation.source);
+  state.circularConservation.losat_program = normalizeCircularConservationLosatProgram(
+    state.circularConservation.losat_program
+  );
+  state.circularConservation.subject_gencode = normalizePositiveInteger(state.circularConservation.subject_gencode, 1);
   state.circularConservation.reference = normalizeCircularConservationReference(state.circularConservation.reference);
   state.circularConservation.labels = String(state.circularConservation.labels || '');
   state.circularConservation.series.splice(
@@ -1264,7 +1292,7 @@ export const exportSession = async (titleOverride = null) => {
     files: await serializeFiles(),
     results: serializeResults(),
     features: {
-      extractedFeatures: state.extractedFeatures.value,
+      extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),
