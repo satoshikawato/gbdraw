@@ -128,6 +128,13 @@ const normalizeOptionalPlacement = (value) => {
   return normalizePlacement(value);
 };
 
+const normalizeTrackIndex = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < 0) return null;
+  return numeric;
+};
+
 const normalizeTickLabelLayout = (value, fallback = DEFAULT_TICK_LABEL_LAYOUT) => {
   const text = String(value || fallback).trim().toLowerCase();
   return TICK_LABEL_LAYOUTS.includes(text) ? text : fallback;
@@ -256,6 +263,19 @@ const slotHasManualGeometry = (slot) => (
 const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
   return { ...params };
+};
+
+const depthFileSlotsFromValue = (value) => {
+  if (Array.isArray(value)) return value.slice();
+  return value ? [value] : [];
+};
+
+const circularDepthTrackCountForState = (state) => {
+  if (!Boolean(state?.form?.show_depth)) return 0;
+  const fileCount = depthFileSlotsFromValue(state?.files?.c_depth).length;
+  if (fileCount > 0) return fileCount;
+  const configCount = Array.isArray(state?.adv?.depth_tracks) ? state.adv.depth_tracks.length : 0;
+  return Math.max(1, configCount);
 };
 
 const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);
@@ -483,6 +503,7 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
 export const createDefaultCircularTrackSlots = ({
   nt = 'GC',
   showDepth = false,
+  depthTrackCount = 1,
   showGc = true,
   showSkew = true,
   preset = 'tuckin'
@@ -502,7 +523,22 @@ export const createDefaultCircularTrackSlots = ({
       }
     })
   ];
-  if (showDepth) slots.push(makeSlot({ id: 'depth', renderer: 'depth' }));
+  if (showDepth) {
+    const count = Math.max(1, Number(depthTrackCount) || 1);
+    if (count === 1) {
+      slots.push(makeSlot({ id: 'depth', renderer: 'depth' }));
+    } else {
+      for (let index = 0; index < count; index += 1) {
+        slots.push(makeSlot({
+          id: `depth_${index + 1}`,
+          renderer: 'depth',
+          params: {
+            track_index: index
+          }
+        }));
+      }
+    }
+  }
   if (showGc) {
     slots.push(makeSlot({
       id: 'gc_content',
@@ -539,6 +575,11 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
     params.tick_label_layout = DEFAULT_TICK_LABEL_LAYOUT;
   } else if (normalizedRenderer === 'features' && side !== null) {
     params.lane_direction = laneDirectionForSide(side);
+  } else if (normalizedRenderer === 'depth') {
+    params.track_index = Math.max(
+      0,
+      (Array.isArray(existingSlots) ? existingSlots : []).filter((slot) => slot?.renderer === 'depth').length
+    );
   }
   void nt;
 
@@ -620,6 +661,17 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
       }
     }
   }
+  if (renderer === 'depth') {
+    const parsedTrackIndex = normalizeTrackIndex(params.track_index);
+    const idMatch = cleanToken(source.id, fallbackId).match(/^depth_(\d+)$/);
+    if (parsedTrackIndex !== null) {
+      params.track_index = parsedTrackIndex;
+    } else if (idMatch) {
+      params.track_index = Math.max(0, Number(idMatch[1]) - 1);
+    } else {
+      delete params.track_index;
+    }
+  }
 
   return makeSlot({
     id: cleanToken(source.id, fallbackId),
@@ -685,6 +737,11 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
     const nt = normalizeOptionalText(params.nt);
     if (nt !== null && normalizeNt(nt) !== normalizeNt(defaultNt)) {
       options.push(`nt=${normalizeNt(nt)}`);
+    }
+  } else if (normalized.renderer === 'depth') {
+    const trackIndex = normalizeTrackIndex(params.track_index);
+    if (trackIndex !== null && trackIndex !== 0) {
+      options.push(`track_index=${trackIndex}`);
     }
   } else if (normalized.renderer === 'sequence_conservation') {
     appendOption(options, 'track_index', params.track_index);
@@ -822,6 +879,38 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     state.adv.circular_track_slots_axis_index
   );
 
+  const desiredCircularDepthTrackCount = () => circularDepthTrackCountForState(state);
+
+  const depthTrackIndexForSlot = (slot, fallbackIndex = null) => {
+    const paramIndex = normalizeTrackIndex(slot?.params?.track_index);
+    if (paramIndex !== null) return paramIndex;
+    const idMatch = String(slot?.id || '').trim().match(/^depth_(\d+)$/);
+    if (idMatch) return Math.max(0, Number(idMatch[1]) - 1);
+    return normalizeTrackIndex(fallbackIndex);
+  };
+
+  const makeDepthSlotForTrackIndex = (trackIndex, existingIds, desiredCount) => {
+    const normalizedIndex = Math.max(0, Number(trackIndex) || 0);
+    const preferredId = Number(desiredCount) > 1 ? `depth_${normalizedIndex + 1}` : 'depth';
+    let id = preferredId;
+    if (existingIds.has(id) && normalizedIndex === 0 && !existingIds.has('depth')) {
+      id = 'depth';
+    }
+    let suffix = 2;
+    while (existingIds.has(id)) {
+      id = `${preferredId}_${suffix}`;
+      suffix += 1;
+    }
+    existingIds.add(id);
+    return makeSlot({
+      id,
+      renderer: 'depth',
+      params: {
+        track_index: normalizedIndex
+      }
+    });
+  };
+
   const normalizeSlotsInPlace = () => {
     const normalized = normalizeCircularTrackSlots(
       state.adv.circular_track_slots,
@@ -846,6 +935,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const slots = createDefaultCircularTrackSlots({
       nt: state.adv.nt,
       showDepth: Boolean(state.form.show_depth),
+      depthTrackCount: desiredCircularDepthTrackCount(),
       showGc: !state.form.suppress_gc,
       showSkew: !state.form.suppress_skew,
       preset: state.form.track_type
@@ -866,9 +956,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const ensureCircularTrackDepthSlot = () => {
     normalizeSlotsInPlace();
-    const existingDepthSlot = state.adv.circular_track_slots.find((slot) => slot?.renderer === 'depth');
-    if (existingDepthSlot) {
-      existingDepthSlot.enabled = true;
+    const desiredCount = desiredCircularDepthTrackCount();
+    if (desiredCount <= 0) {
       return;
     }
 
@@ -894,8 +983,61 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       return;
     }
 
-    const slot = createCircularTrackSlotForRenderer('depth', state.adv.circular_track_slots, state.adv.nt);
-    state.adv.circular_track_slots.push(slot);
+    const slots = state.adv.circular_track_slots;
+    const existingIds = new Set(
+      slots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
+    );
+    const depthEntries = slots
+      .map((slot, index) => ({ slot, index }))
+      .filter((entry) => entry.slot?.renderer === 'depth');
+    const claimedTrackIndexes = new Set();
+    const duplicateDepthEntries = [];
+
+    depthEntries.forEach((entry, depthOrdinal) => {
+      const trackIndex = depthTrackIndexForSlot(entry.slot, depthOrdinal);
+      if (
+        trackIndex !== null &&
+        trackIndex < desiredCount &&
+        !claimedTrackIndexes.has(trackIndex)
+      ) {
+        entry.slot.enabled = true;
+        entry.slot.params = cloneParams(entry.slot.params);
+        if (desiredCount > 1 || normalizeOptionalText(entry.slot.params.track_index) !== null) {
+          entry.slot.params.track_index = trackIndex;
+        }
+        claimedTrackIndexes.add(trackIndex);
+      } else {
+        duplicateDepthEntries.push(entry);
+      }
+    });
+
+    duplicateDepthEntries.forEach((entry) => {
+      for (let trackIndex = 0; trackIndex < desiredCount; trackIndex += 1) {
+        if (claimedTrackIndexes.has(trackIndex)) continue;
+        entry.slot.enabled = true;
+        entry.slot.params = cloneParams(entry.slot.params);
+        entry.slot.params.track_index = trackIndex;
+        claimedTrackIndexes.add(trackIndex);
+        return;
+      }
+    });
+
+    const missingSlots = [];
+    for (let trackIndex = 0; trackIndex < desiredCount; trackIndex += 1) {
+      if (claimedTrackIndexes.has(trackIndex)) continue;
+      missingSlots.push(makeDepthSlotForTrackIndex(trackIndex, existingIds, desiredCount));
+      claimedTrackIndexes.add(trackIndex);
+    }
+
+    if (missingSlots.length > 0) {
+      let insertIndex = -1;
+      slots.forEach((slot, index) => {
+        if (slot?.renderer === 'depth') insertIndex = index;
+      });
+      if (insertIndex < 0) insertIndex = slots.findIndex((slot) => slot?.renderer === 'ticks');
+      if (insertIndex < 0) insertIndex = slots.findIndex((slot) => slot?.renderer === 'features');
+      slots.splice(Math.max(0, insertIndex + 1), 0, ...missingSlots);
+    }
     normalizeSlotsInPlace();
   };
 
@@ -955,6 +1097,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const templateSlots = createDefaultCircularTrackSlots({
       nt: state.adv.nt,
       showDepth: Boolean(state.form.show_depth),
+      depthTrackCount: desiredCircularDepthTrackCount(),
       showGc: !state.form.suppress_gc,
       showSkew: !state.form.suppress_skew,
       preset: normalizedPreset

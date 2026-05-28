@@ -454,7 +454,12 @@ export const createAppSetup = () => {
     { deep: true, immediate: true }
   );
   watch(
-    () => [adv.circular_track_slots_enabled, form.show_depth],
+    () => [
+      adv.circular_track_slots_enabled,
+      form.show_depth,
+      depthFileSlotsFromValue(files.c_depth).length,
+      adv.depth_tracks.length
+    ],
     ([slotsEnabled, showDepth]) => {
       if (slotsEnabled) {
         circularTrackSlotEditor.normalizeCircularTrackSlots();

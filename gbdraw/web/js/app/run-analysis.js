@@ -2100,9 +2100,20 @@ json.dumps({
         }
         if (useCircularTrackSlots) {
           args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
-          const depthSlotCount = circularTrackSlots.filter((slot) => (
-            slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
-          )).length;
+          const circularDepthSlotIndexes = new Set();
+          let circularDepthSlotOrdinal = 0;
+          circularTrackSlots.forEach((slot) => {
+            if (slot?.enabled === false || String(slot?.renderer || '') !== 'depth') return;
+            const parsedTrackIndex = Number(slot?.params?.track_index);
+            const trackIndex = Number.isInteger(parsedTrackIndex) && parsedTrackIndex >= 0
+              ? parsedTrackIndex
+              : circularDepthSlotOrdinal;
+            circularDepthSlotIndexes.add(trackIndex);
+            if (!slot.params || !Number.isInteger(parsedTrackIndex) || parsedTrackIndex < 0) {
+              slot.params = { ...(slot.params || {}), track_index: trackIndex };
+            }
+            circularDepthSlotOrdinal += 1;
+          });
           const usedCircularSlotIds = new Set(
             circularTrackSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
           );
@@ -2116,8 +2127,9 @@ json.dumps({
             );
           });
           const circularDepthEntries = depthTrackEntriesFromSlots(files.c_depth);
-          if (circularDepthEntries.length > 1 && depthSlotCount < circularDepthEntries.length) {
-            for (let depthIndex = depthSlotCount; depthIndex < circularDepthEntries.length; depthIndex += 1) {
+          if (circularDepthEntries.length > 1) {
+            for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
+              if (circularDepthSlotIndexes.has(depthIndex)) continue;
               let slotId = `depth_${depthIndex + 1}`;
               let suffix = 2;
               while (usedCircularSlotIds.has(slotId)) {

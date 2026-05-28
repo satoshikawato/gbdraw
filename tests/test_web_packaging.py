@@ -380,7 +380,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "setCircularTrackSlotsEnabled" in slot_source
     assert "const templateSlots = createDefaultCircularTrackSlots" in slot_source
     assert "state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);" in slot_source
-    assert "() => [adv.circular_track_slots_enabled, form.show_depth]" in app_setup_source
+    assert "depthFileSlotsFromValue(files.c_depth).length" in app_setup_source
     assert "circularTrackSlotEditor.normalizeCircularTrackSlots();" in app_setup_source
     assert "circularTrackSlotEditor.ensureCircularTrackDepthSlot();" in app_setup_source
     assert "resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset" in app_setup_source
@@ -615,6 +615,46 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const resetTick = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
         if (resetTick?.side !== 'inside' || resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Enabling custom slots did not use the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+
+        const multiDepthState = {{
+          adv: {{
+            nt: 'GC',
+            depth_tracks: [{{ label: 'Mars' }}, {{ label: 'DRR271272' }}],
+            circular_track_slots_enabled: false,
+            circular_track_slots_axis_index: null,
+            circular_track_slots: createDefaultCircularTrackSlots({{ preset: 'tuckin' }})
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: true,
+            suppress_gc: false,
+            suppress_skew: false
+          }},
+          files: {{
+            c_depth: [
+              {{ name: 'Mars.depth.tsv', size: 10, lastModified: 100 }},
+              {{ name: 'DRR271272.depth.tsv', size: 20, lastModified: 200 }}
+            ]
+          }}
+        }};
+        const multiDepthEditor = createCircularTrackSlotEditor({{ state: multiDepthState }});
+        multiDepthEditor.setCircularTrackSlotsEnabled(true);
+        const multiDepthSlots = multiDepthState.adv.circular_track_slots.filter((slot) => slot.renderer === 'depth');
+        const multiDepthIndexes = multiDepthSlots.map((slot) => Number(slot.params?.track_index ?? 0)).join(',');
+        if (multiDepthSlots.length !== 2 || multiDepthIndexes !== '0,1') {{
+          throw new Error(`Multiple circular depth tracks were not materialized as slots: ${{JSON.stringify(multiDepthState.adv.circular_track_slots)}}`);
+        }}
+        const secondDepthSpec = multiDepthEditor.circularTrackSlotCliSpec(multiDepthSlots[1]);
+        if (!secondDepthSpec.includes('track_index=1')) {{
+          throw new Error(`Second depth slot CLI spec did not pin track_index=1: ${{secondDepthSpec}}`);
+        }}
+        multiDepthState.files.c_depth.push({{ name: 'third.depth.tsv', size: 30, lastModified: 300 }});
+        multiDepthEditor.ensureCircularTrackDepthSlot();
+        const expandedDepthSlots = multiDepthState.adv.circular_track_slots.filter((slot) => slot.renderer === 'depth');
+        const expandedDepthIndexes = expandedDepthSlots.map((slot) => Number(slot.params?.track_index ?? 0)).join(',');
+        if (expandedDepthSlots.length !== 3 || expandedDepthIndexes !== '0,1,2') {{
+          throw new Error(`Adding a circular depth file did not add a custom depth slot: ${{JSON.stringify(multiDepthState.adv.circular_track_slots)}}`);
         }}
 
         const conservationState = {{
