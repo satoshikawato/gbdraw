@@ -106,6 +106,11 @@ const STANDALONE_INTERACTIVE_STYLE = `
   align-items: start;
   padding: 10px 12px;
   border-bottom: 1px solid #e2e8f0;
+  cursor: grab;
+  user-select: none;
+}
+.gfi-header:active {
+  cursor: grabbing;
 }
 .gfi-title {
   min-width: 0;
@@ -136,6 +141,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   height: 28px;
   font-size: var(--gfi-close-font-size, 20px);
   line-height: 1;
+  cursor: pointer;
 }
 .gfi-close:hover,
 .gfi-copy:hover,
@@ -289,6 +295,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var payload = null;
   var popup = null;
   var activePopupResize = null;
+  var activePopupDrag = null;
   var activeHoverSvgId = null;
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
 
@@ -383,12 +390,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function detailRows(feature) {
     return [
       ['Label', feature.label || ''],
-      ['SVG ID', feature.svg_id || ''],
       ['Record ID', feature.record_id || ''],
-      ['Record index', feature.record_idx === null || feature.record_idx === undefined ? '' : feature.record_idx],
       ['Type', feature.type || ''],
-      ['Location', locationText(feature)],
-      ['Strand', feature.strand || '']
+      ['Location', locationText(feature)]
     ].filter(function (row) {
       return String(row[1] == null ? '' : row[1]) !== '';
     });
@@ -493,7 +497,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return '<button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '">' + label + '</button>';
     }
     return '<div class="gfi">' +
-      '<div class="gfi-header">' +
+      '<div class="gfi-header" data-drag-handle="true">' +
       '<div><div class="gfi-title">' + escapeHtml(feature.label || feature.svg_id || 'Feature') + '</div>' +
       '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
       '<button type="button" class="gfi-close" data-close="true">x</button>' +
@@ -515,8 +519,16 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     activePopupResize = null;
   }
 
+  function stopPopupDrag() {
+    if (!activePopupDrag) return;
+    document.removeEventListener('mousemove', activePopupDrag.onMove);
+    document.removeEventListener('mouseup', activePopupDrag.onEnd);
+    activePopupDrag = null;
+  }
+
   function closePopup() {
     stopPopupResize();
+    stopPopupDrag();
     if (popup && popup.parentNode) {
       popup.parentNode.removeChild(popup);
     }
@@ -736,6 +748,37 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       };
     }
 
+    function getPopupPositionLimits() {
+      var currentViewport = getViewportClientRect();
+      var currentView = getVisibleViewRect();
+      var currentMetrics = getPopupCssMetrics(currentViewport);
+      var currentScale = getScreenScale();
+      var currentEffectiveScaleX = Math.max(currentScale.x, 0.001) * currentMetrics.zoomScale;
+      var currentEffectiveScaleY = Math.max(currentScale.y, 0.001) * currentMetrics.zoomScale;
+      var marginX = currentMetrics.margin / currentEffectiveScaleX;
+      var marginY = currentMetrics.margin / currentEffectiveScaleY;
+      var currentWidth = parseFloat(foreignObject.getAttribute('width')) || width;
+      var currentHeight = parseFloat(foreignObject.getAttribute('height')) || height;
+      var minX = currentView.x + marginX;
+      var minY = currentView.y + marginY;
+      var maxX = currentView.x + currentView.width - currentWidth - marginX;
+      var maxY = currentView.y + currentView.height - currentHeight - marginY;
+      if (maxX < minX) maxX = minX;
+      if (maxY < minY) maxY = minY;
+      return {
+        minX: minX,
+        minY: minY,
+        maxX: maxX,
+        maxY: maxY
+      };
+    }
+
+    function setPopupPosition(nextX, nextY) {
+      var limits = getPopupPositionLimits();
+      foreignObject.setAttribute('x', clampValue(nextX, limits.minX, limits.maxX));
+      foreignObject.setAttribute('y', clampValue(nextY, limits.minY, limits.maxY));
+    }
+
     function applyPopupCssSize(nextCssWidth, nextCssHeight) {
       var limits = getResizeLimits();
       popupCssWidth = clampValue(nextCssWidth, limits.minWidth, limits.maxWidth);
@@ -783,37 +826,72 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       event.stopPropagation();
     }
 
+    function startPopupDrag(event) {
+      if (event.button !== 0) return;
+      stopPopupDrag();
+      stopPopupResize();
+      var startPoint = eventPoint(event);
+      var startX = parseFloat(foreignObject.getAttribute('x')) || 0;
+      var startY = parseFloat(foreignObject.getAttribute('y')) || 0;
+      var onMove = function (moveEvent) {
+        var currentPoint = eventPoint(moveEvent);
+        setPopupPosition(
+          startX + (currentPoint.x - startPoint.x),
+          startY + (currentPoint.y - startPoint.y)
+        );
+        moveEvent.preventDefault();
+      };
+      var onEnd = function () {
+        stopPopupDrag();
+      };
+      activePopupDrag = {
+        onMove: onMove,
+        onEnd: onEnd
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onEnd);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
     function redraw() {
       root.innerHTML = renderPopup(feature, activeTab);
     }
 
+    function closestFromTarget(target, selector) {
+      var node = target && target.closest ? target : target && target.parentElement;
+      return node && node.closest ? node.closest(selector) : null;
+    }
+
     root.addEventListener('mousedown', function (rootEvent) {
       rootEvent.stopPropagation();
-      var closest = rootEvent.target && rootEvent.target.closest
-        ? rootEvent.target.closest.bind(rootEvent.target)
-        : function () { return null; };
-      var resizeHandle = closest('[data-resize]');
-      if (!resizeHandle) return;
-      startPopupResize(rootEvent);
+      var resizeHandle = closestFromTarget(rootEvent.target, '[data-resize]');
+      if (resizeHandle) {
+        startPopupResize(rootEvent);
+        return;
+      }
+      var interactiveTarget = closestFromTarget(rootEvent.target, 'button, input, textarea, select, a, [data-close], [data-copy-index], [data-tab]');
+      if (interactiveTarget) return;
+      var dragHandle = closestFromTarget(rootEvent.target, '[data-drag-handle]');
+      if (dragHandle) {
+        startPopupDrag(rootEvent);
+      }
     });
 
     root.addEventListener('click', function (rootEvent) {
       rootEvent.stopPropagation();
-      var closest = rootEvent.target && rootEvent.target.closest
-        ? rootEvent.target.closest.bind(rootEvent.target)
-        : function () { return null; };
-      var closeButton = closest('[data-close]');
+      var closeButton = closestFromTarget(rootEvent.target, '[data-close]');
       if (closeButton) {
         closePopup();
         return;
       }
-      var tabButton = closest('[data-tab]');
+      var tabButton = closestFromTarget(rootEvent.target, '[data-tab]');
       if (tabButton) {
         activeTab = tabButton.getAttribute('data-tab') || 'details';
         redraw();
         return;
       }
-      var copyTarget = closest('[data-copy-index]');
+      var copyTarget = closestFromTarget(rootEvent.target, '[data-copy-index]');
       if (copyTarget) {
         var index = Number(copyTarget.getAttribute('data-copy-index'));
         var value = Number.isFinite(index) ? copyValues[index] || '' : '';

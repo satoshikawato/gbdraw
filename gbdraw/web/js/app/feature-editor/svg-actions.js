@@ -104,12 +104,9 @@ export const createFeatureSvgActions = ({
   const buildDetailRows = ({ defaultLabel, feat, locationText }) => {
     const rows = [
       { key: 'label', label: 'Label', value: defaultLabel },
-      { key: 'svg_id', label: 'SVG ID', value: feat.svg_id },
       { key: 'record_id', label: 'Record ID', value: feat.record_id },
-      { key: 'record_idx', label: 'Record index', value: feat.record_idx },
       { key: 'type', label: 'Feature type', value: feat.type },
-      { key: 'location', label: 'Location', value: locationText },
-      { key: 'strand', label: 'Strand', value: feat.strand }
+      { key: 'location', label: 'Location', value: locationText }
     ];
     return rows
       .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))

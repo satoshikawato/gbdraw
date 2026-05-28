@@ -133,6 +133,9 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "locationParts" in svg_actions_source
     assert "nucleotideSequence" in svg_actions_source
     assert "aminoAcidSequence" in svg_actions_source
+    assert "label: 'SVG ID'" not in svg_actions_source
+    assert "label: 'Record index'" not in svg_actions_source
+    assert "label: 'Strand'" not in svg_actions_source
     assert "navigator.clipboard?.writeText" in app_setup_source
     assert "location_parts" in helper_source
     assert "nucleotide_sequence" in helper_source
@@ -162,8 +165,14 @@ def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_e
     assert "root.style.setProperty('--gfi-text-scale'" in export_source
     assert "gbdraw-interactive-feature-glow" in export_source
     assert "gbdraw-interactive-feature--hover" in export_source
+    assert "activePopupDrag" in export_source
+    assert 'data-drag-handle="true"' in export_source
+    assert "function startPopupDrag(event)" in export_source
     assert "setFeatureHighlight" in export_source
     assert "svg.addEventListener('mouseover'" in export_source
+    assert "['SVG ID'" not in export_source
+    assert "['Record index'" not in export_source
+    assert "['Strand'" not in export_source
     assert "root.style.transform = 'scale('" in export_source
     assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
     assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
