@@ -29,6 +29,11 @@ import {
   parseConservationLabelText,
   reconcileConservationSeries
 } from './conservation-series.js';
+import {
+  getDepthTrackFallbackLabel,
+  getDepthTrackLabelFromFile,
+  isDepthTrackAutoLabel
+} from './depth-tracks.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref } = window.Vue;
 
@@ -234,7 +239,7 @@ export const createAppSetup = () => {
   const normalizeDepthTrackConfig = (entry, index) => {
     const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
     return {
-      label: String(source.label ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
+      label: String(source.label ?? getDepthTrackFallbackLabel(index)),
       color: String(source.color || (index === 0 ? adv.depth_color : depthTrackFallbackColor(index))),
       large_tick_interval: normalizeDepthTrackNumber(source.large_tick_interval ?? source.tick_interval),
       small_tick_interval: normalizeDepthTrackNumber(source.small_tick_interval),
@@ -267,14 +272,30 @@ export const createAppSetup = () => {
       config: adv.depth_tracks[index] || normalizeDepthTrackConfig(null, index)
     }));
   });
+  const depthTrackAutoLabels = [];
+  const updateDepthTrackLabelFromFile = (index, file, previousFile = null) => {
+    if (!file) return;
+    const config = adv.depth_tracks[index];
+    if (!config) return;
+    const currentLabel = String(config.label ?? '').trim();
+    if (isDepthTrackAutoLabel(currentLabel, index, previousFile) || currentLabel === depthTrackAutoLabels[index]) {
+      const nextLabel = getDepthTrackLabelFromFile(file, index);
+      config.label = nextLabel;
+      depthTrackAutoLabels[index] = nextLabel;
+    }
+  };
   const getCircularDepthFile = (index) => depthFileSlotsFromValue(files.c_depth)[Number(index)] || null;
   const setCircularDepthFile = (index, file) => {
     const idx = Math.max(0, Number(index) || 0);
     ensureDepthTrackConfigCount(idx + 1);
     const slots = depthFileSlotsFromValue(files.c_depth);
+    const previousFile = slots[idx] || null;
     slots[idx] = file || null;
     files.c_depth = compactDepthFileSlots(slots);
-    if (file) form.show_depth = true;
+    if (file) {
+      updateDepthTrackLabelFromFile(idx, file, previousFile);
+      form.show_depth = true;
+    }
   };
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
   const setLinearDepthFile = (seq, index, file) => {
@@ -282,9 +303,13 @@ export const createAppSetup = () => {
     const idx = Math.max(0, Number(index) || 0);
     ensureDepthTrackConfigCount(idx + 1);
     const slots = depthFileSlotsFromValue(seq.depth);
+    const previousFile = slots[idx] || null;
     slots[idx] = file || null;
     seq.depth = compactDepthFileSlots(slots);
-    if (file) form.show_depth = true;
+    if (file) {
+      updateDepthTrackLabelFromFile(idx, file, previousFile);
+      form.show_depth = true;
+    }
   };
   const addDepthTrack = () => {
     ensureDepthTrackConfigCount(depthTrackCount() + 1);
@@ -308,11 +333,13 @@ export const createAppSetup = () => {
       seq.depth = clearSlot(seq.depth);
     });
     if (count <= 1) {
+      depthTrackAutoLabels[0] = '';
       ensureDepthTrackConfigCount(1);
       Object.assign(adv.depth_tracks[0], normalizeDepthTrackConfig(null, 0));
       return;
     }
     if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
+    depthTrackAutoLabels.splice(idx, 1);
     ensureDepthTrackConfigCount(Math.max(1, count - 1));
   };
   watch(

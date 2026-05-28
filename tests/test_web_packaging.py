@@ -294,18 +294,24 @@ def test_web_wires_addable_depth_tracks() -> None:
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    depth_tracks_source = (WEB_ROOT / "js" / "app" / "depth-tracks.js").read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "depth_tracks: []" in state_source
     assert "normalizeDepthTracks(state.adv.depth_tracks, state.adv)" in config_source
+    assert "getDepthTrackFileBaseName" in depth_tracks_source
+    assert "getDepthTrackLabelFromFile" in depth_tracks_source
+    assert "isDepthTrackAutoLabel" in depth_tracks_source
     assert "depthTrackRows" in app_setup_source
     assert "addDepthTrack" in app_setup_source
     assert "setCircularDepthFile" in app_setup_source
     assert "setLinearDepthFile" in app_setup_source
+    assert "updateDepthTrackLabelFromFile(idx, file, previousFile);" in app_setup_source
     assert "Depth TSV tracks" in index_html
     assert "Add TSV" in index_html
     assert "Per-track settings" in index_html
     assert "v-model.number=\"track.config.large_tick_interval\"" in index_html
+    assert "depthTrackConfigAt(index, file)" in run_source
     assert "args.push('--depth_track_label', ...labels);" in run_source
     assert "args.push('--depth_track_color', ...colors);" in run_source
     assert "args.push('--depth_track_large_tick_interval', ...largeTicks);" in run_source

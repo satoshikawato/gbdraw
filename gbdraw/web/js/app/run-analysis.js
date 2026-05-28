@@ -17,6 +17,10 @@ import {
   normalizeFileList,
   orderedConservationSources
 } from './conservation-series.js';
+import {
+  getDepthTrackFallbackLabel,
+  getDepthTrackLabelFromFile
+} from './depth-tracks.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -1746,11 +1750,12 @@ json.dumps({
         const numeric = Number(value);
         return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : null;
       };
-      const depthTrackConfigAt = (index) => {
+      const depthTrackConfigAt = (index, file = null) => {
         const tracks = Array.isArray(adv.depth_tracks) ? adv.depth_tracks : [];
         const source = tracks[index] && typeof tracks[index] === 'object' ? tracks[index] : {};
+        const rawLabel = source.label ?? '';
         return {
-          label: String(source.label ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
+          label: String(rawLabel).trim() ? String(rawLabel) : getDepthTrackLabelFromFile(file, index),
           color: String(source.color || (index === 0 ? adv.depth_color : '')),
           largeTick: normalizeDepthTrackValue(source.large_tick_interval ?? source.tick_interval),
           smallTick: normalizeDepthTrackValue(source.small_tick_interval),
@@ -1758,12 +1763,12 @@ json.dumps({
         };
       };
       const depthTrackEntriesFromSlots = (slots) => depthFileSlotsFromValue(slots)
-        .map((file, index) => (file ? { file, index, config: depthTrackConfigAt(index) } : null))
+        .map((file, index) => (file ? { file, index, config: depthTrackConfigAt(index, file) } : null))
         .filter(Boolean);
       const appendDepthTrackMetadataArgs = (trackEntries) => {
         if (!Array.isArray(trackEntries) || trackEntries.length === 0) return;
         const labels = trackEntries.map((entry, outputIndex) => (
-          String(entry.config.label || (outputIndex === 0 ? 'Depth' : `Depth ${outputIndex + 1}`))
+          String(entry.config.label || getDepthTrackFallbackLabel(outputIndex))
         ));
         if (labels.some((label) => label.trim())) {
           args.push('--depth_track_label', ...labels);
@@ -3449,7 +3454,7 @@ json.dumps({
             args.push('--depth_track', ...depthPaths);
             depthTrackEntries.push({
               index: depthTrackIndex,
-              config: depthTrackConfigAt(depthTrackIndex)
+              config: depthTrackConfigAt(depthTrackIndex, entries[0]?.file)
             });
           }
           appendDepthTrackMetadataArgs(depthTrackEntries);
