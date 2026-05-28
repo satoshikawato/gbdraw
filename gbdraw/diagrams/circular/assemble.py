@@ -22,6 +22,10 @@ from ...analysis.conservation import (  # type: ignore[reportMissingImports]
     ConservationTrack,
     conservation_track_gradient_colors,
 )
+from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+    DepthTrackData,
+    sync_depth_track_legend_entries,
+)
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
@@ -1123,6 +1127,7 @@ def _sync_legend_table_for_circular_slots(
     skew_config: GcSkewConfigurator,
     depth_config: DepthConfigurator | None,
     depth_df: DataFrame | None,
+    depth_tracks: Sequence[DepthTrackData] | None = None,
     cfg: GbdrawConfig,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float | None = None,
@@ -1150,6 +1155,22 @@ def _sync_legend_table_for_circular_slots(
             continue
         renderer = str(slot.renderer)
         if renderer == "depth":
+            if depth_tracks:
+                try:
+                    track_index = int((slot.params or {}).get("track_index", 0) or 0)
+                except (TypeError, ValueError):
+                    track_index = 0
+                if track_index < 0 or track_index >= len(depth_tracks):
+                    continue
+                track = depth_tracks[track_index]
+                label = _slot_legend_label(slot, track.label)
+                out[_unique_legend_key(out, label)] = {
+                    "type": "solid",
+                    "fill": track.config.fill_color,
+                    "stroke": track.config.stroke_color,
+                    "width": track.config.stroke_width,
+                }
+                continue
             if depth_config is None or depth_df is None:
                 continue
             label = _slot_legend_label(slot, "Depth")
@@ -1246,6 +1267,7 @@ def _draw_resolved_circular_slot(
     skew_config: GcSkewConfigurator,
     depth_df: DataFrame | None,
     depth_config: DepthConfigurator | None,
+    depth_tracks: Sequence[DepthTrackData] | None,
     conservation_tracks: Sequence[ConservationTrack] | None,
     conservation_min_identity: float,
     cfg: GbdrawConfig,
@@ -1360,7 +1382,27 @@ def _draw_resolved_circular_slot(
         return canvas
 
     if renderer == "depth":
-        if depth_config is None or depth_df is None:
+        depth_group_id = str(resolved_slot.id)
+        selected_depth_df = depth_df
+        selected_depth_config = depth_config
+        if depth_tracks:
+            try:
+                track_index = int(resolved_slot.params.get("track_index", 0) or 0)
+            except (TypeError, ValueError):
+                track_index = 0
+            if track_index < 0 or track_index >= len(depth_tracks):
+                logger.warning(
+                    "Skipping circular depth slot '%s' because track_index=%s is unavailable.",
+                    resolved_slot.id,
+                    track_index,
+                )
+                return canvas
+            depth_track = depth_tracks[track_index]
+            selected_depth_df = depth_track.df
+            selected_depth_config = depth_track.config
+            if not use_slot_group_id:
+                depth_group_id = depth_track.id
+        if selected_depth_config is None or selected_depth_df is None:
             logger.warning("Skipping circular depth slot '%s' because depth data are unavailable.", resolved_slot.id)
             return canvas
         depth_kwargs: dict[str, Any] = {
@@ -1369,13 +1411,13 @@ def _draw_resolved_circular_slot(
             "cfg": cfg,
         }
         if use_slot_group_id:
-            depth_kwargs["group_id"] = str(resolved_slot.id)
+            depth_kwargs["group_id"] = depth_group_id
         return add_depth_group_on_canvas(
             canvas,
             gb_record,
-            depth_df,
+            selected_depth_df,
             canvas_config,
-            depth_config,
+            selected_depth_config,
             config_dict,
             **depth_kwargs,
         )
@@ -2115,6 +2157,7 @@ def add_record_on_circular_canvas(
     *,
     depth_config: DepthConfigurator | None = None,
     depth_df: DataFrame | None = None,
+    depth_tracks: Sequence[DepthTrackData] | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
     cfg: GbdrawConfig | None = None,
@@ -2155,7 +2198,13 @@ def add_record_on_circular_canvas(
 
     raw_show_labels = cfg.canvas.show_labels
     show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
-    depth_enabled = bool(canvas_config.show_depth and depth_config is not None and depth_df is not None)
+    depth_enabled = bool(
+        canvas_config.show_depth
+        and (
+            bool(depth_tracks)
+            or (depth_config is not None and depth_df is not None)
+        )
+    )
     if user_slot_mode:
         show_depth_track = bool("depth" in user_active_slot_renderers and depth_enabled)
         show_gc_track = bool("dinucleotide_content" in user_active_slot_renderers)
@@ -2453,6 +2502,7 @@ def add_record_on_circular_canvas(
             skew_config=skew_config,
             depth_df=depth_df,
             depth_config=depth_config,
+            depth_tracks=depth_tracks,
             conservation_tracks=conservation_tracks,
             conservation_min_identity=conservation_min_identity,
             cfg=cfg,
@@ -2543,6 +2593,7 @@ def assemble_circular_diagram(
     legend_config: LegendDrawingConfigurator,
     depth_df: DataFrame | None = None,
     depth_config: DepthConfigurator | None = None,
+    depth_tracks: Sequence[DepthTrackData] | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
     cfg: GbdrawConfig | None = None,
@@ -2603,8 +2654,13 @@ def assemble_circular_diagram(
             features_present,
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
-            depth_config=depth_config if (depth_config is not None and depth_df is not None) else None,
+            depth_config=depth_config if (
+                depth_config is not None
+                and (depth_df is not None or len(depth_tracks or ()) == 1)
+            ) else None,
         )
+        if depth_tracks and effective_circular_track_slots is None:
+            legend_table = sync_depth_track_legend_entries(legend_table, depth_tracks)
         legend_table = _sync_legend_table_for_circular_slots(
             legend_table,
             circular_track_slots=effective_circular_track_slots,
@@ -2612,6 +2668,7 @@ def assemble_circular_diagram(
             skew_config=skew_config,
             depth_config=depth_config,
             depth_df=depth_df,
+            depth_tracks=depth_tracks,
             cfg=cfg,
             conservation_tracks=conservation_tracks,
             conservation_min_identity=conservation_min_identity,
@@ -2635,6 +2692,7 @@ def assemble_circular_diagram(
         legend_table,
         depth_config=depth_config,
         depth_df=depth_df,
+        depth_tracks=depth_tracks,
         conservation_tracks=conservation_tracks,
         conservation_min_identity=conservation_min_identity,
         cfg=cfg,

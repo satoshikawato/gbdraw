@@ -13,7 +13,7 @@ import {
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 
-const SESSION_VERSION = 24;
+const SESSION_VERSION = 25;
 const LOSAT_CACHE_SCHEMA = 2;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;
@@ -348,6 +348,47 @@ const normalizeFeatureShapes = (featureShapes) => {
   return normalized;
 };
 
+const DEPTH_TRACK_FALLBACK_COLORS = [
+  '#4A90E2',
+  '#E45756',
+  '#2CA02C',
+  '#F28E2B',
+  '#9467BD',
+  '#8C564B',
+  '#17BECF',
+  '#7F7F7F'
+];
+
+const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
+  const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
+  const fallbackColor =
+    index === 0
+      ? String(legacyAdv.depth_color || DEPTH_TRACK_FALLBACK_COLORS[0])
+      : DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
+  return {
+    label: String(source.label ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
+    color: resolveColorToHex(String(source.color || fallbackColor)),
+    large_tick_interval: normalizePositiveNumberOrNull(
+      source.large_tick_interval ?? source.tick_interval ?? (index === 0 ? legacyAdv.depth_tick_interval : null)
+    ),
+    small_tick_interval: normalizePositiveNumberOrNull(
+      source.small_tick_interval ?? (index === 0 ? legacyAdv.depth_small_tick_interval : null)
+    ),
+    tick_font_size: normalizePositiveNumberOrNull(
+      source.tick_font_size ?? (index === 0 ? legacyAdv.depth_tick_font_size : null)
+    )
+  };
+};
+
+const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
+  const rawTracks = Array.isArray(tracks) ? tracks : [];
+  const normalized = rawTracks.map((entry, index) => normalizeDepthTrackConfig(entry, index, legacyAdv));
+  if (normalized.length === 0) {
+    normalized.push(normalizeDepthTrackConfig(null, 0, legacyAdv));
+  }
+  return normalized;
+};
+
 let lastSessionFilename = null;
 
 const buildConfigData = () => ({
@@ -620,6 +661,11 @@ const applyConfigData = (data) => {
   state.adv.depth_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_tick_interval);
   state.adv.depth_small_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_small_tick_interval);
   state.adv.depth_tick_font_size = normalizePositiveNumberOrNull(state.adv.depth_tick_font_size);
+  state.adv.depth_tracks.splice(
+    0,
+    state.adv.depth_tracks.length,
+    ...normalizeDepthTracks(state.adv.depth_tracks, state.adv)
+  );
   state.adv.gc_content_mode = String(state.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
     ? 'percent'
     : 'deviation';
@@ -882,6 +928,9 @@ const serializeFileArray = async (files) => {
 };
 
 const serializeDepthFile = async (file) => {
+  if (Array.isArray(file)) {
+    return Promise.all(file.map((item) => serializeDepthFile(item)));
+  }
   if (!file) return null;
   try {
     const text = await file.text();
@@ -902,7 +951,16 @@ const serializeDepthFile = async (file) => {
   return serializeFile(file);
 };
 
+const fileSizeOf = (fileOrFiles) => (
+  Array.isArray(fileOrFiles)
+    ? fileOrFiles.reduce((sum, file) => sum + (file?.size || 0), 0)
+    : (fileOrFiles?.size || 0)
+);
+
 const deserializeFile = (entry) => {
+  if (Array.isArray(entry)) {
+    return entry.map((item) => deserializeFile(item));
+  }
   if (!entry || !entry.data) return null;
   if (isEncodedDepthFileEntry(entry)) {
     const text = decodeDepthText(entry.data);
@@ -1219,7 +1277,7 @@ export const exportSession = async (titleOverride = null) => {
     (state.files.c_gb?.size || 0) +
     (state.files.c_gff?.size || 0) +
     (state.files.c_fasta?.size || 0) +
-    (state.files.c_depth?.size || 0) +
+    fileSizeOf(state.files.c_depth) +
     (Array.isArray(state.files.c_conservation_blasts)
       ? state.files.c_conservation_blasts.reduce((sum, file) => sum + (file?.size || 0), 0)
       : 0) +
@@ -1237,7 +1295,7 @@ export const exportSession = async (titleOverride = null) => {
         (seq.gb?.size || 0) +
         (seq.gff?.size || 0) +
         (seq.fasta?.size || 0) +
-        (seq.depth?.size || 0) +
+        fileSizeOf(seq.depth) +
         (seq.blast?.size || 0)
       );
     }, 0) +

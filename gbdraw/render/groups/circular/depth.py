@@ -25,6 +25,7 @@ class DepthGroup:
         track_id: str | int,
         norm_factor_override: float | None = None,
         group_id: str | None = None,
+        axis_group_id: str | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
         self.depth_group = Group(id=group_id or "depth")
@@ -35,6 +36,7 @@ class DepthGroup:
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.depth_df = depth_df
         self.track_width = float(track_width)
+        self.axis_group_id = str(axis_group_id or f"{group_id or 'depth'}_axis")
         self.length_threshold = cfg.labels.length_threshold.circular
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
         self.track_type = cfg.canvas.circular.track_type
@@ -53,6 +55,7 @@ class DepthGroup:
             self.record_len,
             self.track_width,
             self.norm_factor,
+            self.axis_group_id,
         )
 
     def get_group(self) -> Group:

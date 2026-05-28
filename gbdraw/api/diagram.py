@@ -23,6 +23,15 @@ from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.depth import depth_df as build_depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
+from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+    DepthTrackData,
+    DepthTrackSpec,
+    build_depth_track_dataframes,
+    depth_track_count,
+    depth_track_data_count,
+    normalize_depth_tracks,
+    sync_depth_track_legend_entries,
+)
 from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
     ConservationLoadResult,
     ConservationTrack,
@@ -87,6 +96,7 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     ScalarSpec,
     circular_track_slots_from_order,
+    default_circular_track_slots,
     normalize_circular_track_slots_with_axis,
     parse_circular_track_slots,
 )
@@ -566,6 +576,69 @@ def _load_depth_tables(
             f"Expected one depth table/file or one per record ({record_count}); got {len(tables)}."
         )
     return list(tables)
+
+
+def _depth_track_count_from_data(depth_tracks: Sequence[Sequence[DepthTrackData]] | None) -> int:
+    return max((len(row) for row in (depth_tracks or ())), default=0)
+
+
+def _depth_track_count_for_render(
+    record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
+    precomputed_depth_tracks: Sequence[DepthTrackData] | None,
+    precomputed_depth_df: DataFrame | None = None,
+) -> int:
+    if precomputed_depth_tracks:
+        return len(precomputed_depth_tracks)
+    count = depth_track_count(record_depth_tracks)
+    if count > 0:
+        return count
+    return 1 if precomputed_depth_df is not None else 0
+
+
+def _default_circular_depth_slots_if_needed(
+    *,
+    parsed_circular_track_slots: list[CircularTrackSlot] | None,
+    show_depth: bool,
+    depth_track_count_value: int,
+    show_gc: bool,
+    show_skew: bool,
+    dinucleotide: str,
+) -> list[CircularTrackSlot] | None:
+    if parsed_circular_track_slots is not None:
+        return parsed_circular_track_slots
+    if not show_depth or depth_track_count_value <= 1:
+        return None
+    return default_circular_track_slots(
+        show_depth=True,
+        depth_track_count=depth_track_count_value,
+        show_gc=show_gc,
+        show_skew=show_skew,
+        dinucleotide=dinucleotide,
+    )
+
+
+def _validate_circular_depth_track_indices(
+    slots: Sequence[CircularTrackSlot] | None,
+    *,
+    depth_track_count_value: int,
+) -> None:
+    if not slots:
+        return
+    for slot in slots:
+        if not slot.enabled or str(slot.renderer) != "depth":
+            continue
+        raw_index = (slot.params or {}).get("track_index", 0)
+        try:
+            track_index = int(raw_index or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(
+                f"Depth slot '{slot.id}' has invalid track_index={raw_index!r}."
+            ) from exc
+        if track_index < 0 or track_index >= depth_track_count_value:
+            raise ValidationError(
+                f"Depth slot '{slot.id}' track_index={track_index} is outside the available "
+                f"depth track range 0..{max(0, depth_track_count_value - 1)}."
+            )
 
 
 def _parse_svg_length_px(value: object, *, default: float = 0.0) -> float:
@@ -1064,6 +1137,21 @@ def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None
     group_id = attribs.get("id")
     if group_id in _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS:
         attribs["id"] = f"{group_id}_{record_index}"
+    elif isinstance(group_id, str) and group_id.startswith("depth_"):
+        if group_id.endswith("_axis"):
+            attribs["id"] = f"{group_id[:-5]}_record_{record_index + 1}_axis"
+        else:
+            attribs["id"] = f"{group_id}_record_{record_index + 1}"
+    for child in getattr(element, "elements", []) or []:
+        child_attribs = getattr(child, "attribs", None)
+        if not isinstance(child_attribs, dict):
+            continue
+        child_id = child_attribs.get("id")
+        if isinstance(child_id, str) and child_id.startswith("depth_"):
+            if child_id.endswith("_axis"):
+                child_attribs["id"] = f"{child_id[:-5]}_record_{record_index + 1}_axis"
+            else:
+                child_attribs["id"] = f"{child_id}_record_{record_index + 1}"
 
 
 def _is_defs_element(element: object) -> bool:
@@ -1554,6 +1642,13 @@ def assemble_linear_diagram_from_records(
     depth_file: str | None = None,
     depth_tables: Sequence[DataFrame] | None = None,
     depth_files: Sequence[str] | None = None,
+    depth_track_tables: Sequence[Sequence[DataFrame | None]] | None = None,
+    depth_track_files: Sequence[Sequence[str | None]] | None = None,
+    depth_track_labels: Sequence[str] | None = None,
+    depth_track_colors: Sequence[str] | None = None,
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
     plot_title: str | None = None,
     plot_title_position: Literal["center", "top", "bottom"] = "bottom",
     plot_title_font_size: float | None = None,
@@ -1661,20 +1756,23 @@ def assemble_linear_diagram_from_records(
         )
     else:
         cfg = GbdrawConfig.from_dict(config_dict)
-    if depth_table is not None or depth_file is not None:
-        if depth_tables is not None or depth_files is not None:
-            raise ValidationError("Use depth_table/depth_file or depth_tables/depth_files, not both.")
-        single_depth_table = _load_depth_table(depth_table, depth_file)
-        resolved_depth_tables = [single_depth_table for _ in records] if single_depth_table is not None else None
-    else:
-        resolved_depth_tables = _load_depth_tables(
-            records=records,
-            depth_tables=depth_tables,
-            depth_files=depth_files,
-        )
-    if cfg.canvas.show_depth and resolved_depth_tables is None:
-        raise ValidationError("show_depth requires a depth_table or depth_file.")
-    show_depth = resolved_depth_tables is not None
+    record_depth_tracks = normalize_depth_tracks(
+        records,
+        depth_table=depth_table,
+        depth_file=depth_file,
+        depth_tables=depth_tables,
+        depth_files=depth_files,
+        depth_track_tables=depth_track_tables,
+        depth_track_files=depth_track_files,
+        depth_track_labels=depth_track_labels,
+        depth_track_colors=depth_track_colors,
+        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+    )
+    if cfg.canvas.show_depth and record_depth_tracks is None:
+        raise ValidationError("show_depth requires a depth_table, depth_file, or depth_track input.")
+    show_depth = record_depth_tracks is not None
     if show_depth != bool(cfg.canvas.show_depth):
         cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth))
     _validate_gc_content_config(cfg.objects.gc_content)
@@ -1805,6 +1903,7 @@ def assemble_linear_diagram_from_records(
         output_prefix=output_prefix,
         cfg=cfg,
         has_comparisons=bool(blast_files or resolved_protein_comparisons),
+        depth_track_count=max(1, depth_track_count(record_depth_tracks)),
     )
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table,
@@ -1862,7 +1961,7 @@ def assemble_linear_diagram_from_records(
         legend_config=legend_config,
         skew_config=skew_config,
         depth_config=depth_config,
-        depth_tables=resolved_depth_tables,
+        record_depth_tracks=record_depth_tracks,
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
@@ -1903,6 +2002,13 @@ def assemble_circular_diagram_from_record(
     depth_step: Optional[int] = None,
     depth_table: DataFrame | None = None,
     depth_file: str | None = None,
+    depth_track_tables: Sequence[Sequence[DataFrame | None]] | None = None,
+    depth_track_files: Sequence[Sequence[str | None]] | None = None,
+    depth_track_labels: Sequence[str] | None = None,
+    depth_track_colors: Sequence[str] | None = None,
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
     plot_title: str | None = None,
@@ -1919,6 +2025,7 @@ def assemble_circular_diagram_from_record(
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     _tick_track_channel_override: Literal["short", "long"] | None = None,
     _precomputed_depth_df: DataFrame | None = None,
+    _precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
     _shared_depth_max: float | None = None,
     _precomputed_conservation_tracks: Sequence[ConservationTrack] | None = None,
     cfg: GbdrawConfig | None = None,
@@ -1962,10 +2069,26 @@ def assemble_circular_diagram_from_record(
         cfg=cfg,
         plot_title_font_size=plot_title_font_size,
     )
-    resolved_depth_table = _load_depth_table(depth_table, depth_file)
-    if cfg.canvas.show_depth and resolved_depth_table is None:
-        raise ValidationError("show_depth requires a depth_table or depth_file.")
-    show_depth_from_input = resolved_depth_table is not None
+    record_depth_tracks = normalize_depth_tracks(
+        [gb_record],
+        depth_table=depth_table,
+        depth_file=depth_file,
+        depth_track_tables=depth_track_tables,
+        depth_track_files=depth_track_files,
+        depth_track_labels=depth_track_labels,
+        depth_track_colors=depth_track_colors,
+        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+    )
+    precomputed_depth_track_list = list(_precomputed_depth_tracks or [])
+    if cfg.canvas.show_depth and record_depth_tracks is None and not precomputed_depth_track_list and _precomputed_depth_df is None:
+        raise ValidationError("show_depth requires a depth_table, depth_file, or depth_track input.")
+    show_depth_from_input = (
+        record_depth_tracks is not None
+        or bool(precomputed_depth_track_list)
+        or _precomputed_depth_df is not None
+    )
     if show_depth_from_input != bool(cfg.canvas.show_depth):
         cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth_from_input))
     if cfg.objects.depth.share_axis and cfg.objects.depth.max_depth is None and _shared_depth_max is not None:
@@ -2034,12 +2157,25 @@ def assemble_circular_diagram_from_record(
         show_depth = _circular_slots_have_renderer(parsed_circular_track_slots, "depth")
         show_gc = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
         show_skew = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
-        if show_depth and resolved_depth_table is None:
-            raise ValidationError("A circular depth track slot requires a depth_table or depth_file.")
+        if show_depth and not show_depth_from_input:
+            raise ValidationError("A circular depth track slot requires a depth_table, depth_file, or depth_track input.")
     else:
         show_depth = cfg.canvas.show_depth
         show_gc = cfg.canvas.show_gc
         show_skew = cfg.canvas.show_skew
+    available_depth_track_count = _depth_track_count_for_render(
+        record_depth_tracks,
+        precomputed_depth_track_list,
+        _precomputed_depth_df,
+    )
+    parsed_circular_track_slots = _default_circular_depth_slots_if_needed(
+        parsed_circular_track_slots=parsed_circular_track_slots,
+        show_depth=bool(show_depth and show_depth_from_input),
+        depth_track_count_value=available_depth_track_count,
+        show_gc=bool(show_gc),
+        show_skew=bool(show_skew),
+        dinucleotide=dinucleotide,
+    )
     if conservation_tracks:
         if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
             parsed_circular_track_slots = _apply_conservation_track_params_to_slots(
@@ -2060,6 +2196,7 @@ def assemble_circular_diagram_from_record(
                 parsed_circular_track_slots = circular_track_slots_from_order(
                     "features,ticks,depth,gc_content,gc_skew",
                     show_depth=show_depth,
+                    depth_track_count=available_depth_track_count,
                     show_gc=show_gc,
                     show_skew=show_skew,
                     dinucleotide=dinucleotide,
@@ -2071,7 +2208,7 @@ def assemble_circular_diagram_from_record(
     canvas_cfg = cfg.canvas
     canvas_cfg = replace(
         canvas_cfg,
-        show_depth=bool(show_depth and resolved_depth_table is not None),
+        show_depth=bool(show_depth and show_depth_from_input),
         show_gc=bool(show_gc),
         show_skew=bool(show_skew),
     )
@@ -2145,22 +2282,38 @@ def assemble_circular_diagram_from_record(
     )
     gc_df = dinucleotide_dataframes.get(str(dinucleotide).upper(), DataFrame())
     if cfg.canvas.show_depth and depth_config is not None:
-        if _precomputed_depth_df is not None:
+        if precomputed_depth_track_list:
+            resolved_depth_tracks = precomputed_depth_track_list
+            resolved_depth_df = resolved_depth_tracks[0].df if resolved_depth_tracks else None
+        elif _precomputed_depth_df is not None:
             resolved_depth_df = _precomputed_depth_df
-        elif resolved_depth_table is not None:
-            resolved_depth_df = build_depth_df(
-                gb_record,
-                resolved_depth_table,
-                resolved_depth_window,
-                resolved_depth_step,
-                normalize=depth_config.normalize,
-                min_depth=depth_config.min_depth,
-                max_depth=depth_config.max_depth,
-            )
+            resolved_depth_tracks = [
+                DepthTrackData(
+                    id="depth",
+                    label="Depth",
+                    df=resolved_depth_df,
+                    config=depth_config,
+                )
+            ]
+        elif record_depth_tracks is not None:
+            resolved_depth_tracks = build_depth_track_dataframes(
+                [gb_record],
+                record_depth_tracks,
+                base_config=depth_config,
+                depth_df_builder=build_depth_df,
+                window_steps=[(resolved_depth_window, resolved_depth_step)],
+            )[0]
+            resolved_depth_df = resolved_depth_tracks[0].df if resolved_depth_tracks else None
         else:
             resolved_depth_df = None
+            resolved_depth_tracks = []
     else:
         resolved_depth_df = None
+        resolved_depth_tracks = []
+    _validate_circular_depth_track_indices(
+        parsed_circular_track_slots,
+        depth_track_count_value=max(1, len(resolved_depth_tracks)),
+    )
 
     canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix, config_dict=config_dict, legend=legend_effective, gb_record=gb_record, cfg=cfg
@@ -2205,6 +2358,7 @@ def assemble_circular_diagram_from_record(
         legend_config=legend_config,
         depth_df=resolved_depth_df,
         depth_config=depth_config,
+        depth_tracks=resolved_depth_tracks,
         conservation_tracks=conservation_tracks,
         conservation_min_identity=float(identity),
         cfg=cfg,
@@ -2269,6 +2423,13 @@ def assemble_circular_diagram_from_records(
     depth_file: str | None = None,
     depth_tables: Sequence[DataFrame] | None = None,
     depth_files: Sequence[str] | None = None,
+    depth_track_tables: Sequence[Sequence[DataFrame | None]] | None = None,
+    depth_track_files: Sequence[Sequence[str | None]] | None = None,
+    depth_track_labels: Sequence[str] | None = None,
+    depth_track_colors: Sequence[str] | None = None,
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
     plot_title: str | None = None,
@@ -2359,6 +2520,13 @@ def assemble_circular_diagram_from_records(
             depth_step=depth_step,
             depth_table=single_depth_table,
             depth_file=single_depth_file,
+            depth_track_tables=depth_track_tables,
+            depth_track_files=depth_track_files,
+            depth_track_labels=depth_track_labels,
+            depth_track_colors=depth_track_colors,
+            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
@@ -2406,20 +2574,23 @@ def assemble_circular_diagram_from_records(
         selected_features_set = DEFAULT_SELECTED_FEATURES
 
     records = list(records)
-    if depth_table is not None or depth_file is not None:
-        if depth_tables is not None or depth_files is not None:
-            raise ValidationError("Use depth_table/depth_file or depth_tables/depth_files, not both.")
-        single_depth_table = _load_depth_table(depth_table, depth_file)
-        resolved_depth_tables = [single_depth_table for _ in records] if single_depth_table is not None else None
-    else:
-        resolved_depth_tables = _load_depth_tables(
-            records=records,
-            depth_tables=depth_tables,
-            depth_files=depth_files,
-        )
-    if cfg.canvas.show_depth and resolved_depth_tables is None:
-        raise ValidationError("show_depth requires depth_tables or depth_files.")
-    show_depth_from_input = resolved_depth_tables is not None
+    record_depth_tracks = normalize_depth_tracks(
+        records,
+        depth_table=depth_table,
+        depth_file=depth_file,
+        depth_tables=depth_tables,
+        depth_files=depth_files,
+        depth_track_tables=depth_track_tables,
+        depth_track_files=depth_track_files,
+        depth_track_labels=depth_track_labels,
+        depth_track_colors=depth_track_colors,
+        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+    )
+    if cfg.canvas.show_depth and record_depth_tracks is None:
+        raise ValidationError("show_depth requires depth_tables, depth_files, or depth_track input.")
+    show_depth_from_input = record_depth_tracks is not None
     if show_depth_from_input != bool(cfg.canvas.show_depth):
         cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth_from_input))
     _validate_gc_content_config(cfg.objects.gc_content)
@@ -2429,8 +2600,8 @@ def assemble_circular_diagram_from_records(
         records, multi_record_positions
     )
     records = [records[idx] for idx in ordered_indices]
-    if resolved_depth_tables is not None:
-        resolved_depth_tables = [resolved_depth_tables[idx] for idx in ordered_indices]
+    if record_depth_tracks is not None:
+        record_depth_tracks = [record_depth_tracks[idx] for idx in ordered_indices]
 
     conservation_mode = normalize_conservation_reference(conservation_reference)
     conservation_load_result = _load_conservation_result(
@@ -2470,12 +2641,21 @@ def assemble_circular_diagram_from_records(
         show_depth = _circular_slots_have_renderer(parsed_circular_track_slots, "depth")
         show_gc = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
         show_skew = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
-        if show_depth and resolved_depth_tables is None:
-            raise ValidationError("A circular depth track slot requires depth_tables or depth_files.")
+        if show_depth and record_depth_tracks is None:
+            raise ValidationError("A circular depth track slot requires depth_tables, depth_files, or depth_track input.")
     else:
         show_depth = cfg.canvas.show_depth
         show_gc = cfg.canvas.show_gc
         show_skew = cfg.canvas.show_skew
+    available_depth_track_count = depth_track_count(record_depth_tracks)
+    parsed_circular_track_slots = _default_circular_depth_slots_if_needed(
+        parsed_circular_track_slots=parsed_circular_track_slots,
+        show_depth=bool(show_depth and record_depth_tracks is not None),
+        depth_track_count_value=available_depth_track_count,
+        show_gc=bool(show_gc),
+        show_skew=bool(show_skew),
+        dinucleotide=dinucleotide,
+    )
     if first_record_conservation_tracks:
         if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
             parsed_circular_track_slots = _apply_conservation_track_params_to_slots(
@@ -2496,6 +2676,7 @@ def assemble_circular_diagram_from_records(
                 parsed_circular_track_slots = circular_track_slots_from_order(
                     "features,ticks,depth,gc_content,gc_skew",
                     show_depth=show_depth,
+                    depth_track_count=max(1, depth_track_count(record_depth_tracks)),
                     show_gc=show_gc,
                     show_skew=show_skew,
                     dinucleotide=dinucleotide,
@@ -2506,7 +2687,7 @@ def assemble_circular_diagram_from_records(
             )
     canvas_cfg = replace(
         cfg.canvas,
-        show_depth=bool(show_depth and resolved_depth_tables is not None),
+        show_depth=bool(show_depth and record_depth_tracks is not None),
         show_gc=bool(show_gc),
         show_skew=bool(show_skew),
     )
@@ -2529,17 +2710,10 @@ def assemble_circular_diagram_from_records(
         mode=normalized_multi_record_size_mode,
         min_radius_ratio=normalized_multi_record_min_radius_ratio,
     )
-    record_depth_dfs: list[DataFrame | None] = [None for _ in records]
-    shared_depth_max: float | None = None
-    if cfg.canvas.show_depth and resolved_depth_tables is not None:
-        for record_index, record in enumerate(records):
-            record_depth_table = (
-                resolved_depth_tables[record_index]
-                if record_index < len(resolved_depth_tables)
-                else None
-            )
-            if record_depth_table is None:
-                continue
+    record_depth_track_data: list[list[DepthTrackData]] = [[] for _ in records]
+    if cfg.canvas.show_depth and record_depth_tracks is not None:
+        record_depth_window_steps: list[tuple[int, int]] = []
+        for record in records:
             record_window, record_step = _resolve_circular_window_step(
                 record,
                 cfg,
@@ -2552,17 +2726,25 @@ def assemble_circular_diagram_from_records(
                 depth_window=depth_window,
                 depth_step=depth_step,
             )
-            record_depth_dfs[record_index] = build_depth_df(
-                record,
-                record_depth_table,
-                record_depth_window,
-                record_depth_step,
-                normalize=cfg.objects.depth.normalize,
-                min_depth=cfg.objects.depth.min_depth,
-                max_depth=cfg.objects.depth.max_depth,
-            )
-        if cfg.objects.depth.share_axis and cfg.objects.depth.max_depth is None:
-            shared_depth_max = _max_depth_from_dataframes(record_depth_dfs)
+            record_depth_window_steps.append((record_depth_window, record_depth_step))
+        first_depth_window, first_depth_step = record_depth_window_steps[0]
+        base_depth_config = DepthConfigurator(
+            window=first_depth_window,
+            step=first_depth_step,
+            config_dict=config_dict,
+            cfg=cfg,
+        )
+        record_depth_track_data = build_depth_track_dataframes(
+            records,
+            record_depth_tracks,
+            base_config=base_depth_config,
+            depth_df_builder=build_depth_df,
+            window_steps=record_depth_window_steps,
+        )
+        _validate_circular_depth_track_indices(
+            parsed_circular_track_slots,
+            depth_track_count_value=max(1, depth_track_data_count(record_depth_track_data)),
+        )
 
     canvases: list[Drawing] = []
     widths: list[float] = []
@@ -2571,11 +2753,6 @@ def assemble_circular_diagram_from_records(
     for record_index, (record, record_scale) in enumerate(zip(records, record_scales)):
         scaled_cfg = _scale_circular_cfg(cfg, scale=record_scale)
         record_radii_px.append(float(scaled_cfg.canvas.circular.radius))
-        record_depth_table = (
-            resolved_depth_tables[record_index]
-            if resolved_depth_tables is not None and record_index < len(resolved_depth_tables)
-            else None
-        )
         record_conservation_tracks = (
             normalize_conservation_tracks_for_record(
                 conservation_load_result,
@@ -2602,7 +2779,6 @@ def assemble_circular_diagram_from_records(
             step=step,
             depth_window=depth_window,
             depth_step=depth_step,
-            depth_table=record_depth_table,
             species=species,
             strain=strain,
             plot_title=None,
@@ -2616,8 +2792,7 @@ def assemble_circular_diagram_from_records(
             alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
             _tick_track_channel_override=tick_track_channel_override,
-            _precomputed_depth_df=record_depth_dfs[record_index],
-            _shared_depth_max=shared_depth_max,
+            _precomputed_depth_tracks=record_depth_track_data[record_index],
             _precomputed_conservation_tracks=record_conservation_tracks,
             cfg=scaled_cfg,
         )
@@ -2902,8 +3077,11 @@ def assemble_circular_diagram_from_records(
             features_present,
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
-            depth_config=depth_config,
+            depth_config=depth_config if depth_track_data_count(record_depth_track_data) == 1 else None,
         )
+        if cfg.canvas.show_depth:
+            first_depth_row = next((row for row in record_depth_track_data if row), [])
+            legend_table = sync_depth_track_legend_entries(legend_table, first_depth_row)
         if first_record_conservation_tracks:
             if any(track.track_color for track in first_record_conservation_tracks):
                 for track in first_record_conservation_tracks:
@@ -3129,6 +3307,13 @@ def build_circular_diagram(
             if options.depth_file is not None
             else (options.depth_files[0] if options.depth_files else None)
         ),
+        depth_track_tables=options.depth_track_tables,
+        depth_track_files=options.depth_track_files,
+        depth_track_labels=options.depth_track_labels,
+        depth_track_colors=options.depth_track_colors,
+        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
         conservation_blast_files=options.conservation_blast_files,
         conservation_dataframes=options.conservation_dataframes,
         conservation_reference=options.conservation_reference,
@@ -3219,6 +3404,13 @@ def build_linear_diagram(
         depth_file=options.depth_file,
         depth_tables=options.depth_tables,
         depth_files=options.depth_files,
+        depth_track_tables=options.depth_track_tables,
+        depth_track_files=options.depth_track_files,
+        depth_track_labels=options.depth_track_labels,
+        depth_track_colors=options.depth_track_colors,
+        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
         plot_title=options.plot_title,
         plot_title_position=(
             output.plot_title_position

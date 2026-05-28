@@ -65,6 +65,12 @@ def _svg_group_translate_y(svg: str, group_id: str) -> float:
     return float(match.group(1))
 
 
+def _svg_group(svg: str, group_id: str) -> str:
+    match = re.search(rf'<g id="{re.escape(group_id)}".*?</g>', svg, flags=re.DOTALL)
+    assert match is not None
+    return match.group(0)
+
+
 def test_read_depth_tsv_headerless_and_headered(tmp_path: Path) -> None:
     headerless = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec1\t2\t12\n")
     headered = _write_depth_file(
@@ -651,6 +657,186 @@ def test_linear_depth_track_is_optional() -> None:
 
 
 @pytest.mark.linear
+def test_linear_multiple_depth_tracks_have_unique_ids() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    svg = assemble_linear_diagram_from_records(
+        records,
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 20, length=40),
+            ],
+            [
+                _constant_depth_table("rec2", 30, length=40),
+                _constant_depth_table("rec2", 40, length=40),
+            ],
+        ],
+        depth_track_labels=["Sample A", "Sample B"],
+        depth_track_colors=["#111111", "#222222"],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    for group_id in (
+        "depth_1_record_1",
+        "depth_2_record_1",
+        "depth_1_record_2",
+        "depth_2_record_2",
+    ):
+        assert svg.count(f'id="{group_id}"') == 1
+        assert svg.count(f'id="{group_id}_axis"') == 1
+    assert 'fill="#111111"' in svg
+    assert 'fill="#222222"' in svg
+
+
+@pytest.mark.linear
+def test_linear_depth_track_tick_options_are_per_track() -> None:
+    record = _make_record("rec1", length=40)
+    svg = assemble_linear_diagram_from_records(
+        [record],
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 40, length=40),
+            ]
+        ],
+        depth_track_large_tick_intervals=[5, 20],
+        depth_track_small_tick_intervals=["auto", 10],
+        depth_track_tick_font_sizes=[8, 14],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    depth_1_axis = _svg_group(svg, "depth_1_axis")
+    depth_2_axis = _svg_group(svg, "depth_2_axis")
+
+    assert ">5x<" in depth_1_axis
+    assert ">20x<" not in depth_1_axis
+    assert ">20x<" in depth_2_axis
+    assert ">40x<" in depth_2_axis
+
+
+@pytest.mark.circular
+def test_circular_multiple_depth_tracks_render_distinct_rings() -> None:
+    record = _make_record("rec1", length=40)
+    svg = assemble_circular_diagram_from_record(
+        record,
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 40, length=40),
+            ]
+        ],
+        depth_track_labels=["Sample A", "Sample B"],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    assert svg.count('id="depth_1"') == 1
+    assert svg.count('id="depth_1_axis"') == 1
+    assert svg.count('id="depth_2"') == 1
+    assert svg.count('id="depth_2_axis"') == 1
+
+
+@pytest.mark.circular
+def test_circular_custom_depth_slot_selects_track_index() -> None:
+    record = _make_record("rec1", length=40)
+    svg = assemble_circular_diagram_from_record(
+        record,
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 40, length=40),
+            ]
+        ],
+        circular_track_slots=[
+            "features:features",
+            "ticks:ticks",
+            "selected_depth:depth@track_index=1,label=Sample B",
+        ],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    assert 'id="selected_depth"' in svg
+    assert 'id="selected_depth_axis"' in svg
+    assert 'id="depth_1"' not in svg
+
+
+@pytest.mark.linear
+def test_depth_share_axis_is_per_logical_track() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    svg = assemble_linear_diagram_from_records(
+        records,
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 5, length=40),
+            ],
+            [
+                _constant_depth_table("rec2", 100, length=40),
+                _constant_depth_table("rec2", 50, length=40),
+            ],
+        ],
+        config_overrides={
+            "show_gc": False,
+            "show_skew": False,
+            "depth_share_axis": True,
+        },
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    assert ">100x<" in svg
+    assert ">50x<" in svg
+
+
+@pytest.mark.linear
+def test_linear_depth_track_partial_record_rows_are_not_shared() -> None:
+    records = [
+        _make_record("rec1", length=40),
+        _make_record("rec2", length=40),
+        _make_record("rec3", length=40),
+    ]
+    svg = assemble_linear_diagram_from_records(
+        records,
+        legend="none",
+        depth_track_tables=[
+            [_constant_depth_table("rec1", 10, length=40)],
+            [_constant_depth_table("rec2", 20, length=40)],
+            [],
+        ],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    assert svg.count('id="depth"') == 2
+    assert svg.count('id="depth_axis"') == 2
+
+
+@pytest.mark.linear
 def test_linear_depth_origin_label_requires_explicit_min() -> None:
     record = _make_record()
     svg = assemble_linear_diagram_from_records(
@@ -997,6 +1183,172 @@ def test_linear_cli_depth_options_forward_to_api(
     assert cfg.objects.depth.tick_font_size == pytest.approx(9)
     assert cfg.objects.depth.normalize is False
     assert cfg.objects.depth.share_axis is True
+
+
+def test_linear_cli_repeated_depth_track_forwards_record_major_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    records = [_make_record("rec1"), _make_record("rec2")]
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *args, **kwargs: records)
+    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    paths = [str(tmp_path / name) for name in ("r1_a.tsv", "r2_a.tsv", "r1_b.tsv", "r2_b.tsv")]
+    linear_cli_module.linear_main(
+        [
+            "--gbk",
+            "rec1.gb",
+            "rec2.gb",
+            "--depth_track",
+            paths[0],
+            paths[1],
+            "--depth_track",
+            paths[2],
+            paths[3],
+            "--depth_track_label",
+            "A",
+            "B",
+            "--depth_track_color",
+            "#111111",
+            "#222222",
+            "--depth_track_large_tick_interval",
+            "10",
+            "20",
+            "--depth_track_small_tick_interval",
+            "auto",
+            "5",
+            "--depth_track_tick_font_size",
+            "8",
+            "12",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["depth_files"] is None
+    assert captured["depth_track_files"] == [
+        [paths[0], paths[2]],
+        [paths[1], paths[3]],
+    ]
+    assert captured["depth_track_labels"] == ["A", "B"]
+    assert captured["depth_track_colors"] == ["#111111", "#222222"]
+    assert captured["depth_track_large_tick_intervals"] == ["10", "20"]
+    assert captured["depth_track_small_tick_intervals"] == ["auto", "5"]
+    assert captured["depth_track_tick_font_sizes"] == ["8", "12"]
+
+
+def test_linear_cli_depth_track_placeholders_keep_record_slots(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    records = [_make_record("rec1"), _make_record("rec2")]
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *args, **kwargs: records)
+    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    paths = [str(tmp_path / name) for name in ("r1_a.tsv", "r2_b.tsv")]
+    linear_cli_module.linear_main(
+        [
+            "--gbk",
+            "rec1.gb",
+            "rec2.gb",
+            "--depth_track",
+            paths[0],
+            "",
+            "--depth_track",
+            "",
+            paths[1],
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["depth_track_files"] == [
+        [paths[0], None],
+        [None, paths[1]],
+    ]
+
+
+def test_circular_cli_repeated_depth_track_forwards_record_major_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    records = [_make_record("rec1"), _make_record("rec2")]
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: records)
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_assemble)
+
+    paths = [str(tmp_path / name) for name in ("r1_a.tsv", "r2_a.tsv", "r1_b.tsv", "r2_b.tsv")]
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "rec1.gb",
+            "rec2.gb",
+            "--multi_record_canvas",
+            "--depth_track",
+            paths[0],
+            paths[1],
+            "--depth_track",
+            paths[2],
+            paths[3],
+            "--depth_track_large_tick_interval",
+            "10",
+            "20",
+            "--depth_track_small_tick_interval",
+            "auto",
+            "5",
+            "--depth_track_tick_font_size",
+            "8",
+            "12",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["depth_table"] is None
+    assert captured["depth_track_files"] == [
+        [paths[0], paths[2]],
+        [paths[1], paths[3]],
+    ]
+    assert captured["depth_track_large_tick_intervals"] == ["10", "20"]
+    assert captured["depth_track_small_tick_intervals"] == ["auto", "5"]
+    assert captured["depth_track_tick_font_sizes"] == ["8", "12"]
 
 
 @pytest.mark.linear

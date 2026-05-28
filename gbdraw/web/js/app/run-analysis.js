@@ -17,6 +17,10 @@ import {
   normalizeFileList,
   orderedConservationSources
 } from './conservation-series.js';
+import {
+  getDepthTrackFallbackLabel,
+  getDepthTrackLabelFromFile
+} from './depth-tracks.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -1250,16 +1254,19 @@ json.dumps({
 
   const validateDepthInputPresence = () => {
     if (!form.show_depth) return '';
+    const depthFileSlots = (value) => (Array.isArray(value) ? value.slice() : (value ? [value] : []));
+    const depthFiles = (value) => depthFileSlots(value).filter(Boolean);
     if (mode.value === 'circular') {
-      return files.c_depth ? '' : 'Please upload a Depth TSV file or disable Show depth track.';
+      return depthFiles(files.c_depth).length > 0 ? '' : 'Please upload a Depth TSV file or disable Show depth track.';
     }
 
-    const depthCount = linearSeqs.filter((seq) => Boolean(seq.depth)).length;
+    const perRecordDepthFiles = linearSeqs.map((seq) => depthFileSlots(seq.depth));
+    const depthCount = perRecordDepthFiles.reduce(
+      (sum, items) => sum + items.filter(Boolean).length,
+      0
+    );
     if (depthCount === 0) {
       return 'Please upload at least one Depth TSV file or disable Show depth track.';
-    }
-    if (depthCount !== 1 && depthCount !== linearSeqs.length) {
-      return 'Upload one Depth TSV for all records, or one Depth TSV per sequence.';
     }
     return '';
   };
@@ -1727,6 +1734,56 @@ json.dumps({
           args.push('--depth_tick_font_size', adv.depth_tick_font_size);
         }
       };
+      const depthFileSlotsFromValue = (value) => (
+        Array.isArray(value) ? value.slice() : (value ? [value] : [])
+      );
+      const normalizeDepthTrackValue = (value) => {
+        if (value === null || value === undefined || value === '') return null;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : null;
+      };
+      const depthTrackConfigAt = (index, file = null) => {
+        const tracks = Array.isArray(adv.depth_tracks) ? adv.depth_tracks : [];
+        const source = tracks[index] && typeof tracks[index] === 'object' ? tracks[index] : {};
+        const rawLabel = source.label ?? '';
+        return {
+          label: String(rawLabel).trim() ? String(rawLabel) : getDepthTrackLabelFromFile(file, index),
+          color: String(source.color || (index === 0 ? adv.depth_color : '')),
+          largeTick: normalizeDepthTrackValue(source.large_tick_interval ?? source.tick_interval),
+          smallTick: normalizeDepthTrackValue(source.small_tick_interval),
+          tickFontSize: normalizeDepthTrackValue(source.tick_font_size)
+        };
+      };
+      const depthTrackEntriesFromSlots = (slots) => depthFileSlotsFromValue(slots)
+        .map((file, index) => (file ? { file, index, config: depthTrackConfigAt(index, file) } : null))
+        .filter(Boolean);
+      const appendDepthTrackMetadataArgs = (trackEntries) => {
+        if (!Array.isArray(trackEntries) || trackEntries.length === 0) return;
+        const labels = trackEntries.map((entry, outputIndex) => (
+          String(entry.config.label || getDepthTrackFallbackLabel(outputIndex))
+        ));
+        if (labels.some((label) => label.trim())) {
+          args.push('--depth_track_label', ...labels);
+        }
+        const colors = trackEntries.map((entry, outputIndex) => (
+          String(entry.config.color || (outputIndex === 0 ? adv.depth_color : '') || '#4A90E2')
+        ));
+        if (colors.some((color) => color.trim())) {
+          args.push('--depth_track_color', ...colors);
+        }
+        const largeTicks = trackEntries.map((entry) => entry.config.largeTick || 'auto');
+        if (largeTicks.some((value) => value !== 'auto')) {
+          args.push('--depth_track_large_tick_interval', ...largeTicks);
+        }
+        const smallTicks = trackEntries.map((entry) => entry.config.smallTick || 'auto');
+        if (smallTicks.some((value) => value !== 'auto')) {
+          args.push('--depth_track_small_tick_interval', ...smallTicks);
+        }
+        const tickFontSizes = trackEntries.map((entry) => entry.config.tickFontSize || 'auto');
+        if (tickFontSizes.some((value) => value !== 'auto')) {
+          args.push('--depth_track_tick_font_size', ...tickFontSizes);
+        }
+      };
       const appendGcContentPercentArgs = () => {
         adv.gc_content_mode = String(adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
           ? 'percent'
@@ -2035,6 +2092,23 @@ json.dumps({
         }
         if (useCircularTrackSlots) {
           args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
+          const circularDepthSlotIndexes = new Set();
+          let circularDepthSlotOrdinal = 0;
+          circularTrackSlots.forEach((slot) => {
+            if (slot?.enabled === false || String(slot?.renderer || '') !== 'depth') return;
+            const parsedTrackIndex = Number(slot?.params?.track_index);
+            const trackIndex = Number.isInteger(parsedTrackIndex) && parsedTrackIndex >= 0
+              ? parsedTrackIndex
+              : circularDepthSlotOrdinal;
+            circularDepthSlotIndexes.add(trackIndex);
+            if (!slot.params || !Number.isInteger(parsedTrackIndex) || parsedTrackIndex < 0) {
+              slot.params = { ...(slot.params || {}), track_index: trackIndex };
+            }
+            circularDepthSlotOrdinal += 1;
+          });
+          const usedCircularSlotIds = new Set(
+            circularTrackSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
+          );
           circularTrackSlots.forEach((slot) => {
             args.push(
               '--circular_track_slot',
@@ -2044,13 +2118,32 @@ json.dumps({
               })
             );
           });
+          const circularDepthEntries = depthTrackEntriesFromSlots(files.c_depth);
+          if (circularDepthEntries.length > 1) {
+            for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
+              if (circularDepthSlotIndexes.has(depthIndex)) continue;
+              let slotId = `depth_${depthIndex + 1}`;
+              let suffix = 2;
+              while (usedCircularSlotIds.has(slotId)) {
+                slotId = `depth_${depthIndex + 1}_${suffix}`;
+                suffix += 1;
+              }
+              usedCircularSlotIds.add(slotId);
+              args.push('--circular_track_slot', `${slotId}:depth@track_index=${depthIndex}`);
+            }
+          }
         }
-        const hasCircularDepthFile = Boolean(files.c_depth);
+        const circularDepthEntries = depthTrackEntriesFromSlots(files.c_depth);
+        const hasCircularDepthFile = circularDepthEntries.length > 0;
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
         if (form.show_depth || circularSlotNeedsDepth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
-          await stageUploadedFile(files.c_depth, '/depth.tsv');
-          args.push('--depth', '/depth.tsv');
+          for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
+            const depthPath = `/depth_track_${depthIndex + 1}.tsv`;
+            await stageUploadedFile(circularDepthEntries[depthIndex].file, depthPath);
+            args.push('--depth_track', depthPath);
+          }
+          appendDepthTrackMetadataArgs(circularDepthEntries);
           args.push('--show_depth');
           appendDepthStyleArgs();
           if (
@@ -3334,28 +3427,35 @@ json.dumps({
           losatCacheInfo.value = cacheInfo;
           losatCache.value = cacheMap;
         }
-        const depthEntries = linearSeqs
-          .map((seq, idx) => ({ file: seq.depth, idx }))
-          .filter((entry) => Boolean(entry.file));
         if (form.show_depth) {
-          if (depthEntries.length === 0) {
+          const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+          const totalDepthFiles = depthRows.reduce((sum, row) => sum + row.filter(Boolean).length, 0);
+          if (totalDepthFiles === 0) {
             throw new Error('Please upload at least one Depth TSV file or disable Show depth track.');
           }
-          if (depthEntries.length !== 1 && depthEntries.length !== linearSeqs.length) {
-            throw new Error('Upload one Depth TSV for all records, or one Depth TSV per sequence.');
-          }
-          const depthPaths = [];
-          if (depthEntries.length === 1 && linearSeqs.length > 1) {
-            await stageUploadedFile(depthEntries[0].file, '/depth.tsv');
-            depthPaths.push('/depth.tsv');
-          } else {
-            for (const entry of depthEntries) {
-              const depthPath = `/seq_${entry.idx}.depth.tsv`;
-              await stageUploadedFile(entry.file, depthPath);
-              depthPaths.push(depthPath);
+          const maxDepthTracks = Math.max(...depthRows.map((row) => row.length), 0);
+          const depthTrackEntries = [];
+          for (let depthTrackIndex = 0; depthTrackIndex < maxDepthTracks; depthTrackIndex += 1) {
+            const entries = depthRows.map((row, idx) => ({ file: row[depthTrackIndex] || null, idx }));
+            const presentEntries = entries.filter((entry) => Boolean(entry.file));
+            if (presentEntries.length === 0) continue;
+            const depthPaths = [];
+            for (const entry of entries) {
+              if (entry.file) {
+                const depthPath = `/seq_${entry.idx}.depth_${depthTrackEntries.length + 1}.tsv`;
+                await stageUploadedFile(entry.file, depthPath);
+                depthPaths.push(depthPath);
+              } else {
+                depthPaths.push('');
+              }
             }
+            args.push('--depth_track', ...depthPaths);
+            depthTrackEntries.push({
+              index: depthTrackIndex,
+              config: depthTrackConfigAt(depthTrackIndex, presentEntries[0]?.file)
+            });
           }
-          args.push('--depth', ...depthPaths);
+          appendDepthTrackMetadataArgs(depthTrackEntries);
           args.push('--show_depth');
           appendDepthStyleArgs();
           if (

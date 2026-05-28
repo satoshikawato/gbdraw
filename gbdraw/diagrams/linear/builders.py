@@ -102,6 +102,9 @@ def add_depth_group(
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
     depth_df: DataFrame | None = None,
+    depth_track_index: int = 0,
+    group_id: str = "depth",
+    axis_group_id: str = "depth_axis",
 ) -> Drawing:
     """Adds a depth coverage group to the linear canvas."""
     depth_group: Group = DepthGroup(
@@ -113,8 +116,10 @@ def add_depth_group(
         config_dict=config_dict,
         cfg=cfg,
         depth_df=depth_df,
+        group_id=group_id,
+        axis_group_id=axis_group_id,
     ).get_group()
-    position_depth_group(depth_group, offset_y, offset_x, canvas_config)
+    position_depth_group(depth_group, offset_y, offset_x, canvas_config, depth_track_index)
     canvas.add(depth_group)
     return canvas
 

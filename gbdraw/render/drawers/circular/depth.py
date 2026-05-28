@@ -158,6 +158,7 @@ class DepthDrawer:
         radius: float,
         track_width: float,
         norm_factor: float,
+        axis_group_id: str = "depth_axis",
     ) -> Group:
         if not self.show_axis:
             return group
@@ -166,7 +167,7 @@ class DepthDrawer:
             (float(radius) * float(norm_factor)) - (0.5 * float(track_width)),
         )
         outer_radius = baseline_radius + float(track_width)
-        axis_group = Group(id="depth_axis")
+        axis_group = Group(id=axis_group_id)
         axis_group.add(
             Circle(
                 center=(0, 0),
@@ -233,6 +234,7 @@ class DepthDrawer:
         record_len: int,
         track_width: float,
         norm_factor: float,
+        axis_group_id: str = "depth_axis",
     ) -> Group:
         plot_df = self._plot_depth_df(depth_df)
         depth_path_desc = generate_circular_depth_path_desc(
@@ -249,7 +251,7 @@ class DepthDrawer:
             fill_rule="evenodd",
         )
         group.add(depth_path)
-        self._add_axes(group, depth_df, radius, track_width, norm_factor)
+        self._add_axes(group, depth_df, radius, track_width, norm_factor, axis_group_id)
         return group
 
 
