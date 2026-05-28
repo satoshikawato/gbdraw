@@ -65,10 +65,17 @@ const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
 const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
+const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
 
 const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
   cursor: pointer;
+  transition: opacity 120ms ease, filter 120ms ease;
+}
+.gbdraw-interactive-feature:hover,
+.gbdraw-interactive-feature.gbdraw-interactive-feature--hover {
+  opacity: 0.82;
+  filter: url(#gbdraw-interactive-feature-glow);
 }
 .gbdraw-feature-popup {
   overflow: visible;
@@ -282,6 +289,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var payload = null;
   var popup = null;
   var activePopupResize = null;
+  var activeHoverSvgId = null;
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
 
   try {
@@ -300,6 +308,44 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       featuresById.set(svgId, feature);
     }
   });
+
+  var featureElementsById = new Map();
+  Array.prototype.slice.call(svg.querySelectorAll(FEATURE_SELECTOR)).forEach(function (element) {
+    var svgId = String(element && (element.id || element.getAttribute('id')) || '').trim();
+    if (!svgId || !featuresById.has(svgId)) return;
+    if (!featureElementsById.has(svgId)) {
+      featureElementsById.set(svgId, []);
+    }
+    featureElementsById.get(svgId).push(element);
+  });
+
+  function setClassToken(element, token, enabled) {
+    if (!element) return;
+    if (element.classList && element.classList.toggle) {
+      element.classList.toggle(token, Boolean(enabled));
+      return;
+    }
+    var existing = String(element.getAttribute('class') || '').trim();
+    var tokens = existing ? existing.split(/\\s+/) : [];
+    var nextTokens = tokens.filter(function (entry) {
+      return entry && entry !== token;
+    });
+    if (enabled) nextTokens.push(token);
+    element.setAttribute('class', nextTokens.join(' '));
+  }
+
+  featureElementsById.forEach(function (elements) {
+    elements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-feature', true);
+    });
+  });
+
+  function setFeatureHighlight(svgId, highlight) {
+    var elements = featureElementsById.get(String(svgId || '')) || [];
+    elements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-feature--hover', highlight);
+    });
+  }
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
@@ -777,6 +823,28 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
+  svg.addEventListener('mouseover', function (event) {
+    if (popup && popup.contains(event.target)) return;
+    var featureElement = closestFeature(event.target);
+    var svgId = featureElement ? String(featureElement.id || '') : '';
+    if (!svgId || !featureElementsById.has(svgId) || activeHoverSvgId === svgId) return;
+    if (activeHoverSvgId) {
+      setFeatureHighlight(activeHoverSvgId, false);
+    }
+    activeHoverSvgId = svgId;
+    setFeatureHighlight(svgId, true);
+  });
+
+  svg.addEventListener('mouseout', function (event) {
+    var featureElement = closestFeature(event.target);
+    var svgId = featureElement ? String(featureElement.id || '') : '';
+    if (!svgId || activeHoverSvgId !== svgId) return;
+    var relatedFeature = closestFeature(event.relatedTarget);
+    if (relatedFeature && String(relatedFeature.id || '') === svgId) return;
+    setFeatureHighlight(svgId, false);
+    activeHoverSvgId = null;
+  });
+
   svg.addEventListener('click', function (event) {
     if (popup && popup.contains(event.target)) return;
     var featureElement = closestFeature(event.target);
@@ -919,8 +987,79 @@ const buildStandaloneFeaturePayloads = (svg) => {
   return payloads;
 };
 
+const ensureSvgDefs = (svg) => {
+  let defs = svg.querySelector('defs');
+  if (!defs) {
+    defs = document.createElementNS(SVG_NS, 'defs');
+    svg.insertBefore(defs, svg.firstChild);
+  }
+  return defs;
+};
+
+const ensureStandaloneFeatureGlowFilter = (svg) => {
+  const defs = ensureSvgDefs(svg);
+  const existing = defs.querySelector(`#${CSS.escape(INTERACTIVE_GLOW_FILTER_ID)}`);
+  if (existing?.parentNode) {
+    existing.parentNode.removeChild(existing);
+  }
+
+  const filter = document.createElementNS(SVG_NS, 'filter');
+  filter.setAttribute('id', INTERACTIVE_GLOW_FILTER_ID);
+  filter.setAttribute('x', '-35%');
+  filter.setAttribute('y', '-35%');
+  filter.setAttribute('width', '170%');
+  filter.setAttribute('height', '170%');
+  filter.setAttribute('color-interpolation-filters', 'sRGB');
+
+  const componentTransfer = document.createElementNS(SVG_NS, 'feComponentTransfer');
+  componentTransfer.setAttribute('in', 'SourceGraphic');
+  componentTransfer.setAttribute('result', 'gbdrawBrightenedFeature');
+  ['R', 'G', 'B'].forEach((channel) => {
+    const func = document.createElementNS(SVG_NS, `feFunc${channel}`);
+    func.setAttribute('type', 'linear');
+    func.setAttribute('slope', '1.2');
+    componentTransfer.appendChild(func);
+  });
+
+  const blur = document.createElementNS(SVG_NS, 'feGaussianBlur');
+  blur.setAttribute('in', 'SourceAlpha');
+  blur.setAttribute('stdDeviation', '3');
+  blur.setAttribute('result', 'gbdrawFeatureGlowBlur');
+
+  const flood = document.createElementNS(SVG_NS, 'feFlood');
+  flood.setAttribute('flood-color', '#2563eb');
+  flood.setAttribute('flood-opacity', '0.85');
+  flood.setAttribute('result', 'gbdrawFeatureGlowColor');
+
+  const composite = document.createElementNS(SVG_NS, 'feComposite');
+  composite.setAttribute('in', 'gbdrawFeatureGlowColor');
+  composite.setAttribute('in2', 'gbdrawFeatureGlowBlur');
+  composite.setAttribute('operator', 'in');
+  composite.setAttribute('result', 'gbdrawFeatureGlow');
+
+  const merge = document.createElementNS(SVG_NS, 'feMerge');
+  ['gbdrawFeatureGlow', 'gbdrawBrightenedFeature'].forEach((resultName) => {
+    const mergeNode = document.createElementNS(SVG_NS, 'feMergeNode');
+    mergeNode.setAttribute('in', resultName);
+    merge.appendChild(mergeNode);
+  });
+
+  filter.appendChild(componentTransfer);
+  filter.appendChild(blur);
+  filter.appendChild(flood);
+  filter.appendChild(composite);
+  filter.appendChild(merge);
+  defs.appendChild(filter);
+};
+
 const removeExistingStandaloneFeaturePopupAssets = (svg) => {
-  [INTERACTIVE_METADATA_ID, INTERACTIVE_STYLE_ID, INTERACTIVE_SCRIPT_ID, 'gbdraw-feature-popup'].forEach((id) => {
+  [
+    INTERACTIVE_METADATA_ID,
+    INTERACTIVE_STYLE_ID,
+    INTERACTIVE_SCRIPT_ID,
+    INTERACTIVE_GLOW_FILTER_ID,
+    'gbdraw-feature-popup'
+  ].forEach((id) => {
     const element = svg.querySelector(`#${CSS.escape(id)}`);
     if (element?.parentNode) {
       element.parentNode.removeChild(element);
@@ -968,20 +1107,12 @@ const enrichSvgWithStandaloneFeaturePopup = (svg) => {
   script.setAttribute('type', 'application/ecmascript');
   script.textContent = STANDALONE_INTERACTIVE_SCRIPT;
 
+  ensureStandaloneFeatureGlowFilter(svg);
   svg.appendChild(metadata);
   svg.appendChild(style);
   svg.appendChild(script);
   svg.setAttribute('data-gbdraw-interactive-svg', 'true');
   return true;
-};
-
-const ensureSvgDefs = (svg) => {
-  let defs = svg.querySelector('defs');
-  if (!defs) {
-    defs = document.createElementNS(SVG_NS, 'defs');
-    svg.insertBefore(defs, svg.firstChild);
-  }
-  return defs;
 };
 
 const moveGradientsToDefs = (svg) => {
