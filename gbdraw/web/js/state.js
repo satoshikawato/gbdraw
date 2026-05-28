@@ -377,6 +377,7 @@ const adv = reactive({
   gc_height: null,
   depth_height: null,
   depth_color: '#4A90E2',
+  depth_tracks: [],
   depth_window_size: null,
   depth_step_size: null,
   depth_share_axis: false,

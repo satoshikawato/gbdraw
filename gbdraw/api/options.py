@@ -81,6 +81,9 @@ class DiagramOptions:
     depth_track_files: Sequence[Sequence[str | None]] | None = None
     depth_track_labels: Sequence[str] | None = None
     depth_track_colors: Sequence[str] | None = None
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None
     conservation_blast_files: Sequence[str] | None = None
     conservation_dataframes: Sequence[DataFrame] | None = None
     conservation_reference: Literal["query", "subject", "auto"] = "auto"

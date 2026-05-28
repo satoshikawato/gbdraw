@@ -23,6 +23,9 @@ class DepthTrackSpec:
     label: str
     table: DataFrame
     fill_color: str | None = None
+    large_tick_interval: float | None = None
+    small_tick_interval: float | None = None
+    tick_font_size: float | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,37 @@ def _expand_track_metadata(
             f"{field_name} count must be one or equal to the number of depth tracks ({track_count})."
         )
     return [item or None for item in items]
+
+
+def _expand_track_float_metadata(
+    values: Sequence[float | str | None] | None,
+    *,
+    track_count: int,
+    field_name: str,
+) -> list[float | None]:
+    if track_count <= 0:
+        return []
+    if values is None:
+        return [None for _ in range(track_count)]
+    items: list[float | None] = []
+    for value in values:
+        if value is None:
+            items.append(None)
+            continue
+        if isinstance(value, str) and value.strip().lower() in {"", "auto", "none", "null", "-"}:
+            items.append(None)
+            continue
+        numeric = float(value)
+        if numeric <= 0:
+            raise ValidationError(f"{field_name} values must be > 0.")
+        items.append(numeric)
+    if len(items) == 1:
+        return [items[0] for _ in range(track_count)]
+    if len(items) != track_count:
+        raise ValidationError(
+            f"{field_name} count must be one or equal to the number of depth tracks ({track_count})."
+        )
+    return items
 
 
 def _default_depth_track_ids(track_count: int) -> list[str]:
@@ -110,6 +144,9 @@ def _tracks_from_record_major_values(
     records: Sequence[SeqRecord],
     labels: Sequence[str] | None,
     colors: Sequence[str] | None,
+    large_tick_intervals: Sequence[float | str | None] | None,
+    small_tick_intervals: Sequence[float | str | None] | None,
+    tick_font_sizes: Sequence[float | str | None] | None,
     field_name: str,
     values_are_files: bool,
 ) -> list[list[DepthTrackSpec]]:
@@ -135,6 +172,21 @@ def _tracks_from_record_major_values(
         track_count=track_count,
         default_values=[None for _ in range(track_count)],
         field_name="depth_track_colors",
+    )
+    track_large_tick_intervals = _expand_track_float_metadata(
+        large_tick_intervals,
+        track_count=track_count,
+        field_name="depth_track_large_tick_intervals",
+    )
+    track_small_tick_intervals = _expand_track_float_metadata(
+        small_tick_intervals,
+        track_count=track_count,
+        field_name="depth_track_small_tick_intervals",
+    )
+    track_tick_font_sizes = _expand_track_float_metadata(
+        tick_font_sizes,
+        track_count=track_count,
+        field_name="depth_track_tick_font_sizes",
     )
     record_tracks: list[list[DepthTrackSpec]] = [[] for _ in range(record_count)]
 
@@ -179,6 +231,9 @@ def _tracks_from_record_major_values(
                     label=str(track_labels[track_index] or _default_depth_track_labels(track_count)[track_index]),
                     table=table,
                     fill_color=track_colors[track_index],
+                    large_tick_interval=track_large_tick_intervals[track_index],
+                    small_tick_interval=track_small_tick_intervals[track_index],
+                    tick_font_size=track_tick_font_sizes[track_index],
                 )
             )
 
@@ -196,6 +251,9 @@ def normalize_depth_tracks(
     depth_track_files: Sequence[Sequence[str | None]] | None = None,
     depth_track_labels: Sequence[str] | None = None,
     depth_track_colors: Sequence[str] | None = None,
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
 ) -> list[list[DepthTrackSpec]] | None:
     """Normalize all public depth inputs into record-major depth track specs."""
 
@@ -205,7 +263,15 @@ def normalize_depth_tracks(
 
     legacy_present = _has_any((depth_table, depth_file, depth_tables, depth_files))
     new_present = _has_any(
-        (depth_track_tables, depth_track_files, depth_track_labels, depth_track_colors)
+        (
+            depth_track_tables,
+            depth_track_files,
+            depth_track_labels,
+            depth_track_colors,
+            depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes,
+        )
     )
     if legacy_present and new_present:
         raise ValidationError("Legacy depth inputs cannot be combined with depth_track_* inputs.")
@@ -216,13 +282,16 @@ def normalize_depth_tracks(
         if depth_track_tables is not None and depth_track_files is not None:
             raise ValidationError("Pass either depth_track_tables or depth_track_files, not both.")
         if depth_track_tables is None and depth_track_files is None:
-            raise ValidationError("depth_track_labels/depth_track_colors require depth_track_tables or depth_track_files.")
+            raise ValidationError("depth_track metadata requires depth_track_tables or depth_track_files.")
         if depth_track_tables is not None:
             return _tracks_from_record_major_values(
                 depth_track_tables,
                 records=records,
                 labels=depth_track_labels,
                 colors=depth_track_colors,
+                large_tick_intervals=depth_track_large_tick_intervals,
+                small_tick_intervals=depth_track_small_tick_intervals,
+                tick_font_sizes=depth_track_tick_font_sizes,
                 field_name="depth_track_tables",
                 values_are_files=False,
             )
@@ -231,6 +300,9 @@ def normalize_depth_tracks(
             records=records,
             labels=depth_track_labels,
             colors=depth_track_colors,
+            large_tick_intervals=depth_track_large_tick_intervals,
+            small_tick_intervals=depth_track_small_tick_intervals,
+            tick_font_sizes=depth_track_tick_font_sizes,
             field_name="depth_track_files",
             values_are_files=True,
         )
@@ -251,6 +323,9 @@ def normalize_depth_tracks(
             records=records,
             labels=None,
             colors=None,
+            large_tick_intervals=None,
+            small_tick_intervals=None,
+            tick_font_sizes=None,
             field_name="depth_table",
             values_are_files=False,
         )
@@ -261,6 +336,9 @@ def normalize_depth_tracks(
             records=records,
             labels=None,
             colors=None,
+            large_tick_intervals=None,
+            small_tick_intervals=None,
+            tick_font_sizes=None,
             field_name="depth_tables",
             values_are_files=False,
         )
@@ -270,6 +348,9 @@ def normalize_depth_tracks(
         records=records,
         labels=None,
         colors=None,
+        large_tick_intervals=None,
+        small_tick_intervals=None,
+        tick_font_sizes=None,
         field_name="depth_files",
         values_are_files=True,
     )
@@ -293,6 +374,9 @@ def clone_depth_config(
     fill_color: str | None = None,
     window: int | None = None,
     step: int | None = None,
+    large_tick_interval: float | None = None,
+    small_tick_interval: float | None = None,
+    tick_font_size: float | None = None,
 ) -> DepthConfigurator:
     config = copy.copy(base_config)
     if fill_color:
@@ -301,6 +385,13 @@ def clone_depth_config(
         config.window = int(window)
     if step is not None:
         config.step = int(step)
+    if large_tick_interval is not None:
+        config.large_tick_interval = float(large_tick_interval)
+        config.tick_interval = config.large_tick_interval
+    if small_tick_interval is not None:
+        config.small_tick_interval = float(small_tick_interval)
+    if tick_font_size is not None:
+        config.tick_font_size = float(tick_font_size)
     return config
 
 
@@ -334,6 +425,9 @@ def build_depth_track_dataframes(
                 fill_color=spec.fill_color,
                 window=int(window),
                 step=int(step),
+                large_tick_interval=spec.large_tick_interval,
+                small_tick_interval=spec.small_tick_interval,
+                tick_font_size=spec.tick_font_size,
             )
             row.append(
                 DepthTrackData(

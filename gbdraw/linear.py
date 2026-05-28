@@ -510,6 +510,24 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='+')
     parser.add_argument(
+        '--depth_track_large_tick_interval',
+        metavar='VALUE',
+        help='Depth track large tick interval(s). Provide one value or one per --depth_track.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_small_tick_interval',
+        metavar='VALUE',
+        help='Depth track small tick interval(s). Provide one value or one per --depth_track.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_tick_font_size',
+        metavar='VALUE',
+        help='Depth track tick font size(s). Provide one value or one per --depth_track.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
         '--show_depth',
         help='Show depth coverage track. Implied when --depth is supplied.',
         action='store_true')
@@ -935,6 +953,21 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_small_tick_interval must be > 0")
     if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
         parser.error("--depth_tick_font_size must be > 0")
+    for option_name in (
+        "depth_track_large_tick_interval",
+        "depth_track_small_tick_interval",
+        "depth_track_tick_font_size",
+    ):
+        for option_value in getattr(args, option_name) or []:
+            option_text = str(option_value).strip().lower()
+            if option_text in {"", "auto", "none", "null", "-"}:
+                continue
+            try:
+                numeric_option_value = float(option_value)
+            except (TypeError, ValueError):
+                parser.error(f"--{option_name} values must be numbers or auto")
+            if numeric_option_value <= 0:
+                parser.error(f"--{option_name} values must be > 0")
     for option_name in ("gc_content_min_percent", "gc_content_max_percent"):
         option_value = getattr(args, option_name)
         if option_value is not None and not math.isfinite(float(option_value)):
@@ -1069,6 +1102,9 @@ def linear_main(cmd_args) -> None:
     depth_track_groups: list[list[str]] | None = args.depth_track
     depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
     depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
+    depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
+    depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
+    depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
     show_depth: bool = bool(args.show_depth or depth_files or depth_track_groups)
     depth_color: str | None = args.depth_color
     depth_height: Optional[float] = args.depth_height
@@ -1404,6 +1440,9 @@ def linear_main(cmd_args) -> None:
         depth_track_files=depth_track_files,
         depth_track_labels=depth_track_labels,
         depth_track_colors=depth_track_colors,
+        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
         plot_title=plot_title,
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,

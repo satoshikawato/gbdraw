@@ -65,6 +65,12 @@ def _svg_group_translate_y(svg: str, group_id: str) -> float:
     return float(match.group(1))
 
 
+def _svg_group(svg: str, group_id: str) -> str:
+    match = re.search(rf'<g id="{re.escape(group_id)}".*?</g>', svg, flags=re.DOTALL)
+    assert match is not None
+    return match.group(0)
+
+
 def test_read_depth_tsv_headerless_and_headered(tmp_path: Path) -> None:
     headerless = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec1\t2\t12\n")
     headered = _write_depth_file(
@@ -687,6 +693,37 @@ def test_linear_multiple_depth_tracks_have_unique_ids() -> None:
     assert 'fill="#222222"' in svg
 
 
+@pytest.mark.linear
+def test_linear_depth_track_tick_options_are_per_track() -> None:
+    record = _make_record("rec1", length=40)
+    svg = assemble_linear_diagram_from_records(
+        [record],
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 40, length=40),
+            ]
+        ],
+        depth_track_large_tick_intervals=[5, 20],
+        depth_track_small_tick_intervals=["auto", 10],
+        depth_track_tick_font_sizes=[8, 14],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    depth_1_axis = _svg_group(svg, "depth_1_axis")
+    depth_2_axis = _svg_group(svg, "depth_2_axis")
+
+    assert ">5x<" in depth_1_axis
+    assert ">20x<" not in depth_1_axis
+    assert ">20x<" in depth_2_axis
+    assert ">40x<" in depth_2_axis
+
+
 @pytest.mark.circular
 def test_circular_multiple_depth_tracks_render_distinct_rings() -> None:
     record = _make_record("rec1", length=40)
@@ -1178,6 +1215,15 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
             "--depth_track_color",
             "#111111",
             "#222222",
+            "--depth_track_large_tick_interval",
+            "10",
+            "20",
+            "--depth_track_small_tick_interval",
+            "auto",
+            "5",
+            "--depth_track_tick_font_size",
+            "8",
+            "12",
             "--format",
             "svg",
             "-o",
@@ -1192,6 +1238,9 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
     ]
     assert captured["depth_track_labels"] == ["A", "B"]
     assert captured["depth_track_colors"] == ["#111111", "#222222"]
+    assert captured["depth_track_large_tick_intervals"] == ["10", "20"]
+    assert captured["depth_track_small_tick_intervals"] == ["auto", "5"]
+    assert captured["depth_track_tick_font_sizes"] == ["8", "12"]
 
 
 def test_circular_cli_repeated_depth_track_forwards_record_major_files(
@@ -1225,6 +1274,15 @@ def test_circular_cli_repeated_depth_track_forwards_record_major_files(
             "--depth_track",
             paths[2],
             paths[3],
+            "--depth_track_large_tick_interval",
+            "10",
+            "20",
+            "--depth_track_small_tick_interval",
+            "auto",
+            "5",
+            "--depth_track_tick_font_size",
+            "8",
+            "12",
             "--format",
             "svg",
             "-o",
@@ -1237,6 +1295,9 @@ def test_circular_cli_repeated_depth_track_forwards_record_major_files(
         [paths[0], paths[2]],
         [paths[1], paths[3]],
     ]
+    assert captured["depth_track_large_tick_intervals"] == ["10", "20"]
+    assert captured["depth_track_small_tick_intervals"] == ["auto", "5"]
+    assert captured["depth_track_tick_font_sizes"] == ["8", "12"]
 
 
 @pytest.mark.linear

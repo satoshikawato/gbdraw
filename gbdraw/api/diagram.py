@@ -1646,6 +1646,9 @@ def assemble_linear_diagram_from_records(
     depth_track_files: Sequence[Sequence[str | None]] | None = None,
     depth_track_labels: Sequence[str] | None = None,
     depth_track_colors: Sequence[str] | None = None,
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
     plot_title: str | None = None,
     plot_title_position: Literal["center", "top", "bottom"] = "bottom",
     plot_title_font_size: float | None = None,
@@ -1763,6 +1766,9 @@ def assemble_linear_diagram_from_records(
         depth_track_files=depth_track_files,
         depth_track_labels=depth_track_labels,
         depth_track_colors=depth_track_colors,
+        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
     )
     if cfg.canvas.show_depth and record_depth_tracks is None:
         raise ValidationError("show_depth requires a depth_table, depth_file, or depth_track input.")
@@ -2000,6 +2006,9 @@ def assemble_circular_diagram_from_record(
     depth_track_files: Sequence[Sequence[str | None]] | None = None,
     depth_track_labels: Sequence[str] | None = None,
     depth_track_colors: Sequence[str] | None = None,
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
     plot_title: str | None = None,
@@ -2068,6 +2077,9 @@ def assemble_circular_diagram_from_record(
         depth_track_files=depth_track_files,
         depth_track_labels=depth_track_labels,
         depth_track_colors=depth_track_colors,
+        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
     )
     precomputed_depth_track_list = list(_precomputed_depth_tracks or [])
     if cfg.canvas.show_depth and record_depth_tracks is None and not precomputed_depth_track_list and _precomputed_depth_df is None:
@@ -2415,6 +2427,9 @@ def assemble_circular_diagram_from_records(
     depth_track_files: Sequence[Sequence[str | None]] | None = None,
     depth_track_labels: Sequence[str] | None = None,
     depth_track_colors: Sequence[str] | None = None,
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
     plot_title: str | None = None,
@@ -2509,6 +2524,9 @@ def assemble_circular_diagram_from_records(
             depth_track_files=depth_track_files,
             depth_track_labels=depth_track_labels,
             depth_track_colors=depth_track_colors,
+            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
@@ -2566,6 +2584,9 @@ def assemble_circular_diagram_from_records(
         depth_track_files=depth_track_files,
         depth_track_labels=depth_track_labels,
         depth_track_colors=depth_track_colors,
+        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
     )
     if cfg.canvas.show_depth and record_depth_tracks is None:
         raise ValidationError("show_depth requires depth_tables, depth_files, or depth_track input.")
@@ -3290,6 +3311,9 @@ def build_circular_diagram(
         depth_track_files=options.depth_track_files,
         depth_track_labels=options.depth_track_labels,
         depth_track_colors=options.depth_track_colors,
+        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
         conservation_blast_files=options.conservation_blast_files,
         conservation_dataframes=options.conservation_dataframes,
         conservation_reference=options.conservation_reference,
@@ -3384,6 +3408,9 @@ def build_linear_diagram(
         depth_track_files=options.depth_track_files,
         depth_track_labels=options.depth_track_labels,
         depth_track_colors=options.depth_track_colors,
+        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
         plot_title=options.plot_title,
         plot_title_position=(
             output.plot_title_position
