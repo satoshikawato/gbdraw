@@ -814,9 +814,12 @@
                                 </div>
                             </div>
                             <div v-else class="space-y-2">
-                                <div class="flex gap-4 text-sm font-bold">
-                                    <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.losat_program" value="blastn" class="text-blue-600"> LOSATN</label>
-                                    <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.losat_program" value="tblastx" class="text-blue-600"> TLOSATX</label>
+                                <div>
+                                    <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Mode</div>
+                                    <div class="flex gap-4 text-sm font-bold">
+                                        <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.losat_program" value="blastn" class="text-blue-600"> LOSATN</label>
+                                        <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.losat_program" value="tblastx" class="text-blue-600"> TLOSATX</label>
+                                    </div>
                                 </div>
                                 <div class="grid grid-cols-1 gap-1">
                                     <div v-if="circularConservation.losat_program === 'blastn'">
@@ -841,6 +844,51 @@
                                     <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="losatCacheInfo.length === 0">
                                         <i class="ph ph-trash"></i> Clear Cache
                                     </button>
+                                </div>
+                            </div>
+                            <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
+                                <label class="text-[9px] flex items-center">Series names <help-tip text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></label>
+                                <textarea v-model="circularConservation.labels" rows="2" class="form-input px-1 py-0.5 text-xs" placeholder="Ring A&#10;Ring B"></textarea>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                    {{ circularConservation.source === 'losat' ? 'LOSAT Settings' : 'BLAST Settings' }}
+                                    <help-tip :text="circularConservation.source === 'losat' ? 'Filter browser LOSAT alignments before drawing comparison rings.' : 'Filter uploaded BLAST alignments before drawing comparison rings.'"></help-tip>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Bitscore</label>
+                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">E-value</label>
+                                        <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Minimum Identity</label>
+                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Minimum Length</label>
+                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Comparison Track Settings</div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Ring Width</label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Ring Gap</label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                </div>
+                                <div v-if="circularConservationLayoutWarning" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">
+                                    <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                                    <span>{{ circularConservationLayoutWarning }}</span>
                                 </div>
                             </div>
                             <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
@@ -873,42 +921,6 @@
                                 <button v-if="circularConservation.source === 'losat'" type="button" class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
                                     <i class="ph ph-plus"></i> Add Seq
                                 </button>
-                            </div>
-                            <div v-else-if="circularConservation.source === 'upload'">
-                                <label class="text-[9px] flex items-center">Series names <help-tip text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></label>
-                                <textarea v-model="circularConservation.labels" rows="2" class="form-input px-1 py-0.5 text-xs" placeholder="Ring A&#10;Ring B"></textarea>
-                            </div>
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <div>
-                                    <label class="input-label text-[10px]">Ring Width</label>
-                                    <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Ring Gap</label>
-                                    <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                            </div>
-                            <div v-if="circularConservationLayoutWarning" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">
-                                <i class="ph ph-warning-circle text-sm mt-0.5"></i>
-                                <span>{{ circularConservationLayoutWarning }}</span>
-                            </div>
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <div>
-                                    <label class="input-label text-[10px]">Bitscore</label>
-                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">E-value</label>
-                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Minimum Identity</label>
-                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Minimum Length</label>
-                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
-                                </div>
                             </div>
                         </div>
                     </details>
