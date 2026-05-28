@@ -334,6 +334,23 @@ options:
   --gc_skew_radius GC_SKEW_RADIUS
                         GC skew track center radius for circular mode (as a
                         ratio of base radius; must be > 0).
+  --depth DEPTH         Depth TSV file in samtools depth format. Implies
+                        --show_depth.
+  --depth_track DEPTH [DEPTH ...]
+                        Repeatable logical depth track. In circular mode,
+                        provide one file for a single record, or one file per
+                        record when using --multi_record_canvas.
+  --depth_track_label LABEL [LABEL ...]
+                        Depth track label(s). Provide one label or one per
+                        --depth_track.
+  --depth_track_color COLOR [COLOR ...]
+                        Depth track fill color(s). Provide one color or one
+                        per --depth_track.
+  --show_depth          Show depth coverage track. Required only when no depth
+                        file option is supplied.
+  --depth_width DEPTH_WIDTH
+                        Depth track width for circular mode (in px; must be
+                        > 0).
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes <= 50 kb, 20 for genomes >= 50
@@ -344,6 +361,12 @@ options:
 ```
 
 Circular conservation rings use one ring per `--conservation_blast` source and a shared identity gradient legend. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for conservation rings, so provide precomputed BLAST output.
+
+Depth tracks can be supplied with the legacy `--depth` option or the repeatable
+`--depth_track` option. `--depth` keeps the single-track SVG IDs `depth` and
+`depth_axis`. Multiple `--depth_track` groups render as `depth_1`,
+`depth_2`, and so on. Each `--depth_track` group is one logical track; provide
+one file to reuse it for every record, or one file per record.
 
 ## Linear Mode
 
@@ -596,6 +619,23 @@ options:
   --gc_height GC_HEIGHT
                         GC content/skew vertical width (optional; float;
                         default: 20 (pixels, 96 dpi))
+  --depth DEPTH [DEPTH ...]
+                        Depth TSV file(s) in samtools depth format. Provide
+                        one file for all records or one file per input record.
+  --depth_track DEPTH [DEPTH ...]
+                        Repeatable logical depth track. Each group accepts one
+                        shared file or one file per input record.
+  --depth_track_label LABEL [LABEL ...]
+                        Depth track label(s). Provide one label or one per
+                        --depth_track.
+  --depth_track_color COLOR [COLOR ...]
+                        Depth track fill color(s). Provide one color or one
+                        per --depth_track.
+  --show_depth          Show depth coverage track. Required only when no depth
+                        file option is supplied.
+  --depth_height DEPTH_HEIGHT
+                        Depth track height for linear mode (in px; must be
+                        > 0).
   --comparison_height COMPARISON_HEIGHT
                         Comparison block height (optional; float; optional;
                         default: 60 (pixels, 96 dpi))

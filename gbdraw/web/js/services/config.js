@@ -882,6 +882,9 @@ const serializeFileArray = async (files) => {
 };
 
 const serializeDepthFile = async (file) => {
+  if (Array.isArray(file)) {
+    return Promise.all(file.filter(Boolean).map((item) => serializeDepthFile(item)));
+  }
   if (!file) return null;
   try {
     const text = await file.text();
@@ -902,7 +905,16 @@ const serializeDepthFile = async (file) => {
   return serializeFile(file);
 };
 
+const fileSizeOf = (fileOrFiles) => (
+  Array.isArray(fileOrFiles)
+    ? fileOrFiles.reduce((sum, file) => sum + (file?.size || 0), 0)
+    : (fileOrFiles?.size || 0)
+);
+
 const deserializeFile = (entry) => {
+  if (Array.isArray(entry)) {
+    return entry.map((item) => deserializeFile(item)).filter(Boolean);
+  }
   if (!entry || !entry.data) return null;
   if (isEncodedDepthFileEntry(entry)) {
     const text = decodeDepthText(entry.data);
@@ -1219,7 +1231,7 @@ export const exportSession = async (titleOverride = null) => {
     (state.files.c_gb?.size || 0) +
     (state.files.c_gff?.size || 0) +
     (state.files.c_fasta?.size || 0) +
-    (state.files.c_depth?.size || 0) +
+    fileSizeOf(state.files.c_depth) +
     (Array.isArray(state.files.c_conservation_blasts)
       ? state.files.c_conservation_blasts.reduce((sum, file) => sum + (file?.size || 0), 0)
       : 0) +
@@ -1237,7 +1249,7 @@ export const exportSession = async (titleOverride = null) => {
         (seq.gb?.size || 0) +
         (seq.gff?.size || 0) +
         (seq.fasta?.size || 0) +
-        (seq.depth?.size || 0) +
+        fileSizeOf(seq.depth) +
         (seq.blast?.size || 0)
       );
     }, 0) +

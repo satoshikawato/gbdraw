@@ -50,6 +50,7 @@ def add_depth_group_on_canvas(
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
+    axis_group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Adds the depth coverage group to the canvas."""
@@ -69,6 +70,7 @@ def add_depth_group_on_canvas(
         canvas_config.track_ids["depth_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
+        axis_group_id=axis_group_id,
         cfg=cfg,
     ).get_group()
     depth_group = center_group_on_canvas(depth_group, canvas_config)

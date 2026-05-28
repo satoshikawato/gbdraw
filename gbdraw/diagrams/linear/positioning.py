@@ -53,15 +53,25 @@ def position_gc_content_group(
 
 
 def position_depth_group(
-    depth_group: Group, offset_y: float, offset_x: float, canvas_config: LinearCanvasConfigurator
+    depth_group: Group,
+    offset_y: float,
+    offset_x: float,
+    canvas_config: LinearCanvasConfigurator,
+    depth_track_index: int = 0,
 ) -> Group:
     """Positions the depth group on the canvas."""
+    depth_offsets = getattr(canvas_config, "depth_track_offsets", [canvas_config.depth_track_offset])
+    depth_offset = (
+        float(depth_offsets[depth_track_index])
+        if depth_track_index < len(depth_offsets)
+        else float(canvas_config.depth_track_offset)
+    )
     depth_group.translate(
         offset_x + canvas_config.horizontal_offset,
         offset_y
         + canvas_config.cds_padding
         + canvas_config.vertical_padding
-        + canvas_config.depth_track_offset,
+        + depth_offset,
     )
     return depth_group
 

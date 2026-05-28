@@ -517,8 +517,9 @@
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <file-uploader
-                            label="Depth TSV"
+                            label="Depth TSV(s)"
                             accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
+                            multiple
                             :model-value="files.c_depth"
                             @update:model-value="files.c_depth = $event; form.show_depth = form.show_depth || Boolean($event)"
                         ></file-uploader>
@@ -723,8 +724,9 @@
                             </div>
                             <div class="mt-2">
                                 <file-uploader
-                                    label="Depth TSV"
+                                    label="Depth TSV(s)"
                                     accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
+                                    multiple
                                     :model-value="seq.depth"
                                     @update:model-value="seq.depth = $event; form.show_depth = form.show_depth || Boolean($event)"
                                 ></file-uploader>

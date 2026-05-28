@@ -118,6 +118,7 @@ class LinearCanvasConfigurator:
         output_prefix="out",
         cfg: GbdrawConfig | None = None,
         has_comparisons: bool = False,
+        depth_track_count: int = 1,
     ):
         """
         Initializes the linear canvas configurator with given settings.
@@ -163,6 +164,7 @@ class LinearCanvasConfigurator:
         self.show_gc: bool = cfg.canvas.show_gc
         self.show_skew: bool = cfg.canvas.show_skew
         self.show_depth: bool = cfg.canvas.show_depth
+        self.depth_track_count: int = max(1, int(depth_track_count))
         self.strandedness: bool = cfg.canvas.strandedness
         self.resolve_overlaps: bool = cfg.canvas.resolve_overlaps
         self.track_layout: str = cfg.canvas.linear.track_layout
@@ -188,16 +190,17 @@ class LinearCanvasConfigurator:
         Sets linear plot track heights, anchor offsets, and legacy padding segments.
         """
 
+        active_depth_track_count = self.depth_track_count if self.show_depth else 0
         self.depth_height: float = self.default_depth_height if self.show_depth else 0.0
         self.gc_height: float = self.default_gc_height if self.show_gc else 0.0
         self.skew_height: float = self.default_gc_height if self.show_skew else 0.0
         gc_content_mode = str(getattr(self._cfg.objects.gc_content, "mode", "deviation"))
 
         tracks: list[_LinearPlotTrack] = []
-        if self.show_depth:
+        for depth_index in range(active_depth_track_count):
             tracks.append(
                 _LinearPlotTrack(
-                    key="depth",
+                    key="depth" if active_depth_track_count == 1 else f"depth_{depth_index + 1}",
                     top_extent=0.0,
                     bottom_extent=self.depth_height,
                     gap_after=self.configured_depth_padding,
@@ -233,10 +236,27 @@ class LinearCanvasConfigurator:
             tracks,
             track_offsets,
         )
-        self.depth_track_offset = track_offsets.get("depth", 0.0)
+        if active_depth_track_count <= 1:
+            self.depth_track_offsets = [track_offsets.get("depth", 0.0)] if self.show_depth else []
+        else:
+            self.depth_track_offsets = [
+                track_offsets.get(f"depth_{index + 1}", 0.0)
+                for index in range(active_depth_track_count)
+            ]
+        self.depth_track_offset = self.depth_track_offsets[0] if self.depth_track_offsets else 0.0
         self.gc_content_track_offset = track_offsets.get("gc_content", 0.0)
         self.gc_skew_track_offset = track_offsets.get("gc_skew", 0.0)
-        self.depth_padding: float = padding_segments.get("depth", 0.0)
+        self.depth_padding: float = (
+            sum(
+                padding_segments.get(
+                    "depth" if active_depth_track_count == 1 else f"depth_{index + 1}",
+                    0.0,
+                )
+                for index in range(active_depth_track_count)
+            )
+            if active_depth_track_count > 0
+            else 0.0
+        )
         self.gc_padding: float = padding_segments.get("gc_content", 0.0)
         self.skew_padding: float = padding_segments.get("gc_skew", 0.0)
 

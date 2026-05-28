@@ -19,6 +19,14 @@ from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
 from ...analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from ...analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
+from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+    DepthTrackData,
+    DepthTrackSpec,
+    build_depth_track_dataframes,
+    depth_track_count,
+    normalize_depth_tracks,
+    sync_depth_track_legend_entries,
+)
 from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -407,6 +415,23 @@ def _apply_shared_depth_axis(
         depth_config.max_depth = max(max_depth_values)
 
 
+def _linear_depth_group_id(
+    base_id: str,
+    *,
+    record_index: int,
+    record_count: int,
+    track_count: int,
+) -> str:
+    """Return a stable SVG group id while preserving single legacy depth ids."""
+
+    base = str(base_id or "depth")
+    if int(track_count) <= 1:
+        return base
+    if int(record_count) <= 1:
+        return base
+    return f"{base}_record_{int(record_index) + 1}"
+
+
 def _precalculate_label_heights_below(all_labels_by_record: dict[str, list[dict]]) -> dict[str, float]:
     """Return per-record label extents that protrude below the axis."""
     record_label_heights_below: dict[str, float] = {}
@@ -437,6 +462,7 @@ def assemble_linear_diagram(
     skew_config,
     depth_config: DepthConfigurator | None = None,
     depth_tables: list[DataFrame | None] | None = None,
+    record_depth_tracks: list[list[DepthTrackSpec]] | None = None,
     plot_title: str | None = None,
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
@@ -554,14 +580,18 @@ def assemble_linear_diagram(
         dinucleotide=str(gc_config.dinucleotide),
         enabled=bool(canvas_config.show_gc or canvas_config.show_skew),
     )
-    depth_enabled = bool(canvas_config.show_depth and depth_config is not None and depth_tables)
-    record_depth_dfs = _precalculate_depth_dataframes(
+    if record_depth_tracks is None and depth_tables:
+        record_depth_tracks = normalize_depth_tracks(
+            records,
+            depth_track_tables=[[table] for table in depth_tables],
+        )
+    depth_enabled = bool(canvas_config.show_depth and depth_config is not None and record_depth_tracks)
+    record_depth_data: list[list[DepthTrackData]] = build_depth_track_dataframes(
         records,
-        depth_tables=depth_tables,
-        depth_config=depth_config,
-        enabled=depth_enabled,
-    )
-    _apply_shared_depth_axis(record_depth_dfs, depth_config)
+        record_depth_tracks,
+        base_config=depth_config,
+        depth_df_builder=build_depth_df,
+    ) if depth_enabled else [[] for _ in records]
     if not depth_enabled:
         canvas_config.show_depth = False
         canvas_config.set_gc_height_and_gc_padding()
@@ -603,8 +633,11 @@ def assemble_linear_diagram(
             gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
-            depth_config=depth_config if depth_enabled else None,
+            depth_config=depth_config if depth_enabled and depth_track_count(record_depth_tracks) == 1 else None,
         )
+        if depth_enabled:
+            first_depth_row = next((row for row in record_depth_data if row), [])
+            legend_table = sync_depth_track_legend_entries(legend_table, first_depth_row)
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
         required_legend_height = float(legend_group.legend_height)
@@ -910,20 +943,32 @@ def assemble_linear_diagram(
             gc_offset_y = offset_y + (current_feature_height_below - canvas_config.cds_padding)
         gc_offset_y += record_label_heights_below.get(record.id, 0.0)
         shared_gc_df = record_gc_dfs[count - 1] if (count - 1) < len(record_gc_dfs) else None
-        shared_depth_df = record_depth_dfs[count - 1] if (count - 1) < len(record_depth_dfs) else None
+        shared_depth_tracks = record_depth_data[count - 1] if (count - 1) < len(record_depth_data) else []
 
-        if depth_enabled and shared_depth_df is not None and depth_config is not None:
-            add_depth_group(
-                canvas,
-                record,
-                gc_offset_y,
-                offset_x,
-                canvas_config,
-                depth_config,
-                config_dict,
-                cfg=record_cfg,
-                depth_df=shared_depth_df,
-            )
+        if depth_enabled:
+            total_depth_tracks = max((len(row) for row in record_depth_data), default=0)
+            total_records = len(records)
+            for depth_track_index, depth_track in enumerate(shared_depth_tracks):
+                group_id = _linear_depth_group_id(
+                    depth_track.id,
+                    record_index=count - 1,
+                    record_count=total_records,
+                    track_count=total_depth_tracks,
+                )
+                add_depth_group(
+                    canvas,
+                    record,
+                    gc_offset_y,
+                    offset_x,
+                    canvas_config,
+                    depth_track.config,
+                    config_dict,
+                    cfg=record_cfg,
+                    depth_df=depth_track.df,
+                    depth_track_index=depth_track_index,
+                    group_id=group_id,
+                    axis_group_id=f"{group_id}_axis",
+                )
         if canvas_config.show_gc:
             add_gc_content_group(
                 canvas,

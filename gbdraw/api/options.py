@@ -77,6 +77,10 @@ class DiagramOptions:
     depth_file: str | None = None
     depth_tables: Sequence[DataFrame] | None = None
     depth_files: Sequence[str] | None = None
+    depth_track_tables: Sequence[Sequence[DataFrame | None]] | None = None
+    depth_track_files: Sequence[Sequence[str | None]] | None = None
+    depth_track_labels: Sequence[str] | None = None
+    depth_track_colors: Sequence[str] | None = None
     conservation_blast_files: Sequence[str] | None = None
     conservation_dataframes: Sequence[DataFrame] | None = None
     conservation_reference: Literal["query", "subject", "auto"] = "auto"

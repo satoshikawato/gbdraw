@@ -491,6 +491,25 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='+')
     parser.add_argument(
+        '--depth_track',
+        metavar='DEPTH',
+        help='Repeatable logical depth track. Provide one file for all records or one file per input record.',
+        type=str,
+        nargs='+',
+        action='append')
+    parser.add_argument(
+        '--depth_track_label',
+        metavar='LABEL',
+        help='Depth track label(s). Provide one label or one per --depth_track.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_color',
+        metavar='COLOR',
+        help='Depth track fill color(s). Provide one color or one per --depth_track.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
         '--show_depth',
         help='Show depth coverage track. Implied when --depth is supplied.',
         action='store_true')
@@ -892,8 +911,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--losatp_threads must be > 0")
     if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
         parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
-    if args.show_depth and not args.depth:
-        parser.error("--show_depth requires --depth")
+    if args.depth and args.depth_track:
+        parser.error("--depth cannot be combined with --depth_track")
+    if args.show_depth and not (args.depth or args.depth_track):
+        parser.error("--show_depth requires --depth or --depth_track")
     if args.depth_height is not None and args.depth_height <= 0:
         parser.error("--depth_height must be > 0")
     if args.depth_window is not None and args.depth_window <= 0:
@@ -955,6 +976,31 @@ def _get_args(args) -> argparse.Namespace:
     if args.collinear_constant_anchor_score <= 0:
         parser.error("--collinear_constant_anchor_score must be > 0")
     return args
+
+
+def _record_major_depth_track_files_from_cli(
+    depth_track_groups: list[list[str]] | None,
+    *,
+    record_count: int,
+) -> list[list[str | None]] | None:
+    if not depth_track_groups:
+        return None
+    rows: list[list[str | None]] = [[] for _ in range(record_count)]
+    for track_number, group in enumerate(depth_track_groups, start=1):
+        files = [str(path) for path in (group or []) if str(path).strip()]
+        if not files:
+            raise ValidationError(f"--depth_track #{track_number} must include at least one file.")
+        if len(files) == 1:
+            expanded = files * record_count
+        elif len(files) == record_count:
+            expanded = files
+        else:
+            raise ValidationError(
+                f"--depth_track #{track_number} must contain one file or one per record ({record_count}); got {len(files)}."
+            )
+        for record_index, path in enumerate(expanded):
+            rows[record_index].append(path)
+    return rows
 
 
 def linear_main(cmd_args) -> None:
@@ -1020,7 +1066,10 @@ def linear_main(cmd_args) -> None:
     manual_window: int = args.window
     manual_step: int = args.step
     depth_files: list[str] | None = args.depth
-    show_depth: bool = bool(args.show_depth or depth_files)
+    depth_track_groups: list[list[str]] | None = args.depth_track
+    depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
+    depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
+    show_depth: bool = bool(args.show_depth or depth_files or depth_track_groups)
     depth_color: str | None = args.depth_color
     depth_height: Optional[float] = args.depth_height
     depth_window: Optional[int] = args.depth_window
@@ -1288,6 +1337,10 @@ def linear_main(cmd_args) -> None:
         raise ValidationError("--protein_blastp_mode requires at least two linear records.")
     if collinear_blocks_path and len(records) < 2:
         raise ValidationError("--collinear_blocks requires at least two linear records.")
+    depth_track_files = _record_major_depth_track_files_from_cli(
+        depth_track_groups,
+        record_count=len(records),
+    )
     collinearity_comparisons: list[DataFrame] | None = None
     if collinear_blocks_path:
         collinearity_result = parse_native_collinearity_tsv(
@@ -1348,6 +1401,9 @@ def linear_main(cmd_args) -> None:
         depth_window=depth_window,
         depth_step=depth_step,
         depth_files=depth_files,
+        depth_track_files=depth_track_files,
+        depth_track_labels=depth_track_labels,
+        depth_track_colors=depth_track_colors,
         plot_title=plot_title,
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,

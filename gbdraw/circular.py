@@ -259,6 +259,25 @@ def _get_args(args) -> argparse.Namespace:
         help='Depth TSV file in samtools depth format (reference, position, depth).',
         type=str)
     parser.add_argument(
+        '--depth_track',
+        metavar='DEPTH',
+        help='Repeatable logical depth track. Provide one file for all records or one file per record.',
+        type=str,
+        nargs='+',
+        action='append')
+    parser.add_argument(
+        '--depth_track_label',
+        metavar='LABEL',
+        help='Depth track label(s). Provide one label or one per --depth_track.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_color',
+        metavar='COLOR',
+        help='Depth track fill color(s). Provide one color or one per --depth_track.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
         '--show_depth',
         help='Show depth coverage track. Implied when --depth is supplied.',
         action='store_true')
@@ -649,8 +668,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_window must be > 0")
     if args.depth_step is not None and args.depth_step <= 0:
         parser.error("--depth_step must be > 0")
-    if args.show_depth and not args.depth:
-        parser.error("--show_depth requires --depth")
+    if args.depth and args.depth_track:
+        parser.error("--depth cannot be combined with --depth_track")
+    if args.show_depth and not (args.depth or args.depth_track):
+        parser.error("--show_depth requires --depth or --depth_track")
     if args.conservation_ring_width is not None and args.conservation_ring_width <= 0:
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
@@ -721,6 +742,31 @@ def _get_args(args) -> argparse.Namespace:
     return args
 
 
+def _record_major_depth_track_files_from_cli(
+    depth_track_groups: list[list[str]] | None,
+    *,
+    record_count: int,
+) -> list[list[str | None]] | None:
+    if not depth_track_groups:
+        return None
+    rows: list[list[str | None]] = [[] for _ in range(record_count)]
+    for track_number, group in enumerate(depth_track_groups, start=1):
+        files = [str(path) for path in (group or []) if str(path).strip()]
+        if not files:
+            raise ValidationError(f"--depth_track #{track_number} must include at least one file.")
+        if len(files) == 1:
+            expanded = files * record_count
+        elif len(files) == record_count:
+            expanded = files
+        else:
+            raise ValidationError(
+                f"--depth_track #{track_number} must contain one file or one per record ({record_count}); got {len(files)}."
+            )
+        for record_index, path in enumerate(expanded):
+            rows[record_index].append(path)
+    return rows
+
+
 
 def circular_main(cmd_args) -> None:
     """
@@ -767,7 +813,10 @@ def circular_main(cmd_args) -> None:
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
     depth_file: str | None = args.depth
-    show_depth: bool = bool(args.show_depth or depth_file)
+    depth_track_groups: list[list[str]] | None = args.depth_track
+    depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
+    depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
+    show_depth: bool = bool(args.show_depth or depth_file or depth_track_groups)
     depth_table: DataFrame | None = read_depth_tsv(depth_file) if depth_file else None
     depth_color: str | None = args.depth_color
     depth_width: Optional[float] = args.depth_width
@@ -841,6 +890,10 @@ def circular_main(cmd_args) -> None:
         # This case should not be reached due to arg validation
         logger.error("Invalid input file configuration.")
         raise ValidationError("Invalid input file configuration.")
+    depth_track_files = _record_major_depth_track_files_from_cli(
+        depth_track_groups,
+        record_count=len(gb_records),
+    )
 
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
@@ -986,6 +1039,7 @@ def circular_main(cmd_args) -> None:
         circular_track_slots_or_none = circular_track_slots_from_order(
             circular_track_order,
             show_depth=show_depth,
+            depth_track_count=max(1, len(depth_track_files[0]) if depth_track_files else 1),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
@@ -994,6 +1048,7 @@ def circular_main(cmd_args) -> None:
         circular_track_slots_or_none = circular_track_slots_from_order(
             "features,ticks,depth,gc_content,gc_skew",
             show_depth=show_depth,
+            depth_track_count=max(1, len(depth_track_files[0]) if depth_track_files else 1),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
@@ -1005,7 +1060,7 @@ def circular_main(cmd_args) -> None:
         for slot in slots:
             if slot.id == "features" and feature_width is not None:
                 slot = replace(slot, width=ScalarSpec(float(feature_width), "px"))
-            elif slot.id == "depth" and depth_width is not None:
+            elif str(slot.renderer) == "depth" and depth_width is not None:
                 slot = replace(slot, width=ScalarSpec(float(depth_width), "px"))
             elif slot.id == "gc_content":
                 slot = replace(
@@ -1047,6 +1102,9 @@ def circular_main(cmd_args) -> None:
             depth_window=depth_window,
             depth_step=depth_step,
             depth_table=depth_table,
+            depth_track_files=depth_track_files,
+            depth_track_labels=depth_track_labels,
+            depth_track_colors=depth_track_colors,
             species=species,
             strain=strain,
             plot_title=plot_title,
@@ -1076,6 +1134,11 @@ def circular_main(cmd_args) -> None:
             window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
 
             outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
+            record_depth_track_files = (
+                [depth_track_files[record_count - 1]]
+                if depth_track_files is not None
+                else None
+            )
             canvas = assemble_circular_diagram_from_record(
                 gb_record,
                 conservation_blast_files=conservation_blast_files,
@@ -1098,6 +1161,9 @@ def circular_main(cmd_args) -> None:
                 depth_window=depth_window,
                 depth_step=depth_step,
                 depth_table=depth_table,
+                depth_track_files=record_depth_track_files,
+                depth_track_labels=depth_track_labels,
+                depth_track_colors=depth_track_colors,
                 species=species,
                 strain=strain,
                 plot_title=plot_title,

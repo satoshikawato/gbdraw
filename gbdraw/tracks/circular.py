@@ -536,6 +536,7 @@ def default_circular_track_slots(
     show_features: bool = True,
     show_ticks: bool = True,
     show_depth: bool = False,
+    depth_track_count: int = 1,
     show_gc: bool = True,
     show_skew: bool = True,
     dinucleotide: str = "GC",
@@ -559,7 +560,18 @@ def default_circular_track_slots(
             )
         )
     if show_depth:
-        slots.append(CircularTrackSlot(id="depth", renderer="depth"))
+        count = max(1, int(depth_track_count))
+        if count == 1:
+            slots.append(CircularTrackSlot(id="depth", renderer="depth", params={"track_index": 0}))
+        else:
+            for index in range(count):
+                slots.append(
+                    CircularTrackSlot(
+                        id=f"depth_{index + 1}",
+                        renderer="depth",
+                        params={"track_index": index},
+                    )
+                )
     if show_gc:
         slots.append(CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": nt}))
     if show_skew:
@@ -573,6 +585,7 @@ def circular_track_slots_from_order(
     show_features: bool = True,
     show_ticks: bool = True,
     show_depth: bool = False,
+    depth_track_count: int = 1,
     show_gc: bool = True,
     show_skew: bool = True,
     dinucleotide: str = "GC",
@@ -605,13 +618,25 @@ def circular_track_slots_from_order(
         renderer = _ORDER_RENDERER_BY_ID[slot_id]
         if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
             params["nt"] = nt
-        slots.append(
-            CircularTrackSlot(
-                id=slot_id,
-                renderer=renderer,
-                params=params,
+        if renderer == "depth" and int(depth_track_count) > 1:
+            for track_index in range(int(depth_track_count)):
+                slots.append(
+                    CircularTrackSlot(
+                        id=f"depth_{track_index + 1}",
+                        renderer=renderer,
+                        params={"track_index": track_index},
+                    )
+                )
+        else:
+            if renderer == "depth":
+                params["track_index"] = 0
+            slots.append(
+                CircularTrackSlot(
+                    id=slot_id,
+                    renderer=renderer,
+                    params=params,
+                )
             )
-        )
     return slots
 
 

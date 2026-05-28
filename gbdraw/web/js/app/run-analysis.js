@@ -1250,16 +1250,22 @@ json.dumps({
 
   const validateDepthInputPresence = () => {
     if (!form.show_depth) return '';
+    const depthFiles = (value) => (Array.isArray(value) ? value.filter(Boolean) : (value ? [value] : []));
     if (mode.value === 'circular') {
-      return files.c_depth ? '' : 'Please upload a Depth TSV file or disable Show depth track.';
+      return depthFiles(files.c_depth).length > 0 ? '' : 'Please upload a Depth TSV file or disable Show depth track.';
     }
 
-    const depthCount = linearSeqs.filter((seq) => Boolean(seq.depth)).length;
+    const perRecordDepthFiles = linearSeqs.map((seq) => depthFiles(seq.depth));
+    const depthCount = perRecordDepthFiles.reduce((sum, items) => sum + items.length, 0);
     if (depthCount === 0) {
       return 'Please upload at least one Depth TSV file or disable Show depth track.';
     }
-    if (depthCount !== 1 && depthCount !== linearSeqs.length) {
-      return 'Upload one Depth TSV for all records, or one Depth TSV per sequence.';
+    const maxTrackCount = Math.max(...perRecordDepthFiles.map((items) => items.length), 0);
+    for (let trackIndex = 0; trackIndex < maxTrackCount; trackIndex += 1) {
+      const presentCount = perRecordDepthFiles.filter((items) => Boolean(items[trackIndex])).length;
+      if (presentCount !== 1 && presentCount !== linearSeqs.length) {
+        return 'For each depth track, upload one shared Depth TSV or one Depth TSV per sequence.';
+      }
     }
     return '';
   };
@@ -1727,6 +1733,9 @@ json.dumps({
           args.push('--depth_tick_font_size', adv.depth_tick_font_size);
         }
       };
+      const depthFilesFromValue = (value) => (
+        Array.isArray(value) ? value.filter(Boolean) : (value ? [value] : [])
+      );
       const appendGcContentPercentArgs = () => {
         adv.gc_content_mode = String(adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
           ? 'percent'
@@ -2035,6 +2044,12 @@ json.dumps({
         }
         if (useCircularTrackSlots) {
           args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
+          const depthSlotCount = circularTrackSlots.filter((slot) => (
+            slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
+          )).length;
+          const usedCircularSlotIds = new Set(
+            circularTrackSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
+          );
           circularTrackSlots.forEach((slot) => {
             args.push(
               '--circular_track_slot',
@@ -2044,13 +2059,35 @@ json.dumps({
               })
             );
           });
+          const circularDepthFiles = depthFilesFromValue(files.c_depth);
+          if (circularDepthFiles.length > 1 && depthSlotCount < circularDepthFiles.length) {
+            for (let depthIndex = depthSlotCount; depthIndex < circularDepthFiles.length; depthIndex += 1) {
+              let slotId = `depth_${depthIndex + 1}`;
+              let suffix = 2;
+              while (usedCircularSlotIds.has(slotId)) {
+                slotId = `depth_${depthIndex + 1}_${suffix}`;
+                suffix += 1;
+              }
+              usedCircularSlotIds.add(slotId);
+              args.push('--circular_track_slot', `${slotId}:depth@track_index=${depthIndex}`);
+            }
+          }
         }
-        const hasCircularDepthFile = Boolean(files.c_depth);
+        const circularDepthFiles = depthFilesFromValue(files.c_depth);
+        const hasCircularDepthFile = circularDepthFiles.length > 0;
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
         if (form.show_depth || circularSlotNeedsDepth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
-          await stageUploadedFile(files.c_depth, '/depth.tsv');
-          args.push('--depth', '/depth.tsv');
+          if (circularDepthFiles.length === 1) {
+            await stageUploadedFile(circularDepthFiles[0], '/depth.tsv');
+            args.push('--depth', '/depth.tsv');
+          } else {
+            for (let depthIndex = 0; depthIndex < circularDepthFiles.length; depthIndex += 1) {
+              const depthPath = `/depth_track_${depthIndex + 1}.tsv`;
+              await stageUploadedFile(circularDepthFiles[depthIndex], depthPath);
+              args.push('--depth_track', depthPath);
+            }
+          }
           args.push('--show_depth');
           appendDepthStyleArgs();
           if (
@@ -3334,28 +3371,55 @@ json.dumps({
           losatCacheInfo.value = cacheInfo;
           losatCache.value = cacheMap;
         }
-        const depthEntries = linearSeqs
-          .map((seq, idx) => ({ file: seq.depth, idx }))
-          .filter((entry) => Boolean(entry.file));
         if (form.show_depth) {
-          if (depthEntries.length === 0) {
+          const depthRows = linearSeqs.map((seq) => depthFilesFromValue(seq.depth));
+          const totalDepthFiles = depthRows.reduce((sum, row) => sum + row.length, 0);
+          if (totalDepthFiles === 0) {
             throw new Error('Please upload at least one Depth TSV file or disable Show depth track.');
           }
-          if (depthEntries.length !== 1 && depthEntries.length !== linearSeqs.length) {
-            throw new Error('Upload one Depth TSV for all records, or one Depth TSV per sequence.');
-          }
-          const depthPaths = [];
-          if (depthEntries.length === 1 && linearSeqs.length > 1) {
-            await stageUploadedFile(depthEntries[0].file, '/depth.tsv');
-            depthPaths.push('/depth.tsv');
+          const maxDepthTracks = Math.max(...depthRows.map((row) => row.length), 0);
+          if (maxDepthTracks <= 1) {
+            const depthEntries = depthRows
+              .map((row, idx) => ({ file: row[0], idx }))
+              .filter((entry) => Boolean(entry.file));
+            if (depthEntries.length !== 1 && depthEntries.length !== linearSeqs.length) {
+              throw new Error('Upload one Depth TSV for all records, or one Depth TSV per sequence.');
+            }
+            const depthPaths = [];
+            if (depthEntries.length === 1 && linearSeqs.length > 1) {
+              await stageUploadedFile(depthEntries[0].file, '/depth.tsv');
+              depthPaths.push('/depth.tsv');
+            } else {
+              for (const entry of depthEntries) {
+                const depthPath = `/seq_${entry.idx}.depth.tsv`;
+                await stageUploadedFile(entry.file, depthPath);
+                depthPaths.push(depthPath);
+              }
+            }
+            args.push('--depth', ...depthPaths);
           } else {
-            for (const entry of depthEntries) {
-              const depthPath = `/seq_${entry.idx}.depth.tsv`;
-              await stageUploadedFile(entry.file, depthPath);
-              depthPaths.push(depthPath);
+            for (let depthTrackIndex = 0; depthTrackIndex < maxDepthTracks; depthTrackIndex += 1) {
+              const entries = depthRows
+                .map((row, idx) => ({ file: row[depthTrackIndex], idx }))
+                .filter((entry) => Boolean(entry.file));
+              if (entries.length !== 1 && entries.length !== linearSeqs.length) {
+                throw new Error('For each depth track, upload one shared Depth TSV or one Depth TSV per sequence.');
+              }
+              const depthPaths = [];
+              if (entries.length === 1 && linearSeqs.length > 1) {
+                const depthPath = `/depth_track_${depthTrackIndex + 1}.tsv`;
+                await stageUploadedFile(entries[0].file, depthPath);
+                depthPaths.push(depthPath);
+              } else {
+                for (const entry of entries) {
+                  const depthPath = `/seq_${entry.idx}.depth_${depthTrackIndex + 1}.tsv`;
+                  await stageUploadedFile(entry.file, depthPath);
+                  depthPaths.push(depthPath);
+                }
+              }
+              args.push('--depth_track', ...depthPaths);
             }
           }
-          args.push('--depth', ...depthPaths);
           args.push('--show_depth');
           appendDepthStyleArgs();
           if (

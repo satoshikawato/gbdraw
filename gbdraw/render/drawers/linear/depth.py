@@ -156,6 +156,7 @@ class DepthDrawer:
         track_height: float,
         start_x: float,
         start_y: float,
+        axis_group_id: str = "depth_axis",
     ) -> Group:
         if not self.show_axis:
             return group
@@ -166,7 +167,7 @@ class DepthDrawer:
             alignment_width,
             genome_size_normalization_factor,
         )
-        axis_group = Group(id="depth_axis")
+        axis_group = Group(id=axis_group_id)
         axis_group.add(
             Line(
                 start=(start_x, baseline_y),
@@ -235,6 +236,7 @@ class DepthDrawer:
         track_height: float,
         start_x: float,
         start_y: float,
+        axis_group_id: str = "depth_axis",
     ) -> Group:
         plot_df = self._plot_depth_df(depth_df)
         depth_path_desc = calculate_depth_path_desc(
@@ -266,6 +268,7 @@ class DepthDrawer:
             track_height,
             start_x,
             start_y,
+            axis_group_id,
         )
         return group
 
