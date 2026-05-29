@@ -260,11 +260,11 @@ const validateImportedLinearTrackSlots = (configData = {}) => {
 
   if (adv.linear_track_slots_schema_version !== LINEAR_TRACK_SLOT_SCHEMA_VERSION) {
     throw new Error(
-      `Linear Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`
+      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`
     );
   }
   if (!Array.isArray(adv.linear_track_slots)) {
-    throw new Error('Linear Custom Track Slots must be an array.');
+    throw new Error('Custom Track Slots must be an array.');
   }
 };
 

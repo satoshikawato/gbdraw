@@ -1039,8 +1039,8 @@
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div class="flex items-center justify-between gap-2">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" :checked="adv.linear_track_slots_enabled" @change="setLinearTrackSlotsEnabled($event.target.checked)" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Linear Custom Track Slots <help-tip text="Edit the explicit linear track stack. Rows above Axis render above the record axis, rows below Axis render below it."></help-tip></span>
+                                            <input type="checkbox" v-model="adv.linear_track_slots_enabled" @change="setLinearTrackSlotsEnabled($event.target.checked)" class="form-checkbox">
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Edit the explicit linear track stack. Rows above Axis render above the record axis, rows below Axis render below it."></help-tip></span>
                                         </label>
                                         <button
                                             type="button"

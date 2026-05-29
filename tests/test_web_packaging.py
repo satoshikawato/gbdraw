@@ -271,7 +271,10 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linear_track_slots_enabled: false" in state_source
     assert "linear_track_slots_schema_version: 1" in state_source
     assert "createDefaultLinearTrackSlots" in state_source
-    assert "Linear Custom Track Slots" in index_html
+    assert '>Custom Track Slots <help-tip text="Edit the explicit linear track stack.' in index_html
+    assert "Linear Custom Track Slots" not in index_html
+    assert "Linear Custom Track Slots" not in config_source
+    assert 'v-model="adv.linear_track_slots_enabled"' in index_html
     assert 'v-model.number="entry.slot.params.track_index"' in index_html
     assert "--linear_track_slot" in run_source
     assert "buildLinearTrackSlotSpec" in run_source

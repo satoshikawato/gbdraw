@@ -348,17 +348,14 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const linearTrackStackEntries = computed(() => {
-    normalizeCurrentSlots();
-    const axisIndex = clampLinearTrackAxisIndex(
-      adv.linear_track_slots_axis_index,
-      adv.linear_track_slots.length
-    );
+    const slots = Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : [];
+    const axisIndex = clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, slots.length);
     const entries = [];
-    adv.linear_track_slots.forEach((slot, index) => {
+    slots.forEach((slot, index) => {
       if (axisIndex !== null && index === axisIndex) entries.push({ kind: STACK_ENTRY_AXIS });
       entries.push({ kind: STACK_ENTRY_SLOT, slot, index });
     });
-    if (axisIndex === adv.linear_track_slots.length) entries.push({ kind: STACK_ENTRY_AXIS });
+    if (axisIndex === slots.length) entries.push({ kind: STACK_ENTRY_AXIS });
     if (axisIndex === null) entries.splice(1, 0, { kind: STACK_ENTRY_AXIS });
     return entries;
   });
@@ -376,8 +373,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     canMoveLinearTrackSlot,
     updateLinearTrackSlotRenderer,
     linearTrackSlots: () => {
-      normalizeCurrentSlots();
-      return adv.linear_track_slots;
+      return Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : [];
     },
     linearTrackStackEntries: () => linearTrackStackEntries.value,
     linearTrackSlotCliSpec: (slot) => buildLinearTrackSlotSpec(slot),
