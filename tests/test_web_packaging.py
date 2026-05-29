@@ -283,6 +283,8 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1" in config_source
     assert "createLinearTrackSlotEditor" in module_source
     assert "linearTrackStackEntries" in app_setup_source
+    assert "linearTrackSlotUsesPresetGeometry(entry.slot)" in index_html
+    assert "linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry" in app_setup_source
     assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in run_source
     assert "args.push('--scale_font_size', adv.scale_font_size);" in run_source
 

@@ -792,6 +792,13 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     return placement === 'above' ? 'Above Axis' : 'Below Axis';
   };
 
+  const linearTrackSlotUsesPresetGeometry = (slot) => {
+    if (!slot || typeof slot !== 'object') return false;
+    const renderer = RENDERER_ALIASES[String(slot.renderer || '').trim().toLowerCase()] || String(slot.renderer || '').trim().toLowerCase();
+    if (!SUPPORTED_RENDERERS.includes(renderer)) return false;
+    return hasBlankLinearSlotGeometry(slot);
+  };
+
   return {
     linearTrackRenderers,
     linearTrackRendererLabel,
@@ -823,7 +830,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     linearTrackSlotCliSpec: (slot) => buildLinearTrackSlotSpec(slot),
     linearTrackSlotDisplayLabel: (slot) => linearTrackRendererLabel(slot?.renderer),
     linearTrackSlotDisplayMeta: (slot) => buildLinearTrackSlotSpec(slot),
-    linearTrackSlotPlacementLabel
+    linearTrackSlotPlacementLabel,
+    linearTrackSlotUsesPresetGeometry
   };
 };
 
