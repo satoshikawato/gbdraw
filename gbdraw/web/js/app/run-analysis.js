@@ -22,7 +22,8 @@ import {
   buildLinearTrackSlotSpec,
   clampLinearTrackAxisIndex,
   linearDepthTrackCountForState,
-  normalizeLinearTrackSlots
+  normalizeLinearTrackSlots,
+  resolveLinearTrackAxisIndex
 } from './linear-track-slots.js';
 import {
   getDepthTrackFallbackLabel,
@@ -2574,10 +2575,16 @@ json.dumps({
             adv.linear_track_slots_axis_index,
             linearTrackSlots.length
           );
-          if (linearTrackSlotAxisIndex === null) {
-            linearTrackSlotAxisIndex = linearTrackSlots.filter((slot) => slot.side === 'above').length;
-          }
-          linearTrackSlots = applyLinearTrackOrderPlacements(linearTrackSlots, linearTrackSlotAxisIndex);
+          linearTrackSlotAxisIndex = resolveLinearTrackAxisIndex(
+            linearTrackSlots,
+            linearTrackSlotAxisIndex
+          );
+          linearTrackSlots = applyLinearTrackOrderPlacements(
+            linearTrackSlots,
+            linearTrackSlotAxisIndex,
+            adv.nt,
+            form.linear_track_layout
+          );
           adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
         } else {
@@ -3554,7 +3561,7 @@ json.dumps({
           linearTrackSlots
             .filter((slot) => slot.enabled !== false)
             .forEach((slot) => {
-              const spec = buildLinearTrackSlotSpec(slot);
+              const spec = buildLinearTrackSlotSpec(slot, { includeSide: false });
               if (spec) args.push('--linear_track_slot', spec);
             });
         }

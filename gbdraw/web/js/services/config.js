@@ -7,8 +7,10 @@ import {
   normalizeCircularTrackSlots
 } from '../app/circular-track-slots.js';
 import {
+  applyLinearTrackOrderPlacements,
   clampLinearTrackAxisIndex,
-  normalizeLinearTrackSlots
+  normalizeLinearTrackSlots,
+  resolveLinearTrackAxisIndex
 } from '../app/linear-track-slots.js';
 import {
   DEPTH_FILE_ENCODING,
@@ -688,10 +690,19 @@ const applyConfigData = (data) => {
       state.adv.linear_track_slots_axis_index,
       normalizedLinearSlots.length
     );
+    state.adv.linear_track_slots_axis_index = resolveLinearTrackAxisIndex(
+      normalizedLinearSlots,
+      state.adv.linear_track_slots_axis_index
+    );
     state.adv.linear_track_slots.splice(
       0,
       state.adv.linear_track_slots.length,
-      ...normalizedLinearSlots
+      ...applyLinearTrackOrderPlacements(
+        normalizedLinearSlots,
+        state.adv.linear_track_slots_axis_index,
+        state.adv.nt,
+        state.form.linear_track_layout
+      )
     );
   }
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);

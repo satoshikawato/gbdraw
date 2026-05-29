@@ -550,7 +550,7 @@ export const createAppSetup = () => {
     ],
     ([slotsEnabled]) => {
       if (slotsEnabled) {
-        linearTrackSlotEditor.normalizeLinearTrackSlots();
+        linearTrackSlotEditor.reconcileLinearTrackSlotsFromSimpleControls();
       }
     },
     { deep: true }
@@ -1357,18 +1357,31 @@ export const createAppSetup = () => {
     linearTrackRenderers: linearTrackSlotEditor.linearTrackRenderers,
     linearTrackRendererLabel: linearTrackSlotEditor.linearTrackRendererLabel,
     resetLinearTrackSlotsFromSimpleControls: linearTrackSlotEditor.resetLinearTrackSlotsFromSimpleControls,
+    reconcileLinearTrackSlotsFromSimpleControls: linearTrackSlotEditor.reconcileLinearTrackSlotsFromSimpleControls,
+    ensureLinearTrackDepthSlots: linearTrackSlotEditor.ensureLinearTrackDepthSlots,
+    syncLinearNumericSlotsFromSimpleControls: linearTrackSlotEditor.syncLinearNumericSlotsFromSimpleControls,
+    applyLinearTrackLayoutPreset: linearTrackSlotEditor.applyLinearTrackLayoutPreset,
     setLinearTrackSlotsEnabled: linearTrackSlotEditor.setLinearTrackSlotsEnabled,
     addLinearTrackSlot: linearTrackSlotEditor.addLinearTrackSlot,
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
+    moveLinearTrackSlotAbove: linearTrackSlotEditor.moveLinearTrackSlotAbove,
+    moveLinearTrackSlotBelow: linearTrackSlotEditor.moveLinearTrackSlotBelow,
+    moveLinearTrackSlotToAxis: linearTrackSlotEditor.moveLinearTrackSlotToAxis,
+    moveLinearTrackSlotToPlacement: linearTrackSlotEditor.moveLinearTrackSlotToPlacement,
+    canMoveLinearTrackSlotAbove: linearTrackSlotEditor.canMoveLinearTrackSlotAbove,
+    canMoveLinearTrackSlotBelow: linearTrackSlotEditor.canMoveLinearTrackSlotBelow,
+    canMoveLinearTrackSlotToAxis: linearTrackSlotEditor.canMoveLinearTrackSlotToAxis,
     updateLinearTrackSlotRenderer: linearTrackSlotEditor.updateLinearTrackSlotRenderer,
+    updateLinearTrackSlotPlacement: linearTrackSlotEditor.updateLinearTrackSlotPlacement,
     linearTrackSlots: linearTrackSlotEditor.linearTrackSlots,
     linearTrackStackEntries: linearTrackSlotEditor.linearTrackStackEntries,
     linearTrackSlotCliSpec: linearTrackSlotEditor.linearTrackSlotCliSpec,
     linearTrackSlotDisplayLabel: linearTrackSlotEditor.linearTrackSlotDisplayLabel,
     linearTrackSlotDisplayMeta: linearTrackSlotEditor.linearTrackSlotDisplayMeta,
+    linearTrackSlotPlacementLabel: linearTrackSlotEditor.linearTrackSlotPlacementLabel,
     losat,
     ...losatSettings,
     losatCacheInfo,

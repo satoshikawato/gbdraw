@@ -104,6 +104,45 @@ def test_normalize_linear_track_slots_with_axis_derives_sides() -> None:
     assert [slot.id for slot in normalized] == ["gc_skew", "features", "gc_content"]
 
 
+def test_normalize_linear_track_slots_with_axis_rejects_explicit_side_conflicts() -> None:
+    slots = parse_linear_track_slots(
+        [
+            "gc_skew:gc_skew@side=below",
+            "features:features",
+            "gc_content:gc_content",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="conflicts with --linear_track_axis_index"):
+        normalize_linear_track_slots_with_axis(slots, 1)
+
+
+def test_normalize_linear_track_slots_with_axis_allows_feature_overlay_at_axis() -> None:
+    slots = parse_linear_track_slots(
+        [
+            "gc_skew:gc_skew",
+            "features:features@side=overlay",
+            "gc_content:gc_content",
+        ]
+    )
+
+    normalized = normalize_linear_track_slots_with_axis(slots, 1)
+
+    assert [slot.side for slot in normalized] == ["above", "overlay", "below"]
+
+
+def test_normalize_linear_track_slots_with_axis_rejects_overlay_off_axis() -> None:
+    slots = parse_linear_track_slots(
+        [
+            "features:features@side=overlay",
+            "gc_content:gc_content",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="conflicts with --linear_track_axis_index"):
+        normalize_linear_track_slots_with_axis(slots, 1)
+
+
 def test_default_and_order_linear_track_slots() -> None:
     defaults = default_linear_track_slots(
         show_depth=True,

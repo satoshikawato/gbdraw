@@ -265,6 +265,21 @@ def _axis_derived_side(slot_index: int, axis_index: int) -> str:
     return "above" if int(slot_index) < int(axis_index) else "below"
 
 
+def _axis_side_conflict_message(
+    *,
+    slot_id: str,
+    slot_index: int,
+    explicit_side: str,
+    derived_side: str,
+    axis_index: int,
+) -> str:
+    return (
+        f"linear track slot '{slot_id}' at index {slot_index} has side={explicit_side!r}, "
+        f"which conflicts with --linear_track_axis_index {axis_index} "
+        f"(axis-derived side is {derived_side!r})"
+    )
+
+
 def linear_track_slots_with_axis_side(
     slots: Sequence[LinearTrackSlot],
     axis_index: int,
@@ -283,6 +298,29 @@ def linear_track_slots_with_axis_side(
         params = {str(key): value for key, value in dict(slot.params or {}).items()}
         derived_side = _axis_derived_side(slot_index, axis_index)
         explicit_side = _normalize_side_value(slot.side) if slot.side is not None else None
+        if explicit_side == "overlay":
+            if renderer != "features":
+                raise ValueError("side=overlay is only supported for features slots")
+            if slot_index != axis_index:
+                raise ValueError(
+                    _axis_side_conflict_message(
+                        slot_id=str(slot.id),
+                        slot_index=slot_index,
+                        explicit_side=explicit_side,
+                        derived_side=derived_side,
+                        axis_index=axis_index,
+                    )
+                )
+        elif explicit_side is not None and explicit_side != derived_side:
+            raise ValueError(
+                _axis_side_conflict_message(
+                    slot_id=str(slot.id),
+                    slot_index=slot_index,
+                    explicit_side=explicit_side,
+                    derived_side=derived_side,
+                    axis_index=axis_index,
+                )
+            )
         out.append(
             replace(
                 slot,
