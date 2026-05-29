@@ -34,6 +34,11 @@ from .labels.filtering import (
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
+from .tracks import (
+    linear_track_slots_from_order,
+    normalize_linear_track_slots_with_axis,
+    parse_linear_track_slots,
+)
 
 
 from .cli_utils.common import (
@@ -772,6 +777,25 @@ def _get_args(args) -> argparse.Namespace:
         metavar="AUTO|PX",
     )
     parser.add_argument(
+        '--linear_track_order',
+        help='Linear custom track shortcut order, for example features,depth,gc_content,gc_skew.',
+        type=str,
+        default="",
+    )
+    parser.add_argument(
+        '--linear_track_slot',
+        help='Linear custom track slot: <slot_id>:<renderer>@key=value,key=value. Repeat to add slots.',
+        action='append',
+        default=[],
+        metavar='SLOT',
+    )
+    parser.add_argument(
+        '--linear_track_axis_index',
+        help='Axis boundary index for linear custom track slots.',
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
         '--ruler_on_axis',
         help=(
             'Use each record axis as the ruler in linear mode. '
@@ -986,6 +1010,32 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_content_small_tick_interval must be > 0")
     if args.gc_content_tick_font_size is not None and args.gc_content_tick_font_size <= 0:
         parser.error("--gc_content_tick_font_size must be > 0")
+    if args.linear_track_order and args.linear_track_slot:
+        parser.error("--linear_track_order cannot be combined with --linear_track_slot")
+    if args.linear_track_axis_index is not None and not (args.linear_track_order or args.linear_track_slot):
+        parser.error("--linear_track_axis_index requires --linear_track_order or --linear_track_slot")
+    try:
+        linear_track_slot_specs = None
+        if args.linear_track_order:
+            linear_track_slot_specs = linear_track_slots_from_order(
+                args.linear_track_order,
+                show_depth=bool(args.show_depth or args.depth or args.depth_track),
+                depth_track_count=max(1, len(args.depth_track or [])),
+                show_gc=bool(args.show_gc),
+                show_skew=bool(args.show_skew),
+                dinucleotide=str(args.nt or "GC").upper(),
+                track_layout=args.track_layout,
+            )
+        elif args.linear_track_slot:
+            linear_track_slot_specs = parse_linear_track_slots(args.linear_track_slot)
+        if linear_track_slot_specs is not None and args.linear_track_axis_index is not None:
+            normalize_linear_track_slots_with_axis(
+                linear_track_slot_specs,
+                args.linear_track_axis_index,
+            )
+        args.linear_track_slot_specs = linear_track_slot_specs
+    except Exception as exc:
+        parser.error(str(exc))
     if args.label_placement == "above_feature" and args.label_rendering != "auto":
         parser.error("--label_rendering embedded_only|external_only cannot be used with --label_placement above_feature")
     if args.collinear_min_anchors <= 0:
@@ -1204,6 +1254,8 @@ def linear_main(cmd_args) -> None:
     label_rotation: Optional[float] = args.label_rotation
     track_layout: str = args.track_layout
     track_axis_gap: Optional[float] = args.track_axis_gap
+    linear_track_slot_specs = args.linear_track_slot_specs
+    linear_track_axis_index: int | None = args.linear_track_axis_index
     ruler_on_axis: bool = bool(args.ruler_on_axis)
     if ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
         logger.warning(
@@ -1448,6 +1500,8 @@ def linear_main(cmd_args) -> None:
         depth_track_large_tick_intervals=depth_track_large_tick_intervals,
         depth_track_small_tick_intervals=depth_track_small_tick_intervals,
         depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+        linear_track_slots=linear_track_slot_specs,
+        linear_track_axis_index=linear_track_axis_index,
         plot_title=plot_title,
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,

@@ -94,11 +94,14 @@ from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
+    LinearTrackSlot,
     ScalarSpec,
     circular_track_slots_from_order,
     default_circular_track_slots,
     normalize_circular_track_slots_with_axis,
+    normalize_linear_track_slots_with_axis,
     parse_circular_track_slots,
+    parse_linear_track_slots,
 )
 
 DEFAULT_SELECTED_FEATURES = (
@@ -189,6 +192,68 @@ def _circular_slots_define_renderer(
 
 def _dinucleotides_from_circular_slots(
     slots: Sequence[CircularTrackSlot] | None,
+    *,
+    default_nt: str,
+) -> set[str]:
+    nts: set[str] = set()
+    for slot in slots or []:
+        if not slot.enabled or str(slot.renderer) not in {"dinucleotide_content", "dinucleotide_skew"}:
+            continue
+        params = slot.params or {}
+        nt = str(params.get("nt", params.get("dinucleotide", default_nt)) or default_nt).upper()
+        if len(nt) >= 2:
+            nts.add(nt)
+    return nts
+
+
+def _parse_linear_track_slot_inputs(
+    linear_track_slots: Sequence[str | LinearTrackSlot] | None,
+) -> list[LinearTrackSlot] | None:
+    if linear_track_slots is None:
+        return None
+    return parse_linear_track_slots(list(linear_track_slots))
+
+
+def _validate_linear_track_axis_index(
+    linear_track_axis_index: int | None,
+    parsed_linear_track_slots: Sequence[LinearTrackSlot] | None,
+) -> int | None:
+    if linear_track_axis_index is None:
+        return None
+    if parsed_linear_track_slots is None:
+        raise ValidationError("linear_track_axis_index requires linear_track_slots.")
+    if not isinstance(linear_track_axis_index, int):
+        raise ValidationError("linear_track_axis_index must be an integer.")
+    if linear_track_axis_index < 0 or linear_track_axis_index > len(parsed_linear_track_slots):
+        raise ValidationError(
+            f"linear_track_axis_index must be between 0 and the number of linear track slots ({len(parsed_linear_track_slots)})."
+        )
+    try:
+        normalize_linear_track_slots_with_axis(
+            parsed_linear_track_slots,
+            linear_track_axis_index,
+        )
+    except Exception as exc:
+        raise ValidationError(str(exc)) from exc
+    return linear_track_axis_index
+
+
+def _linear_slots_have_renderer(
+    slots: Sequence[LinearTrackSlot] | None,
+    renderer: str,
+) -> bool:
+    return any(slot.enabled and str(slot.renderer) == renderer for slot in (slots or []))
+
+
+def _linear_slots_define_renderer(
+    slots: Sequence[LinearTrackSlot] | None,
+    renderer: str,
+) -> bool:
+    return any(str(slot.renderer) == renderer for slot in (slots or []))
+
+
+def _dinucleotides_from_linear_slots(
+    slots: Sequence[LinearTrackSlot] | None,
     *,
     default_nt: str,
 ) -> set[str]:
@@ -619,6 +684,30 @@ def _default_circular_depth_slots_if_needed(
 
 def _validate_circular_depth_track_indices(
     slots: Sequence[CircularTrackSlot] | None,
+    *,
+    depth_track_count_value: int,
+) -> None:
+    if not slots:
+        return
+    for slot in slots:
+        if not slot.enabled or str(slot.renderer) != "depth":
+            continue
+        raw_index = (slot.params or {}).get("track_index", 0)
+        try:
+            track_index = int(raw_index or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(
+                f"Depth slot '{slot.id}' has invalid track_index={raw_index!r}."
+            ) from exc
+        if track_index < 0 or track_index >= depth_track_count_value:
+            raise ValidationError(
+                f"Depth slot '{slot.id}' track_index={track_index} is outside the available "
+                f"depth track range 0..{max(0, depth_track_count_value - 1)}."
+            )
+
+
+def _validate_linear_depth_track_indices(
+    slots: Sequence[LinearTrackSlot] | None,
     *,
     depth_track_count_value: int,
 ) -> None:
@@ -1649,6 +1738,8 @@ def assemble_linear_diagram_from_records(
     depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
     depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
     depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
+    linear_track_slots: Sequence[str | LinearTrackSlot] | None = None,
+    linear_track_axis_index: int | None = None,
     plot_title: str | None = None,
     plot_title_position: Literal["center", "top", "bottom"] = "bottom",
     plot_title_font_size: float | None = None,
@@ -1770,11 +1861,38 @@ def assemble_linear_diagram_from_records(
         depth_track_small_tick_intervals=depth_track_small_tick_intervals,
         depth_track_tick_font_sizes=depth_track_tick_font_sizes,
     )
-    if cfg.canvas.show_depth and record_depth_tracks is None:
-        raise ValidationError("show_depth requires a depth_table, depth_file, or depth_track input.")
-    show_depth = record_depth_tracks is not None
-    if show_depth != bool(cfg.canvas.show_depth):
-        cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth))
+    parsed_linear_track_slots = _parse_linear_track_slot_inputs(linear_track_slots)
+    resolved_linear_track_axis_index = _validate_linear_track_axis_index(
+        linear_track_axis_index,
+        parsed_linear_track_slots,
+    )
+    available_depth_track_count = depth_track_count(record_depth_tracks)
+    if parsed_linear_track_slots is not None:
+        show_depth = _linear_slots_have_renderer(parsed_linear_track_slots, "depth")
+        show_gc = _linear_slots_have_renderer(parsed_linear_track_slots, "dinucleotide_content")
+        show_skew = _linear_slots_have_renderer(parsed_linear_track_slots, "dinucleotide_skew")
+        if show_depth and record_depth_tracks is None:
+            raise ValidationError("A linear depth track slot requires a depth_table, depth_file, or depth_track input.")
+        if show_depth:
+            _validate_linear_depth_track_indices(
+                parsed_linear_track_slots,
+                depth_track_count_value=max(1, available_depth_track_count),
+            )
+        cfg = replace(
+            cfg,
+            canvas=replace(
+                cfg.canvas,
+                show_depth=show_depth,
+                show_gc=show_gc,
+                show_skew=show_skew,
+            ),
+        )
+    else:
+        if cfg.canvas.show_depth and record_depth_tracks is None:
+            raise ValidationError("show_depth requires a depth_table, depth_file, or depth_track input.")
+        show_depth = record_depth_tracks is not None
+        if show_depth != bool(cfg.canvas.show_depth):
+            cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth))
     _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
 
@@ -1962,6 +2080,8 @@ def assemble_linear_diagram_from_records(
         skew_config=skew_config,
         depth_config=depth_config,
         record_depth_tracks=record_depth_tracks,
+        linear_track_slots=parsed_linear_track_slots,
+        linear_track_axis_index=resolved_linear_track_axis_index,
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
@@ -3264,6 +3384,7 @@ def build_circular_diagram(
     colors = options.colors
     output = options.output
     tracks = options.tracks
+    tracks = options.tracks
 
     config_dict: dict | None = None
     cfg: GbdrawConfig | None = None
@@ -3352,6 +3473,7 @@ def build_linear_diagram(
     options = options or DiagramOptions()
     colors = options.colors
     output = options.output
+    tracks = options.tracks
     config_dict: dict | None = None
     cfg: GbdrawConfig | None = None
     config_overrides = options.config_overrides
@@ -3411,6 +3533,8 @@ def build_linear_diagram(
         depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
         depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
         depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+        linear_track_slots=tracks.linear_track_slots if tracks else None,
+        linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
         plot_title=options.plot_title,
         plot_title_position=(
             output.plot_title_position

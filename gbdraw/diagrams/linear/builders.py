@@ -32,6 +32,7 @@ from .positioning import (
     position_depth_group,
     position_gc_content_group,
     position_gc_skew_group,
+    position_linear_track_group,
     position_record_definition_group,
     position_record_group,
 )
@@ -49,6 +50,8 @@ def add_record_group(
     precalculated_labels: Optional[list],
     cfg: GbdrawConfig | None = None,
     precomputed_feature_dict: FeatureDict | None = None,
+    feature_track_layout: str | None = None,
+    draw_features: bool = True,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
     record_group: Group = SeqRecordGroup(
@@ -59,6 +62,8 @@ def add_record_group(
         precalculated_labels=precalculated_labels,
         cfg=cfg,
         precomputed_feature_dict=precomputed_feature_dict,
+        feature_track_layout=feature_track_layout,
+        draw_features=draw_features,
     ).get_group()
     position_record_group(record_group, offset_y, offset_x, canvas_config)
     canvas.add(record_group)
@@ -75,19 +80,26 @@ def add_gc_content_group(
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
     gc_df: DataFrame | None = None,
+    track_height: float | None = None,
+    track_offset_y: float | None = None,
+    group_id: str = "gc_content",
 ) -> Drawing:
     """Adds a GC content group to the linear canvas."""
     gc_content_group: Group = GcContentGroup(
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
-        track_height=canvas_config.gc_height,
+        track_height=canvas_config.gc_height if track_height is None else float(track_height),
         gc_config=gc_config,
         config_dict=config_dict,
         cfg=cfg,
         gc_df=gc_df,
+        group_id=group_id,
     ).get_group()
-    position_gc_content_group(gc_content_group, offset_y, offset_x, canvas_config)
+    if track_offset_y is None:
+        position_gc_content_group(gc_content_group, offset_y, offset_x, canvas_config)
+    else:
+        position_linear_track_group(gc_content_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_content_group)
     return canvas
 
@@ -105,13 +117,15 @@ def add_depth_group(
     depth_track_index: int = 0,
     group_id: str = "depth",
     axis_group_id: str = "depth_axis",
+    track_height: float | None = None,
+    track_offset_y: float | None = None,
 ) -> Drawing:
     """Adds a depth coverage group to the linear canvas."""
     depth_group: Group = DepthGroup(
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
-        track_height=canvas_config.depth_height,
+        track_height=canvas_config.depth_height if track_height is None else float(track_height),
         depth_config=depth_config,
         config_dict=config_dict,
         cfg=cfg,
@@ -119,7 +133,10 @@ def add_depth_group(
         group_id=group_id,
         axis_group_id=axis_group_id,
     ).get_group()
-    position_depth_group(depth_group, offset_y, offset_x, canvas_config, depth_track_index)
+    if track_offset_y is None:
+        position_depth_group(depth_group, offset_y, offset_x, canvas_config, depth_track_index)
+    else:
+        position_linear_track_group(depth_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(depth_group)
     return canvas
 
@@ -134,19 +151,26 @@ def add_gc_skew_group(
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
     gc_df: DataFrame | None = None,
+    track_height: float | None = None,
+    track_offset_y: float | None = None,
+    group_id: str = "gc_skew",
 ) -> Drawing:
     """Adds a GC skew group to the linear canvas."""
     gc_skew_group: Group = GcSkewGroup(
         gb_record=record,
         alignment_width=canvas_config.alignment_width,
         longest_record_len=canvas_config.longest_genome,
-        track_height=canvas_config.skew_height,
+        track_height=canvas_config.skew_height if track_height is None else float(track_height),
         skew_config=skew_config,
         config_dict=config_dict,
         cfg=cfg,
         gc_df=gc_df,
+        group_id=group_id,
     ).get_group()
-    position_gc_skew_group(gc_skew_group, offset, offset_x, canvas_config)
+    if track_offset_y is None:
+        position_gc_skew_group(gc_skew_group, offset, offset_x, canvas_config)
+    else:
+        position_linear_track_group(gc_skew_group, offset, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_skew_group)
     return canvas
 

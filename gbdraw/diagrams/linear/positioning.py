@@ -76,6 +76,21 @@ def position_depth_group(
     return depth_group
 
 
+def position_linear_track_group(
+    group: Group,
+    offset_y: float,
+    offset_x: float,
+    canvas_config: LinearCanvasConfigurator,
+    track_offset_y: float,
+) -> Group:
+    """Positions a custom linear track group relative to the record axis."""
+    group.translate(
+        offset_x + canvas_config.horizontal_offset,
+        offset_y + float(track_offset_y),
+    )
+    return group
+
+
 def position_gc_skew_group(gc_skew_group: Group, offset_y: float, offset_x: float, canvas_config: LinearCanvasConfigurator) -> Group:
     """Positions the GC skew group on the canvas."""
     y_offset = (
@@ -127,6 +142,7 @@ def position_comparison_group(comparison_count: int, canvas_config: LinearCanvas
 __all__ = [
     "calculate_record_offsets",
     "position_depth_group",
+    "position_linear_track_group",
     "position_record_group",
     "position_gc_content_group",
     "position_gc_skew_group",

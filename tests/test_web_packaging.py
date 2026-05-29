@@ -258,8 +258,30 @@ def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
     assert '"tick_label_font_size": "--tick_label_font_size" in _source' in source
     assert "args.push('--tick_label_font_size', adv.tick_label_font_size);" in source
     assert "if (form.scale_style === 'ruler')" in source
-    assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in source
-    assert "args.push('--scale_font_size', adv.scale_font_size);" in source
+
+
+def test_web_linear_custom_track_slots_are_wired() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    module_source = (WEB_ROOT / "js" / "app" / "linear-track-slots.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+
+    assert "linear_track_slots_enabled: false" in state_source
+    assert "linear_track_slots_schema_version: 1" in state_source
+    assert "createDefaultLinearTrackSlots" in state_source
+    assert "Linear Custom Track Slots" in index_html
+    assert 'v-model.number="entry.slot.params.track_index"' in index_html
+    assert "--linear_track_slot" in run_source
+    assert "buildLinearTrackSlotSpec" in run_source
+    assert "linearSlotNeedsDepth" in run_source
+    assert "validateImportedLinearTrackSlots" in config_source
+    assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1" in config_source
+    assert "createLinearTrackSlotEditor" in module_source
+    assert "linearTrackStackEntries" in app_setup_source
+    assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in run_source
+    assert "args.push('--scale_font_size', adv.scale_font_size);" in run_source
 
 
 def test_web_wires_gc_content_percent_options() -> None:

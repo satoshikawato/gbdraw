@@ -18,6 +18,13 @@ import {
   orderedConservationSources
 } from './conservation-series.js';
 import {
+  applyLinearTrackOrderPlacements,
+  buildLinearTrackSlotSpec,
+  clampLinearTrackAxisIndex,
+  linearDepthTrackCountForState,
+  normalizeLinearTrackSlots
+} from './linear-track-slots.js';
+import {
   getDepthTrackFallbackLabel,
   getDepthTrackLabelFromFile
 } from './depth-tracks.js';
@@ -575,6 +582,7 @@ export const createRunAnalysis = ({
   let linearLabelSupportCache = null;
   let featureShapeSupportCache = null;
   let circularMultiRecordCanvasSupportCache = null;
+  let linearTrackSlotSupportCache = null;
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   let pendingReflowReason = 'label-edit';
@@ -1202,6 +1210,36 @@ json.dumps({
       };
     }
     return circularMultiRecordCanvasSupportCache;
+  };
+
+  const getLinearTrackSlotOptionSupport = () => {
+    if (linearTrackSlotSupportCache) return linearTrackSlotSupportCache;
+    const pyodide = getPyodide();
+    if (!pyodide) {
+      linearTrackSlotSupportCache = {
+        linear_track_slot: false,
+        linear_track_axis_index: false
+      };
+      return linearTrackSlotSupportCache;
+    }
+    try {
+      const raw = pyodide.runPython(`
+import inspect, json
+import gbdraw.linear as _gbdraw_linear
+_source = inspect.getsource(_gbdraw_linear._get_args)
+json.dumps({
+  "linear_track_slot": "--linear_track_slot" in _source,
+  "linear_track_axis_index": "--linear_track_axis_index" in _source,
+})
+      `);
+      linearTrackSlotSupportCache = JSON.parse(String(raw));
+    } catch (_err) {
+      linearTrackSlotSupportCache = {
+        linear_track_slot: false,
+        linear_track_axis_index: false
+      };
+    }
+    return linearTrackSlotSupportCache;
   };
 
   const runCircularLayoutPreflight = (preflightArgs) => {
@@ -2500,8 +2538,52 @@ json.dumps({
         const normalizedPairwiseMatchStyle = normalizePairwiseMatchStyle(adv.pairwise_match_style);
         adv.pairwise_match_style = normalizedPairwiseMatchStyle;
         if (form.align_center) args.push('--align_center');
-        if (form.show_gc) args.push('--show_gc');
-        if (form.show_skew) args.push('--show_skew');
+        const useLinearTrackSlots = adv.linear_track_slots_enabled === true;
+        let linearTrackSlots = [];
+        let linearTrackSlotAxisIndex = null;
+        let linearSlotNeedsDepth = false;
+        if (useLinearTrackSlots) {
+          const support = getLinearTrackSlotOptionSupport();
+          if (!support.linear_track_slot || !support.linear_track_axis_index) {
+            throw new Error(
+              'Current gbdraw wheel does not support --linear_track_slot and --linear_track_axis_index. Rebuild and redeploy the web wheel.'
+            );
+          }
+          linearTrackSlots = normalizeLinearTrackSlots(
+            adv.linear_track_slots,
+            adv.nt,
+            form.linear_track_layout
+          );
+          linearSlotNeedsDepth = linearTrackSlots.some(
+            (slot) => slot.enabled !== false && slot.renderer === 'depth'
+          );
+          const depthTrackCount = linearDepthTrackCountForState(state);
+          let nextDepthIndex = 0;
+          linearTrackSlots.forEach((slot) => {
+            if (slot.renderer !== 'depth') return;
+            slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+            const rawTrackIndex = Number(slot.params.track_index);
+            if (!Number.isInteger(rawTrackIndex) || rawTrackIndex < 0) {
+              slot.params.track_index = Math.min(nextDepthIndex, Math.max(0, depthTrackCount - 1));
+            } else {
+              slot.params.track_index = Math.min(rawTrackIndex, Math.max(0, depthTrackCount - 1));
+            }
+            nextDepthIndex = Number(slot.params.track_index) + 1;
+          });
+          linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
+            adv.linear_track_slots_axis_index,
+            linearTrackSlots.length
+          );
+          if (linearTrackSlotAxisIndex === null) {
+            linearTrackSlotAxisIndex = linearTrackSlots.filter((slot) => slot.side === 'above').length;
+          }
+          linearTrackSlots = applyLinearTrackOrderPlacements(linearTrackSlots, linearTrackSlotAxisIndex);
+          adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
+          adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
+        } else {
+          if (form.show_gc) args.push('--show_gc');
+          if (form.show_skew) args.push('--show_skew');
+        }
         if (form.normalize_length) args.push('--normalize_length');
         if (form.legend !== 'right') args.push('-l', form.legend);
         const useLosat = blastSource.value === 'losat';
@@ -3427,11 +3509,11 @@ json.dumps({
           losatCacheInfo.value = cacheInfo;
           losatCache.value = cacheMap;
         }
-        if (form.show_depth) {
+        if ((!useLinearTrackSlots && form.show_depth) || linearSlotNeedsDepth) {
           const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
           const totalDepthFiles = depthRows.reduce((sum, row) => sum + row.filter(Boolean).length, 0);
           if (totalDepthFiles === 0) {
-            throw new Error('Please upload at least one Depth TSV file or disable Show depth track.');
+            throw new Error('Please upload at least one Depth TSV file or disable the depth track.');
           }
           const maxDepthTracks = Math.max(...depthRows.map((row) => row.length), 0);
           const depthTrackEntries = [];
@@ -3466,6 +3548,15 @@ json.dumps({
           ) {
             args.push('--depth_height', adv.depth_height);
           }
+        }
+        if (useLinearTrackSlots) {
+          args.push('--linear_track_axis_index', String(linearTrackSlotAxisIndex));
+          linearTrackSlots
+            .filter((slot) => slot.enabled !== false)
+            .forEach((slot) => {
+              const spec = buildLinearTrackSlotSpec(slot);
+              if (spec) args.push('--linear_track_slot', spec);
+            });
         }
         if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
         else {

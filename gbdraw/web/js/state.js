@@ -4,6 +4,7 @@ import {
   normalizePaletteDefinitions
 } from './app/color-utils.js';
 import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
+import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -389,6 +390,10 @@ const adv = reactive({
   depth_tick_interval: null,
   depth_small_tick_interval: null,
   depth_tick_font_size: null,
+  linear_track_slots_enabled: false,
+  linear_track_slots_schema_version: 1,
+  linear_track_slots_axis_index: null,
+  linear_track_slots: createDefaultLinearTrackSlots(),
   gc_content_mode: 'deviation',
   gc_content_min_percent: 0,
   gc_content_max_percent: 100,

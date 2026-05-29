@@ -7,16 +7,21 @@ import {
   normalizeCircularTrackSlots
 } from '../app/circular-track-slots.js';
 import {
+  clampLinearTrackAxisIndex,
+  normalizeLinearTrackSlots
+} from '../app/linear-track-slots.js';
+import {
   DEPTH_FILE_ENCODING,
   decodeDepthText,
   encodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 
-const SESSION_VERSION = 25;
+const SESSION_VERSION = 26;
 const LOSAT_CACHE_SCHEMA = 2;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;
+const LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1;
 const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
   'gapAfter',
   'gap_after',
@@ -245,6 +250,21 @@ const validateImportedCircularTrackSlots = (configData = {}) => {
     throw new Error(
       `Custom Track Slots use obsolete field '${obsoletePath}'. Use slot-level radius, width, spacing, side, and z fields.`
     );
+  }
+};
+
+const validateImportedLinearTrackSlots = (configData = {}) => {
+  const adv = configData && typeof configData === 'object' ? configData.adv : null;
+  if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
+  if (!Object.prototype.hasOwnProperty.call(adv, 'linear_track_slots')) return;
+
+  if (adv.linear_track_slots_schema_version !== LINEAR_TRACK_SLOT_SCHEMA_VERSION) {
+    throw new Error(
+      `Linear Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`
+    );
+  }
+  if (!Array.isArray(adv.linear_track_slots)) {
+    throw new Error('Linear Custom Track Slots must be an array.');
   }
 };
 
@@ -656,6 +676,24 @@ const applyConfigData = (data) => {
       state.adv.circular_track_slots_axis_index
     )
   );
+  state.adv.linear_track_slots_schema_version = LINEAR_TRACK_SLOT_SCHEMA_VERSION;
+  state.adv.linear_track_slots_enabled = state.adv.linear_track_slots_enabled === true;
+  {
+    const normalizedLinearSlots = normalizeLinearTrackSlots(
+      state.adv.linear_track_slots,
+      state.adv.nt,
+      state.form.linear_track_layout
+    );
+    state.adv.linear_track_slots_axis_index = clampLinearTrackAxisIndex(
+      state.adv.linear_track_slots_axis_index,
+      normalizedLinearSlots.length
+    );
+    state.adv.linear_track_slots.splice(
+      0,
+      state.adv.linear_track_slots.length,
+      ...normalizedLinearSlots
+    );
+  }
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
   state.adv.depth_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_tick_interval);
@@ -1400,6 +1438,7 @@ export const importConfig = async (e) => {
     });
     state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.form);
     validateImportedCircularTrackSlots(data);
+    validateImportedLinearTrackSlots(data);
     applyConfigData(data);
     restorePaletteStateAfterConfigImport();
     alert('Configuration loaded successfully!');
@@ -1468,6 +1507,7 @@ export const importSession = async (e) => {
     if (data.config) {
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
       validateImportedCircularTrackSlots(data.config);
+      validateImportedLinearTrackSlots(data.config);
       applyConfigData(data.config);
     }
     restorePaletteStateFromSession(ui);
