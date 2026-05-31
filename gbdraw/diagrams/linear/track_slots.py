@@ -66,6 +66,14 @@ def _slot_spacing(
     return 0.0
 
 
+def _axis_clearance_px(canvas_config: LinearCanvasConfigurator) -> float:
+    return max(0.0, float(canvas_config.vertical_padding))
+
+
+def _slot_needs_axis_clearance(slot: NormalizedLinearTrackSlot) -> bool:
+    return slot.renderer != "features"
+
+
 def _track_extents_for_slot(
     slot: NormalizedLinearTrackSlot,
     *,
@@ -91,7 +99,11 @@ def _resolve_below_tracks(
     cfg: GbdrawConfig,
 ) -> tuple[list[LinearResolvedTrack], float]:
     resolved: list[LinearResolvedTrack] = []
-    cursor = 0.0
+    cursor = (
+        _axis_clearance_px(canvas_config)
+        if slots and _slot_needs_axis_clearance(slots[0])
+        else 0.0
+    )
     for slot in slots:
         height = _slot_height(slot, canvas_config=canvas_config)
         spacing = _slot_spacing(slot, canvas_config=canvas_config)
@@ -123,7 +135,12 @@ def _resolve_above_tracks(
     cfg: GbdrawConfig,
 ) -> tuple[list[LinearResolvedTrack], float]:
     by_slot_index: dict[int, LinearResolvedTrack] = {}
-    cursor = 0.0
+    axis_adjacent_slot = slots[-1] if slots else None
+    cursor = (
+        _axis_clearance_px(canvas_config)
+        if axis_adjacent_slot is not None and _slot_needs_axis_clearance(axis_adjacent_slot)
+        else 0.0
+    )
     for slot in reversed(slots):
         height = _slot_height(slot, canvas_config=canvas_config)
         spacing = _slot_spacing(slot, canvas_config=canvas_config)
