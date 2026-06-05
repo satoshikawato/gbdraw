@@ -38,6 +38,7 @@ class GcContentGroup:
         start_y: float = 0,
         cfg: GbdrawConfig | None = None,
         gc_df: DataFrame | None = None,
+        group_id: str = "gc_content",
     ) -> None:
         """
         Initializes the GcContentGroup with the given parameters and configurations.
@@ -52,7 +53,7 @@ class GcContentGroup:
             start_x (float): Starting x-coordinate for the GC content visualization.
             start_y (float): Starting y-coordinate for the GC content visualization.
         """
-        self.gc_group = Group(id="gc_content")
+        self.gc_group = Group(id=group_id)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len

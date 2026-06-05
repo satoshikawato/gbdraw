@@ -413,6 +413,9 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--label_rendering {auto,embedded_only,external_only}]
               [--label_rotation LABEL_ROTATION]
               [--track_layout {above,middle,below}] [--track_axis_gap AUTO|PX]
+              [--linear_track_order LINEAR_TRACK_ORDER]
+              [--linear_track_slot SLOT]
+              [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
               [--ruler_on_axis] [-f FORMAT] [-l LEGEND]
               [--show_labels [{all,first,none}]] [--resolve_overlaps]
               [--label_whitelist LABEL_WHITELIST |
@@ -583,6 +586,15 @@ options:
                         Gap between axis and nearest feature edge in pixels
                         for above/below layouts. Use 'auto' to derive it from
                         feature height.
+  --linear_track_order LINEAR_TRACK_ORDER
+                        Linear custom track shortcut order, for example
+                        features,depth,gc_content,gc_skew.
+  --linear_track_slot SLOT
+                        Linear custom track slot:
+                        <slot_id>:<renderer>@key=value,key=value. Repeat to
+                        add slots.
+  --linear_track_axis_index LINEAR_TRACK_AXIS_INDEX
+                        Axis boundary index for linear custom track slots.
   --ruler_on_axis       Use each record axis as the ruler in linear mode.
                         Effective only with --scale_style ruler and
                         --track_layout above|below.

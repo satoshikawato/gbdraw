@@ -258,8 +258,35 @@ def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
     assert '"tick_label_font_size": "--tick_label_font_size" in _source' in source
     assert "args.push('--tick_label_font_size', adv.tick_label_font_size);" in source
     assert "if (form.scale_style === 'ruler')" in source
-    assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in source
-    assert "args.push('--scale_font_size', adv.scale_font_size);" in source
+
+
+def test_web_linear_custom_track_slots_are_wired() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    module_source = (WEB_ROOT / "js" / "app" / "linear-track-slots.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+
+    assert "linear_track_slots_enabled: false" in state_source
+    assert "linear_track_slots_schema_version: 1" in state_source
+    assert "createDefaultLinearTrackSlots" in state_source
+    assert '>Custom Track Slots <help-tip text="Edit the explicit linear track stack.' in index_html
+    assert "Linear Custom Track Slots" not in index_html
+    assert "Linear Custom Track Slots" not in config_source
+    assert 'v-model="adv.linear_track_slots_enabled"' in index_html
+    assert 'v-model.number="entry.slot.params.track_index"' in index_html
+    assert "--linear_track_slot" in run_source
+    assert "buildLinearTrackSlotSpec" in run_source
+    assert "linearSlotNeedsDepth" in run_source
+    assert "validateImportedLinearTrackSlots" in config_source
+    assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1" in config_source
+    assert "createLinearTrackSlotEditor" in module_source
+    assert "linearTrackStackEntries" in app_setup_source
+    assert "linearTrackSlotUsesPresetGeometry(entry.slot)" in index_html
+    assert "linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry" in app_setup_source
+    assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in run_source
+    assert "args.push('--scale_font_size', adv.scale_font_size);" in run_source
 
 
 def test_web_wires_gc_content_percent_options() -> None:
@@ -546,6 +573,174 @@ def test_web_collinear_orientation_identity_recoloring_uses_identity_factor(tmp_
         if (aliasPalette.collinear_block_plus !== '#123456') {{
           throw new Error(`collinear_block_plus_max should alias collinear_block_plus, got ${{aliasPalette.collinear_block_plus}}`);
         }}
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
+
+
+def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
+    module_path = tmp_path / "linear-track-slots.mjs"
+    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    check_path = tmp_path / "check-linear-track-slots.mjs"
+    check_path.write_text(
+        f"""
+        import {{
+          applyLinearTrackOrderPlacements,
+          buildLinearTrackSlotSpec,
+          createDefaultLinearTrackSlots,
+          createLinearTrackSlotEditor
+        }} from {module_path.as_uri()!r};
+
+        const assert = (condition, message) => {{
+          if (!condition) throw new Error(message);
+        }};
+
+        const defaultState = {{
+          adv: {{
+            nt: 'GC',
+            linear_track_slots_enabled: true,
+            linear_track_slots_axis_index: null,
+            linear_track_slots: createDefaultLinearTrackSlots({{
+              showDepth: true,
+              depthTrackCount: 1,
+              showGc: true,
+              showSkew: true,
+              trackLayout: 'middle'
+            }})
+          }},
+          form: {{
+            linear_track_layout: 'middle',
+            show_depth: true,
+            show_gc: true,
+            show_skew: true
+          }},
+          linearSeqs: [{{ depth: [{{ name: 'depth.tsv' }}] }}]
+        }};
+        const defaultEditor = createLinearTrackSlotEditor({{ state: defaultState }});
+        defaultEditor.normalizeLinearTrackSlots();
+        const defaultEntries = defaultEditor.linearTrackStackEntries();
+        assert(defaultState.adv.linear_track_slots_axis_index === 0, 'Middle default should place Axis at the feature row');
+        assert(defaultEntries[0]?.kind === 'slot' && defaultEntries[0]?.onAxis === true, 'Middle default feature should embed the Axis row');
+        assert(defaultState.adv.linear_track_slots[0].side === 'overlay', 'Middle default feature should use side=overlay');
+
+        const state = {{
+          adv: {{
+            nt: 'GC',
+            linear_track_slots_enabled: true,
+            linear_track_slots_axis_index: 1,
+            linear_track_slots: [
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'above', params: {{ nt: 'GC' }} }},
+              {{ id: 'features', renderer: 'features', side: 'below', params: {{}} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'below', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            linear_track_layout: 'middle',
+            show_depth: false,
+            show_gc: true,
+            show_skew: true
+          }},
+          linearSeqs: []
+        }};
+        const editor = createLinearTrackSlotEditor({{ state }});
+        assert(!editor.canMoveLinearTrackSlot(0, 1), 'Normal down arrow should not cross Axis');
+        editor.moveLinearTrackSlot(0, 1);
+        assert(state.adv.linear_track_slots.map((slot) => slot.id).join(',') === 'gc_content,features,gc_skew', 'Arrow move crossed Axis unexpectedly');
+
+        editor.moveLinearTrackSlotToAxis(1);
+        assert(state.adv.linear_track_slots_axis_index === 1, 'Feature on-Axis move should set axis index to the feature row');
+        assert(state.adv.linear_track_slots[1].side === 'overlay', 'Feature on-Axis move should use side=overlay');
+        assert(editor.linearTrackStackEntries()[1]?.onAxis === true, 'On-Axis feature should be embedded in stack entries');
+
+        editor.moveLinearTrackSlotAbove(2);
+        assert(state.adv.linear_track_slots.map((slot) => slot.id).join(',') === 'gc_content,gc_skew,features', 'Move above Axis inserted in the wrong position');
+        assert(state.adv.linear_track_slots_axis_index === 2, 'Move above Axis should shift the boundary after the moved slot');
+        assert(state.adv.linear_track_slots.map((slot) => slot.side).join(',') === 'above,above,overlay', 'Move above Axis did not sync sides');
+
+        editor.moveLinearTrackSlotBelow(0);
+        assert(state.adv.linear_track_slots.map((slot) => slot.id).join(',') === 'gc_skew,features,gc_content', 'Move below Axis inserted in the wrong position');
+        assert(state.adv.linear_track_slots_axis_index === 1, 'Move below Axis should keep the on-Axis feature boundary');
+        assert(state.adv.linear_track_slots.map((slot) => slot.side).join(',') === 'above,overlay,below', 'Move below Axis did not sync sides');
+
+        const feature = state.adv.linear_track_slots.find((slot) => slot.id === 'features');
+        editor.updateLinearTrackSlotPlacement(feature, 'below');
+        let movedFeature = state.adv.linear_track_slots.find((slot) => slot.id === 'features');
+        assert(movedFeature?.side === 'below' && state.adv.linear_track_slots_axis_index === 1, 'Feature below-axis selection should move the row, not just mutate side');
+        editor.updateLinearTrackSlotPlacement(movedFeature, 'above');
+        movedFeature = state.adv.linear_track_slots.find((slot) => slot.id === 'features');
+        assert(movedFeature?.side === 'above' && state.adv.linear_track_slots_axis_index === 2, 'Feature above-axis selection should move above the boundary');
+        editor.updateLinearTrackSlotPlacement(movedFeature, 'overlay');
+        movedFeature = state.adv.linear_track_slots.find((slot) => slot.id === 'features');
+        assert(movedFeature?.side === 'overlay' && state.adv.linear_track_slots_axis_index === 1, 'Feature on-axis selection should restore overlay placement');
+
+        const duplicateAxis = applyLinearTrackOrderPlacements(
+          [
+            {{ id: 'features_a', renderer: 'features', side: 'overlay', params: {{}} }},
+            {{ id: 'features_b', renderer: 'features', side: 'overlay', params: {{}} }},
+            {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'below', params: {{ nt: 'GC' }} }}
+          ],
+          1
+        );
+        const onAxisIds = duplicateAxis.filter((slot) => slot.side === 'overlay').map((slot) => slot.id).join(',');
+        assert(onAxisIds === 'features_b', 'Only the feature at the Axis index should remain on-axis');
+        assert(duplicateAxis[0].side === 'above', 'Demoted duplicate on-axis feature should match row placement');
+
+        const gcSpec = buildLinearTrackSlotSpec(
+          {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'above', params: {{ nt: 'GC' }} }},
+          {{ includeSide: false }}
+        );
+        assert(!gcSpec.includes('side='), 'Axis-derived above/below side should be omitted from CLI spec');
+        const featureSpec = buildLinearTrackSlotSpec(
+          {{ id: 'features', renderer: 'features', side: 'overlay', params: {{}} }},
+          {{ includeSide: false }}
+        );
+        assert(featureSpec.includes('side=overlay'), 'On-Axis feature CLI spec should keep side=overlay');
+
+        const reconcileState = {{
+          adv: {{
+            nt: 'AT',
+            linear_track_slots_enabled: true,
+            linear_track_slots_axis_index: 0,
+            linear_track_slots: [
+              {{ id: 'features', renderer: 'features', side: 'overlay', params: {{}} }},
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'below', params: {{ nt: 'GC' }} }},
+              {{ id: 'custom_gc', renderer: 'dinucleotide_content', side: 'below', height: '22px', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            linear_track_layout: 'middle',
+            show_depth: false,
+            show_gc: false,
+            show_skew: false
+          }},
+          linearSeqs: [{{ depth: [{{ name: 'one.tsv' }}, {{ name: 'two.tsv' }}] }}]
+        }};
+        const reconcileEditor = createLinearTrackSlotEditor({{ state: reconcileState }});
+        reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
+        assert(!reconcileState.adv.linear_track_slots.some((slot) => slot.id === 'gc_content'), 'Show GC off should remove only the default GC slot');
+        assert(reconcileState.adv.linear_track_slots.some((slot) => slot.id === 'custom_gc'), 'Show GC off should preserve customized duplicate GC slots');
+        reconcileState.form.show_gc = true;
+        reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
+        const restoredGc = reconcileState.adv.linear_track_slots.find((slot) => slot.id === 'gc_content');
+        assert(restoredGc?.params?.nt === 'AT', 'Show GC on should restore default GC using the simple nt control');
+        reconcileState.form.show_depth = true;
+        reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
+        const depthIndexes = reconcileState.adv.linear_track_slots
+          .filter((slot) => slot.renderer === 'depth')
+          .map((slot) => Number(slot.params?.track_index))
+          .join(',');
+        assert(depthIndexes === '0,1', 'Show Depth on should materialize one slot per uploaded depth series');
+        reconcileState.form.linear_track_layout = 'below';
+        reconcileEditor.applyLinearTrackLayoutPreset('below');
+        const reconciledFeature = reconcileState.adv.linear_track_slots.find((slot) => slot.id === 'features');
+        assert(reconciledFeature?.side === 'below' && reconcileState.adv.linear_track_slots_axis_index === 0, 'Track Layout Below should move feature below Axis');
         """,
         encoding="utf-8",
     )

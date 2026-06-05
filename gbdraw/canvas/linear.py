@@ -181,6 +181,9 @@ class LinearCanvasConfigurator:
         self.legend_position = legend
         self.num_of_entries: int = num_of_entries
         self.total_height = 0
+        self.linear_track_layout = None
+        self.plot_tracks_top_extent = 0.0
+        self.plot_tracks_bottom_extent = 0.0
 
         self.calculate_dimensions()
         self.set_arrow_length()
@@ -232,6 +235,8 @@ class LinearCanvasConfigurator:
         track_offsets, padding_segments, stack_span = _calculate_linear_plot_track_layout(tracks)
         self.plot_track_offsets = track_offsets
         self.plot_tracks_height = stack_span
+        self.plot_tracks_top_extent = 0.0
+        self.plot_tracks_bottom_extent = stack_span
         self.plot_tracks_visual_bottom = _calculate_linear_plot_track_visual_bottom(
             tracks,
             track_offsets,
@@ -259,6 +264,27 @@ class LinearCanvasConfigurator:
         )
         self.gc_padding: float = padding_segments.get("gc_content", 0.0)
         self.skew_padding: float = padding_segments.get("gc_skew", 0.0)
+
+    def set_linear_track_layout(self, layout) -> None:
+        """Apply a resolved custom linear track layout to legacy canvas fields."""
+
+        self.linear_track_layout = layout
+        self.plot_tracks_top_extent = float(getattr(layout, "top_extent", 0.0))
+        self.plot_tracks_bottom_extent = float(getattr(layout, "bottom_extent", 0.0))
+        self.plot_tracks_height = float(getattr(layout, "plot_tracks_height", self.plot_tracks_bottom_extent))
+        self.plot_tracks_visual_bottom = float(
+            getattr(layout, "plot_tracks_visual_bottom", self.plot_tracks_bottom_extent)
+        )
+        self.depth_track_offsets = list(getattr(layout, "depth_track_offsets", ()))
+        self.depth_track_offset = self.depth_track_offsets[0] if self.depth_track_offsets else 0.0
+        self.gc_content_track_offset = float(getattr(layout, "gc_content_track_offset", 0.0))
+        self.gc_skew_track_offset = float(getattr(layout, "gc_skew_track_offset", 0.0))
+        self.depth_height = self.default_depth_height if self.show_depth else 0.0
+        self.gc_height = self.default_gc_height if self.show_gc else 0.0
+        self.skew_height = self.default_gc_height if self.show_skew else 0.0
+        self.depth_padding = max(0.0, self.plot_tracks_bottom_extent)
+        self.gc_padding = 0.0
+        self.skew_padding = 0.0
 
     def set_cds_height_and_cds_padding(self) -> None:
         """
@@ -294,7 +320,10 @@ class LinearCanvasConfigurator:
         considering all the elements and padding. This method updates total_width and total_height attributes.
         """
 
-        self.set_gc_height_and_gc_padding()
+        if self.linear_track_layout is None:
+            self.set_gc_height_and_gc_padding()
+        else:
+            self.set_linear_track_layout(self.linear_track_layout)
         self.set_cds_height_and_cds_padding()
         self.add_margin: float | Literal[0] = (
             2 * self.cds_height if ((self.show_gc or self.show_depth) and not self.strandedness) else 0

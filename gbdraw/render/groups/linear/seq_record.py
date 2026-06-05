@@ -42,6 +42,8 @@ class SeqRecordGroup:
         precalculated_labels: Optional[list] = None,
         cfg: GbdrawConfig | None = None,
         precomputed_feature_dict: FeatureDict | None = None,
+        feature_track_layout: str | None = None,
+        draw_features: bool = True,
     ) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
@@ -50,6 +52,7 @@ class SeqRecordGroup:
         self.config_dict = config_dict
         self.precalculated_labels = precalculated_labels
         self.precomputed_feature_dict = precomputed_feature_dict
+        self.draw_features_enabled = bool(draw_features)
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -76,7 +79,7 @@ class SeqRecordGroup:
         self.auto_scale_interval = auto_linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
         self.scale_label_context_length = max(1, int(self.canvas_config.longest_genome))
         self.axis_stroke_width = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
-        self.track_layout = str(self.canvas_config.track_layout).strip().lower()
+        self.track_layout = str(feature_track_layout or self.canvas_config.track_layout).strip().lower()
         self.ruler_on_axis = bool(cfg.canvas.linear.ruler_on_axis)
         self.axis_ruler_enabled = (
             self.ruler_on_axis
@@ -227,7 +230,7 @@ class SeqRecordGroup:
         self._draw_axis_ruler(group, bar_length=bar_length, record_length=record_length)
 
         # Process labels if enabled
-        if self.show_labels:
+        if self.show_labels and self.draw_features_enabled:
             for label in label_list:
                 if label.get("leader_line"):
                     line_path = Line(
@@ -256,21 +259,22 @@ class SeqRecordGroup:
                     group.add(line_path)
 
         # Draw features
-        for feature_object in feature_dict.values():
-            feature_strand = feature_object.strand
-            group = FeatureDrawer(self.feature_config).draw(
-                feature_object=feature_object,
-                group=group,
-                genome_length=record_length,
-                cds_height=cds_height,
-                alignment_width=alignment_width,
-                normalization_factor=genome_size_normalization_factor,
-                feature_strand=feature_strand,
-                separate_strands=separate_strands,
-                arrow_length=arrow_length,
-                track_layout=self.canvas_config.track_layout,
-                track_axis_gap=self.canvas_config.track_axis_gap,
-            )
+        if self.draw_features_enabled:
+            for feature_object in feature_dict.values():
+                feature_strand = feature_object.strand
+                group = FeatureDrawer(self.feature_config).draw(
+                    feature_object=feature_object,
+                    group=group,
+                    genome_length=record_length,
+                    cds_height=cds_height,
+                    alignment_width=alignment_width,
+                    normalization_factor=genome_size_normalization_factor,
+                    feature_strand=feature_strand,
+                    separate_strands=separate_strands,
+                    arrow_length=arrow_length,
+                    track_layout=self.track_layout,
+                    track_axis_gap=self.canvas_config.track_axis_gap,
+                )
 
         # Add labels
         if self.show_labels:
@@ -310,7 +314,7 @@ class SeqRecordGroup:
         selected_features_set: str = self.feature_config.selected_features_set
 
         default_colors: DataFrame | None = self.feature_config.default_colors
-        compute_label_text = self.show_labels and self.precalculated_labels is None
+        compute_label_text = self.show_labels and self.draw_features_enabled and self.precalculated_labels is None
         label_filtering = (
             preprocess_label_filtering(self.label_filtering)
             if compute_label_text
@@ -333,7 +337,7 @@ class SeqRecordGroup:
                 compute_label_text=compute_label_text,
             )
         label_list = []
-        if self.show_labels:
+        if self.show_labels and self.draw_features_enabled:
             if self.precalculated_labels is not None:
                 label_list = self.precalculated_labels
             else:
@@ -344,7 +348,7 @@ class SeqRecordGroup:
                     genome_size_normalization_factor,
                     cds_height,
                     separate_strands,
-                    self.canvas_config.track_layout,
+                    self.track_layout,
                     self.canvas_config.track_axis_gap,
                     self.config_dict,
                     cfg=self._cfg,

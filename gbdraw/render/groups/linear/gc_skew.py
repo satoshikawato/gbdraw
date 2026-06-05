@@ -29,11 +29,12 @@ class GcSkewGroup:
         start_y: float = 0,
         cfg: GbdrawConfig | None = None,
         gc_df: DataFrame | None = None,
+        group_id: str = "gc_skew",
     ) -> None:
         """
         Initializes the GcSkewGroup with the given parameters and configurations.
         """
-        self.skew_group = Group(id="gc_skew")
+        self.skew_group = Group(id=group_id)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len

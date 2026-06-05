@@ -416,6 +416,7 @@
         .btn-secondary { @apply text-slate-700 bg-white border border-slate-300 hover:bg-slate-50; }
         .btn-danger { @apply text-red-600 bg-white border border-red-200 hover:bg-red-50; }
         .btn-sm { @apply px-2 py-1 text-xs; }
+        .btn-icon-sm { @apply inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed; }
 
         /* Highlighted Generate Button Style */
         .btn-generate {
@@ -1034,6 +1035,132 @@
                                         <input type="checkbox" v-model="form.show_depth" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Display depth coverage track from uploaded Depth TSV file(s)."></help-tip></span>
                                     </label>
+                                </div>
+                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="adv.linear_track_slots_enabled" @change="setLinearTrackSlotsEnabled($event.target.checked)" class="form-checkbox">
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Edit the explicit linear track stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip></span>
+                                        </label>
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary text-[10px] py-0.5 px-2"
+                                            @click="resetLinearTrackSlotsFromSimpleControls"
+                                            :disabled="!adv.linear_track_slots_enabled"
+                                            title="Replace the current linear custom stack from current simple controls"
+                                        >
+                                            <i class="ph ph-arrow-counter-clockwise"></i>
+                                            Reset
+                                        </button>
+                                    </div>
+                                    <div v-if="adv.linear_track_slots_enabled" class="space-y-1.5">
+                                        <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
+                                            <div class="flex items-center justify-between gap-2 text-[10px]">
+                                                <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
+                                                    <i class="ph ph-stack"></i>
+                                                    <span class="truncate">Linear track stack</span>
+                                                    <help-tip text="Rows before Axis render above it; rows after Axis render below it. Depth track selects the uploaded depth series and does not control vertical order."></help-tip>
+                                                </div>
+                                                <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ linearTrackSlots().length }}</span>
+                                            </div>
+                                            <div v-if="linearTrackSlots().length === 0" class="rounded border border-dashed border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-400">
+                                                No tracks
+                                            </div>
+                                            <div
+                                                v-for="entry in linearTrackStackEntries()"
+                                                :key="entry.kind === 'axis' ? 'linear-axis-row' : `linear-slot-${entry.slot.id}-${entry.index}`"
+                                            >
+                                                <div
+                                                    v-if="entry.kind === 'axis'"
+                                                    class="flex items-center gap-2 rounded border border-slate-300 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600"
+                                                >
+                                                    <span class="h-px flex-1 bg-slate-300"></span>
+                                                    <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                    <span class="h-px flex-1 bg-slate-300"></span>
+                                                </div>
+                                                <div
+                                                    v-else
+                                                    class="border rounded p-1.5 space-y-1"
+                                                    :class="entry.onAxis ? 'bg-slate-100 border-slate-300 ring-1 ring-slate-200' : (linearTrackSlotUsesPresetGeometry(entry.slot) ? 'bg-sky-50/40 border-sky-200' : 'bg-white border-slate-200')"
+                                                >
+                                                    <div
+                                                        v-if="entry.onAxis"
+                                                        class="flex items-center gap-2 rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600"
+                                                    >
+                                                        <span class="h-px flex-1 bg-slate-300"></span>
+                                                        <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                        <span class="h-px flex-1 bg-slate-300"></span>
+                                                    </div>
+                                                    <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1">
+                                                        <input type="checkbox" v-model="entry.slot.enabled" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'">
+                                                        <input v-model.trim="entry.slot.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id" title="Slot id">
+                                                        <select v-model="entry.slot.renderer" @change="updateLinearTrackSlotRenderer(entry.slot)" class="form-input px-1 py-0.5 text-[10px] min-w-0" title="Renderer">
+                                                            <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
+                                                        </select>
+                                                        <div class="flex items-center gap-0.5">
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index - 1)" :disabled="!canMoveLinearTrackSlot(entry.index, -1)" title="Move up within side"><i class="ph ph-arrow-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1)" :disabled="!canMoveLinearTrackSlot(entry.index, 1)" title="Move down within side"><i class="ph ph-arrow-down"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index)" :disabled="!canMoveLinearTrackSlotAbove(entry.index)" title="Move above Axis"><i class="ph ph-arrow-line-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index)" :disabled="!canMoveLinearTrackSlotBelow(entry.index)" title="Move below Axis"><i class="ph ph-arrow-line-down"></i></button>
+                                                            <button v-if="entry.slot.renderer === 'features'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index)" :disabled="!canMoveLinearTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index)" title="Duplicate"><i class="ph ph-copy"></i></button>
+                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index)" title="Delete"><i class="ph ph-trash"></i></button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="grid grid-cols-3 gap-1">
+                                                        <input v-model.trim="entry.slot.height" class="form-input px-1 py-0.5 text-[10px]" placeholder="h (auto)" title="Height">
+                                                        <input v-model.trim="entry.slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)" title="Spacing">
+                                                        <input type="number" step="1" v-model.number="entry.slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z" title="Draw order">
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
+                                                        <select
+                                                            :value="entry.slot.side"
+                                                            @change="updateLinearTrackSlotPlacement(entry.slot, $event.target.value)"
+                                                            class="form-input px-1 py-0.5 text-[10px]"
+                                                            title="Feature placement"
+                                                        >
+                                                            <option value="above">Above axis</option>
+                                                            <option value="overlay">On axis</option>
+                                                            <option value="below">Below axis</option>
+                                                        </select>
+                                                    </div>
+                                                    <div v-else class="rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[10px] font-medium text-slate-500" :title="linearTrackSlotPlacementLabel(entry.slot)">
+                                                        {{ linearTrackSlotPlacementLabel(entry.slot) }}
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="1"
+                                                            v-model.number="entry.slot.params.track_index"
+                                                            class="form-input px-1 py-0.5 text-[10px]"
+                                                            placeholder="track index"
+                                                            title="Depth track index"
+                                                        >
+                                                        <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Legend label">
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
+                                                        <input
+                                                            v-model.trim="entry.slot.params.nt"
+                                                            class="form-input px-1 py-0.5 text-[10px]"
+                                                            placeholder="nt"
+                                                            title="Dinucleotide"
+                                                        >
+                                                        <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Legend label">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+                                            <select v-model="linearTrackNewRenderer" class="form-input py-1 text-[10px] min-w-0">
+                                                <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
+                                            </select>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer)" title="Add track">
+                                                <i class="ph ph-plus"></i>
+                                                Add track
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </template>
 
