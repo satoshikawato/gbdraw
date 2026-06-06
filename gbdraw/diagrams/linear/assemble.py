@@ -52,7 +52,7 @@ from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px  # type: ignore[reportMissingImports]
 from ...labels.linear import calculate_label_y_bounds  # type: ignore[reportMissingImports]
-from ...tracks import LinearTrackSlot, normalize_linear_track_slots_with_axis
+from ...tracks import LinearTrackSlot, ScalarSpec, normalize_linear_track_slots_with_axis
 
 from .builders import (
     add_comparison_on_linear_canvas,
@@ -106,6 +106,45 @@ def _feature_track_layout_for_linear_slots(
 
 def _feature_slot_for_linear_slots(slots: list) -> object | None:
     return next((slot for slot in slots if slot.renderer == "features"), None)
+
+
+def _depth_track_heights_from_specs(
+    record_depth_tracks: list[list[DepthTrackSpec]] | None,
+) -> list[float | None]:
+    if not record_depth_tracks:
+        return []
+    track_count = depth_track_count(record_depth_tracks)
+    heights: list[float | None] = [None for _ in range(track_count)]
+    for row in record_depth_tracks:
+        for track_index, spec in enumerate(row):
+            if track_index >= len(heights) or heights[track_index] is not None:
+                continue
+            if spec.height is not None:
+                heights[track_index] = float(spec.height)
+    return heights
+
+
+def _apply_depth_track_heights_to_linear_slots(
+    slots: list,
+    record_depth_tracks: list[list[DepthTrackSpec]] | None,
+) -> list:
+    depth_heights = _depth_track_heights_from_specs(record_depth_tracks)
+    if not depth_heights:
+        return slots
+    out = []
+    for slot in slots:
+        if slot.renderer != "depth" or slot.height is not None:
+            out.append(slot)
+            continue
+        try:
+            track_index = int(slot.params.get("track_index", 0))
+        except (AttributeError, TypeError, ValueError):
+            track_index = 0
+        if 0 <= track_index < len(depth_heights) and depth_heights[track_index] is not None:
+            out.append(replace(slot, height=ScalarSpec(float(depth_heights[track_index]), "px")))
+        else:
+            out.append(slot)
+    return out
 
 
 def _slot_nt(slot: LinearResolvedTrack, default_nt: str) -> str:
@@ -593,6 +632,11 @@ def assemble_linear_diagram(
     and returns the SVG canvas (not saved).
     """
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    if record_depth_tracks is None and depth_tables:
+        record_depth_tracks = normalize_depth_tracks(
+            records,
+            depth_track_tables=[[table] for table in depth_tables],
+        )
     normalized_linear_track_slots = (
         normalize_linear_track_slots_with_axis(
             linear_track_slots,
@@ -601,6 +645,11 @@ def assemble_linear_diagram(
         if linear_track_slots is not None
         else None
     )
+    if normalized_linear_track_slots is not None:
+        normalized_linear_track_slots = _apply_depth_track_heights_to_linear_slots(
+            normalized_linear_track_slots,
+            record_depth_tracks,
+        )
     if normalized_linear_track_slots is not None:
         canvas_config.track_layout = _feature_track_layout_for_linear_slots(
             normalized_linear_track_slots,
@@ -748,11 +797,6 @@ def assemble_linear_diagram(
             step=int(gc_config.step),
             dinucleotide=str(gc_config.dinucleotide),
             enabled=bool(canvas_config.show_gc or canvas_config.show_skew),
-        )
-    if record_depth_tracks is None and depth_tables:
-        record_depth_tracks = normalize_depth_tracks(
-            records,
-            depth_track_tables=[[table] for table in depth_tables],
         )
     depth_enabled = bool(canvas_config.show_depth and depth_config is not None and record_depth_tracks)
     record_depth_data: list[list[DepthTrackData]] = build_depth_track_dataframes(
@@ -1335,6 +1379,7 @@ def assemble_linear_diagram(
                     depth_track_index=depth_track_index,
                     group_id=group_id,
                     axis_group_id=f"{group_id}_axis",
+                    track_height=depth_track.height,
                 )
         if canvas_config.show_gc:
             add_gc_content_group(

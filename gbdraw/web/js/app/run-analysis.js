@@ -1788,6 +1788,7 @@ json.dumps({
         return {
           label: String(rawLabel).trim() ? String(rawLabel) : getDepthTrackLabelFromFile(file, index),
           color: String(source.color || (index === 0 ? adv.depth_color : '')),
+          height: normalizeDepthTrackValue(source.height),
           largeTick: normalizeDepthTrackValue(source.large_tick_interval ?? source.tick_interval),
           smallTick: normalizeDepthTrackValue(source.small_tick_interval),
           tickFontSize: normalizeDepthTrackValue(source.tick_font_size)
@@ -1810,6 +1811,12 @@ json.dumps({
         if (colors.some((color) => color.trim())) {
           args.push('--depth_track_color', ...colors);
         }
+        if (mode.value === 'linear') {
+          const heights = trackEntries.map((entry) => entry.config.height || 'auto');
+          if (heights.some((value) => value !== 'auto')) {
+            args.push('--depth_track_height', ...heights);
+          }
+        }
         const largeTicks = trackEntries.map((entry) => entry.config.largeTick || 'auto');
         if (largeTicks.some((value) => value !== 'auto')) {
           args.push('--depth_track_large_tick_interval', ...largeTicks);
@@ -1821,6 +1828,48 @@ json.dumps({
         const tickFontSizes = trackEntries.map((entry) => entry.config.tickFontSize || 'auto');
         if (tickFontSizes.some((value) => value !== 'auto')) {
           args.push('--depth_track_tick_font_size', ...tickFontSizes);
+        }
+      };
+      const ensureDepthTrackConfigAt = (index) => {
+        const idx = Math.max(0, Number(index) || 0);
+        if (!Array.isArray(adv.depth_tracks)) adv.depth_tracks = [];
+        while (adv.depth_tracks.length <= idx) {
+          const nextIndex = adv.depth_tracks.length;
+          adv.depth_tracks.push({
+            label: getDepthTrackFallbackLabel(nextIndex),
+            color: nextIndex === 0 ? String(adv.depth_color || '#4A90E2') : '',
+            height: null,
+            large_tick_interval: null,
+            small_tick_interval: null,
+            tick_font_size: null
+          });
+        }
+        const config = adv.depth_tracks[idx];
+        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+          adv.depth_tracks[idx] = {
+            label: getDepthTrackFallbackLabel(idx),
+            color: idx === 0 ? String(adv.depth_color || '#4A90E2') : '',
+            height: null,
+            large_tick_interval: null,
+            small_tick_interval: null,
+            tick_font_size: null
+          };
+        }
+        return adv.depth_tracks[idx];
+      };
+      const syncLinearDepthSlotHeightFromTrackConfig = (slot) => {
+        if (!slot || String(slot.renderer || '') !== 'depth') return;
+        const rawTrackIndex = Number(slot.params?.track_index);
+        const trackIndex = Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
+        const config = ensureDepthTrackConfigAt(trackIndex);
+        const configuredHeight = normalizeDepthTrackValue(config.height);
+        if (configuredHeight) {
+          slot.height = configuredHeight;
+          return;
+        }
+        const slotHeight = normalizeDepthTrackValue(slot.height);
+        if (slotHeight) {
+          config.height = Number(slotHeight);
         }
       };
       const appendGcContentPercentArgs = () => {
@@ -2569,6 +2618,7 @@ json.dumps({
             } else {
               slot.params.track_index = Math.min(rawTrackIndex, Math.max(0, depthTrackCount - 1));
             }
+            syncLinearDepthSlotHeightFromTrackConfig(slot);
             nextDepthIndex = Number(slot.params.track_index) + 1;
           });
           linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(

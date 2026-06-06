@@ -30,6 +30,7 @@ class LinearTrackLayout:
     plot_tracks_height: float
     plot_tracks_visual_bottom: float
     depth_track_offsets: tuple[float, ...]
+    depth_track_heights: tuple[float, ...]
     gc_content_track_offset: float
     gc_skew_track_offset: float
 
@@ -213,6 +214,7 @@ def resolve_linear_track_layout(
     )
 
     depth_offsets_by_index: dict[int, float] = {}
+    depth_heights_by_index: dict[int, float] = {}
     gc_content_track_offset = 0.0
     gc_skew_track_offset = 0.0
     for track in resolved:
@@ -222,14 +224,23 @@ def resolve_linear_track_layout(
             except (TypeError, ValueError):
                 track_index = 0
             depth_offsets_by_index[track_index] = float(track.y_offset)
+            depth_heights_by_index[track_index] = float(track.height)
         elif track.renderer == "dinucleotide_content":
             gc_content_track_offset = float(track.y_offset)
         elif track.renderer == "dinucleotide_skew":
             gc_skew_track_offset = float(track.y_offset)
 
+    depth_track_count = max(
+        max(depth_offsets_by_index.keys(), default=-1),
+        max(depth_heights_by_index.keys(), default=-1),
+    ) + 1
     depth_track_offsets = tuple(
         depth_offsets_by_index[index]
-        for index in range(max(depth_offsets_by_index.keys(), default=-1) + 1)
+        for index in range(depth_track_count)
+    )
+    depth_track_heights = tuple(
+        depth_heights_by_index[index]
+        for index in range(depth_track_count)
     )
 
     return LinearTrackLayout(
@@ -239,6 +250,7 @@ def resolve_linear_track_layout(
         plot_tracks_height=float(bottom_extent),
         plot_tracks_visual_bottom=float(bottom_extent),
         depth_track_offsets=depth_track_offsets,
+        depth_track_heights=depth_track_heights,
         gc_content_track_offset=float(gc_content_track_offset),
         gc_skew_track_offset=float(gc_skew_track_offset),
     )

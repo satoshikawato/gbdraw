@@ -272,9 +272,11 @@ export const createAppSetup = () => {
   };
   const normalizeDepthTrackConfig = (entry, index) => {
     const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
+    const hasHeight = Object.prototype.hasOwnProperty.call(source, 'height');
     return {
       label: String(source.label ?? getDepthTrackFallbackLabel(index)),
       color: String(source.color || (index === 0 ? adv.depth_color : depthTrackFallbackColor(index))),
+      height: normalizeDepthTrackNumber(hasHeight ? source.height : adv.depth_height),
       large_tick_interval: normalizeDepthTrackNumber(source.large_tick_interval ?? source.tick_interval),
       small_tick_interval: normalizeDepthTrackNumber(source.small_tick_interval),
       tick_font_size: normalizeDepthTrackNumber(source.tick_font_size)

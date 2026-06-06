@@ -71,6 +71,15 @@ def _svg_group(svg: str, group_id: str) -> str:
     return match.group(0)
 
 
+def _svg_line_y_span(svg_fragment: str) -> float:
+    y_values = [
+        float(value)
+        for value in re.findall(r'\by[12]="([^"]+)"', svg_fragment)
+    ]
+    assert y_values
+    return max(y_values) - min(y_values)
+
+
 def test_read_depth_tsv_headerless_and_headered(tmp_path: Path) -> None:
     headerless = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec1\t2\t12\n")
     headered = _write_depth_file(
@@ -694,6 +703,59 @@ def test_linear_multiple_depth_tracks_have_unique_ids() -> None:
 
 
 @pytest.mark.linear
+def test_linear_multiple_depth_track_heights_are_per_track() -> None:
+    record = _make_record("rec1", length=40)
+    svg = assemble_linear_diagram_from_records(
+        [record],
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 40, length=40),
+            ]
+        ],
+        depth_track_heights=[12, 28],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    assert _svg_line_y_span(_svg_group(svg, "depth_1_axis")) == pytest.approx(12)
+    assert _svg_line_y_span(_svg_group(svg, "depth_2_axis")) == pytest.approx(28)
+
+
+@pytest.mark.linear
+def test_linear_custom_depth_slot_uses_track_height_when_slot_height_is_auto() -> None:
+    record = _make_record("rec1", length=40)
+    svg = assemble_linear_diagram_from_records(
+        [record],
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 40, length=40),
+            ]
+        ],
+        depth_track_heights=[12, 28],
+        linear_track_slots=[
+            "features:features@side=overlay",
+            "depth_a:depth@track_index=0",
+            "depth_b:depth@track_index=1",
+        ],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    assert _svg_line_y_span(_svg_group(svg, "depth_a_axis")) == pytest.approx(12)
+    assert _svg_line_y_span(_svg_group(svg, "depth_b_axis")) == pytest.approx(28)
+
+
+@pytest.mark.linear
 def test_linear_depth_track_tick_options_are_per_track() -> None:
     record = _make_record("rec1", length=40)
     svg = assemble_linear_diagram_from_records(
@@ -1222,6 +1284,9 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
             "--depth_track_color",
             "#111111",
             "#222222",
+            "--depth_track_height",
+            "12",
+            "28",
             "--depth_track_large_tick_interval",
             "10",
             "20",
@@ -1245,6 +1310,7 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
     ]
     assert captured["depth_track_labels"] == ["A", "B"]
     assert captured["depth_track_colors"] == ["#111111", "#222222"]
+    assert captured["depth_track_heights"] == ["12", "28"]
     assert captured["depth_track_large_tick_intervals"] == ["10", "20"]
     assert captured["depth_track_small_tick_intervals"] == ["auto", "5"]
     assert captured["depth_track_tick_font_sizes"] == ["8", "12"]

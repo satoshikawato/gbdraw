@@ -1108,7 +1108,13 @@
                                                         </div>
                                                     </div>
                                                     <div class="grid grid-cols-3 gap-1">
-                                                        <input v-model.trim="entry.slot.height" class="form-input px-1 py-0.5 text-[10px]" placeholder="h (auto)" title="Height">
+                                                        <input
+                                                            :value="linearTrackSlotHeightValue(entry.slot)"
+                                                            @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
+                                                            class="form-input px-1 py-0.5 text-[10px]"
+                                                            placeholder="h (auto)"
+                                                            title="Height"
+                                                        >
                                                         <input v-model.trim="entry.slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)" title="Spacing">
                                                         <input type="number" step="1" v-model.number="entry.slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z" title="Draw order">
                                                     </div>
@@ -1133,6 +1139,7 @@
                                                             min="0"
                                                             step="1"
                                                             v-model.number="entry.slot.params.track_index"
+                                                            @change="syncLinearDepthSlotHeightsFromDepthTracks()"
                                                             class="form-input px-1 py-0.5 text-[10px]"
                                                             placeholder="track index"
                                                             title="Depth track index"
@@ -2199,10 +2206,22 @@
                                         <div class="flex items-center justify-between gap-2">
                                             <div class="text-[10px] font-bold text-slate-500">Track #{{ track.index + 1 }}</div>
                                         </div>
-                                        <div class="grid grid-cols-[1fr_44px] gap-1.5 items-end">
+                                        <div class="grid grid-cols-[1fr_64px_44px] gap-1.5 items-end">
                                             <div>
                                                 <label class="input-label text-[10px]">Label <help-tip text="Legend label for this depth coverage track."></help-tip></label>
                                                 <input type="text" v-model="track.config.label" class="form-input form-input-compact" :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`">
+                                            </div>
+                                            <div>
+                                                <label class="input-label text-[10px]">Height <help-tip text="Height of this linear depth coverage track in px. Leave blank for auto."></help-tip></label>
+                                                <input
+                                                    type="number"
+                                                    min="0.01"
+                                                    step="0.5"
+                                                    v-model.number="track.config.height"
+                                                    @input="syncLinearDepthSlotHeightsFromDepthTracks(track.index)"
+                                                    class="form-input form-input-compact"
+                                                    placeholder="Auto"
+                                                >
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Color</label>
@@ -2226,7 +2245,7 @@
                                     </div>
                                 </div>
                                 <div v-if="mode === 'linear'">
-                                    <label class="input-label text-[10px]">Depth Height <help-tip text="Height of the linear depth track."></help-tip></label>
+                                    <label class="input-label text-[10px]">Default Depth Height <help-tip text="Fallback height for linear depth tracks that leave per-track Height blank."></help-tip></label>
                                     <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_height" class="form-input form-input-compact" placeholder="Auto">
                                 </div>
                                 <div v-else>

@@ -119,6 +119,7 @@ class LinearCanvasConfigurator:
         cfg: GbdrawConfig | None = None,
         has_comparisons: bool = False,
         depth_track_count: int = 1,
+        depth_track_heights: list[float | None] | tuple[float | None, ...] | None = None,
     ):
         """
         Initializes the linear canvas configurator with given settings.
@@ -165,6 +166,7 @@ class LinearCanvasConfigurator:
         self.show_skew: bool = cfg.canvas.show_skew
         self.show_depth: bool = cfg.canvas.show_depth
         self.depth_track_count: int = max(1, int(depth_track_count))
+        self.configured_depth_track_heights = self._normalize_depth_track_heights(depth_track_heights)
         self.strandedness: bool = cfg.canvas.strandedness
         self.resolve_overlaps: bool = cfg.canvas.resolve_overlaps
         self.track_layout: str = cfg.canvas.linear.track_layout
@@ -188,13 +190,39 @@ class LinearCanvasConfigurator:
         self.calculate_dimensions()
         self.set_arrow_length()
 
+    def _normalize_depth_track_heights(
+        self,
+        depth_track_heights: list[float | None] | tuple[float | None, ...] | None,
+    ) -> list[float | None]:
+        if not depth_track_heights:
+            return []
+        normalized: list[float | None] = []
+        for raw_height in depth_track_heights:
+            if raw_height is None:
+                normalized.append(None)
+                continue
+            value = float(raw_height)
+            normalized.append(value if value > 0 else None)
+        return normalized
+
+    def _depth_track_height_at(self, depth_index: int) -> float:
+        if 0 <= depth_index < len(self.configured_depth_track_heights):
+            configured_height = self.configured_depth_track_heights[depth_index]
+            if configured_height is not None:
+                return float(configured_height)
+        return float(self.default_depth_height)
+
     def set_gc_height_and_gc_padding(self) -> None:
         """
         Sets linear plot track heights, anchor offsets, and legacy padding segments.
         """
 
         active_depth_track_count = self.depth_track_count if self.show_depth else 0
-        self.depth_height: float = self.default_depth_height if self.show_depth else 0.0
+        self.depth_track_heights: list[float] = [
+            self._depth_track_height_at(depth_index)
+            for depth_index in range(active_depth_track_count)
+        ]
+        self.depth_height: float = self.depth_track_heights[0] if self.depth_track_heights else 0.0
         self.gc_height: float = self.default_gc_height if self.show_gc else 0.0
         self.skew_height: float = self.default_gc_height if self.show_skew else 0.0
         gc_content_mode = str(getattr(self._cfg.objects.gc_content, "mode", "deviation"))
@@ -205,7 +233,7 @@ class LinearCanvasConfigurator:
                 _LinearPlotTrack(
                     key="depth" if active_depth_track_count == 1 else f"depth_{depth_index + 1}",
                     top_extent=0.0,
-                    bottom_extent=self.depth_height,
+                    bottom_extent=self.depth_track_heights[depth_index],
                     gap_after=self.configured_depth_padding,
                 )
             )
@@ -277,9 +305,12 @@ class LinearCanvasConfigurator:
         )
         self.depth_track_offsets = list(getattr(layout, "depth_track_offsets", ()))
         self.depth_track_offset = self.depth_track_offsets[0] if self.depth_track_offsets else 0.0
+        self.depth_track_heights = list(getattr(layout, "depth_track_heights", ()))
         self.gc_content_track_offset = float(getattr(layout, "gc_content_track_offset", 0.0))
         self.gc_skew_track_offset = float(getattr(layout, "gc_skew_track_offset", 0.0))
-        self.depth_height = self.default_depth_height if self.show_depth else 0.0
+        self.depth_height = self.depth_track_heights[0] if self.depth_track_heights else (
+            self.default_depth_height if self.show_depth else 0.0
+        )
         self.gc_height = self.default_gc_height if self.show_gc else 0.0
         self.skew_height = self.default_gc_height if self.show_skew else 0.0
         self.depth_padding = max(0.0, self.plot_tracks_bottom_extent)

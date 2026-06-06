@@ -515,6 +515,12 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='+')
     parser.add_argument(
+        '--depth_track_height',
+        metavar='PX',
+        help='Linear depth track height(s) in px. Provide one value or one per --depth_track.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
         '--depth_track_large_tick_interval',
         metavar='VALUE',
         help='Depth track large tick interval(s). Provide one value or one per --depth_track.',
@@ -978,6 +984,7 @@ def _get_args(args) -> argparse.Namespace:
     if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
         parser.error("--depth_tick_font_size must be > 0")
     for option_name in (
+        "depth_track_height",
         "depth_track_large_tick_interval",
         "depth_track_small_tick_interval",
         "depth_track_tick_font_size",
@@ -1157,6 +1164,7 @@ def linear_main(cmd_args) -> None:
     depth_track_groups: list[list[str]] | None = args.depth_track
     depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
     depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
+    depth_track_heights: list[str] | None = list(args.depth_track_height or []) or None
     depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
     depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
     depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
@@ -1497,6 +1505,7 @@ def linear_main(cmd_args) -> None:
         depth_track_files=depth_track_files,
         depth_track_labels=depth_track_labels,
         depth_track_colors=depth_track_colors,
+        depth_track_heights=depth_track_heights,
         depth_track_large_tick_intervals=depth_track_large_tick_intervals,
         depth_track_small_tick_intervals=depth_track_small_tick_intervals,
         depth_track_tick_font_sizes=depth_track_tick_font_sizes,
