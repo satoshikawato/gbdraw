@@ -799,6 +799,82 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     return hasBlankLinearSlotGeometry(slot);
   };
 
+  const parsePositivePxNumber = (value) => {
+    const text = normalizeOptionalText(value);
+    if (text === null) return null;
+    const withoutUnit = text.endsWith('px') ? text.slice(0, -2) : text;
+    const numeric = Number(withoutUnit);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  };
+
+  const ensureDepthTrackConfigForSlotIndex = (trackIndex) => {
+    const idx = Math.max(0, Number(trackIndex) || 0);
+    if (!Array.isArray(adv.depth_tracks)) adv.depth_tracks = [];
+    while (adv.depth_tracks.length <= idx) {
+      const nextIndex = adv.depth_tracks.length;
+      adv.depth_tracks.push({
+        label: nextIndex === 0 ? 'Depth' : `Depth ${nextIndex + 1}`,
+        color: nextIndex === 0 ? String(adv.depth_color || '#4A90E2') : '',
+        height: null,
+        large_tick_interval: null,
+        small_tick_interval: null,
+        tick_font_size: null
+      });
+    }
+    if (!adv.depth_tracks[idx] || typeof adv.depth_tracks[idx] !== 'object' || Array.isArray(adv.depth_tracks[idx])) {
+      adv.depth_tracks[idx] = {
+        label: idx === 0 ? 'Depth' : `Depth ${idx + 1}`,
+        color: idx === 0 ? String(adv.depth_color || '#4A90E2') : '',
+        height: null,
+        large_tick_interval: null,
+        small_tick_interval: null,
+        tick_font_size: null
+      };
+    }
+    return adv.depth_tracks[idx];
+  };
+
+  const linearDepthTrackIndexForSlot = (slot) => {
+    if (!slot || normalizeRenderer(slot.renderer) !== 'depth') return null;
+    const params = cloneParams(slot.params);
+    return normalizeTrackIndex(params.track_index) ?? 0;
+  };
+
+  const heightTextFromDepthTrackConfig = (trackIndex) => {
+    const config = ensureDepthTrackConfigForSlotIndex(trackIndex);
+    const height = parsePositivePxNumber(config.height);
+    return height === null ? '' : String(height);
+  };
+
+  const syncLinearDepthSlotHeightsFromDepthTracks = (trackIndex = null) => {
+    const slots = Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : [];
+    slots.forEach((slot) => {
+      const slotTrackIndex = linearDepthTrackIndexForSlot(slot);
+      if (slotTrackIndex === null) return;
+      if (trackIndex !== null && Number(trackIndex) !== slotTrackIndex) return;
+      slot.height = heightTextFromDepthTrackConfig(slotTrackIndex);
+    });
+  };
+
+  const linearTrackSlotHeightValue = (slot) => {
+    if (normalizeRenderer(slot?.renderer) !== 'depth') {
+      return String(slot?.height || '');
+    }
+    const trackIndex = linearDepthTrackIndexForSlot(slot) ?? 0;
+    const heightText = heightTextFromDepthTrackConfig(trackIndex);
+    return heightText || String(slot?.height || '');
+  };
+
+  const setLinearTrackSlotHeight = (slot, value) => {
+    if (!slot) return;
+    const text = String(value ?? '').trim();
+    slot.height = text;
+    if (normalizeRenderer(slot.renderer) !== 'depth') return;
+    const trackIndex = linearDepthTrackIndexForSlot(slot) ?? 0;
+    const config = ensureDepthTrackConfigForSlotIndex(trackIndex);
+    config.height = parsePositivePxNumber(text);
+  };
+
   return {
     linearTrackRenderers,
     linearTrackRendererLabel,
@@ -823,6 +899,9 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     canMoveLinearTrackSlotToAxis,
     updateLinearTrackSlotRenderer,
     updateLinearTrackSlotPlacement,
+    linearTrackSlotHeightValue,
+    setLinearTrackSlotHeight,
+    syncLinearDepthSlotHeightsFromDepthTracks,
     linearTrackSlots: () => {
       return Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : [];
     },

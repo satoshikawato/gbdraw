@@ -214,6 +214,22 @@ def _parse_linear_track_slot_inputs(
     return parse_linear_track_slots(list(linear_track_slots))
 
 
+def _depth_track_heights_from_specs(
+    record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
+) -> list[float | None]:
+    if not record_depth_tracks:
+        return []
+    track_count = depth_track_count(record_depth_tracks)
+    heights: list[float | None] = [None for _ in range(track_count)]
+    for row in record_depth_tracks:
+        for track_index, spec in enumerate(row):
+            if track_index >= len(heights) or heights[track_index] is not None:
+                continue
+            if spec.height is not None:
+                heights[track_index] = float(spec.height)
+    return heights
+
+
 def _validate_linear_track_axis_index(
     linear_track_axis_index: int | None,
     parsed_linear_track_slots: Sequence[LinearTrackSlot] | None,
@@ -1735,6 +1751,7 @@ def assemble_linear_diagram_from_records(
     depth_track_files: Sequence[Sequence[str | None]] | None = None,
     depth_track_labels: Sequence[str] | None = None,
     depth_track_colors: Sequence[str] | None = None,
+    depth_track_heights: Sequence[float | str | None] | None = None,
     depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
     depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
     depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
@@ -1857,6 +1874,7 @@ def assemble_linear_diagram_from_records(
         depth_track_files=depth_track_files,
         depth_track_labels=depth_track_labels,
         depth_track_colors=depth_track_colors,
+        depth_track_heights=depth_track_heights,
         depth_track_large_tick_intervals=depth_track_large_tick_intervals,
         depth_track_small_tick_intervals=depth_track_small_tick_intervals,
         depth_track_tick_font_sizes=depth_track_tick_font_sizes,
@@ -2022,6 +2040,7 @@ def assemble_linear_diagram_from_records(
         cfg=cfg,
         has_comparisons=bool(blast_files or resolved_protein_comparisons),
         depth_track_count=max(1, depth_track_count(record_depth_tracks)),
+        depth_track_heights=_depth_track_heights_from_specs(record_depth_tracks),
     )
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table,
@@ -3530,6 +3549,7 @@ def build_linear_diagram(
         depth_track_files=options.depth_track_files,
         depth_track_labels=options.depth_track_labels,
         depth_track_colors=options.depth_track_colors,
+        depth_track_heights=options.depth_track_heights,
         depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
         depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
         depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,

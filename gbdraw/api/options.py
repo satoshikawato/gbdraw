@@ -83,6 +83,7 @@ class DiagramOptions:
     depth_track_files: Sequence[Sequence[str | None]] | None = None
     depth_track_labels: Sequence[str] | None = None
     depth_track_colors: Sequence[str] | None = None
+    depth_track_heights: Sequence[float | str | None] | None = None
     depth_track_large_tick_intervals: Sequence[float | str | None] | None = None
     depth_track_small_tick_intervals: Sequence[float | str | None] | None = None
     depth_track_tick_font_sizes: Sequence[float | str | None] | None = None

@@ -340,10 +340,12 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "Depth TSV tracks" in index_html
     assert "Add TSV" in index_html
     assert "Per-track settings" in index_html
+    assert "v-model.number=\"track.config.height\"" in index_html
     assert "v-model.number=\"track.config.large_tick_interval\"" in index_html
     assert "depthTrackConfigAt(index, file)" in run_source
     assert "args.push('--depth_track_label', ...labels);" in run_source
     assert "args.push('--depth_track_color', ...colors);" in run_source
+    assert "args.push('--depth_track_height', ...heights);" in run_source
     assert "args.push('--depth_track_large_tick_interval', ...largeTicks);" in run_source
     assert "args.push('--depth_track_small_tick_interval', ...smallTicks);" in run_source
     assert "args.push('--depth_track_tick_font_size', ...tickFontSizes);" in run_source

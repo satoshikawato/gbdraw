@@ -23,6 +23,7 @@ class DepthTrackSpec:
     label: str
     table: DataFrame
     fill_color: str | None = None
+    height: float | None = None
     large_tick_interval: float | None = None
     small_tick_interval: float | None = None
     tick_font_size: float | None = None
@@ -36,6 +37,7 @@ class DepthTrackData:
     label: str
     df: DataFrame
     config: DepthConfigurator
+    height: float | None = None
 
 
 DepthDfBuilder = Callable[..., DataFrame]
@@ -144,6 +146,7 @@ def _tracks_from_record_major_values(
     records: Sequence[SeqRecord],
     labels: Sequence[str] | None,
     colors: Sequence[str] | None,
+    heights: Sequence[float | str | None] | None,
     large_tick_intervals: Sequence[float | str | None] | None,
     small_tick_intervals: Sequence[float | str | None] | None,
     tick_font_sizes: Sequence[float | str | None] | None,
@@ -172,6 +175,11 @@ def _tracks_from_record_major_values(
         track_count=track_count,
         default_values=[None for _ in range(track_count)],
         field_name="depth_track_colors",
+    )
+    track_heights = _expand_track_float_metadata(
+        heights,
+        track_count=track_count,
+        field_name="depth_track_heights",
     )
     track_large_tick_intervals = _expand_track_float_metadata(
         large_tick_intervals,
@@ -226,6 +234,7 @@ def _tracks_from_record_major_values(
                     label=str(track_labels[track_index] or _default_depth_track_labels(track_count)[track_index]),
                     table=table,
                     fill_color=track_colors[track_index],
+                    height=track_heights[track_index],
                     large_tick_interval=track_large_tick_intervals[track_index],
                     small_tick_interval=track_small_tick_intervals[track_index],
                     tick_font_size=track_tick_font_sizes[track_index],
@@ -246,6 +255,7 @@ def normalize_depth_tracks(
     depth_track_files: Sequence[Sequence[str | None]] | None = None,
     depth_track_labels: Sequence[str] | None = None,
     depth_track_colors: Sequence[str] | None = None,
+    depth_track_heights: Sequence[float | str | None] | None = None,
     depth_track_large_tick_intervals: Sequence[float | str | None] | None = None,
     depth_track_small_tick_intervals: Sequence[float | str | None] | None = None,
     depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
@@ -263,6 +273,7 @@ def normalize_depth_tracks(
             depth_track_files,
             depth_track_labels,
             depth_track_colors,
+            depth_track_heights,
             depth_track_large_tick_intervals,
             depth_track_small_tick_intervals,
             depth_track_tick_font_sizes,
@@ -284,6 +295,7 @@ def normalize_depth_tracks(
                 records=records,
                 labels=depth_track_labels,
                 colors=depth_track_colors,
+                heights=depth_track_heights,
                 large_tick_intervals=depth_track_large_tick_intervals,
                 small_tick_intervals=depth_track_small_tick_intervals,
                 tick_font_sizes=depth_track_tick_font_sizes,
@@ -295,6 +307,7 @@ def normalize_depth_tracks(
             records=records,
             labels=depth_track_labels,
             colors=depth_track_colors,
+            heights=depth_track_heights,
             large_tick_intervals=depth_track_large_tick_intervals,
             small_tick_intervals=depth_track_small_tick_intervals,
             tick_font_sizes=depth_track_tick_font_sizes,
@@ -318,6 +331,7 @@ def normalize_depth_tracks(
             records=records,
             labels=None,
             colors=None,
+            heights=None,
             large_tick_intervals=None,
             small_tick_intervals=None,
             tick_font_sizes=None,
@@ -331,6 +345,7 @@ def normalize_depth_tracks(
             records=records,
             labels=None,
             colors=None,
+            heights=None,
             large_tick_intervals=None,
             small_tick_intervals=None,
             tick_font_sizes=None,
@@ -343,6 +358,7 @@ def normalize_depth_tracks(
         records=records,
         labels=None,
         colors=None,
+        heights=None,
         large_tick_intervals=None,
         small_tick_intervals=None,
         tick_font_sizes=None,
@@ -438,6 +454,7 @@ def build_depth_track_dataframes(
                         max_depth=config.max_depth,
                     ),
                     config=config,
+                    height=spec.height,
                 )
             )
         output.append(row)

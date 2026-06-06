@@ -383,6 +383,7 @@ const DEPTH_TRACK_FALLBACK_COLORS = [
 
 const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
   const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
+  const hasHeight = Object.prototype.hasOwnProperty.call(source, 'height');
   const fallbackColor =
     index === 0
       ? String(legacyAdv.depth_color || DEPTH_TRACK_FALLBACK_COLORS[0])
@@ -390,6 +391,7 @@ const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
   return {
     label: String(source.label ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
     color: resolveColorToHex(String(source.color || fallbackColor)),
+    height: normalizePositiveNumberOrNull(hasHeight ? source.height : legacyAdv.depth_height),
     large_tick_interval: normalizePositiveNumberOrNull(
       source.large_tick_interval ?? source.tick_interval ?? (index === 0 ? legacyAdv.depth_tick_interval : null)
     ),
