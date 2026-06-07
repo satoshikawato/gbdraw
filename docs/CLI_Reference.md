@@ -394,7 +394,7 @@ depth-axis grouping.
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--input_table INPUT_TABLE]
-              [-b [BLAST ...]] [-t TABLE]
+              [-b [BLAST ...]] [--blast_table BLAST_TABLE] [-t TABLE]
               [--losatp_bin LOSATP_BIN]
               [--losatp_threads LOSATP_THREADS]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
@@ -476,6 +476,9 @@ options:
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
+  --blast_table BLAST_TABLE
+                        Headered TSV assigning BLAST outfmt 6/7 files to
+                        adjacent displayed record pairs.
   --losatp_bin, --losatp-bin LOSATP_BIN
                         LOSATP executable for --protein_blastp_mode
                         pairwise/orthogroup/collinear (default: losat).
@@ -764,6 +767,18 @@ and `renderer`. Optional common columns are `order`, `side`, `track_id`,
 Linear mode rejects `radius` and `width`; circular mode rejects `height`.
 Depth slots should use `track_id` when paired with `--depth_track_table`.
 
+`--blast_table` assigns linear BLAST outfmt 6/7 files to adjacent displayed
+record pairs. Required columns are `query_id`, `subject_id`, and `file`.
+Optional columns are `comparison_id`, `order`, and `enabled`. The selectors
+resolve against displayed records, so `input:<input_id>` works naturally with
+`--input_table`; `#1` and `#2` are also valid. Rows must describe adjacent
+records in the displayed order. If a row names the lower displayed record as
+the query and the upper displayed record as the subject, gbdraw swaps the
+query/subject columns before rendering so the comparison remains gap-aligned.
+Use `order` when multiple enabled rows target the same adjacent gap.
+`--blast_table` is linear-only and mutually exclusive with `-b/--blast`,
+`--protein_blastp_mode`, and `--collinear_blocks`.
+
 Example files are included in `examples/`:
 
 ```bash
@@ -772,6 +787,14 @@ gbdraw linear \
   --depth_track_table examples/cli_table_depth_tracks.tsv \
   --track_table examples/cli_table_track_slots.tsv \
   -o cli_table_linear \
+  -f svg
+```
+
+```bash
+gbdraw linear \
+  --input_table examples/cli_table_blast_inputs.tsv \
+  --blast_table examples/cli_table_blast.tsv \
+  -o cli_table_blast \
   -f svg
 ```
 

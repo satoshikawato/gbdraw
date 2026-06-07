@@ -50,6 +50,7 @@ from .cli_utils.common import (
 )
 from .cli_utils.table_adapters import (
     apply_depth_track_ids_to_slots,
+    load_blast_table,
     load_depth_track_table,
     load_input_table_records,
     load_track_table_slots,
@@ -215,6 +216,11 @@ def _get_args(args) -> argparse.Namespace:
         help="input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)",
         type=str,
         nargs='*')
+    parser.add_argument(
+        '--blast_table',
+        metavar='BLAST_TABLE',
+        help='Headered TSV assigning BLAST outfmt 6/7 files to adjacent displayed record pairs.',
+        type=str)
     parser.add_argument(
         '--losatp_bin',
         '--losatp-bin',
@@ -973,10 +979,16 @@ def _get_args(args) -> argparse.Namespace:
     validate_label_args(parser, args)
     if args.input_table and (args.record_id or args.reverse_complement or args.region or args.record_label):
         parser.error("--input_table cannot be combined with --record_id, --reverse_complement, --region, or --record_label")
+    if args.blast_table and args.blast:
+        parser.error("--blast_table cannot be combined with -b/--blast")
     if args.protein_blastp_mode != "none" and args.blast:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
+    if args.protein_blastp_mode != "none" and args.blast_table:
+        parser.error("--protein_blastp_mode cannot be used with --blast_table")
     if args.collinear_blocks and args.blast:
         parser.error("--collinear_blocks cannot be used with -b/--blast")
+    if args.collinear_blocks and args.blast_table:
+        parser.error("--collinear_blocks cannot be used with --blast_table")
     if args.collinear_blocks and args.protein_blastp_mode != "none":
         parser.error("--collinear_blocks imports native blocks and cannot be used with --protein_blastp_mode")
     if args.save_collinear_blocks and not args.collinear_blocks and args.protein_blastp_mode != "collinear":
@@ -985,7 +997,7 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--protein_blastp_max_hits must be > 0")
     if args.losatp_threads is not None and args.losatp_threads <= 0:
         parser.error("--losatp_threads must be > 0")
-    if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
+    if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not (args.blast or args.blast_table):
         parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
     if args.depth and args.depth_track:
         parser.error("--depth cannot be combined with --depth_track")
@@ -1172,7 +1184,8 @@ def linear_main(cmd_args) -> None:
         logger.warning(
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")
     out_file_prefix: str = args.output
-    blast_files: str = args.blast
+    blast_files: list[str] | None = args.blast
+    blast_table_path: str | None = args.blast_table
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
     losatp_bin: str = args.losatp_bin
     losatp_threads: int | None = args.losatp_threads
@@ -1270,7 +1283,7 @@ def linear_main(cmd_args) -> None:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files or protein_blastp_mode != "none" or collinear_blocks_path:
+    if blast_files or blast_table_path or protein_blastp_mode != "none" or collinear_blocks_path:
         load_comparison = True
     else:
         load_comparison = False
@@ -1489,7 +1502,7 @@ def linear_main(cmd_args) -> None:
         except ValueError as exc:
             logger.error(f"ERROR: {exc}")
             raise ValidationError(str(exc)) from exc
-        if blast_files:
+        if blast_files or blast_table_path:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
             )
@@ -1566,6 +1579,14 @@ def linear_main(cmd_args) -> None:
                 depth_track_ids=depth_track_ids,
                 depth_metadata_by_track_id=depth_track_table_result.metadata_by_track_id,
             )
+    blast_table_comparisons = (
+        load_blast_table(
+            blast_table_path,
+            records=records,
+        )
+        if blast_table_path
+        else None
+    )
     collinearity_comparisons: list[DataFrame] | None = None
     if collinear_blocks_path:
         collinearity_result = parse_native_collinearity_tsv(
@@ -1639,6 +1660,7 @@ def linear_main(cmd_args) -> None:
         plot_title=plot_title,
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,
+        comparison_dataframes=blast_table_comparisons,
         protein_comparisons=collinearity_comparisons,
         protein_blastp_mode="none" if collinearity_comparisons is not None else protein_blastp_mode,
         losatp_bin=losatp_bin,

@@ -7,10 +7,13 @@ from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+import pandas as pd
+from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
 from gbdraw.analysis.depth_tracks import DepthTrackSpec  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.record_select import reverse_records
 from gbdraw.io.regions import apply_region_specs, parse_region_spec
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
@@ -73,6 +76,8 @@ _TRACK_TABLE_OPTIONAL = (
     "lane_direction",
     "tick_label_layout",
 )
+_BLAST_TABLE_REQUIRED = ("query_id", "subject_id", "file")
+_BLAST_TABLE_OPTIONAL = ("comparison_id", "order", "enabled")
 _LINEAR_RENDERER_ALIASES = {
     "gc_content": "dinucleotide_content",
     "content": "dinucleotide_content",
@@ -133,11 +138,242 @@ class TrackTableResult:
     axis_index: int | None = None
 
 
+@dataclass(frozen=True)
+class BlastTableRow:
+    row_number: int
+    query_id: str
+    subject_id: str
+    file: str
+    comparison_id: str
+    order: int | None
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class ResolvedBlastTableRow:
+    row_number: int
+    gap_index: int
+    order: int | None
+    comparison: DataFrame
+
+
 def _require_nonempty(row: HeaderedTableRow, column: str, table_name: str) -> str:
     value = row.cell(column)
     if not value:
         raise table_error(table_name, "value cannot be empty", row_number=row.row_number, column=column)
     return value
+
+
+def _empty_comparison_dataframe() -> DataFrame:
+    return pd.DataFrame(columns=list(COMPARISON_COLUMNS))
+
+
+def _read_blast_table(path: str) -> list[BlastTableRow]:
+    rows = read_headered_tsv_table(
+        path,
+        required=_BLAST_TABLE_REQUIRED,
+        optional=_BLAST_TABLE_OPTIONAL,
+        table_name="blast_table",
+    )
+    parsed: list[BlastTableRow] = []
+    for row in rows:
+        enabled = parse_optional_bool_cell(
+            row.cell("enabled"),
+            "enabled",
+            table_name="blast_table",
+            row_number=row.row_number,
+            column="enabled",
+        )
+        order = parse_optional_int_cell(
+            row.cell("order"),
+            "order",
+            table_name="blast_table",
+            row_number=row.row_number,
+            column="order",
+        )
+        parsed.append(
+            BlastTableRow(
+                row_number=row.row_number,
+                query_id=_require_nonempty(row, "query_id", "blast_table"),
+                subject_id=_require_nonempty(row, "subject_id", "blast_table"),
+                file=resolve_table_path(path, _require_nonempty(row, "file", "blast_table")),
+                comparison_id=row.cell("comparison_id"),
+                order=order,
+                enabled=True if enabled is None else bool(enabled),
+            )
+        )
+    return parsed
+
+
+def _load_blast_table_file(row: BlastTableRow) -> DataFrame:
+    from pathlib import Path
+
+    file_path = Path(row.file)
+    if not file_path.is_file():
+        raise table_error(
+            "blast_table",
+            f"file does not exist or is not accessible: {row.file}",
+            row_number=row.row_number,
+            column="file",
+        )
+    try:
+        raw = pd.read_csv(
+            file_path,
+            sep="\t",
+            comment="#",
+            header=None,
+        )
+    except pd.errors.EmptyDataError:
+        return _empty_comparison_dataframe()
+    except Exception as exc:
+        raise table_error(
+            "blast_table",
+            f"could not parse BLAST outfmt 6/7 file: {exc}",
+            row_number=row.row_number,
+            column="file",
+        ) from exc
+
+    if raw.empty:
+        return _empty_comparison_dataframe()
+    if raw.shape[1] != len(COMPARISON_COLUMNS):
+        raise table_error(
+            "blast_table",
+            (
+                f"malformed BLAST outfmt 6/7 file; expected {len(COMPARISON_COLUMNS)} "
+                f"column(s), got {raw.shape[1]}"
+            ),
+            row_number=row.row_number,
+            column="file",
+        )
+
+    raw.columns = list(COMPARISON_COLUMNS)
+    if raw[list(COMPARISON_COLUMNS)].isna().any().any():
+        raise table_error(
+            "blast_table",
+            "malformed BLAST outfmt 6/7 file; rows must contain all standard comparison columns",
+            row_number=row.row_number,
+            column="file",
+        )
+    numeric_columns = (
+        "identity",
+        "alignment_length",
+        "mismatches",
+        "gap_opens",
+        "qstart",
+        "qend",
+        "sstart",
+        "send",
+        "evalue",
+        "bitscore",
+    )
+    try:
+        for column in numeric_columns:
+            raw[column] = pd.to_numeric(raw[column], errors="raise")
+    except Exception as exc:
+        raise table_error(
+            "blast_table",
+            f"malformed BLAST outfmt 6/7 file; column '{column}' must be numeric",
+            row_number=row.row_number,
+            column="file",
+        ) from exc
+    raw["query"] = raw["query"].astype(str)
+    raw["subject"] = raw["subject"].astype(str)
+    return raw
+
+
+def _swap_query_subject_columns(comparison: DataFrame) -> DataFrame:
+    swapped = comparison.copy()
+    for query_column, subject_column in (
+        ("query", "subject"),
+        ("qstart", "sstart"),
+        ("qend", "send"),
+    ):
+        swapped[query_column] = comparison[subject_column].to_numpy()
+        swapped[subject_column] = comparison[query_column].to_numpy()
+    return swapped
+
+
+def load_blast_table(
+    path: str,
+    *,
+    records: Sequence[SeqRecord],
+) -> list[DataFrame]:
+    """Load --blast_table into gap-aligned linear comparison DataFrames."""
+
+    rows = _read_blast_table(path)
+    if not rows:
+        raise ValidationError("blast_table: table contains no data rows.")
+
+    display_context = DisplayRecordContext(records, table_name="blast_table")
+    by_gap: dict[int, list[ResolvedBlastTableRow]] = {}
+    for row in rows:
+        query_index = display_context.resolve_display_record_selector(
+            row.query_id,
+            row_number=row.row_number,
+            column="query_id",
+        )
+        subject_index = display_context.resolve_display_record_selector(
+            row.subject_id,
+            row_number=row.row_number,
+            column="subject_id",
+        )
+        if query_index == subject_index:
+            raise table_error(
+                "blast_table",
+                "query_id and subject_id resolve to the same displayed record",
+                row_number=row.row_number,
+            )
+        if abs(query_index - subject_index) != 1:
+            raise table_error(
+                "blast_table",
+                (
+                    f"non-adjacent record pair #{query_index + 1} and #{subject_index + 1}; "
+                    "reorder inputs or use legacy -b until arbitrary comparison bands are supported"
+                ),
+                row_number=row.row_number,
+            )
+        if not row.enabled:
+            continue
+
+        comparison = _load_blast_table_file(row)
+        if query_index > subject_index:
+            comparison = _swap_query_subject_columns(comparison)
+        gap_index = min(query_index, subject_index)
+        by_gap.setdefault(gap_index, []).append(
+            ResolvedBlastTableRow(
+                row_number=row.row_number,
+                gap_index=gap_index,
+                order=row.order,
+                comparison=comparison,
+            )
+        )
+
+    comparison_count = max(0, len(records) - 1)
+    comparisons = [_empty_comparison_dataframe() for _ in range(comparison_count)]
+    for gap_index, gap_rows in by_gap.items():
+        if len(gap_rows) > 1:
+            missing_order = next((item for item in gap_rows if item.order is None), None)
+            if missing_order is not None:
+                raise table_error(
+                    "blast_table",
+                    "multiple enabled rows target this comparison gap; add order to every row in the gap",
+                    row_number=missing_order.row_number,
+                    column="order",
+                )
+        ordered_rows = sorted(
+            gap_rows,
+            key=lambda item: (
+                item.order if item.order is not None else item.row_number,
+                item.row_number,
+            ),
+        )
+        frames = [item.comparison for item in ordered_rows]
+        comparisons[gap_index] = (
+            pd.concat(frames, ignore_index=True)
+            if len(frames) > 1
+            else frames[0].reset_index(drop=True)
+        )
+    return comparisons
 
 
 def _read_input_table(path: str) -> list[InputTableRow]:
@@ -960,11 +1196,13 @@ def apply_depth_track_ids_to_slots(
 
 
 __all__ = [
+    "BlastTableRow",
     "DepthTrackMetadata",
     "DepthTrackTableResult",
     "InputTableRow",
     "TrackTableResult",
     "apply_depth_track_ids_to_slots",
+    "load_blast_table",
     "load_depth_track_table",
     "load_input_table_records",
     "load_track_table_slots",

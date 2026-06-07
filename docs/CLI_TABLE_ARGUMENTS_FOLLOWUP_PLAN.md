@@ -1,6 +1,6 @@
 # CLI Table Arguments Follow-up Implementation Plan
 
-Status as of 2026-06-07: planning document.
+Status as of 2026-06-07: implemented in this branch.
 
 The first-pass `--input_table`, `--depth_track_table`, and `--track_table`
 implementation is in place. This follow-up plan covers the remaining work that
@@ -15,6 +15,10 @@ This is not a new manifest design. The same table rules from
 `docs/CLI_TABLE_ARGUMENTS_PLAN.md` apply: headered TSV files, table-relative
 paths, explicit row-numbered validation, selector resolution through
 `DisplayRecordContext`, and narrow CLI-boundary adapters.
+
+Keep the follow-up aligned with the first-pass SOLID/KISS/DRY direction:
+normalize table rows at the CLI/web boundary, reuse the existing renderer and
+slot normalizers, and avoid a second comparison or track layout model.
 
 ## Goals
 
@@ -62,9 +66,19 @@ First pass behavior should be linear-only and adjacent-only:
   `DisplayRecordContext`.
 - The two records must be adjacent after `--input_table` ordering or legacy
   input loading.
-- The row is assigned to the comparison gap between those two records.
-- The BLAST file itself is not coordinate-remapped. Its query and subject names
-  must still match the selected records in the same way existing `-b` files do.
+- The row is assigned to the comparison gap between those two records, and the
+  final comparison list passed to the renderer must remain gap-aligned: index 0
+  is the gap between displayed records 1 and 2, index 1 is the gap between
+  records 2 and 3, and so on.
+- `query_id` and `subject_id` describe the BLAST file's query/subject
+  direction. The existing renderer still draws the upper displayed record as
+  query and the lower displayed record as subject, so a row that points from a
+  lower displayed record to the adjacent upper displayed record must be
+  normalized by swapping the query/subject columns before rendering. Do not
+  transform coordinates beyond this column swap.
+- The BLAST file itself is not otherwise coordinate-remapped. Its query and
+  subject names must still match the selected records in the same way existing
+  `-b` files do.
 
 ### Columns
 
@@ -101,14 +115,23 @@ Rejected for now:
    that already conflict with `blast_files`, including `--protein_blastp_mode`
    values other than `none` and collinearity comparison inputs where the current
    API already requires a single comparison source.
-4. Add a `BlastTableRow` adapter in `gbdraw/cli_utils/table_adapters.py`.
-5. Add `load_blast_table(path, records)` that returns comparison data grouped
-   by adjacent comparison gap.
-6. Prefer returning already-loaded/filter-ready comparison DataFrames instead of
-   forcing a fake positional file list. The internal linear assembler already
-   accepts comparison DataFrames; expose or rename that bridge clearly if the
-   public API needs a less protein-specific name.
-7. Preserve existing `-b` behavior exactly when `--blast_table` is absent.
+4. Add small `BlastTableRow` and resolved-row adapters in
+   `gbdraw/cli_utils/table_adapters.py`. Keep parsing, selector resolution,
+   direction normalization, and DataFrame loading as separate helpers rather
+   than one large manifest parser.
+5. Add `load_blast_table(path, records)` that returns a gap-aligned
+   `list[DataFrame]` with exactly `max(0, len(records) - 1)` entries. Missing
+   gaps must be represented by empty DataFrames with the standard comparison
+   columns so sparse tables do not shift later comparisons into earlier gaps.
+6. Return normalized comparison DataFrames, not a fake positional file list.
+   The adapter should load outfmt 6/7 files into the same comparison column
+   schema as `load_comparisons()` and leave global filtering to the existing
+   `filter_comparison_dataframe` path used by linear assembly.
+7. Add a clearly named public API bridge, for example
+   `comparison_dataframes`, for precomputed linear comparison data. Keep
+   `protein_comparisons` as a backward-compatible alias, but reject calls that
+   pass both names.
+8. Preserve existing `-b` behavior exactly when `--blast_table` is absent.
 
 ### Validation Details
 
@@ -119,10 +142,18 @@ Rejected for now:
   recommending reordering inputs or using legacy `-b` until arbitrary bands are
   implemented.
 - For adjacent rows, compute `gap_index = min(query_index, subject_index)`.
+- For adjacent rows where `query_index > subject_index`, load the BLAST file
+  as written, then swap the query/subject identity and coordinate columns so
+  the DataFrame is display-oriented before it is concatenated into the gap.
 - Allow multiple enabled rows for the same gap only if they are explicitly
-  ordered and their files load successfully; concatenate them in table order.
+  ordered and their files load successfully. When more than one enabled row
+  targets a gap, require every enabled row in that gap to have an `order`
+  value, sort by `order` then row number, and concatenate in that order.
+- Treat a missing, unreadable, or malformed BLAST file as a validation error for
+  the row instead of silently dropping it. A table row is an explicit user
+  request, unlike the legacy warning-and-continue shortcut.
 - Resolve file paths relative to the BLAST table.
-- Keep global BLAST filters applied in the existing `load_comparisons` /
+- Keep global BLAST filters applied exactly once through the existing
   `filter_comparison_dataframe` path.
 
 ### Tests
@@ -130,10 +161,15 @@ Rejected for now:
 - Header parser keeps `#1` selectors in `query_id` and `subject_id`.
 - `input:<id>` selectors work when `--input_table` is used.
 - Adjacent rows produce the same rendered comparison as equivalent `-b`.
+- A table with only the second adjacent gap populated leaves the first
+  comparison slot empty instead of drawing the second gap in the first gap.
+- Reversed adjacent query/subject rows preserve user intent by swapping
+  query/subject DataFrame columns before rendering.
 - Non-adjacent rows are rejected.
 - Ambiguous bare selectors are rejected with a namespace hint.
 - `--blast_table` is mutually exclusive with `-b`.
 - Multiple rows for one adjacent gap concatenate in `order`.
+- Missing or malformed row files are rejected with row-numbered diagnostics.
 - Minimal committed sample TSV runs through a real `gbdraw linear` invocation.
 
 ## Phase 2: Web UI `--input_table` Staging
@@ -152,6 +188,9 @@ legacy input arguments:
 
 When the bundled wheel supports `--input_table`, the web UI should stage
 `/web_input_table.tsv` and pass `--input_table /web_input_table.tsv`.
+When it does not, the web UI should keep the legacy CLI path. Both paths should
+be generated from one normalized web input-row model so record selection,
+regions, reverse complements, labels, and staged paths cannot drift.
 
 The web-generated table should use deterministic IDs:
 
@@ -178,19 +217,32 @@ record_2	gbk	/seq_1.gb	#1		true		2
 ### Implementation Steps
 
 1. Add feature detection for `--input_table` in the web option-support helper.
-2. Add `buildInputTable()` and `stageInputTable()` near the existing table
-   builders in `run-analysis.js`, using the same `cleanTsvCell()` helper.
-3. Stage input files first, then stage `/web_input_table.tsv` with paths to the
+2. Add `buildWebInputRows()` as the single source of truth for staged input
+   paths, deterministic `input_id` values, row-local `record_id`, row-local
+   `region`, `reverse_complement`, `label`, and `order`.
+3. Add `buildInputTable(rows)` and `stageInputTable(rows)` near the existing
+   table builders in `run-analysis.js`, using the same `cleanTsvCell()` helper.
+4. Stage input files first, then stage `/web_input_table.tsv` with paths to the
    staged files.
-4. Replace legacy input arguments only when support is detected. Keep the
-   legacy path as a fallback for older wheels if the current compatibility
-   policy still requires it.
-5. Update depth table staging to prefer `record_id=input:<input_id>` instead of
-   `#1` / `#<index>` when an input table is staged.
-6. Keep circular `region` and `reverse_complement` cells empty because circular
-   CLI support currently rejects them.
-7. Add static packaging tests that assert `/web_input_table.tsv` is staged and
-   `--input_table` is pushed for both linear and circular paths.
+5. When `--input_table` support is detected, push only `--input_table` for
+   input selection and transforms. Do not also push legacy `--gbk`, `--gff`,
+   `--fasta`, `--record_id`, `--region`, `--reverse_complement`, or
+   `--record_label`, because the CLI rejects those combinations.
+6. When `--input_table` support is not detected, derive the existing legacy
+   argument sequence from the same normalized web input rows. This keeps the
+   fallback path behavior-equivalent instead of maintaining two independent
+   input builders.
+7. Update depth table staging to prefer `record_id=input:<input_id>` instead of
+   `#1` / `#<index>` only when an input table is staged. Keep displayed-record
+   `#<index>` selectors for legacy-input fallback.
+8. Keep circular `region` and `reverse_complement` cells empty because circular
+   CLI support currently rejects them. If the UI has circular transforms in a
+   future pass, keep the legacy path until circular table support exists rather
+   than silently dropping those settings.
+9. Add static packaging tests that assert `/web_input_table.tsv` is staged and
+   `--input_table` is pushed for both linear and circular paths, and that the
+   mutually exclusive legacy input/transform arguments are not pushed in the
+   supported-wheel path.
 
 ## Phase 3: Web UI `--track_table` Staging
 
@@ -237,14 +289,20 @@ the enabled slot ID after order normalization and disabled-row filtering.
    used by `/web_depth_track_table.tsv` (`depth`, `depth_1`, `depth_2`, ...).
    Keep `track_index` as a checked compatibility alias when it is present in
    web state.
-7. If `--track_table_axis_before` is used, omit `side` cells or ensure they do
-   not conflict with the derived side. The simpler first pass is to leave `side`
-   empty for slots governed by the axis boundary.
+7. If `--track_table_axis_before` is used, treat existing
+   `normalize_*_track_slots_with_axis()` as the single layout authority. It is
+   acceptable to omit ordinary above/below or outside/inside `side` cells when
+   the axis boundary can derive them, but preserve meaningful side values such
+   as linear `features` with `side=overlay`, circular split/overlay feature
+   semantics, and tick overlay cases. Do not blank these values merely because
+   an axis boundary is present.
 8. Keep the existing compact slot-string fallback for older wheels only if
-   compatibility support is still required.
+   compatibility support is still required. Generate both table rows and legacy
+   slot strings from the same normalized slot list, not by re-reading editor
+   state separately.
 9. Update `tests/test_web_packaging.py` to check staging, axis-boundary
-   conversion by slot ID, disabled-row filtering, and depth `track_id`
-   relationships.
+   conversion by slot ID, disabled-row filtering, preserved overlay/on-axis
+   feature semantics, and depth `track_id` relationships.
 
 ## Phase 4: Optional Web UI `--blast_table` Staging
 
@@ -263,8 +321,15 @@ input:record_2	input:record_3	/blast_1.tsv	2	true
 
 Implementation notes:
 
-- Use input IDs from `/web_input_table.tsv` when input-table staging is active.
+- Use `input:<input_id>` selectors from `/web_input_table.tsv` when input-table
+  staging is active. If input-table staging is not active, use displayed-record
+  selectors such as `#1` and `#2`; do not emit `input:` selectors that cannot
+  resolve.
 - Preserve legacy `-b` fallback for older wheels if needed.
+- Only stage `/web_blast_table.tsv` for adjacent pairwise comparison files that
+  match the first-pass CLI semantics. Keep orthogroup, collinear, protein
+  conversion, and any non-adjacent comparison flows on their existing paths
+  until the table format explicitly supports those user models.
 - Keep web-generated rows adjacent-only until CLI support expands beyond
   adjacent comparison gaps.
 
@@ -289,7 +354,7 @@ Avoid duplicating the full schemas in every document. Keep the reference in
 Run focused tests as each phase lands:
 
 ```bash
-python -m pytest tests/test_cli_table_arguments.py tests/test_comparisons.py -q
+python -m pytest tests/test_cli_table_arguments.py tests/test_comparisons.py tests/test_api_library_usage.py -q
 python -m pytest tests/test_web_packaging.py -k "web_run_analysis or track_table or input_table or blast_table" -q
 ```
 
@@ -310,7 +375,8 @@ python tools/verify_gui_offline.py
 
 ## Suggested Implementation Order
 
-1. Implement and test `--blast_table` for linear adjacent comparisons.
+1. Add the `comparison_dataframes` API bridge, then implement and test
+   `--blast_table` for linear adjacent comparisons.
 2. Add `--blast_table` examples and docs.
 3. Stage `/web_input_table.tsv` in the web UI and update depth table selectors
    to use `input:<id>`.
@@ -321,9 +387,8 @@ python tools/verify_gui_offline.py
 
 ## Open Questions
 
-- Should the public API grow a clearly named `comparison_dataframes` parameter
-  so table-derived BLAST data does not travel through the existing
-  `protein_comparisons` compatibility name?
+- How long should the public API keep `protein_comparisons` as the compatibility
+  alias after `comparison_dataframes` is documented?
 - Should multiple BLAST rows for one adjacent pair concatenate silently, or
   require an explicit shared `comparison_id`?
 - Should circular conservation get its own table argument later, or should

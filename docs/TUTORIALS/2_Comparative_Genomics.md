@@ -124,6 +124,26 @@ Use `--alignment_length` when you want to hide very short BLAST hits and keep on
 > [!IMPORTANT]
 > BLAST files must follow the same order as the genome list.
 
+For table-driven workflows, use `--blast_table` instead of `-b` to attach each
+BLAST file to named displayed records:
+
+```tsv
+query_id	subject_id	file	order	enabled
+input:mje	input:mela	MjeNMV.MelaMJNV.tblastx.out	1	true
+```
+
+```bash
+gbdraw linear \
+  --input_table examples/cli_table_blast_inputs.tsv \
+  --blast_table examples/cli_table_blast.tsv \
+  -o cli_table_blast \
+  -f svg
+```
+
+The first `--blast_table` implementation is linear-only and expects adjacent
+record pairs. Use it when your inputs already have stable `input_id` values, or
+when sparse comparison gaps would make positional `-b` arguments hard to audit.
+
 ## 6. Circular Conservation Rings
 
 Circular mode can draw BLAST HSPs as concentric conservation rings around each displayed record. This is useful when one annotated reference genome should be compared against one or more unannotated FASTA sequences.

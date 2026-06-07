@@ -352,6 +352,42 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "'track_width'" in run_source
 
 
+def test_web_run_analysis_stages_cli_table_arguments() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert '"input_table": "--input_table" in _source' in run_source
+    assert '"track_table": "--track_table" in _source' in run_source
+    assert '"track_table_axis_before": "--track_table_axis_before" in _source' in run_source
+    assert '"blast_table": "--blast_table" in _source' in run_source
+
+    assert "buildInputTable" in run_source
+    assert "stageInputTable" in run_source
+    assert "stageTextFile('/web_input_table.tsv'" in run_source
+    assert "args.push('--input_table', '/web_input_table.tsv');" in run_source
+    assert "if (useLinearInputTable)" in run_source
+    assert "if (!useLinearInputTable)" in run_source
+    assert "input:record_1" in run_source
+    assert "input:${linearInputRows[entry.idx].inputId}" in run_source
+
+    assert "buildTrackTable" in run_source
+    assert "stageTrackTable" in run_source
+    assert "stageTextFile('/web_track_table.tsv'" in run_source
+    assert "args.push('--track_table', '/web_track_table.tsv');" in run_source
+    assert "args.push('--track_table_axis_before', beforeSlotId);" in run_source
+    assert "useCircularTrackTable" in run_source
+    assert "useLinearTrackTable" in run_source
+    assert "'slot_id'" in run_source
+    assert "'track_id'" in run_source
+    assert "params.track_id || depthTrackIdForIndex" in run_source
+
+    assert "buildBlastTable" in run_source
+    assert "stageBlastTable" in run_source
+    assert "stageTextFile('/web_blast_table.tsv'" in run_source
+    assert "args.push('--blast_table', '/web_blast_table.tsv');" in run_source
+    assert "useLinearBlastTable" in run_source
+    assert "input:${inputRows[index].inputId}" in run_source
+
+
 def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")

@@ -1376,6 +1376,51 @@ def test_assemble_linear_diagram_accepts_precomputed_protein_comparisons(
 
 
 @pytest.mark.linear
+def test_assemble_linear_diagram_accepts_comparison_dataframes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_assemble(*_args, **kwargs):
+        captured["comparison_dataframes"] = kwargs.get("comparison_dataframes")
+        return Drawing(filename="dummy.svg")
+
+    monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram", fake_assemble)
+
+    records = [_record("record_a"), _record("record_b")]
+    comparison = pd.DataFrame.from_records(
+        [_hit_row("record_a", "record_b")],
+        columns=COMPARISON_COLUMNS,
+    )
+    canvas = assemble_linear_diagram_from_records(
+        records,
+        comparison_dataframes=[comparison],
+    )
+
+    assert isinstance(canvas, Drawing)
+    frames = captured["comparison_dataframes"]
+    assert isinstance(frames, list)
+    assert len(frames) == 1
+    assert frames[0].equals(comparison)
+
+
+@pytest.mark.linear
+def test_assemble_linear_diagram_rejects_both_comparison_aliases() -> None:
+    records = [_record("record_a"), _record("record_b")]
+    comparison = pd.DataFrame.from_records(
+        [_hit_row("record_a", "record_b")],
+        columns=COMPARISON_COLUMNS,
+    )
+
+    with pytest.raises(ValidationError, match="comparison_dataframes"):
+        assemble_linear_diagram_from_records(
+            records,
+            comparison_dataframes=[comparison],
+            protein_comparisons=[comparison],
+        )
+
+
+@pytest.mark.linear
 def test_build_linear_diagram_forwards_protein_blastp_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

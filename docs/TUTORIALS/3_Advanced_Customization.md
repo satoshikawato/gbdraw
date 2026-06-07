@@ -268,6 +268,8 @@ lists. The tables keep each relationship named:
   `track_id` values.
 - `--track_table` describes custom linear or circular track slots and can refer
   to depth tracks by `track_id`.
+- `--blast_table` assigns linear BLAST outfmt 6/7 files to adjacent displayed
+  record pairs.
 
 The repository includes a minimal linear example:
 
@@ -296,6 +298,11 @@ gbdraw circular \
 Circular `--input_table` currently supports the stable-ID subset and rejects
 `region` or `reverse_complement` cells. Use linear mode when table rows need
 per-record cropping or reverse-complement transforms.
+
+The web app uses the same table path internally when the bundled gbdraw wheel
+supports it: uploaded inputs, depth tracks, custom slots, and simple adjacent
+linear BLAST comparisons are staged as `/web_*_table.tsv` files before the CLI
+is called. Older wheels fall back to the legacy positional arguments.
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 2](./2_Comparative_Genomics.md)

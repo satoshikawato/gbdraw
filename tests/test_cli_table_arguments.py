@@ -17,6 +17,7 @@ from gbdraw.analysis.depth_tracks import (
     build_depth_track_dataframes,
 )
 from gbdraw.cli_utils.table_adapters import (
+    load_blast_table,
     load_depth_track_table,
     load_input_table_records,
     load_track_table_slots,
@@ -52,6 +53,16 @@ def _write_depth_file(path: Path, reference: str, depth: float) -> str:
     return str(path)
 
 
+def _write_blast_file(path: Path, rows: list[tuple[object, ...]]) -> str:
+    path.write_text(
+        "# Fields: query acc., subject acc., % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score\n"
+        + "\n".join("\t".join(map(str, row)) for row in rows)
+        + "\n",
+        encoding="utf-8",
+    )
+    return str(path)
+
+
 def test_headered_table_keeps_hash_record_selector(tmp_path: Path) -> None:
     table = tmp_path / "depth_table.tsv"
     table.write_text(
@@ -68,6 +79,25 @@ def test_headered_table_keeps_hash_record_selector(tmp_path: Path) -> None:
 
     assert len(rows) == 1
     assert rows[0].cell("record_id") == "#1"
+
+
+def test_blast_table_keeps_hash_record_selectors(tmp_path: Path) -> None:
+    table = tmp_path / "blast_table.tsv"
+    table.write_text(
+        "# comment\nquery_id\tsubject_id\tfile\n#1\t#2\tcomparison.tsv\n",
+        encoding="utf-8",
+    )
+
+    rows = read_headered_tsv_table(
+        str(table),
+        required=("query_id", "subject_id", "file"),
+        optional=(),
+        table_name="blast_table",
+    )
+
+    assert len(rows) == 1
+    assert rows[0].cell("query_id") == "#1"
+    assert rows[0].cell("subject_id") == "#2"
 
 
 def test_input_table_row_local_record_selector_and_input_id(tmp_path: Path) -> None:
@@ -118,6 +148,130 @@ def test_depth_track_table_sparse_rows_preserve_track_ids(tmp_path: Path) -> Non
         ["depth_A", "depth_B"],
     ]
     assert result.metadata_by_track_id["depth_B"].fill_color == "#E45756"
+
+
+def test_blast_table_sparse_rows_preserve_gap_alignment_and_input_selectors(tmp_path: Path) -> None:
+    records = [_record("rec1"), _record("rec2"), _record("rec3")]
+    for record, input_id in zip(records, ("ref", "sample", "outgroup")):
+        record.annotations["gbdraw_input_id"] = input_id
+    blast_path = _write_blast_file(
+        tmp_path / "sample_outgroup.tsv",
+        [("rec2", "rec3", 95, 80, 0, 0, 1, 80, 5, 84, 1e-30, 200)],
+    )
+    table = tmp_path / "blast_table.tsv"
+    table.write_text(
+        "query_id\tsubject_id\tfile\n"
+        f"input:sample\tinput:outgroup\t{Path(blast_path).name}\n",
+        encoding="utf-8",
+    )
+
+    comparisons = load_blast_table(str(table), records=records)
+
+    assert len(comparisons) == 2
+    assert comparisons[0].empty
+    assert comparisons[1]["query"].tolist() == ["rec2"]
+    assert comparisons[1]["subject"].tolist() == ["rec3"]
+
+
+def test_blast_table_reversed_adjacent_row_swaps_display_columns(tmp_path: Path) -> None:
+    records = [_record("upper"), _record("lower")]
+    records[0].annotations["gbdraw_input_id"] = "upper"
+    records[1].annotations["gbdraw_input_id"] = "lower"
+    blast_path = _write_blast_file(
+        tmp_path / "lower_upper.tsv",
+        [("lower", "upper", 91, 30, 0, 0, 3, 32, 7, 36, 1e-20, 120)],
+    )
+    table = tmp_path / "blast_table.tsv"
+    table.write_text(
+        "query_id\tsubject_id\tfile\n"
+        f"input:lower\tinput:upper\t{Path(blast_path).name}\n",
+        encoding="utf-8",
+    )
+
+    comparisons = load_blast_table(str(table), records=records)
+    frame = comparisons[0]
+
+    assert frame["query"].tolist() == ["upper"]
+    assert frame["subject"].tolist() == ["lower"]
+    assert frame["qstart"].tolist() == [7]
+    assert frame["qend"].tolist() == [36]
+    assert frame["sstart"].tolist() == [3]
+    assert frame["send"].tolist() == [32]
+
+
+def test_blast_table_rejects_non_adjacent_record_pairs(tmp_path: Path) -> None:
+    records = [_record("rec1"), _record("rec2"), _record("rec3")]
+    blast_path = _write_blast_file(
+        tmp_path / "non_adjacent.tsv",
+        [("rec1", "rec3", 95, 80, 0, 0, 1, 80, 5, 84, 1e-30, 200)],
+    )
+    table = tmp_path / "blast_table.tsv"
+    table.write_text(
+        "query_id\tsubject_id\tfile\n"
+        f"#1\t#3\t{Path(blast_path).name}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="non-adjacent"):
+        load_blast_table(str(table), records=records)
+
+
+def test_blast_table_concatenates_multiple_ordered_rows_for_gap(tmp_path: Path) -> None:
+    records = [_record("rec1"), _record("rec2")]
+    first_path = _write_blast_file(
+        tmp_path / "first.tsv",
+        [("rec1", "rec2", 80, 20, 0, 0, 1, 20, 2, 21, 1e-10, 100)],
+    )
+    second_path = _write_blast_file(
+        tmp_path / "second.tsv",
+        [("rec1", "rec2", 90, 30, 0, 0, 5, 34, 6, 35, 1e-20, 150)],
+    )
+    table = tmp_path / "blast_table.tsv"
+    table.write_text(
+        "query_id\tsubject_id\tfile\torder\n"
+        f"#1\t#2\t{Path(second_path).name}\t2\n"
+        f"#1\t#2\t{Path(first_path).name}\t1\n",
+        encoding="utf-8",
+    )
+
+    comparisons = load_blast_table(str(table), records=records)
+
+    assert comparisons[0]["identity"].tolist() == [80, 90]
+
+
+def test_blast_table_requires_order_for_multiple_rows_in_one_gap(tmp_path: Path) -> None:
+    records = [_record("rec1"), _record("rec2")]
+    first_path = _write_blast_file(
+        tmp_path / "first.tsv",
+        [("rec1", "rec2", 80, 20, 0, 0, 1, 20, 2, 21, 1e-10, 100)],
+    )
+    second_path = _write_blast_file(
+        tmp_path / "second.tsv",
+        [("rec1", "rec2", 90, 30, 0, 0, 5, 34, 6, 35, 1e-20, 150)],
+    )
+    table = tmp_path / "blast_table.tsv"
+    table.write_text(
+        "query_id\tsubject_id\tfile\torder\n"
+        f"#1\t#2\t{Path(first_path).name}\t1\n"
+        f"#1\t#2\t{Path(second_path).name}\t\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="order"):
+        load_blast_table(str(table), records=records)
+
+
+def test_blast_table_rejects_missing_files_with_row_number(tmp_path: Path) -> None:
+    records = [_record("rec1"), _record("rec2")]
+    table = tmp_path / "blast_table.tsv"
+    table.write_text(
+        "query_id\tsubject_id\tfile\n"
+        "#1\t#2\tmissing.tsv\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="blast_table, row 2, column 'file'"):
+        load_blast_table(str(table), records=records)
 
 
 def test_depth_track_table_rejects_mode_specific_size_columns(tmp_path: Path) -> None:
@@ -271,6 +425,70 @@ def test_linear_cli_forwards_table_inputs_to_api(
     assert slots[1].params["track_index"] == 0
 
 
+def test_linear_cli_forwards_blast_table_to_api(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    blast_path = _write_blast_file(
+        tmp_path / "comparison.tsv",
+        [("ref", "sample", 95, 80, 0, 0, 1, 80, 5, 84, 1e-30, 200)],
+    )
+    blast_table = tmp_path / "blast_table.tsv"
+    blast_table.write_text(
+        "query_id\tsubject_id\tfile\n"
+        f"#1\t#2\t{Path(blast_path).name}\n",
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [_record("ref"), _record("sample")])
+    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    linear_cli_module.linear_main(
+        [
+            "--gbk",
+            "ref.gb",
+            "sample.gb",
+            "--blast_table",
+            str(blast_table),
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["blast_files"] is None
+    comparisons = captured["comparison_dataframes"]
+    assert isinstance(comparisons, list)
+    assert len(comparisons) == 1
+    assert comparisons[0]["query"].tolist() == ["ref"]
+
+
+def test_linear_cli_rejects_blast_table_with_legacy_blast() -> None:
+    with pytest.raises(SystemExit):
+        linear_cli_module.linear_main(
+            [
+                "--gbk",
+                "ref.gb",
+                "sample.gb",
+                "--blast_table",
+                "blast_table.tsv",
+                "-b",
+                "comparison.tsv",
+            ]
+        )
+
+
 def test_circular_cli_depth_table_width_applies_to_default_slots(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -339,6 +557,36 @@ def test_linear_cli_table_examples_run_end_to_end(project_root: Path, tmp_path: 
             str(examples_dir / "cli_table_depth_tracks.tsv"),
             "--track_table",
             str(examples_dir / "cli_table_track_slots.tsv"),
+            "-o",
+            str(output_prefix),
+            "-f",
+            "svg",
+        ],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    output_svg = output_prefix.with_suffix(".svg")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output_svg.exists()
+    assert "<svg" in output_svg.read_text(encoding="utf-8")
+
+
+def test_linear_cli_blast_table_example_runs_end_to_end(project_root: Path, tmp_path: Path) -> None:
+    examples_dir = project_root / "examples"
+    output_prefix = tmp_path / "linear_cli_blast_table"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gbdraw.cli",
+            "linear",
+            "--input_table",
+            str(examples_dir / "cli_table_blast_inputs.tsv"),
+            "--blast_table",
+            str(examples_dir / "cli_table_blast.tsv"),
             "-o",
             str(output_prefix),
             "-f",

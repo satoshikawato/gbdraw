@@ -1715,6 +1715,7 @@ def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
     blast_files: Optional[Sequence[str]] = None,
+    comparison_dataframes: Sequence[DataFrame] | None = None,
     protein_comparisons: Sequence[DataFrame] | None = None,
     orthogroups: OrthogroupResult | None = None,
     protein_blastp_mode: ProteinBlastpMode | str = "none",
@@ -1797,19 +1798,26 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("losatp_threads must be > 0 or None")
     if protein_blastp_candidate_limit is not None and int(protein_blastp_candidate_limit) <= 0:
         raise ValidationError("protein_blastp_candidate_limit must be > 0 or None")
-    if normalized_protein_blastp_mode != "none" and protein_comparisons is not None:
-        raise ValidationError("Pass either protein_blastp_mode or protein_comparisons, not both.")
+    if comparison_dataframes is not None and protein_comparisons is not None:
+        raise ValidationError("Pass either comparison_dataframes or protein_comparisons, not both.")
+    precomputed_comparisons = (
+        comparison_dataframes
+        if comparison_dataframes is not None
+        else protein_comparisons
+    )
+    if normalized_protein_blastp_mode != "none" and precomputed_comparisons is not None:
+        raise ValidationError("Pass either protein_blastp_mode or comparison_dataframes, not both.")
     if collinearity_blocks is not None and (
-        normalized_protein_blastp_mode != "none" or protein_comparisons is not None or blast_files
+        normalized_protein_blastp_mode != "none" or precomputed_comparisons is not None or blast_files
     ):
         raise ValidationError(
-            "Pass collinearity_blocks without protein_blastp_mode, protein_comparisons, or blast_files."
+            "Pass collinearity_blocks without protein_blastp_mode, comparison_dataframes, or blast_files."
         )
     if normalized_protein_blastp_mode != "none" and blast_files:
         raise ValidationError("protein_blastp_mode cannot be used with blast_files.")
     if normalized_protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("protein_blastp_mode requires at least two records")
-    has_precomputed_comparisons = bool(blast_files or protein_comparisons is not None or collinearity_blocks is not None)
+    has_precomputed_comparisons = bool(blast_files or precomputed_comparisons is not None or collinearity_blocks is not None)
     if (
         align_orthogroup_feature
         and normalized_protein_blastp_mode != "orthogroup"
@@ -1828,7 +1836,7 @@ def assemble_linear_diagram_from_records(
     if default_colors is None:
         has_comparisons = bool(
             blast_files
-            or protein_comparisons
+            or precomputed_comparisons
             or collinearity_blocks
             or normalized_protein_blastp_mode != "none"
         )
@@ -1939,8 +1947,8 @@ def assemble_linear_diagram_from_records(
         selected_features_set = DEFAULT_SELECTED_FEATURES
     resolved_protein_comparisons: list[DataFrame] | None = None
     resolved_orthogroups: OrthogroupResult | None = orthogroups
-    if protein_comparisons is not None:
-        resolved_protein_comparisons = list(protein_comparisons)
+    if precomputed_comparisons is not None:
+        resolved_protein_comparisons = list(precomputed_comparisons)
     elif collinearity_blocks is not None:
         if isinstance(collinearity_blocks, CollinearityResult):
             collinearity_result = collinearity_blocks
@@ -3567,6 +3575,7 @@ def build_linear_diagram(
     return assemble_linear_diagram_from_records(
         records,
         blast_files=options.blast_files,
+        comparison_dataframes=options.comparison_dataframes,
         protein_comparisons=options.protein_comparisons,
         orthogroups=options.orthogroups,
         protein_blastp_mode=options.protein_blastp_mode,

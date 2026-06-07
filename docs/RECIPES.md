@@ -187,6 +187,17 @@ gbdraw linear \
 flags. `--depth_track_table` assigns sparse depth files to named `track_id`
 values, and `--track_table` can reference those depth tracks by name.
 
+Use `--blast_table` when you want comparison files to attach to named inputs
+instead of relying on `-b` file order:
+
+```bash
+gbdraw linear \
+  --input_table examples/cli_table_blast_inputs.tsv \
+  --blast_table examples/cli_table_blast.tsv \
+  -o cli_table_blast \
+  -f svg
+```
+
 ## Comparative Genomics
 
 ### Two-genome comparison

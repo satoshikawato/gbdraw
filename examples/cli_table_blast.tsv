@@ -1,0 +1,2 @@
+query_id	subject_id	file	order	enabled
+input:mje	input:mela	MjeNMV.MelaMJNV.tblastx.out	1	true

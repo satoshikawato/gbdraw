@@ -1144,6 +1144,9 @@ json.dumps({
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
+        input_table: false,
+        track_table: false,
+        track_table_axis_before: false,
         conservation_blast: false,
         conservation_reference: false,
         conservation_labels: false,
@@ -1175,6 +1178,9 @@ json.dumps({
   "label_rendering": "--label_rendering" in _source,
   "circular_track_slot": "--circular_track_slot" in _source,
   "circular_track_axis_index": "--circular_track_axis_index" in _source,
+  "input_table": "--input_table" in _source,
+  "track_table": "--track_table" in _source,
+  "track_table_axis_before": "--track_table_axis_before" in _source,
   "conservation_blast": "--conservation_blast" in _source,
   "conservation_reference": "--conservation_reference" in _source,
   "conservation_labels": "--conservation_labels" in _source,
@@ -1202,6 +1208,9 @@ json.dumps({
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
+        input_table: false,
+        track_table: false,
+        track_table_axis_before: false,
         conservation_blast: false,
         conservation_reference: false,
         conservation_labels: false,
@@ -1219,7 +1228,11 @@ json.dumps({
     if (!pyodide) {
       linearTrackSlotSupportCache = {
         linear_track_slot: false,
-        linear_track_axis_index: false
+        linear_track_axis_index: false,
+        input_table: false,
+        track_table: false,
+        track_table_axis_before: false,
+        blast_table: false
       };
       return linearTrackSlotSupportCache;
     }
@@ -1231,13 +1244,21 @@ _source = inspect.getsource(_gbdraw_linear._get_args)
 json.dumps({
   "linear_track_slot": "--linear_track_slot" in _source,
   "linear_track_axis_index": "--linear_track_axis_index" in _source,
+  "input_table": "--input_table" in _source,
+  "track_table": "--track_table" in _source,
+  "track_table_axis_before": "--track_table_axis_before" in _source,
+  "blast_table": "--blast_table" in _source,
 })
       `);
       linearTrackSlotSupportCache = JSON.parse(String(raw));
     } catch (_err) {
       linearTrackSlotSupportCache = {
         linear_track_slot: false,
-        linear_track_axis_index: false
+        linear_track_axis_index: false,
+        input_table: false,
+        track_table: false,
+        track_table_axis_before: false,
+        blast_table: false
       };
     }
     return linearTrackSlotSupportCache;
@@ -1839,6 +1860,135 @@ json.dumps({
         stageTextFile('/web_depth_track_table.tsv', buildDepthTrackTable(entries, { circular }));
         args.push('--depth_track_table', '/web_depth_track_table.tsv');
       };
+      const buildInputTable = (rows) => {
+        const columns = [
+          'input_id',
+          'input_type',
+          'gbk',
+          'gff',
+          'fasta',
+          'record_id',
+          'region',
+          'reverse_complement',
+          'label',
+          'order'
+        ];
+        const body = (Array.isArray(rows) ? rows : []).map((row, index) => {
+          const inputType = String(row.inputType || row.input_type || '').trim().toLowerCase();
+          const cells = [
+            row.inputId || row.input_id || `record_${index + 1}`,
+            inputType || 'gbk',
+            inputType === 'gbk' ? (row.gbk || '') : '',
+            inputType === 'gff' ? (row.gff || '') : '',
+            inputType === 'gff' ? (row.fasta || '') : '',
+            row.recordId || row.record_id || '#1',
+            row.region || '',
+            row.reverseComplement === true ? 'true' : (row.reverseComplement === false ? 'false' : ''),
+            row.label || '',
+            row.order || index + 1
+          ];
+          return cells.map(cleanTsvCell).join('\t');
+        });
+        return `${columns.join('\t')}\n${body.join('\n')}\n`;
+      };
+      const stageInputTable = (rows) => {
+        const entries = Array.isArray(rows) ? rows : [];
+        if (!entries.length) return;
+        stageTextFile('/web_input_table.tsv', buildInputTable(entries));
+        args.push('--input_table', '/web_input_table.tsv');
+      };
+      const axisBeforeSlotId = (slots, axisIndex) => {
+        const enabledSlots = (Array.isArray(slots) ? slots : [])
+          .filter((slot) => slot?.enabled !== false && String(slot?.id || '').trim() !== '');
+        const index = Number(axisIndex);
+        if (!Number.isInteger(index) || index < 0 || index >= enabledSlots.length) return '';
+        return String(enabledSlots[index].id || '').trim();
+      };
+      const buildTrackTable = (slots, { circular = false, depthTrackCount = 1 } = {}) => {
+        const columns = [
+          'slot_id',
+          'renderer',
+          'order',
+          'side',
+          'track_id',
+          'track_index',
+          'height',
+          'radius',
+          'width',
+          'spacing',
+          'z',
+          'enabled',
+          'nt',
+          'dinucleotide',
+          'source_index',
+          'lane_direction',
+          'tick_label_layout'
+        ];
+        const rows = (Array.isArray(slots) ? slots : []).map((slot, index) => {
+          const params = slot?.params && typeof slot.params === 'object' ? slot.params : {};
+          const renderer = String(slot?.renderer || '').trim();
+          const parsedTrackIndex = Number(params.track_index);
+          const trackIndex = Number.isInteger(parsedTrackIndex) && parsedTrackIndex >= 0 ? parsedTrackIndex : '';
+          const trackId = renderer === 'depth'
+            ? (params.track_id || depthTrackIdForIndex(trackIndex === '' ? index : trackIndex, depthTrackCount))
+            : '';
+          const dinucleotide = params.dinucleotide || params.nt || '';
+          const cells = [
+            slot?.id || `slot_${index + 1}`,
+            renderer,
+            index + 1,
+            slot?.side || '',
+            trackId,
+            trackIndex,
+            circular ? '' : (slot?.height || ''),
+            circular ? (slot?.radius || '') : '',
+            circular ? (slot?.width || '') : '',
+            slot?.spacing || '',
+            slot?.z ?? '',
+            slot?.enabled === false ? 'false' : 'true',
+            params.nt || '',
+            dinucleotide,
+            params.source_index ?? '',
+            params.lane_direction || '',
+            params.tick_label_layout || ''
+          ];
+          return cells.map(cleanTsvCell).join('\t');
+        });
+        return `${columns.join('\t')}\n${rows.join('\n')}\n`;
+      };
+      const stageTrackTable = (slots, { circular = false, axisIndex = null, depthTrackCount = 1 } = {}) => {
+        const entries = Array.isArray(slots) ? slots : [];
+        if (!entries.length) return;
+        stageTextFile('/web_track_table.tsv', buildTrackTable(entries, { circular, depthTrackCount }));
+        args.push('--track_table', '/web_track_table.tsv');
+        const beforeSlotId = axisBeforeSlotId(entries, axisIndex);
+        if (beforeSlotId) args.push('--track_table_axis_before', beforeSlotId);
+      };
+      const buildBlastTable = (blastPaths, { inputRows = [], useInputTable = false } = {}) => {
+        const columns = ['query_id', 'subject_id', 'file', 'order', 'enabled'];
+        const rows = (Array.isArray(blastPaths) ? blastPaths : []).map((path, index) => {
+          const queryId = useInputTable && inputRows[index]?.inputId
+            ? `input:${inputRows[index].inputId}`
+            : `#${index + 1}`;
+          const subjectId = useInputTable && inputRows[index + 1]?.inputId
+            ? `input:${inputRows[index + 1].inputId}`
+            : `#${index + 2}`;
+          return [queryId, subjectId, path, index + 1, 'true'].map(cleanTsvCell).join('\t');
+        });
+        return `${columns.join('\t')}\n${rows.join('\n')}\n`;
+      };
+      const stageBlastTable = (blastPaths, { inputRows = [], useInputTable = false } = {}) => {
+        const paths = Array.isArray(blastPaths) ? blastPaths : [];
+        if (!paths.length) return;
+        const pathSet = new Set(paths.map((path) => String(path || '')));
+        virtualBlastFiles.forEach((entry) => {
+          if (pathSet.has(String(entry?.path || ''))) {
+            stageTextFile(entry.path, entry.text || '');
+          }
+        });
+        stageTextFile('/web_blast_table.tsv', buildBlastTable(paths, { inputRows, useInputTable }));
+        args.push('--blast_table', '/web_blast_table.tsv');
+      };
       const ensureDepthTrackConfigAt = (index) => {
         const idx = Math.max(0, Number(index) || 0);
         if (!Array.isArray(adv.depth_tracks)) adv.depth_tracks = [];
@@ -1938,6 +2088,12 @@ json.dumps({
         const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
         const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
+        const useCircularInputTable = Boolean(multiCanvasSupport.input_table && !form.multi_record_canvas);
+        const useCircularTrackTable = Boolean(
+          useCircularTrackSlots &&
+          multiCanvasSupport.track_table &&
+          multiCanvasSupport.track_table_axis_before
+        );
         const circularTrackAxisIndex = clampCircularTrackAxisIndex(
           adv.circular_track_slots_axis_index,
           Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots.length : 0
@@ -1951,7 +2107,10 @@ json.dumps({
             )
           : [];
         if (useCircularTrackSlots) {
-          if (!multiCanvasSupport.circular_track_slot || !multiCanvasSupport.circular_track_axis_index) {
+          if (
+            !useCircularTrackTable &&
+            (!multiCanvasSupport.circular_track_slot || !multiCanvasSupport.circular_track_axis_index)
+          ) {
             throw new Error(
               'Current gbdraw wheel does not support --circular_track_slot and --circular_track_axis_index. Rebuild and redeploy the web wheel.'
             );
@@ -2188,7 +2347,6 @@ json.dumps({
           }
         }
         if (useCircularTrackSlots) {
-          args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
           const circularDepthSlotIndexes = new Set();
           let circularDepthSlotOrdinal = 0;
           circularTrackSlots.forEach((slot) => {
@@ -2203,18 +2361,10 @@ json.dumps({
             }
             circularDepthSlotOrdinal += 1;
           });
+          const circularTrackSlotsForCli = circularTrackSlots.slice();
           const usedCircularSlotIds = new Set(
             circularTrackSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
           );
-          circularTrackSlots.forEach((slot) => {
-            args.push(
-              '--circular_track_slot',
-              buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {
-                includeSide: false,
-                forceSplitLane: true
-              })
-            );
-          });
           const circularDepthEntries = depthTrackEntriesFromSlots(files.c_depth);
           if (circularDepthEntries.length > 1) {
             for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
@@ -2226,7 +2376,44 @@ json.dumps({
                 suffix += 1;
               }
               usedCircularSlotIds.add(slotId);
-              args.push('--circular_track_slot', `${slotId}:depth@track_index=${depthIndex}`);
+              circularTrackSlotsForCli.push({
+                id: slotId,
+                renderer: 'depth',
+                enabled: true,
+                side: '',
+                params: {
+                  track_id: depthTrackIdForIndex(depthIndex, circularDepthEntries.length),
+                  track_index: depthIndex
+                }
+              });
+            }
+          }
+          if (useCircularTrackTable) {
+            stageTrackTable(circularTrackSlotsForCli, {
+              circular: true,
+              axisIndex: adv.circular_track_slots_axis_index,
+              depthTrackCount: Math.max(1, circularDepthEntries.length)
+            });
+          } else {
+            args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
+            circularTrackSlots.forEach((slot) => {
+              args.push(
+                '--circular_track_slot',
+                buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {
+                  includeSide: false,
+                  forceSplitLane: true
+                })
+              );
+            });
+            if (circularDepthEntries.length > 1) {
+              circularTrackSlotsForCli
+                .slice(circularTrackSlots.length)
+                .forEach((slot) => {
+                  const depthIndex = Number(slot?.params?.track_index);
+                  if (Number.isInteger(depthIndex) && depthIndex >= 0) {
+                    args.push('--circular_track_slot', `${slot.id}:depth@track_index=${depthIndex}`);
+                  }
+                });
             }
           }
         }
@@ -2242,7 +2429,7 @@ json.dumps({
             stagedCircularDepthEntries.push({
               ...circularDepthEntries[depthIndex],
               logicalIndex: circularDepthEntries[depthIndex].index,
-              recordId: '#1',
+              recordId: useCircularInputTable ? 'input:record_1' : '#1',
               path: depthPath
             });
           }
@@ -2273,16 +2460,33 @@ json.dumps({
           args.push('--tick_label_font_size', adv.tick_label_font_size);
         }
 
+        const circularInputRows = [];
         if (cInputType.value === 'gb') {
           if (!files.c_gb) throw new Error('Please upload a GenBank file.');
           await stageUploadedFile(files.c_gb, '/input.gb');
-          args.push('--gbk', '/input.gb');
+          circularInputRows.push({
+            inputId: 'record_1',
+            inputType: 'gbk',
+            gbk: '/input.gb',
+            recordId: '#1',
+            order: 1
+          });
+          if (!useCircularInputTable) args.push('--gbk', '/input.gb');
         } else {
           if (!files.c_gff || !files.c_fasta) throw new Error('GFF3 and FASTA are required.');
           await stageUploadedFile(files.c_gff, '/input.gff');
           await stageUploadedFile(files.c_fasta, '/input.fasta');
-          args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
+          circularInputRows.push({
+            inputId: 'record_1',
+            inputType: 'gff',
+            gff: '/input.gff',
+            fasta: '/input.fasta',
+            recordId: '#1',
+            order: 1
+          });
+          if (!useCircularInputTable) args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
         }
+        if (useCircularInputTable) stageInputTable(circularInputRows);
 
         const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
@@ -2603,13 +2807,22 @@ json.dumps({
         const normalizedPairwiseMatchStyle = normalizePairwiseMatchStyle(adv.pairwise_match_style);
         adv.pairwise_match_style = normalizedPairwiseMatchStyle;
         if (form.align_center) args.push('--align_center');
+        const linearOptionSupport = getLinearTrackSlotOptionSupport();
+        const useLinearInputTable = Boolean(linearOptionSupport.input_table);
         const useLinearTrackSlots = adv.linear_track_slots_enabled === true;
+        const useLinearTrackTable = Boolean(
+          useLinearTrackSlots &&
+          linearOptionSupport.track_table &&
+          linearOptionSupport.track_table_axis_before
+        );
         let linearTrackSlots = [];
         let linearTrackSlotAxisIndex = null;
         let linearSlotNeedsDepth = false;
         if (useLinearTrackSlots) {
-          const support = getLinearTrackSlotOptionSupport();
-          if (!support.linear_track_slot || !support.linear_track_axis_index) {
+          if (
+            !useLinearTrackTable &&
+            (!linearOptionSupport.linear_track_slot || !linearOptionSupport.linear_track_axis_index)
+          ) {
             throw new Error(
               'Current gbdraw wheel does not support --linear_track_slot and --linear_track_axis_index. Rebuild and redeploy the web wheel.'
             );
@@ -2909,7 +3122,7 @@ json.dumps({
 
         const recordLabels = linearSeqs.map((seq) => (seq.definition ?? '').toString());
         const hasRecordLabels = recordLabels.some((label) => label.trim() !== '');
-        if (hasRecordLabels) {
+        if (!useLinearInputTable && hasRecordLabels) {
           recordLabels.forEach((label) => {
             args.push('--record_label', label);
           });
@@ -2950,7 +3163,7 @@ json.dumps({
             const fileSpec = canonicalSpecBody;
             reverseFlags.push(false);
             viewTransformSpecs.push({ reverse: displayReverse });
-            return { cli: cliSpec, file: fileSpec, displayFile: specBody };
+            return { cli: cliSpec, file: fileSpec, table: specBody, displayFile: specBody };
           }
 
           reverseFlags.push(wantsReverse);
@@ -2960,6 +3173,7 @@ json.dumps({
 
         let inputArgs = [];
         let blastArgs = [];
+        let linearInputRows = [];
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -3277,19 +3491,35 @@ json.dumps({
         }
 
         regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
+        linearInputRows = linearSeqs.map((seq, idx) => ({
+          inputId: `record_${idx + 1}`,
+          inputType: lInputType.value === 'gb' ? 'gbk' : 'gff',
+          gbk: lInputType.value === 'gb' ? `/seq_${idx}.gb` : '',
+          gff: lInputType.value === 'gff' ? `/seq_${idx}.gff` : '',
+          fasta: lInputType.value === 'gff' ? `/seq_${idx}.fasta` : '',
+          recordId: recordSelectors[idx] || '#1',
+          region: regionSpecs[idx]?.table || '',
+          reverseComplement: regionSpecs[idx] ? false : Boolean(reverseFlags[idx]),
+          label: recordLabels[idx] || '',
+          order: idx + 1
+        }));
+        if (useLinearInputTable) {
+          stageInputTable(linearInputRows);
+        } else {
+          regionSpecs.forEach((spec) => {
+            if (spec?.cli) args.push('--region', spec.cli);
+          });
+
+          recordSelectors.forEach((selector) => {
+            args.push('--record_id', selector);
+          });
+          reverseFlags.forEach((flag) => {
+            args.push('--reverse_complement', flag ? '1' : '0');
+          });
+        }
         if (useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
         }
-        regionSpecs.forEach((spec) => {
-          if (spec?.cli) args.push('--region', spec.cli);
-        });
-
-        recordSelectors.forEach((selector) => {
-          args.push('--record_id', selector);
-        });
-        reverseFlags.forEach((flag) => {
-          args.push('--reverse_complement', flag ? '1' : '0');
-        });
 
         if (useLosat) {
           setProcessingStatus('Preparing LOSAT jobs...');
@@ -3600,7 +3830,9 @@ json.dumps({
                 depthTrackEntries.push({
                   file: entry.file,
                   logicalIndex: depthTrackIndex,
-                  recordId: `#${entry.idx + 1}`,
+                  recordId: useLinearInputTable && linearInputRows[entry.idx]?.inputId
+                    ? `input:${linearInputRows[entry.idx].inputId}`
+                    : `#${entry.idx + 1}`,
                   path: depthPath,
                   config: depthTrackConfigAt(depthTrackIndex, entry.file)
                 });
@@ -3620,25 +3852,50 @@ json.dumps({
           }
         }
         if (useLinearTrackSlots) {
-          args.push('--linear_track_axis_index', String(linearTrackSlotAxisIndex));
-          linearTrackSlots
-            .filter((slot) => slot.enabled !== false)
-            .forEach((slot) => {
-              const spec = buildLinearTrackSlotSpec(slot, { includeSide: false });
-              if (spec) args.push('--linear_track_slot', spec);
+          if (useLinearTrackTable) {
+            stageTrackTable(linearTrackSlots, {
+              circular: false,
+              axisIndex: linearTrackSlotAxisIndex,
+              depthTrackCount: Math.max(1, linearDepthTrackCountForState(state))
             });
-        }
-        if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
-        else {
-          let gffs = [];
-          let fastas = [];
-          for (let i = 0; i < linearSeqs.length; i++) {
-            gffs.push(`/seq_${i}.gff`);
-            fastas.push(`/seq_${i}.fasta`);
+          } else {
+            args.push('--linear_track_axis_index', String(linearTrackSlotAxisIndex));
+            linearTrackSlots
+              .filter((slot) => slot.enabled !== false)
+              .forEach((slot) => {
+                const spec = buildLinearTrackSlotSpec(slot, { includeSide: false });
+                if (spec) args.push('--linear_track_slot', spec);
+              });
           }
-          args.push('--gff', ...gffs, '--fasta', ...fastas);
         }
-        if (blastArgs.length) args.push('-b', ...blastArgs);
+        if (!useLinearInputTable) {
+          if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
+          else {
+            let gffs = [];
+            let fastas = [];
+            for (let i = 0; i < linearSeqs.length; i++) {
+              gffs.push(`/seq_${i}.gff`);
+              fastas.push(`/seq_${i}.fasta`);
+            }
+            args.push('--gff', ...gffs, '--fasta', ...fastas);
+          }
+        }
+        if (blastArgs.length) {
+          const useLinearBlastTable = Boolean(
+            linearOptionSupport.blast_table &&
+            !useProteinBlastp &&
+            !useOrthogroupBlastp &&
+            !useCollinearBlastp
+          );
+          if (useLinearBlastTable) {
+            stageBlastTable(blastArgs, {
+              inputRows: linearInputRows,
+              useInputTable: useLinearInputTable
+            });
+          } else {
+            args.push('-b', ...blastArgs);
+          }
+        }
       }
 
       console.log('CMD:', args.join(' '));
