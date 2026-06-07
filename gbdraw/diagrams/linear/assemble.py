@@ -23,8 +23,10 @@ from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     DepthTrackData,
     DepthTrackSpec,
     build_depth_track_dataframes,
+    depth_track_legend_entries,
     depth_track_count,
     normalize_depth_tracks,
+    resolve_depth_track,
     sync_depth_track_legend_entries,
 )
 from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
@@ -124,17 +126,37 @@ def _depth_track_heights_from_specs(
     return heights
 
 
+def _depth_track_height_by_id(
+    record_depth_tracks: list[list[DepthTrackSpec]] | None,
+) -> dict[str, float]:
+    heights: dict[str, float] = {}
+    for row in record_depth_tracks or []:
+        for spec in row:
+            if spec.height is None:
+                continue
+            heights.setdefault(str(spec.id), float(spec.height))
+    return heights
+
+
 def _apply_depth_track_heights_to_linear_slots(
     slots: list,
     record_depth_tracks: list[list[DepthTrackSpec]] | None,
 ) -> list:
     depth_heights = _depth_track_heights_from_specs(record_depth_tracks)
     if not depth_heights:
-        return slots
+        depth_heights_by_id = _depth_track_height_by_id(record_depth_tracks)
+        if not depth_heights_by_id:
+            return slots
+    else:
+        depth_heights_by_id = _depth_track_height_by_id(record_depth_tracks)
     out = []
     for slot in slots:
         if slot.renderer != "depth" or slot.height is not None:
             out.append(slot)
+            continue
+        track_id = str((slot.params or {}).get("track_id", "") or "").strip()
+        if track_id and track_id in depth_heights_by_id:
+            out.append(replace(slot, height=ScalarSpec(float(depth_heights_by_id[track_id]), "px")))
             continue
         try:
             track_index = int(slot.params.get("track_index", 0))
@@ -850,8 +872,10 @@ def assemble_linear_diagram(
             depth_config=depth_config if depth_enabled and depth_track_count(record_depth_tracks) == 1 else None,
         )
         if depth_enabled:
-            first_depth_row = next((row for row in record_depth_data if row), [])
-            legend_table = sync_depth_track_legend_entries(legend_table, first_depth_row)
+            legend_table = sync_depth_track_legend_entries(
+                legend_table,
+                depth_track_legend_entries(record_depth_data),
+            )
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
         required_legend_height = float(legend_group.legend_height)
@@ -1223,12 +1247,15 @@ def assemble_linear_diagram(
                     record_label_heights_above=record_label_heights_above,
                 )
                 if slot.renderer == "depth":
-                    track_index = int(slot.params.get("track_index", 0))
-                    if track_index < 0 or track_index >= len(shared_depth_tracks):
+                    depth_track = resolve_depth_track(shared_depth_tracks, slot.params or {})
+                    if depth_track is None:
                         raise ValueError(
-                            f"Depth slot '{slot.id}' track_index={track_index} is outside the available depth tracks."
+                            f"Depth slot '{slot.id}' selected an unavailable depth track."
                         )
-                    depth_track = shared_depth_tracks[track_index]
+                    try:
+                        track_index = shared_depth_tracks.index(depth_track)
+                    except ValueError:
+                        track_index = 0
                     group_id = _linear_depth_group_id(
                         slot.id or depth_track.id,
                         record_index=count - 1,

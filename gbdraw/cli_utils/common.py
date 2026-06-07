@@ -183,6 +183,10 @@ def add_legend_args(parser: argparse.ArgumentParser, choices_help: str = '"right
 
 def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Validate input file argument combinations."""
+    if getattr(args, "input_table", None):
+        if args.gbk or args.gff or args.fasta:
+            parser.error("Error: --input_table cannot be used with --gbk, --gff, or --fasta.")
+        return
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
     if args.gff and not args.fasta:

@@ -343,13 +343,13 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "v-model.number=\"track.config.height\"" in index_html
     assert "v-model.number=\"track.config.large_tick_interval\"" in index_html
     assert "depthTrackConfigAt(index, file)" in run_source
-    assert "args.push('--depth_track_label', ...labels);" in run_source
-    assert "args.push('--depth_track_color', ...colors);" in run_source
-    assert "args.push('--depth_track_height', ...heights);" in run_source
-    assert "args.push('--depth_track_large_tick_interval', ...largeTicks);" in run_source
-    assert "args.push('--depth_track_small_tick_interval', ...smallTicks);" in run_source
-    assert "args.push('--depth_track_tick_font_size', ...tickFontSizes);" in run_source
-    assert "depthPaths.push('');" in run_source
+    assert "buildDepthTrackTable" in run_source
+    assert "stageDepthTrackTable" in run_source
+    assert "stageTextFile('/web_depth_track_table.tsv'" in run_source
+    assert "args.push('--depth_track_table', '/web_depth_track_table.tsv');" in run_source
+    assert "'track_label'" in run_source
+    assert "'track_height'" in run_source
+    assert "'track_width'" in run_source
 
 
 def test_web_run_analysis_wires_circular_track_slot_options() -> None:

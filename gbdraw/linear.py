@@ -48,6 +48,12 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
 )
+from .cli_utils.table_adapters import (
+    apply_depth_track_ids_to_slots,
+    load_depth_track_table,
+    load_input_table_records,
+    load_track_table_slots,
+)
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -198,6 +204,11 @@ def _get_args(args) -> argparse.Namespace:
         help="FASTA file (required with --gff)",
         type=str,
         nargs='*')
+    parser.add_argument(
+        "--input_table",
+        metavar="INPUT_TABLE",
+        help="Headered TSV describing input files, record selectors, regions, reverse complements, and labels.",
+        type=str)
     parser.add_argument(
         '-b',
         '--blast',
@@ -503,6 +514,11 @@ def _get_args(args) -> argparse.Namespace:
         nargs='+',
         action='append')
     parser.add_argument(
+        '--depth_track_table',
+        metavar='DEPTH_TRACK_TABLE',
+        help='Headered TSV assigning depth files and per-track metadata to records.',
+        type=str)
+    parser.add_argument(
         '--depth_track_label',
         metavar='LABEL',
         help='Depth track label(s). Provide one label or one per --depth_track.',
@@ -802,6 +818,16 @@ def _get_args(args) -> argparse.Namespace:
         default=None,
     )
     parser.add_argument(
+        '--track_table',
+        metavar='TRACK_TABLE',
+        help='Headered TSV describing linear custom track slots.',
+        type=str)
+    parser.add_argument(
+        '--track_table_axis_before',
+        metavar='SLOT_ID',
+        help='Axis boundary for --track_table, resolved after order sorting and disabled-row filtering.',
+        type=str)
+    parser.add_argument(
         '--ruler_on_axis',
         help=(
             'Use each record axis as the ruler in linear mode. '
@@ -945,6 +971,8 @@ def _get_args(args) -> argparse.Namespace:
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if args.input_table and (args.record_id or args.reverse_complement or args.region or args.record_label):
+        parser.error("--input_table cannot be combined with --record_id, --reverse_complement, --region, or --record_label")
     if args.protein_blastp_mode != "none" and args.blast:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
     if args.collinear_blocks and args.blast:
@@ -961,8 +989,12 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
     if args.depth and args.depth_track:
         parser.error("--depth cannot be combined with --depth_track")
-    if args.show_depth and not (args.depth or args.depth_track):
-        parser.error("--show_depth requires --depth or --depth_track")
+    if args.depth_track_table and (args.depth or args.depth_track):
+        parser.error("--depth_track_table cannot be combined with --depth or --depth_track")
+    if args.depth_track_table and (args.depth_track_label or args.depth_track_color):
+        parser.error("--depth_track_table cannot be combined with --depth_track_label or --depth_track_color")
+    if args.show_depth and not (args.depth or args.depth_track or args.depth_track_table):
+        parser.error("--show_depth requires --depth, --depth_track, or --depth_track_table")
     if args.depth_height is not None and args.depth_height <= 0:
         parser.error("--depth_height must be > 0")
     if args.depth_window is not None and args.depth_window <= 0:
@@ -989,6 +1021,8 @@ def _get_args(args) -> argparse.Namespace:
         "depth_track_small_tick_interval",
         "depth_track_tick_font_size",
     ):
+        if args.depth_track_table and getattr(args, option_name):
+            parser.error(f"--depth_track_table cannot be combined with --{option_name}")
         for option_value in getattr(args, option_name) or []:
             option_text = str(option_value).strip().lower()
             if option_text in {"", "auto", "none", "null", "-"}:
@@ -1019,6 +1053,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_content_tick_font_size must be > 0")
     if args.linear_track_order and args.linear_track_slot:
         parser.error("--linear_track_order cannot be combined with --linear_track_slot")
+    if args.track_table and (args.linear_track_order or args.linear_track_slot or args.linear_track_axis_index is not None):
+        parser.error("--track_table cannot be combined with --linear_track_order, --linear_track_slot, or --linear_track_axis_index")
+    if args.track_table_axis_before and not args.track_table:
+        parser.error("--track_table_axis_before requires --track_table")
     if args.linear_track_axis_index is not None and not (args.linear_track_order or args.linear_track_slot):
         parser.error("--linear_track_axis_index requires --linear_track_order or --linear_track_slot")
     try:
@@ -1098,6 +1136,14 @@ def _record_major_depth_track_files_from_cli(
     return rows
 
 
+def _default_depth_track_ids(track_count: int) -> tuple[str, ...]:
+    if track_count <= 0:
+        return ()
+    if track_count == 1:
+        return ("depth",)
+    return tuple(f"depth_{index + 1}" for index in range(track_count))
+
+
 def linear_main(cmd_args) -> None:
     """
     Main function for generating linear genome diagrams.
@@ -1160,15 +1206,17 @@ def linear_main(cmd_args) -> None:
     gc_content_tick_font_size: Optional[float] = args.gc_content_tick_font_size
     manual_window: int = args.window
     manual_step: int = args.step
+    input_table_path: str | None = args.input_table
     depth_files: list[str] | None = args.depth
     depth_track_groups: list[list[str]] | None = args.depth_track
+    depth_track_table_path: str | None = args.depth_track_table
     depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
     depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
     depth_track_heights: list[str] | None = list(args.depth_track_height or []) or None
     depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
     depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
     depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
-    show_depth: bool = bool(args.show_depth or depth_files or depth_track_groups)
+    show_depth: bool = bool(args.show_depth or depth_files or depth_track_groups or depth_track_table_path)
     depth_color: str | None = args.depth_color
     depth_height: Optional[float] = args.depth_height
     depth_window: Optional[int] = args.depth_window
@@ -1264,6 +1312,8 @@ def linear_main(cmd_args) -> None:
     track_axis_gap: Optional[float] = args.track_axis_gap
     linear_track_slot_specs = args.linear_track_slot_specs
     linear_track_axis_index: int | None = args.linear_track_axis_index
+    track_table_path: str | None = args.track_table
+    track_table_axis_before: str | None = args.track_table_axis_before
     ruler_on_axis: bool = bool(args.ruler_on_axis)
     if ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
         logger.warning(
@@ -1378,7 +1428,16 @@ def linear_main(cmd_args) -> None:
         logger.error("ERROR: Invalid reverse_complement value: %s", value)
         raise ValidationError(f"Invalid reverse_complement value: {value}")
 
-    if args.gbk:
+    if input_table_path:
+        records = load_input_table_records(
+            input_table_path,
+            mode="linear",
+            load_gbk_records=load_gbks,
+            load_gff_records=load_gff_fasta,
+            selected_features_set=selected_features_set,
+            keep_all_features=bool(feature_table_path),
+        )
+    elif args.gbk:
         file_count = len(args.gbk)
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
@@ -1438,10 +1497,75 @@ def linear_main(cmd_args) -> None:
         raise ValidationError("--protein_blastp_mode requires at least two linear records.")
     if collinear_blocks_path and len(records) < 2:
         raise ValidationError("--collinear_blocks requires at least two linear records.")
-    depth_track_files = _record_major_depth_track_files_from_cli(
-        depth_track_groups,
-        record_count=len(records),
+    depth_track_table_result = (
+        load_depth_track_table(
+            depth_track_table_path,
+            mode="linear",
+            records=records,
+        )
+        if depth_track_table_path
+        else None
     )
+    record_depth_tracks = (
+        depth_track_table_result.record_depth_tracks
+        if depth_track_table_result is not None
+        else None
+    )
+    depth_track_files = (
+        None
+        if depth_track_table_result is not None
+        else _record_major_depth_track_files_from_cli(
+            depth_track_groups,
+            record_count=len(records),
+        )
+    )
+    if depth_track_table_result is not None:
+        depth_track_labels = None
+        depth_track_colors = None
+        depth_track_heights = None
+        depth_track_large_tick_intervals = None
+        depth_track_small_tick_intervals = None
+        depth_track_tick_font_sizes = None
+
+    depth_track_ids: tuple[str, ...] = ()
+    if depth_track_table_result is not None:
+        depth_track_ids = depth_track_table_result.track_ids
+    elif depth_track_files:
+        depth_track_ids = _default_depth_track_ids(max((len(row) for row in depth_track_files), default=0))
+    elif depth_files:
+        depth_track_ids = _default_depth_track_ids(1)
+
+    if track_table_path:
+        track_table_result = load_track_table_slots(
+            track_table_path,
+            mode="linear",
+            axis_before=track_table_axis_before,
+            depth_track_ids=depth_track_ids,
+            depth_metadata_by_track_id=(
+                depth_track_table_result.metadata_by_track_id
+                if depth_track_table_result is not None
+                else None
+            ),
+        )
+        linear_track_slot_specs = track_table_result.slots
+        linear_track_axis_index = track_table_result.axis_index
+    elif depth_track_table_result is not None:
+        if args.linear_track_order:
+            linear_track_slot_specs = linear_track_slots_from_order(
+                args.linear_track_order,
+                show_depth=True,
+                depth_track_count=max(1, len(depth_track_ids)),
+                show_gc=bool(args.show_gc),
+                show_skew=bool(args.show_skew),
+                dinucleotide=str(args.nt or "GC").upper(),
+                track_layout=args.track_layout,
+            )
+        if linear_track_slot_specs is not None:
+            linear_track_slot_specs = apply_depth_track_ids_to_slots(
+                linear_track_slot_specs,
+                depth_track_ids=depth_track_ids,
+                depth_metadata_by_track_id=depth_track_table_result.metadata_by_track_id,
+            )
     collinearity_comparisons: list[DataFrame] | None = None
     if collinear_blocks_path:
         collinearity_result = parse_native_collinearity_tsv(
@@ -1501,6 +1625,7 @@ def linear_main(cmd_args) -> None:
         step=step,
         depth_window=depth_window,
         depth_step=depth_step,
+        record_depth_tracks=record_depth_tracks,
         depth_files=depth_files,
         depth_track_files=depth_track_files,
         depth_track_labels=depth_track_labels,

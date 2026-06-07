@@ -1797,38 +1797,47 @@ json.dumps({
       const depthTrackEntriesFromSlots = (slots) => depthFileSlotsFromValue(slots)
         .map((file, index) => (file ? { file, index, config: depthTrackConfigAt(index, file) } : null))
         .filter(Boolean);
-      const appendDepthTrackMetadataArgs = (trackEntries) => {
-        if (!Array.isArray(trackEntries) || trackEntries.length === 0) return;
-        const labels = trackEntries.map((entry, outputIndex) => (
-          String(entry.config.label || getDepthTrackFallbackLabel(outputIndex))
-        ));
-        if (labels.some((label) => label.trim())) {
-          args.push('--depth_track_label', ...labels);
-        }
-        const colors = trackEntries.map((entry, outputIndex) => (
-          String(entry.config.color || (outputIndex === 0 ? adv.depth_color : '') || '#4A90E2')
-        ));
-        if (colors.some((color) => color.trim())) {
-          args.push('--depth_track_color', ...colors);
-        }
-        if (mode.value === 'linear') {
-          const heights = trackEntries.map((entry) => entry.config.height || 'auto');
-          if (heights.some((value) => value !== 'auto')) {
-            args.push('--depth_track_height', ...heights);
-          }
-        }
-        const largeTicks = trackEntries.map((entry) => entry.config.largeTick || 'auto');
-        if (largeTicks.some((value) => value !== 'auto')) {
-          args.push('--depth_track_large_tick_interval', ...largeTicks);
-        }
-        const smallTicks = trackEntries.map((entry) => entry.config.smallTick || 'auto');
-        if (smallTicks.some((value) => value !== 'auto')) {
-          args.push('--depth_track_small_tick_interval', ...smallTicks);
-        }
-        const tickFontSizes = trackEntries.map((entry) => entry.config.tickFontSize || 'auto');
-        if (tickFontSizes.some((value) => value !== 'auto')) {
-          args.push('--depth_track_tick_font_size', ...tickFontSizes);
-        }
+      const depthTrackIdForIndex = (index, totalTracks = 1) => (
+        Number(totalTracks) <= 1 ? 'depth' : `depth_${Number(index) + 1}`
+      );
+      const cleanTsvCell = (value) => String(value ?? '').replace(/\r?\n/g, ' ').replace(/\t/g, ' ').trim();
+      const buildDepthTrackTable = (trackEntries, { circular = false } = {}) => {
+        const entries = Array.isArray(trackEntries) ? trackEntries : [];
+        const totalTracks = Math.max(...entries.map((entry) => Number(entry.logicalIndex ?? entry.index ?? 0) + 1), 1);
+        const columns = [
+          'record_id',
+          'track_id',
+          'file',
+          'track_label',
+          'track_color',
+          circular ? 'track_width' : 'track_height',
+          'track_large_tick_interval',
+          'track_small_tick_interval',
+          'track_tick_font_size'
+        ];
+        const rows = entries.map((entry) => {
+          const logicalIndex = Number(entry.logicalIndex ?? entry.index ?? 0);
+          const config = entry.config || depthTrackConfigAt(logicalIndex, entry.file);
+          const cells = [
+            entry.recordId || '#1',
+            depthTrackIdForIndex(logicalIndex, totalTracks),
+            entry.path || '',
+            config.label || getDepthTrackFallbackLabel(logicalIndex),
+            config.color || (logicalIndex === 0 ? adv.depth_color : '') || '#4A90E2',
+            circular ? '' : (config.height || ''),
+            config.largeTick || '',
+            config.smallTick || '',
+            config.tickFontSize || ''
+          ];
+          return cells.map(cleanTsvCell).join('\t');
+        });
+        return `${columns.join('\t')}\n${rows.join('\n')}\n`;
+      };
+      const stageDepthTrackTable = (trackEntries, { circular = false } = {}) => {
+        const entries = Array.isArray(trackEntries) ? trackEntries : [];
+        if (!entries.length) return;
+        stageTextFile('/web_depth_track_table.tsv', buildDepthTrackTable(entries, { circular }));
+        args.push('--depth_track_table', '/web_depth_track_table.tsv');
       };
       const ensureDepthTrackConfigAt = (index) => {
         const idx = Math.max(0, Number(index) || 0);
@@ -2226,12 +2235,18 @@ json.dumps({
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
         if (form.show_depth || circularSlotNeedsDepth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
+          const stagedCircularDepthEntries = [];
           for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
             const depthPath = `/depth_track_${depthIndex + 1}.tsv`;
             await stageUploadedFile(circularDepthEntries[depthIndex].file, depthPath);
-            args.push('--depth_track', depthPath);
+            stagedCircularDepthEntries.push({
+              ...circularDepthEntries[depthIndex],
+              logicalIndex: circularDepthEntries[depthIndex].index,
+              recordId: '#1',
+              path: depthPath
+            });
           }
-          appendDepthTrackMetadataArgs(circularDepthEntries);
+          stageDepthTrackTable(stagedCircularDepthEntries, { circular: true });
           args.push('--show_depth');
           appendDepthStyleArgs();
           if (
@@ -3578,23 +3593,21 @@ json.dumps({
             const entries = depthRows.map((row, idx) => ({ file: row[depthTrackIndex] || null, idx }));
             const presentEntries = entries.filter((entry) => Boolean(entry.file));
             if (presentEntries.length === 0) continue;
-            const depthPaths = [];
             for (const entry of entries) {
               if (entry.file) {
-                const depthPath = `/seq_${entry.idx}.depth_${depthTrackEntries.length + 1}.tsv`;
+                const depthPath = `/seq_${entry.idx}.depth_${depthTrackIndex + 1}.tsv`;
                 await stageUploadedFile(entry.file, depthPath);
-                depthPaths.push(depthPath);
-              } else {
-                depthPaths.push('');
+                depthTrackEntries.push({
+                  file: entry.file,
+                  logicalIndex: depthTrackIndex,
+                  recordId: `#${entry.idx + 1}`,
+                  path: depthPath,
+                  config: depthTrackConfigAt(depthTrackIndex, entry.file)
+                });
               }
             }
-            args.push('--depth_track', ...depthPaths);
-            depthTrackEntries.push({
-              index: depthTrackIndex,
-              config: depthTrackConfigAt(depthTrackIndex, presentEntries[0]?.file)
-            });
           }
-          appendDepthTrackMetadataArgs(depthTrackEntries);
+          stageDepthTrackTable(depthTrackEntries, { circular: false });
           args.push('--show_depth');
           appendDepthStyleArgs();
           if (

@@ -24,6 +24,7 @@ from ...analysis.conservation import (  # type: ignore[reportMissingImports]
 )
 from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     DepthTrackData,
+    resolve_depth_track,
     sync_depth_track_legend_entries,
 )
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -1156,13 +1157,9 @@ def _sync_legend_table_for_circular_slots(
         renderer = str(slot.renderer)
         if renderer == "depth":
             if depth_tracks:
-                try:
-                    track_index = int((slot.params or {}).get("track_index", 0) or 0)
-                except (TypeError, ValueError):
-                    track_index = 0
-                if track_index < 0 or track_index >= len(depth_tracks):
+                track = resolve_depth_track(depth_tracks, slot.params or {})
+                if track is None:
                     continue
-                track = depth_tracks[track_index]
                 label = _slot_legend_label(slot, track.label)
                 out[_unique_legend_key(out, label)] = {
                     "type": "solid",
@@ -1386,18 +1383,13 @@ def _draw_resolved_circular_slot(
         selected_depth_df = depth_df
         selected_depth_config = depth_config
         if depth_tracks:
-            try:
-                track_index = int(resolved_slot.params.get("track_index", 0) or 0)
-            except (TypeError, ValueError):
-                track_index = 0
-            if track_index < 0 or track_index >= len(depth_tracks):
+            depth_track = resolve_depth_track(depth_tracks, resolved_slot.params or {})
+            if depth_track is None:
                 logger.warning(
-                    "Skipping circular depth slot '%s' because track_index=%s is unavailable.",
+                    "Skipping circular depth slot '%s' because the selected depth track is unavailable.",
                     resolved_slot.id,
-                    track_index,
                 )
                 return canvas
-            depth_track = depth_tracks[track_index]
             selected_depth_df = depth_track.df
             selected_depth_config = depth_track.config
             if not use_slot_group_id:

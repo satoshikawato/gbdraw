@@ -1,6 +1,6 @@
 # CLI Table Arguments Implementation Plan
 
-Planned.
+Partially implemented.
 
 This document defines the first implementation plan for adding table-based CLI
 inputs that replace fragile positional argument groups with headered TSV files.
@@ -14,6 +14,87 @@ additional table arguments:
 - `--depth_track_table`
 - `--input_table`
 - `--track_table`
+
+## Current Status and Next Direction
+
+Status as of 2026-06-07: the first CLI-boundary implementation for
+`--input_table`, `--depth_track_table`, and `--track_table` has landed, but this
+document is still a design and tracking document rather than a finished user
+manual. The detailed sections below remain the intended model; this status
+section records what is implemented now and what should be stabilized before
+publishing user-facing documentation.
+
+Implemented first-pass pieces:
+
+- Shared headered TSV helpers were added in `gbdraw/cli_utils/tables.py`,
+  including comment handling that preserves `#1` record selectors, required and
+  optional column validation, row-numbered diagnostics, table-relative path
+  resolution, primitive cell conversion, and displayed/source record selector
+  contexts.
+- Table adapters were added in `gbdraw/cli_utils/table_adapters.py` for input
+  rows, depth-track rows, and custom track-slot rows.
+- Linear and circular CLI commands now accept `--input_table`,
+  `--depth_track_table`, `--track_table`, and `--track_table_axis_before`, with
+  mutual-exclusion checks against legacy positional arguments that describe the
+  same logical data.
+- `--input_table` supports `gbk` and `gff` rows, row-local `record_id`
+  selection, `input_id` aliases, exact one-row-to-one-record loading by default,
+  explicit `expand_records`, labels and ordering, and linear row-local
+  `region`/`reverse_complement` transforms. Circular mode rejects region and
+  reverse-complement cells.
+- `--depth_track_table` supports sparse per-record depth assignments keyed by
+  logical `track_id`, wildcard rows, track-scoped metadata conflict detection,
+  mode-specific `track_height`/`track_width` validation, and named depth-track
+  resolution in linear/circular drawing and legends.
+- Shared depth-axis calculation is now keyed by logical `track_id` for named
+  depth inputs instead of compact record-local list position.
+- `--track_table` converts rows to the existing linear and circular track-slot
+  dataclasses, preserves named depth relationships through `track_id`, filters
+  disabled rows before axis-boundary resolution, and supports
+  `--track_table_axis_before`.
+- Circular depth slots can inherit `track_width` from `--depth_track_table`
+  metadata when no explicit track-table width is provided.
+- The web UI depth-track staging path now writes `/web_depth_track_table.tsv`
+  and invokes the CLI with `--depth_track_table`, removing the need for
+  placeholder depth-file arguments and legacy per-depth-track metadata
+  arguments in that path.
+- Focused tests were added for parser behavior, table adapters, sparse named
+  depth selection, CLI argument forwarding, circular width application, and web
+  packaging expectations.
+
+Remaining or intentionally deferred pieces:
+
+- `--blast_table` is not implemented yet. It should be handled as a separate
+  change after the selector and table conventions are stable.
+- User-facing documentation is not yet updated beyond this plan. In particular,
+  `docs/CLI_Reference.md`, `docs/RECIPES.md`, and
+  `docs/TUTORIALS/3_Advanced_Customization.md` still need table-argument
+  sections and examples.
+- Committed sample TSV files for the new table arguments have not been added.
+  Current tests mostly create table fixtures with `tmp_path`.
+- The web UI only stages a depth-track table. It does not yet emit
+  `--input_table` or `--track_table` from structured UI state.
+- Add small real CLI end-to-end examples before treating the feature as fully
+  documented. The current tests cover adapters and CLI/API handoff, but a
+  minimal invocation using committed sample files would make the public examples
+  safer to maintain.
+- Reconcile this plan with the implementation and either mark completed sections
+  as done or move remaining work into smaller follow-up issues. Avoid expanding
+  the plan into a second user manual.
+
+Recommended next direction:
+
+1. Stabilize the implementation before expanding the user manual: add committed
+   sample TSV files, run one or two minimal CLI end-to-end tests, and close any
+   mismatch between this plan and current behavior.
+2. Then update the user-facing docs from those samples:
+   `docs/CLI_Reference.md` for option/schema reference, `docs/RECIPES.md` for
+   practical examples, and `docs/TUTORIALS/3_Advanced_Customization.md` for a
+   short conceptual explanation.
+3. Keep this file as the engineering tracking record. Once the user docs exist,
+   change this document from "Partially implemented" to an implementation note
+   with a short remaining-work checklist, rather than duplicating the full
+   manual.
 
 ## Goals
 
