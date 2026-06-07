@@ -1,6 +1,7 @@
 # CLI Table Arguments Implementation Plan
 
-Partially implemented.
+Implemented for the first-pass `--input_table`, `--depth_track_table`, and
+`--track_table` scope. `--blast_table` remains intentionally deferred.
 
 This document defines the first implementation plan for adding table-based CLI
 inputs that replace fragile positional argument groups with headered TSV files.
@@ -17,12 +18,13 @@ additional table arguments:
 
 ## Current Status and Next Direction
 
-Status as of 2026-06-07: the first CLI-boundary implementation for
-`--input_table`, `--depth_track_table`, and `--track_table` has landed, but this
-document is still a design and tracking document rather than a finished user
-manual. The detailed sections below remain the intended model; this status
-section records what is implemented now and what should be stabilized before
-publishing user-facing documentation.
+Status as of 2026-06-07: the first-pass CLI-boundary implementation for
+`--input_table`, `--depth_track_table`, and `--track_table` has landed and now
+has committed example TSV files, minimal real CLI smoke tests, and user-facing
+documentation in the CLI reference, recipes, and advanced customization
+tutorial. This document remains the engineering tracking record; the detailed
+sections below describe the intended model and should not be expanded into a
+second user manual.
 
 Implemented first-pass pieces:
 
@@ -61,40 +63,33 @@ Implemented first-pass pieces:
 - Focused tests were added for parser behavior, table adapters, sparse named
   depth selection, CLI argument forwarding, circular width application, and web
   packaging expectations.
+- Committed sample TSV files were added under `examples/` for linear and
+  circular input tables, sparse depth-track tables, custom track tables, and
+  small depth TSV inputs.
+- Minimal real CLI smoke tests now run the committed sample TSV files through
+  `gbdraw linear` and `gbdraw circular`.
+- User-facing documentation now covers the new table arguments in
+  `docs/CLI_Reference.md`, practical examples in `docs/RECIPES.md`, and a short
+  conceptual explanation in `docs/TUTORIALS/3_Advanced_Customization.md`.
 
 Remaining or intentionally deferred pieces:
 
 - `--blast_table` is not implemented yet. It should be handled as a separate
   change after the selector and table conventions are stable.
-- User-facing documentation is not yet updated beyond this plan. In particular,
-  `docs/CLI_Reference.md`, `docs/RECIPES.md`, and
-  `docs/TUTORIALS/3_Advanced_Customization.md` still need table-argument
-  sections and examples.
-- Committed sample TSV files for the new table arguments have not been added.
-  Current tests mostly create table fixtures with `tmp_path`.
 - The web UI only stages a depth-track table. It does not yet emit
   `--input_table` or `--track_table` from structured UI state.
-- Add small real CLI end-to-end examples before treating the feature as fully
-  documented. The current tests cover adapters and CLI/API handoff, but a
-  minimal invocation using committed sample files would make the public examples
-  safer to maintain.
-- Reconcile this plan with the implementation and either mark completed sections
-  as done or move remaining work into smaller follow-up issues. Avoid expanding
-  the plan into a second user manual.
+- If this feature needs additional hardening, move those items into smaller
+  follow-up issues rather than expanding this plan. Keep this file as the
+  implementation note and source of design rationale.
 
 Recommended next direction:
 
-1. Stabilize the implementation before expanding the user manual: add committed
-   sample TSV files, run one or two minimal CLI end-to-end tests, and close any
-   mismatch between this plan and current behavior.
-2. Then update the user-facing docs from those samples:
-   `docs/CLI_Reference.md` for option/schema reference, `docs/RECIPES.md` for
-   practical examples, and `docs/TUTORIALS/3_Advanced_Customization.md` for a
-   short conceptual explanation.
-3. Keep this file as the engineering tracking record. Once the user docs exist,
-   change this document from "Partially implemented" to an implementation note
-   with a short remaining-work checklist, rather than duplicating the full
-   manual.
+1. Treat `--blast_table` as a separate feature after the selector conventions
+   have had time to settle.
+2. Consider a web UI cleanup that emits `--input_table` and `--track_table`
+   from structured UI state, matching the existing depth-track table staging.
+3. Keep this file as the engineering tracking record and maintain user-facing
+   details in `docs/CLI_Reference.md`, `docs/RECIPES.md`, and the tutorials.
 
 ## Goals
 

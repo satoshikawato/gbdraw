@@ -1,0 +1,5 @@
+slot_id	renderer	order	side	track_id	height	spacing	z	enabled
+features	features	1	overlay			4px	0	true
+coverage	depth	2	below	coverage	18px	4px	0	true
+gc	gc_content	3	below		18px	4px	0	true
+skew	gc_skew	4	below		18px	4px	0	true

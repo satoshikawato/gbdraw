@@ -1,0 +1,3 @@
+record_id	track_id	file	track_label	track_color	track_height	order
+input:mje	coverage	cli_table_mje_depth.tsv	Example coverage	#4A90E2	18	1
+input:mela	coverage	cli_table_mela_depth.tsv	Example coverage	#4A90E2	18	1

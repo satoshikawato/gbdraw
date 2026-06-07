@@ -49,7 +49,8 @@ Additional Information:
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [-o OUTPUT] [-p PALETTE] [-t TABLE]
+              [--fasta [FASTA_FILE ...]] [--input_table INPUT_TABLE]
+              [-o OUTPUT] [-p PALETTE] [-t TABLE]
               [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
               [--species SPECIES] [--strain STRAIN] [-k FEATURES]
               [--feature_shape TYPE=SHAPE]
@@ -95,6 +96,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--feature_width FEATURE_WIDTH]
               [--circular_track_order CIRCULAR_TRACK_ORDER]
               [--circular_track_slot CIRCULAR_TRACK_SLOT]
+              [--track_table TRACK_TABLE]
+              [--track_table_axis_before TRACK_TABLE_AXIS_BEFORE]
               [--gc_content_width GC_CONTENT_WIDTH]
               [--gc_content_radius GC_CONTENT_RADIUS]
               [--gc_content_mode {deviation,percent}]
@@ -108,6 +111,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--show_gc_content_ticks] [--hide_gc_content_ticks]
               [--gc_skew_width GC_SKEW_WIDTH]
               [--gc_skew_radius GC_SKEW_RADIUS]
+              [--depth_track_table DEPTH_TRACK_TABLE]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
 
@@ -122,6 +126,11 @@ options:
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
+  --input_table INPUT_TABLE
+                        Headered TSV describing input files, record selectors,
+                        labels, and ordering. Circular mode rejects non-empty
+                        region and reverse_complement cells in this first
+                        implementation.
   -o, --output OUTPUT   output file prefix (default: accession number of the
                         sequence)
   -p, --palette PALETTE
@@ -301,6 +310,11 @@ options:
                         slots with no explicit r or w auto-compress when needed
                         and never move outside automatically. z only controls
                         SVG layering.
+  --track_table TRACK_TABLE
+                        Headered TSV describing circular custom track slots.
+  --track_table_axis_before TRACK_TABLE_AXIS_BEFORE
+                        Axis boundary for --track_table, resolved after order
+                        sorting and disabled-row filtering.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).
@@ -340,6 +354,10 @@ options:
                         Repeatable logical depth track. In circular mode,
                         provide one file for a single record, or one file per
                         record when using --multi_record_canvas.
+  --depth_track_table DEPTH_TRACK_TABLE
+                        Headered TSV assigning sparse depth files to displayed
+                        records and logical track IDs. Circular mode uses the
+                        track_width column for ring width.
   --depth_track_label LABEL [LABEL ...]
                         Depth track label(s). Provide one label or one per
                         --depth_track.
@@ -363,16 +381,20 @@ options:
 Circular conservation rings use one ring per `--conservation_blast` source and a shared identity gradient legend. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for conservation rings, so provide precomputed BLAST output.
 
 Depth tracks can be supplied with the legacy `--depth` option or the repeatable
-`--depth_track` option. `--depth` keeps the single-track SVG IDs `depth` and
-`depth_axis`. Multiple `--depth_track` groups render as `depth_1`,
-`depth_2`, and so on. Each `--depth_track` group is one logical track; provide
-one file to reuse it for every record, or one file per record.
+`--depth_track` option, or with `--depth_track_table` when records have sparse
+or named depth files. `--depth` keeps the single-track SVG IDs `depth` and
+`depth_axis`. Multiple `--depth_track` groups render as `depth_1`, `depth_2`,
+and so on. Each `--depth_track` group is one logical track; provide one file to
+reuse it for every record, or one file per record. `--depth_track_table` keeps
+the user-provided `track_id` values for legends, custom track slots, and shared
+depth-axis grouping.
 
 ## Linear Mode
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [-b [BLAST ...]] [-t TABLE]
+              [--fasta [FASTA_FILE ...]] [--input_table INPUT_TABLE]
+              [-b [BLAST ...]] [-t TABLE]
               [--losatp_bin LOSATP_BIN]
               [--losatp_threads LOSATP_THREADS]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
@@ -416,6 +438,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--linear_track_order LINEAR_TRACK_ORDER]
               [--linear_track_slot SLOT]
               [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
+              [--track_table TRACK_TABLE]
+              [--track_table_axis_before TRACK_TABLE_AXIS_BEFORE]
               [--ruler_on_axis] [-f FORMAT] [-l LEGEND]
               [--show_labels [{all,first,none}]] [--resolve_overlaps]
               [--label_whitelist LABEL_WHITELIST |
@@ -423,6 +447,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--qualifier_priority QUALIFIER_PRIORITY]
               [--label_table LABEL_TABLE] [--feature_table FEATURE_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
+              [--depth_track_table DEPTH_TRACK_TABLE]
               [--comparison_height COMPARISON_HEIGHT]
               [--scale_style {bar,ruler}]
               [--scale_stroke_color SCALE_STROKE_COLOR]
@@ -445,6 +470,9 @@ options:
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
+  --input_table INPUT_TABLE
+                        Headered TSV describing input files, record selectors,
+                        regions, reverse complements, and labels.
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
@@ -595,6 +623,11 @@ options:
                         add slots.
   --linear_track_axis_index LINEAR_TRACK_AXIS_INDEX
                         Axis boundary index for linear custom track slots.
+  --track_table TRACK_TABLE
+                        Headered TSV describing linear custom track slots.
+  --track_table_axis_before TRACK_TABLE_AXIS_BEFORE
+                        Axis boundary for --track_table, resolved after order
+                        sorting and disabled-row filtering.
   --ruler_on_axis       Use each record axis as the ruler in linear mode.
                         Effective only with --scale_style ruler and
                         --track_layout above|below.
@@ -637,6 +670,10 @@ options:
   --depth_track DEPTH [DEPTH ...]
                         Repeatable logical depth track. Each group accepts one
                         shared file or one file per input record.
+  --depth_track_table DEPTH_TRACK_TABLE
+                        Headered TSV assigning sparse depth files to displayed
+                        records and logical track IDs. Linear mode uses the
+                        track_height column for track height.
   --depth_track_label LABEL [LABEL ...]
                         Depth track label(s). Provide one label or one per
                         --depth_track.
@@ -697,6 +734,45 @@ options:
                         Reverse complement record per input file (repeatable;
                         order matches input files). Accepted values: 1/0,
                         true/false, yes/no.
+```
+
+## Headered Table Arguments
+
+The table arguments are TSV files with a header row. Blank lines and comment
+lines are ignored, but `#1` record selectors are data, not comments. File paths
+inside a table are resolved relative to the table file. Unknown columns are
+rejected so typos fail early.
+
+`--input_table` replaces parallel input selectors. Required columns are
+`input_id` and `input_type`; `input_type` is `gbk` or `gff`. GenBank rows use
+`gbk`; GFF3 rows use `gff` and `fasta`. Optional columns are `record_id`,
+`region`, `reverse_complement`, `label`, `order`, and `expand_records`.
+Circular mode currently accepts stable IDs, source files, `record_id`, `label`,
+`order`, and `expand_records`, but rejects `region` and `reverse_complement`.
+
+`--depth_track_table` assigns depth files by displayed record and logical track.
+Required columns are `record_id`, `track_id`, and `file`. Optional columns are
+`track_label`, `track_color`, `track_height` for linear mode, `track_width` for
+circular mode, `track_large_tick_interval`, `track_small_tick_interval`,
+`track_tick_font_size`, and `order`. Use `record_id=*` as a wildcard default, or
+selectors such as `input:mje`, `record:LC738868`, `name:LC738868`, and `#1`.
+
+`--track_table` describes custom slots as rows. Required columns are `slot_id`
+and `renderer`. Optional common columns are `order`, `side`, `track_id`,
+`track_index`, `height`, `radius`, `width`, `spacing`, `z`, `enabled`, `nt`,
+`dinucleotide`, `source_index`, `lane_direction`, and `tick_label_layout`.
+Linear mode rejects `radius` and `width`; circular mode rejects `height`.
+Depth slots should use `track_id` when paired with `--depth_track_table`.
+
+Example files are included in `examples/`:
+
+```bash
+gbdraw linear \
+  --input_table examples/cli_table_inputs.tsv \
+  --depth_track_table examples/cli_table_depth_tracks.tsv \
+  --track_table examples/cli_table_track_slots.tsv \
+  -o cli_table_linear \
+  -f svg
 ```
 
 ## Related Guides

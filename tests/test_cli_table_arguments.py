@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -320,3 +322,69 @@ def test_circular_cli_depth_table_width_applies_to_default_slots(
     assert depth_slot.params["track_id"] == "depth_A"
     assert depth_slot.width is not None
     assert depth_slot.width.resolve(1) == pytest.approx(14)
+
+
+def test_linear_cli_table_examples_run_end_to_end(project_root: Path, tmp_path: Path) -> None:
+    examples_dir = project_root / "examples"
+    output_prefix = tmp_path / "linear_cli_table"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gbdraw.cli",
+            "linear",
+            "--input_table",
+            str(examples_dir / "cli_table_inputs.tsv"),
+            "--depth_track_table",
+            str(examples_dir / "cli_table_depth_tracks.tsv"),
+            "--track_table",
+            str(examples_dir / "cli_table_track_slots.tsv"),
+            "-o",
+            str(output_prefix),
+            "-f",
+            "svg",
+        ],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    output_svg = output_prefix.with_suffix(".svg")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output_svg.exists()
+    assert "<svg" in output_svg.read_text(encoding="utf-8")
+
+
+def test_circular_cli_table_examples_run_end_to_end(project_root: Path, tmp_path: Path) -> None:
+    examples_dir = project_root / "examples"
+    output_prefix = tmp_path / "circular_cli_table"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gbdraw.cli",
+            "circular",
+            "--input_table",
+            str(examples_dir / "cli_table_circular_inputs.tsv"),
+            "--depth_track_table",
+            str(examples_dir / "cli_table_circular_depth_tracks.tsv"),
+            "--track_table",
+            str(examples_dir / "cli_table_circular_track_slots.tsv"),
+            "--suppress_gc",
+            "--suppress_skew",
+            "-o",
+            str(output_prefix),
+            "-f",
+            "svg",
+        ],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    output_svg = output_prefix.with_suffix(".svg")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output_svg.exists()
+    assert "<svg" in output_svg.read_text(encoding="utf-8")

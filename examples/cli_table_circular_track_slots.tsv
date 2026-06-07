@@ -1,0 +1,4 @@
+slot_id	renderer	order	side	track_id	radius	width	spacing	z	enabled	lane_direction	tick_label_layout
+features	features	1	overlay			30px	4px	0	true	split	
+ticks	ticks	2	outside		125%		2px	0	true		tick_only
+coverage	depth	3	inside	coverage	76%		3px	0	true		
