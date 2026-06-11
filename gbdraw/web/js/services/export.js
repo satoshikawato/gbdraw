@@ -279,6 +279,49 @@ const STANDALONE_INTERACTIVE_STYLE = `
   background: #eff6ff;
   color: #2563eb;
 }
+.gbdraw-viewport-controls {
+  pointer-events: auto;
+}
+.gbdraw-viewport-button {
+  cursor: pointer;
+}
+.gbdraw-viewport-button rect {
+  fill: #ffffff;
+  stroke: #cbd5e1;
+  stroke-width: 1;
+  rx: 7;
+  ry: 7;
+}
+.gbdraw-viewport-button text {
+  fill: #475569;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+  user-select: none;
+}
+.gbdraw-viewport-button:hover rect {
+  fill: #eff6ff;
+  stroke: #93c5fd;
+}
+.gbdraw-viewport-button.is-active rect {
+  fill: #dbeafe;
+  stroke: #2563eb;
+}
+.gbdraw-viewport-button.is-active text {
+  fill: #1d4ed8;
+}
+.gbdraw-interactive-pan-active {
+  cursor: grab;
+}
+.gbdraw-interactive-panning {
+  cursor: grabbing;
+}
+.gbdraw-interactive-pan-active .gbdraw-interactive-feature {
+  cursor: grab;
+}
 `;
 
 const STANDALONE_INTERACTIVE_SCRIPT = `
@@ -288,12 +331,16 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
+  var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
   var svg = document.currentScript && document.currentScript.ownerSVGElement
     ? document.currentScript.ownerSVGElement
     : document.documentElement;
   var metadata = svg.querySelector('#gbdraw-interactive-feature-metadata');
   var payload = null;
   var popup = null;
+  var viewportControls = null;
+  var isPanMode = false;
+  var activeCanvasPan = null;
   var activePopupResize = null;
   var activePopupDrag = null;
   var activeHoverSvgId = null;
@@ -306,7 +353,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   var features = Array.isArray(payload.features) ? payload.features : [];
-  if (!features.length) return;
 
   var featuresById = new Map();
   features.forEach(function (feature) {
@@ -352,6 +398,277 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     elements.forEach(function (element) {
       setClassToken(element, 'gbdraw-interactive-feature--hover', highlight);
     });
+  }
+
+  function formatSvgNumber(value) {
+    var numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '0';
+    return String(Math.round(numeric * 1000) / 1000);
+  }
+
+  function copyViewRect(rect) {
+    return {
+      x: Number(rect && rect.x) || 0,
+      y: Number(rect && rect.y) || 0,
+      width: Math.max(1, Number(rect && rect.width) || 1),
+      height: Math.max(1, Number(rect && rect.height) || 1)
+    };
+  }
+
+  function getViewRect() {
+    var viewBox = svg.viewBox && svg.viewBox.baseVal;
+    if (viewBox && viewBox.width && viewBox.height) {
+      return { x: viewBox.x, y: viewBox.y, width: viewBox.width, height: viewBox.height };
+    }
+    var width = parseFloat(svg.getAttribute('width')) || 900;
+    var height = parseFloat(svg.getAttribute('height')) || 650;
+    return { x: 0, y: 0, width: width, height: height };
+  }
+
+  var originalViewRect = copyViewRect(getViewRect());
+
+  function getSvgClientSize() {
+    var rect = typeof svg.getBoundingClientRect === 'function' ? svg.getBoundingClientRect() : null;
+    var width = rect && Number.isFinite(rect.width) && rect.width > 0 ? rect.width : window.innerWidth || originalViewRect.width;
+    var height = rect && Number.isFinite(rect.height) && rect.height > 0 ? rect.height : window.innerHeight || originalViewRect.height;
+    return {
+      width: Math.max(1, width),
+      height: Math.max(1, height)
+    };
+  }
+
+  function normalizeViewRect(rect) {
+    var maxZoom = 16;
+    var minWidth = originalViewRect.width / maxZoom;
+    var minHeight = originalViewRect.height / maxZoom;
+    var width = clampValue(Number(rect && rect.width), minWidth, originalViewRect.width);
+    var height = clampValue(Number(rect && rect.height), minHeight, originalViewRect.height);
+    var minX = originalViewRect.x;
+    var minY = originalViewRect.y;
+    var maxX = originalViewRect.x + originalViewRect.width - width;
+    var maxY = originalViewRect.y + originalViewRect.height - height;
+    var x = maxX <= minX ? minX : clampValue(Number(rect && rect.x), minX, maxX);
+    var y = maxY <= minY ? minY : clampValue(Number(rect && rect.y), minY, maxY);
+    return { x: x, y: y, width: width, height: height };
+  }
+
+  function setSvgViewRect(rect) {
+    var next = normalizeViewRect(rect);
+    svg.setAttribute(
+      'viewBox',
+      [next.x, next.y, next.width, next.height].map(formatSvgNumber).join(' ')
+    );
+    updateViewportControlsPosition();
+    return next;
+  }
+
+  function zoomViewBy(factor, anchorPoint) {
+    var view = getViewRect();
+    var safeFactor = Number(factor);
+    if (!Number.isFinite(safeFactor) || safeFactor <= 0) return;
+    var currentScale = view.width / originalViewRect.width;
+    var nextScale = clampValue(currentScale * safeFactor, 1 / 16, 1);
+    var width = originalViewRect.width * nextScale;
+    var height = originalViewRect.height * nextScale;
+    var anchor = anchorPoint || { x: view.x + view.width / 2, y: view.y + view.height / 2 };
+    var ratioX = width / view.width;
+    var ratioY = height / view.height;
+    closePopup();
+    setSvgViewRect({
+      x: anchor.x - (anchor.x - view.x) * ratioX,
+      y: anchor.y - (anchor.y - view.y) * ratioY,
+      width: width,
+      height: height
+    });
+  }
+
+  function resetViewport() {
+    closePopup();
+    setPanMode(false);
+    setSvgViewRect(originalViewRect);
+  }
+
+  function createSvgNode(tagName, attrs) {
+    var node = document.createElementNS(SVG_NS, tagName);
+    Object.keys(attrs || {}).forEach(function (key) {
+      node.setAttribute(key, attrs[key]);
+    });
+    return node;
+  }
+
+  function createViewportButton(button, x) {
+    var group = createSvgNode('g', {
+      'class': 'gbdraw-viewport-button',
+      'data-action': button.action,
+      'role': 'button',
+      'aria-label': button.title,
+      'tabindex': '0',
+      'transform': 'translate(' + x + ', 0)'
+    });
+    var title = createSvgNode('title', {});
+    title.textContent = button.title;
+    var rect = createSvgNode('rect', {
+      x: 0,
+      y: 0,
+      width: button.width,
+      height: 30
+    });
+    var text = createSvgNode('text', {
+      x: button.width / 2,
+      y: 15
+    });
+    text.textContent = button.label;
+    group.appendChild(title);
+    group.appendChild(rect);
+    group.appendChild(text);
+    return group;
+  }
+
+  function closestViewportButton(target) {
+    var node = target;
+    while (node && node !== svg) {
+      if (node.getAttribute && node.getAttribute('data-action')) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  function updateViewportControlState() {
+    if (!viewportControls) return;
+    Array.prototype.slice.call(viewportControls.querySelectorAll('[data-action="pan"]')).forEach(function (button) {
+      setClassToken(button, 'is-active', isPanMode);
+    });
+  }
+
+  function updateViewportControlsPosition() {
+    if (!viewportControls) return;
+    var visibleView = getVisibleViewRect();
+    var view = getViewRect();
+    var screenScale = getScreenScale();
+    var fallbackSize = getSvgClientSize();
+    var unit = Math.max(
+      1 / Math.max(screenScale.x, 0.001),
+      1 / Math.max(screenScale.y, 0.001),
+      view.width / fallbackSize.width,
+      view.height / fallbackSize.height
+    );
+    var margin = 12 * unit;
+    viewportControls.setAttribute(
+      'transform',
+      'translate(' + formatSvgNumber(visibleView.x + margin) + ', ' + formatSvgNumber(visibleView.y + margin) + ') scale(' + formatSvgNumber(unit) + ')'
+    );
+  }
+
+  function setPanMode(enabled) {
+    isPanMode = Boolean(enabled);
+    setClassToken(svg, 'gbdraw-interactive-pan-active', isPanMode);
+    if (isPanMode) {
+      if (activeHoverSvgId) {
+        setFeatureHighlight(activeHoverSvgId, false);
+        activeHoverSvgId = null;
+      }
+      closePopup();
+    }
+    if (!isPanMode) {
+      stopCanvasPan();
+    }
+    updateViewportControlState();
+  }
+
+  function setupViewportControls() {
+    var existing = svg.querySelector('#' + VIEWPORT_CONTROLS_ID);
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+    viewportControls = createSvgNode('g', {
+      id: VIEWPORT_CONTROLS_ID,
+      'class': 'gbdraw-viewport-controls',
+      'data-gbdraw-viewport-controls': 'true'
+    });
+    var buttons = [
+      { action: 'zoom-in', label: '+', title: 'Zoom in', width: 32 },
+      { action: 'zoom-out', label: '-', title: 'Zoom out', width: 32 },
+      { action: 'reset', label: '1:1', title: 'Reset view', width: 42 },
+      { action: 'pan', label: 'Pan', title: 'Toggle pan mode', width: 44 }
+    ];
+    var x = 0;
+    buttons.forEach(function (button) {
+      viewportControls.appendChild(createViewportButton(button, x));
+      x += button.width + 6;
+    });
+    viewportControls.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    viewportControls.addEventListener('click', function (event) {
+      var button = closestViewportButton(event.target);
+      if (!button) return;
+      var action = button.getAttribute('data-action');
+      if (action === 'zoom-in') {
+        zoomViewBy(0.8);
+      } else if (action === 'zoom-out') {
+        zoomViewBy(1.25);
+      } else if (action === 'reset') {
+        resetViewport();
+      } else if (action === 'pan') {
+        setPanMode(!isPanMode);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    viewportControls.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      var button = closestViewportButton(event.target);
+      if (!button) return;
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      event.preventDefault();
+    });
+    svg.appendChild(viewportControls);
+    updateViewportControlState();
+    updateViewportControlsPosition();
+  }
+
+  function stopCanvasPan() {
+    if (!activeCanvasPan) return;
+    document.removeEventListener('mousemove', activeCanvasPan.onMove);
+    document.removeEventListener('mouseup', activeCanvasPan.onEnd);
+    activeCanvasPan = null;
+    setClassToken(svg, 'gbdraw-interactive-panning', false);
+  }
+
+  function startCanvasPan(event) {
+    if (!isPanMode || event.button !== 0) return;
+    if (popup && popup.contains(event.target)) return;
+    if (closestViewportButton(event.target)) return;
+    stopCanvasPan();
+    closePopup();
+    var startView = getViewRect();
+    var size = getSvgClientSize();
+    var unitX = startView.width / size.width;
+    var unitY = startView.height / size.height;
+    var startClientX = event.clientX;
+    var startClientY = event.clientY;
+    var onMove = function (moveEvent) {
+      setSvgViewRect({
+        x: startView.x - (moveEvent.clientX - startClientX) * unitX,
+        y: startView.y - (moveEvent.clientY - startClientY) * unitY,
+        width: startView.width,
+        height: startView.height
+      });
+      moveEvent.preventDefault();
+    };
+    var onEnd = function () {
+      stopCanvasPan();
+    };
+    activeCanvasPan = {
+      onMove: onMove,
+      onEnd: onEnd
+    };
+    setClassToken(svg, 'gbdraw-interactive-panning', true);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   function escapeHtml(value) {
@@ -533,16 +850,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       popup.parentNode.removeChild(popup);
     }
     popup = null;
-  }
-
-  function getViewRect() {
-    var viewBox = svg.viewBox && svg.viewBox.baseVal;
-    if (viewBox && viewBox.width && viewBox.height) {
-      return { x: viewBox.x, y: viewBox.y, width: viewBox.width, height: viewBox.height };
-    }
-    var width = parseFloat(svg.getAttribute('width')) || 900;
-    var height = parseFloat(svg.getAttribute('height')) || 650;
-    return { x: 0, y: 0, width: width, height: height };
   }
 
   function getScreenScale() {
@@ -903,6 +1210,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     foreignObject.appendChild(root);
     svg.appendChild(foreignObject);
     popup = foreignObject;
+    if (viewportControls) {
+      svg.appendChild(viewportControls);
+    }
   }
 
   async function copyText(value, button) {
@@ -927,7 +1237,25 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
+  setupViewportControls();
+  window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
+  window.addEventListener('resize', updateViewportControlsPosition);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
+    window.visualViewport.addEventListener('resize', updateViewportControlsPosition, { passive: true });
+  }
+
+  svg.addEventListener('mousedown', startCanvasPan);
+
+  svg.addEventListener('wheel', function (event) {
+    if (!isPanMode && !event.ctrlKey) return;
+    var factor = event.deltaY > 0 ? 1.15 : 0.87;
+    zoomViewBy(factor, eventPoint(event));
+    event.preventDefault();
+  }, { passive: false });
+
   svg.addEventListener('mouseover', function (event) {
+    if (isPanMode) return;
     if (popup && popup.contains(event.target)) return;
     var featureElement = closestFeature(event.target);
     var svgId = featureElement ? String(featureElement.id || '') : '';
@@ -951,6 +1279,11 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   svg.addEventListener('click', function (event) {
     if (popup && popup.contains(event.target)) return;
+    if (isPanMode) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     var featureElement = closestFeature(event.target);
     if (!featureElement) {
       closePopup();
@@ -966,6 +1299,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
       closePopup();
+      setPanMode(false);
     }
   });
 }());
@@ -1162,6 +1496,7 @@ const removeExistingStandaloneFeaturePopupAssets = (svg) => {
     INTERACTIVE_STYLE_ID,
     INTERACTIVE_SCRIPT_ID,
     INTERACTIVE_GLOW_FILTER_ID,
+    'gbdraw-viewport-controls',
     'gbdraw-feature-popup'
   ].forEach((id) => {
     const element = svg.querySelector(`#${CSS.escape(id)}`);
@@ -1183,7 +1518,6 @@ const enrichSvgWithStandaloneFeaturePopup = (svg) => {
 
   removeExistingStandaloneFeaturePopupAssets(svg);
   const features = buildStandaloneFeaturePayloads(svg);
-  if (features.length === 0) return false;
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {

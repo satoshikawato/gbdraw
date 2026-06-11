@@ -155,6 +155,9 @@ def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_e
     assert "nucleotide_sequence" in export_source
     assert "amino_acid_sequence" in export_source
     assert "getVisibleViewRect()" in export_source
+    assert "var visibleView = getVisibleViewRect();" in export_source
+    assert "window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });" in export_source
+    assert "window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });" in export_source
     assert "popupCssWidth" in export_source
     assert "getPopupCssMetrics" in export_source
     assert "var effectiveScaleX = safeScaleX * metrics.zoomScale;" in export_source
