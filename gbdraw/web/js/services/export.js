@@ -32,7 +32,9 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
   const clone = cloneCurrentSvg();
   if (!clone) return state.svgContent.value;
   if (interactive) {
-    enrichSvgWithStandaloneFeaturePopup(clone);
+    enrichSvgWithStandaloneInteractivity(clone, {
+      popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'
+    });
   }
   return new XMLSerializer().serializeToString(clone);
 };
@@ -70,12 +72,25 @@ const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
 const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
   cursor: pointer;
-  transition: opacity 120ms ease, filter 120ms ease;
+  transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
 }
 .gbdraw-interactive-feature:hover,
 .gbdraw-interactive-feature.gbdraw-interactive-feature--hover {
   opacity: 0.82;
   filter: url(#gbdraw-interactive-feature-glow);
+}
+.gbdraw-interactive-feature.gbdraw-interactive-feature--dimmed {
+  opacity: 0.18;
+}
+.gbdraw-interactive-feature.gbdraw-interactive-feature--match {
+  opacity: 1;
+  filter: url(#gbdraw-interactive-feature-glow);
+}
+.gbdraw-interactive-feature.gbdraw-interactive-feature--active-match {
+  opacity: 1;
+  filter: url(#gbdraw-interactive-feature-glow);
+  stroke: #f59e0b;
+  stroke-width: 2;
 }
 .gbdraw-feature-popup {
   overflow: visible;
@@ -98,6 +113,12 @@ const STANDALONE_INTERACTIVE_STYLE = `
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
   font-family: Arial, Helvetica, sans-serif;
   font-size: var(--gfi-font-size, 13px);
+}
+.gfi--simple .gfi-content {
+  padding-right: 12px;
+}
+.gfi--simple .gfi-row {
+  grid-template-columns: 82px minmax(0, 1fr) 50px;
 }
 .gfi-header {
   display: grid;
@@ -322,6 +343,96 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-pan-active .gbdraw-interactive-feature {
   cursor: grab;
 }
+.gbdraw-feature-search-controls {
+  overflow: visible;
+  pointer-events: auto;
+}
+.gbdraw-feature-search-controls * {
+  box-sizing: border-box;
+}
+.gfs {
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+}
+.gfs-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.gfs-row + .gfs-row {
+  margin-top: 6px;
+}
+.gfs-input,
+.gfs-select {
+  height: 28px;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1e293b;
+  font: inherit;
+}
+.gfs-input {
+  padding: 0 8px;
+}
+.gfs-query {
+  flex: 1 1 140px;
+}
+.gfs-select {
+  flex: 0 0 122px;
+  padding: 0 6px;
+}
+.gfs-qualifier {
+  flex: 1 1 110px;
+}
+.gfs-qualifier:disabled {
+  opacity: 0.48;
+}
+.gfs-toggle {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+  user-select: none;
+}
+.gfs-button {
+  height: 28px;
+  min-width: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+.gfs-button:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.gfs-count {
+  margin-left: auto;
+  color: #475569;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.gfs.is-invalid .gfs-query {
+  border-color: #ef4444;
+  color: #991b1b;
+}
+.gfs.is-invalid .gfs-count {
+  color: #b91c1c;
+}
 `;
 
 const STANDALONE_INTERACTIVE_SCRIPT = `
@@ -332,6 +443,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
   var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
+  var SEARCH_CONTROLS_ID = 'gbdraw-feature-search-controls';
   var svg = document.currentScript && document.currentScript.ownerSVGElement
     ? document.currentScript.ownerSVGElement
     : document.documentElement;
@@ -339,11 +451,21 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var payload = null;
   var popup = null;
   var viewportControls = null;
+  var searchControls = null;
   var isPanMode = false;
   var activeCanvasPan = null;
   var activePopupResize = null;
   var activePopupDrag = null;
   var activeHoverSvgId = null;
+  var searchState = {
+    query: '',
+    field: 'all',
+    qualifierKey: '',
+    useRegex: false,
+    matches: [],
+    activeIndex: -1,
+    error: ''
+  };
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
 
   try {
@@ -353,6 +475,24 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   var features = Array.isArray(payload.features) ? payload.features : [];
+  var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';
+  var richSearchFields = {
+    'qualifier-key': true,
+    'qualifier-value': true,
+    'sequence': true
+  };
+
+  function isRichSearchField(field) {
+    return Boolean(richSearchFields[String(field || '')]);
+  }
+
+  function normalizeSearchField(field) {
+    var selected = String(field || 'all');
+    if (popupMode === 'simple' && isRichSearchField(selected)) {
+      return 'all';
+    }
+    return selected;
+  }
 
   var featuresById = new Map();
   features.forEach(function (feature) {
@@ -398,6 +538,521 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     elements.forEach(function (element) {
       setClassToken(element, 'gbdraw-interactive-feature--hover', highlight);
     });
+  }
+
+  function supportsStandaloneControls() {
+    if (!document.createElementNS) return false;
+    if (typeof window.SVGForeignObjectElement === 'undefined') return false;
+    try {
+      return document.createElementNS(SVG_NS, 'foreignObject') instanceof window.SVGForeignObjectElement;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function normalizeSearchText(value) {
+    return String(value == null ? '' : value).toLowerCase();
+  }
+
+  function appendSearchValues(values, value) {
+    if (Array.isArray(value)) {
+      value.forEach(function (entry) {
+        appendSearchValues(values, entry);
+      });
+      return;
+    }
+    if (value === null || value === undefined) return;
+    var text = String(value).trim();
+    if (text) values.push(text);
+  }
+
+  function getFeatureQualifiers(feature) {
+    return feature && feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
+      ? feature.qualifiers
+      : {};
+  }
+
+  function getQualifierValuesByKey(feature, qualifierKey) {
+    var target = normalizeSearchText(qualifierKey).trim();
+    var qualifiers = getFeatureQualifiers(feature);
+    var values = [];
+    Object.keys(qualifiers).forEach(function (key) {
+      if (target && normalizeSearchText(key) !== target) return;
+      appendSearchValues(values, qualifiers[key]);
+    });
+    return values;
+  }
+
+  function getLabelSearchValues(feature) {
+    var values = [];
+    appendSearchValues(values, feature && feature.display_label);
+    appendSearchValues(values, feature && feature.label);
+    appendSearchValues(values, feature && feature.search_labels);
+    appendSearchValues(values, feature && feature.svg_id);
+    return values;
+  }
+
+  function featureSearchValues(feature, field, qualifierKey) {
+    var values = [];
+    var selectedField = normalizeSearchField(field);
+    var qualifiers = getFeatureQualifiers(feature);
+    if (selectedField === 'label') {
+      return getLabelSearchValues(feature);
+    }
+    if (selectedField === 'type') {
+      appendSearchValues(values, feature && feature.type);
+      return values;
+    }
+    if (selectedField === 'record-id') {
+      appendSearchValues(values, feature && feature.record_id);
+      return values;
+    }
+    if (selectedField === 'location') {
+      appendSearchValues(values, feature && feature.location);
+      appendSearchValues(values, feature && feature.start);
+      appendSearchValues(values, feature && feature.end);
+      appendSearchValues(values, (feature && Array.isArray(feature.location_parts) ? feature.location_parts : []).map(function (part) {
+        return part && part.display;
+      }));
+      return values;
+    }
+    if (selectedField === 'strand') {
+      appendSearchValues(values, feature && feature.strand);
+      return values;
+    }
+    if (selectedField === 'qualifier-key') {
+      appendSearchValues(values, Object.keys(qualifiers));
+      return values;
+    }
+    if (selectedField === 'qualifier-value') {
+      return getQualifierValuesByKey(feature, qualifierKey);
+    }
+    if (selectedField === 'sequence') {
+      appendSearchValues(values, feature && feature.nucleotide_sequence);
+      appendSearchValues(values, feature && feature.amino_acid_sequence);
+      return values;
+    }
+
+    appendSearchValues(values, getLabelSearchValues(feature));
+    appendSearchValues(values, feature && feature.record_id);
+    appendSearchValues(values, feature && feature.type);
+    appendSearchValues(values, feature && feature.location);
+    appendSearchValues(values, feature && feature.strand);
+    if (popupMode !== 'simple') {
+      appendSearchValues(values, Object.keys(qualifiers));
+      Object.keys(qualifiers).forEach(function (key) {
+        appendSearchValues(values, qualifiers[key]);
+      });
+      appendSearchValues(values, feature && feature.nucleotide_sequence);
+      appendSearchValues(values, feature && feature.amino_acid_sequence);
+    }
+    return values;
+  }
+
+  function compileSearchMatcher(query, useRegex) {
+    var trimmedQuery = String(query || '').trim();
+    if (!trimmedQuery) {
+      return { active: false, error: '', test: function () { return false; } };
+    }
+    if (useRegex) {
+      try {
+        var regex = new RegExp(trimmedQuery, 'i');
+        return {
+          active: true,
+          error: '',
+          test: function (values) {
+            return values.some(function (value) {
+              regex.lastIndex = 0;
+              return regex.test(String(value == null ? '' : value));
+            });
+          }
+        };
+      } catch (error) {
+        return { active: true, error: 'Invalid regex', test: function () { return false; } };
+      }
+    }
+    var needle = normalizeSearchText(trimmedQuery);
+    return {
+      active: true,
+      error: '',
+      test: function (values) {
+        return values.some(function (value) {
+          return normalizeSearchText(value).indexOf(needle) !== -1;
+        });
+      }
+    };
+  }
+
+  function featureMatchesSearch(feature, matcher, field, qualifierKey) {
+    if (!matcher || !matcher.active || matcher.error) return false;
+    return matcher.test(featureSearchValues(feature, field, qualifierKey));
+  }
+
+  function syncSearchControls() {
+    if (!searchControls) return;
+    var root = searchControls.querySelector('.gfs');
+    var queryInput = searchControls.querySelector('[data-search-query]');
+    var fieldSelect = searchControls.querySelector('[data-search-field]');
+    var qualifierInput = searchControls.querySelector('[data-search-qualifier]');
+    var regexInput = searchControls.querySelector('[data-search-regex]');
+    var countText = searchControls.querySelector('[data-search-count]');
+    searchState.field = normalizeSearchField(searchState.field);
+    if (queryInput && queryInput.value !== searchState.query) queryInput.value = searchState.query;
+    if (fieldSelect && fieldSelect.value !== searchState.field) fieldSelect.value = searchState.field;
+    if (qualifierInput && qualifierInput.value !== searchState.qualifierKey) qualifierInput.value = searchState.qualifierKey;
+    if (regexInput) regexInput.checked = Boolean(searchState.useRegex);
+    if (qualifierInput) {
+      qualifierInput.disabled = popupMode === 'simple' || searchState.field !== 'qualifier-value';
+      qualifierInput.style.display = popupMode === 'simple' ? 'none' : '';
+    }
+    setClassToken(root, 'is-invalid', Boolean(searchState.error));
+    if (countText) {
+      if (searchState.error) {
+        countText.textContent = searchState.error;
+      } else if (!String(searchState.query || '').trim()) {
+        countText.textContent = '0 / ' + String(featuresById.size) + ' features';
+      } else {
+        var current = searchState.activeIndex >= 0 ? searchState.activeIndex + 1 : 0;
+        countText.textContent = String(current) + ' / ' + String(searchState.matches.length) + ' features';
+      }
+    }
+  }
+
+  function applySearchResults() {
+    var queryActive = Boolean(String(searchState.query || '').trim()) && !searchState.error;
+    var matchedIds = new Set(searchState.matches);
+    var activeId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
+    featureElementsById.forEach(function (elements, svgId) {
+      var isMatch = queryActive && matchedIds.has(svgId);
+      var isActive = isMatch && svgId === activeId;
+      elements.forEach(function (element) {
+        setClassToken(element, 'gbdraw-interactive-feature--match', isMatch);
+        setClassToken(element, 'gbdraw-interactive-feature--active-match', isActive);
+        setClassToken(element, 'gbdraw-interactive-feature--dimmed', queryActive && !isMatch);
+      });
+    });
+    syncSearchControls();
+  }
+
+  function setSearchState(nextState) {
+    nextState = nextState || {};
+    var previousActiveId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
+    searchState.query = Object.prototype.hasOwnProperty.call(nextState, 'query') ? String(nextState.query || '') : searchState.query;
+    searchState.field = Object.prototype.hasOwnProperty.call(nextState, 'field')
+      ? normalizeSearchField(nextState.field)
+      : normalizeSearchField(searchState.field);
+    searchState.qualifierKey = Object.prototype.hasOwnProperty.call(nextState, 'qualifierKey') ? String(nextState.qualifierKey || '') : searchState.qualifierKey;
+    searchState.useRegex = Object.prototype.hasOwnProperty.call(nextState, 'useRegex') ? Boolean(nextState.useRegex) : searchState.useRegex;
+
+    var matcher = compileSearchMatcher(searchState.query, searchState.useRegex);
+    searchState.error = matcher.error;
+    if (!matcher.active || matcher.error) {
+      searchState.matches = [];
+      searchState.activeIndex = -1;
+      applySearchResults();
+      return;
+    }
+
+    searchState.matches = features.filter(function (feature) {
+      var svgId = String(feature && feature.svg_id || '').trim();
+      return svgId && featureElementsById.has(svgId) && featureMatchesSearch(feature, matcher, searchState.field, searchState.qualifierKey);
+    }).map(function (feature) {
+      return String(feature.svg_id);
+    });
+
+    if (!searchState.matches.length) {
+      searchState.activeIndex = -1;
+    } else if (previousActiveId && searchState.matches.indexOf(previousActiveId) !== -1) {
+      searchState.activeIndex = searchState.matches.indexOf(previousActiveId);
+    } else {
+      searchState.activeIndex = 0;
+    }
+    applySearchResults();
+  }
+
+  function clearSearch() {
+    searchState.query = '';
+    searchState.field = 'all';
+    searchState.qualifierKey = '';
+    searchState.useRegex = false;
+    searchState.matches = [];
+    searchState.activeIndex = -1;
+    searchState.error = '';
+    applySearchResults();
+  }
+
+  function getFeatureBounds(svgId) {
+    var elements = featureElementsById.get(String(svgId || '')) || [];
+    var minX = Infinity;
+    var minY = Infinity;
+    var maxX = -Infinity;
+    var maxY = -Infinity;
+
+    function addPoint(point) {
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    elements.forEach(function (element) {
+      var rect = typeof element.getBoundingClientRect === 'function' ? element.getBoundingClientRect() : null;
+      if (rect && Number.isFinite(rect.left) && Number.isFinite(rect.right) && rect.right > rect.left && rect.bottom > rect.top) {
+        addPoint(clientPoint(rect.left, rect.top));
+        addPoint(clientPoint(rect.right, rect.top));
+        addPoint(clientPoint(rect.right, rect.bottom));
+        addPoint(clientPoint(rect.left, rect.bottom));
+        return;
+      }
+      if (typeof element.getBBox !== 'function') return;
+      try {
+        var bbox = element.getBBox();
+        addPoint({ x: bbox.x, y: bbox.y });
+        addPoint({ x: bbox.x + bbox.width, y: bbox.y + bbox.height });
+      } catch (error) {
+        // Ignore elements that cannot report a box in this viewer.
+      }
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || maxX <= minX || maxY <= minY) {
+      return null;
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  function centerFeatureInView(svgId) {
+    var bounds = getFeatureBounds(svgId);
+    if (!bounds) return;
+    var view = getViewRect();
+    var targetWidth = Math.min(view.width, Math.max(bounds.width * 6, originalViewRect.width / 8));
+    var targetHeight = Math.min(view.height, Math.max(bounds.height * 6, originalViewRect.height / 8));
+    targetWidth = Math.max(targetWidth, bounds.width * 1.4);
+    targetHeight = Math.max(targetHeight, bounds.height * 1.4);
+    setSvgViewRect({
+      x: bounds.x + bounds.width / 2 - targetWidth / 2,
+      y: bounds.y + bounds.height / 2 - targetHeight / 2,
+      width: targetWidth,
+      height: targetHeight
+    });
+  }
+
+  function setActiveMatch(index, options) {
+    if (!searchState.matches.length) {
+      searchState.activeIndex = -1;
+      applySearchResults();
+      return;
+    }
+    var count = searchState.matches.length;
+    var nextIndex = ((Number(index) || 0) % count + count) % count;
+    searchState.activeIndex = nextIndex;
+    applySearchResults();
+    if (options && options.center) {
+      centerFeatureInView(searchState.matches[nextIndex]);
+    }
+  }
+
+  function openActiveMatchPopup() {
+    if (!searchState.matches.length) return;
+    if (searchState.activeIndex < 0) {
+      setActiveMatch(0, { center: true });
+    }
+    var svgId = searchState.matches[searchState.activeIndex];
+    var feature = featuresById.get(String(svgId || ''));
+    if (!feature) return;
+    centerFeatureInView(svgId);
+    openPopup(feature, null);
+  }
+
+  function createXhtmlNode(tagName, attrs) {
+    var node = document.createElementNS(XHTML_NS, tagName);
+    Object.keys(attrs || {}).forEach(function (key) {
+      if (key === 'text') {
+        node.textContent = attrs[key];
+      } else if (key === 'className') {
+        node.setAttribute('class', attrs[key]);
+      } else {
+        node.setAttribute(key, attrs[key]);
+      }
+    });
+    return node;
+  }
+
+  function updateSearchControlsPosition() {
+    if (!searchControls) return;
+    var visibleView = getVisibleViewRect();
+    var view = getViewRect();
+    var screenScale = getScreenScale();
+    var fallbackSize = getSvgClientSize();
+    var unit = Math.max(
+      1 / Math.max(screenScale.x, 0.001),
+      1 / Math.max(screenScale.y, 0.001),
+      view.width / fallbackSize.width,
+      view.height / fallbackSize.height
+    );
+    var margin = 12 * unit;
+    var yOffset = 42 * unit;
+    searchControls.setAttribute(
+      'transform',
+      'translate(' + formatSvgNumber(visibleView.x + margin) + ', ' + formatSvgNumber(visibleView.y + margin + yOffset) + ') scale(' + formatSvgNumber(unit) + ')'
+    );
+  }
+
+  function setupSearchControls() {
+    var existing = svg.querySelector('#' + SEARCH_CONTROLS_ID);
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+    if (!supportsStandaloneControls()) return;
+
+    searchControls = document.createElementNS(SVG_NS, 'foreignObject');
+    searchControls.setAttribute('id', SEARCH_CONTROLS_ID);
+    searchControls.setAttribute('class', 'gbdraw-feature-search-controls');
+    searchControls.setAttribute('data-popup-mode', popupMode);
+    searchControls.setAttribute('width', '392');
+    searchControls.setAttribute('height', '78');
+
+    var root = createXhtmlNode('div', {
+      xmlns: XHTML_NS,
+      className: 'gfs'
+    });
+    var firstRow = createXhtmlNode('div', { className: 'gfs-row' });
+    var secondRow = createXhtmlNode('div', { className: 'gfs-row' });
+    var queryInput = createXhtmlNode('input', {
+      className: 'gfs-input gfs-query',
+      type: 'search',
+      placeholder: 'Search features',
+      'aria-label': 'Search features',
+      'data-search-query': 'true'
+    });
+    var fieldSelect = createXhtmlNode('select', {
+      className: 'gfs-select',
+      'aria-label': 'Search field',
+      'data-search-field': 'true'
+    });
+    var searchFieldOptions = [
+      ['all', 'All'],
+      ['label', 'Label'],
+      ['type', 'Feature type'],
+      ['record-id', 'Record ID'],
+      ['location', 'Location'],
+      ['strand', 'Strand'],
+      ['qualifier-key', 'Qualifier key'],
+      ['qualifier-value', 'Qualifier value'],
+      ['sequence', 'Sequence']
+    ];
+    if (popupMode === 'simple') {
+      searchFieldOptions = searchFieldOptions.filter(function (entry) {
+        return !isRichSearchField(entry[0]);
+      });
+    }
+    searchFieldOptions.forEach(function (entry) {
+      var option = createXhtmlNode('option', { value: entry[0], text: entry[1] });
+      fieldSelect.appendChild(option);
+    });
+    var qualifierInput = createXhtmlNode('input', {
+      className: 'gfs-input gfs-qualifier',
+      type: 'text',
+      placeholder: 'Qualifier key',
+      'aria-label': 'Qualifier key for qualifier value search',
+      'data-search-qualifier': 'true'
+    });
+    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle' });
+    var regexInput = createXhtmlNode('input', {
+      type: 'checkbox',
+      'data-search-regex': 'true'
+    });
+    regexLabel.appendChild(regexInput);
+    regexLabel.appendChild(document.createTextNode('Regex'));
+    var prevButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button',
+      title: 'Previous match',
+      'aria-label': 'Previous match',
+      'data-search-prev': 'true',
+      text: '<'
+    });
+    var nextButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button',
+      title: 'Next match',
+      'aria-label': 'Next match',
+      'data-search-next': 'true',
+      text: '>'
+    });
+    var clearButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button',
+      title: 'Clear search',
+      'aria-label': 'Clear search',
+      'data-search-clear': 'true',
+      text: 'Clear'
+    });
+    var countText = createXhtmlNode('span', {
+      className: 'gfs-count',
+      'data-search-count': 'true',
+      text: '0 / ' + String(featuresById.size) + ' features'
+    });
+
+    firstRow.appendChild(queryInput);
+    firstRow.appendChild(fieldSelect);
+    if (popupMode !== 'simple') {
+      secondRow.appendChild(qualifierInput);
+    }
+    secondRow.appendChild(regexLabel);
+    secondRow.appendChild(prevButton);
+    secondRow.appendChild(nextButton);
+    secondRow.appendChild(clearButton);
+    secondRow.appendChild(countText);
+    root.appendChild(firstRow);
+    root.appendChild(secondRow);
+    searchControls.appendChild(root);
+
+    ['mousedown', 'mouseup', 'click', 'dblclick', 'keydown', 'keyup', 'keypress', 'wheel', 'touchstart', 'touchmove'].forEach(function (eventName) {
+      root.addEventListener(eventName, function (event) {
+        event.stopPropagation();
+      }, { passive: eventName === 'touchstart' || eventName === 'touchmove' });
+    });
+    queryInput.addEventListener('input', function () {
+      setSearchState({ query: queryInput.value });
+    });
+    fieldSelect.addEventListener('change', function () {
+      setSearchState({ field: fieldSelect.value });
+    });
+    qualifierInput.addEventListener('input', function () {
+      setSearchState({ qualifierKey: qualifierInput.value });
+    });
+    regexInput.addEventListener('change', function () {
+      setSearchState({ useRegex: regexInput.checked });
+    });
+    prevButton.addEventListener('click', function () {
+      setActiveMatch(searchState.activeIndex - 1, { center: true });
+    });
+    nextButton.addEventListener('click', function () {
+      setActiveMatch(searchState.activeIndex + 1, { center: true });
+    });
+    clearButton.addEventListener('click', function () {
+      clearSearch();
+      queryInput.focus();
+    });
+    root.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        clearSearch();
+        queryInput.focus();
+        event.preventDefault();
+      } else if (event.key === 'Enter' && searchState.matches.length) {
+        openActiveMatchPopup();
+        event.preventDefault();
+      }
+    });
+
+    svg.appendChild(searchControls);
+    syncSearchControls();
+    updateSearchControlsPosition();
+  }
+
+  function closestSearchControls(target) {
+    return Boolean(searchControls && target && searchControls.contains(target));
   }
 
   function formatSvgNumber(value) {
@@ -557,6 +1212,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       'transform',
       'translate(' + formatSvgNumber(visibleView.x + margin) + ', ' + formatSvgNumber(visibleView.y + margin) + ') scale(' + formatSvgNumber(unit) + ')'
     );
+    updateSearchControlsPosition();
   }
 
   function setPanMode(enabled) {
@@ -639,6 +1295,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function startCanvasPan(event) {
     if (!isPanMode || event.button !== 0) return;
     if (popup && popup.contains(event.target)) return;
+    if (closestSearchControls(event.target)) return;
     if (closestViewportButton(event.target)) return;
     stopCanvasPan();
     closePopup();
@@ -706,7 +1363,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function detailRows(feature) {
     return [
-      ['Label', feature.label || ''],
+      ['Label', feature.display_label || feature.label || ''],
       ['Record ID', feature.record_id || ''],
       ['Type', feature.type || ''],
       ['Location', locationText(feature)]
@@ -799,8 +1456,22 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       renderSequenceBlock('Amino acid', feature.amino_acid_sequence);
   }
 
+  function renderSimplePopup(feature) {
+    return '<div class="gfi gfi--simple">' +
+      '<div class="gfi-header" data-drag-handle="true">' +
+      '<div><div class="gfi-title">' + escapeHtml(feature.display_label || feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
+      '<button type="button" class="gfi-close" data-close="true">x</button>' +
+      '</div>' +
+      '<div class="gfi-content">' + renderRows(detailRows(feature)) + '</div>' +
+      '</div>';
+  }
+
   function renderPopup(feature, activeTab) {
     copyValues = [];
+    if (popupMode === 'simple') {
+      return renderSimplePopup(feature);
+    }
     var tab = activeTab || 'details';
     var panel = '';
     if (tab === 'qualifiers') {
@@ -815,7 +1486,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     return '<div class="gfi">' +
       '<div class="gfi-header" data-drag-handle="true">' +
-      '<div><div class="gfi-title">' + escapeHtml(feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div><div class="gfi-title">' + escapeHtml(feature.display_label || feature.label || feature.svg_id || 'Feature') + '</div>' +
       '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
       '<button type="button" class="gfi-close" data-close="true">x</button>' +
       '</div>' +
@@ -944,22 +1615,28 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function getPopupTextScale(viewport, popupCssWidth, popupCssHeight) {
-    var fitScale = Math.min(1, popupCssWidth / 460, popupCssHeight / 540);
+    var baseWidth = popupMode === 'simple' ? 360 : 460;
+    var baseHeight = popupMode === 'simple' ? 260 : 540;
+    var fitScale = Math.min(1, popupCssWidth / baseWidth, popupCssHeight / baseHeight);
     return Math.max(0.38, Math.min(1, fitScale));
   }
 
   function getPopupCssMetrics(viewport) {
     var zoomScale = getBrowserZoomScale(viewport);
     var margin = 12;
+    var maxWidth = popupMode === 'simple' ? 360 : 460;
+    var maxHeight = popupMode === 'simple' ? 260 : 540;
+    var minWidth = popupMode === 'simple' ? 240 : 300;
+    var minHeight = popupMode === 'simple' ? 160 : 220;
     var availableVisualWidth = Math.max(1, viewport.width * zoomScale - margin * 2);
     var availableVisualHeight = Math.max(1, viewport.height * zoomScale - margin * 2);
     return {
       zoomScale: zoomScale,
       margin: margin,
-      width: Math.max(1, Math.min(460, availableVisualWidth)),
-      height: Math.max(1, Math.min(540, availableVisualHeight)),
-      minWidth: Math.max(1, Math.min(300, availableVisualWidth)),
-      minHeight: Math.max(1, Math.min(220, availableVisualHeight))
+      width: Math.max(1, Math.min(maxWidth, availableVisualWidth)),
+      height: Math.max(1, Math.min(maxHeight, availableVisualHeight)),
+      minWidth: Math.max(1, Math.min(minWidth, availableVisualWidth)),
+      minHeight: Math.max(1, Math.min(minHeight, availableVisualHeight))
     };
   }
 
@@ -990,6 +1667,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function openPopup(feature, event) {
+    if (!supportsStandaloneControls()) return;
     closePopup();
     var viewport = getViewportClientRect();
     var view = getVisibleViewRect();
@@ -1213,6 +1891,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (viewportControls) {
       svg.appendChild(viewportControls);
     }
+    if (searchControls) {
+      svg.appendChild(searchControls);
+    }
   }
 
   async function copyText(value, button) {
@@ -1238,6 +1919,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   setupViewportControls();
+  setupSearchControls();
   window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
   window.addEventListener('resize', updateViewportControlsPosition);
   if (window.visualViewport) {
@@ -1257,6 +1939,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   svg.addEventListener('mouseover', function (event) {
     if (isPanMode) return;
     if (popup && popup.contains(event.target)) return;
+    if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
     var svgId = featureElement ? String(featureElement.id || '') : '';
     if (!svgId || !featureElementsById.has(svgId) || activeHoverSvgId === svgId) return;
@@ -1279,6 +1962,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   svg.addEventListener('click', function (event) {
     if (popup && popup.contains(event.target)) return;
+    if (closestSearchControls(event.target)) return;
     if (isPanMode) {
       event.preventDefault();
       event.stopPropagation();
@@ -1291,6 +1975,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     var feature = featuresById.get(String(featureElement.id || ''));
     if (!feature) return;
+    var matchIndex = searchState.matches.indexOf(String(featureElement.id || ''));
+    if (matchIndex !== -1) {
+      setActiveMatch(matchIndex, { center: false });
+    }
     event.preventDefault();
     event.stopPropagation();
     openPopup(feature, event);
@@ -1384,6 +2072,80 @@ const getStandaloneFeatureLabel = (feature) => {
   return 'Feature';
 };
 
+const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
+
+const getEditableLabelEntryForStandaloneFeature = (feature) => {
+  const entries = Array.isArray(state.editableLabels.value) ? state.editableLabels.value : [];
+  const candidates = [
+    normalizeFeatureIdKey(feature?.svg_id),
+    normalizeFeatureIdKey(feature?.id)
+  ].filter(Boolean);
+  if (candidates.length === 0) return null;
+  return entries.find((entry) => candidates.includes(normalizeFeatureIdKey(entry?.featureId))) || null;
+};
+
+const getLabelTextFeatureOverride = (feature) => {
+  const overrides = state.labelTextFeatureOverrides || {};
+  const candidates = [
+    String(feature?.svg_id || '').trim(),
+    String(feature?.id || '').trim()
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (Object.prototype.hasOwnProperty.call(overrides, candidate)) {
+      const text = String(overrides[candidate] ?? '').trim();
+      if (text) return text;
+    }
+  }
+  return '';
+};
+
+const getStandaloneDisplayLabel = (feature, fallbackLabel) => {
+  const editableEntry = getEditableLabelEntryForStandaloneFeature(feature);
+  const editableText = String(editableEntry?.text || '').trim();
+  if (editableText) return editableText;
+
+  const directOverride = getLabelTextFeatureOverride(feature);
+  if (directOverride) return directOverride;
+
+  const sourceCandidates = [
+    editableEntry?.sourceText,
+    fallbackLabel,
+    feature?.product,
+    feature?.gene,
+    feature?.locus_tag
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  for (const sourceText of sourceCandidates) {
+    const bulkText = String(state.labelTextBulkOverrides?.[sourceText] ?? '').trim();
+    if (bulkText) return bulkText;
+  }
+
+  return fallbackLabel;
+};
+
+const getStandaloneSearchLabels = (feature, fallbackLabel, displayLabel) => {
+  const labels = [
+    displayLabel,
+    fallbackLabel,
+    feature?.label,
+    feature?.gene,
+    feature?.locus_tag,
+    feature?.product,
+    firstQualifierValue(feature, 'gene'),
+    firstQualifierValue(feature, 'locus_tag'),
+    firstQualifierValue(feature, 'product'),
+    feature?.svg_id
+  ];
+  const seen = new Set();
+  return labels
+    .map((value) => String(value || '').trim())
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (!value || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
 const collectRenderedFeatureIds = (svg) => {
   const ids = new Set();
   if (!svg) return ids;
@@ -1394,10 +2156,15 @@ const collectRenderedFeatureIds = (svg) => {
   return ids;
 };
 
-const buildStandaloneFeaturePayloads = (svg) => {
+const normalizeStandalonePopupMode = (popupMode) => (
+  popupMode === 'simple' ? 'simple' : 'rich'
+);
+
+const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
   const renderedIds = collectRenderedFeatureIds(svg);
   if (renderedIds.size === 0) return [];
 
+  const normalizedPopupMode = normalizeStandalonePopupMode(popupMode);
   const features = Array.isArray(state.extractedFeatures.value) ? state.extractedFeatures.value : [];
   const payloads = [];
   const seenIds = new Set();
@@ -1405,22 +2172,31 @@ const buildStandaloneFeaturePayloads = (svg) => {
     const svgId = String(feature?.svg_id || '').trim();
     if (!svgId || !renderedIds.has(svgId) || seenIds.has(svgId)) return;
     seenIds.add(svgId);
-    payloads.push({
+    const fallbackLabel = getStandaloneFeatureLabel(feature);
+    const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel);
+    const payload = {
       svg_id: svgId,
-      label: getStandaloneFeatureLabel(feature),
+      label: fallbackLabel,
+      display_label: displayLabel,
+      search_labels: getStandaloneSearchLabels(feature, fallbackLabel, displayLabel),
       record_id: String(feature?.record_id || ''),
       record_idx: Number.isFinite(Number(feature?.record_idx)) ? Number(feature.record_idx) : null,
       type: String(feature?.type || ''),
       start: Number.isFinite(Number(feature?.start)) ? Number(feature.start) : null,
       end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
       strand: String(feature?.strand || ''),
-      location: buildStandaloneFeatureLocation(feature),
-      qualifiers: normalizeQualifierMap(feature?.qualifiers),
-      location_parts: normalizeLocationParts(feature?.location_parts),
-      nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
-      amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
-      sequence_warnings: normalizeStringArray(feature?.sequence_warnings)
-    });
+      location: buildStandaloneFeatureLocation(feature)
+    };
+    if (normalizedPopupMode === 'rich') {
+      Object.assign(payload, {
+        qualifiers: normalizeQualifierMap(feature?.qualifiers),
+        location_parts: normalizeLocationParts(feature?.location_parts),
+        nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
+        amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
+        sequence_warnings: normalizeStringArray(feature?.sequence_warnings)
+      });
+    }
+    payloads.push(payload);
   });
   return payloads;
 };
@@ -1490,13 +2266,14 @@ const ensureStandaloneFeatureGlowFilter = (svg) => {
   defs.appendChild(filter);
 };
 
-const removeExistingStandaloneFeaturePopupAssets = (svg) => {
+const removeExistingStandaloneInteractivityAssets = (svg) => {
   [
     INTERACTIVE_METADATA_ID,
     INTERACTIVE_STYLE_ID,
     INTERACTIVE_SCRIPT_ID,
     INTERACTIVE_GLOW_FILTER_ID,
     'gbdraw-viewport-controls',
+    'gbdraw-feature-search-controls',
     'gbdraw-feature-popup'
   ].forEach((id) => {
     const element = svg.querySelector(`#${CSS.escape(id)}`);
@@ -1513,11 +2290,12 @@ const addClassToken = (element, token) => {
   element.setAttribute('class', Array.from(tokens).join(' '));
 };
 
-const enrichSvgWithStandaloneFeaturePopup = (svg) => {
-  if (!svg || state.adv.rich_feature_popup === false) return false;
+const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) => {
+  if (!svg) return false;
 
-  removeExistingStandaloneFeaturePopupAssets(svg);
-  const features = buildStandaloneFeaturePayloads(svg);
+  const normalizedPopupMode = normalizeStandalonePopupMode(popupMode);
+  removeExistingStandaloneInteractivityAssets(svg);
+  const features = buildStandaloneFeaturePayloads(svg, { popupMode: normalizedPopupMode });
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
@@ -1530,8 +2308,10 @@ const enrichSvgWithStandaloneFeaturePopup = (svg) => {
   const metadata = document.createElementNS(SVG_NS, 'metadata');
   metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
   metadata.setAttribute('data-schema', 'gbdraw-interactive-feature-popup-v1');
+  metadata.setAttribute('data-popup-mode', normalizedPopupMode);
   metadata.textContent = JSON.stringify({
     schema: 'gbdraw-interactive-feature-popup-v1',
+    popup_mode: normalizedPopupMode,
     features
   });
 
@@ -1715,16 +2495,25 @@ const prepareSvgForPdf = (svg) => {
   };
 };
 
-export const downloadSVG = () => {
-  const svgString = getCurrentSvgString({ interactive: true });
+const downloadSvgString = (svgString, filename) => {
   if (!svgString) return;
   const blob = new Blob([svgString], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = getDownloadName('svg');
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+};
+
+export const downloadSVG = () => {
+  const svgString = getCurrentSvgString();
+  downloadSvgString(svgString, getDownloadName('svg'));
+};
+
+export const downloadInteractiveSVG = () => {
+  const svgString = getCurrentSvgString({ interactive: true });
+  downloadSvgString(svgString, getDownloadName('interactive.svg'));
 };
 
 export const downloadPNG = () => {

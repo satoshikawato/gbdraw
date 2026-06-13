@@ -2419,7 +2419,8 @@
                                 <option value="600">600 (High)</option>
                             </select>
                         </div>
-                        <button @click="downloadSVG" class="btn btn-secondary text-sm"><i class="ph ph-download-simple"></i> SVG</button>
+                        <button @click="downloadSVG" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple"></i> SVG</button>
+                        <button @click="downloadInteractiveSVG" class="btn btn-secondary text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click"></i> Interactive SVG</button>
                         <button @click="downloadPNG" class="btn btn-primary text-sm"><i class="ph ph-download-simple"></i> PNG</button>
                         <button @click="downloadPDF" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf"></i> PDF</button>
                     </div>

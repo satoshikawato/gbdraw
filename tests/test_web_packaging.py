@@ -143,15 +143,41 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
-def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_exports() -> None:
+def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload() -> None:
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "gbdraw-interactive-feature-popup-v1" in export_source
     assert "gbdraw-interactive-feature-metadata" in export_source
     assert "gbdraw-interactive-feature-script" in export_source
+    assert "gbdraw-feature-search-controls" in export_source
+    assert "gbdraw-interactive-feature--match" in export_source
+    assert "gbdraw-interactive-feature--active-match" in export_source
+    assert "gbdraw-interactive-feature--dimmed" in export_source
+    assert "function normalizeSearchText(value)" in export_source
+    assert "function featureSearchValues(feature, field, qualifierKey)" in export_source
+    assert "function compileSearchMatcher(query, useRegex)" in export_source
+    assert "function featureMatchesSearch(feature, matcher, field, qualifierKey)" in export_source
+    assert "function supportsStandaloneControls()" in export_source
+    assert "function setSearchState(nextState)" in export_source
+    assert "function applySearchResults()" in export_source
+    assert "function setActiveMatch(index, options)" in export_source
+    assert "function clearSearch()" in export_source
+    assert "display_label" in export_source
+    assert "search_labels" in export_source
     assert "data-gbdraw-interactive-feature" in export_source
-    assert "state.adv.rich_feature_popup === false" in export_source
-    assert "buildStandaloneFeaturePayloads(svg)" in export_source
+    assert "enrichSvgWithStandaloneFeaturePopup" not in export_source
+    assert "const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) => {\n  if (!svg) return false;" in export_source
+    assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
+    assert "popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'" in export_source
+    assert "buildStandaloneFeaturePayloads(svg, { popupMode: normalizedPopupMode })" in export_source
+    assert "popup_mode: normalizedPopupMode" in export_source
+    assert "var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';" in export_source
+    assert "var richSearchFields = {" in export_source
+    assert "if (popupMode === 'simple') {\n      searchFieldOptions = searchFieldOptions.filter" in export_source
+    assert "function renderSimplePopup(feature)" in export_source
+    assert "if (normalizedPopupMode === 'rich') {\n      Object.assign(payload, {\n        qualifiers: normalizeQualifierMap(feature?.qualifiers)," in export_source
     assert "nucleotide_sequence" in export_source
     assert "amino_acid_sequence" in export_source
     assert "getVisibleViewRect()" in export_source
@@ -177,9 +203,17 @@ def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_e
     assert "['Record index'" not in export_source
     assert "['Strand'" not in export_source
     assert "root.style.transform = 'scale('" in export_source
-    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
+    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
     assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" not in export_source
+    assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" not in export_source
+    assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString({ interactive: true });" not in export_source
+    assert "downloadInteractiveSVG" in app_setup_source
+    assert '@click="downloadInteractiveSVG"' in index_html
+    assert "Interactive SVG" in index_html
+    assert "Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded." in index_html
 
 
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:

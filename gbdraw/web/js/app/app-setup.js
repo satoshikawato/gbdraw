@@ -1,6 +1,6 @@
 import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js';
 import { debugLog } from '../config.js';
-import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
+import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
 import {
   disposeDiagramGenerationWorker,
@@ -1567,6 +1567,7 @@ export const createAppSetup = () => {
     runAnalysis,
     cancelGeneration,
     downloadSVG,
+    downloadInteractiveSVG,
     downloadPNG,
     downloadPDF,
     exportConfig,
