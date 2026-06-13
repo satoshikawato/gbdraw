@@ -457,6 +457,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var activePopupResize = null;
   var activePopupDrag = null;
   var activeHoverSvgId = null;
+  var maxZoom = 16;
+  var resizeFrame = null;
   var searchState = {
     query: '',
     field: 'all',
@@ -1080,7 +1082,66 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return { x: 0, y: 0, width: width, height: height };
   }
 
-  var originalViewRect = copyViewRect(getViewRect());
+  function parseViewBoxRect(value) {
+    var parts = String(value || '').trim().split(/[\\s,]+/).map(function (part) {
+      return Number(part);
+    });
+    if (parts.length < 4 || parts.some(function (part) { return !Number.isFinite(part); })) {
+      return null;
+    }
+    if (parts[2] <= 0 || parts[3] <= 0) return null;
+    return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+  }
+
+  function parseOriginalViewRectFromSvg() {
+    return parseViewBoxRect(svg.getAttribute('data-gbdraw-original-viewbox')) ||
+      parseViewBoxRect(svg.getAttribute('viewBox')) ||
+      copyViewRect(getViewRect());
+  }
+
+  function getViewportAspect() {
+    var doc = document.documentElement || {};
+    var width = window.innerWidth || doc.clientWidth || 0;
+    var height = window.innerHeight || doc.clientHeight || 0;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return 0;
+    }
+    return width / height;
+  }
+
+  function fitRectToAspect(rect, targetAspect) {
+    var source = copyViewRect(rect);
+    var sourceAspect = source.width / source.height;
+    if (!Number.isFinite(targetAspect) || targetAspect <= 0 || !Number.isFinite(sourceAspect) || sourceAspect <= 0) {
+      return source;
+    }
+    if (targetAspect > sourceAspect) {
+      var width = source.height * targetAspect;
+      return {
+        x: source.x + source.width / 2 - width / 2,
+        y: source.y,
+        width: width,
+        height: source.height
+      };
+    }
+    var height = source.width / targetAspect;
+    return {
+      x: source.x,
+      y: source.y + source.height / 2 - height / 2,
+      width: source.width,
+      height: height
+    };
+  }
+
+  function rectsNearlyEqual(a, b) {
+    return Math.abs(a.x - b.x) < 0.5 &&
+      Math.abs(a.y - b.y) < 0.5 &&
+      Math.abs(a.width - b.width) < 0.5 &&
+      Math.abs(a.height - b.height) < 0.5;
+  }
+
+  var originalViewRect = parseOriginalViewRectFromSvg();
+  var homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());
 
   function getSvgClientSize() {
     var rect = typeof svg.getBoundingClientRect === 'function' ? svg.getBoundingClientRect() : null;
@@ -1093,15 +1154,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function normalizeViewRect(rect) {
-    var maxZoom = 16;
-    var minWidth = originalViewRect.width / maxZoom;
-    var minHeight = originalViewRect.height / maxZoom;
-    var width = clampValue(Number(rect && rect.width), minWidth, originalViewRect.width);
-    var height = clampValue(Number(rect && rect.height), minHeight, originalViewRect.height);
-    var minX = originalViewRect.x;
-    var minY = originalViewRect.y;
-    var maxX = originalViewRect.x + originalViewRect.width - width;
-    var maxY = originalViewRect.y + originalViewRect.height - height;
+    var minWidth = homeViewRect.width / maxZoom;
+    var minHeight = homeViewRect.height / maxZoom;
+    var width = clampValue(Number(rect && rect.width), minWidth, homeViewRect.width);
+    var height = clampValue(Number(rect && rect.height), minHeight, homeViewRect.height);
+    var minX = homeViewRect.x;
+    var minY = homeViewRect.y;
+    var maxX = homeViewRect.x + homeViewRect.width - width;
+    var maxY = homeViewRect.y + homeViewRect.height - height;
     var x = maxX <= minX ? minX : clampValue(Number(rect && rect.x), minX, maxX);
     var y = maxY <= minY ? minY : clampValue(Number(rect && rect.y), minY, maxY);
     return { x: x, y: y, width: width, height: height };
@@ -1114,6 +1174,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       [next.x, next.y, next.width, next.height].map(formatSvgNumber).join(' ')
     );
     updateViewportControlsPosition();
+    keepPopupWithinVisibleView();
     return next;
   }
 
@@ -1121,10 +1182,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var view = getViewRect();
     var safeFactor = Number(factor);
     if (!Number.isFinite(safeFactor) || safeFactor <= 0) return;
-    var currentScale = view.width / originalViewRect.width;
-    var nextScale = clampValue(currentScale * safeFactor, 1 / 16, 1);
-    var width = originalViewRect.width * nextScale;
-    var height = originalViewRect.height * nextScale;
+    var currentScale = view.width / homeViewRect.width;
+    var nextScale = clampValue(currentScale * safeFactor, 1 / maxZoom, 1);
+    var width = homeViewRect.width * nextScale;
+    var height = homeViewRect.height * nextScale;
     var anchor = anchorPoint || { x: view.x + view.width / 2, y: view.y + view.height / 2 };
     var ratioX = width / view.width;
     var ratioY = height / view.height;
@@ -1140,7 +1201,40 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function resetViewport() {
     closePopup();
     setPanMode(false);
-    setSvgViewRect(originalViewRect);
+    setSvgViewRect(homeViewRect);
+  }
+
+  function refitViewportToWindow() {
+    var previousHomeViewRect = copyViewRect(homeViewRect);
+    var currentView = getViewRect();
+    var wasAtHome = rectsNearlyEqual(currentView, previousHomeViewRect);
+    var centerX = currentView.x + currentView.width / 2;
+    var centerY = currentView.y + currentView.height / 2;
+    var currentScale = clampValue(currentView.width / previousHomeViewRect.width, 1 / maxZoom, 1);
+    homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());
+    if (wasAtHome) {
+      setSvgViewRect(homeViewRect);
+      return;
+    }
+    var width = homeViewRect.width * currentScale;
+    var height = homeViewRect.height * currentScale;
+    setSvgViewRect({
+      x: centerX - width / 2,
+      y: centerY - height / 2,
+      width: width,
+      height: height
+    });
+  }
+
+  function scheduleViewportRefit() {
+    if (resizeFrame !== null) return;
+    var requestFrame = window.requestAnimationFrame || function (callback) {
+      return window.setTimeout(callback, 16);
+    };
+    resizeFrame = requestFrame(function () {
+      resizeFrame = null;
+      refitViewportToWindow();
+    });
   }
 
   function createSvgNode(tagName, attrs) {
@@ -1244,7 +1338,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var buttons = [
       { action: 'zoom-in', label: '+', title: 'Zoom in', width: 32 },
       { action: 'zoom-out', label: '-', title: 'Zoom out', width: 32 },
-      { action: 'reset', label: '1:1', title: 'Reset view', width: 42 },
+      { action: 'reset', label: 'Original', title: 'Return to original view', width: 62 },
       { action: 'pan', label: 'Pan', title: 'Toggle pan mode', width: 44 }
     ];
     var x = 0;
@@ -1521,6 +1615,28 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       popup.parentNode.removeChild(popup);
     }
     popup = null;
+  }
+
+  function keepPopupWithinVisibleView() {
+    if (!popup) return;
+    var viewport = getViewportClientRect();
+    var view = getVisibleViewRect();
+    var metrics = getPopupCssMetrics(viewport);
+    var scale = getScreenScale();
+    var effectiveScaleX = Math.max(scale.x, 0.001) * metrics.zoomScale;
+    var effectiveScaleY = Math.max(scale.y, 0.001) * metrics.zoomScale;
+    var marginX = metrics.margin / effectiveScaleX;
+    var marginY = metrics.margin / effectiveScaleY;
+    var width = parseFloat(popup.getAttribute('width')) || 1;
+    var height = parseFloat(popup.getAttribute('height')) || 1;
+    var minX = view.x + marginX;
+    var minY = view.y + marginY;
+    var maxX = view.x + view.width - width - marginX;
+    var maxY = view.y + view.height - height - marginY;
+    if (maxX < minX) maxX = minX;
+    if (maxY < minY) maxY = minY;
+    popup.setAttribute('x', clampValue(parseFloat(popup.getAttribute('x')), minX, maxX));
+    popup.setAttribute('y', clampValue(parseFloat(popup.getAttribute('y')), minY, maxY));
   }
 
   function getScreenScale() {
@@ -1918,10 +2034,11 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
+  setSvgViewRect(homeViewRect);
   setupViewportControls();
   setupSearchControls();
   window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
-  window.addEventListener('resize', updateViewportControlsPosition);
+  window.addEventListener('resize', scheduleViewportRefit);
   if (window.visualViewport) {
     window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
     window.visualViewport.addEventListener('resize', updateViewportControlsPosition, { passive: true });
@@ -2290,9 +2407,61 @@ const addClassToken = (element, token) => {
   element.setAttribute('class', Array.from(tokens).join(' '));
 };
 
+const parseSvgViewBox = (value) => {
+  const parts = String(value || '')
+    .trim()
+    .split(/[\s,]+/)
+    .map((part) => Number(part));
+  if (parts.length < 4 || parts.some((part) => !Number.isFinite(part))) return null;
+  if (parts[2] <= 0 || parts[3] <= 0) return null;
+  return {
+    x: parts[0],
+    y: parts[1],
+    width: parts[2],
+    height: parts[3]
+  };
+};
+
+const formatSvgViewBox = (rect) =>
+  [rect.x, rect.y, rect.width, rect.height].map((value) => String(value)).join(' ');
+
+const resolveStandaloneOriginalGeometry = (svg) => {
+  const dataViewBox = parseSvgViewBox(svg.getAttribute('data-gbdraw-original-viewbox'));
+  const currentViewBox = parseSvgViewBox(svg.getAttribute('viewBox'));
+  const width = parseFloat(svg.getAttribute('width'));
+  const height = parseFloat(svg.getAttribute('height'));
+  const fallbackViewBox =
+    Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+      ? { x: 0, y: 0, width, height }
+      : null;
+  const viewBox = dataViewBox || currentViewBox || fallbackViewBox || { x: 0, y: 0, width: 900, height: 650 };
+  const originalWidth = svg.getAttribute('data-gbdraw-original-width') ||
+    svg.getAttribute('width') ||
+    `${viewBox.width}px`;
+  const originalHeight = svg.getAttribute('data-gbdraw-original-height') ||
+    svg.getAttribute('height') ||
+    `${viewBox.height}px`;
+  return {
+    viewBox,
+    originalWidth,
+    originalHeight
+  };
+};
+
+const applyStandaloneViewportRoot = (svg) => {
+  svg.setAttribute('width', '100vw');
+  svg.setAttribute('height', '100vh');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.style.setProperty('width', '100vw');
+  svg.style.setProperty('height', '100vh');
+  svg.style.setProperty('display', 'block');
+  svg.style.setProperty('background', '#ffffff');
+};
+
 const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) => {
   if (!svg) return false;
 
+  const originalGeometry = resolveStandaloneOriginalGeometry(svg);
   const normalizedPopupMode = normalizeStandalonePopupMode(popupMode);
   removeExistingStandaloneInteractivityAssets(svg);
   const features = buildStandaloneFeaturePayloads(svg, { popupMode: normalizedPopupMode });
@@ -2329,7 +2498,11 @@ const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) 
   svg.appendChild(metadata);
   svg.appendChild(style);
   svg.appendChild(script);
+  svg.setAttribute('data-gbdraw-original-viewbox', formatSvgViewBox(originalGeometry.viewBox));
+  svg.setAttribute('data-gbdraw-original-width', originalGeometry.originalWidth);
+  svg.setAttribute('data-gbdraw-original-height', originalGeometry.originalHeight);
   svg.setAttribute('data-gbdraw-interactive-svg', 'true');
+  applyStandaloneViewportRoot(svg);
   return true;
 };
 

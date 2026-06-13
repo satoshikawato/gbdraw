@@ -167,11 +167,28 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "display_label" in export_source
     assert "search_labels" in export_source
     assert "data-gbdraw-interactive-feature" in export_source
+    assert "data-gbdraw-original-viewbox" in export_source
+    assert "data-gbdraw-original-width" in export_source
+    assert "data-gbdraw-original-height" in export_source
     assert "enrichSvgWithStandaloneFeaturePopup" not in export_source
     assert "const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) => {\n  if (!svg) return false;" in export_source
     assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
     assert "popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'" in export_source
     assert "buildStandaloneFeaturePayloads(svg, { popupMode: normalizedPopupMode })" in export_source
+    assert "svg.setAttribute('width', '100vw');" in export_source
+    assert "svg.setAttribute('height', '100vh');" in export_source
+    assert "svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');" in export_source
+    assert "svg.style.setProperty('width', '100vw');" in export_source
+    assert "svg.style.setProperty('height', '100vh');" in export_source
+    assert "function parseOriginalViewRectFromSvg()" in export_source
+    assert "function getViewportAspect()" in export_source
+    assert "function fitRectToAspect(rect, targetAspect)" in export_source
+    assert "var homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());" in export_source
+    assert "homeViewRect.width / maxZoom" in export_source
+    assert "homeViewRect.width * nextScale" in export_source
+    assert "{ action: 'reset', label: 'Original', title: 'Return to original view', width: 62 }" in export_source
+    assert "function refitViewportToWindow()" in export_source
+    assert "function scheduleViewportRefit()" in export_source
     assert "popup_mode: normalizedPopupMode" in export_source
     assert "var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';" in export_source
     assert "var richSearchFields = {" in export_source
@@ -183,6 +200,7 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "getVisibleViewRect()" in export_source
     assert "var visibleView = getVisibleViewRect();" in export_source
     assert "window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });" in export_source
+    assert "window.addEventListener('resize', scheduleViewportRefit);" in export_source
     assert "window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });" in export_source
     assert "popupCssWidth" in export_source
     assert "getPopupCssMetrics" in export_source
