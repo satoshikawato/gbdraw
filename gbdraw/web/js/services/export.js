@@ -623,6 +623,17 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
   });
 
+  function getOrthogroupIds(value) {
+    var seen = {};
+    return String(value || '').split(';').map(function (entry) {
+      return String(entry || '').trim();
+    }).filter(function (entry) {
+      if (!entry || seen[entry]) return false;
+      seen[entry] = true;
+      return true;
+    });
+  }
+
   var featureElementsById = new Map();
   Array.prototype.slice.call(svg.querySelectorAll(FEATURE_SELECTOR)).forEach(function (element) {
     var svgId = getElementFeatureId(element);
@@ -636,23 +647,24 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var featureIdsByOrthogroupId = new Map();
   features.forEach(function (feature) {
     var svgId = String(feature && feature.svg_id || '').trim();
-    var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
-    if (!svgId || !orthogroupId) return;
-    if (!featureIdsByOrthogroupId.has(orthogroupId)) {
-      featureIdsByOrthogroupId.set(orthogroupId, new Set());
-    }
-    featureIdsByOrthogroupId.get(orthogroupId).add(svgId);
+    if (!svgId) return;
+    getOrthogroupIds(feature && feature.orthogroup_id).forEach(function (orthogroupId) {
+      if (!featureIdsByOrthogroupId.has(orthogroupId)) {
+        featureIdsByOrthogroupId.set(orthogroupId, new Set());
+      }
+      featureIdsByOrthogroupId.get(orthogroupId).add(svgId);
+    });
   });
 
   var comparisonElementsByOrthogroupId = new Map();
   Array.prototype.slice.call(svg.querySelectorAll('[data-orthogroup-id]')).forEach(function (element) {
     if (element.matches && element.matches(FEATURE_SELECTOR)) return;
-    var orthogroupId = String(element.getAttribute('data-orthogroup-id') || '').trim();
-    if (!orthogroupId) return;
-    if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
-      comparisonElementsByOrthogroupId.set(orthogroupId, []);
-    }
-    comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
+    getOrthogroupIds(element.getAttribute('data-orthogroup-id')).forEach(function (orthogroupId) {
+      if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
+        comparisonElementsByOrthogroupId.set(orthogroupId, []);
+      }
+      comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
+    });
     setClassToken(element, 'gbdraw-interactive-orthogroup-link', true);
   });
 

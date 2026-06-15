@@ -55,6 +55,14 @@ export const createFeatureSvgActions = ({
   const formatDuration = (ms) => `${ms.toFixed(1)}ms`;
   let delegatedFeatureHandlers = null;
 
+  const getOrthogroupIds = (value) =>
+    Array.from(new Set(
+      String(value || '')
+        .split(';')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    ));
+
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'on' || normalized === 'off' ? normalized : 'default';
@@ -345,22 +353,23 @@ export const createFeatureSvgActions = ({
     const featureLookup = buildFeatureLookup();
     const featureIdsByOrthogroupId = new Map();
     featureLookup.forEach((feat, svgId) => {
-      const orthogroupId = String(feat?.orthogroupId || '').trim();
-      if (!svgId || !orthogroupId) return;
-      if (!featureIdsByOrthogroupId.has(orthogroupId)) {
-        featureIdsByOrthogroupId.set(orthogroupId, new Set());
-      }
-      featureIdsByOrthogroupId.get(orthogroupId).add(svgId);
+      if (!svgId) return;
+      getOrthogroupIds(feat?.orthogroupId).forEach((orthogroupId) => {
+        if (!featureIdsByOrthogroupId.has(orthogroupId)) {
+          featureIdsByOrthogroupId.set(orthogroupId, new Set());
+        }
+        featureIdsByOrthogroupId.get(orthogroupId).add(svgId);
+      });
     });
     const comparisonElementsByOrthogroupId = new Map();
     svg.querySelectorAll('[data-orthogroup-id]').forEach((element) => {
       if (element.matches?.(FEATURE_SELECTOR)) return;
-      const orthogroupId = String(element.getAttribute('data-orthogroup-id') || '').trim();
-      if (!orthogroupId) return;
-      if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
-        comparisonElementsByOrthogroupId.set(orthogroupId, []);
-      }
-      comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
+      getOrthogroupIds(element.getAttribute('data-orthogroup-id')).forEach((orthogroupId) => {
+        if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
+          comparisonElementsByOrthogroupId.set(orthogroupId, []);
+        }
+        comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
+      });
     });
     const indexDuration = getNow() - indexStartedAt;
 
