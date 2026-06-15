@@ -360,6 +360,9 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-viewport-controls {
   pointer-events: auto;
 }
+.gbdraw-sticky-legend {
+  pointer-events: none;
+}
 .gbdraw-viewport-button {
   cursor: pointer;
 }
@@ -547,6 +550,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var popup = null;
   var viewportControls = null;
   var searchControls = null;
+  var stickyLegend = null;
+  var stickyLegendState = null;
+  var stickyLegendVisible = true;
   var isPanMode = false;
   var activeCanvasPan = null;
   var suppressNextCanvasClick = false;
@@ -1599,6 +1605,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
 
     svg.appendChild(searchControls);
+    syncStandaloneOverlayOrder();
     syncSearchControls();
     updateSearchControlsPosition();
   }
@@ -1693,6 +1700,256 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var originalViewRect = parseOriginalViewRectFromSvg();
   var homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());
 
+  function isElementHidden(element) {
+    if (!element) return true;
+    if (String(element.getAttribute('display') || '').trim().toLowerCase() === 'none') return true;
+    if (element.style && String(element.style.display || '').trim().toLowerCase() === 'none') return true;
+    if (typeof window.getComputedStyle === 'function') {
+      try {
+        var style = window.getComputedStyle(element);
+        if (style && (style.display === 'none' || style.visibility === 'hidden')) return true;
+      } catch (error) {
+        // Ignore style lookup failures and let getBBox decide renderability.
+      }
+    }
+    return false;
+  }
+
+  function getElementBBox(element) {
+    if (!element || typeof element.getBBox !== 'function') return null;
+    try {
+      var bbox = element.getBBox();
+      if (!bbox || !Number.isFinite(bbox.x) || !Number.isFinite(bbox.y)) return null;
+      if (!Number.isFinite(bbox.width) || !Number.isFinite(bbox.height)) return null;
+      if (bbox.width <= 0 || bbox.height <= 0) return null;
+      return {
+        x: bbox.x,
+        y: bbox.y,
+        width: bbox.width,
+        height: bbox.height
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function getElementBoundsInSvg(element, bbox) {
+    if (!element || !bbox) return null;
+    var point = typeof svg.createSVGPoint === 'function' ? svg.createSVGPoint() : null;
+    var elementMatrix = typeof element.getScreenCTM === 'function' ? element.getScreenCTM() : null;
+    var svgMatrix = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
+    if (!point || !elementMatrix || !svgMatrix) {
+      return { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
+    }
+    var svgInverse = null;
+    try {
+      svgInverse = svgMatrix.inverse();
+    } catch (error) {
+      return { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
+    }
+
+    function convert(x, y) {
+      point.x = x;
+      point.y = y;
+      var screenPoint = point.matrixTransform(elementMatrix);
+      return screenPoint.matrixTransform(svgInverse);
+    }
+
+    var points = [
+      convert(bbox.x, bbox.y),
+      convert(bbox.x + bbox.width, bbox.y),
+      convert(bbox.x + bbox.width, bbox.y + bbox.height),
+      convert(bbox.x, bbox.y + bbox.height)
+    ].filter(function (entry) {
+      return entry && Number.isFinite(entry.x) && Number.isFinite(entry.y);
+    });
+    if (points.length !== 4) return null;
+    var minX = Math.min.apply(null, points.map(function (entry) { return entry.x; }));
+    var maxX = Math.max.apply(null, points.map(function (entry) { return entry.x; }));
+    var minY = Math.min.apply(null, points.map(function (entry) { return entry.y; }));
+    var maxY = Math.max.apply(null, points.map(function (entry) { return entry.y; }));
+    if (maxX <= minX || maxY <= minY) return null;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  function inferStickyLegendAlignment(center, start, size, low, high) {
+    if (!Number.isFinite(size) || size <= 0) return 'center';
+    var ratio = (center - start) / size;
+    if (ratio < low) return 'left';
+    if (ratio > high) return 'right';
+    return 'center';
+  }
+
+  function inferStickyLegendVerticalAlignment(center, start, size, low, high) {
+    if (!Number.isFinite(size) || size <= 0) return 'center';
+    var ratio = (center - start) / size;
+    if (ratio < low) return 'top';
+    if (ratio > high) return 'bottom';
+    return 'center';
+  }
+
+  function getStickyLegendFallbackMargin() {
+    var shortSide = Math.min(Number(homeViewRect.width) || 0, Number(homeViewRect.height) || 0);
+    return Math.max(8, Math.min(18, shortSide * 0.018 || 12));
+  }
+
+  function safeStickyLegendMargin(value, fallback) {
+    var numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    return fallback;
+  }
+
+  function updateStickyLegendHomeMetrics() {
+    if (!stickyLegendState) return;
+    var bounds = stickyLegendState.initialBounds;
+    var centerX = bounds.x + bounds.width / 2;
+    var centerY = bounds.y + bounds.height / 2;
+    var fallbackMargin = getStickyLegendFallbackMargin();
+    stickyLegendState.anchorX = inferStickyLegendAlignment(
+      centerX,
+      homeViewRect.x,
+      homeViewRect.width,
+      1 / 3,
+      2 / 3
+    );
+    stickyLegendState.anchorY = inferStickyLegendVerticalAlignment(
+      centerY,
+      homeViewRect.y,
+      homeViewRect.height,
+      1 / 3,
+      2 / 3
+    );
+    stickyLegendState.centerOffsetX = centerX - (homeViewRect.x + homeViewRect.width / 2);
+    stickyLegendState.centerOffsetY = centerY - (homeViewRect.y + homeViewRect.height / 2);
+    stickyLegendState.baseMargin = fallbackMargin;
+    stickyLegendState.margins = {
+      left: safeStickyLegendMargin(bounds.x - homeViewRect.x, fallbackMargin),
+      right: safeStickyLegendMargin(homeViewRect.x + homeViewRect.width - (bounds.x + bounds.width), fallbackMargin),
+      top: safeStickyLegendMargin(bounds.y - homeViewRect.y, fallbackMargin),
+      bottom: safeStickyLegendMargin(homeViewRect.y + homeViewRect.height - (bounds.y + bounds.height), fallbackMargin)
+    };
+  }
+
+  function getStickyLegendScale(view) {
+    var scale = Number(view && view.width) / Number(homeViewRect.width);
+    if (!Number.isFinite(scale) || scale <= 0) {
+      scale = Number(view && view.height) / Number(homeViewRect.height);
+    }
+    if (!Number.isFinite(scale) || scale <= 0) return 1;
+    return Math.max(scale, 0.000001);
+  }
+
+  function getStickyLegendMargin(axis, scale) {
+    if (!stickyLegendState) return 0;
+    var margins = stickyLegendState.margins || {};
+    var margin = Number(margins[axis]);
+    var base = Number(stickyLegendState.baseMargin) || 8;
+    return Math.max(base, Number.isFinite(margin) ? margin : base) * scale;
+  }
+
+  function clampStickyLegendCoordinate(value, viewStart, viewSize, itemSize, margin) {
+    if (itemSize + margin * 2 > viewSize) {
+      return viewStart + (viewSize - itemSize) / 2;
+    }
+    var min = viewStart + margin;
+    var max = viewStart + viewSize - itemSize - margin;
+    return clampValue(value, min, max);
+  }
+
+  function updateStickyLegendPosition() {
+    if (!stickyLegend || !stickyLegendState || !stickyLegendVisible) return;
+    var visibleView = getVisibleViewRect();
+    var bbox = stickyLegendState.localBBox;
+    var scale = getStickyLegendScale(getViewRect());
+    var width = bbox.width * scale;
+    var height = bbox.height * scale;
+    var marginX = stickyLegendState.baseMargin * scale;
+    var marginY = stickyLegendState.baseMargin * scale;
+    var targetX = visibleView.x + visibleView.width / 2 + stickyLegendState.centerOffsetX * scale - width / 2;
+    var targetY = visibleView.y + visibleView.height / 2 + stickyLegendState.centerOffsetY * scale - height / 2;
+
+    if (stickyLegendState.anchorX === 'left') {
+      marginX = getStickyLegendMargin('left', scale);
+      targetX = visibleView.x + marginX;
+    } else if (stickyLegendState.anchorX === 'right') {
+      marginX = getStickyLegendMargin('right', scale);
+      targetX = visibleView.x + visibleView.width - width - marginX;
+    }
+
+    if (stickyLegendState.anchorY === 'top') {
+      marginY = getStickyLegendMargin('top', scale);
+      targetY = visibleView.y + marginY;
+    } else if (stickyLegendState.anchorY === 'bottom') {
+      marginY = getStickyLegendMargin('bottom', scale);
+      targetY = visibleView.y + visibleView.height - height - marginY;
+    }
+
+    targetX = clampStickyLegendCoordinate(targetX, visibleView.x, visibleView.width, width, marginX);
+    targetY = clampStickyLegendCoordinate(targetY, visibleView.y, visibleView.height, height, marginY);
+    stickyLegend.setAttribute(
+      'transform',
+      'translate(' +
+        formatSvgNumber(targetX - bbox.x * scale) +
+        ', ' +
+        formatSvgNumber(targetY - bbox.y * scale) +
+        ') scale(' +
+        formatSvgNumber(scale) +
+        ')'
+    );
+  }
+
+  function syncStandaloneOverlayOrder() {
+    if (stickyLegend && stickyLegend.parentNode) {
+      stickyLegend.parentNode.appendChild(stickyLegend);
+    }
+    if (popup && popup.parentNode === svg) {
+      svg.appendChild(popup);
+    }
+    if (viewportControls && viewportControls.parentNode === svg) {
+      svg.appendChild(viewportControls);
+    }
+    if (searchControls && searchControls.parentNode === svg) {
+      svg.appendChild(searchControls);
+    }
+  }
+
+  function setupStickyLegend() {
+    var legend = svg.querySelector('#legend');
+    if (!legend || isElementHidden(legend)) return;
+    var bbox = getElementBBox(legend);
+    var initialBounds = getElementBoundsInSvg(legend, bbox);
+    if (!bbox || !initialBounds) return;
+    stickyLegend = legend;
+    stickyLegendVisible = true;
+    stickyLegendState = {
+      localBBox: bbox,
+      initialBounds: initialBounds,
+      originalDisplay: legend.getAttribute('display')
+    };
+    setClassToken(stickyLegend, 'gbdraw-sticky-legend', true);
+    stickyLegend.setAttribute('data-gbdraw-sticky-legend', 'true');
+    updateStickyLegendHomeMetrics();
+    syncStandaloneOverlayOrder();
+    updateStickyLegendPosition();
+  }
+
+  function setStickyLegendVisible(visible) {
+    if (!stickyLegend || !stickyLegendState) return;
+    stickyLegendVisible = Boolean(visible);
+    if (stickyLegendVisible) {
+      if (stickyLegendState.originalDisplay === null) {
+        stickyLegend.removeAttribute('display');
+      } else {
+        stickyLegend.setAttribute('display', stickyLegendState.originalDisplay);
+      }
+      updateStickyLegendPosition();
+      syncStandaloneOverlayOrder();
+    } else {
+      stickyLegend.setAttribute('display', 'none');
+    }
+    updateViewportControlState();
+  }
+
   function getSvgClientSize() {
     var rect = typeof svg.getBoundingClientRect === 'function' ? svg.getBoundingClientRect() : null;
     var width = rect && Number.isFinite(rect.width) && rect.width > 0 ? rect.width : window.innerWidth || originalViewRect.width;
@@ -1762,6 +2019,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var centerY = currentView.y + currentView.height / 2;
     var currentScale = clampValue(currentView.width / previousHomeViewRect.width, 1 / maxZoom, 1);
     homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());
+    updateStickyLegendHomeMetrics();
     if (wasAtHome) {
       setSvgViewRect(homeViewRect);
       return;
@@ -1837,9 +2095,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     Array.prototype.slice.call(viewportControls.querySelectorAll('[data-action="pan"]')).forEach(function (button) {
       setClassToken(button, 'is-active', isPanMode);
     });
+    Array.prototype.slice.call(viewportControls.querySelectorAll('[data-action="legend"]')).forEach(function (button) {
+      setClassToken(button, 'is-active', Boolean(stickyLegend && stickyLegendState && stickyLegendVisible));
+    });
   }
 
   function updateViewportControlsPosition() {
+    updateStickyLegendPosition();
     if (!viewportControls) return;
     var visibleView = getVisibleViewRect();
     var view = getViewRect();
@@ -1892,6 +2154,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       { action: 'reset', label: 'Original', title: 'Return to original view', width: 62 },
       { action: 'pan', label: 'Pan', title: 'Toggle pan mode', width: 44 }
     ];
+    if (stickyLegend && stickyLegendState) {
+      buttons.push({ action: 'legend', label: 'Legend', title: 'Show or hide legend', width: 62 });
+    }
     var x = 0;
     buttons.forEach(function (button) {
       viewportControls.appendChild(createViewportButton(button, x));
@@ -1913,6 +2178,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         resetViewport();
       } else if (action === 'pan') {
         setPanMode(!isPanMode);
+      } else if (action === 'legend') {
+        setStickyLegendVisible(!stickyLegendVisible);
       }
       event.preventDefault();
       event.stopPropagation();
@@ -1925,6 +2192,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       event.preventDefault();
     });
     svg.appendChild(viewportControls);
+    syncStandaloneOverlayOrder();
     updateViewportControlState();
     updateViewportControlsPosition();
   }
@@ -2645,6 +2913,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (searchControls) {
       svg.appendChild(searchControls);
     }
+    syncStandaloneOverlayOrder();
   }
 
   async function copyText(value, button) {
@@ -2670,6 +2939,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   setSvgViewRect(homeViewRect);
+  setupStickyLegend();
   setupViewportControls();
   setupSearchControls();
   window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
