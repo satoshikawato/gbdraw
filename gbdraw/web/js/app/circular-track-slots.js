@@ -16,6 +16,8 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
+const UI_RENDERERS = SUPPORTED_RENDERERS.filter((renderer) => renderer !== 'spacer');
+
 const RENDERER_LABELS = {
   features: 'Features',
   ticks: 'Ticks',
@@ -721,6 +723,15 @@ const appendOption = (options, key, value) => {
 };
 
 export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuckin', optionsOverride = {}) => {
+  const sourceParams = cloneParams(slot?.params);
+  const sourceLaneDirection = normalizeOptionalText(sourceParams.lane_direction ?? sourceParams.lanes);
+  const sourceRequestsSplitLane = (
+    String(slot?.renderer || '').trim().toLowerCase() === 'features' &&
+    (
+      normalizeOptionalPlacement(slot?.side) === 'overlay' ||
+      (sourceLaneDirection !== null && normalizeLaneDirection(sourceLaneDirection) === 'split')
+    )
+  );
   const normalized = normalizeCircularTrackSlot(slot, 0, defaultNt, preset);
   const options = [];
   const params = normalized.params || {};
@@ -746,14 +757,18 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
       appendOption(options, 'preset', params.preset);
     }
   } else if (normalized.renderer === 'features') {
+    const laneDirection = normalizeOptionalText(params.lane_direction);
+    const effectiveLaneDirection = laneDirection !== null
+      ? normalizeLaneDirection(laneDirection)
+      : (sourceRequestsSplitLane ? 'split' : null);
     if (
-      normalizeOptionalText(params.lane_direction) !== null &&
+      effectiveLaneDirection !== null &&
       (
-        (forceSplitLane && normalizeLaneDirection(params.lane_direction) === 'split') ||
-        normalizeLaneDirection(params.lane_direction) !== laneDirectionForPreset(normalizedPreset)
+        (forceSplitLane && effectiveLaneDirection === 'split') ||
+        effectiveLaneDirection !== laneDirectionForPreset(normalizedPreset)
       )
     ) {
-      appendOption(options, 'lane_direction', params.lane_direction);
+      appendOption(options, 'lane_direction', effectiveLaneDirection);
     }
   } else if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
     const nt = normalizeOptionalText(params.nt);
@@ -1483,7 +1498,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   return {
-    circularTrackRenderers: SUPPORTED_RENDERERS,
+    circularTrackRenderers: UI_RENDERERS,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,

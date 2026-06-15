@@ -1107,7 +1107,7 @@
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index)" title="Delete"><i class="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
-                                                    <div class="grid grid-cols-3 gap-1">
+                                                    <div class="grid grid-cols-2 gap-1">
                                                         <input
                                                             :value="linearTrackSlotHeightValue(entry.slot)"
                                                             @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
@@ -1116,7 +1116,6 @@
                                                             title="Height"
                                                         >
                                                         <input v-model.trim="entry.slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)" title="Spacing">
-                                                        <input type="number" step="1" v-model.number="entry.slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z" title="Draw order">
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                         <select
@@ -1309,12 +1308,11 @@
                                                             <div class="truncate text-[9px] text-slate-500">{{ circularTrackSlotDisplayMeta(entry.slot) }}</div>
                                                         </div>
                                                     </div>
-                                                    <div class="grid grid-cols-5 gap-1">
+                                                    <div class="grid grid-cols-4 gap-1">
                                                         <input v-model.trim="entry.slot.width" class="form-input px-1 py-0.5 text-[10px]" placeholder="w (auto)">
                                                         <input v-model.trim="entry.slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r (auto)">
                                                         <input v-model.trim="entry.slot.inner_gap_px" class="form-input px-1 py-0.5 text-[10px]" placeholder="inner gap px">
                                                         <input v-model.trim="entry.slot.outer_gap_px" class="form-input px-1 py-0.5 text-[10px]" placeholder="outer gap px">
-                                                        <input type="number" v-model.number="entry.slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                         <select

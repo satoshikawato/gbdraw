@@ -407,6 +407,9 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfs-button {
   height: 28px;
   min-width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #f8fafc;
@@ -414,6 +417,9 @@ const STANDALONE_INTERACTIVE_STYLE = `
   cursor: pointer;
   font: inherit;
   font-weight: 700;
+}
+.gfs-button--clear {
+  flex: 0 0 54px;
 }
 .gfs-button:hover {
   background: #eff6ff;
@@ -425,6 +431,21 @@ const STANDALONE_INTERACTIVE_STYLE = `
   color: #475569;
   font-weight: 700;
   white-space: nowrap;
+}
+.gfs-match-detail {
+  display: block;
+  min-width: 0;
+  margin-top: 6px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gfs-match-detail strong {
+  color: #334155;
+  font-weight: 700;
 }
 .gfs.is-invalid .gfs-query {
   border-color: #ef4444;
@@ -465,6 +486,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     qualifierKey: '',
     useRegex: false,
     matches: [],
+    matchDetails: {},
     activeIndex: -1,
     error: ''
   };
@@ -477,6 +499,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   var features = Array.isArray(payload.features) ? payload.features : [];
+  var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
   var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';
   var richSearchFields = {
     'qualifier-key': true,
@@ -501,6 +524,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var svgId = String(feature && feature.svg_id || '').trim();
     if (svgId && !featuresById.has(svgId)) {
       featuresById.set(svgId, feature);
+    }
+  });
+  var orthogroupsById = new Map();
+  orthogroups.forEach(function (group) {
+    var id = String(group && group.id || '').trim();
+    if (id && !orthogroupsById.has(id)) {
+      orthogroupsById.set(id, group);
     }
   });
 
@@ -568,6 +598,20 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (text) values.push(text);
   }
 
+  function appendSearchItems(items, label, value) {
+    if (Array.isArray(value)) {
+      value.forEach(function (entry) {
+        appendSearchItems(items, label, entry);
+      });
+      return;
+    }
+    if (value === null || value === undefined) return;
+    var text = String(value).trim();
+    if (text) {
+      items.push({ label: label, value: text });
+    }
+  }
+
   function getFeatureQualifiers(feature) {
     return feature && feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
       ? feature.qualifiers
@@ -585,6 +629,17 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return values;
   }
 
+  function getQualifierSearchItems(feature, qualifierKey) {
+    var target = normalizeSearchText(qualifierKey).trim();
+    var qualifiers = getFeatureQualifiers(feature);
+    var items = [];
+    Object.keys(qualifiers).sort().forEach(function (key) {
+      if (target && normalizeSearchText(key) !== target) return;
+      appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
+    });
+    return items;
+  }
+
   function getLabelSearchValues(feature) {
     var values = [];
     appendSearchValues(values, feature && feature.display_label);
@@ -594,61 +649,124 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return values;
   }
 
-  function featureSearchValues(feature, field, qualifierKey) {
-    var values = [];
+  function getLabelSearchItems(feature) {
+    var items = [];
+    appendSearchItems(items, 'Label', feature && feature.display_label);
+    appendSearchItems(items, 'Label', feature && feature.label);
+    appendSearchItems(items, 'Label', feature && feature.search_labels);
+    appendSearchItems(items, 'SVG ID', feature && feature.svg_id);
+    return items;
+  }
+
+  function getOrthogroupById(orthogroupId) {
+    var id = String(orthogroupId || '').trim();
+    if (!id) return null;
+    return orthogroupsById.get(id) || null;
+  }
+
+  function getFeatureOrthogroup(feature) {
+    return getOrthogroupById(feature && feature.orthogroup_id);
+  }
+
+  function getFeatureOrthogroupMember(feature, group) {
+    if (feature && feature.orthogroup_member && typeof feature.orthogroup_member === 'object') {
+      return feature.orthogroup_member;
+    }
+    var members = group && Array.isArray(group.members) ? group.members : [];
+    var svgId = String(feature && feature.svg_id || '').trim();
+    var recordIndex = Number(feature && feature.record_idx);
+    for (var i = 0; i < members.length; i += 1) {
+      var member = members[i] || {};
+      if (String(member.featureSvgId || '').trim() !== svgId) continue;
+      if (!Number.isInteger(recordIndex) || Number(member.recordIndex) === recordIndex) {
+        return member;
+      }
+    }
+    return null;
+  }
+
+  function getOrthogroupSearchItems(feature) {
+    var group = getFeatureOrthogroup(feature);
+    var member = getFeatureOrthogroupMember(feature, group);
+    var items = [];
+    appendSearchItems(items, 'Orthogroup ID', feature && feature.orthogroup_id);
+    appendSearchItems(items, 'Orthogroup name', group && (group.display_name || group.name));
+    appendSearchItems(items, 'Orthogroup description', group && group.description);
+    appendSearchItems(items, 'Protein ID', feature && feature.protein_id);
+    appendSearchItems(items, 'Source protein ID', feature && feature.source_protein_id);
+    appendSearchItems(items, 'Orthogroup member', member && member.label);
+    appendSearchItems(items, 'Orthogroup member gene', member && member.gene);
+    appendSearchItems(items, 'Orthogroup member product', member && member.product);
+    appendSearchItems(items, 'Orthogroup member note', member && member.note);
+    appendSearchItems(items, 'Orthogroup member protein ID', member && (member.proteinId || member.sourceProteinId));
+    return items;
+  }
+
+  function featureSearchItems(feature, field, qualifierKey) {
+    var items = [];
     var selectedField = normalizeSearchField(field);
     var qualifiers = getFeatureQualifiers(feature);
     if (selectedField === 'label') {
-      return getLabelSearchValues(feature);
+      return getLabelSearchItems(feature);
     }
     if (selectedField === 'type') {
-      appendSearchValues(values, feature && feature.type);
-      return values;
+      appendSearchItems(items, 'Feature type', feature && feature.type);
+      return items;
     }
     if (selectedField === 'record-id') {
-      appendSearchValues(values, feature && feature.record_id);
-      return values;
+      appendSearchItems(items, 'Record ID', feature && feature.record_id);
+      return items;
     }
     if (selectedField === 'location') {
-      appendSearchValues(values, feature && feature.location);
-      appendSearchValues(values, feature && feature.start);
-      appendSearchValues(values, feature && feature.end);
-      appendSearchValues(values, (feature && Array.isArray(feature.location_parts) ? feature.location_parts : []).map(function (part) {
+      appendSearchItems(items, 'Location', feature && feature.location);
+      appendSearchItems(items, 'Start', feature && feature.start);
+      appendSearchItems(items, 'End', feature && feature.end);
+      appendSearchItems(items, 'Location part', (feature && Array.isArray(feature.location_parts) ? feature.location_parts : []).map(function (part) {
         return part && part.display;
       }));
-      return values;
+      return items;
     }
     if (selectedField === 'strand') {
-      appendSearchValues(values, feature && feature.strand);
-      return values;
+      appendSearchItems(items, 'Strand', feature && feature.strand);
+      return items;
+    }
+    if (selectedField === 'orthogroup') {
+      return getOrthogroupSearchItems(feature);
     }
     if (selectedField === 'qualifier-key') {
-      appendSearchValues(values, Object.keys(qualifiers));
-      return values;
+      appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
+      return items;
     }
     if (selectedField === 'qualifier-value') {
-      return getQualifierValuesByKey(feature, qualifierKey);
+      return getQualifierSearchItems(feature, qualifierKey);
     }
     if (selectedField === 'sequence') {
-      appendSearchValues(values, feature && feature.nucleotide_sequence);
-      appendSearchValues(values, feature && feature.amino_acid_sequence);
-      return values;
+      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence);
+      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence);
+      return items;
     }
 
-    appendSearchValues(values, getLabelSearchValues(feature));
-    appendSearchValues(values, feature && feature.record_id);
-    appendSearchValues(values, feature && feature.type);
-    appendSearchValues(values, feature && feature.location);
-    appendSearchValues(values, feature && feature.strand);
+    Array.prototype.push.apply(items, getLabelSearchItems(feature));
+    appendSearchItems(items, 'Record ID', feature && feature.record_id);
+    appendSearchItems(items, 'Feature type', feature && feature.type);
+    appendSearchItems(items, 'Location', feature && feature.location);
+    appendSearchItems(items, 'Strand', feature && feature.strand);
+    Array.prototype.push.apply(items, getOrthogroupSearchItems(feature));
     if (popupMode !== 'simple') {
-      appendSearchValues(values, Object.keys(qualifiers));
-      Object.keys(qualifiers).forEach(function (key) {
-        appendSearchValues(values, qualifiers[key]);
+      appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
+      Object.keys(qualifiers).sort().forEach(function (key) {
+        appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
       });
-      appendSearchValues(values, feature && feature.nucleotide_sequence);
-      appendSearchValues(values, feature && feature.amino_acid_sequence);
+      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence);
+      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence);
     }
-    return values;
+    return items;
+  }
+
+  function featureSearchValues(feature, field, qualifierKey) {
+    return featureSearchItems(feature, field, qualifierKey).map(function (item) {
+      return item.value;
+    });
   }
 
   function compileSearchMatcher(query, useRegex) {
@@ -662,6 +780,11 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         return {
           active: true,
           error: '',
+          match: function (value) {
+            regex.lastIndex = 0;
+            var match = String(value == null ? '' : value).match(regex);
+            return match ? String(match[0] || '') : '';
+          },
           test: function (values) {
             return values.some(function (value) {
               regex.lastIndex = 0;
@@ -677,6 +800,11 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return {
       active: true,
       error: '',
+      match: function (value) {
+        var text = String(value == null ? '' : value);
+        var index = normalizeSearchText(text).indexOf(needle);
+        return index === -1 ? '' : text.slice(index, index + trimmedQuery.length);
+      },
       test: function (values) {
         return values.some(function (value) {
           return normalizeSearchText(value).indexOf(needle) !== -1;
@@ -687,7 +815,46 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function featureMatchesSearch(feature, matcher, field, qualifierKey) {
     if (!matcher || !matcher.active || matcher.error) return false;
-    return matcher.test(featureSearchValues(feature, field, qualifierKey));
+    return featureSearchMatches(feature, matcher, field, qualifierKey).length > 0;
+  }
+
+  function featureSearchMatches(feature, matcher, field, qualifierKey) {
+    if (!matcher || !matcher.active || matcher.error) return [];
+    return featureSearchItems(feature, field, qualifierKey).map(function (item) {
+      var matchedText = matcher.match ? matcher.match(item.value) : '';
+      if (!matchedText) return null;
+      return {
+        label: item.label,
+        value: String(item.value),
+        match: matchedText
+      };
+    }).filter(Boolean);
+  }
+
+  function collapseWhitespace(value) {
+    return String(value == null ? '' : value).replace(/\\s+/g, ' ').trim();
+  }
+
+  function searchMatchSnippet(value, matchText) {
+    var text = collapseWhitespace(value);
+    var match = collapseWhitespace(matchText);
+    if (!text) return '';
+    if (!match) return text.length > 80 ? text.slice(0, 77) + '...' : text;
+    var lowerText = text.toLowerCase();
+    var index = lowerText.indexOf(match.toLowerCase());
+    if (index === -1) return text.length > 80 ? text.slice(0, 77) + '...' : text;
+    var start = Math.max(0, index - 24);
+    var end = Math.min(text.length, index + match.length + 24);
+    return (start > 0 ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
+  }
+
+  function formatSearchMatchDetail(detail) {
+    if (!detail) return '';
+    var label = collapseWhitespace(detail.label);
+    var snippet = searchMatchSnippet(detail.value, detail.match);
+    if (!label && !snippet) return '';
+    if (!snippet) return label;
+    return label ? label + ': ' + snippet : snippet;
   }
 
   function syncSearchControls() {
@@ -698,6 +865,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var qualifierInput = searchControls.querySelector('[data-search-qualifier]');
     var regexInput = searchControls.querySelector('[data-search-regex]');
     var countText = searchControls.querySelector('[data-search-count]');
+    var matchDetailText = searchControls.querySelector('[data-search-match-detail]');
     searchState.field = normalizeSearchField(searchState.field);
     if (queryInput && queryInput.value !== searchState.query) queryInput.value = searchState.query;
     if (fieldSelect && fieldSelect.value !== searchState.field) fieldSelect.value = searchState.field;
@@ -717,6 +885,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         var current = searchState.activeIndex >= 0 ? searchState.activeIndex + 1 : 0;
         countText.textContent = String(current) + ' / ' + String(searchState.matches.length) + ' features';
       }
+    }
+    if (matchDetailText) {
+      var activeId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
+      var details = activeId ? searchState.matchDetails[activeId] || [] : [];
+      var detailText = details.length ? formatSearchMatchDetail(details[0]) : '';
+      matchDetailText.textContent = detailText ? 'Matched ' + detailText : '';
+      matchDetailText.setAttribute('title', detailText ? 'Matched ' + detailText : '');
     }
   }
 
@@ -750,17 +925,24 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     searchState.error = matcher.error;
     if (!matcher.active || matcher.error) {
       searchState.matches = [];
+      searchState.matchDetails = {};
       searchState.activeIndex = -1;
       applySearchResults();
       return;
     }
 
+    var nextMatchDetails = {};
     searchState.matches = features.filter(function (feature) {
       var svgId = String(feature && feature.svg_id || '').trim();
-      return svgId && featureElementsById.has(svgId) && featureMatchesSearch(feature, matcher, searchState.field, searchState.qualifierKey);
+      if (!svgId || !featureElementsById.has(svgId)) return false;
+      var details = featureSearchMatches(feature, matcher, searchState.field, searchState.qualifierKey);
+      if (!details.length) return false;
+      nextMatchDetails[svgId] = details;
+      return true;
     }).map(function (feature) {
       return String(feature.svg_id);
     });
+    searchState.matchDetails = nextMatchDetails;
 
     if (!searchState.matches.length) {
       searchState.activeIndex = -1;
@@ -778,6 +960,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     searchState.qualifierKey = '';
     searchState.useRegex = false;
     searchState.matches = [];
+    searchState.matchDetails = {};
     searchState.activeIndex = -1;
     searchState.error = '';
     applySearchResults();
@@ -911,8 +1094,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     searchControls.setAttribute('id', SEARCH_CONTROLS_ID);
     searchControls.setAttribute('class', 'gbdraw-feature-search-controls');
     searchControls.setAttribute('data-popup-mode', popupMode);
-    searchControls.setAttribute('width', '392');
-    searchControls.setAttribute('height', '78');
+    searchControls.setAttribute('width', '440');
+    searchControls.setAttribute('height', '96');
 
     var root = createXhtmlNode('div', {
       xmlns: XHTML_NS,
@@ -939,6 +1122,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       ['record-id', 'Record ID'],
       ['location', 'Location'],
       ['strand', 'Strand'],
+      ['orthogroup', 'Orthogroup'],
       ['qualifier-key', 'Qualifier key'],
       ['qualifier-value', 'Qualifier value'],
       ['sequence', 'Sequence']
@@ -984,7 +1168,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     var clearButton = createXhtmlNode('button', {
       type: 'button',
-      className: 'gfs-button',
+      className: 'gfs-button gfs-button--clear',
       title: 'Clear search',
       'aria-label': 'Clear search',
       'data-search-clear': 'true',
@@ -994,6 +1178,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       className: 'gfs-count',
       'data-search-count': 'true',
       text: '0 / ' + String(featuresById.size) + ' features'
+    });
+    var matchDetailText = createXhtmlNode('div', {
+      className: 'gfs-match-detail',
+      'data-search-match-detail': 'true'
     });
 
     firstRow.appendChild(queryInput);
@@ -1008,6 +1196,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     secondRow.appendChild(countText);
     root.appendChild(firstRow);
     root.appendChild(secondRow);
+    root.appendChild(matchDetailText);
     searchControls.appendChild(root);
 
     ['mousedown', 'mouseup', 'click', 'dblclick', 'keydown', 'keyup', 'keypress', 'wheel', 'touchstart', 'touchmove'].forEach(function (eventName) {
@@ -1455,13 +1644,52 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return text;
   }
 
+  function memberLocationText(member) {
+    if (!member || typeof member !== 'object') return '';
+    var start = Number(member.start);
+    var end = Number(member.end);
+    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
+    if (member.strand) text += ' (' + member.strand + ')';
+    return text === '..' ? '' : text;
+  }
+
+  function getFeatureSearchDetail(feature) {
+    var svgId = String(feature && feature.svg_id || '').trim();
+    if (!svgId || !searchState.query) return '';
+    var details = searchState.matchDetails[svgId] || [];
+    return details.length ? formatSearchMatchDetail(details[0]) : '';
+  }
+
+  function orthogroupRows(feature) {
+    var group = getFeatureOrthogroup(feature);
+    var member = getFeatureOrthogroupMember(feature, group);
+    var memberCount = Number(feature && feature.orthogroup_member_count);
+    var recordCoverage = Number(feature && feature.orthogroup_record_coverage);
+    var rows = [
+      ['Orthogroup ID', feature && feature.orthogroup_id || ''],
+      ['Orthogroup name', group && (group.display_name || group.name) || ''],
+      ['Members', Number.isFinite(memberCount) && memberCount > 0 ? String(memberCount) : (group && group.member_count ? String(group.member_count) : '')],
+      ['Record coverage', Number.isFinite(recordCoverage) && recordCoverage > 0 ? String(recordCoverage) : (group && group.record_coverage_count ? String(group.record_coverage_count) : '')],
+      ['Protein ID', feature && feature.protein_id || member && member.proteinId || ''],
+      ['Source protein ID', feature && feature.source_protein_id || member && member.sourceProteinId || ''],
+      ['Representative', feature && feature.orthogroup_representative ? 'yes' : '']
+    ];
+    return rows.filter(function (row) {
+      return String(row[1] == null ? '' : row[1]) !== '';
+    });
+  }
+
   function detailRows(feature) {
-    return [
+    var searchDetail = getFeatureSearchDetail(feature);
+    var rows = [
+      ['Search match', searchDetail],
       ['Label', feature.display_label || feature.label || ''],
       ['Record ID', feature.record_id || ''],
       ['Type', feature.type || ''],
       ['Location', locationText(feature)]
-    ].filter(function (row) {
+    ];
+    Array.prototype.push.apply(rows, orthogroupRows(feature));
+    return rows.filter(function (row) {
       return String(row[1] == null ? '' : row[1]) !== '';
     });
   }
@@ -1514,6 +1742,26 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     if (!rows.length) return '';
     return '<div class="gfi-block"><div class="gfi-block-title">Location parts</div>' + renderRows(rows) + '</div>';
+  }
+
+  function renderOrthogroupMembers(feature) {
+    var group = getFeatureOrthogroup(feature);
+    if (!group) return '';
+    var members = Array.isArray(group.members) ? group.members : [];
+    if (!members.length) return '';
+    var lines = members.map(function (member) {
+      var label = String(member.product || member.gene || member.label || member.proteinId || member.featureSvgId || '').trim();
+      var record = String(member.recordId || '').trim();
+      var location = memberLocationText(member);
+      var flags = member.representative ? ' representative' : '';
+      return [record, label, location + flags].filter(Boolean).join(' | ');
+    }).filter(Boolean);
+    if (!lines.length) return '';
+    var text = lines.join('\\n');
+    return '<div class="gfi-block">' +
+      '<div class="gfi-block-title"><span>Orthogroup members</span><span>' + members.length + '</span>' + copyButton(text) + '</div>' +
+      '<pre class="gfi-pre">' + escapeHtml(text) + '</pre>' +
+      '</div>';
   }
 
   function renderQualifiers(feature) {
@@ -1573,7 +1821,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     } else if (tab === 'sequence') {
       panel = renderSequences(feature);
     } else {
-      panel = renderRows(detailRows(feature)) + renderLocationParts(feature);
+      panel = renderRows(detailRows(feature)) + renderLocationParts(feature) + renderOrthogroupMembers(feature);
     }
     function tabButton(id, label) {
       return '<button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '">' + label + '</button>';
@@ -2263,6 +2511,130 @@ const getStandaloneSearchLabels = (feature, fallbackLabel, displayLabel) => {
     });
 };
 
+const buildStandaloneOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
+
+const getStandaloneFeatureOrthogroupEntry = (feature) => {
+  const directOrthogroupId = String(feature?.orthogroupId || feature?.orthogroup_id || '').trim();
+  if (directOrthogroupId) {
+    return {
+      orthogroupId: directOrthogroupId,
+      orthogroupMemberCount: Number(feature?.orthogroupMemberCount || feature?.orthogroup_member_count || 0),
+      orthogroupRecordCoverage: Number(feature?.orthogroupRecordCoverage || feature?.orthogroup_record_coverage || 0),
+      proteinId: String(feature?.proteinId || feature?.protein_id || '').trim(),
+      sourceProteinId: String(feature?.sourceProteinId || feature?.source_protein_id || '').trim(),
+      orthogroupRepresentative: Boolean(feature?.orthogroupRepresentative || feature?.orthogroup_representative),
+      orthogroupMember: feature?.orthogroupMember || feature?.orthogroup_member || null
+    };
+  }
+
+  const index = state.featureOrthogroupIndex?.value instanceof Map ? state.featureOrthogroupIndex.value : new Map();
+  const svgId = String(feature?.svg_id || '').trim();
+  if (!svgId || index.size === 0) return null;
+
+  const candidateRecordIndexes = [
+    feature?.fileIdx,
+    feature?.file_idx,
+    feature?.record_idx,
+    feature?.recordIndex,
+    feature?.record_index
+  ];
+  for (const recordIndexRaw of candidateRecordIndexes) {
+    const recordIndex = Number(recordIndexRaw);
+    if (!Number.isInteger(recordIndex)) continue;
+    const entry = index.get(buildStandaloneOrthogroupIndexKey(recordIndex, svgId));
+    if (entry) return entry;
+  }
+  return index.get(svgId) || null;
+};
+
+const normalizeStandaloneOrthogroupMember = (member) => {
+  if (!member || typeof member !== 'object' || Array.isArray(member)) return null;
+  const start = Number(member.start);
+  const end = Number(member.end);
+  const recordIndex = Number(member.recordIndex ?? member.record_index);
+  return {
+    orthogroupId: String(member.orthogroupId || member.orthogroup_id || ''),
+    proteinId: String(member.proteinId || member.protein_id || ''),
+    sourceProteinId: String(member.sourceProteinId || member.source_protein_id || ''),
+    recordIndex: Number.isInteger(recordIndex) ? recordIndex : null,
+    recordId: String(member.recordId || member.record_id || ''),
+    featureIndex: Number.isFinite(Number(member.featureIndex ?? member.feature_index))
+      ? Number(member.featureIndex ?? member.feature_index)
+      : null,
+    label: String(member.label || ''),
+    featureSvgId: String(member.featureSvgId || member.feature_svg_id || ''),
+    start: Number.isFinite(start) ? start : null,
+    end: Number.isFinite(end) ? end : null,
+    strand: String(member.strand || ''),
+    representative: Boolean(member.representative),
+    gene: String(member.gene || ''),
+    product: String(member.product || ''),
+    note: String(member.note || '')
+  };
+};
+
+const normalizeStandaloneOrthogroupCandidate = (candidate) => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  return {
+    text: String(candidate.text || ''),
+    source: String(candidate.source || ''),
+    memberCount: Number.isFinite(Number(candidate.memberCount)) ? Number(candidate.memberCount) : 0,
+    recordCoverageCount: Number.isFinite(Number(candidate.recordCoverageCount)) ? Number(candidate.recordCoverageCount) : 0,
+    representativeCount: Number.isFinite(Number(candidate.representativeCount)) ? Number(candidate.representativeCount) : 0,
+    score: Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : 0
+  };
+};
+
+const getStandaloneOrthogroupDisplayName = (group) => {
+  const id = String(group?.id || '').trim();
+  const override = id ? String(state.orthogroupNameOverrides?.[id] || '').trim() : '';
+  return override || String(group?.display_name || group?.displayName || group?.name || id).trim();
+};
+
+const getStandaloneOrthogroupDescription = (group) => {
+  const id = String(group?.id || '').trim();
+  const override = id ? String(state.orthogroupDescriptionOverrides?.[id] || '').trim() : '';
+  return override || String(group?.description || '').trim();
+};
+
+const buildStandaloneOrthogroupPayloads = (features) => {
+  const neededIds = new Set(
+    (Array.isArray(features) ? features : [])
+      .map((feature) => String(feature?.orthogroup_id || '').trim())
+      .filter(Boolean)
+  );
+  if (neededIds.size === 0) return [];
+
+  const groups = Array.isArray(state.orthogroups?.value) ? state.orthogroups.value : [];
+  return groups
+    .filter((group) => neededIds.has(String(group?.id || '').trim()))
+    .map((group) => {
+      const members = Array.isArray(group?.members)
+        ? group.members.map(normalizeStandaloneOrthogroupMember).filter(Boolean)
+        : [];
+      const memberCount = Number(group?.member_count || group?.memberCount || members.length || 0);
+      const recordCoverageFallback = new Set(
+        members
+          .map((member) => Number(member.recordIndex))
+          .filter((recordIndex) => Number.isInteger(recordIndex))
+      ).size;
+      const recordCoverageCount = Number(group?.record_coverage_count || group?.recordCoverageCount || recordCoverageFallback || 0);
+      return {
+        id: String(group?.id || ''),
+        name: String(group?.name || ''),
+        display_name: getStandaloneOrthogroupDisplayName(group),
+        description: getStandaloneOrthogroupDescription(group),
+        nameConfidence: String(group?.nameConfidence || ''),
+        nameCandidates: Array.isArray(group?.nameCandidates)
+          ? group.nameCandidates.map(normalizeStandaloneOrthogroupCandidate).filter(Boolean)
+          : [],
+        member_count: Number.isFinite(memberCount) ? memberCount : members.length,
+        record_coverage_count: Number.isFinite(recordCoverageCount) ? recordCoverageCount : 0,
+        members
+      };
+    });
+};
+
 const collectRenderedFeatureIds = (svg) => {
   const ids = new Set();
   if (!svg) return ids;
@@ -2291,6 +2663,8 @@ const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
     seenIds.add(svgId);
     const fallbackLabel = getStandaloneFeatureLabel(feature);
     const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel);
+    const orthogroupEntry = getStandaloneFeatureOrthogroupEntry(feature);
+    const orthogroupMember = normalizeStandaloneOrthogroupMember(orthogroupEntry?.orthogroupMember);
     const payload = {
       svg_id: svgId,
       label: fallbackLabel,
@@ -2302,7 +2676,17 @@ const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
       start: Number.isFinite(Number(feature?.start)) ? Number(feature.start) : null,
       end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
       strand: String(feature?.strand || ''),
-      location: buildStandaloneFeatureLocation(feature)
+      location: buildStandaloneFeatureLocation(feature),
+      orthogroup_id: String(orthogroupEntry?.orthogroupId || ''),
+      orthogroup_member_count: Number.isFinite(Number(orthogroupEntry?.orthogroupMemberCount))
+        ? Number(orthogroupEntry.orthogroupMemberCount)
+        : 0,
+      orthogroup_record_coverage: Number.isFinite(Number(orthogroupEntry?.orthogroupRecordCoverage))
+        ? Number(orthogroupEntry.orthogroupRecordCoverage)
+        : 0,
+      protein_id: String(orthogroupEntry?.proteinId || ''),
+      source_protein_id: String(orthogroupEntry?.sourceProteinId || ''),
+      orthogroup_representative: Boolean(orthogroupEntry?.orthogroupRepresentative)
     };
     if (normalizedPopupMode === 'rich') {
       Object.assign(payload, {
@@ -2310,7 +2694,8 @@ const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
         location_parts: normalizeLocationParts(feature?.location_parts),
         nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
         amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
-        sequence_warnings: normalizeStringArray(feature?.sequence_warnings)
+        sequence_warnings: normalizeStringArray(feature?.sequence_warnings),
+        orthogroup_member: orthogroupMember
       });
     }
     payloads.push(payload);
@@ -2465,6 +2850,7 @@ const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) 
   const normalizedPopupMode = normalizeStandalonePopupMode(popupMode);
   removeExistingStandaloneInteractivityAssets(svg);
   const features = buildStandaloneFeaturePayloads(svg, { popupMode: normalizedPopupMode });
+  const orthogroups = buildStandaloneOrthogroupPayloads(features);
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
@@ -2481,7 +2867,8 @@ const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) 
   metadata.textContent = JSON.stringify({
     schema: 'gbdraw-interactive-feature-popup-v1',
     popup_mode: normalizedPopupMode,
-    features
+    features,
+    orthogroups
   });
 
   const style = document.createElementNS(SVG_NS, 'style');

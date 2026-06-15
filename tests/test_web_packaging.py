@@ -157,15 +157,27 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "gbdraw-interactive-feature--dimmed" in export_source
     assert "function normalizeSearchText(value)" in export_source
     assert "function featureSearchValues(feature, field, qualifierKey)" in export_source
+    assert "function featureSearchMatches(feature, matcher, field, qualifierKey)" in export_source
     assert "function compileSearchMatcher(query, useRegex)" in export_source
     assert "function featureMatchesSearch(feature, matcher, field, qualifierKey)" in export_source
+    assert "matchDetails: {}" in export_source
+    assert "data-search-match-detail" in export_source
+    assert "gfs-button--clear" in export_source
+    assert "gfs-match-detail" in export_source
+    assert "['orthogroup', 'Orthogroup']" in export_source
     assert "function supportsStandaloneControls()" in export_source
     assert "function setSearchState(nextState)" in export_source
     assert "function applySearchResults()" in export_source
     assert "function setActiveMatch(index, options)" in export_source
     assert "function clearSearch()" in export_source
+    assert "Search match" in export_source
+    assert "Orthogroup members" in export_source
     assert "display_label" in export_source
     assert "search_labels" in export_source
+    assert "orthogroup_id" in export_source
+    assert "protein_id" in export_source
+    assert "const buildStandaloneOrthogroupPayloads = (features) => {" in export_source
+    assert "const orthogroups = buildStandaloneOrthogroupPayloads(features);" in export_source
     assert "data-gbdraw-interactive-feature" in export_source
     assert "data-gbdraw-original-viewbox" in export_source
     assert "data-gbdraw-original-width" in export_source
@@ -190,7 +202,9 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "function refitViewportToWindow()" in export_source
     assert "function scheduleViewportRefit()" in export_source
     assert "popup_mode: normalizedPopupMode" in export_source
+    assert "orthogroups" in export_source
     assert "var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';" in export_source
+    assert "var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];" in export_source
     assert "var richSearchFields = {" in export_source
     assert "if (popupMode === 'simple') {\n      searchFieldOptions = searchFieldOptions.filter" in export_source
     assert "function renderSimplePopup(feature)" in export_source
@@ -903,6 +917,20 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const resetTick = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
         if (resetTick?.side !== 'inside' || resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Enabling custom slots did not use the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+        defaultEditor.resetCircularTrackSlotsToPreset('middle');
+        const middleFeature = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'features');
+        const middleFeatureSpec = buildCircularTrackSlotSpec(
+          middleFeature,
+          defaultState.adv.nt,
+          defaultState.form.track_type,
+          {{ includeSide: false, forceSplitLane: true }}
+        );
+        if (defaultState.form.track_type !== 'middle' || middleFeature?.side !== 'overlay' || middleFeature?.params?.lane_direction !== 'split') {{
+          throw new Error(`Reset to Middle did not put Feature on the Axis: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+        if (middleFeatureSpec !== 'features:features@lane_direction=split') {{
+          throw new Error(`Middle feature CLI spec must keep lane_direction=split with circular axis index: ${{middleFeatureSpec}}`);
         }}
 
         const multiDepthState = {{

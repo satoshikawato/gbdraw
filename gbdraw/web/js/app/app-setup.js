@@ -206,7 +206,7 @@ export const createAppSetup = () => {
   });
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
-  const linearTrackNewRenderer = ref('spacer');
+  const linearTrackNewRenderer = ref('dinucleotide_skew');
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
