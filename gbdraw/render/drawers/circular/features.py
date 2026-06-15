@@ -87,10 +87,11 @@ class FeatureDrawer:
             stroke_linejoin="round",
             stroke_linecap="round",
             stroke_miterlimit=4,
+            debug=False,
         )
         if feature_data_id:
-            # Use feature's internal ID directly (e.g., "gene_000000001")
-            path.attribs['id'] = feature_data_id
+            path.attribs["data-gbdraw-feature-id"] = feature_data_id
+            path.attribs["id"] = feature_data_id
         group.add(path)
 
     def draw(

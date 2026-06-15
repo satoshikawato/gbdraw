@@ -5,8 +5,8 @@ import {
   parseLabelOverrideTsv,
   selectStableFeatureKey
 } from './label-override-table.js';
+import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 
-const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
 const EXCLUDED_GROUP_SELECTOR =
   '#legend, #feature_legend, #pairwise_legend, #horizontal_legend, #vertical_legend, #length_bar, g[id="tick"], g[id^="tick_"]';
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
@@ -192,7 +192,7 @@ const collectEditableLabelElements = (svg, mode) => {
 const collectFeatureGeometry = (svg) => {
   const grouped = new Map();
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((el) => {
-    const id = el.getAttribute('id');
+    const id = getFeatureIdentity(el);
     if (!id) return;
     const center = getElementCenter(svg, el);
     const groupId = el.closest('g[id]')?.id || '';
@@ -308,7 +308,7 @@ const buildContextKey = (svg, mode) => {
   const ids = Array.from(
     new Set(
       Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
-        .map((el) => el.getAttribute('id'))
+        .map((el) => getFeatureIdentity(el))
         .filter((value) => value && value.trim() !== '')
     )
   ).sort();

@@ -63,11 +63,26 @@ const getSvgDimensions = (svg) => {
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
+const FEATURE_SELECTOR = [
+  `path[${FEATURE_ID_ATTRIBUTE}]`,
+  `polygon[${FEATURE_ID_ATTRIBUTE}]`,
+  `rect[${FEATURE_ID_ATTRIBUTE}]`,
+  'path[id^="f"]',
+  'polygon[id^="f"]',
+  'rect[id^="f"]'
+].join(', ');
 const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
 const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
+
+const getElementFeatureId = (element) =>
+  String(
+    element?.getAttribute?.(FEATURE_ID_ATTRIBUTE) ||
+    element?.getAttribute?.('id') ||
+    ''
+  ).trim();
 
 const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
@@ -516,7 +531,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 (function () {
   'use strict';
 
-  var FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+  var FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
+  var FEATURE_SELECTOR =
+    'path[' + FEATURE_ID_ATTRIBUTE + '], polygon[' + FEATURE_ID_ATTRIBUTE + '], rect[' + FEATURE_ID_ATTRIBUTE + '], ' +
+    'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
   var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
@@ -550,6 +568,16 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     error: ''
   };
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
+
+  function getElementFeatureId(element) {
+    return String(
+      element && (
+        element.getAttribute(FEATURE_ID_ATTRIBUTE) ||
+        element.getAttribute('id') ||
+        element.id
+      ) || ''
+    ).trim();
+  }
 
   try {
     payload = JSON.parse(metadata ? metadata.textContent || '{}' : '{}');
@@ -596,7 +624,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   var featureElementsById = new Map();
   Array.prototype.slice.call(svg.querySelectorAll(FEATURE_SELECTOR)).forEach(function (element) {
-    var svgId = String(element && (element.id || element.getAttribute('id')) || '').trim();
+    var svgId = getElementFeatureId(element);
     if (!svgId || !featuresById.has(svgId)) return;
     if (!featureElementsById.has(svgId)) {
       featureElementsById.set(svgId, []);
@@ -2637,7 +2665,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
-    var svgId = featureElement ? String(featureElement.id || '') : '';
+    var svgId = getElementFeatureId(featureElement);
     if (!svgId || !featureElementsById.has(svgId)) return;
     var hoverKey = getFeatureHoverKey(svgId);
     if (activeHoverKey === hoverKey) return;
@@ -2651,10 +2679,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   svg.addEventListener('mouseout', function (event) {
     var featureElement = closestFeature(event.target);
-    var svgId = featureElement ? String(featureElement.id || '') : '';
+    var svgId = getElementFeatureId(featureElement);
     if (!svgId || activeHoverSvgId !== svgId) return;
     var relatedFeature = closestFeature(event.relatedTarget);
-    if (relatedFeature && getFeatureHoverKey(String(relatedFeature.id || '')) === activeHoverKey) return;
+    if (relatedFeature && getFeatureHoverKey(getElementFeatureId(relatedFeature)) === activeHoverKey) return;
     setHoverHighlight(svgId, false);
     activeHoverSvgId = null;
     activeHoverKey = '';
@@ -2673,9 +2701,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       closePopup();
       return;
     }
-    var feature = featuresById.get(String(featureElement.id || ''));
+    var svgId = getElementFeatureId(featureElement);
+    var feature = featuresById.get(svgId);
     if (!feature) return;
-    var matchIndex = searchState.matches.indexOf(String(featureElement.id || ''));
+    var matchIndex = searchState.matches.indexOf(svgId);
     if (matchIndex !== -1) {
       setActiveMatch(matchIndex, { center: false });
     }
@@ -2974,7 +3003,7 @@ const collectRenderedFeatureIds = (svg) => {
   const ids = new Set();
   if (!svg) return ids;
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
-    const id = String(element.getAttribute('id') || '').trim();
+    const id = getElementFeatureId(element);
     if (id) ids.add(id);
   });
   return ids;
@@ -3189,7 +3218,7 @@ const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) 
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
-    const id = String(element.getAttribute('id') || '').trim();
+    const id = getElementFeatureId(element);
     if (!featureIds.has(id)) return;
     element.setAttribute('data-gbdraw-interactive-feature', 'true');
     addClassToken(element, 'gbdraw-interactive-feature');

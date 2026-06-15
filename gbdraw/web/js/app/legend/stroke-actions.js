@@ -1,4 +1,5 @@
 import { getFeatureCaption, ruleMatchesFeature } from '../feature-utils.js';
+import { FEATURE_SELECTOR, getFeatureElements } from '../feature-editor/svg-actions.js';
 import { getAllFeatureLegendGroups } from './utils.js';
 
 export const createLegendStrokeActions = ({ state, debugLog }) => {
@@ -77,7 +78,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
 
     if (entry.featureIds && entry.featureIds.length > 0) {
       for (const svgId of entry.featureIds) {
-        const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+        const elements = getFeatureElements(svg, svgId);
         elements.forEach((el) => {
           if (originalColor === null) {
             el.removeAttribute('stroke');
@@ -96,7 +97,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       const legendFillColor = entry.color;
       if (legendFillColor) {
         const normalizedColor = legendFillColor.toLowerCase();
-        const featurePaths = svg.querySelectorAll('path[id^="f"]');
+        const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
         featurePaths.forEach((path) => {
           const fill = path.getAttribute('fill');
           if (fill && fill.toLowerCase() === normalizedColor) {
@@ -136,7 +137,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     const originalColor = originalSvgStroke.value.color;
     const originalWidth = originalSvgStroke.value.width;
 
-    const featurePaths = svg.querySelectorAll('path[id^="f"]');
+    const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
     let updatedCount = 0;
     featurePaths.forEach((path) => {
       if (originalColor === null) {
@@ -204,7 +205,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     }
 
     for (const feat of matchingFeatures) {
-      const el = svg.querySelector(`#${CSS.escape(feat.svg_id)}`);
+      const el = getFeatureElements(svg, feat.svg_id)[0] || null;
       if (el) {
         return {
           strokeColor: el.getAttribute('stroke') || '#000000',
@@ -215,7 +216,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
 
     if (legendFillColor) {
       const normalizedLegendColor = legendFillColor.toLowerCase();
-      const featurePaths = svg.querySelectorAll('path[id^="f"]');
+      const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
       for (const path of featurePaths) {
         const fill = path.getAttribute('fill');
         if (fill && fill.toLowerCase() === normalizedLegendColor) {
@@ -244,7 +245,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       for (const svgId of legendEntry.featureIds) {
         if (processedIds.has(svgId)) continue;
         processedIds.add(svgId);
-        const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+        const elements = getFeatureElements(svg, svgId);
         elements.forEach((el) => {
           if (strokeColor !== null) {
             el.setAttribute('stroke', strokeColor);
@@ -260,7 +261,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       const legendFillColor = legendEntry?.color;
       if (legendFillColor) {
         const normalizedLegendColor = legendFillColor.toLowerCase();
-        const featurePaths = svg.querySelectorAll('path[id^="f"]');
+        const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
         featurePaths.forEach((path) => {
           const fill = path.getAttribute('fill');
           if (fill && fill.toLowerCase() === normalizedLegendColor) {
@@ -334,7 +335,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       const matchingFeatures = extractedFeatures.value.filter((f) => getFeatureCaption(f) === caption);
 
       for (const feat of matchingFeatures) {
-        const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
+        const elements = getFeatureElements(svg, feat.svg_id);
         elements.forEach((el) => {
           if (strokeColor) {
             el.setAttribute('stroke', strokeColor);

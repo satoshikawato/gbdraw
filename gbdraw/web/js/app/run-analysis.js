@@ -1607,8 +1607,10 @@ json.dumps({
       };
 
       if (form.prefix && form.prefix.trim() !== '') args.push('-o', form.prefix.trim());
-      if (form.species) args.push('--species', form.species);
-      if (form.strain) args.push('--strain', form.strain);
+      if (mode.value === 'circular') {
+        if (form.species) args.push('--species', form.species);
+        if (form.strain) args.push('--strain', form.strain);
+      }
       if (form.separate_strands) args.push('--separate_strands');
 
       if (adv.features.length) args.push('-k', adv.features.join(','));

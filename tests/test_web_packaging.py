@@ -367,6 +367,43 @@ def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
     assert "if (form.scale_style === 'ruler')" in source
 
 
+def test_web_linear_run_ignores_hidden_circular_species_strain_args() -> None:
+    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    assert (
+        "if (mode.value === 'circular') {\n"
+        "        if (form.species) args.push('--species', form.species);\n"
+        "        if (form.strain) args.push('--strain', form.strain);\n"
+        "      }"
+    ) in source
+    assert "if (form.species) args.push('--species', form.species);\n      if (form.strain)" not in source
+
+
+def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() -> None:
+    svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
+    label_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "label-actions.js").read_text(encoding="utf-8")
+    color_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "color-actions.js").read_text(encoding="utf-8")
+    stroke_actions_source = (WEB_ROOT / "js" / "app" / "legend" / "stroke-actions.js").read_text(encoding="utf-8")
+    svg_styles_source = (WEB_ROOT / "js" / "app" / "svg-styles.js").read_text(encoding="utf-8")
+    orthogroups_source = (WEB_ROOT / "js" / "app" / "orthogroups.js").read_text(encoding="utf-8")
+    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+
+    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source
+    assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in svg_actions_source
+    assert "svg.querySelectorAll(`[${FEATURE_ID_ATTRIBUTE}]`)" in svg_actions_source
+    assert "getFeatureIdentity(path)" in svg_actions_source
+    assert "getFeatureHoverKey(getFeatureIdentity(relatedFeature))" in svg_actions_source
+    assert "getFeatureIdentity(el)" in label_actions_source
+    assert "getFeatureElements(svg, feat.svg_id)" in color_actions_source
+    assert "getFeatureElements(svg, svgId)" in color_actions_source
+    assert "getFeatureElements(svg, svgId)" in stroke_actions_source
+    assert "getFeatureIdentity(path)" in svg_styles_source
+    assert "getFeatureElements(svg, featureId)" in orthogroups_source
+    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in export_source
+    assert "function getElementFeatureId(element)" in export_source
+    assert "var svgId = getElementFeatureId(featureElement);" in export_source
+    assert "const id = getElementFeatureId(element);" in export_source
+
+
 def test_web_linear_custom_track_slots_are_wired() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")

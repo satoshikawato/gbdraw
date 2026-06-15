@@ -6,13 +6,13 @@ from typing import Any
 
 import pytest
 from Bio.Seq import Seq
-from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
-from gbdraw.api.diagram import assemble_circular_diagram_from_record
+from gbdraw.api.diagram import assemble_circular_diagram_from_record, assemble_linear_diagram_from_records
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
@@ -190,6 +190,42 @@ def test_hmmtdna_origin_spanning_d_loop_arrow_renders_as_single_block() -> None:
     ]
 
     assert len(d_loop_paths) == 1
+    assert d_loop_paths[0].attrib.get("data-gbdraw-feature-id") == d_loop_id
+
+
+def test_linear_multipart_feature_paths_have_unique_dom_ids_and_shared_feature_id() -> None:
+    split_cds = SeqFeature(
+        CompoundLocation(
+            [
+                FeatureLocation(10, 60, strand=1),
+                FeatureLocation(120, 180, strand=1),
+            ]
+        ),
+        type="CDS",
+        qualifiers={"product": ["split cds"]},
+    )
+    record = SeqRecord(Seq("A" * 300), id="rec1")
+    record.features = [split_cds]
+    feature_id = compute_feature_hash(split_cds, record_id=record.id)
+
+    canvas = assemble_linear_diagram_from_records(
+        [record],
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+
+    root = ET.fromstring(canvas.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    feature_paths = [
+        path
+        for path in root.findall(".//svg:path", ns)
+        if path.attrib.get("data-gbdraw-feature-id") == feature_id
+    ]
+    path_ids = [path.attrib.get("id") for path in feature_paths]
+
+    assert len(feature_paths) == 2
+    assert path_ids == [f"{feature_id}__part1", f"{feature_id}__part2"]
+    assert len(path_ids) == len(set(path_ids))
 
 
 def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

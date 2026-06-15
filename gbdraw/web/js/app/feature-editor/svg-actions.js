@@ -1,6 +1,36 @@
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption } from '../feature-utils.js';
 
+export const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
+export const FEATURE_SELECTOR = [
+  `path[${FEATURE_ID_ATTRIBUTE}]`,
+  `polygon[${FEATURE_ID_ATTRIBUTE}]`,
+  `rect[${FEATURE_ID_ATTRIBUTE}]`,
+  'path[id^="f"]',
+  'polygon[id^="f"]',
+  'rect[id^="f"]'
+].join(', ');
+
+export const getFeatureIdentity = (element) =>
+  String(
+    element?.getAttribute?.(FEATURE_ID_ATTRIBUTE) ||
+    element?.getAttribute?.('id') ||
+    element?.id ||
+    ''
+  ).trim();
+
+export const getFeatureElements = (svg, featureId) => {
+  const normalizedId = String(featureId || '').trim();
+  if (!svg || !normalizedId) return [];
+
+  const byData = Array.from(svg.querySelectorAll(`[${FEATURE_ID_ATTRIBUTE}]`)).filter(
+    (element) => String(element.getAttribute(FEATURE_ID_ATTRIBUTE) || '').trim() === normalizedId
+  );
+  if (byData.length > 0) return byData;
+
+  return Array.from(svg.querySelectorAll(`#${CSS.escape(normalizedId)}`));
+};
+
 export const createFeatureSvgActions = ({
   state,
   getFeatureColor,
@@ -21,7 +51,6 @@ export const createFeatureSvgActions = ({
     skipCaptureBaseConfig,
     adv
   } = state;
-  const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
   const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
   const formatDuration = (ms) => `${ms.toFixed(1)}ms`;
   let delegatedFeatureHandlers = null;
@@ -108,11 +137,6 @@ export const createFeatureSvgActions = ({
     return rows
       .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
       .filter((row) => row.value !== '');
-  };
-
-  const getFeatureElements = (svg, svgId) => {
-    if (!svg || !svgId) return [];
-    return Array.from(svg.querySelectorAll(`#${CSS.escape(svgId)}`));
   };
 
   const buildFeatureLookup = () => {
@@ -238,7 +262,7 @@ export const createFeatureSvgActions = ({
     if (!svg) return;
 
     try {
-      const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+      const elements = getFeatureElements(svg, svgId);
       let updated = elements.length > 0;
 
       if (updated) {
@@ -269,7 +293,7 @@ export const createFeatureSvgActions = ({
     if (!svg) return false;
 
     try {
-      const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+      const elements = getFeatureElements(svg, svgId);
       if (!elements || elements.length === 0) {
         console.log(`Instant preview: element ${svgId} not found for visibility update`);
         return false;
@@ -312,7 +336,7 @@ export const createFeatureSvgActions = ({
     const indexStartedAt = getNow();
     const pathsByIdMap = new Map();
     featurePaths.forEach((path) => {
-      const id = path.getAttribute('id');
+      const id = getFeatureIdentity(path);
       if (!id) return;
       if (!pathsByIdMap.has(id)) pathsByIdMap.set(id, []);
       pathsByIdMap.get(id).push(path);
@@ -406,7 +430,7 @@ export const createFeatureSvgActions = ({
 
       const handleMouseOver = (e) => {
         const featureEl = getFeatureTarget(e.target, svg);
-        const svgId = featureEl?.getAttribute('id');
+        const svgId = getFeatureIdentity(featureEl);
         if (!svgId) return;
         const hoverKey = getFeatureHoverKey(svgId);
         if (handlerState.activeHoverKey === hoverKey) return;
@@ -420,10 +444,10 @@ export const createFeatureSvgActions = ({
 
       const handleMouseOut = (e) => {
         const featureEl = getFeatureTarget(e.target, svg);
-        const svgId = featureEl?.getAttribute('id');
+        const svgId = getFeatureIdentity(featureEl);
         if (!svgId || handlerState.activeHoverSvgId !== svgId) return;
         const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
-        if (relatedFeature && getFeatureHoverKey(relatedFeature.getAttribute('id')) === handlerState.activeHoverKey) return;
+        if (relatedFeature && getFeatureHoverKey(getFeatureIdentity(relatedFeature)) === handlerState.activeHoverKey) return;
         setHoverHighlight(svgId, false);
         handlerState.activeHoverSvgId = null;
         handlerState.activeHoverKey = '';
@@ -431,7 +455,7 @@ export const createFeatureSvgActions = ({
 
       const handleClick = (e) => {
         const featureEl = getFeatureTarget(e.target, svg);
-        const svgId = featureEl?.getAttribute('id');
+        const svgId = getFeatureIdentity(featureEl);
         if (!svgId) return;
         e.stopPropagation();
         const feat = handlerState.featureLookup.get(svgId);
@@ -471,6 +495,7 @@ export const createFeatureSvgActions = ({
     applyInstantPreview,
     applyVisibilityPreviewBySvgId,
     attachSvgFeatureHandlers,
+    getFeatureElements,
     openFeatureEditorForFeature
   };
 };

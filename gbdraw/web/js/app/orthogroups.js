@@ -1,3 +1,5 @@
+import { getFeatureElements } from './feature-editor/svg-actions.js';
+
 const { computed } = window.Vue;
 
 const normalizeText = (value) => String(value ?? '').trim();
@@ -239,7 +241,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
         .filter(Boolean)
     );
     featureIds.forEach((featureId) => {
-      svg.querySelectorAll(`#${CSS.escape(featureId)}`).forEach((el) => {
+      getFeatureElements(svg, featureId).forEach((el) => {
         setOriginalStroke(el);
         el.setAttribute('stroke', '#2563eb');
         el.setAttribute('stroke-width', '2.4');
