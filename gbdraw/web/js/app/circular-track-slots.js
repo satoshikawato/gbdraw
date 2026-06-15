@@ -118,6 +118,14 @@ const normalizeOptionalText = (value) => {
   return text.length > 0 ? text : null;
 };
 
+const normalizePxNumberText = (value) => {
+  const text = normalizeOptionalText(value);
+  if (text === null) return null;
+  const withoutUnit = text.endsWith('px') ? text.slice(0, -2) : text;
+  const numeric = Number(withoutUnit);
+  return Number.isFinite(numeric) && numeric >= 0 ? String(numeric) : null;
+};
+
 const normalizePlacement = (value, fallback = 'inside') => {
   const text = String(value || fallback).trim().toLowerCase();
   return ['inside', 'outside', 'overlay'].includes(text) ? text : fallback;
@@ -257,7 +265,9 @@ const getPresetRadiusRatio = (slot, renderer, preset, lengthParam, state) => {
 const slotHasManualGeometry = (slot) => (
   normalizeOptionalText(slot?.width) !== null ||
   normalizeOptionalText(slot?.radius) !== null ||
-  normalizeOptionalText(slot?.spacing) !== null
+  normalizeOptionalText(slot?.spacing) !== null ||
+  normalizeOptionalText(slot?.inner_gap_px) !== null ||
+  normalizeOptionalText(slot?.outer_gap_px) !== null
 );
 
 const cloneParams = (params = {}) => {
@@ -407,6 +417,8 @@ const makeSlot = ({
   width = null,
   radius = null,
   spacing = null,
+  inner_gap_px = null,
+  outer_gap_px = null,
   side = null,
   z = 0,
   params = {}
@@ -417,6 +429,8 @@ const makeSlot = ({
   width,
   radius,
   spacing,
+  inner_gap_px,
+  outer_gap_px,
   side: normalizeSlotSide(side),
   z,
   params: cloneParams(params)
@@ -437,7 +451,9 @@ const paramsMatchExactly = (params, expected = {}) => {
 const hasBlankSlotGeometry = (source) =>
   normalizeOptionalText(source.width) === null &&
   normalizeOptionalText(source.radius) === null &&
-  normalizeOptionalText(source.spacing) === null;
+  normalizeOptionalText(source.spacing) === null &&
+  normalizeOptionalText(source.inner_gap_px) === null &&
+  normalizeOptionalText(source.outer_gap_px) === null;
 
 const hasDefaultSlotFlags = (source) =>
   source.enabled !== false &&
@@ -607,14 +623,18 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     'radius',
     'w',
     'width',
-    'spacing'
+    'spacing',
+    'inner_gap_px',
+    'outer_gap_px'
   ].forEach((key) => {
     delete params[key];
   });
 
   let side = inheritsPresetDefaults ? null : normalizeSlotSide(source.side);
   const radius = source.radius ?? null;
-  const spacing = source.spacing ?? null;
+  const legacySpacingPx = normalizePxNumberText(source.spacing);
+  const innerGapPx = normalizePxNumberText(source.inner_gap_px ?? source.innerGapPx) ?? legacySpacingPx;
+  const outerGapPx = normalizePxNumberText(source.outer_gap_px ?? source.outerGapPx) ?? legacySpacingPx;
 
   if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
     const nt = normalizeOptionalText(params.nt ?? params.dinucleotide);
@@ -678,7 +698,9 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     enabled: source.enabled !== false,
     width: source.width ?? null,
     radius,
-    spacing,
+    spacing: null,
+    inner_gap_px: innerGapPx,
+    outer_gap_px: outerGapPx,
     side,
     z: Number.isFinite(Number(source.z)) ? Number(source.z) : 0,
     params
@@ -709,7 +731,8 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
   if (!normalized.enabled) options.push('enabled=false');
   appendOption(options, 'w', normalized.width);
   appendOption(options, 'r', normalized.radius);
-  appendOption(options, 'spacing', normalized.spacing);
+  appendOption(options, 'inner_gap_px', normalized.inner_gap_px);
+  appendOption(options, 'outer_gap_px', normalized.outer_gap_px);
   if (includeSide || normalizePlacement(normalized.side) === 'overlay') {
     appendOption(options, 'side', normalized.side);
   }
@@ -1141,7 +1164,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     duplicate.enabled = source.enabled;
     duplicate.width = source.width;
     duplicate.radius = source.radius;
-    duplicate.spacing = source.spacing;
+    duplicate.spacing = null;
+    duplicate.inner_gap_px = source.inner_gap_px;
+    duplicate.outer_gap_px = source.outer_gap_px;
     duplicate.side = source.side;
     duplicate.z = source.z;
     duplicate.params = cloneParams(source.params);

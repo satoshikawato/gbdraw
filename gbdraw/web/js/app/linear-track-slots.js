@@ -80,7 +80,7 @@ const normalizePxText = (value) => {
   if (text === null) return '';
   const withoutUnit = text.endsWith('px') ? text.slice(0, -2) : text;
   const numeric = Number(withoutUnit);
-  return Number.isFinite(numeric) && numeric >= 0 ? String(text) : '';
+  return Number.isFinite(numeric) && numeric >= 0 ? `${numeric}px` : '';
 };
 
 const defaultSlot = (renderer, overrides = {}) => {

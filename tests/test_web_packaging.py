@@ -822,6 +822,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         f"""
         import {{
           applyCircularTrackOrderPlacements,
+          buildCircularTrackSlotSpec,
           createDefaultCircularTrackSlots,
           createCircularTrackSlotEditor,
           estimateCircularConservationLayoutWarning
@@ -832,6 +833,37 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const defaultTick = defaultSlots.find((slot) => slot.id === 'ticks');
         if (defaultTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Default Tick layout should point labels inward when Tick is inside Feature: ${{JSON.stringify(defaultTick)}}`);
+        }}
+        const gapSpec = buildCircularTrackSlotSpec(
+          {{
+            id: 'gc_content',
+            renderer: 'dinucleotide_content',
+            side: 'inside',
+            inner_gap_px: '4',
+            outer_gap_px: '6',
+            params: {{ nt: 'GC' }}
+          }},
+          'GC',
+          'tuckin',
+          {{ includeSide: false }}
+        );
+        if (!gapSpec.includes('inner_gap_px=4') || !gapSpec.includes('outer_gap_px=6') || gapSpec.includes('spacing=')) {{
+          throw new Error(`Circular gap spec did not serialize physical px gaps: ${{gapSpec}}`);
+        }}
+        const legacySpacingSpec = buildCircularTrackSlotSpec(
+          {{
+            id: 'gc_skew',
+            renderer: 'dinucleotide_skew',
+            side: 'inside',
+            spacing: '5',
+            params: {{ nt: 'GC' }}
+          }},
+          'GC',
+          'tuckin',
+          {{ includeSide: false }}
+        );
+        if (!legacySpacingSpec.includes('inner_gap_px=5') || !legacySpacingSpec.includes('outer_gap_px=5') || legacySpacingSpec.includes('spacing=')) {{
+          throw new Error(`Legacy circular spacing was not converted to physical gaps: ${{legacySpacingSpec}}`);
         }}
 
         const state = {{
@@ -1304,9 +1336,9 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
 
-    assert "circular_track_slots_schema_version: 3" in state_source
-    assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
-    assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;" in config_source
+    assert "circular_track_slots_schema_version: 4" in state_source
+    assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;" in config_source
+    assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
     assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
     assert "validateImportedCircularTrackSlots(data);" in config_source
     assert "validateImportedCircularTrackSlots(data.config);" in config_source

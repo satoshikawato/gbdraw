@@ -292,10 +292,12 @@ options:
   --circular_track_slot CIRCULAR_TRACK_SLOT
                         Circular track slot spec:
                         <slot_id>:<renderer>@key=value,key=value. Can be
-                        repeated. Use r=<radius>, w=<width>, and
-                        spacing=<scalar>; spacing is the gap to the next
-                        same-side slot. ri/ro/gap are obsolete. side and z are
-                        slot fields. If r, w, spacing, side, or standard renderer params are
+                        repeated. Use r=<radius>, w=<width>,
+                        inner_gap_px=<px>, and outer_gap_px=<px>. The legacy
+                        spacing=<scalar> field is still accepted as a
+                        compatibility alias for both gaps. ri/ro/gap are
+                        obsolete. side and z are slot fields. If r, w, gap,
+                        side, or standard renderer params are
                         omitted for built-in slots, they inherit the active
                         --track_type preset at render time. Inside numeric/depth
                         slots with no explicit r or w auto-compress when needed

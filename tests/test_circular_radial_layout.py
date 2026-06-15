@@ -299,6 +299,110 @@ def test_auto_conservation_stack_compresses_ring_width_and_gap_when_tight() -> N
     assert by_id["gc_skew"].compressed
 
 
+def test_outside_physical_gap_uses_facing_radial_sides() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(
+                id="outer",
+                renderer="dinucleotide_content",
+                side="outside",
+                width=ScalarSpec(10.0, "px"),
+                inner_gap_px=31.0,
+                outer_gap_px=0.0,
+            ),
+            CircularTrackSlot(
+                id="inner",
+                renderer="dinucleotide_skew",
+                side="outside",
+                width=ScalarSpec(10.0, "px"),
+                inner_gap_px=0.0,
+                outer_gap_px=7.0,
+            ),
+        ],
+    )
+
+    by_id = {slot.id: slot for slot in layout.slots}
+    gap = by_id["outer"].packing_band_px.inner_px - by_id["inner"].packing_band_px.outer_px
+    assert gap == pytest.approx(31.0)
+
+
+def test_inside_physical_gap_uses_facing_radial_sides() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(
+                id="outer",
+                renderer="dinucleotide_content",
+                side="inside",
+                width=ScalarSpec(10.0, "px"),
+                inner_gap_px=29.0,
+                outer_gap_px=0.0,
+            ),
+            CircularTrackSlot(
+                id="inner",
+                renderer="dinucleotide_skew",
+                side="inside",
+                width=ScalarSpec(10.0, "px"),
+                inner_gap_px=0.0,
+                outer_gap_px=11.0,
+            ),
+        ],
+    )
+
+    by_id = {slot.id: slot for slot in layout.slots}
+    gap = by_id["outer"].packing_band_px.inner_px - by_id["inner"].packing_band_px.outer_px
+    assert gap == pytest.approx(29.0)
+
+
+def test_explicit_inside_gaps_are_not_auto_compressed_when_widths_are() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+    conservation_slots = [
+        CircularTrackSlot(
+            id=f"conservation_{idx}",
+            renderer="sequence_conservation",
+            inner_gap_px=4.0,
+            outer_gap_px=4.0,
+        )
+        for idx in range(18)
+    ]
+
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            *conservation_slots,
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+        ],
+        feature_dict={"a": _Feature(0)},
+        show_features=True,
+        show_ticks=False,
+    )
+
+    by_id = {slot.id: slot for slot in layout.slots}
+    resolved_conservation = [by_id[f"conservation_{idx}"] for idx in range(18)]
+    assert any(slot.compressed for slot in resolved_conservation)
+    gap_px = (
+        resolved_conservation[0].packing_band_px.inner_px
+        - resolved_conservation[1].packing_band_px.outer_px
+    )
+    assert gap_px == pytest.approx(4.0)
+
+
 def test_explicit_conservation_ring_width_is_not_auto_compressed() -> None:
     canvas_config, cfg = _small_radial_canvas()
     canvas_config.radius = 300.0
