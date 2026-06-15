@@ -6,6 +6,8 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
+const UI_RENDERERS = SUPPORTED_RENDERERS.filter((renderer) => renderer !== 'spacer');
+
 const RENDERER_LABELS = {
   features: 'Features',
   dinucleotide_content: 'Dinucleotide content',
@@ -80,7 +82,7 @@ const normalizePxText = (value) => {
   if (text === null) return '';
   const withoutUnit = text.endsWith('px') ? text.slice(0, -2) : text;
   const numeric = Number(withoutUnit);
-  return Number.isFinite(numeric) && numeric >= 0 ? String(text) : '';
+  return Number.isFinite(numeric) && numeric >= 0 ? `${numeric}px` : '';
 };
 
 const defaultSlot = (renderer, overrides = {}) => {
@@ -357,7 +359,7 @@ const isDefaultManagedLinearSlot = (slot, renderer = null) => {
 export const createLinearTrackSlotEditor = ({ state }) => {
   const { adv, form } = state;
 
-  const linearTrackRenderers = SUPPORTED_RENDERERS.slice();
+  const linearTrackRenderers = UI_RENDERERS.slice();
   const linearTrackRendererLabel = (renderer) => RENDERER_LABELS[normalizeRenderer(renderer)] || String(renderer || '');
 
   const axisIndexForCurrentLinearSlots = (slots) => {

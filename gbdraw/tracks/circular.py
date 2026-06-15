@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from math import isfinite
 from typing import Any, Literal, Mapping, Sequence
 
 from .parsing import CircularTrackSlotParseError, parse_bool, split_kv_list
@@ -78,6 +79,8 @@ _GENERIC_LAYOUT_KEYS = {
     "w",
     "width",
     "spacing",
+    "inner_gap_px",
+    "outer_gap_px",
     "z",
     "z_index",
     "zindex",
@@ -113,6 +116,8 @@ class CircularTrackSlot:
     spacing: ScalarSpec | None = None
     z: int = 0
     params: Mapping[str, Any] = field(default_factory=dict)
+    inner_gap_px: float | None = None
+    outer_gap_px: float | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +130,8 @@ class NormalizedCircularTrackSlot:
     radius: ScalarSpec | None
     width: ScalarSpec | None
     spacing: ScalarSpec | None
+    inner_gap_px: float | None
+    outer_gap_px: float | None
     z: int
     compress: bool
     reserve: bool
@@ -134,6 +141,18 @@ class NormalizedCircularTrackSlot:
 def _normalize_renderer(raw: str) -> str:
     renderer = str(raw).strip().lower()
     return _RENDERER_ALIASES.get(renderer, renderer)
+
+
+def _parse_gap_px(raw: object, *, field_name: str) -> float:
+    text = str(raw).strip()
+    if not text:
+        raise ValueError(f"{field_name} must be a numeric pixel value")
+    if text.endswith("px") or text.endswith("%"):
+        raise ValueError(f"{field_name} must be a numeric pixel value without a unit")
+    value = float(text)
+    if not isfinite(value) or value < 0:
+        raise ValueError(f"{field_name} must be a nonnegative numeric pixel value")
+    return value
 
 
 def _normalize_side_value(raw: object, *, field_name: str = "side") -> str:
@@ -236,6 +255,8 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
     radius: ScalarSpec | None = None
     width: ScalarSpec | None = None
     spacing: ScalarSpec | None = None
+    inner_gap_px: float | None = None
+    outer_gap_px: float | None = None
     z = 0
     params: dict[str, Any] = {}
 
@@ -260,6 +281,10 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
                     width = ScalarSpec.parse(value)
                 elif key == "spacing":
                     spacing = ScalarSpec.parse(value)
+                elif key == "inner_gap_px":
+                    inner_gap_px = _parse_gap_px(value, field_name="inner_gap_px")
+                elif key == "outer_gap_px":
+                    outer_gap_px = _parse_gap_px(value, field_name="outer_gap_px")
                 elif key in _OBSOLETE_GEOMETRY_KEYS:
                     raise ValueError(f"'{key}' is no longer supported; use r=<radius> with w=<width>")
                 elif key in {"innerradius", "outerradius"}:
@@ -283,6 +308,11 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
 
     if not slot_id:
         raise CircularTrackSlotParseError("missing circular track slot id", original)
+    if spacing is not None and (inner_gap_px is not None or outer_gap_px is not None):
+        raise CircularTrackSlotParseError(
+            "spacing cannot be combined with inner_gap_px or outer_gap_px",
+            original,
+        )
 
     slot = CircularTrackSlot(
         id=slot_id,
@@ -294,6 +324,8 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
         spacing=spacing,
         z=z,
         params=params,
+        inner_gap_px=inner_gap_px,
+        outer_gap_px=outer_gap_px,
     )
     try:
         normalize_circular_track_slots([slot])
@@ -494,6 +526,20 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
 
         auto_compress = bool(params.pop("_auto_compress", False))
+        if slot.spacing is not None and (slot.inner_gap_px is not None or slot.outer_gap_px is not None):
+            raise ValueError(
+                f"circular track slot '{slot.id}' cannot combine spacing with inner_gap_px or outer_gap_px"
+            )
+        inner_gap_px = (
+            _parse_gap_px(slot.inner_gap_px, field_name="inner_gap_px")
+            if slot.inner_gap_px is not None
+            else None
+        )
+        outer_gap_px = (
+            _parse_gap_px(slot.outer_gap_px, field_name="outer_gap_px")
+            if slot.outer_gap_px is not None
+            else None
+        )
         compress = (
             renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
             and side == "inside"
@@ -511,6 +557,8 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
                 radius=slot.radius,
                 width=slot.width,
                 spacing=slot.spacing,
+                inner_gap_px=inner_gap_px,
+                outer_gap_px=outer_gap_px,
                 z=int(slot.z),
                 compress=compress,
                 reserve=reserve,

@@ -1107,7 +1107,7 @@
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index)" title="Delete"><i class="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
-                                                    <div class="grid grid-cols-3 gap-1">
+                                                    <div class="grid grid-cols-2 gap-1">
                                                         <input
                                                             :value="linearTrackSlotHeightValue(entry.slot)"
                                                             @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
@@ -1116,7 +1116,6 @@
                                                             title="Height"
                                                         >
                                                         <input v-model.trim="entry.slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)" title="Spacing">
-                                                        <input type="number" step="1" v-model.number="entry.slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z" title="Draw order">
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                         <select
@@ -1312,8 +1311,8 @@
                                                     <div class="grid grid-cols-4 gap-1">
                                                         <input v-model.trim="entry.slot.width" class="form-input px-1 py-0.5 text-[10px]" placeholder="w (auto)">
                                                         <input v-model.trim="entry.slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r (auto)">
-                                                        <input v-model.trim="entry.slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)">
-                                                        <input type="number" v-model.number="entry.slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
+                                                        <input v-model.trim="entry.slot.inner_gap_px" class="form-input px-1 py-0.5 text-[10px]" placeholder="inner gap px">
+                                                        <input v-model.trim="entry.slot.outer_gap_px" class="form-input px-1 py-0.5 text-[10px]" placeholder="outer gap px">
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                         <select
@@ -2419,7 +2418,8 @@
                                 <option value="600">600 (High)</option>
                             </select>
                         </div>
-                        <button @click="downloadSVG" class="btn btn-secondary text-sm"><i class="ph ph-download-simple"></i> SVG</button>
+                        <button @click="downloadSVG" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple"></i> SVG</button>
+                        <button @click="downloadInteractiveSVG" class="btn btn-secondary text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click"></i> Interactive SVG</button>
                         <button @click="downloadPNG" class="btn btn-primary text-sm"><i class="ph ph-download-simple"></i> PNG</button>
                         <button @click="downloadPDF" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf"></i> PDF</button>
                     </div>
@@ -2637,35 +2637,41 @@
                                 <div class="text-[10px] text-slate-400 mb-1">Current member</div>
                                 <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.label || clickedFeature.label }}</div>
                                 <div class="font-mono text-[10px] text-slate-500 break-all">
-                                    {{ clickedOrthogroupDetail.currentMember.proteinId || clickedFeature.proteinId }}
+                                    {{ clickedOrthogroupDetail.currentMember.sourceProteinId || clickedFeature.sourceProteinId || clickedOrthogroupDetail.currentMember.proteinId || clickedFeature.proteinId }}
                                 </div>
                                 <div class="text-[10px] text-slate-500">
                                     {{ clickedOrthogroupDetail.currentMember.recordId || '' }}
                                     {{ Number(clickedOrthogroupDetail.currentMember.start) + 1 }}-{{ clickedOrthogroupDetail.currentMember.end }}
                                     <span v-if="clickedOrthogroupDetail.currentMember.strand">({{ clickedOrthogroupDetail.currentMember.strand }})</span>
-                                    <span v-if="clickedOrthogroupDetail.currentMember.representative" class="font-medium text-blue-600"> representative</span>
                                 </div>
                             </div>
                             <div class="max-h-40 overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
-                                <div v-for="recordGroup in clickedOrthogroupDetail.membersByRecord"
-                                     :key="`og-${clickedOrthogroupDetail.id}-${recordGroup.recordIndex}`"
-                                     class="border-b border-slate-100 last:border-b-0">
-                                    <div class="bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-500">
-                                        {{ recordGroup.recordLabel }}
-                                    </div>
-                                    <div v-for="member in recordGroup.members"
-                                         :key="`${member.featureSvgId}-${member.proteinId}`"
-                                         class="px-2 py-1 text-[10px] text-slate-600 grid grid-cols-[1fr_auto] gap-2">
-                                        <div class="min-w-0">
-                                            <div class="truncate">{{ member.label || member.proteinId }}</div>
-                                            <div class="font-mono text-slate-400 truncate">{{ member.sourceProteinId || member.proteinId }}</div>
-                                        </div>
-                                        <div class="text-right text-slate-400">
-                                            {{ Number(member.start) + 1 }}-{{ member.end }}
-                                            <span v-if="member.representative" class="text-blue-600">*</span>
-                                        </div>
-                                    </div>
-                                </div>
+                                <table class="min-w-[42rem] text-[10px] text-slate-600">
+                                    <thead class="sticky top-0 bg-slate-50 text-slate-400 uppercase">
+                                        <tr>
+                                            <th class="px-2 py-1 text-left font-semibold">Record</th>
+                                            <th class="px-2 py-1 text-left font-semibold">Coordinates (+/-)</th>
+                                            <th class="px-2 py-1 text-left font-semibold">Protein ID</th>
+                                            <th class="px-2 py-1 text-left font-semibold">Product / note</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template v-for="recordGroup in clickedOrthogroupDetail.membersByRecord"
+                                                  :key="`og-${clickedOrthogroupDetail.id}-${recordGroup.recordIndex}`">
+                                            <tr v-for="member in recordGroup.members"
+                                                :key="`${member.featureSvgId}-${member.proteinId}`"
+                                                class="border-t border-slate-100">
+                                                <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.recordId || recordGroup.recordLabel }}</td>
+                                                <td class="px-2 py-1 font-mono whitespace-nowrap">
+                                                    {{ Number(member.start) + 1 }}..{{ member.end }}
+                                                    <span v-if="member.strand">({{ member.strand }})</span>
+                                                </td>
+                                                <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.sourceProteinId || member.proteinId }}</td>
+                                                <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
                             </div>
                             <div v-if="canUseClickedOrthogroupActions" class="mt-2 flex gap-2">
                                 <button @click="highlightClickedOrthogroup"
@@ -2832,23 +2838,6 @@
                                             title="Copy">
                                         <i class="ph ph-copy"></i>
                                     </button>
-                                </div>
-                            </div>
-                            <div v-if="clickedFeature.locationParts.length > 0">
-                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Location parts</div>
-                                <div class="max-h-32 overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
-                                    <div v-for="part in clickedFeature.locationParts"
-                                         :key="`feature-location-part-${part.index}`"
-                                         class="grid grid-cols-[minmax(0,1fr)_4rem_2rem] gap-2 items-center px-3 py-2 border-b border-slate-100 last:border-b-0">
-                                        <div class="font-mono text-xs text-slate-700 break-all">{{ part.display }}</div>
-                                        <div class="text-xs text-slate-500 text-right">{{ part.strand || '-' }}</div>
-                                        <button type="button"
-                                                @click="copyText(part.copyText)"
-                                                class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
-                                                title="Copy location part">
-                                            <i class="ph ph-copy"></i>
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -3449,24 +3438,33 @@
 
                             <div>
                                 <div class="text-xs font-semibold text-slate-600 mb-2">Members</div>
-                                <div class="border border-slate-100 rounded overflow-hidden">
-                                    <div v-for="recordGroup in selectedOrthogroupMembersByRecord"
-                                         :key="`${selectedOrthogroup.id}-${recordGroup.recordIndex}`"
-                                         class="border-b border-slate-100 last:border-b-0">
-                                        <div class="bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-500">{{ recordGroup.recordLabel }}</div>
-                                        <div v-for="member in recordGroup.members"
-                                             :key="`${member.featureSvgId}-${member.proteinId}`"
-                                             class="px-2 py-1 text-[10px] text-slate-600 grid grid-cols-[1fr_auto] gap-2">
-                                            <div class="min-w-0">
-                                                <div class="truncate">{{ member.product || member.gene || member.label || member.proteinId }}</div>
-                                                <div class="font-mono text-slate-400 truncate">{{ member.sourceProteinId || member.proteinId }}</div>
-                                            </div>
-                                            <div class="text-right text-slate-400">
-                                                {{ Number(member.start) + 1 }}-{{ member.end }}
-                                                <span v-if="member.representative" class="text-blue-600">*</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                                <div class="border border-slate-100 rounded overflow-auto custom-scrollbar">
+                                    <table class="min-w-[42rem] text-[10px] text-slate-600">
+                                        <thead class="sticky top-0 bg-slate-50 text-slate-400 uppercase">
+                                            <tr>
+                                                <th class="px-2 py-1 text-left font-semibold">Record</th>
+                                                <th class="px-2 py-1 text-left font-semibold">Coordinates (+/-)</th>
+                                                <th class="px-2 py-1 text-left font-semibold">Protein ID</th>
+                                                <th class="px-2 py-1 text-left font-semibold">Product / note</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <template v-for="recordGroup in selectedOrthogroupMembersByRecord"
+                                                      :key="`${selectedOrthogroup.id}-${recordGroup.recordIndex}`">
+                                                <tr v-for="member in recordGroup.members"
+                                                    :key="`${member.featureSvgId}-${member.proteinId}`"
+                                                    class="border-t border-slate-100">
+                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.recordId || recordGroup.recordLabel }}</td>
+                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">
+                                                        {{ Number(member.start) + 1 }}..{{ member.end }}
+                                                        <span v-if="member.strand">({{ member.strand }})</span>
+                                                    </td>
+                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.sourceProteinId || member.proteinId }}</td>
+                                                    <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>

@@ -129,12 +129,9 @@ def _effective_group_spacing_px(
     *,
     legacy_spacing_px: float,
 ) -> float:
-    """Apply spacing conservatively so legacy circular placement stays stable."""
-    requested_spacing_px = max(0.0, float(requested_spacing_px))
-    legacy_spacing_px = max(0.0, float(legacy_spacing_px))
-    if requested_spacing_px <= legacy_spacing_px:
-        return requested_spacing_px
-    return legacy_spacing_px + ((requested_spacing_px - legacy_spacing_px) * 0.25)
+    """Return the requested circular label spacing without legacy dampening."""
+    del legacy_spacing_px
+    return max(0.0, float(requested_spacing_px))
 
 
 def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float | None = None) -> float:
@@ -3038,7 +3035,6 @@ def improved_label_placement_fc(
                 best_y = label["start_y"]
                 best_overlaps = current_overlaps
                 best_target_delta = current_target_delta
-                best_move = 0.0
                 best_middle_penalty = current_middle_penalty
                 best_leader_length = current_leader_length
                 proximity_penalty_factor = 4.0
@@ -3085,7 +3081,6 @@ def improved_label_placement_fc(
                             best_y = candidate_y
                             best_overlaps = candidate_overlaps
                             best_target_delta = candidate_target_delta
-                            best_move = candidate_move
                             best_middle_penalty = candidate_middle_penalty
                             best_leader_length = candidate_leader_length
                             best_score = candidate_score

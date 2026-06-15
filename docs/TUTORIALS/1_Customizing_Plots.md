@@ -32,7 +32,7 @@ Two options control the overall look of a circular plot:
 - `--track_type`: preset name, `tuckin`, `middle`, or `spreadout`
 - `--separate_strands`: split forward and reverse features into different tracks
 
-`tuckin` is the default and most compact. `middle` is often easier to label. `spreadout` gives the most visual separation. Custom Track Slots can be used just to reorder tracks: omitted radius, width, spacing, placement, and standard renderer parameters inherit the selected `--track_type` preset. Values you provide on a slot override the inherited preset defaults.
+`tuckin` is the default and most compact. `middle` is often easier to label. `spreadout` gives the most visual separation. Custom Track Slots can be used just to reorder tracks: omitted radius, width, physical gaps, placement, and standard renderer parameters inherit the selected `--track_type` preset. Values you provide on a slot override the inherited preset defaults; use `inner_gap_px` and `outer_gap_px` for circular radial gaps.
 
 The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular track slot.
 

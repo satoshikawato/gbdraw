@@ -700,6 +700,62 @@ def test_build_orthogroups_suggests_names_from_cds_annotations() -> None:
 
 
 @pytest.mark.linear
+def test_build_orthogroups_falls_back_to_id_for_annotation_provenance_notes() -> None:
+    provenance_note = "Derived by automated computational analysis using gene prediction method: GeneMarkS-2+"
+    records = [
+        _record(
+            "record_a",
+            features=[
+                _cds(
+                    0,
+                    9,
+                    qualifiers={
+                        "translation": ["MKT*"],
+                        "product": ["hypothetical protein"],
+                        "note": [provenance_note],
+                        "locus_tag": ["LOCUS_0001"],
+                    },
+                )
+            ],
+        ),
+        _record(
+            "record_b",
+            features=[
+                _cds(
+                    9,
+                    18,
+                    qualifiers={
+                        "translation": ["MKT*"],
+                        "product": ["hypothetical protein"],
+                        "note": [provenance_note],
+                        "locus_tag": ["LOCUS_0002"],
+                    },
+                )
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    hits = pd.DataFrame.from_records(
+        [_hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001")],
+        columns=COMPARISON_COLUMNS,
+    )
+
+    orthogroups = build_orthogroups_from_protein_hits(
+        [hits],
+        extraction.protein_map,
+    )
+
+    assert "og_1" not in orthogroups.names_by_orthogroup_id
+    assert orthogroups.confidence_by_orthogroup_id["og_1"] == "low"
+    assert orthogroups.descriptions_by_orthogroup_id["og_1"] == (
+        "No informative product/gene/note consensus was found."
+    )
+    candidates = orthogroups.name_candidates_by_orthogroup_id["og_1"]
+    assert candidates[0].source == "label"
+    assert provenance_note not in {candidate.text for candidate in candidates}
+
+
+@pytest.mark.linear
 def test_build_orthogroups_keeps_product_consensus_over_single_nonrepresentative_gene() -> None:
     records = [
         _record(

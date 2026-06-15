@@ -881,6 +881,10 @@ _ORTHOGROUP_NAME_SOURCE_RANK = {
 }
 _NOTE_PREFIX_RE = re.compile(r"^(?:product|gene|note)\s*:\s*", re.IGNORECASE)
 _DUF_CANDIDATE_RE = re.compile(r"\bDUF\d+\b.*\bdomain-containing protein\b", re.IGNORECASE)
+_ANNOTATION_PROVENANCE_NOTE_RE = re.compile(
+    r"^derived by automated computational analysis\b",
+    re.IGNORECASE,
+)
 _GENERIC_ORTHOGROUP_NAME_CANDIDATES = {
     "hypothetical protein",
     "uncharacterized protein",
@@ -907,6 +911,8 @@ def _normalize_orthogroup_name_text(
     normalized = _NOTE_PREFIX_RE.sub("", normalized).strip()
     normalized = normalized.strip(" \t\r\n.,;:()[]{}")
     if not normalized:
+        return None
+    if source == "note" and _ANNOTATION_PROVENANCE_NOTE_RE.search(normalized):
         return None
     compact_length = len(re.sub(r"[^0-9A-Za-z]+", "", normalized))
     if source != "gene" and compact_length < 4:
@@ -1094,7 +1100,7 @@ def _build_orthogroup_name_metadata(
         total_record_coverage = len({int(member.record_index) for member in members})
         confidence = _orthogroup_name_confidence(top_candidate)
 
-        if top_candidate is not None:
+        if top_candidate is not None and confidence not in {"none", "low"}:
             names_by_orthogroup_id[orthogroup_id] = top_candidate.text
         descriptions_by_orthogroup_id[orthogroup_id] = _orthogroup_description(
             top_candidate,
