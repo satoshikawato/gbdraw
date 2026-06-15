@@ -2,6 +2,7 @@ import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js'
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
+import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
   disposeDiagramGenerationWorker,
   preinitializeDiagramGenerationWorker
@@ -788,6 +789,30 @@ export const createAppSetup = () => {
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
+  const resetSettings = () => {
+    const proceed = window.confirm(
+      'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
+    );
+    if (!proceed) return;
+
+    cancelDefinitionUpdate();
+    resetSettingsState(state);
+    circularTrackNewRenderer.value = 'dinucleotide_skew';
+    linearTrackNewRenderer.value = 'dinucleotide_skew';
+    depthTrackUiCounts.circular = 1;
+    Object.keys(depthTrackUiCounts.linearByUid).forEach((uid) => {
+      delete depthTrackUiCounts.linearByUid[uid];
+    });
+    ensureDepthTrackConfigCount(activeDepthTrackCount());
+  };
+
+  const resetLayout = () => {
+    resetAllPositions();
+    resetCanvasPadding();
+    resetLayoutState(state);
+    resetPreviewViewport({ resetZoom: true });
+  };
+
   const isInteractiveTarget = (target) => {
     if (!target) return false;
     return Boolean(target.closest('input, textarea, select, button, label, a, [data-nodrag="true"]'));
@@ -1563,6 +1588,7 @@ export const createAppSetup = () => {
     resetLegendEntryStroke,
     resetAllStrokes,
     resetAllPositions,
+    resetLayout,
     canvasPadding,
     showCanvasControls,
     resetCanvasPadding,
@@ -1574,6 +1600,7 @@ export const createAppSetup = () => {
     downloadPNG,
     downloadPDF,
     exportConfig,
+    resetSettings,
     saveSessionWithTitle,
     editSessionTitle,
     importConfig,

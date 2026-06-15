@@ -468,6 +468,9 @@
                     <button @click="$refs.configInput.click()" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5" title="Load Config" aria-label="Load Config">
                         <i class="ph ph-arrow-square-in"></i> Load Config
                     </button>
+                    <button @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
+                        <i class="ph ph-arrow-clockwise"></i> Reset Settings
+                    </button>
                     <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
                     <button @click="saveSessionWithTitle" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Save Session" aria-label="Save Session">
                         <i class="ph ph-archive"></i> Save Session
@@ -2427,13 +2430,13 @@
 
                     <!-- Zoom and Canvas controls -->
                     <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
-                        <!-- Reset all positions button -->
-                        <button v-if="svgContent" @click="resetAllPositions"
+                        <!-- Reset preview layout button -->
+                        <button v-if="svgContent" @click="resetLayout"
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
-                                title="Reset all element positions"
-                                aria-label="Reset all element positions">
+                                title="Reset layout"
+                                aria-label="Reset layout">
                             <i class="ph ph-arrow-counter-clockwise"></i>
-                            <span>Reset positions</span>
+                            <span>Reset Layout</span>
                         </button>
                         <!-- Canvas size toggle -->
                         <button v-if="svgContent" @click="showCanvasControls = !showCanvasControls"
