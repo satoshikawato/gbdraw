@@ -100,6 +100,7 @@ class DiagramOptions:
     species: str | None = None
     strain: str | None = None
     blast_files: Sequence[str] | None = None
+    comparison_dataframes: Sequence[DataFrame] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | None = None
     protein_blastp_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = "none"

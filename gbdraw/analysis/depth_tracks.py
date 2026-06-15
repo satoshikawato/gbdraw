@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
-from typing import Callable, Sequence
+from typing import Callable, Mapping, Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -379,6 +379,59 @@ def depth_track_data_count(record_depth_tracks: Sequence[Sequence[DepthTrackData
     return max((len(row) for row in record_depth_tracks), default=0)
 
 
+def ordered_depth_track_ids(
+    record_depth_tracks: Sequence[Sequence[DepthTrackSpec | DepthTrackData]] | None,
+) -> list[str]:
+    """Return first-seen logical depth track IDs across record-major rows."""
+
+    ids: list[str] = []
+    seen: set[str] = set()
+    for row in record_depth_tracks or ():
+        for track in row:
+            track_id = str(getattr(track, "id", "") or "").strip()
+            if not track_id or track_id in seen:
+                continue
+            seen.add(track_id)
+            ids.append(track_id)
+    return ids
+
+
+def resolve_depth_track(
+    depth_tracks: Sequence[DepthTrackData] | Mapping[str, DepthTrackData] | None,
+    slot_params: Mapping[str, object] | None,
+    ordered_track_ids: Sequence[str] | None = None,
+) -> DepthTrackData | None:
+    """Resolve a depth slot by track_id first, with track_index as legacy fallback."""
+
+    if not depth_tracks:
+        return None
+    params = dict(slot_params or {})
+    if isinstance(depth_tracks, Mapping):
+        tracks_by_id = {str(key): value for key, value in depth_tracks.items()}
+        track_sequence = list(depth_tracks.values())
+    else:
+        track_sequence = list(depth_tracks)
+        tracks_by_id = {str(track.id): track for track in track_sequence}
+
+    raw_track_id = str(params.get("track_id", "") or "").strip()
+    if raw_track_id:
+        return tracks_by_id.get(raw_track_id)
+
+    raw_index = params.get("track_index", 0)
+    try:
+        track_index = int(raw_index or 0)
+    except (TypeError, ValueError):
+        return None
+    if track_index < 0:
+        return None
+    if ordered_track_ids is not None and track_index < len(ordered_track_ids):
+        track_id = str(ordered_track_ids[track_index])
+        return tracks_by_id.get(track_id)
+    if track_index < len(track_sequence):
+        return track_sequence[track_index]
+    return None
+
+
 def clone_depth_config(
     base_config: DepthConfigurator,
     *,
@@ -460,23 +513,41 @@ def build_depth_track_dataframes(
         output.append(row)
 
     if bool(getattr(base_config, "share_axis", False)) and base_config.max_depth is None:
-        track_count = max((len(row) for row in output), default=0)
-        for track_index in range(track_count):
+        for track_id in ordered_depth_track_ids(output):
             max_values = [
-                float(row[track_index].df["depth"].max())
+                float(track.df["depth"].max())
                 for row in output
-                if track_index < len(row)
-                and not row[track_index].df.empty
-                and "depth" in row[track_index].df.columns
+                for track in row
+                if track.id == track_id
+                and not track.df.empty
+                and "depth" in track.df.columns
             ]
             if not max_values:
                 continue
             shared_max = max(max_values)
             for row in output:
-                if track_index < len(row):
-                    row[track_index].config.max_depth = shared_max
+                for track in row:
+                    if track.id == track_id:
+                        track.config.max_depth = shared_max
 
     return output
+
+
+def depth_track_legend_entries(
+    record_depth_tracks: Sequence[Sequence[DepthTrackData]] | None,
+) -> list[DepthTrackData]:
+    """Return one representative depth track per logical ID for legends."""
+
+    entries: list[DepthTrackData] = []
+    seen: set[str] = set()
+    for row in record_depth_tracks or ():
+        for track in row:
+            track_id = str(track.id)
+            if track_id in seen:
+                continue
+            seen.add(track_id)
+            entries.append(track)
+    return entries
 
 
 def sync_depth_track_legend_entries(
@@ -510,8 +581,11 @@ __all__ = [
     "DepthTrackSpec",
     "build_depth_track_dataframes",
     "clone_depth_config",
+    "depth_track_legend_entries",
     "depth_track_count",
     "depth_track_data_count",
     "normalize_depth_tracks",
+    "ordered_depth_track_ids",
+    "resolve_depth_track",
     "sync_depth_track_legend_entries",
 ]

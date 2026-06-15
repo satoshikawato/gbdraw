@@ -1,0 +1,3 @@
+input_id	input_type	gbk	record_id	region	reverse_complement	label	order
+mje	gbk	MjeNMV.gb	#1		false	MjeNMV	1
+mela	gbk	MelaMJNV.gb	#1		false	MelaMJNV	2

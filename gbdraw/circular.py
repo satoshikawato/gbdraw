@@ -44,6 +44,12 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
 )
+from .cli_utils.table_adapters import (
+    apply_depth_track_ids_to_slots,
+    load_depth_track_table,
+    load_input_table_records,
+    load_track_table_slots,
+)
 
 # Setup for the logging system
 logger = logging.getLogger()
@@ -130,6 +136,11 @@ def _get_args(args) -> argparse.Namespace:
         help="FASTA file (required with --gff)",
         type=str,
         nargs='*')
+    parser.add_argument(
+        "--input_table",
+        metavar="INPUT_TABLE",
+        help="Headered TSV describing circular input files, record selectors, labels, order, and stable input IDs.",
+        type=str)
     parser.add_argument(
         '-o',
         '--output',
@@ -265,6 +276,11 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='+',
         action='append')
+    parser.add_argument(
+        '--depth_track_table',
+        metavar='DEPTH_TRACK_TABLE',
+        help='Headered TSV assigning depth files and per-track metadata to records.',
+        type=str)
     parser.add_argument(
         '--depth_track_label',
         metavar='LABEL',
@@ -574,6 +590,16 @@ def _get_args(args) -> argparse.Namespace:
         default=None,
         help='Axis boundary index for --circular_track_slot order. Slots before this index render outside; slots at or after it render inside.')
     parser.add_argument(
+        '--track_table',
+        metavar='TRACK_TABLE',
+        help='Headered TSV describing circular custom track slots.',
+        type=str)
+    parser.add_argument(
+        '--track_table_axis_before',
+        metavar='SLOT_ID',
+        help='Axis boundary for --track_table, resolved after order sorting and disabled-row filtering.',
+        type=str)
+    parser.add_argument(
         '--gc_content_width',
         help='GC content track width for circular mode (in px; must be > 0).',
         type=float)
@@ -688,8 +714,12 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_step must be > 0")
     if args.depth and args.depth_track:
         parser.error("--depth cannot be combined with --depth_track")
-    if args.show_depth and not (args.depth or args.depth_track):
-        parser.error("--show_depth requires --depth or --depth_track")
+    if args.depth_track_table and (args.depth or args.depth_track):
+        parser.error("--depth_track_table cannot be combined with --depth or --depth_track")
+    if args.depth_track_table and (args.depth_track_label or args.depth_track_color):
+        parser.error("--depth_track_table cannot be combined with --depth_track_label or --depth_track_color")
+    if args.show_depth and not (args.depth or args.depth_track or args.depth_track_table):
+        parser.error("--show_depth requires --depth, --depth_track, or --depth_track_table")
     if args.conservation_ring_width is not None and args.conservation_ring_width <= 0:
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
@@ -729,6 +759,8 @@ def _get_args(args) -> argparse.Namespace:
         "depth_track_small_tick_interval",
         "depth_track_tick_font_size",
     ):
+        if args.depth_track_table and getattr(args, option_name):
+            parser.error(f"--depth_track_table cannot be combined with --{option_name}")
         for option_value in getattr(args, option_name) or []:
             option_text = str(option_value).strip().lower()
             if option_text in {"", "auto", "none", "null", "-"}:
@@ -745,6 +777,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--circular_label_spacing must be > 0")
     if args.circular_track_order and args.circular_track_slot:
         parser.error("--circular_track_order cannot be combined with --circular_track_slot")
+    if args.track_table and (args.circular_track_order or args.circular_track_slot or args.circular_track_axis_index is not None):
+        parser.error("--track_table cannot be combined with --circular_track_order, --circular_track_slot, or --circular_track_axis_index")
+    if args.track_table_axis_before and not args.track_table:
+        parser.error("--track_table_axis_before requires --track_table")
     if args.circular_track_axis_index is not None and not (args.circular_track_order or args.circular_track_slot):
         parser.error("--circular_track_axis_index requires --circular_track_slot or --circular_track_order")
     circular_track_slots_for_validation: list[CircularTrackSlot] | None = None
@@ -805,6 +841,14 @@ def _record_major_depth_track_files_from_cli(
     return rows
 
 
+def _default_depth_track_ids(track_count: int) -> tuple[str, ...]:
+    if track_count <= 0:
+        return ()
+    if track_count == 1:
+        return ("depth",)
+    return tuple(f"depth_{index + 1}" for index in range(track_count))
+
+
 
 def circular_main(cmd_args) -> None:
     """
@@ -850,14 +894,16 @@ def circular_main(cmd_args) -> None:
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
+    input_table_path: str | None = args.input_table
     depth_file: str | None = args.depth
     depth_track_groups: list[list[str]] | None = args.depth_track
+    depth_track_table_path: str | None = args.depth_track_table
     depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
     depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
     depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
     depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
     depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
-    show_depth: bool = bool(args.show_depth or depth_file or depth_track_groups)
+    show_depth: bool = bool(args.show_depth or depth_file or depth_track_groups or depth_track_table_path)
     depth_table: DataFrame | None = read_depth_tsv(depth_file) if depth_file else None
     depth_color: str | None = args.depth_color
     depth_width: Optional[float] = args.depth_width
@@ -902,6 +948,8 @@ def circular_main(cmd_args) -> None:
     circular_track_order: str | None = args.circular_track_order
     circular_track_slot_specs: list[str] = list(args.circular_track_slot or [])
     circular_track_axis_index: int | None = args.circular_track_axis_index
+    track_table_path: str | None = args.track_table
+    track_table_axis_before: str | None = args.track_table_axis_before
     gc_content_width: Optional[float] = args.gc_content_width
     gc_content_radius: Optional[float] = args.gc_content_radius
     gc_content_mode: str | None = args.gc_content_mode
@@ -917,7 +965,16 @@ def circular_main(cmd_args) -> None:
     gc_skew_radius: Optional[float] = args.gc_skew_radius
     if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
         raise ValidationError("plot_title_font_size must be > 0")
-    if args.gbk:
+    if input_table_path:
+        gb_records = load_input_table_records(
+            input_table_path,
+            mode="circular",
+            load_gbk_records=load_gbks,
+            load_gff_records=load_gff_fasta,
+            selected_features_set=selected_features_set,
+            keep_all_features=bool(feature_table_path),
+        )
+    elif args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
         gb_records = load_gff_fasta(
@@ -931,10 +988,42 @@ def circular_main(cmd_args) -> None:
         # This case should not be reached due to arg validation
         logger.error("Invalid input file configuration.")
         raise ValidationError("Invalid input file configuration.")
-    depth_track_files = _record_major_depth_track_files_from_cli(
-        depth_track_groups,
-        record_count=len(gb_records),
+    depth_track_table_result = (
+        load_depth_track_table(
+            depth_track_table_path,
+            mode="circular",
+            records=gb_records,
+        )
+        if depth_track_table_path
+        else None
     )
+    record_depth_tracks = (
+        depth_track_table_result.record_depth_tracks
+        if depth_track_table_result is not None
+        else None
+    )
+    depth_track_files = (
+        None
+        if depth_track_table_result is not None
+        else _record_major_depth_track_files_from_cli(
+            depth_track_groups,
+            record_count=len(gb_records),
+        )
+    )
+    if depth_track_table_result is not None:
+        depth_track_labels = None
+        depth_track_colors = None
+        depth_track_large_tick_intervals = None
+        depth_track_small_tick_intervals = None
+        depth_track_tick_font_sizes = None
+
+    depth_track_ids: tuple[str, ...] = ()
+    if depth_track_table_result is not None:
+        depth_track_ids = depth_track_table_result.track_ids
+    elif depth_track_files:
+        depth_track_ids = _default_depth_track_ids(max((len(row) for row in depth_track_files), default=0))
+    elif depth_file:
+        depth_track_ids = _default_depth_track_ids(1)
 
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
@@ -1074,13 +1163,27 @@ def circular_main(cmd_args) -> None:
         )
 
     circular_track_slots_or_none: list[str] | list[CircularTrackSlot] | None = None
-    if circular_track_slot_specs:
+    if track_table_path:
+        track_table_result = load_track_table_slots(
+            track_table_path,
+            mode="circular",
+            axis_before=track_table_axis_before,
+            depth_track_ids=depth_track_ids,
+            depth_metadata_by_track_id=(
+                depth_track_table_result.metadata_by_track_id
+                if depth_track_table_result is not None
+                else None
+            ),
+        )
+        circular_track_slots_or_none = track_table_result.slots
+        circular_track_axis_index = track_table_result.axis_index
+    elif circular_track_slot_specs:
         circular_track_slots_or_none = circular_track_slot_specs
     elif circular_track_order:
         circular_track_slots_or_none = circular_track_slots_from_order(
             circular_track_order,
             show_depth=show_depth,
-            depth_track_count=max(1, len(depth_track_files[0]) if depth_track_files else 1),
+            depth_track_count=max(1, len(depth_track_ids) if depth_track_ids else (len(depth_track_files[0]) if depth_track_files else 1)),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
@@ -1089,13 +1192,32 @@ def circular_main(cmd_args) -> None:
         circular_track_slots_or_none = circular_track_slots_from_order(
             "features,ticks,depth,gc_content,gc_skew",
             show_depth=show_depth,
-            depth_track_count=max(1, len(depth_track_files[0]) if depth_track_files else 1),
+            depth_track_count=max(1, len(depth_track_ids) if depth_track_ids else (len(depth_track_files[0]) if depth_track_files else 1)),
+            show_gc=show_gc,
+            show_skew=show_skew,
+            dinucleotide=dinucleotide,
+        )
+    elif depth_track_table_result is not None and (
+        len(depth_track_ids) > 1
+        or any(metadata.width is not None for metadata in depth_track_table_result.metadata_by_track_id.values())
+    ):
+        circular_track_slots_or_none = circular_track_slots_from_order(
+            "features,ticks,depth,gc_content,gc_skew",
+            show_depth=show_depth,
+            depth_track_count=max(1, len(depth_track_ids)),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
         )
 
-    if circular_track_slots_or_none is not None and not circular_track_slot_specs:
+    if depth_track_table_result is not None and circular_track_slots_or_none is not None and not circular_track_slot_specs:
+        circular_track_slots_or_none = apply_depth_track_ids_to_slots(
+            circular_track_slots_or_none,
+            depth_track_ids=depth_track_ids,
+            depth_metadata_by_track_id=depth_track_table_result.metadata_by_track_id,
+        )
+
+    if circular_track_slots_or_none is not None and not circular_track_slot_specs and not track_table_path:
         slots = parse_circular_track_slots(circular_track_slots_or_none)
         updated_slots: list[CircularTrackSlot] = []
         for slot in slots:
@@ -1142,6 +1264,7 @@ def circular_main(cmd_args) -> None:
             step=manual_step,
             depth_window=depth_window,
             depth_step=depth_step,
+            record_depth_tracks=record_depth_tracks,
             depth_table=depth_table,
             depth_track_files=depth_track_files,
             depth_track_labels=depth_track_labels,
@@ -1183,6 +1306,11 @@ def circular_main(cmd_args) -> None:
                 if depth_track_files is not None
                 else None
             )
+            record_depth_track_specs = (
+                [record_depth_tracks[record_count - 1]]
+                if record_depth_tracks is not None
+                else None
+            )
             canvas = assemble_circular_diagram_from_record(
                 gb_record,
                 conservation_blast_files=conservation_blast_files,
@@ -1204,6 +1332,7 @@ def circular_main(cmd_args) -> None:
                 step=step,
                 depth_window=depth_window,
                 depth_step=depth_step,
+                record_depth_tracks=record_depth_track_specs,
                 depth_table=depth_table,
                 depth_track_files=record_depth_track_files,
                 depth_track_labels=depth_track_labels,

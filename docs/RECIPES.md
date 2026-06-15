@@ -81,6 +81,22 @@ gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels bo
 gbdraw circular --gbk genome.gb -o output -f svg --suppress_gc --suppress_skew --legend none
 ```
 
+### Use headered tables for circular depth and custom slots
+
+```bash
+gbdraw circular \
+  --input_table examples/cli_table_circular_inputs.tsv \
+  --depth_track_table examples/cli_table_circular_depth_tracks.tsv \
+  --track_table examples/cli_table_circular_track_slots.tsv \
+  --suppress_gc \
+  --suppress_skew \
+  -o cli_table_circular \
+  -f svg
+```
+
+The input, depth, and track-slot tables keep record IDs and logical depth track
+IDs named instead of relying on positional placeholder arguments.
+
 ### Resolve overlapping features
 
 ```bash
@@ -153,6 +169,32 @@ gbdraw linear \
   --gbk genome1.gb genome2.gb \
   --reverse_complement false true \
   -o output \
+  -f svg
+```
+
+### Use headered tables for inputs, depth, and track slots
+
+```bash
+gbdraw linear \
+  --input_table examples/cli_table_inputs.tsv \
+  --depth_track_table examples/cli_table_depth_tracks.tsv \
+  --track_table examples/cli_table_track_slots.tsv \
+  -o cli_table_linear \
+  -f svg
+```
+
+`--input_table` can hold per-record labels, regions, and reverse-complement
+flags. `--depth_track_table` assigns sparse depth files to named `track_id`
+values, and `--track_table` can reference those depth tracks by name.
+
+Use `--blast_table` when you want comparison files to attach to named inputs
+instead of relying on `-b` file order:
+
+```bash
+gbdraw linear \
+  --input_table examples/cli_table_blast_inputs.tsv \
+  --blast_table examples/cli_table_blast.tsv \
+  -o cli_table_blast \
   -f svg
 ```
 

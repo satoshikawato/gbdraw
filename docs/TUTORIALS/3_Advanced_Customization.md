@@ -258,6 +258,52 @@ For linear plots, the main selectors are:
 
 See [Tutorial 2](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for the full syntax.
 
+When several records need different labels, regions, depth files, or custom
+track slots, use the headered table arguments instead of parallel positional
+lists. The tables keep each relationship named:
+
+- `--input_table` defines displayed records and attaches stable `input_id`
+  aliases.
+- `--depth_track_table` assigns depth files to displayed records and logical
+  `track_id` values.
+- `--track_table` describes custom linear or circular track slots and can refer
+  to depth tracks by `track_id`.
+- `--blast_table` assigns linear BLAST outfmt 6/7 files to adjacent displayed
+  record pairs.
+
+The repository includes a minimal linear example:
+
+```bash
+gbdraw linear \
+  --input_table examples/cli_table_inputs.tsv \
+  --depth_track_table examples/cli_table_depth_tracks.tsv \
+  --track_table examples/cli_table_track_slots.tsv \
+  -o cli_table_linear \
+  -f svg
+```
+
+And a circular example:
+
+```bash
+gbdraw circular \
+  --input_table examples/cli_table_circular_inputs.tsv \
+  --depth_track_table examples/cli_table_circular_depth_tracks.tsv \
+  --track_table examples/cli_table_circular_track_slots.tsv \
+  --suppress_gc \
+  --suppress_skew \
+  -o cli_table_circular \
+  -f svg
+```
+
+Circular `--input_table` currently supports the stable-ID subset and rejects
+`region` or `reverse_complement` cells. Use linear mode when table rows need
+per-record cropping or reverse-complement transforms.
+
+The web app uses the same table path internally when the bundled gbdraw wheel
+supports it: uploaded inputs, depth tracks, custom slots, and simple adjacent
+linear BLAST comparisons are staged as `/web_*_table.tsv` files before the CLI
+is called. Older wheels fall back to the legacy positional arguments.
+
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 2](./2_Comparative_Genomics.md)
 
