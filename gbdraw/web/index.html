@@ -2643,7 +2643,6 @@
                                     {{ clickedOrthogroupDetail.currentMember.recordId || '' }}
                                     {{ Number(clickedOrthogroupDetail.currentMember.start) + 1 }}-{{ clickedOrthogroupDetail.currentMember.end }}
                                     <span v-if="clickedOrthogroupDetail.currentMember.strand">({{ clickedOrthogroupDetail.currentMember.strand }})</span>
-                                    <span v-if="clickedOrthogroupDetail.currentMember.representative" class="font-medium text-blue-600"> representative</span>
                                 </div>
                             </div>
                             <div class="max-h-40 overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
@@ -2662,7 +2661,6 @@
                                         </div>
                                         <div class="text-right text-slate-400">
                                             {{ Number(member.start) + 1 }}-{{ member.end }}
-                                            <span v-if="member.representative" class="text-blue-600">*</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2832,23 +2830,6 @@
                                             title="Copy">
                                         <i class="ph ph-copy"></i>
                                     </button>
-                                </div>
-                            </div>
-                            <div v-if="clickedFeature.locationParts.length > 0">
-                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Location parts</div>
-                                <div class="max-h-32 overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
-                                    <div v-for="part in clickedFeature.locationParts"
-                                         :key="`feature-location-part-${part.index}`"
-                                         class="grid grid-cols-[minmax(0,1fr)_4rem_2rem] gap-2 items-center px-3 py-2 border-b border-slate-100 last:border-b-0">
-                                        <div class="font-mono text-xs text-slate-700 break-all">{{ part.display }}</div>
-                                        <div class="text-xs text-slate-500 text-right">{{ part.strand || '-' }}</div>
-                                        <button type="button"
-                                                @click="copyText(part.copyText)"
-                                                class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
-                                                title="Copy location part">
-                                            <i class="ph ph-copy"></i>
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -3463,7 +3444,6 @@
                                             </div>
                                             <div class="text-right text-slate-400">
                                                 {{ Number(member.start) + 1 }}-{{ member.end }}
-                                                <span v-if="member.representative" class="text-blue-600">*</span>
                                             </div>
                                         </div>
                                     </div>

@@ -81,26 +81,6 @@ export const createFeatureSvgActions = ({
       .sort((left, right) => left.key.localeCompare(right.key));
   };
 
-  const normalizeLocationParts = (parts) => {
-    if (!Array.isArray(parts)) return [];
-    return parts
-      .map((part, index) => {
-        const startValue = Number(part?.start);
-        const endValue = Number(part?.end);
-        const display = String(part?.display || '').trim() ||
-          `${Number.isFinite(startValue) ? startValue + 1 : ''}..${Number.isFinite(endValue) ? endValue : ''}`;
-        return {
-          index,
-          start: Number.isFinite(startValue) ? startValue : null,
-          end: Number.isFinite(endValue) ? endValue : null,
-          strand: String(part?.strand || '').trim(),
-          display,
-          copyText: display
-        };
-      })
-      .filter((part) => part.display && part.display !== '..');
-  };
-
   const displayProteinId = (feat) => String(
     feat?.sourceProteinId || feat?.source_protein_id || feat?.proteinId || feat?.protein_id || ''
   ).trim();
@@ -112,12 +92,7 @@ export const createFeatureSvgActions = ({
       { key: 'orthogroup_id', label: 'Orthogroup ID', value: feat?.orthogroupId || feat?.orthogroup_id },
       { key: 'orthogroup_members', label: 'Members', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },
       { key: 'orthogroup_coverage', label: 'Record coverage', value: feat?.orthogroupRecordCoverage || feat?.orthogroup_record_coverage },
-      { key: 'protein_id', label: 'Protein ID', value: proteinId },
-      {
-        key: 'representative',
-        label: 'Representative',
-        value: feat?.orthogroupRepresentative || feat?.orthogroup_representative ? 'yes' : ''
-      }
+      { key: 'protein_id', label: 'Protein ID', value: proteinId }
     ];
     return rows.filter((row) => String(row.value === null || row.value === undefined ? '' : row.value) !== '');
   };
@@ -171,7 +146,6 @@ export const createFeatureSvgActions = ({
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
     const locationText = buildFeatureLocation(feat);
     const qualifierRows = normalizeQualifierRows(feat.qualifiers);
-    const locationParts = normalizeLocationParts(feat.location_parts);
     const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
     const nucleotideSequence = String(feat.nucleotide_sequence || '');
     const aminoAcidSequence = String(feat.amino_acid_sequence || '');
@@ -200,7 +174,6 @@ export const createFeatureSvgActions = ({
       strand: String(feat.strand || ''),
       qualifiers: feat.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {},
       qualifierRows,
-      locationParts,
       sequenceWarnings,
       nucleotideSequence,
       aminoAcidSequence,

@@ -931,9 +931,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       appendSearchItems(items, 'Location', feature && feature.location);
       appendSearchItems(items, 'Start', feature && feature.start);
       appendSearchItems(items, 'End', feature && feature.end);
-      appendSearchItems(items, 'Location part', (feature && Array.isArray(feature.location_parts) ? feature.location_parts : []).map(function (part) {
-        return part && part.display;
-      }));
       return items;
     }
     if (selectedField === 'strand') {
@@ -1955,8 +1952,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       ['Orthogroup name', group && (group.display_name || group.name) || ''],
       ['Members', Number.isFinite(memberCount) && memberCount > 0 ? String(memberCount) : (group && group.member_count ? String(group.member_count) : '')],
       ['Record coverage', Number.isFinite(recordCoverage) && recordCoverage > 0 ? String(recordCoverage) : (group && group.record_coverage_count ? String(group.record_coverage_count) : '')],
-      ['Protein ID', proteinId],
-      ['Representative', feature && feature.orthogroup_representative ? 'yes' : '']
+      ['Protein ID', proteinId]
     ];
     return rows.filter(function (row) {
       return String(row[1] == null ? '' : row[1]) !== '';
@@ -2014,20 +2010,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
   }
 
-  function renderLocationParts(feature) {
-    var parts = Array.isArray(feature.location_parts) ? feature.location_parts : [];
-    if (!parts.length) return '';
-    var rows = parts.map(function (part, index) {
-      var display = String(part && part.display || '').trim();
-      var strand = String(part && part.strand || '').trim();
-      return ['Part ' + String(index + 1), strand ? display + ' (' + strand + ')' : display];
-    }).filter(function (row) {
-      return row[1];
-    });
-    if (!rows.length) return '';
-    return '<div class="gfi-block"><div class="gfi-block-title">Location parts</div>' + renderRows(rows) + '</div>';
-  }
-
   function renderOrthogroupMembers(feature) {
     var group = getFeatureOrthogroup(feature);
     if (!group) return '';
@@ -2037,8 +2019,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       var label = String(member.product || member.gene || member.label || member.sourceProteinId || member.proteinId || member.featureSvgId || '').trim();
       var record = String(member.recordId || '').trim();
       var location = memberLocationText(member);
-      var flags = member.representative ? ' representative' : '';
-      return [record, label, location + flags].filter(Boolean).join(' | ');
+      return [record, label, location].filter(Boolean).join(' | ');
     }).filter(Boolean);
     if (!lines.length) return '';
     var text = lines.join('\\n');
@@ -2105,7 +2086,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     } else if (tab === 'sequence') {
       panel = renderSequences(feature);
     } else {
-      panel = renderRows(detailRows(feature)) + renderLocationParts(feature) + renderOrthogroupMembers(feature);
+      panel = renderRows(detailRows(feature)) + renderOrthogroupMembers(feature);
     }
     function tabButton(id, label) {
       return '<button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '">' + label + '</button>';
