@@ -145,6 +145,7 @@ export const createFeatureSvgActions = ({
     const existingOverride = featureColorOverrides[feat.id];
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
     const locationText = buildFeatureLocation(feat);
+    const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
     const qualifierRows = normalizeQualifierRows(feat.qualifiers);
     const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
     const nucleotideSequence = String(feat.nucleotide_sequence || '');
@@ -163,6 +164,7 @@ export const createFeatureSvgActions = ({
       svg_id: feat.svg_id,
       label: defaultLabel,
       location: locationText,
+      locationParts,
       color: currentColor,
       feat,
       activeTab: 'edit',

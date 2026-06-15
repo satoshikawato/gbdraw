@@ -267,6 +267,41 @@ const STANDALONE_INTERACTIVE_STYLE = `
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+.gfi-table-wrap {
+  max-height: 180px;
+  overflow: auto;
+}
+.gfi-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: var(--gfi-value-font-size, 11px);
+}
+.gfi-table th,
+.gfi-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  vertical-align: top;
+}
+.gfi-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: var(--gfi-key-font-size, 10px);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gfi-table td {
+  color: #1e293b;
+  overflow-wrap: anywhere;
+}
+.gfi-table td.gfi-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
 .gfi-empty,
 .gfi-warning {
   padding: 10px;
@@ -1302,10 +1337,15 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     );
     var margin = 12 * unit;
     var yOffset = 42 * unit;
+    var controlWidth = Number(searchControls.getAttribute('width')) || 396;
+    var x = Math.max(
+      visibleView.x + margin,
+      visibleView.x + visibleView.width - (controlWidth * unit) - margin
+    );
     searchControls.setAttribute(
       'transform',
       'translate(' +
-        formatSvgNumber(visibleView.x + margin + (searchControlsOffsetCss.x * unit)) +
+        formatSvgNumber(x + (searchControlsOffsetCss.x * unit)) +
         ', ' +
         formatSvgNumber(visibleView.y + margin + yOffset + (searchControlsOffsetCss.y * unit)) +
         ') scale(' + formatSvgNumber(unit) + ')'
@@ -2010,22 +2050,48 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
   }
 
+  function memberProductOrNote(member) {
+    return String(member && (member.product || member.note) || '').trim();
+  }
+
+  function orthogroupMemberTableRows(members) {
+    return members.map(function (member) {
+      return {
+        record: String(member && member.recordId || '').trim(),
+        coordinates: memberLocationText(member),
+        proteinId: displayProteinId(null, member),
+        productOrNote: memberProductOrNote(member)
+      };
+    }).filter(function (row) {
+      return row.record || row.coordinates || row.proteinId || row.productOrNote;
+    });
+  }
+
   function renderOrthogroupMembers(feature) {
     var group = getFeatureOrthogroup(feature);
     if (!group) return '';
     var members = Array.isArray(group.members) ? group.members : [];
     if (!members.length) return '';
-    var lines = members.map(function (member) {
-      var label = String(member.product || member.gene || member.label || member.sourceProteinId || member.proteinId || member.featureSvgId || '').trim();
-      var record = String(member.recordId || '').trim();
-      var location = memberLocationText(member);
-      return [record, label, location].filter(Boolean).join(' | ');
-    }).filter(Boolean);
-    if (!lines.length) return '';
-    var text = lines.join('\\n');
+    var rows = orthogroupMemberTableRows(members);
+    if (!rows.length) return '';
+    var text = ['Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'].concat(
+      rows.map(function (row) {
+        return [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\\t');
+      })
+    ).join('\\n');
+    var body = rows.map(function (row) {
+      return '<tr>' +
+        '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.coordinates) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.proteinId) + '</td>' +
+        '<td>' + escapeHtml(row.productOrNote) + '</td>' +
+        '</tr>';
+    }).join('');
     return '<div class="gfi-block">' +
       '<div class="gfi-block-title"><span>Orthogroup members</span><span>' + members.length + '</span>' + copyButton(text) + '</div>' +
-      '<pre class="gfi-pre">' + escapeHtml(text) + '</pre>' +
+      '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
+      '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>' +
       '</div>';
   }
 
