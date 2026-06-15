@@ -63,11 +63,26 @@ const getSvgDimensions = (svg) => {
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
+const FEATURE_SELECTOR = [
+  `path[${FEATURE_ID_ATTRIBUTE}]`,
+  `polygon[${FEATURE_ID_ATTRIBUTE}]`,
+  `rect[${FEATURE_ID_ATTRIBUTE}]`,
+  'path[id^="f"]',
+  'polygon[id^="f"]',
+  'rect[id^="f"]'
+].join(', ');
 const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
 const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
+
+const getElementFeatureId = (element) =>
+  String(
+    element?.getAttribute?.(FEATURE_ID_ATTRIBUTE) ||
+    element?.getAttribute?.('id') ||
+    ''
+  ).trim();
 
 const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
@@ -383,7 +398,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   cursor: grabbing;
 }
 .gbdraw-interactive-pan-active .gbdraw-interactive-feature {
-  cursor: grab;
+  cursor: pointer;
 }
 .gbdraw-feature-search-controls {
   overflow: visible;
@@ -516,7 +531,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 (function () {
   'use strict';
 
-  var FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+  var FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
+  var FEATURE_SELECTOR =
+    'path[' + FEATURE_ID_ATTRIBUTE + '], polygon[' + FEATURE_ID_ATTRIBUTE + '], rect[' + FEATURE_ID_ATTRIBUTE + '], ' +
+    'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
   var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
@@ -531,6 +549,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var searchControls = null;
   var isPanMode = false;
   var activeCanvasPan = null;
+  var suppressNextCanvasClick = false;
   var activePopupResize = null;
   var activePopupDrag = null;
   var activeSearchControlsDrag = null;
@@ -550,6 +569,16 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     error: ''
   };
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
+
+  function getElementFeatureId(element) {
+    return String(
+      element && (
+        element.getAttribute(FEATURE_ID_ATTRIBUTE) ||
+        element.getAttribute('id') ||
+        element.id
+      ) || ''
+    ).trim();
+  }
 
   try {
     payload = JSON.parse(metadata ? metadata.textContent || '{}' : '{}');
@@ -594,9 +623,20 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
   });
 
+  function getOrthogroupIds(value) {
+    var seen = {};
+    return String(value || '').split(';').map(function (entry) {
+      return String(entry || '').trim();
+    }).filter(function (entry) {
+      if (!entry || seen[entry]) return false;
+      seen[entry] = true;
+      return true;
+    });
+  }
+
   var featureElementsById = new Map();
   Array.prototype.slice.call(svg.querySelectorAll(FEATURE_SELECTOR)).forEach(function (element) {
-    var svgId = String(element && (element.id || element.getAttribute('id')) || '').trim();
+    var svgId = getElementFeatureId(element);
     if (!svgId || !featuresById.has(svgId)) return;
     if (!featureElementsById.has(svgId)) {
       featureElementsById.set(svgId, []);
@@ -607,23 +647,24 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var featureIdsByOrthogroupId = new Map();
   features.forEach(function (feature) {
     var svgId = String(feature && feature.svg_id || '').trim();
-    var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
-    if (!svgId || !orthogroupId) return;
-    if (!featureIdsByOrthogroupId.has(orthogroupId)) {
-      featureIdsByOrthogroupId.set(orthogroupId, new Set());
-    }
-    featureIdsByOrthogroupId.get(orthogroupId).add(svgId);
+    if (!svgId) return;
+    getOrthogroupIds(feature && feature.orthogroup_id).forEach(function (orthogroupId) {
+      if (!featureIdsByOrthogroupId.has(orthogroupId)) {
+        featureIdsByOrthogroupId.set(orthogroupId, new Set());
+      }
+      featureIdsByOrthogroupId.get(orthogroupId).add(svgId);
+    });
   });
 
   var comparisonElementsByOrthogroupId = new Map();
   Array.prototype.slice.call(svg.querySelectorAll('[data-orthogroup-id]')).forEach(function (element) {
     if (element.matches && element.matches(FEATURE_SELECTOR)) return;
-    var orthogroupId = String(element.getAttribute('data-orthogroup-id') || '').trim();
-    if (!orthogroupId) return;
-    if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
-      comparisonElementsByOrthogroupId.set(orthogroupId, []);
-    }
-    comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
+    getOrthogroupIds(element.getAttribute('data-orthogroup-id')).forEach(function (orthogroupId) {
+      if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
+        comparisonElementsByOrthogroupId.set(orthogroupId, []);
+      }
+      comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
+    });
     setClassToken(element, 'gbdraw-interactive-orthogroup-link', true);
   });
 
@@ -1902,34 +1943,49 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (closestSearchControls(event.target)) return;
     if (closestViewportButton(event.target)) return;
     stopCanvasPan();
-    closePopup();
     var startView = getViewRect();
     var size = getSvgClientSize();
     var unitX = startView.width / size.width;
     var unitY = startView.height / size.height;
     var startClientX = event.clientX;
     var startClientY = event.clientY;
+    var didPan = false;
+    var panThresholdSq = 16;
     var onMove = function (moveEvent) {
+      var dx = moveEvent.clientX - startClientX;
+      var dy = moveEvent.clientY - startClientY;
+      if (!didPan && ((dx * dx) + (dy * dy)) >= panThresholdSq) {
+        didPan = true;
+        if (activeCanvasPan) activeCanvasPan.didPan = true;
+        closePopup();
+        setClassToken(svg, 'gbdraw-interactive-panning', true);
+      }
+      if (!didPan) return;
       setSvgViewRect({
-        x: startView.x - (moveEvent.clientX - startClientX) * unitX,
-        y: startView.y - (moveEvent.clientY - startClientY) * unitY,
+        x: startView.x - dx * unitX,
+        y: startView.y - dy * unitY,
         width: startView.width,
         height: startView.height
       });
       moveEvent.preventDefault();
     };
     var onEnd = function () {
+      var wasPanned = Boolean(activeCanvasPan && activeCanvasPan.didPan);
       stopCanvasPan();
+      if (wasPanned) {
+        suppressNextCanvasClick = true;
+        window.setTimeout(function () {
+          suppressNextCanvasClick = false;
+        }, 0);
+      }
     };
     activeCanvasPan = {
       onMove: onMove,
-      onEnd: onEnd
+      onEnd: onEnd,
+      didPan: false
     };
-    setClassToken(svg, 'gbdraw-interactive-panning', true);
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onEnd);
-    event.preventDefault();
-    event.stopPropagation();
   }
 
   function escapeHtml(value) {
@@ -2637,7 +2693,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
-    var svgId = featureElement ? String(featureElement.id || '') : '';
+    var svgId = getElementFeatureId(featureElement);
     if (!svgId || !featureElementsById.has(svgId)) return;
     var hoverKey = getFeatureHoverKey(svgId);
     if (activeHoverKey === hoverKey) return;
@@ -2651,10 +2707,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   svg.addEventListener('mouseout', function (event) {
     var featureElement = closestFeature(event.target);
-    var svgId = featureElement ? String(featureElement.id || '') : '';
+    var svgId = getElementFeatureId(featureElement);
     if (!svgId || activeHoverSvgId !== svgId) return;
     var relatedFeature = closestFeature(event.relatedTarget);
-    if (relatedFeature && getFeatureHoverKey(String(relatedFeature.id || '')) === activeHoverKey) return;
+    if (relatedFeature && getFeatureHoverKey(getElementFeatureId(relatedFeature)) === activeHoverKey) return;
     setHoverHighlight(svgId, false);
     activeHoverSvgId = null;
     activeHoverKey = '';
@@ -2663,7 +2719,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   svg.addEventListener('click', function (event) {
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
-    if (isPanMode) {
+    if (suppressNextCanvasClick) {
+      suppressNextCanvasClick = false;
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -2673,9 +2730,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       closePopup();
       return;
     }
-    var feature = featuresById.get(String(featureElement.id || ''));
+    var svgId = getElementFeatureId(featureElement);
+    var feature = featuresById.get(svgId);
     if (!feature) return;
-    var matchIndex = searchState.matches.indexOf(String(featureElement.id || ''));
+    var matchIndex = searchState.matches.indexOf(svgId);
     if (matchIndex !== -1) {
       setActiveMatch(matchIndex, { center: false });
     }
@@ -2974,7 +3032,7 @@ const collectRenderedFeatureIds = (svg) => {
   const ids = new Set();
   if (!svg) return ids;
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
-    const id = String(element.getAttribute('id') || '').trim();
+    const id = getElementFeatureId(element);
     if (id) ids.add(id);
   });
   return ids;
@@ -3189,7 +3247,7 @@ const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) 
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
-    const id = String(element.getAttribute('id') || '').trim();
+    const id = getElementFeatureId(element);
     if (!featureIds.has(id)) return;
     element.setAttribute('data-gbdraw-interactive-feature', 'true');
     addClassToken(element, 'gbdraw-interactive-feature');

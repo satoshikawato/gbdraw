@@ -55,7 +55,7 @@ export const createFeatureColorActions = ({
     getIndividualFeatureLabel,
     getFeatureQualifier
   } = ruleActions;
-  const { applyInstantPreview } = featureSvgActions;
+  const { applyInstantPreview, getFeatureElements } = featureSvgActions;
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
   const normalizeColor = (value) => String(value || '').trim().toLowerCase();
@@ -254,7 +254,7 @@ export const createFeatureColorActions = ({
 
     const svg = getCurrentSvg();
     if (svg && feat.svg_id) {
-      const element = svg.querySelector(`#${CSS.escape(feat.svg_id)}`);
+      const element = getFeatureElements(svg, feat.svg_id)[0] || null;
       const fill = element?.getAttribute('fill');
       if (fill) {
         return resolveColorToHex(fill) || fill;
@@ -1063,7 +1063,7 @@ export const createFeatureColorActions = ({
     if (!svg) return;
 
     const svgId = clickedFeature.value.svg_id;
-    const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+    const elements = getFeatureElements(svg, svgId);
 
     elements.forEach((el) => {
       if (strokeColor !== null) {
@@ -1095,7 +1095,7 @@ export const createFeatureColorActions = ({
     if (!svg) return;
 
     const svgId = clickedFeature.value.svg_id;
-    const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+    const elements = getFeatureElements(svg, svgId);
 
     const originalColor = originalSvgStroke.value.color;
     const originalWidth = originalSvgStroke.value.width;
@@ -1179,7 +1179,7 @@ export const createFeatureColorActions = ({
     const svgId = clickedFeature.value.svg_id;
 
     if (choice === 'this' || choice === 'this_with_legend') {
-      const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+      const elements = getFeatureElements(svg, svgId);
       elements.forEach((el) => {
         el.setAttribute('fill', defaultColor);
       });
@@ -1208,7 +1208,7 @@ export const createFeatureColorActions = ({
       const matchingFeatures = extractedFeatures.value.filter((f) => getFeatureCaption(f) === caption);
 
       for (const matchFeat of matchingFeatures) {
-        const elements = svg.querySelectorAll(`#${CSS.escape(matchFeat.svg_id)}`);
+        const elements = getFeatureElements(svg, matchFeat.svg_id);
         elements.forEach((el) => {
           el.setAttribute('fill', defaultColor);
         });
@@ -1278,7 +1278,7 @@ export const createFeatureColorActions = ({
     } else {
       const siblingFeatures = extractedFeatures.value.filter((f) => {
         if (getFeatureCaption(f) !== caption) return false;
-        const el = svg.querySelector(`#${CSS.escape(f.svg_id)}`);
+        const el = getFeatureElements(svg, f.svg_id)[0] || null;
         if (!el) return false;
         const fillColor = el.getAttribute('fill');
         return fillColor && fillColor.toLowerCase() === currentFillColor?.toLowerCase();
@@ -1290,7 +1290,7 @@ export const createFeatureColorActions = ({
     }
 
     for (const svgId of siblingFeatureIds) {
-      const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+      const elements = getFeatureElements(svg, svgId);
       elements.forEach((el) => {
         if (currentStrokeColor) {
           el.setAttribute('stroke', currentStrokeColor);

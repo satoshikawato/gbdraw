@@ -92,6 +92,21 @@ def test_index_uses_title_logo_separately_from_icon_assets() -> None:
     assert '<link rel="icon" href="./assets/gbdraw-logo.svg" type="image/svg+xml">' in index_html
 
 
+def test_circular_gff3_input_renders_single_gff3_uploader() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert index_html.count('label="GFF3 File" v-model="files.c_gff"') == 1
+    assert '<file-uploader label="GenBank/DDBJ File" v-model="files.c_gb"' in index_html
+    assert '<file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>' in index_html
+    assert '<file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>' in index_html
+
+
+def test_meta_csp_omits_frame_ancestors_header_only_directive() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    notices_html = (WEB_ROOT / "open-source-notices.html").read_text(encoding="utf-8")
+    assert "frame-ancestors" not in index_html
+    assert "frame-ancestors" not in notices_html
+
+
 def test_index_cloaks_vue_template_until_mount() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert '<div id="app" v-cloak' in index_html
@@ -325,6 +340,7 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     assert "Cross-Origin-Opener-Policy: same-origin" in headers
     assert "Cross-Origin-Embedder-Policy: require-corp" in headers
     assert "Cross-Origin-Resource-Policy: same-origin" in headers
+    assert "Content-Security-Policy: frame-ancestors 'none'" in headers
 
 
 def test_wrangler_uses_cloudflare_bundle_directory() -> None:
@@ -349,6 +365,43 @@ def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
     assert '"tick_label_font_size": "--tick_label_font_size" in _source' in source
     assert "args.push('--tick_label_font_size', adv.tick_label_font_size);" in source
     assert "if (form.scale_style === 'ruler')" in source
+
+
+def test_web_linear_run_ignores_hidden_circular_species_strain_args() -> None:
+    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    assert (
+        "if (mode.value === 'circular') {\n"
+        "        if (form.species) args.push('--species', form.species);\n"
+        "        if (form.strain) args.push('--strain', form.strain);\n"
+        "      }"
+    ) in source
+    assert "if (form.species) args.push('--species', form.species);\n      if (form.strain)" not in source
+
+
+def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() -> None:
+    svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
+    label_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "label-actions.js").read_text(encoding="utf-8")
+    color_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "color-actions.js").read_text(encoding="utf-8")
+    stroke_actions_source = (WEB_ROOT / "js" / "app" / "legend" / "stroke-actions.js").read_text(encoding="utf-8")
+    svg_styles_source = (WEB_ROOT / "js" / "app" / "svg-styles.js").read_text(encoding="utf-8")
+    orthogroups_source = (WEB_ROOT / "js" / "app" / "orthogroups.js").read_text(encoding="utf-8")
+    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+
+    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source
+    assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in svg_actions_source
+    assert "svg.querySelectorAll(`[${FEATURE_ID_ATTRIBUTE}]`)" in svg_actions_source
+    assert "getFeatureIdentity(path)" in svg_actions_source
+    assert "getFeatureHoverKey(getFeatureIdentity(relatedFeature))" in svg_actions_source
+    assert "getFeatureIdentity(el)" in label_actions_source
+    assert "getFeatureElements(svg, feat.svg_id)" in color_actions_source
+    assert "getFeatureElements(svg, svgId)" in color_actions_source
+    assert "getFeatureElements(svg, svgId)" in stroke_actions_source
+    assert "getFeatureIdentity(path)" in svg_styles_source
+    assert "getFeatureElements(svg, featureId)" in orthogroups_source
+    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in export_source
+    assert "function getElementFeatureId(element)" in export_source
+    assert "var svgId = getElementFeatureId(featureElement);" in export_source
+    assert "const id = getElementFeatureId(element);" in export_source
 
 
 def test_web_linear_custom_track_slots_are_wired() -> None:

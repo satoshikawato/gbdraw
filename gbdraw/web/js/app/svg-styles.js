@@ -4,6 +4,7 @@ import {
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
 } from './color-utils.js';
+import { FEATURE_SELECTOR, getFeatureElements, getFeatureIdentity } from './feature-editor/svg-actions.js';
 import { ruleMatchesFeature } from './feature-utils.js';
 
 export const createSvgStyles = ({ state, watch, legendActions }) => {
@@ -175,12 +176,12 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     ensureUniquePairwiseGradientIds(svg);
 
     const colors = appliedPaletteColors.value;
-    const featurePaths = svg.querySelectorAll('path[id^="f"]');
+    const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
     const featureLookup = featuresBySvgId?.value || new Map();
     let updatedCount = 0;
 
     featurePaths.forEach((path) => {
-      const svgId = path.getAttribute('id');
+      const svgId = getFeatureIdentity(path);
       const feat = featureLookup.get(svgId);
       if (!feat) return;
 
@@ -427,7 +428,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
         }
       }
 
-      const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
+      const elements = getFeatureElements(svg, feat.svg_id);
       if (elements.length > 0) {
         const newColor = matchingRule ? matchingRule.color : appliedPaletteColors.value[feat.type] || '#cccccc';
         elements.forEach((el) => {
@@ -460,7 +461,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     let updatedCount = 0;
 
     if (adv.block_stroke_color || adv.block_stroke_width !== null) {
-      const featurePaths = svg.querySelectorAll('path[id^="f"]');
+      const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
       featurePaths.forEach((path) => {
         if (adv.block_stroke_color) {
           path.setAttribute('stroke', adv.block_stroke_color);

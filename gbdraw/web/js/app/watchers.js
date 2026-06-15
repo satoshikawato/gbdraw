@@ -104,7 +104,12 @@ export const setupWatchers = ({
     reapplyStrokeOverrides
   } = legendActions;
 
-  const { applySpecificRulesToSvg, ensureUniquePairwiseGradientIds, ensureUniqueSkewClipPathIds } = svgActions;
+  const {
+    applyPaletteToSvg,
+    applySpecificRulesToSvg,
+    ensureUniquePairwiseGradientIds,
+    ensureUniqueSkewClipPathIds
+  } = svgActions;
   const { attachSvgFeatureHandlers, refreshFeatureOverrides, syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
@@ -471,6 +476,8 @@ export const setupWatchers = ({
     if (!svgContent.value) return;
     nextTick(() => {
       const timingEntries = [];
+      measureTiming(timingEntries, 'watch(extractedFeatures) apply palette colors', applyPaletteToSvg);
+      measureTiming(timingEntries, 'watch(extractedFeatures) apply specific rules', applySpecificRulesToSvg);
       measureTiming(timingEntries, 'watch(extractedFeatures) refresh delegated feature handlers', attachSvgFeatureHandlers);
       logPostGbdrawTimings(timingEntries);
     });

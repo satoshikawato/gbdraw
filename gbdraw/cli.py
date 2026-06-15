@@ -38,6 +38,7 @@ class IsolatedSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
         super().end_headers()
 
 def print_version() -> None:

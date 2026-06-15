@@ -13,7 +13,6 @@
     object-src 'none';
     base-uri 'self';
     form-action 'self';
-    frame-ancestors 'none';
     ">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gbdraw Web App</title>
@@ -513,7 +512,6 @@
                             <file-uploader label="GenBank/DDBJ File" v-model="files.c_gb" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader label="GFF3 File" v-model="files.c_gff"></file-uploader>
                             <file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>

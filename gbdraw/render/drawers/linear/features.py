@@ -56,6 +56,7 @@ class FeatureDrawer:
         stroke_color_specified: Optional[str] = None,
         stroke_width_specified: Optional[float] = None,
         feature_data_id: Optional[str] = None,
+        dom_element_id: Optional[str] = None,
     ) -> None:
         stroke_color: str = (
             stroke_color_specified if stroke_color_specified is not None else self.default_stroke_color
@@ -70,10 +71,11 @@ class FeatureDrawer:
             stroke_width=stroke_width,
             stroke_linejoin="round",
             stroke_linecap="round",
+            debug=False,
         )
         if feature_data_id:
-            # Use feature's internal ID directly (e.g., "gene_000000001")
-            path.attribs['id'] = feature_data_id
+            path.attribs["data-gbdraw-feature-id"] = feature_data_id
+            path.attribs["id"] = dom_element_id or feature_data_id
         group.add(path)
 
     def draw(
@@ -106,11 +108,27 @@ class FeatureDrawer:
 
         # Get feature identifier for instant preview support
         feature_data_id = self.get_feature_data_id(feature_object)
+        block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
+        block_index = 0
 
         for gene_path in gene_paths:
             path_type, path_data = gene_path[0], gene_path[1]
             if path_type == "block":
-                self.draw_path(path_data, group, fill_color=feature_object.color, feature_data_id=feature_data_id)
+                block_index += 1
+                dom_element_id = None
+                if feature_data_id:
+                    dom_element_id = (
+                        feature_data_id
+                        if block_count <= 1
+                        else f"{feature_data_id}__part{block_index}"
+                    )
+                self.draw_path(
+                    path_data,
+                    group,
+                    fill_color=feature_object.color,
+                    feature_data_id=feature_data_id,
+                    dom_element_id=dom_element_id,
+                )
             elif path_type == "line":
                 self.draw_path(
                     path_data,

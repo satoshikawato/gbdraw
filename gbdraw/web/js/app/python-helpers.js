@@ -1543,7 +1543,7 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
                     qualifiers[q_key.lower()] = q_list
                 features.append({
                     "id": f"f{idx}",  # Unique internal ID for UI tracking
-                    "svg_id": svg_id,  # Matches SVG path id attribute
+                    "svg_id": svg_id,  # Stable feature key; SVG DOM ids may be suffixed per rendered part
                     "record_id": record_id,  # For multi-record filtering
                     "record_idx": rec_idx,
                     "type": feat.type,
