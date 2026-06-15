@@ -432,7 +432,7 @@ const adv = reactive({
   gc_skew_width_circular: null,
   gc_skew_radius_circular: null,
   circular_track_slots_enabled: false,
-  circular_track_slots_schema_version: 3,
+  circular_track_slots_schema_version: 4,
   circular_track_slots_axis_index: null,
   circular_track_slots: createDefaultCircularTrackSlots(),
   outer_label_x_offset: null,

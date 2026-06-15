@@ -32,7 +32,9 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
   const clone = cloneCurrentSvg();
   if (!clone) return state.svgContent.value;
   if (interactive) {
-    enrichSvgWithStandaloneFeaturePopup(clone);
+    enrichSvgWithStandaloneInteractivity(clone, {
+      popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'
+    });
   }
   return new XMLSerializer().serializeToString(clone);
 };
@@ -70,11 +72,31 @@ const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
 const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
   cursor: pointer;
-  transition: opacity 120ms ease, filter 120ms ease;
+  transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
 }
 .gbdraw-interactive-feature:hover,
 .gbdraw-interactive-feature.gbdraw-interactive-feature--hover {
   opacity: 0.82;
+  filter: url(#gbdraw-interactive-feature-glow);
+}
+.gbdraw-interactive-feature.gbdraw-interactive-feature--dimmed {
+  opacity: 0.18;
+}
+.gbdraw-interactive-feature.gbdraw-interactive-feature--match {
+  opacity: 1;
+  filter: url(#gbdraw-interactive-feature-glow);
+}
+.gbdraw-interactive-feature.gbdraw-interactive-feature--active-match {
+  opacity: 1;
+  filter: url(#gbdraw-interactive-feature-glow);
+  stroke: #f59e0b;
+  stroke-width: 2;
+}
+.gbdraw-interactive-orthogroup-link {
+  transition: opacity 120ms ease, filter 120ms ease;
+}
+.gbdraw-interactive-orthogroup-link.gbdraw-interactive-orthogroup-link--hover {
+  opacity: 0.92;
   filter: url(#gbdraw-interactive-feature-glow);
 }
 .gbdraw-feature-popup {
@@ -98,6 +120,12 @@ const STANDALONE_INTERACTIVE_STYLE = `
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
   font-family: Arial, Helvetica, sans-serif;
   font-size: var(--gfi-font-size, 13px);
+}
+.gfi--simple .gfi-content {
+  padding-right: 12px;
+}
+.gfi--simple .gfi-row {
+  grid-template-columns: 82px minmax(0, 1fr) 50px;
 }
 .gfi-header {
   display: grid;
@@ -239,6 +267,41 @@ const STANDALONE_INTERACTIVE_STYLE = `
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+.gfi-table-wrap {
+  max-height: 180px;
+  overflow: auto;
+}
+.gfi-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: var(--gfi-value-font-size, 11px);
+}
+.gfi-table th,
+.gfi-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  vertical-align: top;
+}
+.gfi-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: var(--gfi-key-font-size, 10px);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gfi-table td {
+  color: #1e293b;
+  overflow-wrap: anywhere;
+}
+.gfi-table td.gfi-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
 .gfi-empty,
 .gfi-warning {
   padding: 10px;
@@ -322,6 +385,131 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-pan-active .gbdraw-interactive-feature {
   cursor: grab;
 }
+.gbdraw-feature-search-controls {
+  overflow: visible;
+  pointer-events: auto;
+}
+.gbdraw-feature-search-controls * {
+  box-sizing: border-box;
+}
+.gfs {
+  width: 100%;
+  height: 100%;
+  padding: 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  cursor: grab;
+}
+.gfs.is-dragging {
+  cursor: grabbing;
+}
+.gfs-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+}
+.gfs-row + .gfs-row {
+  margin-top: 6px;
+}
+.gfs-input,
+.gfs-select {
+  height: 26px;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1e293b;
+  font: inherit;
+}
+.gfs-input {
+  padding: 0 7px;
+}
+.gfs-query {
+  flex: 1 1 126px;
+}
+.gfs-select {
+  flex: 0 0 104px;
+  padding: 0 5px;
+}
+.gfs-qualifier {
+  flex: 1 1 104px;
+}
+.gfs-qualifier:disabled {
+  opacity: 0.48;
+}
+.gfs-toggle {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+  user-select: none;
+}
+.gfs-button {
+  height: 26px;
+  min-width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+.gfs-button--clear {
+  flex: 0 0 48px;
+}
+.gfs-button:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.gfs-count {
+  margin-left: auto;
+  color: #475569;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.gfs-match-detail {
+  display: block;
+  min-width: 0;
+  margin-top: 5px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gfs input,
+.gfs select,
+.gfs button,
+.gfs label {
+  cursor: auto;
+}
+.gfs button,
+.gfs label {
+  cursor: pointer;
+}
+.gfs-match-detail strong {
+  color: #334155;
+  font-weight: 700;
+}
+.gfs.is-invalid .gfs-query {
+  border-color: #ef4444;
+  color: #991b1b;
+}
+.gfs.is-invalid .gfs-count {
+  color: #b91c1c;
+}
 `;
 
 const STANDALONE_INTERACTIVE_SCRIPT = `
@@ -332,6 +520,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
   var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
+  var SEARCH_CONTROLS_ID = 'gbdraw-feature-search-controls';
   var svg = document.currentScript && document.currentScript.ownerSVGElement
     ? document.currentScript.ownerSVGElement
     : document.documentElement;
@@ -339,11 +528,27 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var payload = null;
   var popup = null;
   var viewportControls = null;
+  var searchControls = null;
   var isPanMode = false;
   var activeCanvasPan = null;
   var activePopupResize = null;
   var activePopupDrag = null;
+  var activeSearchControlsDrag = null;
+  var searchControlsOffsetCss = { x: 0, y: 0 };
   var activeHoverSvgId = null;
+  var activeHoverKey = '';
+  var maxZoom = 16;
+  var resizeFrame = null;
+  var searchState = {
+    query: '',
+    field: 'all',
+    qualifierKey: '',
+    useRegex: false,
+    matches: [],
+    matchDetails: {},
+    activeIndex: -1,
+    error: ''
+  };
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
 
   try {
@@ -353,12 +558,39 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   var features = Array.isArray(payload.features) ? payload.features : [];
+  var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
+  var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';
+  var richSearchFields = {
+    'qualifier-key': true,
+    'qualifier-value': true,
+    'nucleotide': true,
+    'amino-acid': true
+  };
+
+  function isRichSearchField(field) {
+    return Boolean(richSearchFields[String(field || '')]);
+  }
+
+  function normalizeSearchField(field) {
+    var selected = String(field || 'all');
+    if (popupMode === 'simple' && isRichSearchField(selected)) {
+      return 'all';
+    }
+    return selected;
+  }
 
   var featuresById = new Map();
   features.forEach(function (feature) {
     var svgId = String(feature && feature.svg_id || '').trim();
     if (svgId && !featuresById.has(svgId)) {
       featuresById.set(svgId, feature);
+    }
+  });
+  var orthogroupsById = new Map();
+  orthogroups.forEach(function (group) {
+    var id = String(group && group.id || '').trim();
+    if (id && !orthogroupsById.has(id)) {
+      orthogroupsById.set(id, group);
     }
   });
 
@@ -370,6 +602,29 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       featureElementsById.set(svgId, []);
     }
     featureElementsById.get(svgId).push(element);
+  });
+
+  var featureIdsByOrthogroupId = new Map();
+  features.forEach(function (feature) {
+    var svgId = String(feature && feature.svg_id || '').trim();
+    var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
+    if (!svgId || !orthogroupId) return;
+    if (!featureIdsByOrthogroupId.has(orthogroupId)) {
+      featureIdsByOrthogroupId.set(orthogroupId, new Set());
+    }
+    featureIdsByOrthogroupId.get(orthogroupId).add(svgId);
+  });
+
+  var comparisonElementsByOrthogroupId = new Map();
+  Array.prototype.slice.call(svg.querySelectorAll('[data-orthogroup-id]')).forEach(function (element) {
+    if (element.matches && element.matches(FEATURE_SELECTOR)) return;
+    var orthogroupId = String(element.getAttribute('data-orthogroup-id') || '').trim();
+    if (!orthogroupId) return;
+    if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
+      comparisonElementsByOrthogroupId.set(orthogroupId, []);
+    }
+    comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
+    setClassToken(element, 'gbdraw-interactive-orthogroup-link', true);
   });
 
   function setClassToken(element, token, enabled) {
@@ -400,6 +655,917 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
+  function getFeatureHoverKey(svgId) {
+    var feature = featuresById.get(String(svgId || '').trim());
+    var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
+    return orthogroupId ? 'orthogroup:' + orthogroupId : 'feature:' + String(svgId || '').trim();
+  }
+
+  function setOrthogroupHover(orthogroupId, highlight) {
+    var id = String(orthogroupId || '').trim();
+    if (!id) return;
+    var featureIds = featureIdsByOrthogroupId.get(id) || new Set();
+    featureIds.forEach(function (featureId) {
+      setFeatureHighlight(featureId, highlight);
+    });
+    var comparisonElements = comparisonElementsByOrthogroupId.get(id) || [];
+    comparisonElements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-orthogroup-link--hover', highlight);
+    });
+  }
+
+  function setHoverHighlight(svgId, highlight) {
+    var feature = featuresById.get(String(svgId || '').trim());
+    var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
+    if (orthogroupId) {
+      setOrthogroupHover(orthogroupId, highlight);
+      return;
+    }
+    setFeatureHighlight(svgId, highlight);
+  }
+
+  function supportsStandaloneControls() {
+    if (!document.createElementNS) return false;
+    if (typeof window.SVGForeignObjectElement === 'undefined') return false;
+    try {
+      return document.createElementNS(SVG_NS, 'foreignObject') instanceof window.SVGForeignObjectElement;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function normalizeSearchText(value) {
+    return String(value == null ? '' : value).toLowerCase();
+  }
+
+  var NUCLEOTIDE_IUPAC = {
+    A: 'A',
+    C: 'C',
+    G: 'G',
+    T: 'TU',
+    U: 'TU',
+    R: 'AG',
+    Y: 'CTU',
+    S: 'GC',
+    W: 'ATU',
+    K: 'GTU',
+    M: 'AC',
+    B: 'CGTU',
+    D: 'AGTU',
+    H: 'ACTU',
+    V: 'ACG',
+    N: 'ACGTU',
+    '-': '-'
+  };
+  var AMINO_ACID_IUPAC = {
+    A: 'A',
+    C: 'C',
+    D: 'D',
+    E: 'E',
+    F: 'F',
+    G: 'G',
+    H: 'H',
+    I: 'I',
+    K: 'K',
+    L: 'L',
+    M: 'M',
+    N: 'N',
+    P: 'P',
+    Q: 'Q',
+    R: 'R',
+    S: 'S',
+    T: 'T',
+    V: 'V',
+    W: 'W',
+    Y: 'Y',
+    U: 'U',
+    O: 'O',
+    B: 'DN',
+    Z: 'EQ',
+    J: 'IL',
+    X: 'ACDEFGHIKLMNPQRSTVWYUO',
+    '*': '*',
+    '-': '-'
+  };
+
+  function getIupacAlphabet(alphabet) {
+    if (alphabet === 'nucleotide') return NUCLEOTIDE_IUPAC;
+    if (alphabet === 'amino-acid') return AMINO_ACID_IUPAC;
+    return null;
+  }
+
+  function uniqueCharacters(value) {
+    var seen = {};
+    var chars = [];
+    String(value || '').split('').forEach(function (char) {
+      if (!char || seen[char]) return;
+      seen[char] = true;
+      chars.push(char);
+    });
+    return chars;
+  }
+
+  function charSetsIntersect(left, right) {
+    var rightSet = {};
+    uniqueCharacters(right).forEach(function (char) {
+      rightSet[char] = true;
+    });
+    return uniqueCharacters(left).some(function (char) {
+      return Boolean(rightSet[char]);
+    });
+  }
+
+  function escapeRegExpText(value) {
+    return String(value).replace(/[.*+?^\${}()|[\]\\]/g, '\\\\$&');
+  }
+
+  function escapeRegExpClassChar(value) {
+    return String(value).replace(/[\\\]\[\^-]/g, '\\\\$&');
+  }
+
+  function buildIupacQueryPattern(query, alphabet) {
+    var map = getIupacAlphabet(alphabet);
+    var normalized = String(query || '').replace(/\s+/g, '').toUpperCase();
+    if (!map || !normalized) return null;
+    var targetChars = Object.keys(map);
+    var parts = [];
+    normalized.split('').forEach(function (queryChar) {
+      var querySet = map[queryChar] || queryChar;
+      var matchingTargets = targetChars.filter(function (targetChar) {
+        return charSetsIntersect(querySet, map[targetChar] || targetChar);
+      });
+      if (!matchingTargets.length) {
+        parts.push(escapeRegExpText(queryChar));
+      } else if (matchingTargets.length === 1) {
+        parts.push(escapeRegExpText(matchingTargets[0]));
+      } else {
+        parts.push('[' + matchingTargets.map(escapeRegExpClassChar).join('') + ']');
+      }
+    });
+    return parts.join('');
+  }
+
+  function appendSearchValues(values, value) {
+    if (Array.isArray(value)) {
+      value.forEach(function (entry) {
+        appendSearchValues(values, entry);
+      });
+      return;
+    }
+    if (value === null || value === undefined) return;
+    var text = String(value).trim();
+    if (text) values.push(text);
+  }
+
+  function appendSearchItems(items, label, value, options) {
+    if (Array.isArray(value)) {
+      value.forEach(function (entry) {
+        appendSearchItems(items, label, entry, options);
+      });
+      return;
+    }
+    if (value === null || value === undefined) return;
+    var text = String(value).trim();
+    if (text) {
+      items.push({
+        label: label,
+        value: text,
+        alphabet: options && options.alphabet ? String(options.alphabet) : ''
+      });
+    }
+  }
+
+  function getFeatureQualifiers(feature) {
+    return feature && feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
+      ? feature.qualifiers
+      : {};
+  }
+
+  function getQualifierValuesByKey(feature, qualifierKey) {
+    var target = normalizeSearchText(qualifierKey).trim();
+    var qualifiers = getFeatureQualifiers(feature);
+    var values = [];
+    Object.keys(qualifiers).forEach(function (key) {
+      if (target && normalizeSearchText(key) !== target) return;
+      appendSearchValues(values, qualifiers[key]);
+    });
+    return values;
+  }
+
+  function getQualifierSearchItems(feature, qualifierKey) {
+    var target = normalizeSearchText(qualifierKey).trim();
+    var qualifiers = getFeatureQualifiers(feature);
+    var items = [];
+    Object.keys(qualifiers).sort().forEach(function (key) {
+      if (target && normalizeSearchText(key) !== target) return;
+      appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
+    });
+    return items;
+  }
+
+  function getLabelSearchValues(feature) {
+    var values = [];
+    appendSearchValues(values, feature && feature.display_label);
+    appendSearchValues(values, feature && feature.label);
+    appendSearchValues(values, feature && feature.search_labels);
+    appendSearchValues(values, feature && feature.svg_id);
+    return values;
+  }
+
+  function getLabelSearchItems(feature) {
+    var items = [];
+    appendSearchItems(items, 'Label', feature && feature.display_label);
+    appendSearchItems(items, 'Label', feature && feature.label);
+    appendSearchItems(items, 'Label', feature && feature.search_labels);
+    appendSearchItems(items, 'SVG ID', feature && feature.svg_id);
+    return items;
+  }
+
+  function getOrthogroupById(orthogroupId) {
+    var id = String(orthogroupId || '').trim();
+    if (!id) return null;
+    return orthogroupsById.get(id) || null;
+  }
+
+  function getFeatureOrthogroup(feature) {
+    return getOrthogroupById(feature && feature.orthogroup_id);
+  }
+
+  function getFeatureOrthogroupMember(feature, group) {
+    if (feature && feature.orthogroup_member && typeof feature.orthogroup_member === 'object') {
+      return feature.orthogroup_member;
+    }
+    var members = group && Array.isArray(group.members) ? group.members : [];
+    var svgId = String(feature && feature.svg_id || '').trim();
+    var recordIndex = Number(feature && feature.record_idx);
+    for (var i = 0; i < members.length; i += 1) {
+      var member = members[i] || {};
+      if (String(member.featureSvgId || '').trim() !== svgId) continue;
+      if (!Number.isInteger(recordIndex) || Number(member.recordIndex) === recordIndex) {
+        return member;
+      }
+    }
+    return null;
+  }
+
+  function displayProteinId(feature, member) {
+    return String(
+      feature && feature.source_protein_id ||
+      member && member.sourceProteinId ||
+      feature && feature.protein_id ||
+      member && member.proteinId ||
+      ''
+    ).trim();
+  }
+
+  function internalProteinId(feature, member) {
+    return String(
+      feature && feature.protein_id ||
+      member && member.proteinId ||
+      ''
+    ).trim();
+  }
+
+  function getOrthogroupSearchItems(feature) {
+    var group = getFeatureOrthogroup(feature);
+    var member = getFeatureOrthogroupMember(feature, group);
+    var proteinId = displayProteinId(feature, member);
+    var internalId = internalProteinId(feature, member);
+    var items = [];
+    appendSearchItems(items, 'Orthogroup ID', feature && feature.orthogroup_id);
+    appendSearchItems(items, 'Orthogroup name', group && (group.display_name || group.name));
+    appendSearchItems(items, 'Orthogroup description', group && group.description);
+    appendSearchItems(items, 'Protein ID', proteinId);
+    if (internalId && internalId !== proteinId) {
+      appendSearchItems(items, 'Internal protein ID', internalId);
+    }
+    appendSearchItems(items, 'Orthogroup member', member && member.label);
+    appendSearchItems(items, 'Orthogroup member gene', member && member.gene);
+    appendSearchItems(items, 'Orthogroup member product', member && member.product);
+    appendSearchItems(items, 'Orthogroup member note', member && member.note);
+    appendSearchItems(items, 'Orthogroup member protein ID', member && (member.sourceProteinId || member.proteinId));
+    return items;
+  }
+
+  function featureSearchItems(feature, field, qualifierKey) {
+    var items = [];
+    var selectedField = normalizeSearchField(field);
+    var qualifiers = getFeatureQualifiers(feature);
+    if (selectedField === 'label') {
+      return getLabelSearchItems(feature);
+    }
+    if (selectedField === 'type') {
+      appendSearchItems(items, 'Feature type', feature && feature.type);
+      return items;
+    }
+    if (selectedField === 'record-id') {
+      appendSearchItems(items, 'Record ID', feature && feature.record_id);
+      return items;
+    }
+    if (selectedField === 'location') {
+      appendSearchItems(items, 'Location', feature && feature.location);
+      appendSearchItems(items, 'Start', feature && feature.start);
+      appendSearchItems(items, 'End', feature && feature.end);
+      return items;
+    }
+    if (selectedField === 'strand') {
+      appendSearchItems(items, 'Strand', feature && feature.strand);
+      return items;
+    }
+    if (selectedField === 'orthogroup') {
+      return getOrthogroupSearchItems(feature);
+    }
+    if (selectedField === 'qualifier-key') {
+      appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
+      return items;
+    }
+    if (selectedField === 'qualifier-value') {
+      return getQualifierSearchItems(feature, qualifierKey);
+    }
+    if (selectedField === 'nucleotide') {
+      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence, { alphabet: 'nucleotide' });
+      return items;
+    }
+    if (selectedField === 'amino-acid') {
+      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence, { alphabet: 'amino-acid' });
+      return items;
+    }
+
+    Array.prototype.push.apply(items, getLabelSearchItems(feature));
+    appendSearchItems(items, 'Record ID', feature && feature.record_id);
+    appendSearchItems(items, 'Feature type', feature && feature.type);
+    appendSearchItems(items, 'Location', feature && feature.location);
+    appendSearchItems(items, 'Strand', feature && feature.strand);
+    Array.prototype.push.apply(items, getOrthogroupSearchItems(feature));
+    if (popupMode !== 'simple') {
+      appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
+      Object.keys(qualifiers).sort().forEach(function (key) {
+        appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
+      });
+      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence, { alphabet: 'nucleotide' });
+      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence, { alphabet: 'amino-acid' });
+    }
+    return items;
+  }
+
+  function featureSearchValues(feature, field, qualifierKey) {
+    return featureSearchItems(feature, field, qualifierKey).map(function (item) {
+      return item.value;
+    });
+  }
+
+  function compileSearchMatcher(query, useRegex) {
+    var trimmedQuery = String(query || '').trim();
+    if (!trimmedQuery) {
+      return { active: false, error: '', test: function () { return false; } };
+    }
+    if (useRegex) {
+      try {
+        var regex = new RegExp(trimmedQuery, 'i');
+        return {
+          active: true,
+          error: '',
+          match: function (value) {
+            regex.lastIndex = 0;
+            var match = String(value == null ? '' : value).match(regex);
+            return match ? String(match[0] || '') : '';
+          },
+          test: function (values) {
+            return values.some(function (value) {
+              regex.lastIndex = 0;
+              return regex.test(String(value == null ? '' : value));
+            });
+          }
+        };
+      } catch (error) {
+        return { active: true, error: 'Invalid regex', test: function () { return false; } };
+      }
+    }
+    var needle = normalizeSearchText(trimmedQuery);
+    var sequenceMatchers = {};
+    var getSequenceRegex = function (alphabet) {
+      if (!getIupacAlphabet(alphabet)) return null;
+      if (!Object.prototype.hasOwnProperty.call(sequenceMatchers, alphabet)) {
+        var pattern = buildIupacQueryPattern(trimmedQuery, alphabet);
+        sequenceMatchers[alphabet] = pattern ? new RegExp(pattern, 'i') : null;
+      }
+      return sequenceMatchers[alphabet];
+    };
+    return {
+      active: true,
+      error: '',
+      match: function (value, alphabet) {
+        var text = String(value == null ? '' : value);
+        var sequenceRegex = getSequenceRegex(alphabet);
+        if (sequenceRegex) {
+          sequenceRegex.lastIndex = 0;
+          var sequenceMatch = text.match(sequenceRegex);
+          return sequenceMatch ? String(sequenceMatch[0] || '') : '';
+        }
+        var index = normalizeSearchText(text).indexOf(needle);
+        return index === -1 ? '' : text.slice(index, index + trimmedQuery.length);
+      },
+      test: function (values) {
+        return values.some(function (value) {
+          return normalizeSearchText(value).indexOf(needle) !== -1;
+        });
+      }
+    };
+  }
+
+  function featureMatchesSearch(feature, matcher, field, qualifierKey) {
+    if (!matcher || !matcher.active || matcher.error) return false;
+    return featureSearchMatches(feature, matcher, field, qualifierKey).length > 0;
+  }
+
+  function featureSearchMatches(feature, matcher, field, qualifierKey) {
+    if (!matcher || !matcher.active || matcher.error) return [];
+    return featureSearchItems(feature, field, qualifierKey).map(function (item) {
+      var matchedText = matcher.match ? matcher.match(item.value, item.alphabet) : '';
+      if (!matchedText) return null;
+      return {
+        label: item.label,
+        value: String(item.value),
+        match: matchedText
+      };
+    }).filter(Boolean);
+  }
+
+  function collapseWhitespace(value) {
+    return String(value == null ? '' : value).replace(/\\s+/g, ' ').trim();
+  }
+
+  function searchMatchSnippet(value, matchText) {
+    var text = collapseWhitespace(value);
+    var match = collapseWhitespace(matchText);
+    if (!text) return '';
+    if (!match) return text.length > 80 ? text.slice(0, 77) + '...' : text;
+    var lowerText = text.toLowerCase();
+    var index = lowerText.indexOf(match.toLowerCase());
+    if (index === -1) return text.length > 80 ? text.slice(0, 77) + '...' : text;
+    var start = Math.max(0, index - 24);
+    var end = Math.min(text.length, index + match.length + 24);
+    return (start > 0 ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
+  }
+
+  function formatSearchMatchDetail(detail) {
+    if (!detail) return '';
+    var label = collapseWhitespace(detail.label);
+    var snippet = searchMatchSnippet(detail.value, detail.match);
+    if (!label && !snippet) return '';
+    if (!snippet) return label;
+    return label ? label + ': ' + snippet : snippet;
+  }
+
+  function syncSearchControls() {
+    if (!searchControls) return;
+    var root = searchControls.querySelector('.gfs');
+    var queryInput = searchControls.querySelector('[data-search-query]');
+    var fieldSelect = searchControls.querySelector('[data-search-field]');
+    var qualifierInput = searchControls.querySelector('[data-search-qualifier]');
+    var regexInput = searchControls.querySelector('[data-search-regex]');
+    var countText = searchControls.querySelector('[data-search-count]');
+    var matchDetailText = searchControls.querySelector('[data-search-match-detail]');
+    searchState.field = normalizeSearchField(searchState.field);
+    if (queryInput && queryInput.value !== searchState.query) queryInput.value = searchState.query;
+    if (fieldSelect && fieldSelect.value !== searchState.field) fieldSelect.value = searchState.field;
+    if (qualifierInput && qualifierInput.value !== searchState.qualifierKey) qualifierInput.value = searchState.qualifierKey;
+    if (regexInput) regexInput.checked = Boolean(searchState.useRegex);
+    if (qualifierInput) {
+      qualifierInput.disabled = popupMode === 'simple' || searchState.field !== 'qualifier-value';
+      qualifierInput.style.display = popupMode === 'simple' ? 'none' : '';
+    }
+    setClassToken(root, 'is-invalid', Boolean(searchState.error));
+    if (countText) {
+      if (searchState.error) {
+        countText.textContent = searchState.error;
+      } else if (!String(searchState.query || '').trim()) {
+        countText.textContent = '0 / ' + String(featuresById.size) + ' features';
+      } else {
+        var current = searchState.activeIndex >= 0 ? searchState.activeIndex + 1 : 0;
+        countText.textContent = String(current) + ' / ' + String(searchState.matches.length) + ' features';
+      }
+    }
+    if (matchDetailText) {
+      var activeId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
+      var details = activeId ? searchState.matchDetails[activeId] || [] : [];
+      var detailText = details.length ? formatSearchMatchDetail(details[0]) : '';
+      matchDetailText.textContent = detailText ? 'Matched ' + detailText : '';
+      matchDetailText.setAttribute('title', detailText ? 'Matched ' + detailText : '');
+    }
+  }
+
+  function applySearchResults() {
+    var queryActive = Boolean(String(searchState.query || '').trim()) && !searchState.error;
+    var matchedIds = new Set(searchState.matches);
+    var activeId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
+    featureElementsById.forEach(function (elements, svgId) {
+      var isMatch = queryActive && matchedIds.has(svgId);
+      var isActive = isMatch && svgId === activeId;
+      elements.forEach(function (element) {
+        setClassToken(element, 'gbdraw-interactive-feature--match', isMatch);
+        setClassToken(element, 'gbdraw-interactive-feature--active-match', isActive);
+        setClassToken(element, 'gbdraw-interactive-feature--dimmed', queryActive && !isMatch);
+      });
+    });
+    syncSearchControls();
+  }
+
+  function setSearchState(nextState) {
+    nextState = nextState || {};
+    var previousActiveId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
+    searchState.query = Object.prototype.hasOwnProperty.call(nextState, 'query') ? String(nextState.query || '') : searchState.query;
+    searchState.field = Object.prototype.hasOwnProperty.call(nextState, 'field')
+      ? normalizeSearchField(nextState.field)
+      : normalizeSearchField(searchState.field);
+    searchState.qualifierKey = Object.prototype.hasOwnProperty.call(nextState, 'qualifierKey') ? String(nextState.qualifierKey || '') : searchState.qualifierKey;
+    searchState.useRegex = Object.prototype.hasOwnProperty.call(nextState, 'useRegex') ? Boolean(nextState.useRegex) : searchState.useRegex;
+
+    var matcher = compileSearchMatcher(searchState.query, searchState.useRegex);
+    searchState.error = matcher.error;
+    if (!matcher.active || matcher.error) {
+      searchState.matches = [];
+      searchState.matchDetails = {};
+      searchState.activeIndex = -1;
+      applySearchResults();
+      return;
+    }
+
+    var nextMatchDetails = {};
+    searchState.matches = features.filter(function (feature) {
+      var svgId = String(feature && feature.svg_id || '').trim();
+      if (!svgId || !featureElementsById.has(svgId)) return false;
+      var details = featureSearchMatches(feature, matcher, searchState.field, searchState.qualifierKey);
+      if (!details.length) return false;
+      nextMatchDetails[svgId] = details;
+      return true;
+    }).map(function (feature) {
+      return String(feature.svg_id);
+    });
+    searchState.matchDetails = nextMatchDetails;
+
+    if (!searchState.matches.length) {
+      searchState.activeIndex = -1;
+    } else if (previousActiveId && searchState.matches.indexOf(previousActiveId) !== -1) {
+      searchState.activeIndex = searchState.matches.indexOf(previousActiveId);
+    } else {
+      searchState.activeIndex = 0;
+    }
+    applySearchResults();
+  }
+
+  function clearSearch() {
+    searchState.query = '';
+    searchState.field = 'all';
+    searchState.qualifierKey = '';
+    searchState.useRegex = false;
+    searchState.matches = [];
+    searchState.matchDetails = {};
+    searchState.activeIndex = -1;
+    searchState.error = '';
+    applySearchResults();
+  }
+
+  function getFeatureBounds(svgId) {
+    var elements = featureElementsById.get(String(svgId || '')) || [];
+    var minX = Infinity;
+    var minY = Infinity;
+    var maxX = -Infinity;
+    var maxY = -Infinity;
+
+    function addPoint(point) {
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    elements.forEach(function (element) {
+      var rect = typeof element.getBoundingClientRect === 'function' ? element.getBoundingClientRect() : null;
+      if (rect && Number.isFinite(rect.left) && Number.isFinite(rect.right) && rect.right > rect.left && rect.bottom > rect.top) {
+        addPoint(clientPoint(rect.left, rect.top));
+        addPoint(clientPoint(rect.right, rect.top));
+        addPoint(clientPoint(rect.right, rect.bottom));
+        addPoint(clientPoint(rect.left, rect.bottom));
+        return;
+      }
+      if (typeof element.getBBox !== 'function') return;
+      try {
+        var bbox = element.getBBox();
+        addPoint({ x: bbox.x, y: bbox.y });
+        addPoint({ x: bbox.x + bbox.width, y: bbox.y + bbox.height });
+      } catch (error) {
+        // Ignore elements that cannot report a box in this viewer.
+      }
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || maxX <= minX || maxY <= minY) {
+      return null;
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  function centerFeatureInView(svgId) {
+    var bounds = getFeatureBounds(svgId);
+    if (!bounds) return;
+    var view = getViewRect();
+    var targetWidth = Math.min(view.width, Math.max(bounds.width * 6, originalViewRect.width / 8));
+    var targetHeight = Math.min(view.height, Math.max(bounds.height * 6, originalViewRect.height / 8));
+    targetWidth = Math.max(targetWidth, bounds.width * 1.4);
+    targetHeight = Math.max(targetHeight, bounds.height * 1.4);
+    setSvgViewRect({
+      x: bounds.x + bounds.width / 2 - targetWidth / 2,
+      y: bounds.y + bounds.height / 2 - targetHeight / 2,
+      width: targetWidth,
+      height: targetHeight
+    });
+  }
+
+  function setActiveMatch(index, options) {
+    if (!searchState.matches.length) {
+      searchState.activeIndex = -1;
+      applySearchResults();
+      return;
+    }
+    var count = searchState.matches.length;
+    var nextIndex = ((Number(index) || 0) % count + count) % count;
+    searchState.activeIndex = nextIndex;
+    applySearchResults();
+    if (options && options.center) {
+      centerFeatureInView(searchState.matches[nextIndex]);
+    }
+  }
+
+  function openActiveMatchPopup() {
+    if (!searchState.matches.length) return;
+    if (searchState.activeIndex < 0) {
+      setActiveMatch(0, { center: true });
+    }
+    var svgId = searchState.matches[searchState.activeIndex];
+    var feature = featuresById.get(String(svgId || ''));
+    if (!feature) return;
+    centerFeatureInView(svgId);
+    openPopup(feature, null);
+  }
+
+  function createXhtmlNode(tagName, attrs) {
+    var node = document.createElementNS(XHTML_NS, tagName);
+    Object.keys(attrs || {}).forEach(function (key) {
+      if (key === 'text') {
+        node.textContent = attrs[key];
+      } else if (key === 'className') {
+        node.setAttribute('class', attrs[key]);
+      } else {
+        node.setAttribute(key, attrs[key]);
+      }
+    });
+    return node;
+  }
+
+  function updateSearchControlsPosition() {
+    if (!searchControls) return;
+    var visibleView = getVisibleViewRect();
+    var view = getViewRect();
+    var screenScale = getScreenScale();
+    var fallbackSize = getSvgClientSize();
+    var unit = Math.max(
+      1 / Math.max(screenScale.x, 0.001),
+      1 / Math.max(screenScale.y, 0.001),
+      view.width / fallbackSize.width,
+      view.height / fallbackSize.height
+    );
+    var margin = 12 * unit;
+    var yOffset = 42 * unit;
+    var controlWidth = Number(searchControls.getAttribute('width')) || 396;
+    var x = Math.max(
+      visibleView.x + margin,
+      visibleView.x + visibleView.width - (controlWidth * unit) - margin
+    );
+    searchControls.setAttribute(
+      'transform',
+      'translate(' +
+        formatSvgNumber(x + (searchControlsOffsetCss.x * unit)) +
+        ', ' +
+        formatSvgNumber(visibleView.y + margin + yOffset + (searchControlsOffsetCss.y * unit)) +
+        ') scale(' + formatSvgNumber(unit) + ')'
+    );
+  }
+
+  function stopSearchControlsDrag() {
+    if (!activeSearchControlsDrag) return;
+    document.removeEventListener('mousemove', activeSearchControlsDrag.onMove, true);
+    document.removeEventListener('mouseup', activeSearchControlsDrag.onEnd, true);
+    window.removeEventListener('mouseup', activeSearchControlsDrag.onEnd, true);
+    window.removeEventListener('blur', activeSearchControlsDrag.onEnd);
+    if (activeSearchControlsDrag.root && activeSearchControlsDrag.root.classList) {
+      activeSearchControlsDrag.root.classList.remove('is-dragging');
+    }
+    activeSearchControlsDrag = null;
+  }
+
+  function startSearchControlsDrag(event, root) {
+    if (event.button !== 0) return;
+    stopSearchControlsDrag();
+    var startClientX = Number(event.clientX) || 0;
+    var startClientY = Number(event.clientY) || 0;
+    var startOffsetX = Number(searchControlsOffsetCss.x) || 0;
+    var startOffsetY = Number(searchControlsOffsetCss.y) || 0;
+    var onMove = function (moveEvent) {
+      searchControlsOffsetCss.x = startOffsetX + ((Number(moveEvent.clientX) || 0) - startClientX);
+      searchControlsOffsetCss.y = startOffsetY + ((Number(moveEvent.clientY) || 0) - startClientY);
+      updateSearchControlsPosition();
+      moveEvent.preventDefault();
+    };
+    var onEnd = function () {
+      stopSearchControlsDrag();
+    };
+    activeSearchControlsDrag = {
+      root: root,
+      onMove: onMove,
+      onEnd: onEnd
+    };
+    if (root && root.classList) root.classList.add('is-dragging');
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup', onEnd, true);
+    window.addEventListener('mouseup', onEnd, true);
+    window.addEventListener('blur', onEnd);
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function setupSearchControls() {
+    var existing = svg.querySelector('#' + SEARCH_CONTROLS_ID);
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+    if (!supportsStandaloneControls()) return;
+
+    searchControls = document.createElementNS(SVG_NS, 'foreignObject');
+    searchControls.setAttribute('id', SEARCH_CONTROLS_ID);
+    searchControls.setAttribute('class', 'gbdraw-feature-search-controls');
+    searchControls.setAttribute('data-popup-mode', popupMode);
+    searchControls.setAttribute('width', '396');
+    searchControls.setAttribute('height', '86');
+
+    var root = createXhtmlNode('div', {
+      xmlns: XHTML_NS,
+      className: 'gfs'
+    });
+    var firstRow = createXhtmlNode('div', { className: 'gfs-row' });
+    var secondRow = createXhtmlNode('div', { className: 'gfs-row' });
+    var queryInput = createXhtmlNode('input', {
+      className: 'gfs-input gfs-query',
+      type: 'search',
+      placeholder: 'Search features',
+      'aria-label': 'Search features',
+      'data-search-query': 'true'
+    });
+    var fieldSelect = createXhtmlNode('select', {
+      className: 'gfs-select',
+      'aria-label': 'Search field',
+      'data-search-field': 'true'
+    });
+    var searchFieldOptions = [
+      ['all', 'All'],
+      ['label', 'Label'],
+      ['type', 'Feature type'],
+      ['record-id', 'Record ID'],
+      ['location', 'Location'],
+      ['strand', 'Strand'],
+      ['orthogroup', 'Orthogroup'],
+      ['qualifier-key', 'Qualifier key'],
+      ['qualifier-value', 'Qualifier value'],
+      ['nucleotide', 'Nucleotide'],
+      ['amino-acid', 'Amino acid']
+    ];
+    if (popupMode === 'simple') {
+      searchFieldOptions = searchFieldOptions.filter(function (entry) {
+        return !isRichSearchField(entry[0]);
+      });
+    }
+    searchFieldOptions.forEach(function (entry) {
+      var option = createXhtmlNode('option', { value: entry[0], text: entry[1] });
+      fieldSelect.appendChild(option);
+    });
+    var qualifierInput = createXhtmlNode('input', {
+      className: 'gfs-input gfs-qualifier',
+      type: 'text',
+      placeholder: 'Qualifier key',
+      'aria-label': 'Qualifier key for qualifier value search',
+      'data-search-qualifier': 'true'
+    });
+    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle' });
+    var regexInput = createXhtmlNode('input', {
+      type: 'checkbox',
+      'data-search-regex': 'true'
+    });
+    regexLabel.appendChild(regexInput);
+    regexLabel.appendChild(document.createTextNode('Regex'));
+    var prevButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button',
+      title: 'Previous match',
+      'aria-label': 'Previous match',
+      'data-search-prev': 'true',
+      text: '<'
+    });
+    var nextButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button',
+      title: 'Next match',
+      'aria-label': 'Next match',
+      'data-search-next': 'true',
+      text: '>'
+    });
+    var clearButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button gfs-button--clear',
+      title: 'Clear search',
+      'aria-label': 'Clear search',
+      'data-search-clear': 'true',
+      text: 'Clear'
+    });
+    var countText = createXhtmlNode('span', {
+      className: 'gfs-count',
+      'data-search-count': 'true',
+      text: '0 / ' + String(featuresById.size) + ' features'
+    });
+    var matchDetailText = createXhtmlNode('div', {
+      className: 'gfs-match-detail',
+      'data-search-match-detail': 'true'
+    });
+
+    firstRow.appendChild(queryInput);
+    firstRow.appendChild(fieldSelect);
+    if (popupMode !== 'simple') {
+      secondRow.appendChild(qualifierInput);
+    }
+    secondRow.appendChild(regexLabel);
+    secondRow.appendChild(prevButton);
+    secondRow.appendChild(nextButton);
+    secondRow.appendChild(clearButton);
+    secondRow.appendChild(countText);
+    root.appendChild(firstRow);
+    root.appendChild(secondRow);
+    root.appendChild(matchDetailText);
+    searchControls.appendChild(root);
+
+    root.addEventListener('mousedown', function (event) {
+      var target = event.target && event.target.closest
+        ? event.target.closest('input, textarea, select, button, label, a')
+        : null;
+      if (target && root.contains(target)) return;
+      startSearchControlsDrag(event, root);
+    });
+
+    ['mousedown', 'mouseup', 'click', 'dblclick', 'keydown', 'keyup', 'keypress', 'wheel', 'touchstart', 'touchmove'].forEach(function (eventName) {
+      root.addEventListener(eventName, function (event) {
+        event.stopPropagation();
+      }, { passive: eventName === 'touchstart' || eventName === 'touchmove' });
+    });
+    queryInput.addEventListener('input', function () {
+      setSearchState({ query: queryInput.value });
+    });
+    fieldSelect.addEventListener('change', function () {
+      setSearchState({ field: fieldSelect.value });
+    });
+    qualifierInput.addEventListener('input', function () {
+      setSearchState({ qualifierKey: qualifierInput.value });
+    });
+    regexInput.addEventListener('change', function () {
+      setSearchState({ useRegex: regexInput.checked });
+    });
+    prevButton.addEventListener('click', function () {
+      setActiveMatch(searchState.activeIndex - 1, { center: true });
+    });
+    nextButton.addEventListener('click', function () {
+      setActiveMatch(searchState.activeIndex + 1, { center: true });
+    });
+    clearButton.addEventListener('click', function () {
+      clearSearch();
+      queryInput.focus();
+    });
+    root.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        clearSearch();
+        queryInput.focus();
+        event.preventDefault();
+      } else if (event.key === 'Enter' && searchState.matches.length) {
+        openActiveMatchPopup();
+        event.preventDefault();
+      }
+    });
+
+    svg.appendChild(searchControls);
+    syncSearchControls();
+    updateSearchControlsPosition();
+  }
+
+  function closestSearchControls(target) {
+    return Boolean(searchControls && target && searchControls.contains(target));
+  }
+
   function formatSvgNumber(value) {
     var numeric = Number(value);
     if (!Number.isFinite(numeric)) return '0';
@@ -425,7 +1591,66 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return { x: 0, y: 0, width: width, height: height };
   }
 
-  var originalViewRect = copyViewRect(getViewRect());
+  function parseViewBoxRect(value) {
+    var parts = String(value || '').trim().split(/[\\s,]+/).map(function (part) {
+      return Number(part);
+    });
+    if (parts.length < 4 || parts.some(function (part) { return !Number.isFinite(part); })) {
+      return null;
+    }
+    if (parts[2] <= 0 || parts[3] <= 0) return null;
+    return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+  }
+
+  function parseOriginalViewRectFromSvg() {
+    return parseViewBoxRect(svg.getAttribute('data-gbdraw-original-viewbox')) ||
+      parseViewBoxRect(svg.getAttribute('viewBox')) ||
+      copyViewRect(getViewRect());
+  }
+
+  function getViewportAspect() {
+    var doc = document.documentElement || {};
+    var width = window.innerWidth || doc.clientWidth || 0;
+    var height = window.innerHeight || doc.clientHeight || 0;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return 0;
+    }
+    return width / height;
+  }
+
+  function fitRectToAspect(rect, targetAspect) {
+    var source = copyViewRect(rect);
+    var sourceAspect = source.width / source.height;
+    if (!Number.isFinite(targetAspect) || targetAspect <= 0 || !Number.isFinite(sourceAspect) || sourceAspect <= 0) {
+      return source;
+    }
+    if (targetAspect > sourceAspect) {
+      var width = source.height * targetAspect;
+      return {
+        x: source.x + source.width / 2 - width / 2,
+        y: source.y,
+        width: width,
+        height: source.height
+      };
+    }
+    var height = source.width / targetAspect;
+    return {
+      x: source.x,
+      y: source.y + source.height / 2 - height / 2,
+      width: source.width,
+      height: height
+    };
+  }
+
+  function rectsNearlyEqual(a, b) {
+    return Math.abs(a.x - b.x) < 0.5 &&
+      Math.abs(a.y - b.y) < 0.5 &&
+      Math.abs(a.width - b.width) < 0.5 &&
+      Math.abs(a.height - b.height) < 0.5;
+  }
+
+  var originalViewRect = parseOriginalViewRectFromSvg();
+  var homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());
 
   function getSvgClientSize() {
     var rect = typeof svg.getBoundingClientRect === 'function' ? svg.getBoundingClientRect() : null;
@@ -438,15 +1663,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function normalizeViewRect(rect) {
-    var maxZoom = 16;
-    var minWidth = originalViewRect.width / maxZoom;
-    var minHeight = originalViewRect.height / maxZoom;
-    var width = clampValue(Number(rect && rect.width), minWidth, originalViewRect.width);
-    var height = clampValue(Number(rect && rect.height), minHeight, originalViewRect.height);
-    var minX = originalViewRect.x;
-    var minY = originalViewRect.y;
-    var maxX = originalViewRect.x + originalViewRect.width - width;
-    var maxY = originalViewRect.y + originalViewRect.height - height;
+    var minWidth = homeViewRect.width / maxZoom;
+    var minHeight = homeViewRect.height / maxZoom;
+    var width = clampValue(Number(rect && rect.width), minWidth, homeViewRect.width);
+    var height = clampValue(Number(rect && rect.height), minHeight, homeViewRect.height);
+    var minX = homeViewRect.x;
+    var minY = homeViewRect.y;
+    var maxX = homeViewRect.x + homeViewRect.width - width;
+    var maxY = homeViewRect.y + homeViewRect.height - height;
     var x = maxX <= minX ? minX : clampValue(Number(rect && rect.x), minX, maxX);
     var y = maxY <= minY ? minY : clampValue(Number(rect && rect.y), minY, maxY);
     return { x: x, y: y, width: width, height: height };
@@ -459,6 +1683,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       [next.x, next.y, next.width, next.height].map(formatSvgNumber).join(' ')
     );
     updateViewportControlsPosition();
+    keepPopupWithinVisibleView();
     return next;
   }
 
@@ -466,10 +1691,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var view = getViewRect();
     var safeFactor = Number(factor);
     if (!Number.isFinite(safeFactor) || safeFactor <= 0) return;
-    var currentScale = view.width / originalViewRect.width;
-    var nextScale = clampValue(currentScale * safeFactor, 1 / 16, 1);
-    var width = originalViewRect.width * nextScale;
-    var height = originalViewRect.height * nextScale;
+    var currentScale = view.width / homeViewRect.width;
+    var nextScale = clampValue(currentScale * safeFactor, 1 / maxZoom, 1);
+    var width = homeViewRect.width * nextScale;
+    var height = homeViewRect.height * nextScale;
     var anchor = anchorPoint || { x: view.x + view.width / 2, y: view.y + view.height / 2 };
     var ratioX = width / view.width;
     var ratioY = height / view.height;
@@ -485,7 +1710,40 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function resetViewport() {
     closePopup();
     setPanMode(false);
-    setSvgViewRect(originalViewRect);
+    setSvgViewRect(homeViewRect);
+  }
+
+  function refitViewportToWindow() {
+    var previousHomeViewRect = copyViewRect(homeViewRect);
+    var currentView = getViewRect();
+    var wasAtHome = rectsNearlyEqual(currentView, previousHomeViewRect);
+    var centerX = currentView.x + currentView.width / 2;
+    var centerY = currentView.y + currentView.height / 2;
+    var currentScale = clampValue(currentView.width / previousHomeViewRect.width, 1 / maxZoom, 1);
+    homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());
+    if (wasAtHome) {
+      setSvgViewRect(homeViewRect);
+      return;
+    }
+    var width = homeViewRect.width * currentScale;
+    var height = homeViewRect.height * currentScale;
+    setSvgViewRect({
+      x: centerX - width / 2,
+      y: centerY - height / 2,
+      width: width,
+      height: height
+    });
+  }
+
+  function scheduleViewportRefit() {
+    if (resizeFrame !== null) return;
+    var requestFrame = window.requestAnimationFrame || function (callback) {
+      return window.setTimeout(callback, 16);
+    };
+    resizeFrame = requestFrame(function () {
+      resizeFrame = null;
+      refitViewportToWindow();
+    });
   }
 
   function createSvgNode(tagName, attrs) {
@@ -557,6 +1815,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       'transform',
       'translate(' + formatSvgNumber(visibleView.x + margin) + ', ' + formatSvgNumber(visibleView.y + margin) + ') scale(' + formatSvgNumber(unit) + ')'
     );
+    updateSearchControlsPosition();
   }
 
   function setPanMode(enabled) {
@@ -564,8 +1823,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     setClassToken(svg, 'gbdraw-interactive-pan-active', isPanMode);
     if (isPanMode) {
       if (activeHoverSvgId) {
-        setFeatureHighlight(activeHoverSvgId, false);
+        setHoverHighlight(activeHoverSvgId, false);
         activeHoverSvgId = null;
+        activeHoverKey = '';
       }
       closePopup();
     }
@@ -588,7 +1848,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var buttons = [
       { action: 'zoom-in', label: '+', title: 'Zoom in', width: 32 },
       { action: 'zoom-out', label: '-', title: 'Zoom out', width: 32 },
-      { action: 'reset', label: '1:1', title: 'Reset view', width: 42 },
+      { action: 'reset', label: 'Original', title: 'Return to original view', width: 62 },
       { action: 'pan', label: 'Pan', title: 'Toggle pan mode', width: 44 }
     ];
     var x = 0;
@@ -639,6 +1899,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function startCanvasPan(event) {
     if (!isPanMode || event.button !== 0) return;
     if (popup && popup.contains(event.target)) return;
+    if (closestSearchControls(event.target)) return;
     if (closestViewportButton(event.target)) return;
     stopCanvasPan();
     closePopup();
@@ -704,13 +1965,51 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return text;
   }
 
+  function memberLocationText(member) {
+    if (!member || typeof member !== 'object') return '';
+    var start = Number(member.start);
+    var end = Number(member.end);
+    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
+    if (member.strand) text += ' (' + member.strand + ')';
+    return text === '..' ? '' : text;
+  }
+
+  function getFeatureSearchDetail(feature) {
+    var svgId = String(feature && feature.svg_id || '').trim();
+    if (!svgId || !searchState.query) return '';
+    var details = searchState.matchDetails[svgId] || [];
+    return details.length ? formatSearchMatchDetail(details[0]) : '';
+  }
+
+  function orthogroupRows(feature) {
+    var group = getFeatureOrthogroup(feature);
+    var member = getFeatureOrthogroupMember(feature, group);
+    var memberCount = Number(feature && feature.orthogroup_member_count);
+    var recordCoverage = Number(feature && feature.orthogroup_record_coverage);
+    var proteinId = displayProteinId(feature, member);
+    var rows = [
+      ['Orthogroup ID', feature && feature.orthogroup_id || ''],
+      ['Orthogroup name', group && (group.display_name || group.name) || ''],
+      ['Members', Number.isFinite(memberCount) && memberCount > 0 ? String(memberCount) : (group && group.member_count ? String(group.member_count) : '')],
+      ['Record coverage', Number.isFinite(recordCoverage) && recordCoverage > 0 ? String(recordCoverage) : (group && group.record_coverage_count ? String(group.record_coverage_count) : '')],
+      ['Protein ID', proteinId]
+    ];
+    return rows.filter(function (row) {
+      return String(row[1] == null ? '' : row[1]) !== '';
+    });
+  }
+
   function detailRows(feature) {
-    return [
-      ['Label', feature.label || ''],
+    var searchDetail = getFeatureSearchDetail(feature);
+    var rows = [
+      ['Search match', searchDetail],
+      ['Label', feature.display_label || feature.label || ''],
       ['Record ID', feature.record_id || ''],
       ['Type', feature.type || ''],
       ['Location', locationText(feature)]
-    ].filter(function (row) {
+    ];
+    Array.prototype.push.apply(rows, orthogroupRows(feature));
+    return rows.filter(function (row) {
       return String(row[1] == null ? '' : row[1]) !== '';
     });
   }
@@ -751,18 +2050,49 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
   }
 
-  function renderLocationParts(feature) {
-    var parts = Array.isArray(feature.location_parts) ? feature.location_parts : [];
-    if (!parts.length) return '';
-    var rows = parts.map(function (part, index) {
-      var display = String(part && part.display || '').trim();
-      var strand = String(part && part.strand || '').trim();
-      return ['Part ' + String(index + 1), strand ? display + ' (' + strand + ')' : display];
+  function memberProductOrNote(member) {
+    return String(member && (member.product || member.note) || '').trim();
+  }
+
+  function orthogroupMemberTableRows(members) {
+    return members.map(function (member) {
+      return {
+        record: String(member && member.recordId || '').trim(),
+        coordinates: memberLocationText(member),
+        proteinId: displayProteinId(null, member),
+        productOrNote: memberProductOrNote(member)
+      };
     }).filter(function (row) {
-      return row[1];
+      return row.record || row.coordinates || row.proteinId || row.productOrNote;
     });
+  }
+
+  function renderOrthogroupMembers(feature) {
+    var group = getFeatureOrthogroup(feature);
+    if (!group) return '';
+    var members = Array.isArray(group.members) ? group.members : [];
+    if (!members.length) return '';
+    var rows = orthogroupMemberTableRows(members);
     if (!rows.length) return '';
-    return '<div class="gfi-block"><div class="gfi-block-title">Location parts</div>' + renderRows(rows) + '</div>';
+    var text = ['Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'].concat(
+      rows.map(function (row) {
+        return [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\\t');
+      })
+    ).join('\\n');
+    var body = rows.map(function (row) {
+      return '<tr>' +
+        '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.coordinates) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.proteinId) + '</td>' +
+        '<td>' + escapeHtml(row.productOrNote) + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="gfi-block">' +
+      '<div class="gfi-block-title"><span>Orthogroup members</span><span>' + members.length + '</span>' + copyButton(text) + '</div>' +
+      '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
+      '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>' +
+      '</div>';
   }
 
   function renderQualifiers(feature) {
@@ -799,8 +2129,22 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       renderSequenceBlock('Amino acid', feature.amino_acid_sequence);
   }
 
+  function renderSimplePopup(feature) {
+    return '<div class="gfi gfi--simple">' +
+      '<div class="gfi-header" data-drag-handle="true">' +
+      '<div><div class="gfi-title">' + escapeHtml(feature.display_label || feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
+      '<button type="button" class="gfi-close" data-close="true">x</button>' +
+      '</div>' +
+      '<div class="gfi-content">' + renderRows(detailRows(feature)) + '</div>' +
+      '</div>';
+  }
+
   function renderPopup(feature, activeTab) {
     copyValues = [];
+    if (popupMode === 'simple') {
+      return renderSimplePopup(feature);
+    }
     var tab = activeTab || 'details';
     var panel = '';
     if (tab === 'qualifiers') {
@@ -808,14 +2152,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     } else if (tab === 'sequence') {
       panel = renderSequences(feature);
     } else {
-      panel = renderRows(detailRows(feature)) + renderLocationParts(feature);
+      panel = renderRows(detailRows(feature)) + renderOrthogroupMembers(feature);
     }
     function tabButton(id, label) {
       return '<button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '">' + label + '</button>';
     }
     return '<div class="gfi">' +
       '<div class="gfi-header" data-drag-handle="true">' +
-      '<div><div class="gfi-title">' + escapeHtml(feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div><div class="gfi-title">' + escapeHtml(feature.display_label || feature.label || feature.svg_id || 'Feature') + '</div>' +
       '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
       '<button type="button" class="gfi-close" data-close="true">x</button>' +
       '</div>' +
@@ -850,6 +2194,28 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       popup.parentNode.removeChild(popup);
     }
     popup = null;
+  }
+
+  function keepPopupWithinVisibleView() {
+    if (!popup) return;
+    var viewport = getViewportClientRect();
+    var view = getVisibleViewRect();
+    var metrics = getPopupCssMetrics(viewport);
+    var scale = getScreenScale();
+    var effectiveScaleX = Math.max(scale.x, 0.001) * metrics.zoomScale;
+    var effectiveScaleY = Math.max(scale.y, 0.001) * metrics.zoomScale;
+    var marginX = metrics.margin / effectiveScaleX;
+    var marginY = metrics.margin / effectiveScaleY;
+    var width = parseFloat(popup.getAttribute('width')) || 1;
+    var height = parseFloat(popup.getAttribute('height')) || 1;
+    var minX = view.x + marginX;
+    var minY = view.y + marginY;
+    var maxX = view.x + view.width - width - marginX;
+    var maxY = view.y + view.height - height - marginY;
+    if (maxX < minX) maxX = minX;
+    if (maxY < minY) maxY = minY;
+    popup.setAttribute('x', clampValue(parseFloat(popup.getAttribute('x')), minX, maxX));
+    popup.setAttribute('y', clampValue(parseFloat(popup.getAttribute('y')), minY, maxY));
   }
 
   function getScreenScale() {
@@ -944,22 +2310,28 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function getPopupTextScale(viewport, popupCssWidth, popupCssHeight) {
-    var fitScale = Math.min(1, popupCssWidth / 460, popupCssHeight / 540);
+    var baseWidth = popupMode === 'simple' ? 360 : 460;
+    var baseHeight = popupMode === 'simple' ? 260 : 540;
+    var fitScale = Math.min(1, popupCssWidth / baseWidth, popupCssHeight / baseHeight);
     return Math.max(0.38, Math.min(1, fitScale));
   }
 
   function getPopupCssMetrics(viewport) {
     var zoomScale = getBrowserZoomScale(viewport);
     var margin = 12;
+    var maxWidth = popupMode === 'simple' ? 360 : 460;
+    var maxHeight = popupMode === 'simple' ? 260 : 540;
+    var minWidth = popupMode === 'simple' ? 240 : 300;
+    var minHeight = popupMode === 'simple' ? 160 : 220;
     var availableVisualWidth = Math.max(1, viewport.width * zoomScale - margin * 2);
     var availableVisualHeight = Math.max(1, viewport.height * zoomScale - margin * 2);
     return {
       zoomScale: zoomScale,
       margin: margin,
-      width: Math.max(1, Math.min(460, availableVisualWidth)),
-      height: Math.max(1, Math.min(540, availableVisualHeight)),
-      minWidth: Math.max(1, Math.min(300, availableVisualWidth)),
-      minHeight: Math.max(1, Math.min(220, availableVisualHeight))
+      width: Math.max(1, Math.min(maxWidth, availableVisualWidth)),
+      height: Math.max(1, Math.min(maxHeight, availableVisualHeight)),
+      minWidth: Math.max(1, Math.min(minWidth, availableVisualWidth)),
+      minHeight: Math.max(1, Math.min(minHeight, availableVisualHeight))
     };
   }
 
@@ -990,6 +2362,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function openPopup(feature, event) {
+    if (!supportsStandaloneControls()) return;
     closePopup();
     var viewport = getViewportClientRect();
     var view = getVisibleViewRect();
@@ -1213,6 +2586,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (viewportControls) {
       svg.appendChild(viewportControls);
     }
+    if (searchControls) {
+      svg.appendChild(searchControls);
+    }
   }
 
   async function copyText(value, button) {
@@ -1237,9 +2613,11 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
+  setSvgViewRect(homeViewRect);
   setupViewportControls();
+  setupSearchControls();
   window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
-  window.addEventListener('resize', updateViewportControlsPosition);
+  window.addEventListener('resize', scheduleViewportRefit);
   if (window.visualViewport) {
     window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
     window.visualViewport.addEventListener('resize', updateViewportControlsPosition, { passive: true });
@@ -1257,14 +2635,18 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   svg.addEventListener('mouseover', function (event) {
     if (isPanMode) return;
     if (popup && popup.contains(event.target)) return;
+    if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
     var svgId = featureElement ? String(featureElement.id || '') : '';
-    if (!svgId || !featureElementsById.has(svgId) || activeHoverSvgId === svgId) return;
+    if (!svgId || !featureElementsById.has(svgId)) return;
+    var hoverKey = getFeatureHoverKey(svgId);
+    if (activeHoverKey === hoverKey) return;
     if (activeHoverSvgId) {
-      setFeatureHighlight(activeHoverSvgId, false);
+      setHoverHighlight(activeHoverSvgId, false);
     }
     activeHoverSvgId = svgId;
-    setFeatureHighlight(svgId, true);
+    activeHoverKey = hoverKey;
+    setHoverHighlight(svgId, true);
   });
 
   svg.addEventListener('mouseout', function (event) {
@@ -1272,13 +2654,15 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var svgId = featureElement ? String(featureElement.id || '') : '';
     if (!svgId || activeHoverSvgId !== svgId) return;
     var relatedFeature = closestFeature(event.relatedTarget);
-    if (relatedFeature && String(relatedFeature.id || '') === svgId) return;
-    setFeatureHighlight(svgId, false);
+    if (relatedFeature && getFeatureHoverKey(String(relatedFeature.id || '')) === activeHoverKey) return;
+    setHoverHighlight(svgId, false);
     activeHoverSvgId = null;
+    activeHoverKey = '';
   });
 
   svg.addEventListener('click', function (event) {
     if (popup && popup.contains(event.target)) return;
+    if (closestSearchControls(event.target)) return;
     if (isPanMode) {
       event.preventDefault();
       event.stopPropagation();
@@ -1291,6 +2675,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     var feature = featuresById.get(String(featureElement.id || ''));
     if (!feature) return;
+    var matchIndex = searchState.matches.indexOf(String(featureElement.id || ''));
+    if (matchIndex !== -1) {
+      setActiveMatch(matchIndex, { center: false });
+    }
     event.preventDefault();
     event.stopPropagation();
     openPopup(feature, event);
@@ -1384,6 +2772,204 @@ const getStandaloneFeatureLabel = (feature) => {
   return 'Feature';
 };
 
+const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
+
+const getEditableLabelEntryForStandaloneFeature = (feature) => {
+  const entries = Array.isArray(state.editableLabels.value) ? state.editableLabels.value : [];
+  const candidates = [
+    normalizeFeatureIdKey(feature?.svg_id),
+    normalizeFeatureIdKey(feature?.id)
+  ].filter(Boolean);
+  if (candidates.length === 0) return null;
+  return entries.find((entry) => candidates.includes(normalizeFeatureIdKey(entry?.featureId))) || null;
+};
+
+const getLabelTextFeatureOverride = (feature) => {
+  const overrides = state.labelTextFeatureOverrides || {};
+  const candidates = [
+    String(feature?.svg_id || '').trim(),
+    String(feature?.id || '').trim()
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (Object.prototype.hasOwnProperty.call(overrides, candidate)) {
+      const text = String(overrides[candidate] ?? '').trim();
+      if (text) return text;
+    }
+  }
+  return '';
+};
+
+const getStandaloneDisplayLabel = (feature, fallbackLabel) => {
+  const editableEntry = getEditableLabelEntryForStandaloneFeature(feature);
+  const editableText = String(editableEntry?.text || '').trim();
+  if (editableText) return editableText;
+
+  const directOverride = getLabelTextFeatureOverride(feature);
+  if (directOverride) return directOverride;
+
+  const sourceCandidates = [
+    editableEntry?.sourceText,
+    fallbackLabel,
+    feature?.product,
+    feature?.gene,
+    feature?.locus_tag
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  for (const sourceText of sourceCandidates) {
+    const bulkText = String(state.labelTextBulkOverrides?.[sourceText] ?? '').trim();
+    if (bulkText) return bulkText;
+  }
+
+  return fallbackLabel;
+};
+
+const getStandaloneSearchLabels = (feature, fallbackLabel, displayLabel) => {
+  const labels = [
+    displayLabel,
+    fallbackLabel,
+    feature?.label,
+    feature?.gene,
+    feature?.locus_tag,
+    feature?.product,
+    firstQualifierValue(feature, 'gene'),
+    firstQualifierValue(feature, 'locus_tag'),
+    firstQualifierValue(feature, 'product'),
+    feature?.svg_id
+  ];
+  const seen = new Set();
+  return labels
+    .map((value) => String(value || '').trim())
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (!value || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
+const buildStandaloneOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
+
+const getStandaloneFeatureOrthogroupEntry = (feature) => {
+  const directOrthogroupId = String(feature?.orthogroupId || feature?.orthogroup_id || '').trim();
+  if (directOrthogroupId) {
+    return {
+      orthogroupId: directOrthogroupId,
+      orthogroupMemberCount: Number(feature?.orthogroupMemberCount || feature?.orthogroup_member_count || 0),
+      orthogroupRecordCoverage: Number(feature?.orthogroupRecordCoverage || feature?.orthogroup_record_coverage || 0),
+      proteinId: String(feature?.proteinId || feature?.protein_id || '').trim(),
+      sourceProteinId: String(feature?.sourceProteinId || feature?.source_protein_id || '').trim(),
+      orthogroupRepresentative: Boolean(feature?.orthogroupRepresentative || feature?.orthogroup_representative),
+      orthogroupMember: feature?.orthogroupMember || feature?.orthogroup_member || null
+    };
+  }
+
+  const index = state.featureOrthogroupIndex?.value instanceof Map ? state.featureOrthogroupIndex.value : new Map();
+  const svgId = String(feature?.svg_id || '').trim();
+  if (!svgId || index.size === 0) return null;
+
+  const candidateRecordIndexes = [
+    feature?.fileIdx,
+    feature?.file_idx,
+    feature?.record_idx,
+    feature?.recordIndex,
+    feature?.record_index
+  ];
+  for (const recordIndexRaw of candidateRecordIndexes) {
+    const recordIndex = Number(recordIndexRaw);
+    if (!Number.isInteger(recordIndex)) continue;
+    const entry = index.get(buildStandaloneOrthogroupIndexKey(recordIndex, svgId));
+    if (entry) return entry;
+  }
+  return index.get(svgId) || null;
+};
+
+const normalizeStandaloneOrthogroupMember = (member) => {
+  if (!member || typeof member !== 'object' || Array.isArray(member)) return null;
+  const start = Number(member.start);
+  const end = Number(member.end);
+  const recordIndex = Number(member.recordIndex ?? member.record_index);
+  return {
+    orthogroupId: String(member.orthogroupId || member.orthogroup_id || ''),
+    proteinId: String(member.proteinId || member.protein_id || ''),
+    sourceProteinId: String(member.sourceProteinId || member.source_protein_id || ''),
+    recordIndex: Number.isInteger(recordIndex) ? recordIndex : null,
+    recordId: String(member.recordId || member.record_id || ''),
+    featureIndex: Number.isFinite(Number(member.featureIndex ?? member.feature_index))
+      ? Number(member.featureIndex ?? member.feature_index)
+      : null,
+    label: String(member.label || ''),
+    featureSvgId: String(member.featureSvgId || member.feature_svg_id || ''),
+    start: Number.isFinite(start) ? start : null,
+    end: Number.isFinite(end) ? end : null,
+    strand: String(member.strand || ''),
+    representative: Boolean(member.representative),
+    gene: String(member.gene || ''),
+    product: String(member.product || ''),
+    note: String(member.note || '')
+  };
+};
+
+const normalizeStandaloneOrthogroupCandidate = (candidate) => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  return {
+    text: String(candidate.text || ''),
+    source: String(candidate.source || ''),
+    memberCount: Number.isFinite(Number(candidate.memberCount)) ? Number(candidate.memberCount) : 0,
+    recordCoverageCount: Number.isFinite(Number(candidate.recordCoverageCount)) ? Number(candidate.recordCoverageCount) : 0,
+    representativeCount: Number.isFinite(Number(candidate.representativeCount)) ? Number(candidate.representativeCount) : 0,
+    score: Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : 0
+  };
+};
+
+const getStandaloneOrthogroupDisplayName = (group) => {
+  const id = String(group?.id || '').trim();
+  const override = id ? String(state.orthogroupNameOverrides?.[id] || '').trim() : '';
+  return override || String(group?.display_name || group?.displayName || group?.name || id).trim();
+};
+
+const getStandaloneOrthogroupDescription = (group) => {
+  const id = String(group?.id || '').trim();
+  const override = id ? String(state.orthogroupDescriptionOverrides?.[id] || '').trim() : '';
+  return override || String(group?.description || '').trim();
+};
+
+const buildStandaloneOrthogroupPayloads = (features) => {
+  const neededIds = new Set(
+    (Array.isArray(features) ? features : [])
+      .map((feature) => String(feature?.orthogroup_id || '').trim())
+      .filter(Boolean)
+  );
+  if (neededIds.size === 0) return [];
+
+  const groups = Array.isArray(state.orthogroups?.value) ? state.orthogroups.value : [];
+  return groups
+    .filter((group) => neededIds.has(String(group?.id || '').trim()))
+    .map((group) => {
+      const members = Array.isArray(group?.members)
+        ? group.members.map(normalizeStandaloneOrthogroupMember).filter(Boolean)
+        : [];
+      const memberCount = Number(group?.member_count || group?.memberCount || members.length || 0);
+      const recordCoverageFallback = new Set(
+        members
+          .map((member) => Number(member.recordIndex))
+          .filter((recordIndex) => Number.isInteger(recordIndex))
+      ).size;
+      const recordCoverageCount = Number(group?.record_coverage_count || group?.recordCoverageCount || recordCoverageFallback || 0);
+      return {
+        id: String(group?.id || ''),
+        name: String(group?.name || ''),
+        display_name: getStandaloneOrthogroupDisplayName(group),
+        description: getStandaloneOrthogroupDescription(group),
+        nameConfidence: String(group?.nameConfidence || ''),
+        nameCandidates: Array.isArray(group?.nameCandidates)
+          ? group.nameCandidates.map(normalizeStandaloneOrthogroupCandidate).filter(Boolean)
+          : [],
+        member_count: Number.isFinite(memberCount) ? memberCount : members.length,
+        record_coverage_count: Number.isFinite(recordCoverageCount) ? recordCoverageCount : 0,
+        members
+      };
+    });
+};
+
 const collectRenderedFeatureIds = (svg) => {
   const ids = new Set();
   if (!svg) return ids;
@@ -1394,10 +2980,15 @@ const collectRenderedFeatureIds = (svg) => {
   return ids;
 };
 
-const buildStandaloneFeaturePayloads = (svg) => {
+const normalizeStandalonePopupMode = (popupMode) => (
+  popupMode === 'simple' ? 'simple' : 'rich'
+);
+
+const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
   const renderedIds = collectRenderedFeatureIds(svg);
   if (renderedIds.size === 0) return [];
 
+  const normalizedPopupMode = normalizeStandalonePopupMode(popupMode);
   const features = Array.isArray(state.extractedFeatures.value) ? state.extractedFeatures.value : [];
   const payloads = [];
   const seenIds = new Set();
@@ -1405,9 +2996,15 @@ const buildStandaloneFeaturePayloads = (svg) => {
     const svgId = String(feature?.svg_id || '').trim();
     if (!svgId || !renderedIds.has(svgId) || seenIds.has(svgId)) return;
     seenIds.add(svgId);
-    payloads.push({
+    const fallbackLabel = getStandaloneFeatureLabel(feature);
+    const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel);
+    const orthogroupEntry = getStandaloneFeatureOrthogroupEntry(feature);
+    const orthogroupMember = normalizeStandaloneOrthogroupMember(orthogroupEntry?.orthogroupMember);
+    const payload = {
       svg_id: svgId,
-      label: getStandaloneFeatureLabel(feature),
+      label: fallbackLabel,
+      display_label: displayLabel,
+      search_labels: getStandaloneSearchLabels(feature, fallbackLabel, displayLabel),
       record_id: String(feature?.record_id || ''),
       record_idx: Number.isFinite(Number(feature?.record_idx)) ? Number(feature.record_idx) : null,
       type: String(feature?.type || ''),
@@ -1415,12 +3012,28 @@ const buildStandaloneFeaturePayloads = (svg) => {
       end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
       strand: String(feature?.strand || ''),
       location: buildStandaloneFeatureLocation(feature),
-      qualifiers: normalizeQualifierMap(feature?.qualifiers),
-      location_parts: normalizeLocationParts(feature?.location_parts),
-      nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
-      amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
-      sequence_warnings: normalizeStringArray(feature?.sequence_warnings)
-    });
+      orthogroup_id: String(orthogroupEntry?.orthogroupId || ''),
+      orthogroup_member_count: Number.isFinite(Number(orthogroupEntry?.orthogroupMemberCount))
+        ? Number(orthogroupEntry.orthogroupMemberCount)
+        : 0,
+      orthogroup_record_coverage: Number.isFinite(Number(orthogroupEntry?.orthogroupRecordCoverage))
+        ? Number(orthogroupEntry.orthogroupRecordCoverage)
+        : 0,
+      protein_id: String(orthogroupEntry?.proteinId || ''),
+      source_protein_id: String(orthogroupEntry?.sourceProteinId || ''),
+      orthogroup_representative: Boolean(orthogroupEntry?.orthogroupRepresentative)
+    };
+    if (normalizedPopupMode === 'rich') {
+      Object.assign(payload, {
+        qualifiers: normalizeQualifierMap(feature?.qualifiers),
+        location_parts: normalizeLocationParts(feature?.location_parts),
+        nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
+        amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
+        sequence_warnings: normalizeStringArray(feature?.sequence_warnings),
+        orthogroup_member: orthogroupMember
+      });
+    }
+    payloads.push(payload);
   });
   return payloads;
 };
@@ -1490,13 +3103,14 @@ const ensureStandaloneFeatureGlowFilter = (svg) => {
   defs.appendChild(filter);
 };
 
-const removeExistingStandaloneFeaturePopupAssets = (svg) => {
+const removeExistingStandaloneInteractivityAssets = (svg) => {
   [
     INTERACTIVE_METADATA_ID,
     INTERACTIVE_STYLE_ID,
     INTERACTIVE_SCRIPT_ID,
     INTERACTIVE_GLOW_FILTER_ID,
     'gbdraw-viewport-controls',
+    'gbdraw-feature-search-controls',
     'gbdraw-feature-popup'
   ].forEach((id) => {
     const element = svg.querySelector(`#${CSS.escape(id)}`);
@@ -1513,11 +3127,65 @@ const addClassToken = (element, token) => {
   element.setAttribute('class', Array.from(tokens).join(' '));
 };
 
-const enrichSvgWithStandaloneFeaturePopup = (svg) => {
-  if (!svg || state.adv.rich_feature_popup === false) return false;
+const parseSvgViewBox = (value) => {
+  const parts = String(value || '')
+    .trim()
+    .split(/[\s,]+/)
+    .map((part) => Number(part));
+  if (parts.length < 4 || parts.some((part) => !Number.isFinite(part))) return null;
+  if (parts[2] <= 0 || parts[3] <= 0) return null;
+  return {
+    x: parts[0],
+    y: parts[1],
+    width: parts[2],
+    height: parts[3]
+  };
+};
 
-  removeExistingStandaloneFeaturePopupAssets(svg);
-  const features = buildStandaloneFeaturePayloads(svg);
+const formatSvgViewBox = (rect) =>
+  [rect.x, rect.y, rect.width, rect.height].map((value) => String(value)).join(' ');
+
+const resolveStandaloneOriginalGeometry = (svg) => {
+  const dataViewBox = parseSvgViewBox(svg.getAttribute('data-gbdraw-original-viewbox'));
+  const currentViewBox = parseSvgViewBox(svg.getAttribute('viewBox'));
+  const width = parseFloat(svg.getAttribute('width'));
+  const height = parseFloat(svg.getAttribute('height'));
+  const fallbackViewBox =
+    Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+      ? { x: 0, y: 0, width, height }
+      : null;
+  const viewBox = dataViewBox || currentViewBox || fallbackViewBox || { x: 0, y: 0, width: 900, height: 650 };
+  const originalWidth = svg.getAttribute('data-gbdraw-original-width') ||
+    svg.getAttribute('width') ||
+    `${viewBox.width}px`;
+  const originalHeight = svg.getAttribute('data-gbdraw-original-height') ||
+    svg.getAttribute('height') ||
+    `${viewBox.height}px`;
+  return {
+    viewBox,
+    originalWidth,
+    originalHeight
+  };
+};
+
+const applyStandaloneViewportRoot = (svg) => {
+  svg.setAttribute('width', '100vw');
+  svg.setAttribute('height', '100vh');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.style.setProperty('width', '100vw');
+  svg.style.setProperty('height', '100vh');
+  svg.style.setProperty('display', 'block');
+  svg.style.setProperty('background', '#ffffff');
+};
+
+const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) => {
+  if (!svg) return false;
+
+  const originalGeometry = resolveStandaloneOriginalGeometry(svg);
+  const normalizedPopupMode = normalizeStandalonePopupMode(popupMode);
+  removeExistingStandaloneInteractivityAssets(svg);
+  const features = buildStandaloneFeaturePayloads(svg, { popupMode: normalizedPopupMode });
+  const orthogroups = buildStandaloneOrthogroupPayloads(features);
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
@@ -1530,9 +3198,12 @@ const enrichSvgWithStandaloneFeaturePopup = (svg) => {
   const metadata = document.createElementNS(SVG_NS, 'metadata');
   metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
   metadata.setAttribute('data-schema', 'gbdraw-interactive-feature-popup-v1');
+  metadata.setAttribute('data-popup-mode', normalizedPopupMode);
   metadata.textContent = JSON.stringify({
     schema: 'gbdraw-interactive-feature-popup-v1',
-    features
+    popup_mode: normalizedPopupMode,
+    features,
+    orthogroups
   });
 
   const style = document.createElementNS(SVG_NS, 'style');
@@ -1549,7 +3220,11 @@ const enrichSvgWithStandaloneFeaturePopup = (svg) => {
   svg.appendChild(metadata);
   svg.appendChild(style);
   svg.appendChild(script);
+  svg.setAttribute('data-gbdraw-original-viewbox', formatSvgViewBox(originalGeometry.viewBox));
+  svg.setAttribute('data-gbdraw-original-width', originalGeometry.originalWidth);
+  svg.setAttribute('data-gbdraw-original-height', originalGeometry.originalHeight);
   svg.setAttribute('data-gbdraw-interactive-svg', 'true');
+  applyStandaloneViewportRoot(svg);
   return true;
 };
 
@@ -1715,16 +3390,25 @@ const prepareSvgForPdf = (svg) => {
   };
 };
 
-export const downloadSVG = () => {
-  const svgString = getCurrentSvgString({ interactive: true });
+const downloadSvgString = (svgString, filename) => {
   if (!svgString) return;
   const blob = new Blob([svgString], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = getDownloadName('svg');
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+};
+
+export const downloadSVG = () => {
+  const svgString = getCurrentSvgString();
+  downloadSvgString(svgString, getDownloadName('svg'));
+};
+
+export const downloadInteractiveSVG = () => {
+  const svgString = getCurrentSvgString({ interactive: true });
+  downloadSvgString(svgString, getDownloadName('interactive.svg'));
 };
 
 export const downloadPNG = () => {

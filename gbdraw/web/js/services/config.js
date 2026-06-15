@@ -19,10 +19,10 @@ import {
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 
-const SESSION_VERSION = 26;
+const SESSION_VERSION = 27;
 const LOSAT_CACHE_SCHEMA = 2;
-const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
-const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;
+const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
+const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1;
 const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
   'gapAfter',
@@ -36,7 +36,17 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
   'compress',
   'reserve'
 ];
-const OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS = ['side', 'radius', 'width', 'strict', 'compress', 'reserve'];
+const OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS = [
+  'side',
+  'radius',
+  'width',
+  'spacing',
+  'inner_gap_px',
+  'outer_gap_px',
+  'strict',
+  'compress',
+  'reserve'
+];
 
 const isRawLosatCacheEntry = (entry) =>
   Boolean(entry) &&
@@ -250,7 +260,7 @@ const validateImportedCircularTrackSlots = (configData = {}) => {
   const obsoletePath = findObsoleteCircularTrackSlotShape(adv.circular_track_slots);
   if (obsoletePath) {
     throw new Error(
-      `Custom Track Slots use obsolete field '${obsoletePath}'. Use slot-level radius, width, spacing, side, and z fields.`
+      `Custom Track Slots use obsolete field '${obsoletePath}'. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.`
     );
   }
 };

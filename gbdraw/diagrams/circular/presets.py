@@ -332,6 +332,8 @@ def _slot_is_blank_unmatched_numeric_duplicate(slot: CircularTrackSlot, renderer
         and slot.radius is None
         and slot.width is None
         and slot.spacing is None
+        and slot.inner_gap_px is None
+        and slot.outer_gap_px is None
     )
 
 
@@ -438,6 +440,16 @@ def _overlay_slot_on_preset_lane(
         radius=slot.radius,
         width=slot.width if slot.width is not None else _inherited_width_for_renderer(renderer, params_slot, context),
         spacing=slot.spacing if slot.spacing is not None else (geometry_slot.spacing if geometry_slot is not None else None),
+        inner_gap_px=(
+            slot.inner_gap_px
+            if slot.inner_gap_px is not None
+            else (geometry_slot.inner_gap_px if geometry_slot is not None else None)
+        ),
+        outer_gap_px=(
+            slot.outer_gap_px
+            if slot.outer_gap_px is not None
+            else (geometry_slot.outer_gap_px if geometry_slot is not None else None)
+        ),
         params=params,
     )
 

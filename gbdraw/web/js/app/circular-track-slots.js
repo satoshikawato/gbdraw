@@ -16,6 +16,8 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
+const UI_RENDERERS = SUPPORTED_RENDERERS.filter((renderer) => renderer !== 'spacer');
+
 const RENDERER_LABELS = {
   features: 'Features',
   ticks: 'Ticks',
@@ -116,6 +118,14 @@ const cleanToken = (value, fallback) => {
 const normalizeOptionalText = (value) => {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
+};
+
+const normalizePxNumberText = (value) => {
+  const text = normalizeOptionalText(value);
+  if (text === null) return null;
+  const withoutUnit = text.endsWith('px') ? text.slice(0, -2) : text;
+  const numeric = Number(withoutUnit);
+  return Number.isFinite(numeric) && numeric >= 0 ? String(numeric) : null;
 };
 
 const normalizePlacement = (value, fallback = 'inside') => {
@@ -257,7 +267,9 @@ const getPresetRadiusRatio = (slot, renderer, preset, lengthParam, state) => {
 const slotHasManualGeometry = (slot) => (
   normalizeOptionalText(slot?.width) !== null ||
   normalizeOptionalText(slot?.radius) !== null ||
-  normalizeOptionalText(slot?.spacing) !== null
+  normalizeOptionalText(slot?.spacing) !== null ||
+  normalizeOptionalText(slot?.inner_gap_px) !== null ||
+  normalizeOptionalText(slot?.outer_gap_px) !== null
 );
 
 const cloneParams = (params = {}) => {
@@ -407,6 +419,8 @@ const makeSlot = ({
   width = null,
   radius = null,
   spacing = null,
+  inner_gap_px = null,
+  outer_gap_px = null,
   side = null,
   z = 0,
   params = {}
@@ -417,6 +431,8 @@ const makeSlot = ({
   width,
   radius,
   spacing,
+  inner_gap_px,
+  outer_gap_px,
   side: normalizeSlotSide(side),
   z,
   params: cloneParams(params)
@@ -437,7 +453,9 @@ const paramsMatchExactly = (params, expected = {}) => {
 const hasBlankSlotGeometry = (source) =>
   normalizeOptionalText(source.width) === null &&
   normalizeOptionalText(source.radius) === null &&
-  normalizeOptionalText(source.spacing) === null;
+  normalizeOptionalText(source.spacing) === null &&
+  normalizeOptionalText(source.inner_gap_px) === null &&
+  normalizeOptionalText(source.outer_gap_px) === null;
 
 const hasDefaultSlotFlags = (source) =>
   source.enabled !== false &&
@@ -607,14 +625,18 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     'radius',
     'w',
     'width',
-    'spacing'
+    'spacing',
+    'inner_gap_px',
+    'outer_gap_px'
   ].forEach((key) => {
     delete params[key];
   });
 
   let side = inheritsPresetDefaults ? null : normalizeSlotSide(source.side);
   const radius = source.radius ?? null;
-  const spacing = source.spacing ?? null;
+  const legacySpacingPx = normalizePxNumberText(source.spacing);
+  const innerGapPx = normalizePxNumberText(source.inner_gap_px ?? source.innerGapPx) ?? legacySpacingPx;
+  const outerGapPx = normalizePxNumberText(source.outer_gap_px ?? source.outerGapPx) ?? legacySpacingPx;
 
   if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
     const nt = normalizeOptionalText(params.nt ?? params.dinucleotide);
@@ -678,7 +700,9 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     enabled: source.enabled !== false,
     width: source.width ?? null,
     radius,
-    spacing,
+    spacing: null,
+    inner_gap_px: innerGapPx,
+    outer_gap_px: outerGapPx,
     side,
     z: Number.isFinite(Number(source.z)) ? Number(source.z) : 0,
     params
@@ -699,6 +723,15 @@ const appendOption = (options, key, value) => {
 };
 
 export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuckin', optionsOverride = {}) => {
+  const sourceParams = cloneParams(slot?.params);
+  const sourceLaneDirection = normalizeOptionalText(sourceParams.lane_direction ?? sourceParams.lanes);
+  const sourceRequestsSplitLane = (
+    String(slot?.renderer || '').trim().toLowerCase() === 'features' &&
+    (
+      normalizeOptionalPlacement(slot?.side) === 'overlay' ||
+      (sourceLaneDirection !== null && normalizeLaneDirection(sourceLaneDirection) === 'split')
+    )
+  );
   const normalized = normalizeCircularTrackSlot(slot, 0, defaultNt, preset);
   const options = [];
   const params = normalized.params || {};
@@ -709,7 +742,8 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
   if (!normalized.enabled) options.push('enabled=false');
   appendOption(options, 'w', normalized.width);
   appendOption(options, 'r', normalized.radius);
-  appendOption(options, 'spacing', normalized.spacing);
+  appendOption(options, 'inner_gap_px', normalized.inner_gap_px);
+  appendOption(options, 'outer_gap_px', normalized.outer_gap_px);
   if (includeSide || normalizePlacement(normalized.side) === 'overlay') {
     appendOption(options, 'side', normalized.side);
   }
@@ -723,14 +757,18 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
       appendOption(options, 'preset', params.preset);
     }
   } else if (normalized.renderer === 'features') {
+    const laneDirection = normalizeOptionalText(params.lane_direction);
+    const effectiveLaneDirection = laneDirection !== null
+      ? normalizeLaneDirection(laneDirection)
+      : (sourceRequestsSplitLane ? 'split' : null);
     if (
-      normalizeOptionalText(params.lane_direction) !== null &&
+      effectiveLaneDirection !== null &&
       (
-        (forceSplitLane && normalizeLaneDirection(params.lane_direction) === 'split') ||
-        normalizeLaneDirection(params.lane_direction) !== laneDirectionForPreset(normalizedPreset)
+        (forceSplitLane && effectiveLaneDirection === 'split') ||
+        effectiveLaneDirection !== laneDirectionForPreset(normalizedPreset)
       )
     ) {
-      appendOption(options, 'lane_direction', params.lane_direction);
+      appendOption(options, 'lane_direction', effectiveLaneDirection);
     }
   } else if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
     const nt = normalizeOptionalText(params.nt);
@@ -1141,7 +1179,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     duplicate.enabled = source.enabled;
     duplicate.width = source.width;
     duplicate.radius = source.radius;
-    duplicate.spacing = source.spacing;
+    duplicate.spacing = null;
+    duplicate.inner_gap_px = source.inner_gap_px;
+    duplicate.outer_gap_px = source.outer_gap_px;
     duplicate.side = source.side;
     duplicate.z = source.z;
     duplicate.params = cloneParams(source.params);
@@ -1458,7 +1498,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   return {
-    circularTrackRenderers: SUPPORTED_RENDERERS,
+    circularTrackRenderers: UI_RENDERERS,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,

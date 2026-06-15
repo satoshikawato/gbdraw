@@ -1,6 +1,6 @@
 import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js';
 import { debugLog } from '../config.js';
-import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
+import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
 import {
   disposeDiagramGenerationWorker,
@@ -206,7 +206,7 @@ export const createAppSetup = () => {
   });
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
-  const linearTrackNewRenderer = ref('spacer');
+  const linearTrackNewRenderer = ref('dinucleotide_skew');
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
@@ -1378,6 +1378,9 @@ export const createAppSetup = () => {
     canMoveLinearTrackSlotToAxis: linearTrackSlotEditor.canMoveLinearTrackSlotToAxis,
     updateLinearTrackSlotRenderer: linearTrackSlotEditor.updateLinearTrackSlotRenderer,
     updateLinearTrackSlotPlacement: linearTrackSlotEditor.updateLinearTrackSlotPlacement,
+    linearTrackSlotHeightValue: linearTrackSlotEditor.linearTrackSlotHeightValue,
+    setLinearTrackSlotHeight: linearTrackSlotEditor.setLinearTrackSlotHeight,
+    syncLinearDepthSlotHeightsFromDepthTracks: linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks,
     linearTrackSlots: linearTrackSlotEditor.linearTrackSlots,
     linearTrackStackEntries: linearTrackSlotEditor.linearTrackStackEntries,
     linearTrackSlotCliSpec: linearTrackSlotEditor.linearTrackSlotCliSpec,
@@ -1567,6 +1570,7 @@ export const createAppSetup = () => {
     runAnalysis,
     cancelGeneration,
     downloadSVG,
+    downloadInteractiveSVG,
     downloadPNG,
     downloadPDF,
     exportConfig,

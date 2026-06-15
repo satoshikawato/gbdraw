@@ -133,6 +133,9 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "locationParts" in svg_actions_source
     assert "nucleotideSequence" in svg_actions_source
     assert "aminoAcidSequence" in svg_actions_source
+    assert "const displayProteinId = (feat)" in svg_actions_source
+    assert "label: 'Protein ID', value: proteinId" in svg_actions_source
+    assert "label: 'Source protein ID'" not in svg_actions_source
     assert "label: 'SVG ID'" not in svg_actions_source
     assert "label: 'Record index'" not in svg_actions_source
     assert "label: 'Strand'" not in svg_actions_source
@@ -143,20 +146,91 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
-def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_exports() -> None:
+def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload() -> None:
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "gbdraw-interactive-feature-popup-v1" in export_source
     assert "gbdraw-interactive-feature-metadata" in export_source
     assert "gbdraw-interactive-feature-script" in export_source
+    assert "gbdraw-feature-search-controls" in export_source
+    assert "gbdraw-interactive-feature--match" in export_source
+    assert "gbdraw-interactive-feature--active-match" in export_source
+    assert "gbdraw-interactive-feature--dimmed" in export_source
+    assert "function normalizeSearchText(value)" in export_source
+    assert "function featureSearchValues(feature, field, qualifierKey)" in export_source
+    assert "function featureSearchMatches(feature, matcher, field, qualifierKey)" in export_source
+    assert "function compileSearchMatcher(query, useRegex)" in export_source
+    assert "function featureMatchesSearch(feature, matcher, field, qualifierKey)" in export_source
+    assert "matchDetails: {}" in export_source
+    assert "data-search-match-detail" in export_source
+    assert "gfs-button--clear" in export_source
+    assert "gfs-match-detail" in export_source
+    assert "['orthogroup', 'Orthogroup']" in export_source
+    assert "['nucleotide', 'Nucleotide']" in export_source
+    assert "['amino-acid', 'Amino acid']" in export_source
+    assert "['sequence', 'Sequence']" not in export_source
+    assert "var NUCLEOTIDE_IUPAC = {" in export_source
+    assert "var AMINO_ACID_IUPAC = {" in export_source
+    assert "function buildIupacQueryPattern(query, alphabet)" in export_source
+    assert "function supportsStandaloneControls()" in export_source
+    assert "function setSearchState(nextState)" in export_source
+    assert "function applySearchResults()" in export_source
+    assert "function setActiveMatch(index, options)" in export_source
+    assert "function clearSearch()" in export_source
+    assert "Search match" in export_source
+    assert "Orthogroup members" in export_source
+    assert "visibleView.x + visibleView.width - (controlWidth * unit) - margin" in export_source
+    assert "gfi-og-members-table" in export_source
+    assert "Coordinates (+/-)" in export_source
+    assert "Product / note" in export_source
+    assert "displayProteinId(null, member)" in export_source
+    assert "function displayProteinId(feature, member)" in export_source
+    assert "['Source protein ID'" not in export_source
+    assert "display_label" in export_source
+    assert "search_labels" in export_source
+    assert "orthogroup_id" in export_source
+    assert "protein_id" in export_source
+    assert "const buildStandaloneOrthogroupPayloads = (features) => {" in export_source
+    assert "const orthogroups = buildStandaloneOrthogroupPayloads(features);" in export_source
     assert "data-gbdraw-interactive-feature" in export_source
-    assert "state.adv.rich_feature_popup === false" in export_source
-    assert "buildStandaloneFeaturePayloads(svg)" in export_source
+    assert "data-gbdraw-original-viewbox" in export_source
+    assert "data-gbdraw-original-width" in export_source
+    assert "data-gbdraw-original-height" in export_source
+    assert "enrichSvgWithStandaloneFeaturePopup" not in export_source
+    assert "const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) => {\n  if (!svg) return false;" in export_source
+    assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
+    assert "popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'" in export_source
+    assert "buildStandaloneFeaturePayloads(svg, { popupMode: normalizedPopupMode })" in export_source
+    assert "svg.setAttribute('width', '100vw');" in export_source
+    assert "svg.setAttribute('height', '100vh');" in export_source
+    assert "svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');" in export_source
+    assert "svg.style.setProperty('width', '100vw');" in export_source
+    assert "svg.style.setProperty('height', '100vh');" in export_source
+    assert "function parseOriginalViewRectFromSvg()" in export_source
+    assert "function getViewportAspect()" in export_source
+    assert "function fitRectToAspect(rect, targetAspect)" in export_source
+    assert "var homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());" in export_source
+    assert "homeViewRect.width / maxZoom" in export_source
+    assert "homeViewRect.width * nextScale" in export_source
+    assert "{ action: 'reset', label: 'Original', title: 'Return to original view', width: 62 }" in export_source
+    assert "function refitViewportToWindow()" in export_source
+    assert "function scheduleViewportRefit()" in export_source
+    assert "popup_mode: normalizedPopupMode" in export_source
+    assert "orthogroups" in export_source
+    assert "var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';" in export_source
+    assert "var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];" in export_source
+    assert "var richSearchFields = {" in export_source
+    assert "if (popupMode === 'simple') {\n      searchFieldOptions = searchFieldOptions.filter" in export_source
+    assert "function renderSimplePopup(feature)" in export_source
+    assert "if (normalizedPopupMode === 'rich') {\n      Object.assign(payload, {\n        qualifiers: normalizeQualifierMap(feature?.qualifiers)," in export_source
     assert "nucleotide_sequence" in export_source
     assert "amino_acid_sequence" in export_source
     assert "getVisibleViewRect()" in export_source
     assert "var visibleView = getVisibleViewRect();" in export_source
     assert "window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });" in export_source
+    assert "window.addEventListener('resize', scheduleViewportRefit);" in export_source
     assert "window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });" in export_source
     assert "popupCssWidth" in export_source
     assert "getPopupCssMetrics" in export_source
@@ -168,7 +242,13 @@ def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_e
     assert "root.style.setProperty('--gfi-text-scale'" in export_source
     assert "gbdraw-interactive-feature-glow" in export_source
     assert "gbdraw-interactive-feature--hover" in export_source
+    assert "gbdraw-interactive-orthogroup-link--hover" in export_source
+    assert "function setOrthogroupHover(orthogroupId, highlight)" in export_source
     assert "activePopupDrag" in export_source
+    assert "activeSearchControlsDrag" in export_source
+    assert "function startSearchControlsDrag(event, root)" in export_source
+    assert "document.addEventListener('mouseup', onEnd, true);" in export_source
+    assert "window.addEventListener('blur', onEnd);" in export_source
     assert 'data-drag-handle="true"' in export_source
     assert "function startPopupDrag(event)" in export_source
     assert "setFeatureHighlight" in export_source
@@ -177,9 +257,17 @@ def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_e
     assert "['Record index'" not in export_source
     assert "['Strand'" not in export_source
     assert "root.style.transform = 'scale('" in export_source
-    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
+    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
     assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" not in export_source
+    assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" not in export_source
+    assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString({ interactive: true });" not in export_source
+    assert "downloadInteractiveSVG" in app_setup_source
+    assert '@click="downloadInteractiveSVG"' in index_html
+    assert "Interactive SVG" in index_html
+    assert "Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded." in index_html
 
 
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
@@ -770,6 +858,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         f"""
         import {{
           applyCircularTrackOrderPlacements,
+          buildCircularTrackSlotSpec,
           createDefaultCircularTrackSlots,
           createCircularTrackSlotEditor,
           estimateCircularConservationLayoutWarning
@@ -780,6 +869,37 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const defaultTick = defaultSlots.find((slot) => slot.id === 'ticks');
         if (defaultTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Default Tick layout should point labels inward when Tick is inside Feature: ${{JSON.stringify(defaultTick)}}`);
+        }}
+        const gapSpec = buildCircularTrackSlotSpec(
+          {{
+            id: 'gc_content',
+            renderer: 'dinucleotide_content',
+            side: 'inside',
+            inner_gap_px: '4',
+            outer_gap_px: '6',
+            params: {{ nt: 'GC' }}
+          }},
+          'GC',
+          'tuckin',
+          {{ includeSide: false }}
+        );
+        if (!gapSpec.includes('inner_gap_px=4') || !gapSpec.includes('outer_gap_px=6') || gapSpec.includes('spacing=')) {{
+          throw new Error(`Circular gap spec did not serialize physical px gaps: ${{gapSpec}}`);
+        }}
+        const legacySpacingSpec = buildCircularTrackSlotSpec(
+          {{
+            id: 'gc_skew',
+            renderer: 'dinucleotide_skew',
+            side: 'inside',
+            spacing: '5',
+            params: {{ nt: 'GC' }}
+          }},
+          'GC',
+          'tuckin',
+          {{ includeSide: false }}
+        );
+        if (!legacySpacingSpec.includes('inner_gap_px=5') || !legacySpacingSpec.includes('outer_gap_px=5') || legacySpacingSpec.includes('spacing=')) {{
+          throw new Error(`Legacy circular spacing was not converted to physical gaps: ${{legacySpacingSpec}}`);
         }}
 
         const state = {{
@@ -819,6 +939,20 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const resetTick = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
         if (resetTick?.side !== 'inside' || resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Enabling custom slots did not use the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+        defaultEditor.resetCircularTrackSlotsToPreset('middle');
+        const middleFeature = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'features');
+        const middleFeatureSpec = buildCircularTrackSlotSpec(
+          middleFeature,
+          defaultState.adv.nt,
+          defaultState.form.track_type,
+          {{ includeSide: false, forceSplitLane: true }}
+        );
+        if (defaultState.form.track_type !== 'middle' || middleFeature?.side !== 'overlay' || middleFeature?.params?.lane_direction !== 'split') {{
+          throw new Error(`Reset to Middle did not put Feature on the Axis: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+        if (middleFeatureSpec !== 'features:features@lane_direction=split') {{
+          throw new Error(`Middle feature CLI spec must keep lane_direction=split with circular axis index: ${{middleFeatureSpec}}`);
         }}
 
         const multiDepthState = {{
@@ -1252,9 +1386,9 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
 
-    assert "circular_track_slots_schema_version: 3" in state_source
-    assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
-    assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;" in config_source
+    assert "circular_track_slots_schema_version: 4" in state_source
+    assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;" in config_source
+    assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
     assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
     assert "validateImportedCircularTrackSlots(data);" in config_source
     assert "validateImportedCircularTrackSlots(data.config);" in config_source

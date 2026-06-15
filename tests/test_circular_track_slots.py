@@ -326,6 +326,30 @@ def test_parse_circular_track_slots_normalizes_object_renderer_aliases() -> None
     assert slots[0].renderer == "dinucleotide_skew"
 
 
+def test_parse_circular_track_slot_accepts_physical_gap_fields() -> None:
+    slot = parse_circular_track_slot(
+        "gc_content:dinucleotide_content@inner_gap_px=4,outer_gap_px=6,w=24px"
+    )
+
+    assert slot.spacing is None
+    assert slot.inner_gap_px == pytest.approx(4.0)
+    assert slot.outer_gap_px == pytest.approx(6.0)
+
+    normalized = normalize_circular_track_slots([slot])[0]
+    assert normalized.inner_gap_px == pytest.approx(4.0)
+    assert normalized.outer_gap_px == pytest.approx(6.0)
+
+
+def test_parse_circular_track_slot_rejects_ambiguous_spacing_and_gap_fields() -> None:
+    with pytest.raises(CircularTrackSlotParseError, match="spacing cannot be combined"):
+        parse_circular_track_slot(
+            "gc_content:dinucleotide_content@spacing=4px,inner_gap_px=4"
+        )
+
+    with pytest.raises(CircularTrackSlotParseError, match="without a unit"):
+        parse_circular_track_slot("gc_content:dinucleotide_content@inner_gap_px=4px")
+
+
 def test_default_circular_track_slots_do_not_include_tick_axis_param() -> None:
     slots = default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True)
     ticks = next(slot for slot in slots if slot.renderer == "ticks")
@@ -369,7 +393,10 @@ def test_circular_track_slot_rejects_obsolete_geometry_keys(spec: str) -> None:
         parse_circular_track_slot(spec)
 
 
-@pytest.mark.parametrize("param_key", ["side", "radius", "width", "spacing", "gap_after", "inner_radius"])
+@pytest.mark.parametrize(
+    "param_key",
+    ["side", "radius", "width", "spacing", "inner_gap_px", "outer_gap_px", "gap_after", "inner_radius"],
+)
 def test_normalize_circular_track_slots_rejects_generic_layout_keys_in_params(param_key: str) -> None:
     with pytest.raises(ValueError, match="generic layout field"):
         normalize_circular_track_slots(
