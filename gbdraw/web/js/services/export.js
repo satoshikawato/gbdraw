@@ -398,7 +398,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   cursor: grabbing;
 }
 .gbdraw-interactive-pan-active .gbdraw-interactive-feature {
-  cursor: grab;
+  cursor: pointer;
 }
 .gbdraw-feature-search-controls {
   overflow: visible;
@@ -549,6 +549,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var searchControls = null;
   var isPanMode = false;
   var activeCanvasPan = null;
+  var suppressNextCanvasClick = false;
   var activePopupResize = null;
   var activePopupDrag = null;
   var activeSearchControlsDrag = null;
@@ -1930,34 +1931,49 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (closestSearchControls(event.target)) return;
     if (closestViewportButton(event.target)) return;
     stopCanvasPan();
-    closePopup();
     var startView = getViewRect();
     var size = getSvgClientSize();
     var unitX = startView.width / size.width;
     var unitY = startView.height / size.height;
     var startClientX = event.clientX;
     var startClientY = event.clientY;
+    var didPan = false;
+    var panThresholdSq = 16;
     var onMove = function (moveEvent) {
+      var dx = moveEvent.clientX - startClientX;
+      var dy = moveEvent.clientY - startClientY;
+      if (!didPan && ((dx * dx) + (dy * dy)) >= panThresholdSq) {
+        didPan = true;
+        if (activeCanvasPan) activeCanvasPan.didPan = true;
+        closePopup();
+        setClassToken(svg, 'gbdraw-interactive-panning', true);
+      }
+      if (!didPan) return;
       setSvgViewRect({
-        x: startView.x - (moveEvent.clientX - startClientX) * unitX,
-        y: startView.y - (moveEvent.clientY - startClientY) * unitY,
+        x: startView.x - dx * unitX,
+        y: startView.y - dy * unitY,
         width: startView.width,
         height: startView.height
       });
       moveEvent.preventDefault();
     };
     var onEnd = function () {
+      var wasPanned = Boolean(activeCanvasPan && activeCanvasPan.didPan);
       stopCanvasPan();
+      if (wasPanned) {
+        suppressNextCanvasClick = true;
+        window.setTimeout(function () {
+          suppressNextCanvasClick = false;
+        }, 0);
+      }
     };
     activeCanvasPan = {
       onMove: onMove,
-      onEnd: onEnd
+      onEnd: onEnd,
+      didPan: false
     };
-    setClassToken(svg, 'gbdraw-interactive-panning', true);
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onEnd);
-    event.preventDefault();
-    event.stopPropagation();
   }
 
   function escapeHtml(value) {
@@ -2691,7 +2707,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   svg.addEventListener('click', function (event) {
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
-    if (isPanMode) {
+    if (suppressNextCanvasClick) {
+      suppressNextCanvasClick = false;
       event.preventDefault();
       event.stopPropagation();
       return;
