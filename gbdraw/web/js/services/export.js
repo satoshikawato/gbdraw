@@ -92,6 +92,13 @@ const STANDALONE_INTERACTIVE_STYLE = `
   stroke: #f59e0b;
   stroke-width: 2;
 }
+.gbdraw-interactive-orthogroup-link {
+  transition: opacity 120ms ease, filter 120ms ease;
+}
+.gbdraw-interactive-orthogroup-link.gbdraw-interactive-orthogroup-link--hover {
+  opacity: 0.92;
+  filter: url(#gbdraw-interactive-feature-glow);
+}
 .gbdraw-feature-popup {
   overflow: visible;
   pointer-events: auto;
@@ -353,18 +360,22 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfs {
   width: 100%;
   height: 100%;
-  padding: 8px;
+  padding: 7px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.96);
   color: #334155;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 12px;
+  font-size: 11px;
+  cursor: grab;
+}
+.gfs.is-dragging {
+  cursor: grabbing;
 }
 .gfs-row {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
   min-width: 0;
 }
@@ -373,7 +384,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gfs-input,
 .gfs-select {
-  height: 28px;
+  height: 26px;
   min-width: 0;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
@@ -382,17 +393,17 @@ const STANDALONE_INTERACTIVE_STYLE = `
   font: inherit;
 }
 .gfs-input {
-  padding: 0 8px;
+  padding: 0 7px;
 }
 .gfs-query {
-  flex: 1 1 140px;
+  flex: 1 1 126px;
 }
 .gfs-select {
-  flex: 0 0 122px;
-  padding: 0 6px;
+  flex: 0 0 104px;
+  padding: 0 5px;
 }
 .gfs-qualifier {
-  flex: 1 1 110px;
+  flex: 1 1 104px;
 }
 .gfs-qualifier:disabled {
   opacity: 0.48;
@@ -405,8 +416,8 @@ const STANDALONE_INTERACTIVE_STYLE = `
   user-select: none;
 }
 .gfs-button {
-  height: 28px;
-  min-width: 34px;
+  height: 26px;
+  min-width: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -419,7 +430,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   font-weight: 700;
 }
 .gfs-button--clear {
-  flex: 0 0 54px;
+  flex: 0 0 48px;
 }
 .gfs-button:hover {
   background: #eff6ff;
@@ -435,13 +446,23 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfs-match-detail {
   display: block;
   min-width: 0;
-  margin-top: 6px;
+  margin-top: 5px;
   overflow: hidden;
   color: #64748b;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.gfs input,
+.gfs select,
+.gfs button,
+.gfs label {
+  cursor: auto;
+}
+.gfs button,
+.gfs label {
+  cursor: pointer;
 }
 .gfs-match-detail strong {
   color: #334155;
@@ -477,7 +498,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var activeCanvasPan = null;
   var activePopupResize = null;
   var activePopupDrag = null;
+  var activeSearchControlsDrag = null;
+  var searchControlsOffsetCss = { x: 0, y: 0 };
   var activeHoverSvgId = null;
+  var activeHoverKey = '';
   var maxZoom = 16;
   var resizeFrame = null;
   var searchState = {
@@ -504,7 +528,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var richSearchFields = {
     'qualifier-key': true,
     'qualifier-value': true,
-    'sequence': true
+    'nucleotide': true,
+    'amino-acid': true
   };
 
   function isRichSearchField(field) {
@@ -544,6 +569,29 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     featureElementsById.get(svgId).push(element);
   });
 
+  var featureIdsByOrthogroupId = new Map();
+  features.forEach(function (feature) {
+    var svgId = String(feature && feature.svg_id || '').trim();
+    var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
+    if (!svgId || !orthogroupId) return;
+    if (!featureIdsByOrthogroupId.has(orthogroupId)) {
+      featureIdsByOrthogroupId.set(orthogroupId, new Set());
+    }
+    featureIdsByOrthogroupId.get(orthogroupId).add(svgId);
+  });
+
+  var comparisonElementsByOrthogroupId = new Map();
+  Array.prototype.slice.call(svg.querySelectorAll('[data-orthogroup-id]')).forEach(function (element) {
+    if (element.matches && element.matches(FEATURE_SELECTOR)) return;
+    var orthogroupId = String(element.getAttribute('data-orthogroup-id') || '').trim();
+    if (!orthogroupId) return;
+    if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
+      comparisonElementsByOrthogroupId.set(orthogroupId, []);
+    }
+    comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
+    setClassToken(element, 'gbdraw-interactive-orthogroup-link', true);
+  });
+
   function setClassToken(element, token, enabled) {
     if (!element) return;
     if (element.classList && element.classList.toggle) {
@@ -572,6 +620,35 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
+  function getFeatureHoverKey(svgId) {
+    var feature = featuresById.get(String(svgId || '').trim());
+    var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
+    return orthogroupId ? 'orthogroup:' + orthogroupId : 'feature:' + String(svgId || '').trim();
+  }
+
+  function setOrthogroupHover(orthogroupId, highlight) {
+    var id = String(orthogroupId || '').trim();
+    if (!id) return;
+    var featureIds = featureIdsByOrthogroupId.get(id) || new Set();
+    featureIds.forEach(function (featureId) {
+      setFeatureHighlight(featureId, highlight);
+    });
+    var comparisonElements = comparisonElementsByOrthogroupId.get(id) || [];
+    comparisonElements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-orthogroup-link--hover', highlight);
+    });
+  }
+
+  function setHoverHighlight(svgId, highlight) {
+    var feature = featuresById.get(String(svgId || '').trim());
+    var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
+    if (orthogroupId) {
+      setOrthogroupHover(orthogroupId, highlight);
+      return;
+    }
+    setFeatureHighlight(svgId, highlight);
+  }
+
   function supportsStandaloneControls() {
     if (!document.createElementNS) return false;
     if (typeof window.SVGForeignObjectElement === 'undefined') return false;
@@ -586,6 +663,113 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return String(value == null ? '' : value).toLowerCase();
   }
 
+  var NUCLEOTIDE_IUPAC = {
+    A: 'A',
+    C: 'C',
+    G: 'G',
+    T: 'TU',
+    U: 'TU',
+    R: 'AG',
+    Y: 'CTU',
+    S: 'GC',
+    W: 'ATU',
+    K: 'GTU',
+    M: 'AC',
+    B: 'CGTU',
+    D: 'AGTU',
+    H: 'ACTU',
+    V: 'ACG',
+    N: 'ACGTU',
+    '-': '-'
+  };
+  var AMINO_ACID_IUPAC = {
+    A: 'A',
+    C: 'C',
+    D: 'D',
+    E: 'E',
+    F: 'F',
+    G: 'G',
+    H: 'H',
+    I: 'I',
+    K: 'K',
+    L: 'L',
+    M: 'M',
+    N: 'N',
+    P: 'P',
+    Q: 'Q',
+    R: 'R',
+    S: 'S',
+    T: 'T',
+    V: 'V',
+    W: 'W',
+    Y: 'Y',
+    U: 'U',
+    O: 'O',
+    B: 'DN',
+    Z: 'EQ',
+    J: 'IL',
+    X: 'ACDEFGHIKLMNPQRSTVWYUO',
+    '*': '*',
+    '-': '-'
+  };
+
+  function getIupacAlphabet(alphabet) {
+    if (alphabet === 'nucleotide') return NUCLEOTIDE_IUPAC;
+    if (alphabet === 'amino-acid') return AMINO_ACID_IUPAC;
+    return null;
+  }
+
+  function uniqueCharacters(value) {
+    var seen = {};
+    var chars = [];
+    String(value || '').split('').forEach(function (char) {
+      if (!char || seen[char]) return;
+      seen[char] = true;
+      chars.push(char);
+    });
+    return chars;
+  }
+
+  function charSetsIntersect(left, right) {
+    var rightSet = {};
+    uniqueCharacters(right).forEach(function (char) {
+      rightSet[char] = true;
+    });
+    return uniqueCharacters(left).some(function (char) {
+      return Boolean(rightSet[char]);
+    });
+  }
+
+  function escapeRegExpText(value) {
+    return String(value).replace(/[.*+?^\${}()|[\]\\]/g, '\\\\$&');
+  }
+
+  function escapeRegExpClassChar(value) {
+    return String(value).replace(/[\\\]\[\^-]/g, '\\\\$&');
+  }
+
+  function buildIupacQueryPattern(query, alphabet) {
+    var map = getIupacAlphabet(alphabet);
+    var normalized = String(query || '').replace(/\s+/g, '').toUpperCase();
+    if (!map || !normalized) return null;
+    var targetChars = Object.keys(map);
+    var parts = [];
+    normalized.split('').forEach(function (queryChar) {
+      var querySet = map[queryChar] || queryChar;
+      var matchingTargets = targetChars.filter(function (targetChar) {
+        return charSetsIntersect(querySet, map[targetChar] || targetChar);
+      });
+      if (!matchingTargets.length) {
+        parts.push(escapeRegExpText(queryChar));
+      } else if (matchingTargets.length === 1) {
+        parts.push(escapeRegExpText(matchingTargets[0]));
+      } else {
+        parts.push('[' + matchingTargets.map(escapeRegExpClassChar).join('') + ']');
+      }
+    });
+    return parts.join('');
+  }
+
   function appendSearchValues(values, value) {
     if (Array.isArray(value)) {
       value.forEach(function (entry) {
@@ -598,17 +782,21 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (text) values.push(text);
   }
 
-  function appendSearchItems(items, label, value) {
+  function appendSearchItems(items, label, value, options) {
     if (Array.isArray(value)) {
       value.forEach(function (entry) {
-        appendSearchItems(items, label, entry);
+        appendSearchItems(items, label, entry, options);
       });
       return;
     }
     if (value === null || value === undefined) return;
     var text = String(value).trim();
     if (text) {
-      items.push({ label: label, value: text });
+      items.push({
+        label: label,
+        value: text,
+        alphabet: options && options.alphabet ? String(options.alphabet) : ''
+      });
     }
   }
 
@@ -685,20 +873,42 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
+  function displayProteinId(feature, member) {
+    return String(
+      feature && feature.source_protein_id ||
+      member && member.sourceProteinId ||
+      feature && feature.protein_id ||
+      member && member.proteinId ||
+      ''
+    ).trim();
+  }
+
+  function internalProteinId(feature, member) {
+    return String(
+      feature && feature.protein_id ||
+      member && member.proteinId ||
+      ''
+    ).trim();
+  }
+
   function getOrthogroupSearchItems(feature) {
     var group = getFeatureOrthogroup(feature);
     var member = getFeatureOrthogroupMember(feature, group);
+    var proteinId = displayProteinId(feature, member);
+    var internalId = internalProteinId(feature, member);
     var items = [];
     appendSearchItems(items, 'Orthogroup ID', feature && feature.orthogroup_id);
     appendSearchItems(items, 'Orthogroup name', group && (group.display_name || group.name));
     appendSearchItems(items, 'Orthogroup description', group && group.description);
-    appendSearchItems(items, 'Protein ID', feature && feature.protein_id);
-    appendSearchItems(items, 'Source protein ID', feature && feature.source_protein_id);
+    appendSearchItems(items, 'Protein ID', proteinId);
+    if (internalId && internalId !== proteinId) {
+      appendSearchItems(items, 'Internal protein ID', internalId);
+    }
     appendSearchItems(items, 'Orthogroup member', member && member.label);
     appendSearchItems(items, 'Orthogroup member gene', member && member.gene);
     appendSearchItems(items, 'Orthogroup member product', member && member.product);
     appendSearchItems(items, 'Orthogroup member note', member && member.note);
-    appendSearchItems(items, 'Orthogroup member protein ID', member && (member.proteinId || member.sourceProteinId));
+    appendSearchItems(items, 'Orthogroup member protein ID', member && (member.sourceProteinId || member.proteinId));
     return items;
   }
 
@@ -740,9 +950,12 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (selectedField === 'qualifier-value') {
       return getQualifierSearchItems(feature, qualifierKey);
     }
-    if (selectedField === 'sequence') {
-      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence);
-      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence);
+    if (selectedField === 'nucleotide') {
+      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence, { alphabet: 'nucleotide' });
+      return items;
+    }
+    if (selectedField === 'amino-acid') {
+      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence, { alphabet: 'amino-acid' });
       return items;
     }
 
@@ -757,8 +970,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       Object.keys(qualifiers).sort().forEach(function (key) {
         appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
       });
-      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence);
-      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence);
+      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence, { alphabet: 'nucleotide' });
+      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence, { alphabet: 'amino-acid' });
     }
     return items;
   }
@@ -797,11 +1010,26 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       }
     }
     var needle = normalizeSearchText(trimmedQuery);
+    var sequenceMatchers = {};
+    var getSequenceRegex = function (alphabet) {
+      if (!getIupacAlphabet(alphabet)) return null;
+      if (!Object.prototype.hasOwnProperty.call(sequenceMatchers, alphabet)) {
+        var pattern = buildIupacQueryPattern(trimmedQuery, alphabet);
+        sequenceMatchers[alphabet] = pattern ? new RegExp(pattern, 'i') : null;
+      }
+      return sequenceMatchers[alphabet];
+    };
     return {
       active: true,
       error: '',
-      match: function (value) {
+      match: function (value, alphabet) {
         var text = String(value == null ? '' : value);
+        var sequenceRegex = getSequenceRegex(alphabet);
+        if (sequenceRegex) {
+          sequenceRegex.lastIndex = 0;
+          var sequenceMatch = text.match(sequenceRegex);
+          return sequenceMatch ? String(sequenceMatch[0] || '') : '';
+        }
         var index = normalizeSearchText(text).indexOf(needle);
         return index === -1 ? '' : text.slice(index, index + trimmedQuery.length);
       },
@@ -821,7 +1049,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function featureSearchMatches(feature, matcher, field, qualifierKey) {
     if (!matcher || !matcher.active || matcher.error) return [];
     return featureSearchItems(feature, field, qualifierKey).map(function (item) {
-      var matchedText = matcher.match ? matcher.match(item.value) : '';
+      var matchedText = matcher.match ? matcher.match(item.value, item.alphabet) : '';
       if (!matchedText) return null;
       return {
         label: item.label,
@@ -1079,8 +1307,54 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var yOffset = 42 * unit;
     searchControls.setAttribute(
       'transform',
-      'translate(' + formatSvgNumber(visibleView.x + margin) + ', ' + formatSvgNumber(visibleView.y + margin + yOffset) + ') scale(' + formatSvgNumber(unit) + ')'
+      'translate(' +
+        formatSvgNumber(visibleView.x + margin + (searchControlsOffsetCss.x * unit)) +
+        ', ' +
+        formatSvgNumber(visibleView.y + margin + yOffset + (searchControlsOffsetCss.y * unit)) +
+        ') scale(' + formatSvgNumber(unit) + ')'
     );
+  }
+
+  function stopSearchControlsDrag() {
+    if (!activeSearchControlsDrag) return;
+    document.removeEventListener('mousemove', activeSearchControlsDrag.onMove, true);
+    document.removeEventListener('mouseup', activeSearchControlsDrag.onEnd, true);
+    window.removeEventListener('mouseup', activeSearchControlsDrag.onEnd, true);
+    window.removeEventListener('blur', activeSearchControlsDrag.onEnd);
+    if (activeSearchControlsDrag.root && activeSearchControlsDrag.root.classList) {
+      activeSearchControlsDrag.root.classList.remove('is-dragging');
+    }
+    activeSearchControlsDrag = null;
+  }
+
+  function startSearchControlsDrag(event, root) {
+    if (event.button !== 0) return;
+    stopSearchControlsDrag();
+    var startClientX = Number(event.clientX) || 0;
+    var startClientY = Number(event.clientY) || 0;
+    var startOffsetX = Number(searchControlsOffsetCss.x) || 0;
+    var startOffsetY = Number(searchControlsOffsetCss.y) || 0;
+    var onMove = function (moveEvent) {
+      searchControlsOffsetCss.x = startOffsetX + ((Number(moveEvent.clientX) || 0) - startClientX);
+      searchControlsOffsetCss.y = startOffsetY + ((Number(moveEvent.clientY) || 0) - startClientY);
+      updateSearchControlsPosition();
+      moveEvent.preventDefault();
+    };
+    var onEnd = function () {
+      stopSearchControlsDrag();
+    };
+    activeSearchControlsDrag = {
+      root: root,
+      onMove: onMove,
+      onEnd: onEnd
+    };
+    if (root && root.classList) root.classList.add('is-dragging');
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup', onEnd, true);
+    window.addEventListener('mouseup', onEnd, true);
+    window.addEventListener('blur', onEnd);
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   function setupSearchControls() {
@@ -1094,8 +1368,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     searchControls.setAttribute('id', SEARCH_CONTROLS_ID);
     searchControls.setAttribute('class', 'gbdraw-feature-search-controls');
     searchControls.setAttribute('data-popup-mode', popupMode);
-    searchControls.setAttribute('width', '440');
-    searchControls.setAttribute('height', '96');
+    searchControls.setAttribute('width', '396');
+    searchControls.setAttribute('height', '86');
 
     var root = createXhtmlNode('div', {
       xmlns: XHTML_NS,
@@ -1125,7 +1399,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       ['orthogroup', 'Orthogroup'],
       ['qualifier-key', 'Qualifier key'],
       ['qualifier-value', 'Qualifier value'],
-      ['sequence', 'Sequence']
+      ['nucleotide', 'Nucleotide'],
+      ['amino-acid', 'Amino acid']
     ];
     if (popupMode === 'simple') {
       searchFieldOptions = searchFieldOptions.filter(function (entry) {
@@ -1198,6 +1473,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     root.appendChild(secondRow);
     root.appendChild(matchDetailText);
     searchControls.appendChild(root);
+
+    root.addEventListener('mousedown', function (event) {
+      var target = event.target && event.target.closest
+        ? event.target.closest('input, textarea, select, button, label, a')
+        : null;
+      if (target && root.contains(target)) return;
+      startSearchControlsDrag(event, root);
+    });
 
     ['mousedown', 'mouseup', 'click', 'dblclick', 'keydown', 'keyup', 'keypress', 'wheel', 'touchstart', 'touchmove'].forEach(function (eventName) {
       root.addEventListener(eventName, function (event) {
@@ -1503,8 +1786,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     setClassToken(svg, 'gbdraw-interactive-pan-active', isPanMode);
     if (isPanMode) {
       if (activeHoverSvgId) {
-        setFeatureHighlight(activeHoverSvgId, false);
+        setHoverHighlight(activeHoverSvgId, false);
         activeHoverSvgId = null;
+        activeHoverKey = '';
       }
       closePopup();
     }
@@ -1665,13 +1949,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var member = getFeatureOrthogroupMember(feature, group);
     var memberCount = Number(feature && feature.orthogroup_member_count);
     var recordCoverage = Number(feature && feature.orthogroup_record_coverage);
+    var proteinId = displayProteinId(feature, member);
     var rows = [
       ['Orthogroup ID', feature && feature.orthogroup_id || ''],
       ['Orthogroup name', group && (group.display_name || group.name) || ''],
       ['Members', Number.isFinite(memberCount) && memberCount > 0 ? String(memberCount) : (group && group.member_count ? String(group.member_count) : '')],
       ['Record coverage', Number.isFinite(recordCoverage) && recordCoverage > 0 ? String(recordCoverage) : (group && group.record_coverage_count ? String(group.record_coverage_count) : '')],
-      ['Protein ID', feature && feature.protein_id || member && member.proteinId || ''],
-      ['Source protein ID', feature && feature.source_protein_id || member && member.sourceProteinId || ''],
+      ['Protein ID', proteinId],
       ['Representative', feature && feature.orthogroup_representative ? 'yes' : '']
     ];
     return rows.filter(function (row) {
@@ -1750,7 +2034,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var members = Array.isArray(group.members) ? group.members : [];
     if (!members.length) return '';
     var lines = members.map(function (member) {
-      var label = String(member.product || member.gene || member.label || member.proteinId || member.featureSvgId || '').trim();
+      var label = String(member.product || member.gene || member.label || member.sourceProteinId || member.proteinId || member.featureSvgId || '').trim();
       var record = String(member.recordId || '').trim();
       var location = memberLocationText(member);
       var flags = member.representative ? ' representative' : '';
@@ -2307,12 +2591,15 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
     var svgId = featureElement ? String(featureElement.id || '') : '';
-    if (!svgId || !featureElementsById.has(svgId) || activeHoverSvgId === svgId) return;
+    if (!svgId || !featureElementsById.has(svgId)) return;
+    var hoverKey = getFeatureHoverKey(svgId);
+    if (activeHoverKey === hoverKey) return;
     if (activeHoverSvgId) {
-      setFeatureHighlight(activeHoverSvgId, false);
+      setHoverHighlight(activeHoverSvgId, false);
     }
     activeHoverSvgId = svgId;
-    setFeatureHighlight(svgId, true);
+    activeHoverKey = hoverKey;
+    setHoverHighlight(svgId, true);
   });
 
   svg.addEventListener('mouseout', function (event) {
@@ -2320,9 +2607,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var svgId = featureElement ? String(featureElement.id || '') : '';
     if (!svgId || activeHoverSvgId !== svgId) return;
     var relatedFeature = closestFeature(event.relatedTarget);
-    if (relatedFeature && String(relatedFeature.id || '') === svgId) return;
-    setFeatureHighlight(svgId, false);
+    if (relatedFeature && getFeatureHoverKey(String(relatedFeature.id || '')) === activeHoverKey) return;
+    setHoverHighlight(svgId, false);
     activeHoverSvgId = null;
+    activeHoverKey = '';
   });
 
   svg.addEventListener('click', function (event) {

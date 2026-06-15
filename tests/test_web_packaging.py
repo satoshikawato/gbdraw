@@ -133,6 +133,9 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "locationParts" in svg_actions_source
     assert "nucleotideSequence" in svg_actions_source
     assert "aminoAcidSequence" in svg_actions_source
+    assert "const displayProteinId = (feat)" in svg_actions_source
+    assert "label: 'Protein ID', value: proteinId" in svg_actions_source
+    assert "label: 'Source protein ID'" not in svg_actions_source
     assert "label: 'SVG ID'" not in svg_actions_source
     assert "label: 'Record index'" not in svg_actions_source
     assert "label: 'Strand'" not in svg_actions_source
@@ -165,6 +168,12 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "gfs-button--clear" in export_source
     assert "gfs-match-detail" in export_source
     assert "['orthogroup', 'Orthogroup']" in export_source
+    assert "['nucleotide', 'Nucleotide']" in export_source
+    assert "['amino-acid', 'Amino acid']" in export_source
+    assert "['sequence', 'Sequence']" not in export_source
+    assert "var NUCLEOTIDE_IUPAC = {" in export_source
+    assert "var AMINO_ACID_IUPAC = {" in export_source
+    assert "function buildIupacQueryPattern(query, alphabet)" in export_source
     assert "function supportsStandaloneControls()" in export_source
     assert "function setSearchState(nextState)" in export_source
     assert "function applySearchResults()" in export_source
@@ -172,6 +181,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "function clearSearch()" in export_source
     assert "Search match" in export_source
     assert "Orthogroup members" in export_source
+    assert "function displayProteinId(feature, member)" in export_source
+    assert "['Source protein ID'" not in export_source
     assert "display_label" in export_source
     assert "search_labels" in export_source
     assert "orthogroup_id" in export_source
@@ -226,7 +237,13 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "root.style.setProperty('--gfi-text-scale'" in export_source
     assert "gbdraw-interactive-feature-glow" in export_source
     assert "gbdraw-interactive-feature--hover" in export_source
+    assert "gbdraw-interactive-orthogroup-link--hover" in export_source
+    assert "function setOrthogroupHover(orthogroupId, highlight)" in export_source
     assert "activePopupDrag" in export_source
+    assert "activeSearchControlsDrag" in export_source
+    assert "function startSearchControlsDrag(event, root)" in export_source
+    assert "document.addEventListener('mouseup', onEnd, true);" in export_source
+    assert "window.addEventListener('blur', onEnd);" in export_source
     assert 'data-drag-handle="true"' in export_source
     assert "function startPopupDrag(event)" in export_source
     assert "setFeatureHighlight" in export_source

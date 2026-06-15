@@ -2637,7 +2637,7 @@
                                 <div class="text-[10px] text-slate-400 mb-1">Current member</div>
                                 <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.label || clickedFeature.label }}</div>
                                 <div class="font-mono text-[10px] text-slate-500 break-all">
-                                    {{ clickedOrthogroupDetail.currentMember.proteinId || clickedFeature.proteinId }}
+                                    {{ clickedOrthogroupDetail.currentMember.sourceProteinId || clickedFeature.sourceProteinId || clickedOrthogroupDetail.currentMember.proteinId || clickedFeature.proteinId }}
                                 </div>
                                 <div class="text-[10px] text-slate-500">
                                     {{ clickedOrthogroupDetail.currentMember.recordId || '' }}
