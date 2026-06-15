@@ -23,11 +23,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 VENDOR_ROOT = WEB_ROOT / "vendor"
+PYODIDE_RUNTIME_DIR = VENDOR_ROOT / "pyodide" / "v0.29.0" / "full"
 
 ASSET_URLS = {
     "vue": "https://unpkg.com/vue@3.5.25/dist/vue.global.js",
     "tailwindcss": "https://cdn.tailwindcss.com",
     "pyodide_core": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2",
+    "micropip": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
+    "tzdata": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl",
     "browser_wasi_shim": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz",
     "jspdf": "https://registry.npmjs.org/jspdf/-/jspdf-3.0.3.tgz",
     "svg2pdf": "https://registry.npmjs.org/svg2pdf.js/-/svg2pdf.js-2.6.0.tgz",
@@ -45,6 +48,11 @@ PYODIDE_CORE_FILES = {
     "pyodide.mjs",
     "pyodide-lock.json",
     "python_stdlib.zip",
+}
+
+PYODIDE_RUNTIME_PACKAGE_WHEELS = {
+    "micropip": "micropip-0.11.0-py3-none-any.whl",
+    "tzdata": "tzdata-2025.2-py2.py3-none-any.whl",
 }
 
 UI_FONT_ASSETS = {
@@ -150,7 +158,7 @@ def vendor_assets() -> None:
         for path in [
             VENDOR_ROOT / "vue",
             VENDOR_ROOT / "tailwindcss",
-            VENDOR_ROOT / "pyodide" / "v0.29.0" / "full",
+            PYODIDE_RUNTIME_DIR,
             VENDOR_ROOT / "browser_wasi_shim" / "dist",
             VENDOR_ROOT / "jspdf",
             VENDOR_ROOT / "svg2pdf.js",
@@ -171,7 +179,7 @@ def vendor_assets() -> None:
 
         pyodide_archive = tmp / "pyodide-core.tar.bz2"
         _download(ASSET_URLS["pyodide_core"], pyodide_archive)
-        pyodide_target = VENDOR_ROOT / "pyodide" / "v0.29.0" / "full"
+        pyodide_target = PYODIDE_RUNTIME_DIR
         pyodide_target.mkdir(parents=True, exist_ok=True)
         with tarfile.open(pyodide_archive, "r:bz2") as tar:
             for member in tar.getmembers():
@@ -185,6 +193,9 @@ def vendor_assets() -> None:
                     continue
                 with (pyodide_target / name).open("wb") as dst:
                     shutil.copyfileobj(extracted, dst)
+
+        for asset_key, filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.items():
+            _download(ASSET_URLS[asset_key], PYODIDE_RUNTIME_DIR / filename)
 
         browser_wasi_archive = tmp / "browser_wasi_shim.tgz"
         _download(ASSET_URLS["browser_wasi_shim"], browser_wasi_archive)
@@ -265,12 +276,8 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "vendor" / "vue" / "vue.global.js",
         WEB_ROOT / "vendor" / "tailwindcss" / "tailwindcss-play.js",
         *(WEB_ROOT / path for path in REQUIRED_UI_FONT_FILES),
-        WEB_ROOT / "vendor" / "pyodide" / "v0.29.0" / "full" / "pyodide.js",
-        WEB_ROOT / "vendor" / "pyodide" / "v0.29.0" / "full" / "pyodide.asm.js",
-        WEB_ROOT / "vendor" / "pyodide" / "v0.29.0" / "full" / "pyodide.asm.wasm",
-        WEB_ROOT / "vendor" / "pyodide" / "v0.29.0" / "full" / "pyodide-lock.json",
-        WEB_ROOT / "vendor" / "pyodide" / "v0.29.0" / "full" / "python_stdlib.zip",
-        WEB_ROOT / "vendor" / "pyodide" / "v0.29.0" / "full" / "micropip-0.11.0-py3-none-any.whl",
+        *(PYODIDE_RUNTIME_DIR / filename for filename in PYODIDE_CORE_FILES),
+        *(PYODIDE_RUNTIME_DIR / filename for filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.values()),
         WEB_ROOT / "vendor" / "browser_wasi_shim" / "dist" / "index.js",
         WEB_ROOT / "vendor" / "browser_wasi_shim" / "dist" / "wasi.js",
         WEB_ROOT / "vendor" / "jspdf" / "jspdf.umd.min.js",
@@ -294,6 +301,7 @@ class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
         super().end_headers()
 
     def log_message(self, format: str, *args: object) -> None:
@@ -328,7 +336,7 @@ def smoke_test() -> None:
     _assert_packaged_assets()
     _ensure_playwright_available()
 
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
     circular_gbk = (REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk").read_text(encoding="utf-8")
     linear_left_gbk = (REPO_ROOT / "tests" / "test_inputs" / "MERS-CoV.gbk").read_text(encoding="utf-8")
@@ -364,22 +372,59 @@ def smoke_test() -> None:
                 "GUI local server did not enable browser isolation for threaded LOSAT: "
                 f"{isolation_state}"
             )
-        page.wait_for_function(
-            """
-            () => {
-              const app = window.__GBDRAW_APP__;
-              if (!app) return false;
-              const status = String(app.loadingStatus || '');
-              return app.pyodideReady === true || status.startsWith('Startup Error:');
-            }
-            """,
-            timeout=120000,
-        )
+        try:
+            page.wait_for_function(
+                """
+                () => {
+                  const app = window.__GBDRAW_APP__;
+                  if (!app) return false;
+                  const loadingStatus = String(app.loadingStatus || '');
+                  return (
+                    (app.pyodideReady === true && app.diagramGenerationWorkerReady === true) ||
+                    loadingStatus.startsWith('Startup Error:') ||
+                    Boolean(app.diagramGenerationWorkerError)
+                  );
+                }
+                """,
+                timeout=120000,
+            )
+        except PlaywrightTimeoutError as exc:
+            startup_state = page.evaluate(
+                """
+                () => {
+                  const app = window.__GBDRAW_APP__;
+                  if (!app) return { appMounted: false };
+                  return {
+                    appMounted: true,
+                    pyodideReady: app.pyodideReady,
+                    loadingStatus: app.loadingStatus,
+                    diagramGenerationWorkerReady: app.diagramGenerationWorkerReady,
+                    diagramGenerationWorkerStatus: app.diagramGenerationWorkerStatus,
+                    diagramGenerationWorkerError: app.diagramGenerationWorkerError
+                  };
+                }
+                """
+            )
+            raise RuntimeError(f"GUI startup timed out offline: {startup_state}") from exc
         startup_state = page.evaluate(
-            "() => ({ pyodideReady: window.__GBDRAW_APP__.pyodideReady, loadingStatus: window.__GBDRAW_APP__.loadingStatus })"
+            """
+            () => ({
+              pyodideReady: window.__GBDRAW_APP__.pyodideReady,
+              loadingStatus: window.__GBDRAW_APP__.loadingStatus,
+              diagramGenerationWorkerReady: window.__GBDRAW_APP__.diagramGenerationWorkerReady,
+              diagramGenerationWorkerStatus: window.__GBDRAW_APP__.diagramGenerationWorkerStatus,
+              diagramGenerationWorkerError: window.__GBDRAW_APP__.diagramGenerationWorkerError
+            })
+            """
         )
         if not startup_state["pyodideReady"]:
             raise RuntimeError(f"GUI startup failed offline: {startup_state['loadingStatus']}")
+        if not startup_state["diagramGenerationWorkerReady"]:
+            raise RuntimeError(
+                "GUI diagram engine failed offline: "
+                f"{startup_state['diagramGenerationWorkerStatus']} "
+                f"(error: {startup_state['diagramGenerationWorkerError']})"
+            )
 
         page.evaluate(
             """
@@ -416,6 +461,34 @@ def smoke_test() -> None:
             raise RuntimeError(f"Circular offline generation failed:\n{circular_state['errorLog']}")
         if circular_state["resultCount"] < 1:
             raise RuntimeError("Circular offline generation produced no SVG results.")
+        page.wait_for_function(
+            """
+            () => {
+              const app = window.__GBDRAW_APP__;
+              if (!app) return false;
+              return Boolean(app.featureExtractionError) ||
+                (Array.isArray(app.extractedFeatures) && app.extractedFeatures.length > 0);
+            }
+            """,
+            timeout=120000,
+        )
+        feature_extraction_state = page.evaluate(
+            """
+            () => ({
+              featureExtractionError: window.__GBDRAW_APP__.featureExtractionError,
+              extractedFeatureCount: Array.isArray(window.__GBDRAW_APP__.extractedFeatures)
+                ? window.__GBDRAW_APP__.extractedFeatures.length
+                : 0
+            })
+            """
+        )
+        if feature_extraction_state["featureExtractionError"]:
+            raise RuntimeError(
+                "Circular feature extraction failed offline:\n"
+                f"{feature_extraction_state['featureExtractionError']}"
+            )
+        if feature_extraction_state["extractedFeatureCount"] < 1:
+            raise RuntimeError("Circular feature extraction produced no editable features.")
 
         deferred_palette_state = page.evaluate(
             """
@@ -446,6 +519,25 @@ def smoke_test() -> None:
                   if (element) return element.getAttribute('fill');
                 }
                 return null;
+              };
+              const waitForExtractedFeatures = async () => {
+                for (let attempt = 0; attempt < 240; attempt += 1) {
+                  if (app.featureExtractionError) return false;
+                  if (Array.isArray(app.extractedFeatures) && app.extractedFeatures.length > 0) {
+                    return true;
+                  }
+                  await new Promise((resolve) => setTimeout(resolve, 50));
+                }
+                return false;
+              };
+              const waitForFeatureFillByType = async (featureType, preferredSvgId, expectedFill) => {
+                let lastFill = findFeatureFillByType(featureType, preferredSvgId);
+                for (let attempt = 0; attempt < 20; attempt += 1) {
+                  if (lastFill === expectedFill) return lastFill;
+                  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+                  lastFill = findFeatureFillByType(featureType, preferredSvgId);
+                }
+                return lastFill;
               };
 
               const pickFeatureForPaletteCheck = () => {
@@ -500,6 +592,9 @@ def smoke_test() -> None:
               const afterDraftEditFill = getFeatureFill(chosenFeature.svgId);
 
               await app.runAnalysis();
+              if (!(await waitForExtractedFeatures())) {
+                return { error: 'Feature extraction did not complete after regenerating the circular diagram.' };
+              }
               const afterGenerateFill = findFeatureFillByType(chosenFeature.type, chosenFeature.svgId);
               const pendingAfterGenerate = String(app.pendingPaletteName || '');
               const appliedAfterGenerate = String(app.appliedPaletteColors?.[chosenFeature.type] || '');
@@ -525,10 +620,25 @@ def smoke_test() -> None:
               }
 
               await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-              const afterImmediateFill = findFeatureFillByType(chosenFeature.type, chosenFeature.svgId);
+              const afterImmediateFill = await waitForFeatureFillByType(
+                chosenFeature.type,
+                chosenFeature.svgId,
+                immediateColor
+              );
 
               return {
                 featureType: chosenFeature.type,
+                featureId: chosenFeature.id,
+                svgId: chosenFeature.svgId,
+                svgElementTag: chosenFeature.svgId
+                  ? app.svgContainer?.querySelector('svg')?.querySelector(`#${CSS.escape(chosenFeature.svgId)}`)?.tagName || ''
+                  : '',
+                extractedHasSvgAfterImmediate: (app.extractedFeatures || []).some(
+                  (feat) => feat?.svg_id === chosenFeature.svgId
+                ),
+                extractedFeatureCountAfterImmediate: Array.isArray(app.extractedFeatures)
+                  ? app.extractedFeatures.length
+                  : 0,
                 beforeFill: chosenFeature.beforeFill,
                 afterPaletteFill,
                 afterDraftEditFill,
@@ -539,6 +649,12 @@ def smoke_test() -> None:
                 appliedColorAfterPalette,
                 pendingColorAfterPalette,
                 appliedAfterGenerate,
+                appliedAfterImmediate: String(app.appliedPaletteColors?.[chosenFeature.type] || ''),
+                pendingAfterImmediate: String(app.pendingPaletteName || ''),
+                overrideAfterImmediate: app.featureColorOverrides?.[chosenFeature.id] || null,
+                specificRuleCountAfterImmediate: Array.isArray(app.manualSpecificRules)
+                  ? app.manualSpecificRules.length
+                  : 0,
                 manualDraftColor,
                 pendingPalette,
                 pendingDraftColor,
@@ -576,7 +692,8 @@ def smoke_test() -> None:
             raise RuntimeError("Applied palette colors were not promoted after Generate Diagram.")
         if deferred_palette_state["afterImmediateFill"] != deferred_palette_state["immediateColor"]:
             raise RuntimeError(
-                "Palette instant preview did not update the SVG immediately after being re-enabled."
+                "Palette instant preview did not update the SVG immediately after being re-enabled: "
+                f"{deferred_palette_state}"
             )
 
         download_dir = Path(tempfile.mkdtemp(prefix="gbdraw-offline-downloads-"))
@@ -704,6 +821,14 @@ def inspect_wheel(wheel_path: Path) -> None:
     }
     required.update(f"gbdraw/web/{path.as_posix()}" for path in REQUIRED_UI_FONT_FILES)
     required.update(f"gbdraw/web/{path.as_posix()}" for path in _parse_local_wheel_paths())
+    required.update(
+        f"gbdraw/web/vendor/pyodide/v0.29.0/full/{filename}"
+        for filename in PYODIDE_CORE_FILES
+    )
+    required.update(
+        f"gbdraw/web/vendor/pyodide/v0.29.0/full/{filename}"
+        for filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.values()
+    )
     missing = sorted(required - names)
     if missing:
         raise FileNotFoundError(

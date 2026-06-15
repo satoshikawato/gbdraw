@@ -92,6 +92,21 @@ def test_index_uses_title_logo_separately_from_icon_assets() -> None:
     assert '<link rel="icon" href="./assets/gbdraw-logo.svg" type="image/svg+xml">' in index_html
 
 
+def test_circular_gff3_input_renders_single_gff3_uploader() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert index_html.count('label="GFF3 File" v-model="files.c_gff"') == 1
+    assert '<file-uploader label="GenBank/DDBJ File" v-model="files.c_gb"' in index_html
+    assert '<file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>' in index_html
+    assert '<file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>' in index_html
+
+
+def test_meta_csp_omits_frame_ancestors_header_only_directive() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    notices_html = (WEB_ROOT / "open-source-notices.html").read_text(encoding="utf-8")
+    assert "frame-ancestors" not in index_html
+    assert "frame-ancestors" not in notices_html
+
+
 def test_index_cloaks_vue_template_until_mount() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert '<div id="app" v-cloak' in index_html
@@ -325,6 +340,7 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     assert "Cross-Origin-Opener-Policy: same-origin" in headers
     assert "Cross-Origin-Embedder-Policy: require-corp" in headers
     assert "Cross-Origin-Resource-Policy: same-origin" in headers
+    assert "Content-Security-Policy: frame-ancestors 'none'" in headers
 
 
 def test_wrangler_uses_cloudflare_bundle_directory() -> None:
