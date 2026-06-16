@@ -248,6 +248,27 @@ def test_pairwise_match_ribbon_path_uses_straight_segments() -> None:
 
 
 @pytest.mark.linear
+def test_pairwise_match_path_serializes_orthogroup_metadata_without_collinearity_block() -> None:
+    row = SimpleNamespace(
+        **_build_match_row().__dict__,
+        orthogroup_id="og_1",
+        query_protein_id="query_protein",
+        subject_protein_id="subject_protein",
+        query_feature_svg_id="fquery",
+        subject_feature_svg_id="fsubject",
+    )
+
+    path = _build_pairwise_group("ribbon").generate_linear_match_path(row)
+
+    assert path.attribs["data-orthogroup-id"] == "og_1"
+    assert path.attribs["data-query-protein-id"] == "query_protein"
+    assert path.attribs["data-subject-protein-id"] == "subject_protein"
+    assert path.attribs["data-query-feature-svg-id"] == "fquery"
+    assert path.attribs["data-subject-feature-svg-id"] == "fsubject"
+    assert "data-collinearity-block-id" not in path.attribs
+
+
+@pytest.mark.linear
 def test_pairwise_match_curve_path_preserves_endpoint_spans() -> None:
     path = _build_pairwise_group("curve").generate_linear_match_path(_build_match_row())
     path_desc = str(path.get_xml().attrib["d"])
