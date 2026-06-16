@@ -288,6 +288,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "['Record index'" not in export_source
     assert "['Strand'" not in export_source
     assert "root.style.transform = 'scale('" in export_source
+    assert "overscroll-behavior: contain;" in export_source
+    assert "root.addEventListener('wheel', function (rootEvent) {\n      rootEvent.stopPropagation();\n    }, { passive: true });" in export_source
     assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
     assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source

@@ -240,6 +240,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 10px 18px 18px 10px;
 }
 .gfi-row {
@@ -2916,6 +2917,16 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         var value = Number.isFinite(index) ? copyValues[index] || '' : '';
         Promise.resolve(copyText(value, copyTarget)).catch(function () {});
       }
+    });
+
+    root.addEventListener('wheel', function (rootEvent) {
+      rootEvent.stopPropagation();
+    }, { passive: true });
+
+    ['mouseup', 'dblclick', 'touchstart', 'touchmove'].forEach(function (eventName) {
+      root.addEventListener(eventName, function (rootEvent) {
+        rootEvent.stopPropagation();
+      }, { passive: eventName === 'touchstart' || eventName === 'touchmove' });
     });
 
     redraw();
