@@ -508,6 +508,7 @@ def test_web_wires_addable_depth_tracks() -> None:
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     depth_tracks_source = (WEB_ROOT / "js" / "app" / "depth-tracks.js").read_text(encoding="utf-8")
+    depth_state_source = (WEB_ROOT / "js" / "app" / "depth-track-state.js").read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "depth_tracks: []" in state_source
@@ -542,7 +543,8 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "v-model.number=\"track.config.large_tick_interval\"" in index_html
     assert "depthTrackConfigAt(index, file)" in run_source
     assert "syncDepthSlotLegendLabelsFromTrackConfigs" in run_source
-    assert "slot.params.legend_label = resolvedLabel;" in run_source
+    assert "syncDepthSlotLabels({" in run_source
+    assert "slot.params.legend_label = label;" in depth_state_source
     assert "args.push('--depth_track_label', ...labels);" in run_source
     assert "args.push('--depth_track_color', ...colors);" in run_source
     assert "args.push('--depth_track_height', ...heights);" in run_source
@@ -801,6 +803,10 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
 
     source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
     module_path = tmp_path / "linear-track-slots.mjs"
+    (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
+    for dependency in ["depth-track-state.js"]:
+        dep_path = WEB_ROOT / "js" / "app" / dependency
+        (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
     check_path = tmp_path / "check-linear-track-slots.mjs"
     check_path.write_text(
@@ -970,7 +976,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
     module_path = tmp_path / "circular-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["conservation-series.js", "color-utils.js"]:
+    for dependency in ["conservation-series.js", "color-utils.js", "depth-track-state.js"]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
