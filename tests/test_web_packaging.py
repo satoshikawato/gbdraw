@@ -292,6 +292,18 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded." in index_html
 
 
+def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:
+    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+
+    assert "const stripEditorOnlyCursorStyles = (svg) => {" in export_source
+    assert "svg.querySelectorAll('[style]').forEach((element) => {" in export_source
+    assert "if (!style || !/\\bcursor\\s*:/i.test(style)) return;" in export_source
+    assert "element.style.removeProperty('cursor');" in export_source
+    assert "if (!element.getAttribute('style')?.trim()) {" in export_source
+    assert "  } else {\n    stripEditorOnlyCursorStyles(clone);\n  }\n  return new XMLSerializer().serializeToString(clone);" in export_source
+    assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
+
+
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "static.cloudflareinsights.com" not in index_html

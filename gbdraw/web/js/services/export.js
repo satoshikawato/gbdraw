@@ -35,6 +35,8 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
     enrichSvgWithStandaloneInteractivity(clone, {
       popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'
     });
+  } else {
+    stripEditorOnlyCursorStyles(clone);
   }
   return new XMLSerializer().serializeToString(clone);
 };
@@ -76,6 +78,18 @@ const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
 const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
+
+const stripEditorOnlyCursorStyles = (svg) => {
+  if (!svg) return;
+  svg.querySelectorAll('[style]').forEach((element) => {
+    const style = element.getAttribute('style');
+    if (!style || !/\bcursor\s*:/i.test(style)) return;
+    element.style.removeProperty('cursor');
+    if (!element.getAttribute('style')?.trim()) {
+      element.removeAttribute('style');
+    }
+  });
+};
 
 const getElementFeatureId = (element) =>
   String(
