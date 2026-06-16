@@ -518,17 +518,31 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "depthTrackRows" in app_setup_source
     assert "circularDepthTrackRows" in app_setup_source
     assert "linearDepthTrackRows" in app_setup_source
+    assert "hasCircularDepthFiles" in app_setup_source
+    assert "hasLinearDepthFiles" in app_setup_source
+    assert "depthTrackCountLabel" in app_setup_source
+    assert "getDepthTrackLegendLabelForSlot" in app_setup_source
+    assert "setDepthTrackLegendLabelForSlot" in app_setup_source
+    assert "syncDepthTrackSlotLabel" in app_setup_source
     assert "addCircularDepthTrack" in app_setup_source
     assert "addLinearDepthTrack" in app_setup_source
     assert "setCircularDepthFile" in app_setup_source
     assert "setLinearDepthFile" in app_setup_source
     assert "updateDepthTrackLabelFromFile(idx, file, previousFile);" in app_setup_source
     assert "Depth TSV tracks" in index_html
+    assert 'v-if="!hasCircularDepthFiles"' in index_html
+    assert 'v-if="!hasLinearDepthFiles(seq)"' in index_html
     assert "Add TSV" in index_html
     assert "Per-track settings" in index_html
+    assert ':value="getDepthTrackLabel(track.index)"' in index_html
+    assert '@input="setDepthTrackLabel(track.index, $event.target.value)"' in index_html
+    assert ':value="getDepthTrackLegendLabelForSlot(entry.slot)"' in index_html
+    assert '@input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"' in index_html
     assert "v-model.number=\"track.config.height\"" in index_html
     assert "v-model.number=\"track.config.large_tick_interval\"" in index_html
     assert "depthTrackConfigAt(index, file)" in run_source
+    assert "syncDepthSlotLegendLabelsFromTrackConfigs" in run_source
+    assert "slot.params.legend_label = resolvedLabel;" in run_source
     assert "args.push('--depth_track_label', ...labels);" in run_source
     assert "args.push('--depth_track_color', ...colors);" in run_source
     assert "args.push('--depth_track_height', ...heights);" in run_source

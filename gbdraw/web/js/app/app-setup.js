@@ -266,6 +266,13 @@ export const createAppSetup = () => {
     if (Array.isArray(value)) return value.slice();
     return value ? [value] : [];
   };
+  const depthFileCount = (value) => depthFileSlotsFromValue(value).filter(Boolean).length;
+  const depthTrackCountLabel = (value) => {
+    const count = depthFileCount(value);
+    return count === 1 ? '1 TSV' : `${count} TSVs`;
+  };
+  const hasCircularDepthFiles = computed(() => depthFileCount(files.c_depth) > 0);
+  const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
   const depthTrackUiCounts = reactive({
     circular: 1,
     linearByUid: {}
@@ -351,6 +358,95 @@ export const createAppSetup = () => {
     sourceDepthTrackCount(seq?.depth, linearDepthTrackUiCount(seq))
   );
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
+  const normalizeDepthSlotTrackIndex = (slot) => {
+    const rawTrackIndex = Number(slot?.params?.track_index);
+    return Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
+  };
+  const depthTrackConfigForIndex = (index) => {
+    const idx = Math.max(0, Number(index) || 0);
+    ensureDepthTrackConfigCount(idx + 1);
+    return adv.depth_tracks[idx];
+  };
+  const getDepthTrackLabel = (index) => {
+    const config = depthTrackConfigForIndex(index);
+    return String(config?.label ?? '');
+  };
+  const representativeDepthFileForIndex = (index) => {
+    const idx = Math.max(0, Number(index) || 0);
+    const circularFile = getCircularDepthFile(idx);
+    if (circularFile) return circularFile;
+    for (const seq of linearSeqs) {
+      const file = getLinearDepthFile(seq, idx);
+      if (file) return file;
+    }
+    return null;
+  };
+  const depthTrackLabelLooksAutomatic = (label, index) => {
+    const text = String(label ?? '').trim();
+    if (!text) return true;
+    if (text === getDepthTrackFallbackLabel(index)) return true;
+    const representativeFile = representativeDepthFileForIndex(index);
+    return Boolean(representativeFile && text === getDepthTrackLabelFromFile(representativeFile, index));
+  };
+  const depthTrackSlotCollections = () => [
+    Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : [],
+    Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : []
+  ];
+  const syncDepthTrackSlotLabelsForTrack = (index) => {
+    const idx = Math.max(0, Number(index) || 0);
+    const label = getDepthTrackLabel(idx);
+    depthTrackSlotCollections().forEach((slots) => {
+      slots.forEach((slot) => {
+        if (!slot || slot.renderer !== 'depth') return;
+        if (normalizeDepthSlotTrackIndex(slot) !== idx) return;
+        slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+        if (String(label).trim()) {
+          slot.params.legend_label = label;
+        } else {
+          delete slot.params.legend_label;
+        }
+      });
+    });
+  };
+  const setDepthTrackLabel = (index, value) => {
+    const idx = Math.max(0, Number(index) || 0);
+    const config = depthTrackConfigForIndex(idx);
+    config.label = String(value ?? '');
+    syncDepthTrackSlotLabelsForTrack(idx);
+  };
+  const getDepthTrackLegendLabelForSlot = (slot) => (
+    getDepthTrackLabel(normalizeDepthSlotTrackIndex(slot))
+  );
+  const setDepthTrackLegendLabelForSlot = (slot, value) => {
+    if (!slot) return;
+    const idx = normalizeDepthSlotTrackIndex(slot);
+    slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+    const label = String(value ?? '');
+    if (label.trim()) {
+      slot.params.legend_label = label;
+    } else {
+      delete slot.params.legend_label;
+    }
+    setDepthTrackLabel(idx, label);
+  };
+  const syncDepthTrackSlotLabel = (slot) => {
+    if (!slot || slot.renderer !== 'depth') return;
+    syncDepthTrackSlotLabelsForTrack(normalizeDepthSlotTrackIndex(slot));
+  };
+  const syncDepthTrackLabelsFromSlots = () => {
+    depthTrackSlotCollections().forEach((slots) => {
+      slots.forEach((slot) => {
+        if (!slot || slot.renderer !== 'depth') return;
+        const slotLabel = String(slot.params?.legend_label ?? '').trim();
+        if (!slotLabel) return;
+        const idx = normalizeDepthSlotTrackIndex(slot);
+        const config = depthTrackConfigForIndex(idx);
+        if (String(config.label ?? '').trim() === slotLabel) return;
+        if (!depthTrackLabelLooksAutomatic(config.label, idx)) return;
+        config.label = slotLabel;
+      });
+    });
+  };
   const depthTrackAutoLabels = [];
   const updateDepthTrackLabelFromFile = (index, file, previousFile = null) => {
     if (!file) return;
@@ -361,6 +457,7 @@ export const createAppSetup = () => {
       const nextLabel = getDepthTrackLabelFromFile(file, index);
       config.label = nextLabel;
       depthTrackAutoLabels[index] = nextLabel;
+      syncDepthTrackSlotLabelsForTrack(index);
     }
   };
   const getCircularDepthFile = (index) => depthFileSlotsFromValue(files.c_depth)[Number(index)] || null;
@@ -579,6 +676,10 @@ export const createAppSetup = () => {
       if (slotsEnabled && showDepth) {
         circularTrackSlotEditor.ensureCircularTrackDepthSlot();
       }
+      if (slotsEnabled) {
+        syncDepthTrackLabelsFromSlots();
+        adv.depth_tracks.forEach((_track, index) => syncDepthTrackSlotLabelsForTrack(index));
+      }
     }
   );
   watch(
@@ -593,6 +694,8 @@ export const createAppSetup = () => {
     ([slotsEnabled]) => {
       if (slotsEnabled) {
         linearTrackSlotEditor.reconcileLinearTrackSlotsFromSimpleControls();
+        syncDepthTrackLabelsFromSlots();
+        adv.depth_tracks.forEach((_track, index) => syncDepthTrackSlotLabelsForTrack(index));
       }
     },
     { deep: true }
@@ -1395,6 +1498,14 @@ export const createAppSetup = () => {
     depthTrackRows,
     circularDepthTrackRows,
     linearDepthTrackRows,
+    hasCircularDepthFiles,
+    hasLinearDepthFiles,
+    depthTrackCountLabel,
+    getDepthTrackLabel,
+    setDepthTrackLabel,
+    getDepthTrackLegendLabelForSlot,
+    setDepthTrackLegendLabelForSlot,
+    syncDepthTrackSlotLabel,
     addCircularDepthTrack,
     addLinearDepthTrack,
     removeCircularDepthTrack,
