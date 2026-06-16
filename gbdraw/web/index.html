@@ -604,6 +604,10 @@
                                         <i class="ph ph-trash"></i> Remove
                                     </button>
                                 </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Legend title <help-tip text="Legend label shown for this depth coverage track."></help-tip></label>
+                                    <input type="text" v-model.trim="track.config.label" class="form-input form-input-compact" :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`">
+                                </div>
                                 <file-uploader
                                     label="Depth TSV"
                                     small
@@ -824,6 +828,10 @@
                                             <button type="button" @click="removeLinearDepthTrack(seq, track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1">
                                                 <i class="ph ph-trash"></i> Remove
                                             </button>
+                                        </div>
+                                        <div>
+                                            <label class="input-label text-[10px]">Legend title <help-tip text="Legend label shown for this depth coverage track."></help-tip></label>
+                                            <input type="text" v-model.trim="track.config.label" class="form-input form-input-compact" :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`">
                                         </div>
                                         <file-uploader
                                             label="Depth TSV"
