@@ -9,6 +9,7 @@ import {
 } from '../services/diagram-generation.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
+import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPyodideManager } from './pyodide.js';
@@ -128,6 +129,16 @@ export const createAppSetup = () => {
     featurePanelTab,
     featureSearchInput,
     featureSearch,
+    previewFeatureSearchInput,
+    previewFeatureSearchQuery,
+    previewFeatureSearchField,
+    previewFeatureSearchQualifierKey,
+    previewFeatureSearchUseRegex,
+    previewFeatureSearchMatches,
+    previewFeatureSearchMatchDetails,
+    previewFeatureSearchActiveIndex,
+    previewFeatureSearchError,
+    previewFeatureSearchRenderedCount,
     featureListScrollTop,
     featureListViewportHeight,
     isFeatureDrawerMounted,
@@ -220,6 +231,13 @@ export const createAppSetup = () => {
     legendActions,
     svgActions
   });
+  const previewFeatureSearch = createPreviewFeatureSearch({
+    state,
+    watch,
+    nextTick,
+    computed,
+    openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
+  });
 
   let featureSearchDebounceId = null;
   const featureListScrollRef = ref(null);
@@ -253,6 +271,7 @@ export const createAppSetup = () => {
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
   onUnmounted(() => {
     if (featureSearchDebounceId !== null) clearTimeout(featureSearchDebounceId);
+    previewFeatureSearch.dispose();
     disposeDiagramGenerationWorker();
   });
 
@@ -1706,6 +1725,26 @@ export const createAppSetup = () => {
     featurePanelTab,
     featureSearchInput,
     featureSearch,
+    previewFeatureSearchInput,
+    previewFeatureSearchQuery,
+    previewFeatureSearchField,
+    previewFeatureSearchQualifierKey,
+    previewFeatureSearchUseRegex,
+    previewFeatureSearchMatches,
+    previewFeatureSearchMatchDetails,
+    previewFeatureSearchActiveIndex,
+    previewFeatureSearchError,
+    previewFeatureSearchRenderedCount,
+    previewFeatureSearchFieldOptions: previewFeatureSearch.previewFeatureSearchFieldOptions,
+    previewFeatureSearchQualifierEnabled: previewFeatureSearch.previewFeatureSearchQualifierEnabled,
+    previewFeatureSearchHasMatches: previewFeatureSearch.previewFeatureSearchHasMatches,
+    previewFeatureSearchCanOpenActive: previewFeatureSearch.previewFeatureSearchCanOpenActive,
+    previewFeatureSearchStatusText: previewFeatureSearch.previewFeatureSearchStatusText,
+    previewFeatureSearchActiveDetail: previewFeatureSearch.previewFeatureSearchActiveDetail,
+    goToNextPreviewFeatureSearchMatch: previewFeatureSearch.goToNext,
+    goToPreviousPreviewFeatureSearchMatch: previewFeatureSearch.goToPrevious,
+    clearPreviewFeatureSearch: previewFeatureSearch.clearSearch,
+    openPreviewFeatureSearchActiveMatch: previewFeatureSearch.openActiveMatch,
     visibleFeatureRows,
     featureListTopSpacerPx,
     featureListBottomSpacerPx,
