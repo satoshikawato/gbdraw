@@ -2071,6 +2071,31 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
+  function scheduleInitialViewportRefresh() {
+    var initialView = copyViewRect(getViewRect());
+    var requestFrame = window.requestAnimationFrame || function (callback) {
+      return window.setTimeout(callback, 16);
+    };
+
+    function refresh(refitIfStillInitial) {
+      if (refitIfStillInitial && rectsNearlyEqual(getViewRect(), initialView)) {
+        refitViewportToWindow();
+        return;
+      }
+      updateViewportControlsPosition();
+    }
+
+    requestFrame(function () {
+      refresh(false);
+      requestFrame(function () {
+        refresh(true);
+      });
+    });
+    window.setTimeout(function () {
+      refresh(true);
+    }, 80);
+  }
+
   function createSvgNode(tagName, attrs) {
     var node = document.createElementNS(SVG_NS, tagName);
     Object.keys(attrs || {}).forEach(function (key) {
@@ -2939,6 +2964,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
     window.visualViewport.addEventListener('resize', updateViewportControlsPosition, { passive: true });
   }
+  scheduleInitialViewportRefresh();
 
   svg.addEventListener('mousedown', startCanvasPan);
 

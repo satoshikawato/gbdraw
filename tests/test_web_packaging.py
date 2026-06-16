@@ -200,6 +200,10 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "function clearSearch()" in export_source
     assert "Search match" in export_source
     assert "Orthogroup members" in export_source
+    assert "function scheduleInitialViewportRefresh()" in export_source
+    assert "var initialView = copyViewRect(getViewRect());" in export_source
+    assert "rectsNearlyEqual(getViewRect(), initialView)" in export_source
+    assert "scheduleInitialViewportRefresh();" in export_source
     assert "visibleView.x + visibleView.width - (controlWidth * unit) - margin" in export_source
     assert "visibleView.y + margin + (searchControlsOffsetCss.y * unit)" in export_source
     assert "var yOffset = 42 * unit" not in export_source
