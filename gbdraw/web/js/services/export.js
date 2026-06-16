@@ -139,8 +139,90 @@ const STANDALONE_INTERACTIVE_STYLE = `
   overflow: visible;
   pointer-events: auto;
 }
+.gbdraw-feature-hover-popup {
+  overflow: visible;
+  pointer-events: none;
+}
 .gbdraw-feature-popup * {
   box-sizing: border-box;
+}
+.gbdraw-feature-hover-popup * {
+  box-sizing: border-box;
+}
+.gfhs {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  color: #334155;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 10px 12px;
+}
+.gfhs-title {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  margin-bottom: 7px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.gfhs-swatch {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  border-radius: 3px;
+  background: #94a3b8;
+}
+.gfhs-text {
+  min-width: 0;
+}
+.gfhs-heading {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gfhs-subtitle {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gfhs-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: 4px;
+}
+.gfhs-key {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gfhs-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gfhs-value.is-clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .gfi {
   position: relative;
@@ -573,6 +655,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var metadata = svg.querySelector('#gbdraw-interactive-feature-metadata');
   var payload = null;
   var popup = null;
+  var hoverPopup = null;
   var viewportControls = null;
   var searchControls = null;
   var stickyLegend = null;
@@ -583,6 +666,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var activePopupDrag = null;
   var activeSearchControlsDrag = null;
   var searchControlsOffsetCss = { x: 0, y: 0 };
+  var hoverPopupTimer = null;
+  var hoverPopupFrame = null;
+  var hoverPopupFeatureId = '';
+  var hoverPopupLastEvent = null;
   var activeHoverSvgId = null;
   var activeHoverKey = '';
   var maxZoom = 16;
@@ -1944,6 +2031,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (stickyLegend && stickyLegend.parentNode) {
       stickyLegend.parentNode.appendChild(stickyLegend);
     }
+    if (hoverPopup && hoverPopup.parentNode === svg) {
+      svg.appendChild(hoverPopup);
+    }
     if (popup && popup.parentNode === svg) {
       svg.appendChild(popup);
     }
@@ -2009,6 +2099,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     );
     updateViewportControlsPosition();
     keepPopupWithinVisibleView();
+    scheduleHoverPopupPosition(hoverPopupLastEvent);
     return next;
   }
 
@@ -2023,6 +2114,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var anchor = anchorPoint || { x: view.x + view.width / 2, y: view.y + view.height / 2 };
     var ratioX = width / view.width;
     var ratioY = height / view.height;
+    closeHoverPopup();
     closePopup();
     setSvgViewRect({
       x: anchor.x - (anchor.x - view.x) * ratioX,
@@ -2033,6 +2125,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function resetViewport() {
+    closeHoverPopup();
     closePopup();
     stopCanvasPan();
     setSvgViewRect(homeViewRect);
@@ -2241,6 +2334,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       if (!didPan && ((dx * dx) + (dy * dy)) >= panThresholdSq) {
         didPan = true;
         if (activeCanvasPan) activeCanvasPan.didPan = true;
+        closeHoverPopup();
         closePopup();
         setClassToken(svg, 'gbdraw-interactive-panning', true);
       }
@@ -2536,6 +2630,229 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     popup = null;
   }
 
+  function closeHoverPopup() {
+    if (hoverPopupTimer) {
+      window.clearTimeout(hoverPopupTimer);
+      hoverPopupTimer = null;
+    }
+    if (hoverPopupFrame) {
+      var cancelFrame = window.cancelAnimationFrame || window.clearTimeout;
+      cancelFrame(hoverPopupFrame);
+      hoverPopupFrame = null;
+    }
+    if (hoverPopup && hoverPopup.parentNode) {
+      hoverPopup.parentNode.removeChild(hoverPopup);
+    }
+    hoverPopup = null;
+    hoverPopupFeatureId = '';
+    hoverPopupLastEvent = null;
+  }
+
+  function firstValue(value) {
+    var values = normalizeArray(value);
+    for (var i = 0; i < values.length; i += 1) {
+      var text = String(values[i] || '').trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  function firstQualifierValue(feature, key) {
+    var qualifiers = getFeatureQualifiers(feature);
+    var normalizedKey = String(key || '').trim().toLowerCase();
+    if (!normalizedKey) return '';
+    var direct = feature && feature[normalizedKey];
+    if (direct !== null && direct !== undefined && direct !== '') return firstValue(direct);
+    var exact = qualifiers[normalizedKey];
+    if (exact !== null && exact !== undefined && exact !== '') return firstValue(exact);
+    var keys = Object.keys(qualifiers);
+    for (var i = 0; i < keys.length; i += 1) {
+      if (String(keys[i]).toLowerCase() === normalizedKey) {
+        return firstValue(qualifiers[keys[i]]);
+      }
+    }
+    return '';
+  }
+
+  function featureLengthText(feature) {
+    var start = Number(feature && feature.start);
+    var end = Number(feature && feature.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
+    return String(Math.round(end - start).toLocaleString()) + ' bp';
+  }
+
+  function getFeatureDisplayColor(feature, svgId) {
+    var direct = String(feature && (feature.fill_color || feature.color) || '').trim();
+    if (direct) return direct;
+    var elements = featureElementsById.get(String(svgId || feature && feature.svg_id || '').trim()) || [];
+    for (var i = 0; i < elements.length; i += 1) {
+      var fill = String(elements[i].getAttribute('fill') || elements[i].style && elements[i].style.fill || '').trim();
+      if (fill && fill.toLowerCase() !== 'none') return fill;
+    }
+    return '#94a3b8';
+  }
+
+  function hoverTitle(feature) {
+    var primary = firstQualifierValue(feature, 'gene') ||
+      firstQualifierValue(feature, 'locus_tag') ||
+      firstQualifierValue(feature, 'product') ||
+      String(feature && (feature.display_label || feature.label || feature.svg_id) || '').trim();
+    var type = String(feature && feature.type || 'Feature').trim() || 'Feature';
+    return primary && primary !== type ? type + ': ' + primary : type;
+  }
+
+  function hoverRows(feature) {
+    var primary = String(feature && (feature.display_label || feature.label || '') || '').trim();
+    var product = firstQualifierValue(feature, 'product') || String(feature && feature.product || '').trim();
+    var gene = firstQualifierValue(feature, 'gene') || String(feature && feature.gene || '').trim();
+    var locus = firstQualifierValue(feature, 'locus_tag') || String(feature && feature.locus_tag || '').trim();
+    var note = firstQualifierValue(feature, 'note') || String(feature && feature.note || '').trim();
+    var rows = [];
+    if (gene && gene !== primary) rows.push(['Gene', gene]);
+    if (locus && locus !== primary) rows.push(['Locus', locus]);
+    if (product && product !== primary) rows.push(['Product', product, true]);
+    if (note && note !== primary && note !== product) rows.push(['Note', note, true]);
+    rows.push(['Length', featureLengthText(feature)]);
+    rows.push(['Location', locationText(feature)]);
+    rows.push(['Record', feature && feature.record_id || '']);
+    rows.push(['Orthogroup', feature && feature.orthogroup_id || '']);
+    return rows.filter(function (row) {
+      return String(row[1] == null ? '' : row[1]).trim() !== '';
+    });
+  }
+
+  function renderHoverPopupHtml(feature, svgId) {
+    var rows = hoverRows(feature);
+    var color = getFeatureDisplayColor(feature, svgId);
+    var rowHtml = rows.slice(0, 7).map(function (row) {
+      return '<div class="gfhs-row">' +
+        '<div class="gfhs-key">' + escapeHtml(row[0]) + '</div>' +
+        '<div class="gfhs-value' + (row[2] ? ' is-clamped' : '') + '">' + escapeHtml(row[1]) + '</div>' +
+        '</div>';
+    }).join('');
+    return '<div class="gfhs">' +
+      '<div class="gfhs-title">' +
+      '<div class="gfhs-swatch" style="background:' + escapeHtml(color) + '"></div>' +
+      '<div class="gfhs-text"><div class="gfhs-heading">' + escapeHtml(hoverTitle(feature)) + '</div>' +
+      '<div class="gfhs-subtitle">' + escapeHtml(locationText(feature) || String(svgId || '')) + '</div></div>' +
+      '</div>' +
+      rowHtml +
+      '</div>';
+  }
+
+  function getHoverPopupCssMetrics(viewport, rowCount) {
+    var zoomScale = getBrowserZoomScale(viewport);
+    var margin = 12;
+    var width = Math.min(340, Math.max(1, viewport.width * zoomScale - margin * 2));
+    var height = Math.min(250, Math.max(118, 68 + Math.min(Math.max(Number(rowCount) || 0, 1), 7) * 24));
+    height = Math.min(height, Math.max(1, viewport.height * zoomScale - margin * 2));
+    return {
+      zoomScale: zoomScale,
+      margin: margin,
+      width: width,
+      height: height
+    };
+  }
+
+  function positionHoverPopup(event) {
+    if (!hoverPopup) return;
+    var viewport = getViewportClientRect();
+    var rowCount = Number(hoverPopup.getAttribute('data-row-count')) || 1;
+    var metrics = getHoverPopupCssMetrics(viewport, rowCount);
+    var scale = getScreenScale();
+    var effectiveScaleX = Math.max(scale.x, 0.001) * metrics.zoomScale;
+    var effectiveScaleY = Math.max(scale.y, 0.001) * metrics.zoomScale;
+    var width = metrics.width / effectiveScaleX;
+    var height = metrics.height / effectiveScaleY;
+    var offsetX = 14 / effectiveScaleX;
+    var offsetY = 14 / effectiveScaleY;
+    var marginX = metrics.margin / effectiveScaleX;
+    var marginY = metrics.margin / effectiveScaleY;
+    var point = eventPoint(event);
+    var view = getVisibleViewRect();
+    var x = point.x + offsetX;
+    var y = point.y + offsetY;
+    if (x + width + marginX > view.x + view.width) x = point.x - width - offsetX;
+    if (y + height + marginY > view.y + view.height) y = point.y - height - offsetY;
+    x = clampValue(x, view.x + marginX, view.x + view.width - width - marginX);
+    y = clampValue(y, view.y + marginY, view.y + view.height - height - marginY);
+    hoverPopup.setAttribute('x', x);
+    hoverPopup.setAttribute('y', y);
+    hoverPopup.setAttribute('width', width);
+    hoverPopup.setAttribute('height', height);
+    var root = hoverPopup.firstElementChild;
+    if (root && root.style) {
+      root.style.width = metrics.width + 'px';
+      root.style.height = metrics.height + 'px';
+      root.style.transformOrigin = '0 0';
+      root.style.transform = 'scale(' + (1 / effectiveScaleX) + ', ' + (1 / effectiveScaleY) + ')';
+    }
+  }
+
+  function scheduleHoverPopupPosition(event) {
+    hoverPopupLastEvent = event || hoverPopupLastEvent;
+    if (!hoverPopup || hoverPopupFrame) return;
+    var requestFrame = window.requestAnimationFrame || function (callback) {
+      return window.setTimeout(callback, 16);
+    };
+    hoverPopupFrame = requestFrame(function () {
+      hoverPopupFrame = null;
+      positionHoverPopup(hoverPopupLastEvent);
+    });
+  }
+
+  function hoverPopupAllowed() {
+    if (popup || activeCanvasPan) return false;
+    if (window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      return false;
+    }
+    return true;
+  }
+
+  function showHoverPopup(feature, svgId, event) {
+    if (!feature || !hoverPopupAllowed()) {
+      closeHoverPopup();
+      return;
+    }
+    closeHoverPopup();
+    var rows = hoverRows(feature);
+    var foreignObject = document.createElementNS(SVG_NS, 'foreignObject');
+    foreignObject.setAttribute('id', 'gbdraw-feature-hover-popup');
+    foreignObject.setAttribute('class', 'gbdraw-feature-hover-popup');
+    foreignObject.setAttribute('data-row-count', String(rows.length || 1));
+    var root = document.createElementNS(XHTML_NS, 'div');
+    root.setAttribute('xmlns', XHTML_NS);
+    root.innerHTML = renderHoverPopupHtml(feature, svgId);
+    foreignObject.appendChild(root);
+    svg.appendChild(foreignObject);
+    hoverPopup = foreignObject;
+    hoverPopupFeatureId = String(svgId || '').trim();
+    hoverPopupLastEvent = event;
+    positionHoverPopup(event);
+    syncStandaloneOverlayOrder();
+  }
+
+  function scheduleHoverPopup(feature, svgId, event) {
+    if (!feature || !hoverPopupAllowed()) {
+      closeHoverPopup();
+      return;
+    }
+    hoverPopupLastEvent = event || hoverPopupLastEvent;
+    if (hoverPopup && hoverPopupFeatureId === String(svgId || '').trim()) {
+      scheduleHoverPopupPosition(event);
+      return;
+    }
+    if (hoverPopupTimer) {
+      window.clearTimeout(hoverPopupTimer);
+      hoverPopupTimer = null;
+    }
+    hoverPopupFeatureId = String(svgId || '').trim();
+    hoverPopupTimer = window.setTimeout(function () {
+      hoverPopupTimer = null;
+      showHoverPopup(feature, svgId, hoverPopupLastEvent);
+    }, 180);
+  }
+
   function keepPopupWithinVisibleView() {
     if (!popup) return;
     var viewport = getViewportClientRect();
@@ -2703,6 +3020,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function openPopup(feature, event) {
     if (!supportsStandaloneControls()) return;
+    closeHoverPopup();
     closePopup();
     var viewport = getViewportClientRect();
     var view = getVisibleViewRect();
@@ -2991,14 +3309,37 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var featureElement = closestFeature(event.target);
     var svgId = getElementFeatureId(featureElement);
     if (!svgId || !featureElementsById.has(svgId)) return;
+    var feature = featuresById.get(svgId);
     var hoverKey = getFeatureHoverKey(svgId);
-    if (activeHoverKey === hoverKey) return;
+    if (activeHoverKey === hoverKey) {
+      scheduleHoverPopup(feature, svgId, event);
+      return;
+    }
     if (activeHoverSvgId) {
       setHoverHighlight(activeHoverSvgId, false);
     }
     activeHoverSvgId = svgId;
     activeHoverKey = hoverKey;
     setHoverHighlight(svgId, true);
+    scheduleHoverPopup(feature, svgId, event);
+  });
+
+  svg.addEventListener('mousemove', function (event) {
+    if (popup && popup.contains(event.target)) {
+      closeHoverPopup();
+      return;
+    }
+    if (closestSearchControls(event.target) || closestViewportButton(event.target)) {
+      closeHoverPopup();
+      return;
+    }
+    var featureElement = closestFeature(event.target);
+    var svgId = getElementFeatureId(featureElement);
+    if (!svgId || !featureElementsById.has(svgId)) {
+      closeHoverPopup();
+      return;
+    }
+    scheduleHoverPopup(featuresById.get(svgId), svgId, event);
   });
 
   svg.addEventListener('mouseout', function (event) {
@@ -3010,6 +3351,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     setHoverHighlight(svgId, false);
     activeHoverSvgId = null;
     activeHoverKey = '';
+    closeHoverPopup();
   });
 
   svg.addEventListener('click', function (event) {
@@ -3023,6 +3365,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     var featureElement = closestFeature(event.target);
     if (!featureElement) {
+      closeHoverPopup();
       closePopup();
       return;
     }
@@ -3035,11 +3378,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     event.preventDefault();
     event.stopPropagation();
+    closeHoverPopup();
     openPopup(feature, event);
   });
 
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
+      closeHoverPopup();
       closePopup();
       stopCanvasPan();
     }
@@ -3334,12 +3679,112 @@ const collectRenderedFeatureIds = (svg) => {
   return ids;
 };
 
+const collectRenderedFeatureEntries = (svg) => {
+  const entries = new Map();
+  if (!svg) return entries;
+  svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
+    const id = getElementFeatureId(element);
+    if (!id) return;
+    if (!entries.has(id)) {
+      entries.set(id, { id, elements: [] });
+    }
+    entries.get(id).elements.push(element);
+  });
+  return entries;
+};
+
+const normalizeColorKey = (value) => String(value || '').trim().toLowerCase();
+
+const getRenderedElementFill = (element) => {
+  const fill = String(element?.getAttribute?.('fill') || element?.style?.fill || '').trim();
+  if (fill && fill.toLowerCase() !== 'none') return fill;
+  return '';
+};
+
+const getRenderedFeatureFill = (entry) => {
+  const elements = Array.isArray(entry?.elements) ? entry.elements : [];
+  for (const element of elements) {
+    const fill = getRenderedElementFill(element);
+    if (fill) return fill;
+  }
+  return '';
+};
+
+const collectLegendCaptionsByColor = (svg) => {
+  const captionsByColor = new Map();
+  const addCaption = (color, caption) => {
+    const key = normalizeColorKey(color);
+    const text = String(caption || '').trim();
+    if (key && text && !captionsByColor.has(key)) {
+      captionsByColor.set(key, text);
+    }
+  };
+
+  const legendEntries = Array.isArray(state.legendEntries?.value) ? state.legendEntries.value : [];
+  legendEntries.forEach((entry) => addCaption(entry?.color, entry?.caption || entry?.originalCaption));
+
+  const paletteColors = state.currentColors?.value && typeof state.currentColors.value === 'object'
+    ? state.currentColors.value
+    : {};
+  Object.entries(paletteColors).forEach(([caption, color]) => addCaption(color, caption));
+
+  if (!svg) return captionsByColor;
+  const legendRoots = Array.from(svg.querySelectorAll('#legend, g[id*="legend"], [data-gbdraw-sticky-legend]'));
+  legendRoots.forEach((root) => {
+    root.querySelectorAll('rect, path, polygon').forEach((shape) => {
+      const color = getRenderedElementFill(shape);
+      if (!color) return;
+      const group = shape.closest?.('g') || root;
+      const groupText = group?.querySelector?.('text') || null;
+      const siblingText = shape.nextElementSibling?.matches?.('text') ? shape.nextElementSibling : null;
+      const textElement = groupText || siblingText;
+      const caption = String(textElement?.textContent || '').trim();
+      addCaption(color, caption);
+    });
+  });
+  return captionsByColor;
+};
+
+const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) => {
+  const fillColor = getRenderedFeatureFill(entry);
+  const caption = captionsByColor.get(normalizeColorKey(fillColor)) || 'Feature';
+  const label = caption === 'Feature' ? String(svgId) : caption;
+  const searchLabels = Array.from(new Set([label, caption, svgId].map((value) => String(value || '').trim()).filter(Boolean)));
+  return {
+    svg_id: String(svgId || ''),
+    label,
+    display_label: label,
+    search_labels: searchLabels,
+    record_id: '',
+    record_idx: null,
+    type: caption,
+    start: null,
+    end: null,
+    strand: '',
+    location: '',
+    fill_color: fillColor,
+    orthogroup_id: '',
+    orthogroup_member_count: 0,
+    orthogroup_record_coverage: 0,
+    protein_id: '',
+    source_protein_id: '',
+    orthogroup_representative: false,
+    qualifiers: {},
+    location_parts: [],
+    nucleotide_sequence: '',
+    amino_acid_sequence: '',
+    sequence_warnings: [],
+    orthogroup_member: null
+  };
+};
+
 const normalizeStandalonePopupMode = (popupMode) => (
   popupMode === 'simple' ? 'simple' : 'rich'
 );
 
 const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
-  const renderedIds = collectRenderedFeatureIds(svg);
+  const renderedEntries = collectRenderedFeatureEntries(svg);
+  const renderedIds = new Set(renderedEntries.keys());
   if (renderedIds.size === 0) return [];
 
   const normalizedPopupMode = normalizeStandalonePopupMode(popupMode);
@@ -3389,6 +3834,14 @@ const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
     }
     payloads.push(payload);
   });
+  if (payloads.length < renderedIds.size) {
+    const captionsByColor = collectLegendCaptionsByColor(svg);
+    renderedEntries.forEach((entry, svgId) => {
+      if (seenIds.has(svgId)) return;
+      seenIds.add(svgId);
+      payloads.push(buildFallbackStandaloneFeaturePayload(svgId, entry, captionsByColor));
+    });
+  }
   return payloads;
 };
 
@@ -3495,7 +3948,8 @@ const removeExistingStandaloneInteractivityAssets = (svg) => {
     INTERACTIVE_MATCH_GLOW_FILTER_ID,
     'gbdraw-viewport-controls',
     'gbdraw-feature-search-controls',
-    'gbdraw-feature-popup'
+    'gbdraw-feature-popup',
+    'gbdraw-feature-hover-popup'
   ].forEach((id) => {
     const element = svg.querySelector(`#${CSS.escape(id)}`);
     if (element?.parentNode) {

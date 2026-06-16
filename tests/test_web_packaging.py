@@ -281,6 +281,12 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "function setOrthogroupHover(orthogroupId, highlight)" in export_source
     assert "activePopupDrag" in export_source
     assert "activeSearchControlsDrag" in export_source
+    assert "gbdraw-feature-hover-popup" in export_source
+    assert "function scheduleHoverPopup(feature, svgId, event)" in export_source
+    assert "function renderHoverPopupHtml(feature, svgId)" in export_source
+    assert "svg.addEventListener('mousemove'" in export_source
+    assert "const collectRenderedFeatureEntries = (svg) => {" in export_source
+    assert "const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) => {" in export_source
     assert "function startSearchControlsDrag(event, root)" in export_source
     assert "document.addEventListener('mouseup', onEnd, true);" in export_source
     assert "window.addEventListener('blur', onEnd);" in export_source
