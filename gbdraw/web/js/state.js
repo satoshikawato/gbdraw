@@ -328,7 +328,7 @@ export const createDefaultForm = () => ({
 });
 
 export const createDefaultAdv = () => ({
-  rich_feature_popup: false,
+  rich_feature_popup: true,
   features: ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'repeat_region'],
   feature_shapes: createDefaultFeatureShapes(),
   window_size: null,
