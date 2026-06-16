@@ -197,6 +197,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "Search match" in export_source
     assert "Orthogroup members" in export_source
     assert "visibleView.x + visibleView.width - (controlWidth * unit) - margin" in export_source
+    assert "visibleView.y + margin + (searchControlsOffsetCss.y * unit)" in export_source
+    assert "var yOffset = 42 * unit" not in export_source
     assert "gfi-og-members-table" in export_source
     assert "Coordinates (+/-)" in export_source
     assert "Product / note" in export_source

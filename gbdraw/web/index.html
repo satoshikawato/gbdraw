@@ -2363,14 +2363,12 @@
                 <i class="ph ph-warning-circle text-sm mt-0.5"></i>
                 <span>{{ circularConservationLayoutWarning }}</span>
             </div>
-            <button @click="runAnalysis" :disabled="processing || !pyodideReady || !!diagramGenerationWorkerError"
+            <button @click="runAnalysis" :disabled="processing"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
-                <span v-if="!processing && pyodideReady && !diagramGenerationWorkerError" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
-                <span v-else-if="!processing && pyodideReady && diagramGenerationWorkerError" class="flex items-center justify-center gap-2"><i class="ph ph-warning-circle text-xl"></i> Generator Unavailable</span>
-                <span v-else-if="!processing && !pyodideReady" class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> Preparing Python...</span>
+                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
-            <p v-if="!processing && (!pyodideReady || diagramGenerationWorkerError)" :class="['mt-2 text-center text-xs font-mono', diagramGenerationWorkerError || (!pyodideReady && loadingStatus.startsWith('Startup Error')) ? 'text-red-600' : 'text-slate-500']" v-text="pyodideReady ? diagramGenerationWorkerStatus : loadingStatus"></p>
+            <p v-if="!processing && (!pyodideReady || !diagramGenerationWorkerReady || diagramGenerationWorkerError)" :class="['mt-2 text-center text-xs font-mono', diagramGenerationWorkerError || (!pyodideReady && loadingStatus.startsWith('Startup Error')) ? 'text-red-600' : 'text-slate-500']" v-text="pyodideReady ? diagramGenerationWorkerStatus : loadingStatus"></p>
             </div>
 
         </div>

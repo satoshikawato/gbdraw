@@ -22,6 +22,7 @@ export const createPyodideManager = ({ state }) => {
     normalizePaletteDefinitions
   } = state;
   const pyodideRef = { current: null };
+  let initPromise = null;
 
   const getPyodide = () => pyodideRef.current;
   const setPyodide = (value) => {
@@ -51,44 +52,55 @@ export const createPyodideManager = ({ state }) => {
   };
 
   const initPyodide = async () => {
-    try {
-      const pyodideIndexUrl = resolvePyodideIndexUrl();
-      loadingStatus.value = 'Loading local Pyodide runtime...';
-      const pyodide = await loadPyodide({
-        indexURL: pyodideIndexUrl,
-        packageBaseUrl: pyodideIndexUrl
-      });
-      setPyodide(pyodide);
-      loadingStatus.value = 'Loading local micropip...';
-      await pyodide.loadPackage('micropip');
-      const micropip = pyodide.pyimport('micropip');
-      loadingStatus.value = 'Installing local Python dependencies...';
-      const localWheelUrls = await ensureLocalDependencyWheels();
-      await micropip.install(localWheelUrls);
-      loadingStatus.value = 'Installing gbdraw...';
-      const wheelUrl = await ensureWheelAvailable();
-      await micropip.install(wheelUrl);
-      await pyodide.runPythonAsync(PYTHON_HELPERS);
+    if (pyodideReady.value) return getPyodide();
+    if (initPromise) return initPromise;
 
-      const allPalettes = loadPalettes();
-      if (allPalettes) {
-        const normalizedPalettes = normalizePaletteDefinitions(allPalettes);
-        paletteDefinitions.value = normalizedPalettes;
-        paletteNames.value = Object.keys(normalizedPalettes).sort();
-        const defaultColors = normalizePaletteColors(normalizedPalettes.default || {});
-        selectedPalette.value = 'default';
-        currentColors.value = defaultColors;
-        appliedPaletteName.value = 'default';
-        appliedPaletteColors.value = { ...defaultColors };
-        pendingPaletteName.value = '';
-        pendingPaletteColors.value = {};
+    initPromise = (async () => {
+      try {
+        const pyodideIndexUrl = resolvePyodideIndexUrl();
+        loadingStatus.value = 'Loading local Pyodide runtime...';
+        const pyodide = await loadPyodide({
+          indexURL: pyodideIndexUrl,
+          packageBaseUrl: pyodideIndexUrl
+        });
+        setPyodide(pyodide);
+        loadingStatus.value = 'Loading local micropip...';
+        await pyodide.loadPackage('micropip');
+        const micropip = pyodide.pyimport('micropip');
+        loadingStatus.value = 'Installing local Python dependencies...';
+        const localWheelUrls = await ensureLocalDependencyWheels();
+        await micropip.install(localWheelUrls);
+        loadingStatus.value = 'Installing gbdraw...';
+        const wheelUrl = await ensureWheelAvailable();
+        await micropip.install(wheelUrl);
+        await pyodide.runPythonAsync(PYTHON_HELPERS);
+
+        const allPalettes = loadPalettes();
+        if (allPalettes) {
+          const normalizedPalettes = normalizePaletteDefinitions(allPalettes);
+          paletteDefinitions.value = normalizedPalettes;
+          paletteNames.value = Object.keys(normalizedPalettes).sort();
+          const defaultColors = normalizePaletteColors(normalizedPalettes.default || {});
+          selectedPalette.value = 'default';
+          currentColors.value = defaultColors;
+          appliedPaletteName.value = 'default';
+          appliedPaletteColors.value = { ...defaultColors };
+          pendingPaletteName.value = '';
+          pendingPaletteColors.value = {};
+        }
+        pyodideReady.value = true;
+        return pyodide;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        loadingStatus.value = 'Startup Error: ' + message;
+        console.error(e);
+        return null;
+      } finally {
+        initPromise = null;
       }
-      pyodideReady.value = true;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      loadingStatus.value = 'Startup Error: ' + message;
-      console.error(e);
-    }
+    })();
+
+    return initPromise;
   };
 
   const writeFileToFs = async (fileObj, path) => {

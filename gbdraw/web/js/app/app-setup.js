@@ -727,7 +727,34 @@ export const createAppSetup = () => {
 
   const runAnalysis = async () => {
     cancelDefinitionUpdate();
-    return runGeneratedDiagramAnalysis();
+    if (!pyodideReady.value) {
+      if (processing.value) return { status: 'skipped' };
+      generationCancelRequested.value = false;
+      processing.value = true;
+      processingStatus.value = loadingStatus.value || 'Preparing Python environment...';
+      await pyodideManager.initPyodide();
+      if (generationCancelRequested.value || !pyodideReady.value) {
+        const wasCanceled = generationCancelRequested.value;
+        processing.value = false;
+        processingStatus.value = '';
+        generationCancelRequested.value = false;
+        return { status: wasCanceled ? 'canceled' : 'error' };
+      }
+    }
+
+    if (diagramGenerationWorkerError.value) {
+      diagramGenerationWorkerReady.value = false;
+      diagramGenerationWorkerError.value = null;
+      diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
+    }
+
+    const result = await runGeneratedDiagramAnalysis();
+    if (result?.status === 'ok' && !diagramGenerationWorkerReady.value) {
+      diagramGenerationWorkerReady.value = true;
+      diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
+      diagramGenerationWorkerError.value = null;
+    }
+    return result;
   };
 
   const cancelGeneration = () => {

@@ -1384,7 +1384,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       view.height / fallbackSize.height
     );
     var margin = 12 * unit;
-    var yOffset = 42 * unit;
     var controlWidth = Number(searchControls.getAttribute('width')) || 396;
     var x = Math.max(
       visibleView.x + margin,
@@ -1395,7 +1394,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       'translate(' +
         formatSvgNumber(x + (searchControlsOffsetCss.x * unit)) +
         ', ' +
-        formatSvgNumber(visibleView.y + margin + yOffset + (searchControlsOffsetCss.y * unit)) +
+        formatSvgNumber(visibleView.y + margin + (searchControlsOffsetCss.y * unit)) +
         ') scale(' + formatSvgNumber(unit) + ')'
     );
   }
