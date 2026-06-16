@@ -31,6 +31,11 @@ import {
   getDepthTrackFallbackLabel,
   getDepthTrackLabelFromFile
 } from './depth-tracks.js';
+import {
+  depthFileSlotsFromValue,
+  depthSlotTrackIndex,
+  syncDepthSlotLabels
+} from './depth-track-state.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -1820,9 +1825,6 @@ json.dumps({
           args.push('--depth_tick_font_size', adv.depth_tick_font_size);
         }
       };
-      const depthFileSlotsFromValue = (value) => (
-        Array.isArray(value) ? value.slice() : (value ? [value] : [])
-      );
       const normalizeDepthTrackValue = (value) => {
         if (value === null || value === undefined || value === '') return null;
         const numeric = Number(value);
@@ -1904,52 +1906,33 @@ json.dumps({
         }
         return adv.depth_tracks[idx];
       };
-      const depthSlotTrackIndex = (slot, fallbackIndex = 0, trackCount = null) => {
-        const rawTrackIndex = Number(slot?.params?.track_index);
-        const parsed = Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0
-          ? rawTrackIndex
-          : Math.max(0, Number(fallbackIndex) || 0);
-        if (Number.isInteger(trackCount) && trackCount > 0) {
-          return Math.min(parsed, trackCount - 1);
-        }
-        return parsed;
-      };
-      const depthLabelLooksAutomatic = (label, trackIndex, file = null) => {
-        const text = String(label ?? '').trim();
-        if (!text) return true;
-        if (text === getDepthTrackFallbackLabel(trackIndex)) return true;
-        return Boolean(file && text === getDepthTrackLabelFromFile(file, trackIndex));
-      };
       const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, trackFiles = []) => {
         if (!Array.isArray(slots)) return;
-        const trackCount = Math.max(
-          1,
-          Array.isArray(adv.depth_tracks) ? adv.depth_tracks.length : 0,
-          Array.isArray(trackFiles) ? trackFiles.length : 0
-        );
+        const trackCount = Array.isArray(trackFiles)
+          ? trackFiles.length
+          : 0;
+        for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
+          ensureDepthTrackConfigAt(trackIndex);
+        }
+        syncDepthSlotLabels({
+          slots,
+          depthTracks: adv.depth_tracks,
+          activeCount: trackCount
+        });
+      };
+      const validateEnabledDepthSlots = (slots, activeCount, kind) => {
+        const count = Math.max(0, Number(activeCount) || 0);
         let fallbackIndex = 0;
-        slots.forEach((slot) => {
-          if (!slot || String(slot.renderer || '') !== 'depth') return;
-          const trackIndex = depthSlotTrackIndex(slot, fallbackIndex, trackCount);
-          const config = ensureDepthTrackConfigAt(trackIndex);
-          const file = Array.isArray(trackFiles) ? (trackFiles[trackIndex] || null) : null;
-          const slotLabel = String(slot.params?.legend_label ?? '').trim();
-          const configLabel = String(config.label ?? '').trim();
-          if (slotLabel && slotLabel !== configLabel && depthLabelLooksAutomatic(configLabel, trackIndex, file)) {
-            config.label = slotLabel;
-          }
-          const resolvedLabel = String(config.label ?? '').trim() ||
-            slotLabel ||
-            getDepthTrackLabelFromFile(file, trackIndex) ||
-            getDepthTrackFallbackLabel(trackIndex);
-          slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
-          slot.params.track_index = trackIndex;
-          if (resolvedLabel.trim()) {
-            slot.params.legend_label = resolvedLabel;
-          } else {
-            delete slot.params.legend_label;
-          }
-          fallbackIndex = trackIndex + 1;
+        (Array.isArray(slots) ? slots : []).forEach((slot) => {
+          if (!slot || slot.enabled === false || String(slot.renderer || '') !== 'depth') return;
+          const trackIndex = depthSlotTrackIndex(slot, fallbackIndex);
+          fallbackIndex += 1;
+          if (trackIndex !== null && trackIndex >= 0 && trackIndex < count) return;
+          const slotId = String(slot.id || 'depth').trim() || 'depth';
+          const indexText = trackIndex === null ? 'unknown' : String(trackIndex);
+          throw new Error(
+            `${kind} depth slot '${slotId}' references removed depth track index ${indexText}. Select an existing Depth TSV or remove the slot.`
+          );
         });
       };
       const linearDepthRepresentativeFiles = () => {
@@ -2281,6 +2264,7 @@ json.dumps({
             args.push('--gc_skew_radius', adv.gc_skew_radius_circular);
           }
         }
+        const circularDepthEntries = depthTrackEntriesFromSlots(files.c_depth);
         if (useCircularTrackSlots) {
           args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
           const circularDepthSlotIndexes = new Set();
@@ -2291,7 +2275,6 @@ json.dumps({
             const trackIndex = Number.isInteger(parsedTrackIndex) && parsedTrackIndex >= 0
               ? parsedTrackIndex
               : circularDepthSlotOrdinal;
-            circularDepthSlotIndexes.add(trackIndex);
             if (!slot.params || !Number.isInteger(parsedTrackIndex) || parsedTrackIndex < 0) {
               slot.params = { ...(slot.params || {}), track_index: trackIndex };
             }
@@ -2299,8 +2282,14 @@ json.dumps({
           });
           syncDepthSlotLegendLabelsFromTrackConfigs(
             circularTrackSlots,
-            depthFileSlotsFromValue(files.c_depth)
+            circularDepthEntries.map((entry) => entry.file)
           );
+          validateEnabledDepthSlots(circularTrackSlots, circularDepthEntries.length, 'Circular');
+          circularTrackSlots.forEach((slot, slotIndex) => {
+            if (slot?.enabled === false || String(slot?.renderer || '') !== 'depth') return;
+            const trackIndex = depthSlotTrackIndex(slot, slotIndex);
+            if (trackIndex !== null) circularDepthSlotIndexes.add(trackIndex);
+          });
           const usedCircularSlotIds = new Set(
             circularTrackSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
           );
@@ -2313,7 +2302,6 @@ json.dumps({
               })
             );
           });
-          const circularDepthEntries = depthTrackEntriesFromSlots(files.c_depth);
           if (circularDepthEntries.length > 1) {
             for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
               if (circularDepthSlotIndexes.has(depthIndex)) continue;
@@ -2328,7 +2316,6 @@ json.dumps({
             }
           }
         }
-        const circularDepthEntries = depthTrackEntriesFromSlots(files.c_depth);
         const hasCircularDepthFile = circularDepthEntries.length > 0;
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
         if (form.show_depth || circularSlotNeedsDepth) {
@@ -2721,9 +2708,7 @@ json.dumps({
             slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
             const rawTrackIndex = Number(slot.params.track_index);
             if (!Number.isInteger(rawTrackIndex) || rawTrackIndex < 0) {
-              slot.params.track_index = Math.min(nextDepthIndex, Math.max(0, depthTrackCount - 1));
-            } else {
-              slot.params.track_index = Math.min(rawTrackIndex, Math.max(0, depthTrackCount - 1));
+              slot.params.track_index = nextDepthIndex;
             }
             syncLinearDepthSlotHeightFromTrackConfig(slot);
             nextDepthIndex = Number(slot.params.track_index) + 1;
@@ -2732,6 +2717,7 @@ json.dumps({
             linearTrackSlots,
             linearDepthRepresentativeFiles()
           );
+          validateEnabledDepthSlots(linearTrackSlots, depthTrackCount, 'Linear');
           linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
             adv.linear_track_slots_axis_index,
             linearTrackSlots.length

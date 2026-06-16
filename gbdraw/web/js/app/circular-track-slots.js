@@ -5,6 +5,11 @@ import {
   orderedConservationSources,
   safeConservationSlotId
 } from './conservation-series.js';
+import {
+  dropInvalidManagedDepthSlots,
+  isDefaultManagedDepthSlot,
+  uploadedDepthFileCount
+} from './depth-track-state.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -298,16 +303,9 @@ const cloneParams = (params = {}) => {
   return { ...params };
 };
 
-const depthFileSlotsFromValue = (value) => {
-  if (Array.isArray(value)) return value.slice();
-  return value ? [value] : [];
-};
-
 const circularDepthTrackCountForState = (state) => {
   if (!Boolean(state?.form?.show_depth)) return 0;
-  const fileCount = depthFileSlotsFromValue(state?.files?.c_depth).length;
-  if (fileCount > 0) return fileCount;
-  return 1;
+  return uploadedDepthFileCount(state?.files?.c_depth);
 };
 
 const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);
@@ -1042,6 +1040,16 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
     const desiredCount = desiredCircularDepthTrackCount();
     if (desiredCount <= 0) {
+      state.adv.circular_track_slots.splice(
+        0,
+        state.adv.circular_track_slots.length,
+        ...dropInvalidManagedDepthSlots({
+          slots: state.adv.circular_track_slots,
+          activeCount: 0,
+          managedPredicate: isDefaultManagedDepthSlot
+        })
+      );
+      normalizeSlotsInPlace();
       return;
     }
 
@@ -1067,13 +1075,22 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       return;
     }
 
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      ...dropInvalidManagedDepthSlots({
+        slots: state.adv.circular_track_slots,
+        activeCount: desiredCount,
+        managedPredicate: isDefaultManagedDepthSlot
+      })
+    );
     const slots = state.adv.circular_track_slots;
     const existingIds = new Set(
       slots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
     );
     const depthEntries = slots
       .map((slot, index) => ({ slot, index }))
-      .filter((entry) => entry.slot?.renderer === 'depth');
+      .filter((entry) => entry.slot?.renderer === 'depth' && entry.slot.enabled !== false);
     const claimedTrackIndexes = new Set();
     const duplicateDepthEntries = [];
 
@@ -1091,7 +1108,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
         }
         claimedTrackIndexes.add(trackIndex);
       } else {
-        duplicateDepthEntries.push(entry);
+        if (isDefaultManagedDepthSlot(entry.slot)) {
+          duplicateDepthEntries.push(entry);
+        }
       }
     });
 
