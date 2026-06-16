@@ -251,6 +251,7 @@ export const setupWatchers = ({
   watch(
     () => [...manualSpecificRules],
     async (newRules, oldRules) => {
+      applyPaletteToSvg();
       applySpecificRulesToSvg();
       if (extractedFeatures.value.length > 0) {
         refreshFeatureOverrides(extractedFeatures.value);

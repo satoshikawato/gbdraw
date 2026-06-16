@@ -4,7 +4,7 @@ import {
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
 } from './color-utils.js';
-import { FEATURE_SELECTOR, getFeatureElements, getFeatureIdentity } from './feature-editor/svg-actions.js';
+import { FEATURE_SELECTOR, getFeatureElementIndex, getFeatureElements, getFeatureIdentity } from './feature-editor/svg-actions.js';
 import { ruleMatchesFeature } from './feature-utils.js';
 
 export const createSvgStyles = ({ state, watch, legendActions }) => {
@@ -398,11 +398,13 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
   const applySpecificRulesToSvg = () => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
+    if (!manualSpecificRules.length) return;
     if (!svgContainer.value) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
+    const featureElementIndex = getFeatureElementIndex(svg);
     let updatedCount = 0;
 
     extractedFeatures.value.forEach((feat) => {
@@ -428,7 +430,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
         }
       }
 
-      const elements = getFeatureElements(svg, feat.svg_id);
+      const elements = getFeatureElements(svg, feat.svg_id, featureElementIndex);
       if (elements.length > 0) {
         const newColor = matchingRule ? matchingRule.color : appliedPaletteColors.value[feat.type] || '#cccccc';
         elements.forEach((el) => {

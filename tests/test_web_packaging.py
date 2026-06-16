@@ -73,7 +73,7 @@ def ensure_prepared_browser_wheel():
 
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
-    expected_wheel_name = "gbdraw-0.12.0b0-py3-none-any.whl"
+    expected_wheel_name = "gbdraw-0.12.0-py3-none-any.whl"
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
@@ -131,13 +131,17 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     helper_source = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
 
-    assert "rich_feature_popup: false" in state_source
+    assert "rich_feature_popup: true" in state_source
     assert 'v-model="adv.rich_feature_popup"' in index_html
     assert "Rich Feature Popup" in index_html
     assert "feature-popup--simple" in index_html
+    assert "feature-hover-summary" in index_html
     assert "!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" in index_html
     assert "adv?.rich_feature_popup === false ? 440 : 720" in svg_actions_source
-    assert "state.adv.rich_feature_popup = data?.adv?.rich_feature_popup === true;" in config_source
+    assert "const scheduleHoverSummary = (feat, featureElement, eventLike) => {" in svg_actions_source
+    assert "svg.addEventListener('mousemove', handleMouseMove);" in svg_actions_source
+    assert "function hideHoverSummary()" in svg_actions_source
+    assert "state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;" in config_source
     assert "clickedFeature.activeTab" in index_html
     assert "Details" in index_html
     assert "Qualifiers" in index_html
@@ -173,6 +177,10 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "gbdraw-interactive-feature--match" in export_source
     assert "gbdraw-interactive-feature--active-match" in export_source
     assert "gbdraw-interactive-feature--dimmed" in export_source
+    assert "gbdraw-interactive-feature-match-glow" in export_source
+    assert "filter: url(#gbdraw-interactive-feature-match-glow);" in export_source
+    assert "stroke-opacity: 0.6;" in export_source
+    assert "stroke-opacity: 1;" in export_source
     assert "function normalizeSearchText(value)" in export_source
     assert "function featureSearchValues(feature, field, qualifierKey)" in export_source
     assert "function featureSearchMatches(feature, matcher, field, qualifierKey)" in export_source
@@ -196,7 +204,13 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "function clearSearch()" in export_source
     assert "Search match" in export_source
     assert "Orthogroup members" in export_source
+    assert "function scheduleInitialViewportRefresh()" in export_source
+    assert "var initialView = copyViewRect(getViewRect());" in export_source
+    assert "rectsNearlyEqual(getViewRect(), initialView)" in export_source
+    assert "scheduleInitialViewportRefresh();" in export_source
     assert "visibleView.x + visibleView.width - (controlWidth * unit) - margin" in export_source
+    assert "visibleView.y + margin + (searchControlsOffsetCss.y * unit)" in export_source
+    assert "var yOffset = 42 * unit" not in export_source
     assert "gfi-og-members-table" in export_source
     assert "Coordinates (+/-)" in export_source
     assert "Product / note" in export_source
@@ -230,6 +244,11 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "homeViewRect.width / maxZoom" in export_source
     assert "homeViewRect.width * nextScale" in export_source
     assert "{ action: 'reset', label: 'Original', title: 'Return to original view', width: 62 }" in export_source
+    assert "{ action: 'pan', label: 'Pan'" not in export_source
+    assert "{ action: 'legend', label: 'Legend'" not in export_source
+    assert "function ensureStickyLegendBackground(legend, bbox)" in export_source
+    assert "gbdraw-sticky-legend-background" in export_source
+    assert "setClassToken(svg, 'gbdraw-interactive-pan-enabled', true);" in export_source
     assert "function refitViewportToWindow()" in export_source
     assert "function scheduleViewportRefit()" in export_source
     assert "popup_mode: normalizedPopupMode" in export_source
@@ -256,11 +275,18 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "getPopupTextScale" in export_source
     assert "root.style.setProperty('--gfi-text-scale'" in export_source
     assert "gbdraw-interactive-feature-glow" in export_source
+    assert "gbdraw-interactive-feature-match-glow" in export_source
     assert "gbdraw-interactive-feature--hover" in export_source
     assert "gbdraw-interactive-orthogroup-link--hover" in export_source
     assert "function setOrthogroupHover(orthogroupId, highlight)" in export_source
     assert "activePopupDrag" in export_source
     assert "activeSearchControlsDrag" in export_source
+    assert "gbdraw-feature-hover-popup" in export_source
+    assert "function scheduleHoverPopup(feature, svgId, event)" in export_source
+    assert "function renderHoverPopupHtml(feature, svgId)" in export_source
+    assert "svg.addEventListener('mousemove'" in export_source
+    assert "const collectRenderedFeatureEntries = (svg) => {" in export_source
+    assert "const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) => {" in export_source
     assert "function startSearchControlsDrag(event, root)" in export_source
     assert "document.addEventListener('mouseup', onEnd, true);" in export_source
     assert "window.addEventListener('blur', onEnd);" in export_source
@@ -272,6 +298,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "['Record index'" not in export_source
     assert "['Strand'" not in export_source
     assert "root.style.transform = 'scale('" in export_source
+    assert "overscroll-behavior: contain;" in export_source
+    assert "root.addEventListener('wheel', function (rootEvent) {\n      rootEvent.stopPropagation();\n    }, { passive: true });" in export_source
     assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
     assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
@@ -283,6 +311,18 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert '@click="downloadInteractiveSVG"' in index_html
     assert "Interactive SVG" in index_html
     assert "Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded." in index_html
+
+
+def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:
+    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+
+    assert "const stripEditorOnlyCursorStyles = (svg) => {" in export_source
+    assert "svg.querySelectorAll('[style]').forEach((element) => {" in export_source
+    assert "if (!style || !/\\bcursor\\s*:/i.test(style)) return;" in export_source
+    assert "element.style.removeProperty('cursor');" in export_source
+    assert "if (!element.getAttribute('style')?.trim()) {" in export_source
+    assert "  } else {\n    stripEditorOnlyCursorStyles(clone);\n  }\n  return new XMLSerializer().serializeToString(clone);" in export_source
+    assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
 
 
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
@@ -388,9 +428,11 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
 
     assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source
+    assert "FEATURE_SELECTOR = [" in svg_actions_source
+    assert "`path[${FEATURE_ID_ATTRIBUTE}]`" in svg_actions_source
     assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in svg_actions_source
-    assert "svg.querySelectorAll(`[${FEATURE_ID_ATTRIBUTE}]`)" in svg_actions_source
-    assert "getFeatureIdentity(path)" in svg_actions_source
+    assert "svg.querySelectorAll(FEATURE_SELECTOR)" in svg_actions_source
+    assert "getFeatureIdentity(element)" in svg_actions_source
     assert "getFeatureHoverKey(getFeatureIdentity(relatedFeature))" in svg_actions_source
     assert "getFeatureIdentity(el)" in label_actions_source
     assert "getFeatureElements(svg, feat.svg_id)" in color_actions_source
@@ -476,17 +518,31 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "depthTrackRows" in app_setup_source
     assert "circularDepthTrackRows" in app_setup_source
     assert "linearDepthTrackRows" in app_setup_source
+    assert "hasCircularDepthFiles" in app_setup_source
+    assert "hasLinearDepthFiles" in app_setup_source
+    assert "depthTrackCountLabel" in app_setup_source
+    assert "getDepthTrackLegendLabelForSlot" in app_setup_source
+    assert "setDepthTrackLegendLabelForSlot" in app_setup_source
+    assert "syncDepthTrackSlotLabel" in app_setup_source
     assert "addCircularDepthTrack" in app_setup_source
     assert "addLinearDepthTrack" in app_setup_source
     assert "setCircularDepthFile" in app_setup_source
     assert "setLinearDepthFile" in app_setup_source
     assert "updateDepthTrackLabelFromFile(idx, file, previousFile);" in app_setup_source
     assert "Depth TSV tracks" in index_html
+    assert 'v-if="!hasCircularDepthFiles"' in index_html
+    assert 'v-if="!hasLinearDepthFiles(seq)"' in index_html
     assert "Add TSV" in index_html
     assert "Per-track settings" in index_html
+    assert ':value="getDepthTrackLabel(track.index)"' in index_html
+    assert '@input="setDepthTrackLabel(track.index, $event.target.value)"' in index_html
+    assert ':value="getDepthTrackLegendLabelForSlot(entry.slot)"' in index_html
+    assert '@input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"' in index_html
     assert "v-model.number=\"track.config.height\"" in index_html
     assert "v-model.number=\"track.config.large_tick_interval\"" in index_html
     assert "depthTrackConfigAt(index, file)" in run_source
+    assert "syncDepthSlotLegendLabelsFromTrackConfigs" in run_source
+    assert "slot.params.legend_label = resolvedLabel;" in run_source
     assert "args.push('--depth_track_label', ...labels);" in run_source
     assert "args.push('--depth_track_color', ...colors);" in run_source
     assert "args.push('--depth_track_height', ...heights);" in run_source
@@ -1577,7 +1633,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
-    assert wheel_path.name == "gbdraw-0.12.0b0-py3-none-any.whl"
+    assert wheel_path.name == "gbdraw-0.12.0-py3-none-any.whl"
     subprocess.run(
         [sys.executable, "tools/verify_gui_offline.py", "inspect-wheel", str(wheel_path)],
         cwd=REPO_ROOT,

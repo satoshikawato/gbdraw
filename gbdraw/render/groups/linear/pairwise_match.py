@@ -260,9 +260,15 @@ class PairWiseMatchGroup:
         return default_gradient_color
 
     def add_optional_metadata_attributes(self, path: Path, row: DataFrame) -> None:
-        collinearity_block_id = str(_row_value(row, "collinearity_block_id", "") or "").strip()
-        if not collinearity_block_id:
+        has_collinearity_metadata = bool(
+            str(_row_value(row, "collinearity_block_id", "") or "").strip()
+        )
+        has_orthogroup_metadata = bool(
+            str(_row_value(row, "orthogroup_id", "") or "").strip()
+        )
+        if not (has_collinearity_metadata or has_orthogroup_metadata):
             return
+
         metadata_columns = {
             "collinearity_block_id": "data-collinearity-block-id",
             "collinearity_block_kind": "data-collinearity-block-kind",

@@ -2,6 +2,7 @@ import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js'
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
+import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
   disposeDiagramGenerationWorker,
   preinitializeDiagramGenerationWorker
@@ -106,13 +107,22 @@ export const createAppSetup = () => {
     specificRulePresetLoading,
     downloadDpi,
     extractedFeatures,
+    featureEditorStatus,
+    featureEditorStatusText,
     featureExtractionPending,
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
     showFeaturePanel,
     featurePanelTab,
+    featureSearchInput,
     featureSearch,
+    featureListScrollTop,
+    featureListViewportHeight,
+    isFeatureDrawerMounted,
+    visibleFeatureRows,
+    featureListTopSpacerPx,
+    featureListBottomSpacerPx,
     labelSearch,
     editableLabels,
     filteredEditableLabels,
@@ -200,8 +210,38 @@ export const createAppSetup = () => {
     svgActions
   });
 
+  let featureSearchDebounceId = null;
+  const featureListScrollRef = ref(null);
+  const resetFeatureListScroll = () => {
+    featureListScrollTop.value = 0;
+    if (featureListScrollRef.value) featureListScrollRef.value.scrollTop = 0;
+  };
+  const handleFeatureListScroll = (event) => {
+    const target = event?.currentTarget || event?.target;
+    featureListScrollTop.value = Number(target?.scrollTop || 0);
+    const nextHeight = Number(target?.clientHeight || 0);
+    if (nextHeight > 0) featureListViewportHeight.value = nextHeight;
+  };
+  watch(featureSearchInput, (value) => {
+    if (featureSearchDebounceId !== null) {
+      clearTimeout(featureSearchDebounceId);
+      featureSearchDebounceId = null;
+    }
+    const delay = String(value || '').trim() ? 120 : 0;
+    featureSearchDebounceId = setTimeout(() => {
+      featureSearch.value = String(value || '');
+      resetFeatureListScroll();
+      featureSearchDebounceId = null;
+    }, delay);
+  });
+  watch(
+    () => [selectedFeatureRecordIdx.value, showRightDrawer.value, rightDrawerTab.value, extractedFeatures.value.length],
+    resetFeatureListScroll
+  );
+
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
   onUnmounted(() => {
+    if (featureSearchDebounceId !== null) clearTimeout(featureSearchDebounceId);
     disposeDiagramGenerationWorker();
   });
 
@@ -226,6 +266,13 @@ export const createAppSetup = () => {
     if (Array.isArray(value)) return value.slice();
     return value ? [value] : [];
   };
+  const depthFileCount = (value) => depthFileSlotsFromValue(value).filter(Boolean).length;
+  const depthTrackCountLabel = (value) => {
+    const count = depthFileCount(value);
+    return count === 1 ? '1 TSV' : `${count} TSVs`;
+  };
+  const hasCircularDepthFiles = computed(() => depthFileCount(files.c_depth) > 0);
+  const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
   const depthTrackUiCounts = reactive({
     circular: 1,
     linearByUid: {}
@@ -311,6 +358,95 @@ export const createAppSetup = () => {
     sourceDepthTrackCount(seq?.depth, linearDepthTrackUiCount(seq))
   );
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
+  const normalizeDepthSlotTrackIndex = (slot) => {
+    const rawTrackIndex = Number(slot?.params?.track_index);
+    return Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
+  };
+  const depthTrackConfigForIndex = (index) => {
+    const idx = Math.max(0, Number(index) || 0);
+    ensureDepthTrackConfigCount(idx + 1);
+    return adv.depth_tracks[idx];
+  };
+  const getDepthTrackLabel = (index) => {
+    const config = depthTrackConfigForIndex(index);
+    return String(config?.label ?? '');
+  };
+  const representativeDepthFileForIndex = (index) => {
+    const idx = Math.max(0, Number(index) || 0);
+    const circularFile = getCircularDepthFile(idx);
+    if (circularFile) return circularFile;
+    for (const seq of linearSeqs) {
+      const file = getLinearDepthFile(seq, idx);
+      if (file) return file;
+    }
+    return null;
+  };
+  const depthTrackLabelLooksAutomatic = (label, index) => {
+    const text = String(label ?? '').trim();
+    if (!text) return true;
+    if (text === getDepthTrackFallbackLabel(index)) return true;
+    const representativeFile = representativeDepthFileForIndex(index);
+    return Boolean(representativeFile && text === getDepthTrackLabelFromFile(representativeFile, index));
+  };
+  const depthTrackSlotCollections = () => [
+    Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : [],
+    Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : []
+  ];
+  const syncDepthTrackSlotLabelsForTrack = (index) => {
+    const idx = Math.max(0, Number(index) || 0);
+    const label = getDepthTrackLabel(idx);
+    depthTrackSlotCollections().forEach((slots) => {
+      slots.forEach((slot) => {
+        if (!slot || slot.renderer !== 'depth') return;
+        if (normalizeDepthSlotTrackIndex(slot) !== idx) return;
+        slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+        if (String(label).trim()) {
+          slot.params.legend_label = label;
+        } else {
+          delete slot.params.legend_label;
+        }
+      });
+    });
+  };
+  const setDepthTrackLabel = (index, value) => {
+    const idx = Math.max(0, Number(index) || 0);
+    const config = depthTrackConfigForIndex(idx);
+    config.label = String(value ?? '');
+    syncDepthTrackSlotLabelsForTrack(idx);
+  };
+  const getDepthTrackLegendLabelForSlot = (slot) => (
+    getDepthTrackLabel(normalizeDepthSlotTrackIndex(slot))
+  );
+  const setDepthTrackLegendLabelForSlot = (slot, value) => {
+    if (!slot) return;
+    const idx = normalizeDepthSlotTrackIndex(slot);
+    slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+    const label = String(value ?? '');
+    if (label.trim()) {
+      slot.params.legend_label = label;
+    } else {
+      delete slot.params.legend_label;
+    }
+    setDepthTrackLabel(idx, label);
+  };
+  const syncDepthTrackSlotLabel = (slot) => {
+    if (!slot || slot.renderer !== 'depth') return;
+    syncDepthTrackSlotLabelsForTrack(normalizeDepthSlotTrackIndex(slot));
+  };
+  const syncDepthTrackLabelsFromSlots = () => {
+    depthTrackSlotCollections().forEach((slots) => {
+      slots.forEach((slot) => {
+        if (!slot || slot.renderer !== 'depth') return;
+        const slotLabel = String(slot.params?.legend_label ?? '').trim();
+        if (!slotLabel) return;
+        const idx = normalizeDepthSlotTrackIndex(slot);
+        const config = depthTrackConfigForIndex(idx);
+        if (String(config.label ?? '').trim() === slotLabel) return;
+        if (!depthTrackLabelLooksAutomatic(config.label, idx)) return;
+        config.label = slotLabel;
+      });
+    });
+  };
   const depthTrackAutoLabels = [];
   const updateDepthTrackLabelFromFile = (index, file, previousFile = null) => {
     if (!file) return;
@@ -321,6 +457,7 @@ export const createAppSetup = () => {
       const nextLabel = getDepthTrackLabelFromFile(file, index);
       config.label = nextLabel;
       depthTrackAutoLabels[index] = nextLabel;
+      syncDepthTrackSlotLabelsForTrack(index);
     }
   };
   const getCircularDepthFile = (index) => depthFileSlotsFromValue(files.c_depth)[Number(index)] || null;
@@ -539,6 +676,10 @@ export const createAppSetup = () => {
       if (slotsEnabled && showDepth) {
         circularTrackSlotEditor.ensureCircularTrackDepthSlot();
       }
+      if (slotsEnabled) {
+        syncDepthTrackLabelsFromSlots();
+        adv.depth_tracks.forEach((_track, index) => syncDepthTrackSlotLabelsForTrack(index));
+      }
     }
   );
   watch(
@@ -553,6 +694,8 @@ export const createAppSetup = () => {
     ([slotsEnabled]) => {
       if (slotsEnabled) {
         linearTrackSlotEditor.reconcileLinearTrackSlotsFromSimpleControls();
+        syncDepthTrackLabelsFromSlots();
+        adv.depth_tracks.forEach((_track, index) => syncDepthTrackSlotLabelsForTrack(index));
       }
     },
     { deep: true }
@@ -687,7 +830,34 @@ export const createAppSetup = () => {
 
   const runAnalysis = async () => {
     cancelDefinitionUpdate();
-    return runGeneratedDiagramAnalysis();
+    if (!pyodideReady.value) {
+      if (processing.value) return { status: 'skipped' };
+      generationCancelRequested.value = false;
+      processing.value = true;
+      processingStatus.value = loadingStatus.value || 'Preparing Python environment...';
+      await pyodideManager.initPyodide();
+      if (generationCancelRequested.value || !pyodideReady.value) {
+        const wasCanceled = generationCancelRequested.value;
+        processing.value = false;
+        processingStatus.value = '';
+        generationCancelRequested.value = false;
+        return { status: wasCanceled ? 'canceled' : 'error' };
+      }
+    }
+
+    if (diagramGenerationWorkerError.value) {
+      diagramGenerationWorkerReady.value = false;
+      diagramGenerationWorkerError.value = null;
+      diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
+    }
+
+    const result = await runGeneratedDiagramAnalysis();
+    if (result?.status === 'ok' && !diagramGenerationWorkerReady.value) {
+      diagramGenerationWorkerReady.value = true;
+      diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
+      diagramGenerationWorkerError.value = null;
+    }
+    return result;
   };
 
   const cancelGeneration = () => {
@@ -787,6 +957,30 @@ export const createAppSetup = () => {
   };
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
+
+  const resetSettings = () => {
+    const proceed = window.confirm(
+      'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
+    );
+    if (!proceed) return;
+
+    cancelDefinitionUpdate();
+    resetSettingsState(state);
+    circularTrackNewRenderer.value = 'dinucleotide_skew';
+    linearTrackNewRenderer.value = 'dinucleotide_skew';
+    depthTrackUiCounts.circular = 1;
+    Object.keys(depthTrackUiCounts.linearByUid).forEach((uid) => {
+      delete depthTrackUiCounts.linearByUid[uid];
+    });
+    ensureDepthTrackConfigCount(activeDepthTrackCount());
+  };
+
+  const resetLayout = () => {
+    resetAllPositions();
+    resetCanvasPadding();
+    resetLayoutState(state);
+    resetPreviewViewport({ resetZoom: true });
+  };
 
   const isInteractiveTarget = (target) => {
     if (!target) return false;
@@ -1304,6 +1498,14 @@ export const createAppSetup = () => {
     depthTrackRows,
     circularDepthTrackRows,
     linearDepthTrackRows,
+    hasCircularDepthFiles,
+    hasLinearDepthFiles,
+    depthTrackCountLabel,
+    getDepthTrackLabel,
+    setDepthTrackLabel,
+    getDepthTrackLegendLabelForSlot,
+    setDepthTrackLegendLabelForSlot,
+    syncDepthTrackSlotLabel,
     addCircularDepthTrack,
     addLinearDepthTrack,
     removeCircularDepthTrack,
@@ -1469,13 +1671,22 @@ export const createAppSetup = () => {
     applySpecificRulePreset,
     clearAllSpecificRules,
     extractedFeatures,
+    featureEditorStatus,
+    featureEditorStatusText,
     featureExtractionPending,
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
     showFeaturePanel,
     featurePanelTab,
+    featureSearchInput,
     featureSearch,
+    visibleFeatureRows,
+    featureListTopSpacerPx,
+    featureListBottomSpacerPx,
+    isFeatureDrawerMounted,
+    featureListScrollRef,
+    handleFeatureListScroll,
     labelSearch,
     editableLabels,
     filteredEditableLabels,
@@ -1563,6 +1774,7 @@ export const createAppSetup = () => {
     resetLegendEntryStroke,
     resetAllStrokes,
     resetAllPositions,
+    resetLayout,
     canvasPadding,
     showCanvasControls,
     resetCanvasPadding,
@@ -1574,6 +1786,7 @@ export const createAppSetup = () => {
     downloadPNG,
     downloadPDF,
     exportConfig,
+    resetSettings,
     saveSessionWithTitle,
     editSessionTitle,
     importConfig,

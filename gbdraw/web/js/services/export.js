@@ -35,6 +35,8 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
     enrichSvgWithStandaloneInteractivity(clone, {
       popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'
     });
+  } else {
+    stripEditorOnlyCursorStyles(clone);
   }
   return new XMLSerializer().serializeToString(clone);
 };
@@ -76,6 +78,19 @@ const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
 const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
+const INTERACTIVE_MATCH_GLOW_FILTER_ID = 'gbdraw-interactive-feature-match-glow';
+
+const stripEditorOnlyCursorStyles = (svg) => {
+  if (!svg) return;
+  svg.querySelectorAll('[style]').forEach((element) => {
+    const style = element.getAttribute('style');
+    if (!style || !/\bcursor\s*:/i.test(style)) return;
+    element.style.removeProperty('cursor');
+    if (!element.getAttribute('style')?.trim()) {
+      element.removeAttribute('style');
+    }
+  });
+};
 
 const getElementFeatureId = (element) =>
   String(
@@ -87,7 +102,7 @@ const getElementFeatureId = (element) =>
 const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
   cursor: pointer;
-  transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+  transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease, stroke-opacity 120ms ease;
 }
 .gbdraw-interactive-feature:hover,
 .gbdraw-interactive-feature.gbdraw-interactive-feature--hover {
@@ -99,12 +114,18 @@ const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gbdraw-interactive-feature.gbdraw-interactive-feature--match {
   opacity: 1;
-  filter: url(#gbdraw-interactive-feature-glow);
+  filter: url(#gbdraw-interactive-feature-match-glow);
+  stroke: #fbbf24;
+  stroke-linejoin: round;
+  stroke-opacity: 0.6;
+  stroke-width: 1;
+  paint-order: stroke fill markers;
 }
 .gbdraw-interactive-feature.gbdraw-interactive-feature--active-match {
   opacity: 1;
   filter: url(#gbdraw-interactive-feature-glow);
   stroke: #f59e0b;
+  stroke-opacity: 1;
   stroke-width: 2;
 }
 .gbdraw-interactive-orthogroup-link {
@@ -118,8 +139,90 @@ const STANDALONE_INTERACTIVE_STYLE = `
   overflow: visible;
   pointer-events: auto;
 }
+.gbdraw-feature-hover-popup {
+  overflow: visible;
+  pointer-events: none;
+}
 .gbdraw-feature-popup * {
   box-sizing: border-box;
+}
+.gbdraw-feature-hover-popup * {
+  box-sizing: border-box;
+}
+.gfhs {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  color: #334155;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 10px 12px;
+}
+.gfhs-title {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  margin-bottom: 7px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.gfhs-swatch {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  border-radius: 3px;
+  background: #94a3b8;
+}
+.gfhs-text {
+  min-width: 0;
+}
+.gfhs-heading {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gfhs-subtitle {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gfhs-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: 4px;
+}
+.gfhs-key {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gfhs-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gfhs-value.is-clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .gfi {
   position: relative;
@@ -219,6 +322,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 10px 18px 18px 10px;
 }
 .gfi-row {
@@ -360,6 +464,12 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-viewport-controls {
   pointer-events: auto;
 }
+.gbdraw-sticky-legend {
+  pointer-events: none;
+}
+.gbdraw-sticky-legend-background {
+  pointer-events: none;
+}
 .gbdraw-viewport-button {
   cursor: pointer;
 }
@@ -391,13 +501,13 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-viewport-button.is-active text {
   fill: #1d4ed8;
 }
-.gbdraw-interactive-pan-active {
+.gbdraw-interactive-pan-enabled {
   cursor: grab;
 }
 .gbdraw-interactive-panning {
   cursor: grabbing;
 }
-.gbdraw-interactive-pan-active .gbdraw-interactive-feature {
+.gbdraw-interactive-pan-enabled .gbdraw-interactive-feature {
   cursor: pointer;
 }
 .gbdraw-feature-search-controls {
@@ -545,15 +655,21 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var metadata = svg.querySelector('#gbdraw-interactive-feature-metadata');
   var payload = null;
   var popup = null;
+  var hoverPopup = null;
   var viewportControls = null;
   var searchControls = null;
-  var isPanMode = false;
+  var stickyLegend = null;
+  var stickyLegendState = null;
   var activeCanvasPan = null;
   var suppressNextCanvasClick = false;
   var activePopupResize = null;
   var activePopupDrag = null;
   var activeSearchControlsDrag = null;
   var searchControlsOffsetCss = { x: 0, y: 0 };
+  var hoverPopupTimer = null;
+  var hoverPopupFrame = null;
+  var hoverPopupFeatureId = '';
+  var hoverPopupLastEvent = null;
   var activeHoverSvgId = null;
   var activeHoverKey = '';
   var maxZoom = 16;
@@ -1377,7 +1493,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       view.height / fallbackSize.height
     );
     var margin = 12 * unit;
-    var yOffset = 42 * unit;
     var controlWidth = Number(searchControls.getAttribute('width')) || 396;
     var x = Math.max(
       visibleView.x + margin,
@@ -1388,7 +1503,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       'translate(' +
         formatSvgNumber(x + (searchControlsOffsetCss.x * unit)) +
         ', ' +
-        formatSvgNumber(visibleView.y + margin + yOffset + (searchControlsOffsetCss.y * unit)) +
+        formatSvgNumber(visibleView.y + margin + (searchControlsOffsetCss.y * unit)) +
         ') scale(' + formatSvgNumber(unit) + ')'
     );
   }
@@ -1599,6 +1714,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
 
     svg.appendChild(searchControls);
+    syncStandaloneOverlayOrder();
     syncSearchControls();
     updateSearchControlsPosition();
   }
@@ -1693,6 +1809,264 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var originalViewRect = parseOriginalViewRectFromSvg();
   var homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());
 
+  function isElementHidden(element) {
+    if (!element) return true;
+    if (String(element.getAttribute('display') || '').trim().toLowerCase() === 'none') return true;
+    if (element.style && String(element.style.display || '').trim().toLowerCase() === 'none') return true;
+    if (typeof window.getComputedStyle === 'function') {
+      try {
+        var style = window.getComputedStyle(element);
+        if (style && (style.display === 'none' || style.visibility === 'hidden')) return true;
+      } catch (error) {
+        // Ignore style lookup failures and let getBBox decide renderability.
+      }
+    }
+    return false;
+  }
+
+  function getElementBBox(element) {
+    if (!element || typeof element.getBBox !== 'function') return null;
+    try {
+      var bbox = element.getBBox();
+      if (!bbox || !Number.isFinite(bbox.x) || !Number.isFinite(bbox.y)) return null;
+      if (!Number.isFinite(bbox.width) || !Number.isFinite(bbox.height)) return null;
+      if (bbox.width <= 0 || bbox.height <= 0) return null;
+      return {
+        x: bbox.x,
+        y: bbox.y,
+        width: bbox.width,
+        height: bbox.height
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function getElementBoundsInSvg(element, bbox) {
+    if (!element || !bbox) return null;
+    var point = typeof svg.createSVGPoint === 'function' ? svg.createSVGPoint() : null;
+    var elementMatrix = typeof element.getScreenCTM === 'function' ? element.getScreenCTM() : null;
+    var svgMatrix = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
+    if (!point || !elementMatrix || !svgMatrix) {
+      return { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
+    }
+    var svgInverse = null;
+    try {
+      svgInverse = svgMatrix.inverse();
+    } catch (error) {
+      return { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
+    }
+
+    function convert(x, y) {
+      point.x = x;
+      point.y = y;
+      var screenPoint = point.matrixTransform(elementMatrix);
+      return screenPoint.matrixTransform(svgInverse);
+    }
+
+    var points = [
+      convert(bbox.x, bbox.y),
+      convert(bbox.x + bbox.width, bbox.y),
+      convert(bbox.x + bbox.width, bbox.y + bbox.height),
+      convert(bbox.x, bbox.y + bbox.height)
+    ].filter(function (entry) {
+      return entry && Number.isFinite(entry.x) && Number.isFinite(entry.y);
+    });
+    if (points.length !== 4) return null;
+    var minX = Math.min.apply(null, points.map(function (entry) { return entry.x; }));
+    var maxX = Math.max.apply(null, points.map(function (entry) { return entry.x; }));
+    var minY = Math.min.apply(null, points.map(function (entry) { return entry.y; }));
+    var maxY = Math.max.apply(null, points.map(function (entry) { return entry.y; }));
+    if (maxX <= minX || maxY <= minY) return null;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  function inferStickyLegendAlignment(center, start, size, low, high) {
+    if (!Number.isFinite(size) || size <= 0) return 'center';
+    var ratio = (center - start) / size;
+    if (ratio < low) return 'left';
+    if (ratio > high) return 'right';
+    return 'center';
+  }
+
+  function inferStickyLegendVerticalAlignment(center, start, size, low, high) {
+    if (!Number.isFinite(size) || size <= 0) return 'center';
+    var ratio = (center - start) / size;
+    if (ratio < low) return 'top';
+    if (ratio > high) return 'bottom';
+    return 'center';
+  }
+
+  function getStickyLegendFallbackMargin() {
+    var shortSide = Math.min(Number(homeViewRect.width) || 0, Number(homeViewRect.height) || 0);
+    return Math.max(8, Math.min(18, shortSide * 0.018 || 12));
+  }
+
+  function updateStickyLegendHomeMetrics() {
+    if (!stickyLegendState) return;
+    var bounds = stickyLegendState.initialBounds;
+    var centerX = bounds.x + bounds.width / 2;
+    var centerY = bounds.y + bounds.height / 2;
+    var fallbackMargin = getStickyLegendFallbackMargin();
+    var alignmentView = originalViewRect || homeViewRect;
+    stickyLegendState.anchorX = inferStickyLegendAlignment(
+      centerX,
+      alignmentView.x,
+      alignmentView.width,
+      1 / 3,
+      2 / 3
+    );
+    stickyLegendState.anchorY = inferStickyLegendVerticalAlignment(
+      centerY,
+      alignmentView.y,
+      alignmentView.height,
+      1 / 3,
+      2 / 3
+    );
+    stickyLegendState.centerOffsetX = centerX - (homeViewRect.x + homeViewRect.width / 2);
+    stickyLegendState.centerOffsetY = centerY - (homeViewRect.y + homeViewRect.height / 2);
+    stickyLegendState.baseMargin = fallbackMargin;
+    stickyLegendState.margins = {
+      left: fallbackMargin,
+      right: fallbackMargin,
+      top: fallbackMargin,
+      bottom: fallbackMargin
+    };
+  }
+
+  function getStickyLegendScale(view) {
+    var scale = Number(view && view.width) / Number(homeViewRect.width);
+    if (!Number.isFinite(scale) || scale <= 0) {
+      scale = Number(view && view.height) / Number(homeViewRect.height);
+    }
+    if (!Number.isFinite(scale) || scale <= 0) return 1;
+    return Math.max(scale, 0.000001);
+  }
+
+  function getStickyLegendMargin(axis, scale) {
+    if (!stickyLegendState) return 0;
+    var margins = stickyLegendState.margins || {};
+    var margin = Number(margins[axis]);
+    var base = Number(stickyLegendState.baseMargin) || 8;
+    return Math.max(base, Number.isFinite(margin) ? margin : base) * scale;
+  }
+
+  function clampStickyLegendCoordinate(value, viewStart, viewSize, itemSize, margin) {
+    if (itemSize + margin * 2 > viewSize) {
+      return viewStart + (viewSize - itemSize) / 2;
+    }
+    var min = viewStart + margin;
+    var max = viewStart + viewSize - itemSize - margin;
+    return clampValue(value, min, max);
+  }
+
+  function ensureStickyLegendBackground(legend, bbox) {
+    if (!legend || !bbox) return;
+    var existing = legend.querySelector('#gbdraw-sticky-legend-background');
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+    var padding = Math.max(8, Math.min(18, Math.min(bbox.width, bbox.height) * 0.08 || 10));
+    var rect = createSvgNode('rect', {
+      id: 'gbdraw-sticky-legend-background',
+      'class': 'gbdraw-sticky-legend-background',
+      x: formatSvgNumber(bbox.x - padding),
+      y: formatSvgNumber(bbox.y - padding),
+      width: formatSvgNumber(bbox.width + padding * 2),
+      height: formatSvgNumber(bbox.height + padding * 2),
+      rx: formatSvgNumber(Math.min(12, padding)),
+      ry: formatSvgNumber(Math.min(12, padding)),
+      fill: '#ffffff',
+      'fill-opacity': '0.84',
+      stroke: '#cbd5e1',
+      'stroke-opacity': '0.7',
+      'stroke-width': '1'
+    });
+    legend.insertBefore(rect, legend.firstChild || null);
+  }
+
+  function updateStickyLegendPosition() {
+    if (!stickyLegend || !stickyLegendState) return;
+    var visibleView = getVisibleViewRect();
+    var bbox = stickyLegendState.localBBox;
+    var scale = getStickyLegendScale(getViewRect());
+    var width = bbox.width * scale;
+    var height = bbox.height * scale;
+    var marginX = stickyLegendState.baseMargin * scale;
+    var marginY = stickyLegendState.baseMargin * scale;
+    var targetX = visibleView.x + visibleView.width / 2 + stickyLegendState.centerOffsetX * scale - width / 2;
+    var targetY = visibleView.y + visibleView.height / 2 + stickyLegendState.centerOffsetY * scale - height / 2;
+
+    if (stickyLegendState.anchorX === 'left') {
+      marginX = getStickyLegendMargin('left', scale);
+      targetX = visibleView.x + marginX;
+    } else if (stickyLegendState.anchorX === 'right') {
+      marginX = getStickyLegendMargin('right', scale);
+      targetX = visibleView.x + visibleView.width - width - marginX;
+    }
+
+    if (stickyLegendState.anchorY === 'top') {
+      marginY = getStickyLegendMargin('top', scale);
+      targetY = visibleView.y + marginY;
+    } else if (stickyLegendState.anchorY === 'bottom') {
+      marginY = getStickyLegendMargin('bottom', scale);
+      targetY = visibleView.y + visibleView.height - height - marginY;
+    }
+
+    targetX = clampStickyLegendCoordinate(targetX, visibleView.x, visibleView.width, width, marginX);
+    targetY = clampStickyLegendCoordinate(targetY, visibleView.y, visibleView.height, height, marginY);
+    stickyLegend.setAttribute(
+      'transform',
+      'translate(' +
+        formatSvgNumber(targetX - bbox.x * scale) +
+        ', ' +
+        formatSvgNumber(targetY - bbox.y * scale) +
+        ') scale(' +
+        formatSvgNumber(scale) +
+        ')'
+    );
+  }
+
+  function syncStandaloneOverlayOrder() {
+    if (stickyLegend && stickyLegend.parentNode) {
+      stickyLegend.parentNode.appendChild(stickyLegend);
+    }
+    if (hoverPopup && hoverPopup.parentNode === svg) {
+      svg.appendChild(hoverPopup);
+    }
+    if (popup && popup.parentNode === svg) {
+      svg.appendChild(popup);
+    }
+    if (viewportControls && viewportControls.parentNode === svg) {
+      svg.appendChild(viewportControls);
+    }
+    if (searchControls && searchControls.parentNode === svg) {
+      svg.appendChild(searchControls);
+    }
+  }
+
+  function setupStickyLegend() {
+    var legend = svg.querySelector('#legend');
+    if (!legend || isElementHidden(legend)) return;
+    var contentBBox = getElementBBox(legend);
+    if (!contentBBox) return;
+    ensureStickyLegendBackground(legend, contentBBox);
+    var bbox = getElementBBox(legend) || contentBBox;
+    var initialBounds = getElementBoundsInSvg(legend, bbox);
+    if (!initialBounds) return;
+    stickyLegend = legend;
+    stickyLegendState = {
+      localBBox: bbox,
+      initialBounds: initialBounds,
+      originalDisplay: legend.getAttribute('display')
+    };
+    setClassToken(stickyLegend, 'gbdraw-sticky-legend', true);
+    stickyLegend.setAttribute('data-gbdraw-sticky-legend', 'true');
+    updateStickyLegendHomeMetrics();
+    syncStandaloneOverlayOrder();
+    updateStickyLegendPosition();
+  }
+
   function getSvgClientSize() {
     var rect = typeof svg.getBoundingClientRect === 'function' ? svg.getBoundingClientRect() : null;
     var width = rect && Number.isFinite(rect.width) && rect.width > 0 ? rect.width : window.innerWidth || originalViewRect.width;
@@ -1725,6 +2099,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     );
     updateViewportControlsPosition();
     keepPopupWithinVisibleView();
+    scheduleHoverPopupPosition(hoverPopupLastEvent);
     return next;
   }
 
@@ -1739,6 +2114,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var anchor = anchorPoint || { x: view.x + view.width / 2, y: view.y + view.height / 2 };
     var ratioX = width / view.width;
     var ratioY = height / view.height;
+    closeHoverPopup();
     closePopup();
     setSvgViewRect({
       x: anchor.x - (anchor.x - view.x) * ratioX,
@@ -1749,8 +2125,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function resetViewport() {
+    closeHoverPopup();
     closePopup();
-    setPanMode(false);
+    stopCanvasPan();
     setSvgViewRect(homeViewRect);
   }
 
@@ -1762,6 +2139,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var centerY = currentView.y + currentView.height / 2;
     var currentScale = clampValue(currentView.width / previousHomeViewRect.width, 1 / maxZoom, 1);
     homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());
+    updateStickyLegendHomeMetrics();
     if (wasAtHome) {
       setSvgViewRect(homeViewRect);
       return;
@@ -1785,6 +2163,31 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       resizeFrame = null;
       refitViewportToWindow();
     });
+  }
+
+  function scheduleInitialViewportRefresh() {
+    var initialView = copyViewRect(getViewRect());
+    var requestFrame = window.requestAnimationFrame || function (callback) {
+      return window.setTimeout(callback, 16);
+    };
+
+    function refresh(refitIfStillInitial) {
+      if (refitIfStillInitial && rectsNearlyEqual(getViewRect(), initialView)) {
+        refitViewportToWindow();
+        return;
+      }
+      updateViewportControlsPosition();
+    }
+
+    requestFrame(function () {
+      refresh(false);
+      requestFrame(function () {
+        refresh(true);
+      });
+    });
+    window.setTimeout(function () {
+      refresh(true);
+    }, 80);
   }
 
   function createSvgNode(tagName, attrs) {
@@ -1832,14 +2235,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
-  function updateViewportControlState() {
-    if (!viewportControls) return;
-    Array.prototype.slice.call(viewportControls.querySelectorAll('[data-action="pan"]')).forEach(function (button) {
-      setClassToken(button, 'is-active', isPanMode);
-    });
-  }
-
   function updateViewportControlsPosition() {
+    updateStickyLegendPosition();
     if (!viewportControls) return;
     var visibleView = getVisibleViewRect();
     var view = getViewRect();
@@ -1859,23 +2256,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     updateSearchControlsPosition();
   }
 
-  function setPanMode(enabled) {
-    isPanMode = Boolean(enabled);
-    setClassToken(svg, 'gbdraw-interactive-pan-active', isPanMode);
-    if (isPanMode) {
-      if (activeHoverSvgId) {
-        setHoverHighlight(activeHoverSvgId, false);
-        activeHoverSvgId = null;
-        activeHoverKey = '';
-      }
-      closePopup();
-    }
-    if (!isPanMode) {
-      stopCanvasPan();
-    }
-    updateViewportControlState();
-  }
-
   function setupViewportControls() {
     var existing = svg.querySelector('#' + VIEWPORT_CONTROLS_ID);
     if (existing && existing.parentNode) {
@@ -1889,8 +2269,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var buttons = [
       { action: 'zoom-in', label: '+', title: 'Zoom in', width: 32 },
       { action: 'zoom-out', label: '-', title: 'Zoom out', width: 32 },
-      { action: 'reset', label: 'Original', title: 'Return to original view', width: 62 },
-      { action: 'pan', label: 'Pan', title: 'Toggle pan mode', width: 44 }
+      { action: 'reset', label: 'Original', title: 'Return to original view', width: 62 }
     ];
     var x = 0;
     buttons.forEach(function (button) {
@@ -1911,8 +2290,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         zoomViewBy(1.25);
       } else if (action === 'reset') {
         resetViewport();
-      } else if (action === 'pan') {
-        setPanMode(!isPanMode);
       }
       event.preventDefault();
       event.stopPropagation();
@@ -1925,7 +2302,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       event.preventDefault();
     });
     svg.appendChild(viewportControls);
-    updateViewportControlState();
+    syncStandaloneOverlayOrder();
     updateViewportControlsPosition();
   }
 
@@ -1938,7 +2315,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function startCanvasPan(event) {
-    if (!isPanMode || event.button !== 0) return;
+    if (event.button !== 0) return;
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
     if (closestViewportButton(event.target)) return;
@@ -1957,6 +2334,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       if (!didPan && ((dx * dx) + (dy * dy)) >= panThresholdSq) {
         didPan = true;
         if (activeCanvasPan) activeCanvasPan.didPan = true;
+        closeHoverPopup();
         closePopup();
         setClassToken(svg, 'gbdraw-interactive-panning', true);
       }
@@ -2252,6 +2630,229 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     popup = null;
   }
 
+  function closeHoverPopup() {
+    if (hoverPopupTimer) {
+      window.clearTimeout(hoverPopupTimer);
+      hoverPopupTimer = null;
+    }
+    if (hoverPopupFrame) {
+      var cancelFrame = window.cancelAnimationFrame || window.clearTimeout;
+      cancelFrame(hoverPopupFrame);
+      hoverPopupFrame = null;
+    }
+    if (hoverPopup && hoverPopup.parentNode) {
+      hoverPopup.parentNode.removeChild(hoverPopup);
+    }
+    hoverPopup = null;
+    hoverPopupFeatureId = '';
+    hoverPopupLastEvent = null;
+  }
+
+  function firstValue(value) {
+    var values = normalizeArray(value);
+    for (var i = 0; i < values.length; i += 1) {
+      var text = String(values[i] || '').trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  function firstQualifierValue(feature, key) {
+    var qualifiers = getFeatureQualifiers(feature);
+    var normalizedKey = String(key || '').trim().toLowerCase();
+    if (!normalizedKey) return '';
+    var direct = feature && feature[normalizedKey];
+    if (direct !== null && direct !== undefined && direct !== '') return firstValue(direct);
+    var exact = qualifiers[normalizedKey];
+    if (exact !== null && exact !== undefined && exact !== '') return firstValue(exact);
+    var keys = Object.keys(qualifiers);
+    for (var i = 0; i < keys.length; i += 1) {
+      if (String(keys[i]).toLowerCase() === normalizedKey) {
+        return firstValue(qualifiers[keys[i]]);
+      }
+    }
+    return '';
+  }
+
+  function featureLengthText(feature) {
+    var start = Number(feature && feature.start);
+    var end = Number(feature && feature.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
+    return String(Math.round(end - start).toLocaleString()) + ' bp';
+  }
+
+  function getFeatureDisplayColor(feature, svgId) {
+    var direct = String(feature && (feature.fill_color || feature.color) || '').trim();
+    if (direct) return direct;
+    var elements = featureElementsById.get(String(svgId || feature && feature.svg_id || '').trim()) || [];
+    for (var i = 0; i < elements.length; i += 1) {
+      var fill = String(elements[i].getAttribute('fill') || elements[i].style && elements[i].style.fill || '').trim();
+      if (fill && fill.toLowerCase() !== 'none') return fill;
+    }
+    return '#94a3b8';
+  }
+
+  function hoverTitle(feature) {
+    var primary = firstQualifierValue(feature, 'gene') ||
+      firstQualifierValue(feature, 'locus_tag') ||
+      firstQualifierValue(feature, 'product') ||
+      String(feature && (feature.display_label || feature.label || feature.svg_id) || '').trim();
+    var type = String(feature && feature.type || 'Feature').trim() || 'Feature';
+    return primary && primary !== type ? type + ': ' + primary : type;
+  }
+
+  function hoverRows(feature) {
+    var primary = String(feature && (feature.display_label || feature.label || '') || '').trim();
+    var product = firstQualifierValue(feature, 'product') || String(feature && feature.product || '').trim();
+    var gene = firstQualifierValue(feature, 'gene') || String(feature && feature.gene || '').trim();
+    var locus = firstQualifierValue(feature, 'locus_tag') || String(feature && feature.locus_tag || '').trim();
+    var note = firstQualifierValue(feature, 'note') || String(feature && feature.note || '').trim();
+    var rows = [];
+    if (gene && gene !== primary) rows.push(['Gene', gene]);
+    if (locus && locus !== primary) rows.push(['Locus', locus]);
+    if (product && product !== primary) rows.push(['Product', product, true]);
+    if (note && note !== primary && note !== product) rows.push(['Note', note, true]);
+    rows.push(['Length', featureLengthText(feature)]);
+    rows.push(['Location', locationText(feature)]);
+    rows.push(['Record', feature && feature.record_id || '']);
+    rows.push(['Orthogroup', feature && feature.orthogroup_id || '']);
+    return rows.filter(function (row) {
+      return String(row[1] == null ? '' : row[1]).trim() !== '';
+    });
+  }
+
+  function renderHoverPopupHtml(feature, svgId) {
+    var rows = hoverRows(feature);
+    var color = getFeatureDisplayColor(feature, svgId);
+    var rowHtml = rows.slice(0, 7).map(function (row) {
+      return '<div class="gfhs-row">' +
+        '<div class="gfhs-key">' + escapeHtml(row[0]) + '</div>' +
+        '<div class="gfhs-value' + (row[2] ? ' is-clamped' : '') + '">' + escapeHtml(row[1]) + '</div>' +
+        '</div>';
+    }).join('');
+    return '<div class="gfhs">' +
+      '<div class="gfhs-title">' +
+      '<div class="gfhs-swatch" style="background:' + escapeHtml(color) + '"></div>' +
+      '<div class="gfhs-text"><div class="gfhs-heading">' + escapeHtml(hoverTitle(feature)) + '</div>' +
+      '<div class="gfhs-subtitle">' + escapeHtml(locationText(feature) || String(svgId || '')) + '</div></div>' +
+      '</div>' +
+      rowHtml +
+      '</div>';
+  }
+
+  function getHoverPopupCssMetrics(viewport, rowCount) {
+    var zoomScale = getBrowserZoomScale(viewport);
+    var margin = 12;
+    var width = Math.min(340, Math.max(1, viewport.width * zoomScale - margin * 2));
+    var height = Math.min(250, Math.max(118, 68 + Math.min(Math.max(Number(rowCount) || 0, 1), 7) * 24));
+    height = Math.min(height, Math.max(1, viewport.height * zoomScale - margin * 2));
+    return {
+      zoomScale: zoomScale,
+      margin: margin,
+      width: width,
+      height: height
+    };
+  }
+
+  function positionHoverPopup(event) {
+    if (!hoverPopup) return;
+    var viewport = getViewportClientRect();
+    var rowCount = Number(hoverPopup.getAttribute('data-row-count')) || 1;
+    var metrics = getHoverPopupCssMetrics(viewport, rowCount);
+    var scale = getScreenScale();
+    var effectiveScaleX = Math.max(scale.x, 0.001) * metrics.zoomScale;
+    var effectiveScaleY = Math.max(scale.y, 0.001) * metrics.zoomScale;
+    var width = metrics.width / effectiveScaleX;
+    var height = metrics.height / effectiveScaleY;
+    var offsetX = 14 / effectiveScaleX;
+    var offsetY = 14 / effectiveScaleY;
+    var marginX = metrics.margin / effectiveScaleX;
+    var marginY = metrics.margin / effectiveScaleY;
+    var point = eventPoint(event);
+    var view = getVisibleViewRect();
+    var x = point.x + offsetX;
+    var y = point.y + offsetY;
+    if (x + width + marginX > view.x + view.width) x = point.x - width - offsetX;
+    if (y + height + marginY > view.y + view.height) y = point.y - height - offsetY;
+    x = clampValue(x, view.x + marginX, view.x + view.width - width - marginX);
+    y = clampValue(y, view.y + marginY, view.y + view.height - height - marginY);
+    hoverPopup.setAttribute('x', x);
+    hoverPopup.setAttribute('y', y);
+    hoverPopup.setAttribute('width', width);
+    hoverPopup.setAttribute('height', height);
+    var root = hoverPopup.firstElementChild;
+    if (root && root.style) {
+      root.style.width = metrics.width + 'px';
+      root.style.height = metrics.height + 'px';
+      root.style.transformOrigin = '0 0';
+      root.style.transform = 'scale(' + (1 / effectiveScaleX) + ', ' + (1 / effectiveScaleY) + ')';
+    }
+  }
+
+  function scheduleHoverPopupPosition(event) {
+    hoverPopupLastEvent = event || hoverPopupLastEvent;
+    if (!hoverPopup || hoverPopupFrame) return;
+    var requestFrame = window.requestAnimationFrame || function (callback) {
+      return window.setTimeout(callback, 16);
+    };
+    hoverPopupFrame = requestFrame(function () {
+      hoverPopupFrame = null;
+      positionHoverPopup(hoverPopupLastEvent);
+    });
+  }
+
+  function hoverPopupAllowed() {
+    if (popup || activeCanvasPan) return false;
+    if (window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      return false;
+    }
+    return true;
+  }
+
+  function showHoverPopup(feature, svgId, event) {
+    if (!feature || !hoverPopupAllowed()) {
+      closeHoverPopup();
+      return;
+    }
+    closeHoverPopup();
+    var rows = hoverRows(feature);
+    var foreignObject = document.createElementNS(SVG_NS, 'foreignObject');
+    foreignObject.setAttribute('id', 'gbdraw-feature-hover-popup');
+    foreignObject.setAttribute('class', 'gbdraw-feature-hover-popup');
+    foreignObject.setAttribute('data-row-count', String(rows.length || 1));
+    var root = document.createElementNS(XHTML_NS, 'div');
+    root.setAttribute('xmlns', XHTML_NS);
+    root.innerHTML = renderHoverPopupHtml(feature, svgId);
+    foreignObject.appendChild(root);
+    svg.appendChild(foreignObject);
+    hoverPopup = foreignObject;
+    hoverPopupFeatureId = String(svgId || '').trim();
+    hoverPopupLastEvent = event;
+    positionHoverPopup(event);
+    syncStandaloneOverlayOrder();
+  }
+
+  function scheduleHoverPopup(feature, svgId, event) {
+    if (!feature || !hoverPopupAllowed()) {
+      closeHoverPopup();
+      return;
+    }
+    hoverPopupLastEvent = event || hoverPopupLastEvent;
+    if (hoverPopup && hoverPopupFeatureId === String(svgId || '').trim()) {
+      scheduleHoverPopupPosition(event);
+      return;
+    }
+    if (hoverPopupTimer) {
+      window.clearTimeout(hoverPopupTimer);
+      hoverPopupTimer = null;
+    }
+    hoverPopupFeatureId = String(svgId || '').trim();
+    hoverPopupTimer = window.setTimeout(function () {
+      hoverPopupTimer = null;
+      showHoverPopup(feature, svgId, hoverPopupLastEvent);
+    }, 180);
+  }
+
   function keepPopupWithinVisibleView() {
     if (!popup) return;
     var viewport = getViewportClientRect();
@@ -2419,6 +3020,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function openPopup(feature, event) {
     if (!supportsStandaloneControls()) return;
+    closeHoverPopup();
     closePopup();
     var viewport = getViewportClientRect();
     var view = getVisibleViewRect();
@@ -2635,6 +3237,16 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       }
     });
 
+    root.addEventListener('wheel', function (rootEvent) {
+      rootEvent.stopPropagation();
+    }, { passive: true });
+
+    ['mouseup', 'dblclick', 'touchstart', 'touchmove'].forEach(function (eventName) {
+      root.addEventListener(eventName, function (rootEvent) {
+        rootEvent.stopPropagation();
+      }, { passive: eventName === 'touchstart' || eventName === 'touchmove' });
+    });
+
     redraw();
     foreignObject.appendChild(root);
     svg.appendChild(foreignObject);
@@ -2645,6 +3257,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (searchControls) {
       svg.appendChild(searchControls);
     }
+    syncStandaloneOverlayOrder();
   }
 
   async function copyText(value, button) {
@@ -2670,6 +3283,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   setSvgViewRect(homeViewRect);
+  setClassToken(svg, 'gbdraw-interactive-pan-enabled', true);
+  setupStickyLegend();
   setupViewportControls();
   setupSearchControls();
   window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
@@ -2678,31 +3293,53 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });
     window.visualViewport.addEventListener('resize', updateViewportControlsPosition, { passive: true });
   }
+  scheduleInitialViewportRefresh();
 
   svg.addEventListener('mousedown', startCanvasPan);
 
   svg.addEventListener('wheel', function (event) {
-    if (!isPanMode && !event.ctrlKey) return;
     var factor = event.deltaY > 0 ? 1.15 : 0.87;
     zoomViewBy(factor, eventPoint(event));
     event.preventDefault();
   }, { passive: false });
 
   svg.addEventListener('mouseover', function (event) {
-    if (isPanMode) return;
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
     var svgId = getElementFeatureId(featureElement);
     if (!svgId || !featureElementsById.has(svgId)) return;
+    var feature = featuresById.get(svgId);
     var hoverKey = getFeatureHoverKey(svgId);
-    if (activeHoverKey === hoverKey) return;
+    if (activeHoverKey === hoverKey) {
+      scheduleHoverPopup(feature, svgId, event);
+      return;
+    }
     if (activeHoverSvgId) {
       setHoverHighlight(activeHoverSvgId, false);
     }
     activeHoverSvgId = svgId;
     activeHoverKey = hoverKey;
     setHoverHighlight(svgId, true);
+    scheduleHoverPopup(feature, svgId, event);
+  });
+
+  svg.addEventListener('mousemove', function (event) {
+    if (popup && popup.contains(event.target)) {
+      closeHoverPopup();
+      return;
+    }
+    if (closestSearchControls(event.target) || closestViewportButton(event.target)) {
+      closeHoverPopup();
+      return;
+    }
+    var featureElement = closestFeature(event.target);
+    var svgId = getElementFeatureId(featureElement);
+    if (!svgId || !featureElementsById.has(svgId)) {
+      closeHoverPopup();
+      return;
+    }
+    scheduleHoverPopup(featuresById.get(svgId), svgId, event);
   });
 
   svg.addEventListener('mouseout', function (event) {
@@ -2714,6 +3351,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     setHoverHighlight(svgId, false);
     activeHoverSvgId = null;
     activeHoverKey = '';
+    closeHoverPopup();
   });
 
   svg.addEventListener('click', function (event) {
@@ -2727,6 +3365,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     var featureElement = closestFeature(event.target);
     if (!featureElement) {
+      closeHoverPopup();
       closePopup();
       return;
     }
@@ -2739,13 +3378,15 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     event.preventDefault();
     event.stopPropagation();
+    closeHoverPopup();
     openPopup(feature, event);
   });
 
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
+      closeHoverPopup();
       closePopup();
-      setPanMode(false);
+      stopCanvasPan();
     }
   });
 }());
@@ -3038,12 +3679,112 @@ const collectRenderedFeatureIds = (svg) => {
   return ids;
 };
 
+const collectRenderedFeatureEntries = (svg) => {
+  const entries = new Map();
+  if (!svg) return entries;
+  svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
+    const id = getElementFeatureId(element);
+    if (!id) return;
+    if (!entries.has(id)) {
+      entries.set(id, { id, elements: [] });
+    }
+    entries.get(id).elements.push(element);
+  });
+  return entries;
+};
+
+const normalizeColorKey = (value) => String(value || '').trim().toLowerCase();
+
+const getRenderedElementFill = (element) => {
+  const fill = String(element?.getAttribute?.('fill') || element?.style?.fill || '').trim();
+  if (fill && fill.toLowerCase() !== 'none') return fill;
+  return '';
+};
+
+const getRenderedFeatureFill = (entry) => {
+  const elements = Array.isArray(entry?.elements) ? entry.elements : [];
+  for (const element of elements) {
+    const fill = getRenderedElementFill(element);
+    if (fill) return fill;
+  }
+  return '';
+};
+
+const collectLegendCaptionsByColor = (svg) => {
+  const captionsByColor = new Map();
+  const addCaption = (color, caption) => {
+    const key = normalizeColorKey(color);
+    const text = String(caption || '').trim();
+    if (key && text && !captionsByColor.has(key)) {
+      captionsByColor.set(key, text);
+    }
+  };
+
+  const legendEntries = Array.isArray(state.legendEntries?.value) ? state.legendEntries.value : [];
+  legendEntries.forEach((entry) => addCaption(entry?.color, entry?.caption || entry?.originalCaption));
+
+  const paletteColors = state.currentColors?.value && typeof state.currentColors.value === 'object'
+    ? state.currentColors.value
+    : {};
+  Object.entries(paletteColors).forEach(([caption, color]) => addCaption(color, caption));
+
+  if (!svg) return captionsByColor;
+  const legendRoots = Array.from(svg.querySelectorAll('#legend, g[id*="legend"], [data-gbdraw-sticky-legend]'));
+  legendRoots.forEach((root) => {
+    root.querySelectorAll('rect, path, polygon').forEach((shape) => {
+      const color = getRenderedElementFill(shape);
+      if (!color) return;
+      const group = shape.closest?.('g') || root;
+      const groupText = group?.querySelector?.('text') || null;
+      const siblingText = shape.nextElementSibling?.matches?.('text') ? shape.nextElementSibling : null;
+      const textElement = groupText || siblingText;
+      const caption = String(textElement?.textContent || '').trim();
+      addCaption(color, caption);
+    });
+  });
+  return captionsByColor;
+};
+
+const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) => {
+  const fillColor = getRenderedFeatureFill(entry);
+  const caption = captionsByColor.get(normalizeColorKey(fillColor)) || 'Feature';
+  const label = caption === 'Feature' ? String(svgId) : caption;
+  const searchLabels = Array.from(new Set([label, caption, svgId].map((value) => String(value || '').trim()).filter(Boolean)));
+  return {
+    svg_id: String(svgId || ''),
+    label,
+    display_label: label,
+    search_labels: searchLabels,
+    record_id: '',
+    record_idx: null,
+    type: caption,
+    start: null,
+    end: null,
+    strand: '',
+    location: '',
+    fill_color: fillColor,
+    orthogroup_id: '',
+    orthogroup_member_count: 0,
+    orthogroup_record_coverage: 0,
+    protein_id: '',
+    source_protein_id: '',
+    orthogroup_representative: false,
+    qualifiers: {},
+    location_parts: [],
+    nucleotide_sequence: '',
+    amino_acid_sequence: '',
+    sequence_warnings: [],
+    orthogroup_member: null
+  };
+};
+
 const normalizeStandalonePopupMode = (popupMode) => (
   popupMode === 'simple' ? 'simple' : 'rich'
 );
 
 const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
-  const renderedIds = collectRenderedFeatureIds(svg);
+  const renderedEntries = collectRenderedFeatureEntries(svg);
+  const renderedIds = new Set(renderedEntries.keys());
   if (renderedIds.size === 0) return [];
 
   const normalizedPopupMode = normalizeStandalonePopupMode(popupMode);
@@ -3093,6 +3834,14 @@ const buildStandaloneFeaturePayloads = (svg, { popupMode = 'rich' } = {}) => {
     }
     payloads.push(payload);
   });
+  if (payloads.length < renderedIds.size) {
+    const captionsByColor = collectLegendCaptionsByColor(svg);
+    renderedEntries.forEach((entry, svgId) => {
+      if (seenIds.has(svgId)) return;
+      seenIds.add(svgId);
+      payloads.push(buildFallbackStandaloneFeaturePayload(svgId, entry, captionsByColor));
+    });
+  }
   return payloads;
 };
 
@@ -3105,19 +3854,28 @@ const ensureSvgDefs = (svg) => {
   return defs;
 };
 
-const ensureStandaloneFeatureGlowFilter = (svg) => {
-  const defs = ensureSvgDefs(svg);
-  const existing = defs.querySelector(`#${CSS.escape(INTERACTIVE_GLOW_FILTER_ID)}`);
+const appendStandaloneFeatureGlowFilter = (
+  defs,
+  {
+    id,
+    color,
+    opacity,
+    blurStdDeviation,
+    slope,
+    extent
+  }
+) => {
+  const existing = defs.querySelector(`#${CSS.escape(id)}`);
   if (existing?.parentNode) {
     existing.parentNode.removeChild(existing);
   }
 
   const filter = document.createElementNS(SVG_NS, 'filter');
-  filter.setAttribute('id', INTERACTIVE_GLOW_FILTER_ID);
-  filter.setAttribute('x', '-35%');
-  filter.setAttribute('y', '-35%');
-  filter.setAttribute('width', '170%');
-  filter.setAttribute('height', '170%');
+  filter.setAttribute('id', id);
+  filter.setAttribute('x', `-${extent}%`);
+  filter.setAttribute('y', `-${extent}%`);
+  filter.setAttribute('width', `${100 + (extent * 2)}%`);
+  filter.setAttribute('height', `${100 + (extent * 2)}%`);
   filter.setAttribute('color-interpolation-filters', 'sRGB');
 
   const componentTransfer = document.createElementNS(SVG_NS, 'feComponentTransfer');
@@ -3126,18 +3884,18 @@ const ensureStandaloneFeatureGlowFilter = (svg) => {
   ['R', 'G', 'B'].forEach((channel) => {
     const func = document.createElementNS(SVG_NS, `feFunc${channel}`);
     func.setAttribute('type', 'linear');
-    func.setAttribute('slope', '1.2');
+    func.setAttribute('slope', String(slope));
     componentTransfer.appendChild(func);
   });
 
   const blur = document.createElementNS(SVG_NS, 'feGaussianBlur');
   blur.setAttribute('in', 'SourceAlpha');
-  blur.setAttribute('stdDeviation', '3');
+  blur.setAttribute('stdDeviation', String(blurStdDeviation));
   blur.setAttribute('result', 'gbdrawFeatureGlowBlur');
 
   const flood = document.createElementNS(SVG_NS, 'feFlood');
-  flood.setAttribute('flood-color', '#2563eb');
-  flood.setAttribute('flood-opacity', '0.85');
+  flood.setAttribute('flood-color', color);
+  flood.setAttribute('flood-opacity', String(opacity));
   flood.setAttribute('result', 'gbdrawFeatureGlowColor');
 
   const composite = document.createElementNS(SVG_NS, 'feComposite');
@@ -3161,15 +3919,37 @@ const ensureStandaloneFeatureGlowFilter = (svg) => {
   defs.appendChild(filter);
 };
 
+const ensureStandaloneFeatureGlowFilter = (svg) => {
+  const defs = ensureSvgDefs(svg);
+  appendStandaloneFeatureGlowFilter(defs, {
+    id: INTERACTIVE_GLOW_FILTER_ID,
+    color: '#2563eb',
+    opacity: 0.85,
+    blurStdDeviation: 3,
+    slope: 1.2,
+    extent: 35
+  });
+  appendStandaloneFeatureGlowFilter(defs, {
+    id: INTERACTIVE_MATCH_GLOW_FILTER_ID,
+    color: '#fbbf24',
+    opacity: 0.32,
+    blurStdDeviation: 1.5,
+    slope: 1.04,
+    extent: 25
+  });
+};
+
 const removeExistingStandaloneInteractivityAssets = (svg) => {
   [
     INTERACTIVE_METADATA_ID,
     INTERACTIVE_STYLE_ID,
     INTERACTIVE_SCRIPT_ID,
     INTERACTIVE_GLOW_FILTER_ID,
+    INTERACTIVE_MATCH_GLOW_FILTER_ID,
     'gbdraw-viewport-controls',
     'gbdraw-feature-search-controls',
-    'gbdraw-feature-popup'
+    'gbdraw-feature-popup',
+    'gbdraw-feature-hover-popup'
   ].forEach((id) => {
     const element = svg.querySelector(`#${CSS.escape(id)}`);
     if (element?.parentNode) {

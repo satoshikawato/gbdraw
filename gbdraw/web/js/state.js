@@ -181,18 +181,6 @@ const files = reactive({
   qualifier_priority: null
 });
 
-const circularConservation = reactive({
-  enabled: false,
-  source: 'losat',
-  losat_program: 'blastn',
-  subject_gencode: 1,
-  reference: 'auto',
-  labels: '',
-  series: [],
-  ring_width: null,
-  ring_gap: null
-});
-
 let linearSeqUidCounter = 0;
 
 const generateLinearSeqUid = () => {
@@ -311,10 +299,11 @@ export const collapseEmptyLinearSeqList = (items) => {
 const linearSeqs = reactive(normalizeLinearSeqList([]));
 
 const defaultDirectionalFeatureTypes = ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA'];
-const defaultFeatureShapes = Object.fromEntries(defaultDirectionalFeatureTypes.map((featureType) => [featureType, 'arrow']));
 
-// Configuration Forms
-const form = reactive({
+export const createDefaultFeatureShapes = () =>
+  Object.fromEntries(defaultDirectionalFeatureTypes.map((featureType) => [featureType, 'arrow']));
+
+export const createDefaultForm = () => ({
   prefix: '',
   species: '',
   strain: '',
@@ -338,11 +327,10 @@ const form = reactive({
   normalize_length: false
 });
 
-// Extended Advanced Config
-const adv = reactive({
-  rich_feature_popup: false,
+export const createDefaultAdv = () => ({
+  rich_feature_popup: true,
   features: ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'repeat_region'],
-  feature_shapes: { ...defaultFeatureShapes },
+  feature_shapes: createDefaultFeatureShapes(),
   window_size: null,
   step_size: null,
   nt: 'GC',
@@ -441,7 +429,7 @@ const adv = reactive({
   inner_label_y_offset: null
 });
 
-const losat = reactive({
+export const createDefaultLosat = () => ({
   outfmt: '6',
   parallelWorkers: undefined,
   executionMode: 'auto',
@@ -468,6 +456,70 @@ const losat = reactive({
   }
 });
 
+export const createDefaultCircularConservation = () => ({
+  enabled: false,
+  source: 'losat',
+  losat_program: 'blastn',
+  subject_gencode: 1,
+  reference: 'auto',
+  labels: '',
+  series: [],
+  ring_width: null,
+  ring_gap: null
+});
+
+export const createDefaultSpecificRule = () => ({
+  feat: 'CDS',
+  qual: 'product',
+  val: '',
+  color: '#ff0000',
+  cap: ''
+});
+
+export const createDefaultPriorityRule = () => ({
+  feat: 'CDS',
+  order: 'product,gene,locus_tag'
+});
+
+export const createDefaultPaletteDraftState = () => ({
+  selectedPalette: 'default',
+  currentColors: {},
+  paletteInstantPreviewEnabled: false,
+  appliedPaletteName: 'default',
+  appliedPaletteColors: {},
+  pendingPaletteName: '',
+  pendingPaletteColors: {}
+});
+
+export const createDefaultLabelFilterState = () => ({
+  filterMode: 'None',
+  manualBlacklist: 'hypothetical, uncharacterized, putative, unknown',
+  manualWhitelist: []
+});
+
+export const createDefaultEditorDraftState = () => ({
+  selectedSpecificPreset: '',
+  specificRulePresetLoading: false,
+  downloadDpi: 300,
+  featurePanelTab: 'colors',
+  newColorFeat: 'gene',
+  newColorVal: '#d3d3d3',
+  newFeatureToAdd: 'mobile_element',
+  newLegendCaption: '',
+  newLegendColor: '#808080'
+});
+
+const circularConservation = reactive(createDefaultCircularConservation());
+const defaultEditorDraftState = createDefaultEditorDraftState();
+
+// Configuration Forms
+const form = reactive(createDefaultForm());
+
+// Extended Advanced Config
+const adv = reactive(createDefaultAdv());
+
+const losat = reactive(createDefaultLosat());
+
 const losatCacheInfo = ref([]);
 const losatThreadingStatus = ref({
   state: 'unknown',
@@ -490,27 +542,23 @@ const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 // Color & Filter State
 const paletteDefinitions = ref({});
 const paletteNames = ref(['default']);
-const selectedPalette = ref('default');
-const currentColors = ref({});
-const paletteInstantPreviewEnabled = ref(false);
-const appliedPaletteName = ref('default');
-const appliedPaletteColors = ref({});
-const pendingPaletteName = ref('');
-const pendingPaletteColors = ref({});
+const defaultPaletteDraftState = createDefaultPaletteDraftState();
+const selectedPalette = ref(defaultPaletteDraftState.selectedPalette);
+const currentColors = ref(defaultPaletteDraftState.currentColors);
+const paletteInstantPreviewEnabled = ref(defaultPaletteDraftState.paletteInstantPreviewEnabled);
+const appliedPaletteName = ref(defaultPaletteDraftState.appliedPaletteName);
+const appliedPaletteColors = ref(defaultPaletteDraftState.appliedPaletteColors);
+const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
+const pendingPaletteColors = ref(defaultPaletteDraftState.pendingPaletteColors);
 const hasPendingPaletteDraft = computed(
   () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
 );
-const filterMode = ref('None');
-const manualBlacklist = ref('hypothetical, uncharacterized, putative, unknown');
-const manualWhitelist = reactive([]);
+const defaultLabelFilterState = createDefaultLabelFilterState();
+const filterMode = ref(defaultLabelFilterState.filterMode);
+const manualBlacklist = ref(defaultLabelFilterState.manualBlacklist);
+const manualWhitelist = reactive(defaultLabelFilterState.manualWhitelist);
 const manualSpecificRules = reactive([]);
-const newSpecRule = reactive({
-  feat: 'CDS',
-  qual: 'product',
-  val: '',
-  color: '#ff0000',
-  cap: ''
-});
+const newSpecRule = reactive(createDefaultSpecificRule());
 const specificRulePresets = [
   {
     id: 'pharokka',
@@ -523,9 +571,9 @@ const specificRulePresets = [
     path: 'presets/bakta_color_table.txt'
   }
 ];
-const selectedSpecificPreset = ref('');
-const specificRulePresetLoading = ref(false);
-const downloadDpi = ref(300);
+const selectedSpecificPreset = ref(defaultEditorDraftState.selectedSpecificPreset);
+const specificRulePresetLoading = ref(defaultEditorDraftState.specificRulePresetLoading);
+const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
@@ -539,12 +587,20 @@ const featuresBySvgId = computed(() => {
   }
   return indexed;
 });
+const featureEditorStatus = reactive({
+  status: 'idle',
+  generationId: 0,
+  error: null,
+  summaryCount: 0,
+  detailsCacheSize: 0
+});
 const featureExtractionPending = ref(false);
 const featureExtractionError = ref(null);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
 const showFeaturePanel = ref(false);
-const featurePanelTab = ref('colors'); // 'colors' | 'labels'
+const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
+const featureSearchInput = ref('');
 const featureSearch = ref('');
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off'}
@@ -649,8 +705,8 @@ const legendEntries = ref([]); // [{caption, originalCaption, color, yPos, showS
 const deletedLegendEntries = ref([]); // Track deleted entries for restoration
 const originalLegendOrder = ref([]); // Store original order from generation
 const originalLegendColors = ref({}); // Store original colors: { caption: color }
-const newLegendCaption = ref('');
-const newLegendColor = ref('#808080');
+const newLegendCaption = ref(defaultEditorDraftState.newLegendCaption);
+const newLegendColor = ref(defaultEditorDraftState.newLegendColor);
 
 // Legend stroke overrides: { caption: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth } }
 const legendStrokeOverrides = reactive({});
@@ -797,13 +853,13 @@ const featureKeys = [
 
 const defaultColorKeys = [...featureKeys, 'default', 'skew_high', 'skew_low', 'gc_content', ...COMPARISON_COLOR_KEYS];
 
-const newColorFeat = ref('gene');
-const newColorVal = ref('#d3d3d3');
+const newColorFeat = ref(defaultEditorDraftState.newColorFeat);
+const newColorVal = ref(defaultEditorDraftState.newColorVal);
 
 const manualPriorityRules = reactive([]);
-const newPriorityRule = reactive({ feat: 'CDS', order: 'product,gene,locus_tag' });
+const newPriorityRule = reactive(createDefaultPriorityRule());
 
-const newFeatureToAdd = ref('mobile_element');
+const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 
 const addedLegendCaptions = ref(new Set());
 const fileLegendCaptions = ref(new Set());
@@ -837,6 +893,42 @@ const filteredFeatures = computed(() => {
     );
   }
   return features;
+});
+
+const FEATURE_ROW_HEIGHT_PX = 64;
+const FEATURE_LIST_OVERSCAN = 8;
+const featureListScrollTop = ref(0);
+const featureListViewportHeight = ref(520);
+const isFeatureDrawerMounted = computed(
+  () => Boolean(svgContent.value && showRightDrawer.value && rightDrawerTab.value === 'features')
+);
+const featureListStartIndex = computed(() => {
+  if (!isFeatureDrawerMounted.value) return 0;
+  return Math.max(0, Math.floor(featureListScrollTop.value / FEATURE_ROW_HEIGHT_PX) - FEATURE_LIST_OVERSCAN);
+});
+const featureListEndIndex = computed(() => {
+  if (!isFeatureDrawerMounted.value) return 0;
+  const visibleCount = Math.ceil(featureListViewportHeight.value / FEATURE_ROW_HEIGHT_PX) + (FEATURE_LIST_OVERSCAN * 2);
+  return Math.min(filteredFeatures.value.length, featureListStartIndex.value + visibleCount);
+});
+const visibleFeatureRows = computed(() => {
+  if (!isFeatureDrawerMounted.value) return [];
+  return filteredFeatures.value.slice(featureListStartIndex.value, featureListEndIndex.value);
+});
+const featureListTopSpacerPx = computed(() => featureListStartIndex.value * FEATURE_ROW_HEIGHT_PX);
+const featureListBottomSpacerPx = computed(
+  () => Math.max(0, (filteredFeatures.value.length - featureListEndIndex.value) * FEATURE_ROW_HEIGHT_PX)
+);
+const featureEditorStatusText = computed(() => {
+  const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
+  if (featureEditorStatus.status === 'pending-summary' || featureExtractionPending.value) {
+    return count > 0 ? `${count.toLocaleString()} features updating...` : 'Preparing features...';
+  }
+  if (featureEditorStatus.status === 'failed' || featureExtractionError.value) {
+    return 'Feature editor unavailable';
+  }
+  if (count > 0) return `${count.toLocaleString()} features ready`;
+  return 'No features ready';
 });
 
 const filteredEditableLabels = computed(() => {
@@ -928,13 +1020,22 @@ export const state = {
   downloadDpi,
   extractedFeatures,
   featuresBySvgId,
+  featureEditorStatus,
+  featureEditorStatusText,
   featureExtractionPending,
   featureExtractionError,
   featureRecordIds,
   selectedFeatureRecordIdx,
   showFeaturePanel,
   featurePanelTab,
+  featureSearchInput,
   featureSearch,
+  featureListScrollTop,
+  featureListViewportHeight,
+  isFeatureDrawerMounted,
+  visibleFeatureRows,
+  featureListTopSpacerPx,
+  featureListBottomSpacerPx,
   featureColorOverrides,
   featureVisibilityOverrides,
   labelSearch,
