@@ -8,6 +8,7 @@ import {
 } from '../services/diagram-generation.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
 import {
+  applyCircularSuppressControlsToSlots,
   applyCircularTrackOrderPlacements,
   buildCircularTrackSlotSpec,
   clampCircularTrackAxisIndex,
@@ -2035,11 +2036,14 @@ json.dumps({
           Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots.length : 0
         );
         const circularTrackSlots = useCircularTrackSlots
-          ? applyCircularTrackOrderPlacements(
-              adv.circular_track_slots,
-              adv.nt,
-              form.track_type,
-              circularTrackAxisIndex
+          ? applyCircularSuppressControlsToSlots(
+              applyCircularTrackOrderPlacements(
+                adv.circular_track_slots,
+                adv.nt,
+                form.track_type,
+                circularTrackAxisIndex
+              ),
+              form
             )
           : [];
         if (useCircularTrackSlots) {
@@ -2156,10 +2160,8 @@ json.dumps({
           }
           args.push('--label_rendering', normalizedLabelRendering);
         }
-        if (!useCircularTrackSlots) {
-          if (form.suppress_gc) args.push('--suppress_gc');
-          if (form.suppress_skew) args.push('--suppress_skew');
-        }
+        if (form.suppress_gc) args.push('--suppress_gc');
+        if (form.suppress_skew) args.push('--suppress_skew');
         if (form.multi_record_canvas) {
           if (!multiCanvasSupport.circular) {
             throw new Error(

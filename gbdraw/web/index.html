@@ -1472,11 +1472,11 @@
                                         <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (opt-in)."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox">
+                                        <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Hide GC Content <help-tip text="Suppress the GC content track."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox">
+                                        <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Hide GC Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -1559,7 +1559,14 @@
                                                         <span class="h-px flex-1 bg-slate-300"></span>
                                                     </div>
                                                     <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1">
-                                                        <input type="checkbox" v-model="entry.slot.enabled" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'">
+                                                        <input
+                                                            type="checkbox"
+                                                            :checked="circularTrackSlotEffectiveEnabled(entry.slot)"
+                                                            @change="setCircularTrackSlotEnabled(entry.slot, $event.target.checked)"
+                                                            class="form-checkbox"
+                                                            :disabled="circularTrackSlotHiddenBySuppress(entry.slot)"
+                                                            :title="circularTrackSlotSuppressMessage(entry.slot) || (entry.slot.enabled ? 'Enabled' : 'Disabled')"
+                                                        >
                                                         <input v-model.trim="entry.slot.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id">
                                                         <select
                                                             :value="entry.slot.renderer"
@@ -1579,6 +1586,10 @@
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : 'Duplicate'"><i class="ph ph-copy"></i></button>
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash"></i></button>
                                                         </div>
+                                                    </div>
+                                                    <div v-if="circularTrackSlotHiddenBySuppress(entry.slot)" class="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
+                                                        <i class="ph ph-eye-slash"></i>
+                                                        <span>{{ circularTrackSlotSuppressMessage(entry.slot) }}</span>
                                                     </div>
                                                     <div v-if="isManagedCircularConservationSlot(entry.slot)" class="grid grid-cols-[1.15rem_minmax(0,1fr)] gap-1.5 items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                         <span class="h-4 w-4 rounded border border-slate-300" :style="{ backgroundColor: circularTrackSlotColor(entry.slot) || '#94a3b8' }"></span>
