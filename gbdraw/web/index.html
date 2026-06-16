@@ -3281,9 +3281,12 @@
                         </div>
                     </div>
 
-                    <div v-show="rightDrawerTab === 'features'" class="flex-1 min-h-0 flex flex-col">
+                    <div v-if="isFeatureDrawerMounted" class="flex-1 min-h-0 flex flex-col">
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
-                            <p class="text-xs font-semibold text-slate-600">Features ({{ filteredFeatures.length }})</p>
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-xs font-semibold text-slate-600">Features ({{ filteredFeatures.length }})</p>
+                                <span class="text-[10px] text-slate-400 truncate" :title="featureEditorStatus.error || featureEditorStatusText">{{ featureEditorStatusText }}</span>
+                            </div>
                         </div>
                         <div v-if="featureRecordIds.length > 1" class="px-4 py-2 border-b border-slate-100 shrink-0">
                             <select v-model="selectedFeatureRecordIdx" class="form-select text-xs w-full">
@@ -3291,13 +3294,14 @@
                             </select>
                         </div>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0">
-                            <input v-model="featureSearch" placeholder="Search by feature or annotation..." class="form-input text-xs w-full">
+                            <input v-model="featureSearchInput" placeholder="Search by feature or annotation..." class="form-input text-xs w-full">
                         </div>
-                        <div class="flex-grow overflow-y-auto custom-scrollbar">
+                        <div ref="featureListScrollRef" class="flex-grow overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
                             <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
-                                <i class="ph ph-circle-notch animate-spin"></i> Loading features...
+                                <i class="ph ph-circle-notch animate-spin"></i> Preparing features...
                             </div>
-                            <div v-for="feat in filteredFeatures" :key="feat.id" @click="openFeatureEditorFromList(feat, $event)" class="px-3 py-2 border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
+                            <div v-if="featureListTopSpacerPx > 0" :style="{ height: `${featureListTopSpacerPx}px` }" aria-hidden="true"></div>
+                            <div v-for="feat in visibleFeatureRows" :key="feat.id" @click="openFeatureEditorFromList(feat, $event)" class="px-3 py-2 min-h-[64px] border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
                                 <div class="flex items-center gap-2">
                                     <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
                                     <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">{{ feat.start }}..{{ feat.end }}</span>
@@ -3313,6 +3317,7 @@
                                 </p>
                                 <p class="text-[10px] text-slate-400 truncate">Visibility: {{ getFeatureVisibility(feat) }}</p>
                             </div>
+                            <div v-if="featureListBottomSpacerPx > 0" :style="{ height: `${featureListBottomSpacerPx}px` }" aria-hidden="true"></div>
                             <div v-if="!featureExtractionPending && filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">No features found</div>
                         </div>
                         <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50 space-y-2">

@@ -587,12 +587,20 @@ const featuresBySvgId = computed(() => {
   }
   return indexed;
 });
+const featureEditorStatus = reactive({
+  status: 'idle',
+  generationId: 0,
+  error: null,
+  summaryCount: 0,
+  detailsCacheSize: 0
+});
 const featureExtractionPending = ref(false);
 const featureExtractionError = ref(null);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
 const showFeaturePanel = ref(false);
 const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
+const featureSearchInput = ref('');
 const featureSearch = ref('');
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off'}
@@ -887,6 +895,42 @@ const filteredFeatures = computed(() => {
   return features;
 });
 
+const FEATURE_ROW_HEIGHT_PX = 64;
+const FEATURE_LIST_OVERSCAN = 8;
+const featureListScrollTop = ref(0);
+const featureListViewportHeight = ref(520);
+const isFeatureDrawerMounted = computed(
+  () => Boolean(svgContent.value && showRightDrawer.value && rightDrawerTab.value === 'features')
+);
+const featureListStartIndex = computed(() => {
+  if (!isFeatureDrawerMounted.value) return 0;
+  return Math.max(0, Math.floor(featureListScrollTop.value / FEATURE_ROW_HEIGHT_PX) - FEATURE_LIST_OVERSCAN);
+});
+const featureListEndIndex = computed(() => {
+  if (!isFeatureDrawerMounted.value) return 0;
+  const visibleCount = Math.ceil(featureListViewportHeight.value / FEATURE_ROW_HEIGHT_PX) + (FEATURE_LIST_OVERSCAN * 2);
+  return Math.min(filteredFeatures.value.length, featureListStartIndex.value + visibleCount);
+});
+const visibleFeatureRows = computed(() => {
+  if (!isFeatureDrawerMounted.value) return [];
+  return filteredFeatures.value.slice(featureListStartIndex.value, featureListEndIndex.value);
+});
+const featureListTopSpacerPx = computed(() => featureListStartIndex.value * FEATURE_ROW_HEIGHT_PX);
+const featureListBottomSpacerPx = computed(
+  () => Math.max(0, (filteredFeatures.value.length - featureListEndIndex.value) * FEATURE_ROW_HEIGHT_PX)
+);
+const featureEditorStatusText = computed(() => {
+  const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
+  if (featureEditorStatus.status === 'pending-summary' || featureExtractionPending.value) {
+    return count > 0 ? `${count.toLocaleString()} features updating...` : 'Preparing features...';
+  }
+  if (featureEditorStatus.status === 'failed' || featureExtractionError.value) {
+    return 'Feature editor unavailable';
+  }
+  if (count > 0) return `${count.toLocaleString()} features ready`;
+  return 'No features ready';
+});
+
 const filteredEditableLabels = computed(() => {
   const query = String(labelSearch.value || '').trim().toLowerCase();
   if (!query) return editableLabels.value;
@@ -976,13 +1020,22 @@ export const state = {
   downloadDpi,
   extractedFeatures,
   featuresBySvgId,
+  featureEditorStatus,
+  featureEditorStatusText,
   featureExtractionPending,
   featureExtractionError,
   featureRecordIds,
   selectedFeatureRecordIdx,
   showFeaturePanel,
   featurePanelTab,
+  featureSearchInput,
   featureSearch,
+  featureListScrollTop,
+  featureListViewportHeight,
+  isFeatureDrawerMounted,
+  visibleFeatureRows,
+  featureListTopSpacerPx,
+  featureListBottomSpacerPx,
   featureColorOverrides,
   featureVisibilityOverrides,
   labelSearch,

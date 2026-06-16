@@ -17,6 +17,7 @@ let worker = null;
 let workerInitialized = false;
 let initState = null;
 let activeRequest = null;
+const activeFeatureRequests = new Set();
 let nextRequestId = 1;
 
 const buildInitPayload = (id) => {
@@ -58,6 +59,11 @@ const rejectPendingInit = (error) => {
 const terminateWorker = (error = null) => {
   if (error) rejectPendingInit(error);
   else clearInitState();
+  activeFeatureRequests.forEach((request) => {
+    request.cleanup?.();
+    request.reject(error || new Error('Diagram generation worker was terminated.'));
+  });
+  activeFeatureRequests.clear();
   if (worker) {
     worker.terminate();
     worker = null;
@@ -214,6 +220,80 @@ export const runDiagramGeneration = (payload = {}) => {
     } catch (error) {
       if (request.settled || activeRequest !== request) return;
       settleActiveRequest(request, () => rejectRequest(error));
+    }
+  })();
+
+  return promise;
+};
+
+export const runFeatureExtraction = (payload = {}) => {
+  const requestId = nextRequestId;
+  nextRequestId += 1;
+
+  let resolveRequest;
+  let rejectRequest;
+  const promise = new Promise((resolve, reject) => {
+    resolveRequest = resolve;
+    rejectRequest = reject;
+  });
+
+  (async () => {
+    let request = null;
+    try {
+      const currentWorker = await ensureWorkerInitialized();
+      request = {
+        requestId,
+        cleanup: null,
+        reject: rejectRequest
+      };
+
+      const cleanup = () => {
+        currentWorker.removeEventListener('message', handleMessage);
+        currentWorker.removeEventListener('error', handleError);
+        currentWorker.removeEventListener('messageerror', handleMessageError);
+        activeFeatureRequests.delete(request);
+      };
+      request.cleanup = cleanup;
+      activeFeatureRequests.add(request);
+
+      const fail = (error) => {
+        cleanup();
+        rejectRequest(error);
+      };
+
+      function handleMessage(event) {
+        const data = event.data || {};
+        if (data.type !== 'feature-extraction' || data.requestId !== requestId) return;
+        cleanup();
+        if (data.ok) {
+          resolveRequest({ requestId, result: data.result });
+          return;
+        }
+        rejectRequest(deserializeWorkerError(data.error, 'Feature extraction failed'));
+      }
+
+      function handleError(event) {
+        fail(new Error(event.message || 'Diagram generation worker error'));
+      }
+
+      function handleMessageError() {
+        fail(new Error('Diagram generation worker message could not be decoded'));
+      }
+
+      currentWorker.addEventListener('message', handleMessage);
+      currentWorker.addEventListener('error', handleError);
+      currentWorker.addEventListener('messageerror', handleMessageError);
+      currentWorker.postMessage(
+        {
+          type: 'feature-extraction',
+          requestId,
+          payload
+        },
+        collectTransferList(payload)
+      );
+    } catch (error) {
+      request?.cleanup?.();
+      rejectRequest(error);
     }
   })();
 

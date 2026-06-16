@@ -120,6 +120,40 @@ const runGeneration = async ({
   }
 };
 
+const runFeatureExtraction = async ({
+  path,
+  files = [],
+  regionSpec = null,
+  recordSelector = null,
+  reverseFlag = false,
+  selectedFeatures = null
+} = {}) => {
+  if (!runtime?.pyodide) {
+    throw new Error('Diagram generation worker has not been initialized.');
+  }
+  const normalizedPath = String(path || '').trim();
+  if (!normalizedPath) {
+    throw new Error('Feature extraction requires a GenBank input path.');
+  }
+
+  const { pyodide } = runtime;
+  writeGenerationFiles(pyodide, files);
+
+  const extractFeatures = pyodide.globals.get('extract_features_from_genbank');
+  try {
+    const resultJson = extractFeatures(
+      normalizedPath,
+      regionSpec || null,
+      recordSelector || null,
+      reverseFlag ? '1' : '0',
+      Array.isArray(selectedFeatures) && selectedFeatures.length ? JSON.stringify(selectedFeatures) : null
+    );
+    return JSON.parse(String(resultJson || 'null'));
+  } finally {
+    extractFeatures.destroy?.();
+  }
+};
+
 self.onmessage = async (event) => {
   const data = event.data || {};
   const { id, requestId, type } = data;
@@ -131,6 +165,11 @@ self.onmessage = async (event) => {
     }
     if (type === 'ping') {
       self.postMessage({ id, type: 'ping', ok: true });
+      return;
+    }
+    if (type === 'feature-extraction') {
+      const result = await runFeatureExtraction(data.payload || {});
+      self.postMessage({ requestId, type: 'feature-extraction', ok: true, result });
       return;
     }
     if (type !== 'run') {

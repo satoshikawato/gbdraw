@@ -19,16 +19,45 @@ export const getFeatureIdentity = (element) =>
     ''
   ).trim();
 
-export const getFeatureElements = (svg, featureId) => {
+const featureElementIndexCache = new WeakMap();
+
+export const buildFeatureElementIndex = (svg, { markCursor = false } = {}) => {
+  const indexed = new Map();
+  if (!svg) return indexed;
+
+  Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).forEach((element) => {
+    const id = getFeatureIdentity(element);
+    if (!id) return;
+    if (!indexed.has(id)) indexed.set(id, []);
+    indexed.get(id).push(element);
+    if (markCursor && element?.style) element.style.cursor = 'pointer';
+  });
+  featureElementIndexCache.set(svg, indexed);
+  return indexed;
+};
+
+export const getFeatureElementIndex = (svg, options = {}) => {
+  if (!svg) return new Map();
+  if (options.rebuild || !featureElementIndexCache.has(svg)) {
+    return buildFeatureElementIndex(svg, options);
+  }
+  return featureElementIndexCache.get(svg) || new Map();
+};
+
+export const clearFeatureElementIndex = (svg) => {
+  if (svg) featureElementIndexCache.delete(svg);
+};
+
+export const getFeatureElements = (svg, featureId, featureIndex = null) => {
   const normalizedId = String(featureId || '').trim();
   if (!svg || !normalizedId) return [];
 
-  const byData = Array.from(svg.querySelectorAll(`[${FEATURE_ID_ATTRIBUTE}]`)).filter(
-    (element) => String(element.getAttribute(FEATURE_ID_ATTRIBUTE) || '').trim() === normalizedId
-  );
-  if (byData.length > 0) return byData;
+  const indexed = featureIndex || featureElementIndexCache.get(svg);
+  const indexedElements = indexed?.get?.(normalizedId);
+  if (indexedElements?.length) return indexedElements;
 
-  return Array.from(svg.querySelectorAll(`#${CSS.escape(normalizedId)}`));
+  const byId = svg.getElementById?.(normalizedId) || svg.querySelector?.(`#${CSS.escape(normalizedId)}`);
+  return byId ? [byId] : [];
 };
 
 export const createFeatureSvgActions = ({
@@ -338,18 +367,11 @@ export const createFeatureSvgActions = ({
     }
 
     const queryStartedAt = getNow();
-    const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR));
+    const pathsByIdMap = getFeatureElementIndex(svg, { rebuild: true, markCursor: true });
+    const featurePathCount = Array.from(pathsByIdMap.values()).reduce((sum, elements) => sum + elements.length, 0);
     const queryDuration = getNow() - queryStartedAt;
 
     const indexStartedAt = getNow();
-    const pathsByIdMap = new Map();
-    featurePaths.forEach((path) => {
-      const id = getFeatureIdentity(path);
-      if (!id) return;
-      if (!pathsByIdMap.has(id)) pathsByIdMap.set(id, []);
-      pathsByIdMap.get(id).push(path);
-      path.style.cursor = 'pointer';
-    });
     const featureLookup = buildFeatureLookup();
     const featureIdsByOrthogroupId = new Map();
     featureLookup.forEach((feat, svgId) => {
@@ -492,11 +514,11 @@ export const createFeatureSvgActions = ({
     }
 
     console.groupCollapsed('post-gbdraw timing');
-    console.info(`feature handler querySelectorAll: ${formatDuration(queryDuration)}`);
+    console.info(`feature handler index querySelectorAll: ${formatDuration(queryDuration)}`);
     console.info(`feature handler index/delegation setup: ${formatDuration(indexDuration)}`);
     console.groupEnd();
     console.log(
-      `Delegated feature handlers for ${featurePaths.length} feature paths (${pathsByIdMap.size} unique features)`
+      `Delegated feature handlers for ${featurePathCount} feature paths (${pathsByIdMap.size} unique features)`
     );
   };
 

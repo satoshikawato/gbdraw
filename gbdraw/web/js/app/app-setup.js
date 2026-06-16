@@ -107,13 +107,22 @@ export const createAppSetup = () => {
     specificRulePresetLoading,
     downloadDpi,
     extractedFeatures,
+    featureEditorStatus,
+    featureEditorStatusText,
     featureExtractionPending,
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
     showFeaturePanel,
     featurePanelTab,
+    featureSearchInput,
     featureSearch,
+    featureListScrollTop,
+    featureListViewportHeight,
+    isFeatureDrawerMounted,
+    visibleFeatureRows,
+    featureListTopSpacerPx,
+    featureListBottomSpacerPx,
     labelSearch,
     editableLabels,
     filteredEditableLabels,
@@ -201,8 +210,38 @@ export const createAppSetup = () => {
     svgActions
   });
 
+  let featureSearchDebounceId = null;
+  const featureListScrollRef = ref(null);
+  const resetFeatureListScroll = () => {
+    featureListScrollTop.value = 0;
+    if (featureListScrollRef.value) featureListScrollRef.value.scrollTop = 0;
+  };
+  const handleFeatureListScroll = (event) => {
+    const target = event?.currentTarget || event?.target;
+    featureListScrollTop.value = Number(target?.scrollTop || 0);
+    const nextHeight = Number(target?.clientHeight || 0);
+    if (nextHeight > 0) featureListViewportHeight.value = nextHeight;
+  };
+  watch(featureSearchInput, (value) => {
+    if (featureSearchDebounceId !== null) {
+      clearTimeout(featureSearchDebounceId);
+      featureSearchDebounceId = null;
+    }
+    const delay = String(value || '').trim() ? 120 : 0;
+    featureSearchDebounceId = setTimeout(() => {
+      featureSearch.value = String(value || '');
+      resetFeatureListScroll();
+      featureSearchDebounceId = null;
+    }, delay);
+  });
+  watch(
+    () => [selectedFeatureRecordIdx.value, showRightDrawer.value, rightDrawerTab.value, extractedFeatures.value.length],
+    resetFeatureListScroll
+  );
+
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
   onUnmounted(() => {
+    if (featureSearchDebounceId !== null) clearTimeout(featureSearchDebounceId);
     disposeDiagramGenerationWorker();
   });
 
@@ -1494,13 +1533,22 @@ export const createAppSetup = () => {
     applySpecificRulePreset,
     clearAllSpecificRules,
     extractedFeatures,
+    featureEditorStatus,
+    featureEditorStatusText,
     featureExtractionPending,
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
     showFeaturePanel,
     featurePanelTab,
+    featureSearchInput,
     featureSearch,
+    visibleFeatureRows,
+    featureListTopSpacerPx,
+    featureListBottomSpacerPx,
+    isFeatureDrawerMounted,
+    featureListScrollRef,
+    handleFeatureListScroll,
     labelSearch,
     editableLabels,
     filteredEditableLabels,
