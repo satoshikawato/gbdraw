@@ -13,6 +13,13 @@ import {
   resolveLinearTrackAxisIndex
 } from '../app/linear-track-slots.js';
 import {
+  depthFileSlotsFromValue,
+  dropInvalidManagedDepthSlots,
+  reconcileDepthTracksToFiles,
+  syncDepthSlotLabels,
+  uploadedDepthFileCount
+} from '../app/depth-track-state.js';
+import {
   DEPTH_FILE_ENCODING,
   decodeDepthText,
   encodeDepthText,
@@ -1282,6 +1289,87 @@ const applyFiles = (filesData) => {
   return { collapsedLinearSeqs: false };
 };
 
+const representativeLinearDepthFiles = () => {
+  const rows = state.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+  const maxDepthTracks = Math.max(...rows.map((row) => row.length), 0);
+  return Array.from({ length: maxDepthTracks }, (_, trackIndex) => (
+    rows.map((row) => row[trackIndex]).find(Boolean) || null
+  ));
+};
+
+const reconcileDepthTrackStateAfterSessionFiles = () => {
+  const circularDepthCount = uploadedDepthFileCount(state.files.c_depth);
+  const linearDepthCount = state.linearSeqs.reduce(
+    (maxCount, seq) => Math.max(maxCount, uploadedDepthFileCount(seq.depth)),
+    0
+  );
+  const targetDepthTrackCount = Math.max(1, circularDepthCount, linearDepthCount);
+  const depthFilesForTracks = circularDepthCount > 0
+    ? depthFileSlotsFromValue(state.files.c_depth).filter(Boolean)
+    : representativeLinearDepthFiles();
+  const normalizedTracks = reconcileDepthTracksToFiles({
+    files: depthFilesForTracks,
+    depthTracks: state.adv.depth_tracks,
+    targetCount: targetDepthTrackCount,
+    defaults: {
+      depthColor: state.adv.depth_color,
+      depthHeight: state.adv.depth_height,
+      largeTickInterval: state.adv.depth_tick_interval,
+      smallTickInterval: state.adv.depth_small_tick_interval,
+      tickFontSize: state.adv.depth_tick_font_size
+    }
+  });
+  state.adv.depth_tracks.splice(0, state.adv.depth_tracks.length, ...normalizedTracks);
+
+  state.adv.circular_track_slots.splice(
+    0,
+    state.adv.circular_track_slots.length,
+    ...dropInvalidManagedDepthSlots({
+      slots: state.adv.circular_track_slots,
+      activeCount: circularDepthCount
+    })
+  );
+  syncDepthSlotLabels({
+    slots: state.adv.circular_track_slots,
+    depthTracks: state.adv.depth_tracks,
+    activeCount: circularDepthCount
+  });
+  state.adv.circular_track_slots.splice(
+    0,
+    state.adv.circular_track_slots.length,
+    ...applyCircularTrackOrderPlacements(
+      state.adv.circular_track_slots,
+      state.adv.nt,
+      state.form.track_type,
+      state.adv.circular_track_slots_axis_index
+    )
+  );
+
+  state.adv.linear_track_slots.splice(
+    0,
+    state.adv.linear_track_slots.length,
+    ...dropInvalidManagedDepthSlots({
+      slots: state.adv.linear_track_slots,
+      activeCount: linearDepthCount
+    })
+  );
+  syncDepthSlotLabels({
+    slots: state.adv.linear_track_slots,
+    depthTracks: state.adv.depth_tracks,
+    activeCount: linearDepthCount
+  });
+  state.adv.linear_track_slots.splice(
+    0,
+    state.adv.linear_track_slots.length,
+    ...applyLinearTrackOrderPlacements(
+      state.adv.linear_track_slots,
+      state.adv.linear_track_slots_axis_index,
+      state.adv.nt,
+      state.form.linear_track_layout
+    )
+  );
+};
+
 export const exportConfig = () => {
   const configData = buildConfigData();
   downloadJson(configData, 'gbdraw_config.json');
@@ -1538,6 +1626,7 @@ export const importSession = async (e) => {
     restoreSessionPlotTitlePositions(ui);
 
     const { collapsedLinearSeqs } = applyFiles(data.files);
+    reconcileDepthTrackStateAfterSessionFiles();
     applyLosatCache(data.losatCache?.entries);
     if (collapsedLinearSeqs) {
       state.losatCacheInfo.value = [];

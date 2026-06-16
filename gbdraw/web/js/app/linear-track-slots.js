@@ -1,3 +1,8 @@
+import {
+  dropInvalidManagedDepthSlots,
+  uploadedDepthFileCount
+} from './depth-track-state.js';
+
 const SUPPORTED_RENDERERS = [
   'features',
   'dinucleotide_content',
@@ -103,12 +108,8 @@ const defaultSlot = (renderer, overrides = {}) => {
 export const linearDepthTrackCountForState = (state) => {
   if (!Boolean(state?.form?.show_depth)) return 0;
   const seqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
-  const counts = seqs.map((seq) => {
-    const value = seq?.depth;
-    if (Array.isArray(value)) return value.filter(Boolean).length;
-    return value ? 1 : 0;
-  });
-  return Math.max(1, ...counts);
+  const counts = seqs.map((seq) => uploadedDepthFileCount(seq?.depth));
+  return Math.max(0, ...counts);
 };
 
 export const createDefaultLinearTrackSlots = ({
@@ -175,7 +176,15 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
       }
       if (renderer === 'depth') {
         const trackIndex = normalizeTrackIndex(params.track_index);
-        params.track_index = trackIndex === null ? 0 : trackIndex;
+        if (trackIndex === null) {
+          if (slot.enabled === false) {
+            delete params.track_index;
+          } else {
+            params.track_index = 0;
+          }
+        } else {
+          params.track_index = trackIndex;
+        }
       }
       if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
         params.nt = normalizeNt(params.nt ?? params.dinucleotide, nt);
@@ -338,7 +347,6 @@ const isDefaultManagedLinearSlot = (slot, renderer = null) => {
   if (!hasBlankLinearSlotGeometry(slot)) return false;
   const id = String(slot.id || '').trim();
   const params = cloneParams(slot.params);
-  if (normalizeOptionalText(params.legend_label) !== null) return false;
   if (params.managed === DEFAULT_LINEAR_SLOT_MANAGER) return true;
 
   if (normalizedRenderer === 'features') {
@@ -351,7 +359,7 @@ const isDefaultManagedLinearSlot = (slot, renderer = null) => {
     return id === 'gc_skew' && paramsMatchAllowedKeys(params, ['nt', 'dinucleotide']);
   }
   if (normalizedRenderer === 'depth') {
-    return /^depth(?:_\d+)?$/.test(id) && paramsMatchAllowedKeys(params, ['track_index']);
+    return /^depth(?:_\d+)?$/.test(id) && paramsMatchAllowedKeys(params, ['track_index', 'legend_label']);
   }
   return false;
 };
@@ -686,12 +694,29 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   const ensureLinearTrackDepthSlots = () => {
     const desiredCount = linearDepthTrackCountForState(state);
     if (!Boolean(form.show_depth) || desiredCount <= 0) {
-      removeDefaultManagedSlots('depth');
+      adv.linear_track_slots.splice(
+        0,
+        adv.linear_track_slots.length,
+        ...dropInvalidManagedDepthSlots({
+          slots: adv.linear_track_slots,
+          activeCount: 0,
+          managedPredicate: (slot) => isDefaultManagedLinearSlot(slot, 'depth')
+        })
+      );
       normalizeCurrentSlots();
       return;
     }
 
     normalizeCurrentSlots();
+    adv.linear_track_slots.splice(
+      0,
+      adv.linear_track_slots.length,
+      ...dropInvalidManagedDepthSlots({
+        slots: adv.linear_track_slots,
+        activeCount: desiredCount,
+        managedPredicate: (slot) => isDefaultManagedLinearSlot(slot, 'depth')
+      })
+    );
     const slots = adv.linear_track_slots;
     const managedDepthEntries = slots
       .map((slot, index) => ({ slot, index }))
