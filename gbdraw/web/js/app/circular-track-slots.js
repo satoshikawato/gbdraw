@@ -41,6 +41,27 @@ const DEFAULT_SLOT_IDS = {
 const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth', 'sequence_conservation']);
 const STACK_ENTRY_AXIS = 'axis';
 const STACK_ENTRY_SLOT = 'slot';
+const GLOBAL_SUPPRESS_PARAM = '_suppressed_by_global';
+const SUPPRESS_RENDERER_BY_KEY = {
+  gc_content: 'dinucleotide_content',
+  gc_skew: 'dinucleotide_skew'
+};
+const SUPPRESS_KEY_BY_RENDERER = {
+  dinucleotide_content: 'gc_content',
+  dinucleotide_skew: 'gc_skew'
+};
+const SUPPRESS_FORM_KEY_BY_RENDERER = {
+  dinucleotide_content: 'suppress_gc',
+  dinucleotide_skew: 'suppress_skew'
+};
+const SUPPRESS_TRACK_LABEL_BY_RENDERER = {
+  dinucleotide_content: 'GC content',
+  dinucleotide_skew: 'GC skew'
+};
+const SUPPRESS_CONTROL_LABEL_BY_RENDERER = {
+  dinucleotide_content: 'Hide GC Content',
+  dinucleotide_skew: 'Hide GC Skew'
+};
 const PRESET_LABELS = {
   tuckin: 'Tuckin',
   middle: 'Middle',
@@ -792,6 +813,31 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
 export const hasEnabledCircularTrackRenderer = (slots, renderer) =>
   normalizeCircularTrackSlots(slots).some((slot) => slot.enabled && slot.renderer === renderer);
 
+export const isCircularTrackRendererSuppressedByForm = (renderer, form = {}) => {
+  const normalizedRenderer = String(renderer || '').trim();
+  const formKey = SUPPRESS_FORM_KEY_BY_RENDERER[normalizedRenderer];
+  return Boolean(formKey && form?.[formKey]);
+};
+
+export const circularTrackSlotHiddenBySuppressForm = (slot, form = {}) =>
+  isCircularTrackRendererSuppressedByForm(slot?.renderer, form);
+
+export const applyCircularSuppressControlsToSlots = (slots, form = {}) => (
+  (Array.isArray(slots) ? slots : []).map((slot) => {
+    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
+    if (!circularTrackSlotHiddenBySuppressForm(slot, form)) return slot;
+    if (slot.enabled === false) return slot;
+    const token = SUPPRESS_KEY_BY_RENDERER[String(slot.renderer || '').trim()];
+    const params = cloneParams(slot.params);
+    if (token) params[GLOBAL_SUPPRESS_PARAM] = token;
+    return {
+      ...slot,
+      enabled: false,
+      params
+    };
+  })
+);
+
 const conservationSourceFilesForState = (state) => (
   String(state?.circularConservation?.source || '').trim().toLowerCase() === 'upload'
     ? normalizeFileList(state?.files?.c_conservation_blasts)
@@ -961,10 +1007,11 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       axis,
       state.form.track_type
     );
+    const suppressed = applyCircularSuppressControlsToSlots(normalized, state.form);
     state.adv.circular_track_slots.splice(
       0,
       state.adv.circular_track_slots.length,
-      ...normalized
+      ...suppressed
     );
   };
 
@@ -1166,6 +1213,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   const addCircularTrackSlot = (renderer, placement = null) => {
     normalizeSlotsInPlace();
     const slot = createCircularTrackSlotForRenderer(renderer, state.adv.circular_track_slots, state.adv.nt, placement);
+    applyGlobalSuppressToSlot(slot);
     state.adv.circular_track_slots.push(slot);
     normalizeSlotsInPlace();
   };
@@ -1185,6 +1233,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     duplicate.side = source.side;
     duplicate.z = source.z;
     duplicate.params = cloneParams(source.params);
+    applyGlobalSuppressToSlot(duplicate);
     state.adv.circular_track_slots.splice(idx + 1, 0, duplicate);
     const axis = axisIndexForCurrentSlots(state.adv.circular_track_slots);
     if (idx < axis) state.adv.circular_track_slots_axis_index = axis + 1;
@@ -1360,7 +1409,133 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     } else if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
       slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(state.adv.nt));
     }
+    applyGlobalSuppressToSlot(slot);
     normalizeSlotsInPlace();
+  };
+
+  const applyGlobalSuppressToSlot = (slot) => {
+    if (!slot || !circularTrackSlotHiddenBySuppressForm(slot, state.form)) return;
+    const token = SUPPRESS_KEY_BY_RENDERER[String(slot.renderer || '').trim()];
+    slot.enabled = false;
+    slot.params = cloneParams(slot.params);
+    if (token) slot.params[GLOBAL_SUPPRESS_PARAM] = token;
+  };
+
+  const activeCircularTrackSlotsForRenderer = (renderer) => {
+    normalizeSlotsInPlace();
+    return state.adv.circular_track_slots.filter((slot) => (
+      slot &&
+      slot.enabled !== false &&
+      String(slot.renderer || '').trim() === renderer
+    ));
+  };
+
+  const confirmCircularSuppressOverride = (renderer) => {
+    if (!state.adv.circular_track_slots_enabled) return true;
+    const activeSlots = activeCircularTrackSlotsForRenderer(renderer);
+    if (activeSlots.length === 0) return true;
+
+    const trackLabel = SUPPRESS_TRACK_LABEL_BY_RENDERER[renderer] || 'selected';
+    const plural = activeSlots.length === 1 ? '' : 's';
+    const message = [
+      `Custom Track Slots currently include ${activeSlots.length} enabled ${trackLabel} track${plural}.`,
+      `Hiding ${trackLabel} will disable those custom track slot${plural} and override the custom track settings.`,
+      '',
+      'Continue?'
+    ].join('\n');
+    return globalThis.confirm ? globalThis.confirm(message) : true;
+  };
+
+  const disableCircularTrackSlotsForSuppress = (renderer) => {
+    if (!state.adv.circular_track_slots_enabled) return;
+    let changed = false;
+    const token = SUPPRESS_KEY_BY_RENDERER[renderer];
+    state.adv.circular_track_slots.forEach((slot) => {
+      if (!slot || String(slot.renderer || '').trim() !== renderer || slot.enabled === false) return;
+      slot.enabled = false;
+      slot.params = cloneParams(slot.params);
+      if (token) slot.params[GLOBAL_SUPPRESS_PARAM] = token;
+      changed = true;
+    });
+    if (changed) normalizeSlotsInPlace();
+  };
+
+  const restoreCircularTrackSlotsForSuppress = (renderer) => {
+    if (!state.adv.circular_track_slots_enabled) return;
+    let changed = false;
+    const token = SUPPRESS_KEY_BY_RENDERER[renderer];
+    state.adv.circular_track_slots.forEach((slot) => {
+      if (!slot || String(slot.renderer || '').trim() !== renderer) return;
+      const params = cloneParams(slot.params);
+      if (params[GLOBAL_SUPPRESS_PARAM] !== token) return;
+      delete params[GLOBAL_SUPPRESS_PARAM];
+      slot.enabled = true;
+      slot.params = params;
+      changed = true;
+    });
+    if (changed) normalizeSlotsInPlace();
+  };
+
+  const setCircularSuppressControl = (key, checked, event = null) => {
+    const renderer = SUPPRESS_RENDERER_BY_KEY[key];
+    if (!renderer) return;
+    const formKey = SUPPRESS_FORM_KEY_BY_RENDERER[renderer];
+    const nextChecked = Boolean(checked);
+    const previousChecked = Boolean(state.form?.[formKey]);
+
+    if (nextChecked === previousChecked) {
+      if (event?.target) event.target.checked = previousChecked;
+      return;
+    }
+
+    if (nextChecked) {
+      if (!confirmCircularSuppressOverride(renderer)) {
+        if (event?.target) event.target.checked = previousChecked;
+        return;
+      }
+      disableCircularTrackSlotsForSuppress(renderer);
+      state.form[formKey] = true;
+    } else {
+      state.form[formKey] = false;
+      restoreCircularTrackSlotsForSuppress(renderer);
+    }
+
+    if (event?.target) event.target.checked = nextChecked;
+  };
+
+  const setCircularGcSuppressed = (checked, event = null) => {
+    setCircularSuppressControl('gc_content', checked, event);
+  };
+
+  const setCircularSkewSuppressed = (checked, event = null) => {
+    setCircularSuppressControl('gc_skew', checked, event);
+  };
+
+  const setCircularTrackSlotEnabled = (slot, enabled) => {
+    if (!slot || circularTrackSlotHiddenBySuppressForm(slot, state.form)) return;
+    slot.enabled = Boolean(enabled);
+    if (slot.params && typeof slot.params === 'object' && !Array.isArray(slot.params)) {
+      const token = SUPPRESS_KEY_BY_RENDERER[String(slot.renderer || '').trim()];
+      if (token && slot.params[GLOBAL_SUPPRESS_PARAM] === token) {
+        slot.params = cloneParams(slot.params);
+        delete slot.params[GLOBAL_SUPPRESS_PARAM];
+      }
+    }
+    normalizeSlotsInPlace();
+  };
+
+  const circularTrackSlotEffectiveEnabled = (slot) => (
+    Boolean(slot?.enabled !== false) && !circularTrackSlotHiddenBySuppressForm(slot, state.form)
+  );
+
+  const circularTrackSlotHiddenBySuppress = (slot) =>
+    circularTrackSlotHiddenBySuppressForm(slot, state.form);
+
+  const circularTrackSlotSuppressMessage = (slot) => {
+    if (!circularTrackSlotHiddenBySuppress(slot)) return '';
+    const renderer = String(slot?.renderer || '').trim();
+    const controlLabel = SUPPRESS_CONTROL_LABEL_BY_RENDERER[renderer] || 'Layout';
+    return `Hidden by ${controlLabel}.`;
   };
 
   const updateCircularTrackSlotPlacement = (slot, placement) => {
@@ -1507,9 +1682,15 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     resetCircularTrackSlotsToPreset,
     applyCircularTrackPreset,
     setCircularTrackSlotsEnabled,
+    setCircularGcSuppressed,
+    setCircularSkewSuppressed,
     addCircularTrackSlot,
     duplicateCircularTrackSlot,
     removeCircularTrackSlot,
+    setCircularTrackSlotEnabled,
+    circularTrackSlotEffectiveEnabled,
+    circularTrackSlotHiddenBySuppress,
+    circularTrackSlotSuppressMessage,
     moveCircularTrackSlot,
     canMoveCircularTrackSlot,
     moveCircularTrackSlotOutside,

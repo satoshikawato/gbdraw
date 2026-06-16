@@ -571,10 +571,13 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert '"center_reserved_radius": "--center_reserved_radius" in _source' in run_source
     assert "args.push('--track_type', form.track_type);" in run_source
     assert "args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));" in run_source
+    assert "applyCircularSuppressControlsToSlots" in run_source
+    assert "if (form.suppress_gc) args.push('--suppress_gc');" in run_source
+    assert "if (form.suppress_skew) args.push('--suppress_skew');" in run_source
     assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source
     assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {" in run_source
     assert "applyCircularTrackOrderPlacements(" in run_source
-    assert "if (!useCircularTrackSlots)" in run_source
+    assert "if (useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
     assert "Track Preset" in index_html
@@ -609,10 +612,19 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "side = null" in slot_source
     assert "isLegacyDefaultWebSlotShape" in slot_source
     assert "ensureCircularTrackDepthSlot" in slot_source
+    assert "setCircularGcSuppressed" in slot_source
+    assert "setCircularSkewSuppressed" in slot_source
+    assert "override the custom track settings" in slot_source
     assert "Replace the current custom circular track slots with this preset" not in slot_source
     assert "setCircularTrackSlotsEnabled" in slot_source
+    assert "setCircularTrackSlotEnabled: circularTrackSlotEditor.setCircularTrackSlotEnabled" in app_setup_source
+    assert "circularTrackSlotHiddenBySuppress: circularTrackSlotEditor.circularTrackSlotHiddenBySuppress" in app_setup_source
     assert "const templateSlots = createDefaultCircularTrackSlots" in slot_source
-    assert "state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);" in slot_source
+    assert "const suppressed = applyCircularSuppressControlsToSlots(normalized, state.form);" in slot_source
+    assert "state.adv.circular_track_slots.splice(" in slot_source
+    assert '@change="setCircularGcSuppressed($event.target.checked, $event)"' in index_html
+    assert '@change="setCircularSkewSuppressed($event.target.checked, $event)"' in index_html
+    assert "circularTrackSlotSuppressMessage(entry.slot)" in index_html
     assert "depthFileSlotsFromValue(files.c_depth).length" in app_setup_source
     assert "circularTrackSlotEditor.normalizeCircularTrackSlots();" in app_setup_source
     assert "circularTrackSlotEditor.ensureCircularTrackDepthSlot();" in app_setup_source
@@ -966,6 +978,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     check_path.write_text(
         f"""
         import {{
+          applyCircularSuppressControlsToSlots,
           applyCircularTrackOrderPlacements,
           buildCircularTrackSlotSpec,
           createDefaultCircularTrackSlots,
@@ -1062,6 +1075,87 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         }}
         if (middleFeatureSpec !== 'features:features@lane_direction=split') {{
           throw new Error(`Middle feature CLI spec must keep lane_direction=split with circular axis index: ${{middleFeatureSpec}}`);
+        }}
+
+        const suppressState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots_enabled: true,
+            circular_track_slots_axis_index: 0,
+            circular_track_slots: [
+              {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', enabled: true, params: {{ nt: 'GC' }} }},
+              {{ id: 'manual_gc', renderer: 'dinucleotide_content', side: 'inside', enabled: false, params: {{ nt: 'GC' }} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', enabled: true, params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+        const suppressEditor = createCircularTrackSlotEditor({{ state: suppressState }});
+        let confirmCalls = 0;
+        globalThis.confirm = (message) => {{
+          confirmCalls += 1;
+          if (!String(message).includes('override the custom track settings')) {{
+            throw new Error(`Suppress confirmation did not describe custom override: ${{message}}`);
+          }}
+          return false;
+        }};
+        const cancelEvent = {{ target: {{ checked: true }} }};
+        suppressEditor.setCircularGcSuppressed(true, cancelEvent);
+        if (confirmCalls !== 1 || suppressState.form.suppress_gc !== false || cancelEvent.target.checked !== false) {{
+          throw new Error(`Cancelled suppress did not restore checkbox/form state: calls=${{confirmCalls}} form=${{suppressState.form.suppress_gc}} event=${{cancelEvent.target.checked}}`);
+        }}
+        const uncancelledGc = suppressState.adv.circular_track_slots.find((slot) => slot.id === 'gc_content');
+        if (uncancelledGc?.enabled !== true) {{
+          throw new Error(`Cancelled suppress should not disable custom GC slot: ${{JSON.stringify(suppressState.adv.circular_track_slots)}}`);
+        }}
+
+        globalThis.confirm = () => true;
+        const proceedEvent = {{ target: {{ checked: true }} }};
+        suppressEditor.setCircularGcSuppressed(true, proceedEvent);
+        const suppressedGc = suppressState.adv.circular_track_slots.find((slot) => slot.id === 'gc_content');
+        const manualGc = suppressState.adv.circular_track_slots.find((slot) => slot.id === 'manual_gc');
+        const activeSkew = suppressState.adv.circular_track_slots.find((slot) => slot.id === 'gc_skew');
+        if (suppressState.form.suppress_gc !== true || proceedEvent.target.checked !== true) {{
+          throw new Error('Confirmed suppress did not set form/checkbox state');
+        }}
+        if (suppressedGc?.enabled !== false || suppressedGc?.params?._suppressed_by_global !== 'gc_content') {{
+          throw new Error(`Confirmed suppress did not mark enabled GC slot as globally hidden: ${{JSON.stringify(suppressedGc)}}`);
+        }}
+        if (manualGc?.enabled !== false || manualGc?.params?._suppressed_by_global) {{
+          throw new Error(`Manually disabled GC slot should stay disabled without global marker: ${{JSON.stringify(manualGc)}}`);
+        }}
+        if (activeSkew?.enabled !== true || suppressEditor.circularTrackSlotEffectiveEnabled(suppressedGc)) {{
+          throw new Error(`Suppress GC should not affect skew and hidden GC should not be effectively enabled: ${{JSON.stringify(suppressState.adv.circular_track_slots)}}`);
+        }}
+        if (!suppressEditor.circularTrackSlotSuppressMessage(suppressedGc).includes('Hide GC Content')) {{
+          throw new Error(`Suppress message did not name the controlling checkbox: ${{suppressEditor.circularTrackSlotSuppressMessage(suppressedGc)}}`);
+        }}
+        suppressEditor.normalizeCircularTrackSlots();
+        const normalizedManualGc = suppressState.adv.circular_track_slots.find((slot) => slot.id === 'manual_gc');
+        if (normalizedManualGc?.params?._suppressed_by_global) {{
+          throw new Error(`Re-normalizing while hidden should not mark manually disabled GC slots: ${{JSON.stringify(normalizedManualGc)}}`);
+        }}
+        const forcedSkewSlots = applyCircularSuppressControlsToSlots(
+          [{{ id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, params: {{ nt: 'GC' }} }}],
+          {{ suppress_skew: true }}
+        );
+        if (forcedSkewSlots[0]?.enabled !== false || forcedSkewSlots[0]?.params?._suppressed_by_global !== 'gc_skew') {{
+          throw new Error(`Run-time suppress guard did not disable skew slot: ${{JSON.stringify(forcedSkewSlots)}}`);
+        }}
+        suppressEditor.setCircularGcSuppressed(false, {{ target: {{ checked: false }} }});
+        const restoredGc = suppressState.adv.circular_track_slots.find((slot) => slot.id === 'gc_content');
+        const stillManualGc = suppressState.adv.circular_track_slots.find((slot) => slot.id === 'manual_gc');
+        if (suppressState.form.suppress_gc !== false || restoredGc?.enabled !== true || restoredGc?.params?._suppressed_by_global) {{
+          throw new Error(`Unhiding GC did not restore globally hidden slot: ${{JSON.stringify(restoredGc)}}`);
+        }}
+        if (stillManualGc?.enabled !== false) {{
+          throw new Error(`Unhiding GC should not restore manually disabled duplicate: ${{JSON.stringify(stillManualGc)}}`);
         }}
 
         const multiDepthState = {{
