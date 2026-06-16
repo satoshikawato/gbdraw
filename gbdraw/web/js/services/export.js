@@ -363,6 +363,9 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-sticky-legend {
   pointer-events: none;
 }
+.gbdraw-sticky-legend-background {
+  pointer-events: none;
+}
 .gbdraw-viewport-button {
   cursor: pointer;
 }
@@ -394,13 +397,13 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-viewport-button.is-active text {
   fill: #1d4ed8;
 }
-.gbdraw-interactive-pan-active {
+.gbdraw-interactive-pan-enabled {
   cursor: grab;
 }
 .gbdraw-interactive-panning {
   cursor: grabbing;
 }
-.gbdraw-interactive-pan-active .gbdraw-interactive-feature {
+.gbdraw-interactive-pan-enabled .gbdraw-interactive-feature {
   cursor: pointer;
 }
 .gbdraw-feature-search-controls {
@@ -552,8 +555,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var searchControls = null;
   var stickyLegend = null;
   var stickyLegendState = null;
-  var stickyLegendVisible = true;
-  var isPanMode = false;
   var activeCanvasPan = null;
   var suppressNextCanvasClick = false;
   var activePopupResize = null;
@@ -1793,29 +1794,24 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return Math.max(8, Math.min(18, shortSide * 0.018 || 12));
   }
 
-  function safeStickyLegendMargin(value, fallback) {
-    var numeric = Number(value);
-    if (Number.isFinite(numeric) && numeric > 0) return numeric;
-    return fallback;
-  }
-
   function updateStickyLegendHomeMetrics() {
     if (!stickyLegendState) return;
     var bounds = stickyLegendState.initialBounds;
     var centerX = bounds.x + bounds.width / 2;
     var centerY = bounds.y + bounds.height / 2;
     var fallbackMargin = getStickyLegendFallbackMargin();
+    var alignmentView = originalViewRect || homeViewRect;
     stickyLegendState.anchorX = inferStickyLegendAlignment(
       centerX,
-      homeViewRect.x,
-      homeViewRect.width,
+      alignmentView.x,
+      alignmentView.width,
       1 / 3,
       2 / 3
     );
     stickyLegendState.anchorY = inferStickyLegendVerticalAlignment(
       centerY,
-      homeViewRect.y,
-      homeViewRect.height,
+      alignmentView.y,
+      alignmentView.height,
       1 / 3,
       2 / 3
     );
@@ -1823,10 +1819,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     stickyLegendState.centerOffsetY = centerY - (homeViewRect.y + homeViewRect.height / 2);
     stickyLegendState.baseMargin = fallbackMargin;
     stickyLegendState.margins = {
-      left: safeStickyLegendMargin(bounds.x - homeViewRect.x, fallbackMargin),
-      right: safeStickyLegendMargin(homeViewRect.x + homeViewRect.width - (bounds.x + bounds.width), fallbackMargin),
-      top: safeStickyLegendMargin(bounds.y - homeViewRect.y, fallbackMargin),
-      bottom: safeStickyLegendMargin(homeViewRect.y + homeViewRect.height - (bounds.y + bounds.height), fallbackMargin)
+      left: fallbackMargin,
+      right: fallbackMargin,
+      top: fallbackMargin,
+      bottom: fallbackMargin
     };
   }
 
@@ -1856,8 +1852,33 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return clampValue(value, min, max);
   }
 
+  function ensureStickyLegendBackground(legend, bbox) {
+    if (!legend || !bbox) return;
+    var existing = legend.querySelector('#gbdraw-sticky-legend-background');
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+    var padding = Math.max(8, Math.min(18, Math.min(bbox.width, bbox.height) * 0.08 || 10));
+    var rect = createSvgNode('rect', {
+      id: 'gbdraw-sticky-legend-background',
+      'class': 'gbdraw-sticky-legend-background',
+      x: formatSvgNumber(bbox.x - padding),
+      y: formatSvgNumber(bbox.y - padding),
+      width: formatSvgNumber(bbox.width + padding * 2),
+      height: formatSvgNumber(bbox.height + padding * 2),
+      rx: formatSvgNumber(Math.min(12, padding)),
+      ry: formatSvgNumber(Math.min(12, padding)),
+      fill: '#ffffff',
+      'fill-opacity': '0.84',
+      stroke: '#cbd5e1',
+      'stroke-opacity': '0.7',
+      'stroke-width': '1'
+    });
+    legend.insertBefore(rect, legend.firstChild || null);
+  }
+
   function updateStickyLegendPosition() {
-    if (!stickyLegend || !stickyLegendState || !stickyLegendVisible) return;
+    if (!stickyLegend || !stickyLegendState) return;
     var visibleView = getVisibleViewRect();
     var bbox = stickyLegendState.localBBox;
     var scale = getStickyLegendScale(getViewRect());
@@ -1916,11 +1937,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function setupStickyLegend() {
     var legend = svg.querySelector('#legend');
     if (!legend || isElementHidden(legend)) return;
-    var bbox = getElementBBox(legend);
+    var contentBBox = getElementBBox(legend);
+    if (!contentBBox) return;
+    ensureStickyLegendBackground(legend, contentBBox);
+    var bbox = getElementBBox(legend) || contentBBox;
     var initialBounds = getElementBoundsInSvg(legend, bbox);
-    if (!bbox || !initialBounds) return;
+    if (!initialBounds) return;
     stickyLegend = legend;
-    stickyLegendVisible = true;
     stickyLegendState = {
       localBBox: bbox,
       initialBounds: initialBounds,
@@ -1931,23 +1954,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     updateStickyLegendHomeMetrics();
     syncStandaloneOverlayOrder();
     updateStickyLegendPosition();
-  }
-
-  function setStickyLegendVisible(visible) {
-    if (!stickyLegend || !stickyLegendState) return;
-    stickyLegendVisible = Boolean(visible);
-    if (stickyLegendVisible) {
-      if (stickyLegendState.originalDisplay === null) {
-        stickyLegend.removeAttribute('display');
-      } else {
-        stickyLegend.setAttribute('display', stickyLegendState.originalDisplay);
-      }
-      updateStickyLegendPosition();
-      syncStandaloneOverlayOrder();
-    } else {
-      stickyLegend.setAttribute('display', 'none');
-    }
-    updateViewportControlState();
   }
 
   function getSvgClientSize() {
@@ -2007,7 +2013,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function resetViewport() {
     closePopup();
-    setPanMode(false);
+    stopCanvasPan();
     setSvgViewRect(homeViewRect);
   }
 
@@ -2090,16 +2096,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
-  function updateViewportControlState() {
-    if (!viewportControls) return;
-    Array.prototype.slice.call(viewportControls.querySelectorAll('[data-action="pan"]')).forEach(function (button) {
-      setClassToken(button, 'is-active', isPanMode);
-    });
-    Array.prototype.slice.call(viewportControls.querySelectorAll('[data-action="legend"]')).forEach(function (button) {
-      setClassToken(button, 'is-active', Boolean(stickyLegend && stickyLegendState && stickyLegendVisible));
-    });
-  }
-
   function updateViewportControlsPosition() {
     updateStickyLegendPosition();
     if (!viewportControls) return;
@@ -2121,23 +2117,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     updateSearchControlsPosition();
   }
 
-  function setPanMode(enabled) {
-    isPanMode = Boolean(enabled);
-    setClassToken(svg, 'gbdraw-interactive-pan-active', isPanMode);
-    if (isPanMode) {
-      if (activeHoverSvgId) {
-        setHoverHighlight(activeHoverSvgId, false);
-        activeHoverSvgId = null;
-        activeHoverKey = '';
-      }
-      closePopup();
-    }
-    if (!isPanMode) {
-      stopCanvasPan();
-    }
-    updateViewportControlState();
-  }
-
   function setupViewportControls() {
     var existing = svg.querySelector('#' + VIEWPORT_CONTROLS_ID);
     if (existing && existing.parentNode) {
@@ -2151,12 +2130,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var buttons = [
       { action: 'zoom-in', label: '+', title: 'Zoom in', width: 32 },
       { action: 'zoom-out', label: '-', title: 'Zoom out', width: 32 },
-      { action: 'reset', label: 'Original', title: 'Return to original view', width: 62 },
-      { action: 'pan', label: 'Pan', title: 'Toggle pan mode', width: 44 }
+      { action: 'reset', label: 'Original', title: 'Return to original view', width: 62 }
     ];
-    if (stickyLegend && stickyLegendState) {
-      buttons.push({ action: 'legend', label: 'Legend', title: 'Show or hide legend', width: 62 });
-    }
     var x = 0;
     buttons.forEach(function (button) {
       viewportControls.appendChild(createViewportButton(button, x));
@@ -2176,10 +2151,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         zoomViewBy(1.25);
       } else if (action === 'reset') {
         resetViewport();
-      } else if (action === 'pan') {
-        setPanMode(!isPanMode);
-      } else if (action === 'legend') {
-        setStickyLegendVisible(!stickyLegendVisible);
       }
       event.preventDefault();
       event.stopPropagation();
@@ -2193,7 +2164,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     svg.appendChild(viewportControls);
     syncStandaloneOverlayOrder();
-    updateViewportControlState();
     updateViewportControlsPosition();
   }
 
@@ -2206,7 +2176,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function startCanvasPan(event) {
-    if (!isPanMode || event.button !== 0) return;
+    if (event.button !== 0) return;
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
     if (closestViewportButton(event.target)) return;
@@ -2939,6 +2909,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   setSvgViewRect(homeViewRect);
+  setClassToken(svg, 'gbdraw-interactive-pan-enabled', true);
   setupStickyLegend();
   setupViewportControls();
   setupSearchControls();
@@ -2952,14 +2923,12 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   svg.addEventListener('mousedown', startCanvasPan);
 
   svg.addEventListener('wheel', function (event) {
-    if (!isPanMode && !event.ctrlKey) return;
     var factor = event.deltaY > 0 ? 1.15 : 0.87;
     zoomViewBy(factor, eventPoint(event));
     event.preventDefault();
   }, { passive: false });
 
   svg.addEventListener('mouseover', function (event) {
-    if (isPanMode) return;
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
@@ -3015,7 +2984,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
       closePopup();
-      setPanMode(false);
+      stopCanvasPan();
     }
   });
 }());

@@ -230,6 +230,11 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "homeViewRect.width / maxZoom" in export_source
     assert "homeViewRect.width * nextScale" in export_source
     assert "{ action: 'reset', label: 'Original', title: 'Return to original view', width: 62 }" in export_source
+    assert "{ action: 'pan', label: 'Pan'" not in export_source
+    assert "{ action: 'legend', label: 'Legend'" not in export_source
+    assert "function ensureStickyLegendBackground(legend, bbox)" in export_source
+    assert "gbdraw-sticky-legend-background" in export_source
+    assert "setClassToken(svg, 'gbdraw-interactive-pan-enabled', true);" in export_source
     assert "function refitViewportToWindow()" in export_source
     assert "function scheduleViewportRefit()" in export_source
     assert "popup_mode: normalizedPopupMode" in export_source
@@ -388,9 +393,11 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
 
     assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source
+    assert "FEATURE_SELECTOR = [" in svg_actions_source
+    assert "`path[${FEATURE_ID_ATTRIBUTE}]`" in svg_actions_source
     assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in svg_actions_source
-    assert "svg.querySelectorAll(`[${FEATURE_ID_ATTRIBUTE}]`)" in svg_actions_source
-    assert "getFeatureIdentity(path)" in svg_actions_source
+    assert "svg.querySelectorAll(FEATURE_SELECTOR)" in svg_actions_source
+    assert "getFeatureIdentity(element)" in svg_actions_source
     assert "getFeatureHoverKey(getFeatureIdentity(relatedFeature))" in svg_actions_source
     assert "getFeatureIdentity(el)" in label_actions_source
     assert "getFeatureElements(svg, feat.svg_id)" in color_actions_source
