@@ -83,6 +83,14 @@ export const createFeatureSvgActions = ({
   const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
   const formatDuration = (ms) => `${ms.toFixed(1)}ms`;
   let delegatedFeatureHandlers = null;
+  const hoverSummaryState = {
+    element: null,
+    timer: null,
+    frame: null,
+    visible: false,
+    activeSvgId: '',
+    lastEvent: null
+  };
 
   const getOrthogroupIds = (value) =>
     Array.from(new Set(
@@ -145,6 +153,76 @@ export const createFeatureSvgActions = ({
       })
       .filter((row) => row.key && row.values.length > 0)
       .sort((left, right) => left.key.localeCompare(right.key));
+  };
+
+  const getQualifierFirstValue = (feat, key) => {
+    const normalizedKey = String(key || '').trim().toLowerCase();
+    if (!normalizedKey) return '';
+    const directValue = feat?.[normalizedKey];
+    const qualifierValue = feat?.qualifiers && typeof feat.qualifiers === 'object'
+      ? feat.qualifiers[normalizedKey]
+      : null;
+    const values = normalizeStringArray(directValue || qualifierValue)
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    return values[0] || '';
+  };
+
+  const getHoverSummaryPrimaryLabel = (feat) => (
+    getQualifierFirstValue(feat, 'gene') ||
+    getQualifierFirstValue(feat, 'locus_tag') ||
+    getQualifierFirstValue(feat, 'product') ||
+    getFeatureCaption(feat) ||
+    ''
+  );
+
+  const formatFeatureLength = (feat) => {
+    const startNumeric = Number(feat?.start);
+    const endNumeric = Number(feat?.end);
+    if (!Number.isFinite(startNumeric) || !Number.isFinite(endNumeric)) return '';
+    const length = Math.max(0, Math.round(endNumeric - startNumeric));
+    return `${length.toLocaleString()} bp`;
+  };
+
+  const createHoverSummaryElement = (tagName, className = '', text = '') => {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    if (text !== '') element.textContent = text;
+    return element;
+  };
+
+  const addHoverSummaryRow = (container, label, value, { clamp = false } = {}) => {
+    const normalizedValue = String(value === null || value === undefined ? '' : value).trim();
+    if (!normalizedValue) return;
+    const row = createHoverSummaryElement('div', 'feature-hover-summary-row');
+    row.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-label', label));
+    row.appendChild(createHoverSummaryElement(
+      'div',
+      `feature-hover-summary-value${clamp ? ' is-clamped' : ''}`,
+      normalizedValue
+    ));
+    container.appendChild(row);
+  };
+
+  const buildHoverSummaryRows = (feat, primaryLabel) => {
+    const product = getQualifierFirstValue(feat, 'product');
+    const gene = getQualifierFirstValue(feat, 'gene');
+    const locusTag = getQualifierFirstValue(feat, 'locus_tag');
+    const note = getQualifierFirstValue(feat, 'note');
+    const locationText = buildFeatureLocation(feat);
+    const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || '').trim();
+    const rows = [];
+
+    if (gene && gene !== primaryLabel) rows.push(['Gene', gene]);
+    if (locusTag && locusTag !== primaryLabel) rows.push(['Locus', locusTag]);
+    if (product && product !== primaryLabel) rows.push(['Product', product, true]);
+    if (note && note !== primaryLabel && note !== product) rows.push(['Note', note, true]);
+    rows.push(['Length', formatFeatureLength(feat)]);
+    rows.push(['Location', locationText]);
+    rows.push(['Record', feat?.record_id || '']);
+    if (feat?.orthogroupId) rows.push(['Orthogroup', feat.orthogroupId]);
+    if (effectiveCaption && effectiveCaption !== primaryLabel) rows.push(['Legend', effectiveCaption]);
+    return rows;
   };
 
   const displayProteinId = (feat) => String(
@@ -270,6 +348,7 @@ export const createFeatureSvgActions = ({
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return null;
 
+    hideHoverSummary();
     const featureElements = getFeatureElements(svg, feat.svg_id);
     const featureElement = featureElements[0] || null;
     clickedFeature.value = buildClickedFeaturePayload(feat, featureElement);
@@ -286,6 +365,129 @@ export const createFeatureSvgActions = ({
     }
     return clickedFeature.value;
   };
+
+  const hoverSummaryIsAllowed = () => {
+    if (clickedFeature.value) return false;
+    if (window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      return false;
+    }
+    return true;
+  };
+
+  const ensureHoverSummaryElement = () => {
+    if (hoverSummaryState.element?.isConnected) return hoverSummaryState.element;
+    const element = createHoverSummaryElement('div', 'feature-hover-summary');
+    element.hidden = true;
+    element.setAttribute('role', 'tooltip');
+    document.body.appendChild(element);
+    hoverSummaryState.element = element;
+    return element;
+  };
+
+  const positionHoverSummary = (eventLike = hoverSummaryState.lastEvent) => {
+    const element = hoverSummaryState.element;
+    if (!element || element.hidden || !eventLike) return;
+    const margin = 12;
+    const offset = 14;
+    const clientX = Number.isFinite(eventLike.clientX) ? eventLike.clientX : window.innerWidth / 2;
+    const clientY = Number.isFinite(eventLike.clientY) ? eventLike.clientY : window.innerHeight / 2;
+    const rect = element.getBoundingClientRect();
+    let x = clientX + offset;
+    let y = clientY + offset;
+
+    if (x + rect.width + margin > window.innerWidth) x = clientX - rect.width - offset;
+    if (y + rect.height + margin > window.innerHeight) y = clientY - rect.height - offset;
+    x = Math.min(Math.max(x, margin), Math.max(margin, window.innerWidth - rect.width - margin));
+    y = Math.min(Math.max(y, margin), Math.max(margin, window.innerHeight - rect.height - margin));
+    element.style.left = `${Math.round(x)}px`;
+    element.style.top = `${Math.round(y)}px`;
+  };
+
+  const scheduleHoverSummaryPosition = (eventLike) => {
+    hoverSummaryState.lastEvent = {
+      clientX: Number.isFinite(eventLike?.clientX) ? eventLike.clientX : hoverSummaryState.lastEvent?.clientX,
+      clientY: Number.isFinite(eventLike?.clientY) ? eventLike.clientY : hoverSummaryState.lastEvent?.clientY
+    };
+    if (!hoverSummaryState.visible || hoverSummaryState.frame) return;
+    hoverSummaryState.frame = window.requestAnimationFrame(() => {
+      hoverSummaryState.frame = null;
+      positionHoverSummary();
+    });
+  };
+
+  const renderHoverSummary = (feat, featureElement, eventLike) => {
+    if (!feat || !hoverSummaryIsAllowed()) {
+      hideHoverSummary();
+      return;
+    }
+    const element = ensureHoverSummaryElement();
+    const primaryLabel = getHoverSummaryPrimaryLabel(feat);
+    const featureType = String(feat?.type || 'Feature').trim() || 'Feature';
+    const titleText = primaryLabel ? `${featureType}: ${primaryLabel}` : featureType;
+    const locationText = buildFeatureLocation(feat);
+    const color = resolveColorToHex(
+      featureElement?.getAttribute?.('fill') || getFeatureColor(feat) || '#94a3b8'
+    ) || '#94a3b8';
+
+    element.replaceChildren();
+    const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
+    const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
+    swatch.style.backgroundColor = color;
+    const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
+    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', titleText));
+    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', locationText));
+    title.appendChild(swatch);
+    title.appendChild(titleTextWrap);
+    element.appendChild(title);
+
+    buildHoverSummaryRows(feat, primaryLabel).forEach(([label, value, clamp]) => {
+      addHoverSummaryRow(element, label, value, { clamp: Boolean(clamp) });
+    });
+
+    element.hidden = false;
+    hoverSummaryState.visible = true;
+    hoverSummaryState.activeSvgId = String(feat.svg_id || '').trim();
+    scheduleHoverSummaryPosition(eventLike);
+    positionHoverSummary(eventLike);
+  };
+
+  const scheduleHoverSummary = (feat, featureElement, eventLike) => {
+    if (hoverSummaryState.timer) {
+      window.clearTimeout(hoverSummaryState.timer);
+      hoverSummaryState.timer = null;
+    }
+    if (!feat || !hoverSummaryIsAllowed()) {
+      hideHoverSummary();
+      return;
+    }
+    scheduleHoverSummaryPosition(eventLike);
+    const show = () => {
+      hoverSummaryState.timer = null;
+      renderHoverSummary(feat, featureElement, eventLike);
+    };
+    if (hoverSummaryState.visible) {
+      show();
+      return;
+    }
+    hoverSummaryState.timer = window.setTimeout(show, 180);
+  };
+
+  function hideHoverSummary() {
+    if (hoverSummaryState.timer) {
+      window.clearTimeout(hoverSummaryState.timer);
+      hoverSummaryState.timer = null;
+    }
+    if (hoverSummaryState.frame) {
+      window.cancelAnimationFrame(hoverSummaryState.frame);
+      hoverSummaryState.frame = null;
+    }
+    if (hoverSummaryState.element) {
+      hoverSummaryState.element.hidden = true;
+    }
+    hoverSummaryState.visible = false;
+    hoverSummaryState.activeSvgId = '';
+    hoverSummaryState.lastEvent = null;
+  }
 
   const applyInstantPreview = (feat, color) => {
     const svgId = feat.svg_id;
@@ -464,13 +666,25 @@ export const createFeatureSvgActions = ({
         const svgId = getFeatureIdentity(featureEl);
         if (!svgId) return;
         const hoverKey = getFeatureHoverKey(svgId);
-        if (handlerState.activeHoverKey === hoverKey) return;
-        if (handlerState.activeHoverSvgId) {
+        if (handlerState.activeHoverKey !== hoverKey && handlerState.activeHoverSvgId) {
           setHoverHighlight(handlerState.activeHoverSvgId, false);
+        }
+        if (handlerState.activeHoverKey !== hoverKey) {
+          setHoverHighlight(svgId, true);
         }
         handlerState.activeHoverSvgId = svgId;
         handlerState.activeHoverKey = hoverKey;
-        setHoverHighlight(svgId, true);
+        scheduleHoverSummary(handlerState.featureLookup.get(svgId), featureEl, e);
+      };
+
+      const handleMouseMove = (e) => {
+        if (clickedFeature.value) {
+          hideHoverSummary();
+          return;
+        }
+        if (hoverSummaryState.visible || hoverSummaryState.timer) {
+          scheduleHoverSummaryPosition(e);
+        }
       };
 
       const handleMouseOut = (e) => {
@@ -482,6 +696,7 @@ export const createFeatureSvgActions = ({
         setHoverHighlight(svgId, false);
         handlerState.activeHoverSvgId = null;
         handlerState.activeHoverKey = '';
+        hideHoverSummary();
       };
 
       const handleClick = (e) => {
@@ -489,6 +704,7 @@ export const createFeatureSvgActions = ({
         const svgId = getFeatureIdentity(featureEl);
         if (!svgId) return;
         e.stopPropagation();
+        hideHoverSummary();
         const feat = handlerState.featureLookup.get(svgId);
         if (feat) {
           openFeatureEditorForFeature(feat, e);
@@ -498,12 +714,15 @@ export const createFeatureSvgActions = ({
       };
 
       svg.addEventListener('mouseover', handleMouseOver);
+      svg.addEventListener('mousemove', handleMouseMove);
       svg.addEventListener('mouseout', handleMouseOut);
       svg.addEventListener('click', handleClick);
       handlerState.cleanup = () => {
         svg.removeEventListener('mouseover', handleMouseOver);
+        svg.removeEventListener('mousemove', handleMouseMove);
         svg.removeEventListener('mouseout', handleMouseOut);
         svg.removeEventListener('click', handleClick);
+        hideHoverSummary();
       };
       delegatedFeatureHandlers = handlerState;
     } else {

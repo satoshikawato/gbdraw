@@ -135,8 +135,12 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert 'v-model="adv.rich_feature_popup"' in index_html
     assert "Rich Feature Popup" in index_html
     assert "feature-popup--simple" in index_html
+    assert "feature-hover-summary" in index_html
     assert "!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" in index_html
     assert "adv?.rich_feature_popup === false ? 440 : 720" in svg_actions_source
+    assert "const scheduleHoverSummary = (feat, featureElement, eventLike) => {" in svg_actions_source
+    assert "svg.addEventListener('mousemove', handleMouseMove);" in svg_actions_source
+    assert "function hideHoverSummary()" in svg_actions_source
     assert "state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;" in config_source
     assert "clickedFeature.activeTab" in index_html
     assert "Details" in index_html
