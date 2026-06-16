@@ -78,6 +78,7 @@ const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
 const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
+const INTERACTIVE_MATCH_GLOW_FILTER_ID = 'gbdraw-interactive-feature-match-glow';
 
 const stripEditorOnlyCursorStyles = (svg) => {
   if (!svg) return;
@@ -101,7 +102,7 @@ const getElementFeatureId = (element) =>
 const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
   cursor: pointer;
-  transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+  transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease, stroke-opacity 120ms ease;
 }
 .gbdraw-interactive-feature:hover,
 .gbdraw-interactive-feature.gbdraw-interactive-feature--hover {
@@ -113,12 +114,18 @@ const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gbdraw-interactive-feature.gbdraw-interactive-feature--match {
   opacity: 1;
-  filter: url(#gbdraw-interactive-feature-glow);
+  filter: url(#gbdraw-interactive-feature-match-glow);
+  stroke: #fbbf24;
+  stroke-linejoin: round;
+  stroke-opacity: 0.6;
+  stroke-width: 1;
+  paint-order: stroke fill markers;
 }
 .gbdraw-interactive-feature.gbdraw-interactive-feature--active-match {
   opacity: 1;
   filter: url(#gbdraw-interactive-feature-glow);
   stroke: #f59e0b;
+  stroke-opacity: 1;
   stroke-width: 2;
 }
 .gbdraw-interactive-orthogroup-link {
@@ -3357,19 +3364,28 @@ const ensureSvgDefs = (svg) => {
   return defs;
 };
 
-const ensureStandaloneFeatureGlowFilter = (svg) => {
-  const defs = ensureSvgDefs(svg);
-  const existing = defs.querySelector(`#${CSS.escape(INTERACTIVE_GLOW_FILTER_ID)}`);
+const appendStandaloneFeatureGlowFilter = (
+  defs,
+  {
+    id,
+    color,
+    opacity,
+    blurStdDeviation,
+    slope,
+    extent
+  }
+) => {
+  const existing = defs.querySelector(`#${CSS.escape(id)}`);
   if (existing?.parentNode) {
     existing.parentNode.removeChild(existing);
   }
 
   const filter = document.createElementNS(SVG_NS, 'filter');
-  filter.setAttribute('id', INTERACTIVE_GLOW_FILTER_ID);
-  filter.setAttribute('x', '-35%');
-  filter.setAttribute('y', '-35%');
-  filter.setAttribute('width', '170%');
-  filter.setAttribute('height', '170%');
+  filter.setAttribute('id', id);
+  filter.setAttribute('x', `-${extent}%`);
+  filter.setAttribute('y', `-${extent}%`);
+  filter.setAttribute('width', `${100 + (extent * 2)}%`);
+  filter.setAttribute('height', `${100 + (extent * 2)}%`);
   filter.setAttribute('color-interpolation-filters', 'sRGB');
 
   const componentTransfer = document.createElementNS(SVG_NS, 'feComponentTransfer');
@@ -3378,18 +3394,18 @@ const ensureStandaloneFeatureGlowFilter = (svg) => {
   ['R', 'G', 'B'].forEach((channel) => {
     const func = document.createElementNS(SVG_NS, `feFunc${channel}`);
     func.setAttribute('type', 'linear');
-    func.setAttribute('slope', '1.2');
+    func.setAttribute('slope', String(slope));
     componentTransfer.appendChild(func);
   });
 
   const blur = document.createElementNS(SVG_NS, 'feGaussianBlur');
   blur.setAttribute('in', 'SourceAlpha');
-  blur.setAttribute('stdDeviation', '3');
+  blur.setAttribute('stdDeviation', String(blurStdDeviation));
   blur.setAttribute('result', 'gbdrawFeatureGlowBlur');
 
   const flood = document.createElementNS(SVG_NS, 'feFlood');
-  flood.setAttribute('flood-color', '#2563eb');
-  flood.setAttribute('flood-opacity', '0.85');
+  flood.setAttribute('flood-color', color);
+  flood.setAttribute('flood-opacity', String(opacity));
   flood.setAttribute('result', 'gbdrawFeatureGlowColor');
 
   const composite = document.createElementNS(SVG_NS, 'feComposite');
@@ -3413,12 +3429,33 @@ const ensureStandaloneFeatureGlowFilter = (svg) => {
   defs.appendChild(filter);
 };
 
+const ensureStandaloneFeatureGlowFilter = (svg) => {
+  const defs = ensureSvgDefs(svg);
+  appendStandaloneFeatureGlowFilter(defs, {
+    id: INTERACTIVE_GLOW_FILTER_ID,
+    color: '#2563eb',
+    opacity: 0.85,
+    blurStdDeviation: 3,
+    slope: 1.2,
+    extent: 35
+  });
+  appendStandaloneFeatureGlowFilter(defs, {
+    id: INTERACTIVE_MATCH_GLOW_FILTER_ID,
+    color: '#fbbf24',
+    opacity: 0.32,
+    blurStdDeviation: 1.5,
+    slope: 1.04,
+    extent: 25
+  });
+};
+
 const removeExistingStandaloneInteractivityAssets = (svg) => {
   [
     INTERACTIVE_METADATA_ID,
     INTERACTIVE_STYLE_ID,
     INTERACTIVE_SCRIPT_ID,
     INTERACTIVE_GLOW_FILTER_ID,
+    INTERACTIVE_MATCH_GLOW_FILTER_ID,
     'gbdraw-viewport-controls',
     'gbdraw-feature-search-controls',
     'gbdraw-feature-popup'

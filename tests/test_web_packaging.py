@@ -173,6 +173,10 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "gbdraw-interactive-feature--match" in export_source
     assert "gbdraw-interactive-feature--active-match" in export_source
     assert "gbdraw-interactive-feature--dimmed" in export_source
+    assert "gbdraw-interactive-feature-match-glow" in export_source
+    assert "filter: url(#gbdraw-interactive-feature-match-glow);" in export_source
+    assert "stroke-opacity: 0.6;" in export_source
+    assert "stroke-opacity: 1;" in export_source
     assert "function normalizeSearchText(value)" in export_source
     assert "function featureSearchValues(feature, field, qualifierKey)" in export_source
     assert "function featureSearchMatches(feature, matcher, field, qualifierKey)" in export_source
@@ -263,6 +267,7 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "getPopupTextScale" in export_source
     assert "root.style.setProperty('--gfi-text-scale'" in export_source
     assert "gbdraw-interactive-feature-glow" in export_source
+    assert "gbdraw-interactive-feature-match-glow" in export_source
     assert "gbdraw-interactive-feature--hover" in export_source
     assert "gbdraw-interactive-orthogroup-link--hover" in export_source
     assert "function setOrthogroupHover(orthogroupId, highlight)" in export_source
