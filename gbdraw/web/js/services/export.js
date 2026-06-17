@@ -598,6 +598,9 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfs-button--clear {
   flex: 0 0 48px;
 }
+.gfs-button--open {
+  flex: 0 0 44px;
+}
 .gfs-button--search {
   flex: 0 0 62px;
   border-color: #1d4ed8;
@@ -613,6 +616,21 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfs-button--search:hover {
   background: #1d4ed8;
   border-color: #1e40af;
+  color: #ffffff;
+}
+.gfs-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+}
+.gfs-button:disabled:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+.gfs-button--search:disabled:hover {
+  background: #2563eb;
+  border-color: #1d4ed8;
   color: #ffffff;
 }
 .gfs-count {
@@ -701,6 +719,12 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     matchDetails: {},
     activeIndex: -1,
     error: ''
+  };
+  var pendingSearchState = {
+    query: '',
+    field: 'all',
+    qualifierKey: '',
+    useRegex: false
   };
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
   var FEATURE_PART_SUFFIX_RE = /__part\\d+$/;
@@ -1374,14 +1398,33 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var regexInput = searchControls.querySelector('[data-search-regex]');
     var countText = searchControls.querySelector('[data-search-count]');
     var matchDetailText = searchControls.querySelector('[data-search-match-detail]');
+    var prevButton = searchControls.querySelector('[data-search-prev]');
+    var nextButton = searchControls.querySelector('[data-search-next]');
+    var openButton = searchControls.querySelector('[data-search-open]');
+    var clearButton = searchControls.querySelector('[data-search-clear]');
     searchState.field = normalizeSearchField(searchState.field);
-    if (queryInput && queryInput.value !== searchState.query) queryInput.value = searchState.query;
-    if (fieldSelect && fieldSelect.value !== searchState.field) fieldSelect.value = searchState.field;
-    if (qualifierInput && qualifierInput.value !== searchState.qualifierKey) qualifierInput.value = searchState.qualifierKey;
-    if (regexInput) regexInput.checked = Boolean(searchState.useRegex);
+    pendingSearchState.field = normalizeSearchField(pendingSearchState.field);
+    if (queryInput && queryInput.value !== pendingSearchState.query) queryInput.value = pendingSearchState.query;
+    if (fieldSelect && fieldSelect.value !== pendingSearchState.field) fieldSelect.value = pendingSearchState.field;
+    if (qualifierInput && qualifierInput.value !== pendingSearchState.qualifierKey) qualifierInput.value = pendingSearchState.qualifierKey;
+    if (regexInput) regexInput.checked = Boolean(pendingSearchState.useRegex);
     if (qualifierInput) {
-      qualifierInput.disabled = popupMode === 'simple' || searchState.field !== 'qualifier-value';
+      qualifierInput.disabled = popupMode === 'simple' || pendingSearchState.field !== 'qualifier-value';
       qualifierInput.style.display = popupMode === 'simple' ? 'none' : '';
+    }
+    var hasMatches = searchState.matches.length > 0;
+    if (prevButton) prevButton.disabled = !hasMatches;
+    if (nextButton) nextButton.disabled = !hasMatches;
+    if (openButton) openButton.disabled = !hasMatches;
+    if (clearButton) {
+      clearButton.disabled = !pendingSearchState.query &&
+        !pendingSearchState.qualifierKey &&
+        pendingSearchState.field === 'all' &&
+        !pendingSearchState.useRegex &&
+        !searchState.query &&
+        !searchState.qualifierKey &&
+        !searchState.error &&
+        !searchState.matches.length;
     }
     setClassToken(root, 'is-invalid', Boolean(searchState.error));
     if (countText) {
@@ -1428,6 +1471,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       : normalizeSearchField(searchState.field);
     searchState.qualifierKey = Object.prototype.hasOwnProperty.call(nextState, 'qualifierKey') ? String(nextState.qualifierKey || '') : searchState.qualifierKey;
     searchState.useRegex = Object.prototype.hasOwnProperty.call(nextState, 'useRegex') ? Boolean(nextState.useRegex) : searchState.useRegex;
+    pendingSearchState.query = searchState.query;
+    pendingSearchState.field = normalizeSearchField(searchState.field);
+    pendingSearchState.qualifierKey = searchState.qualifierKey;
+    pendingSearchState.useRegex = Boolean(searchState.useRegex);
 
     var matcher = compileSearchMatcher(searchState.query, searchState.useRegex);
     searchState.error = matcher.error;
@@ -1462,7 +1509,42 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     applySearchResults();
   }
 
+  function clearAppliedSearchResults() {
+    var hadAppliedSearch = Boolean(String(searchState.query || '').trim()) ||
+      Boolean(searchState.qualifierKey) ||
+      Boolean(searchState.error) ||
+      searchState.matches.length > 0;
+    searchState.query = '';
+    searchState.field = 'all';
+    searchState.qualifierKey = '';
+    searchState.useRegex = false;
+    searchState.matches = [];
+    searchState.matchDetails = {};
+    searchState.activeIndex = -1;
+    searchState.error = '';
+    if (hadAppliedSearch) {
+      applySearchResults();
+    } else {
+      syncSearchControls();
+    }
+  }
+
+  function setPendingSearchState(nextState) {
+    nextState = nextState || {};
+    pendingSearchState.query = Object.prototype.hasOwnProperty.call(nextState, 'query') ? String(nextState.query || '') : pendingSearchState.query;
+    pendingSearchState.field = Object.prototype.hasOwnProperty.call(nextState, 'field')
+      ? normalizeSearchField(nextState.field)
+      : normalizeSearchField(pendingSearchState.field);
+    pendingSearchState.qualifierKey = Object.prototype.hasOwnProperty.call(nextState, 'qualifierKey') ? String(nextState.qualifierKey || '') : pendingSearchState.qualifierKey;
+    pendingSearchState.useRegex = Object.prototype.hasOwnProperty.call(nextState, 'useRegex') ? Boolean(nextState.useRegex) : pendingSearchState.useRegex;
+    clearAppliedSearchResults();
+  }
+
   function clearSearch() {
+    pendingSearchState.query = '';
+    pendingSearchState.field = 'all';
+    pendingSearchState.qualifierKey = '';
+    pendingSearchState.useRegex = false;
     searchState.query = '';
     searchState.field = 'all';
     searchState.qualifierKey = '';
@@ -1543,9 +1625,12 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (options && options.center) {
       centerFeatureInView(searchState.matches[nextIndex]);
     }
+    if (options && options.openPopup && popup) {
+      openActiveMatchPopup({ center: false });
+    }
   }
 
-  function openActiveMatchPopup() {
+  function openActiveMatchPopup(options) {
     if (!searchState.matches.length) return;
     if (searchState.activeIndex < 0) {
       setActiveMatch(0, { center: true });
@@ -1553,7 +1638,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var svgId = searchState.matches[searchState.activeIndex];
     var feature = featuresById.get(String(svgId || ''));
     if (!feature) return;
-    centerFeatureInView(svgId);
+    if (!options || options.center !== false) {
+      centerFeatureInView(svgId);
+    }
     openPopup(feature, null);
   }
 
@@ -1584,7 +1671,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       view.height / fallbackSize.height
     );
     var margin = 12 * unit;
-    var controlWidth = Number(searchControls.getAttribute('width')) || 396;
+    var controlWidth = Number(searchControls.getAttribute('width')) || 430;
     var x = Math.max(
       visibleView.x + margin,
       visibleView.x + visibleView.width - (controlWidth * unit) - margin
@@ -1652,7 +1739,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     searchControls.setAttribute('id', SEARCH_CONTROLS_ID);
     searchControls.setAttribute('class', 'gbdraw-feature-search-controls');
     searchControls.setAttribute('data-popup-mode', popupMode);
-    searchControls.setAttribute('width', '396');
+    searchControls.setAttribute('width', '430');
     searchControls.setAttribute('height', '86');
 
     var root = createXhtmlNode('div', {
@@ -1733,6 +1820,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       'data-search-next': 'true',
       text: '>'
     });
+    var openButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button gfs-button--open',
+      title: 'Open active feature',
+      'aria-label': 'Open active feature',
+      'data-search-open': 'true',
+      text: 'Open'
+    });
     var clearButton = createXhtmlNode('button', {
       type: 'button',
       className: 'gfs-button gfs-button--clear',
@@ -1760,6 +1855,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     secondRow.appendChild(regexLabel);
     secondRow.appendChild(prevButton);
     secondRow.appendChild(nextButton);
+    secondRow.appendChild(openButton);
     secondRow.appendChild(clearButton);
     secondRow.appendChild(countText);
     root.appendChild(firstRow);
@@ -1781,34 +1877,37 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       }, { passive: eventName === 'touchstart' || eventName === 'touchmove' });
     });
     queryInput.addEventListener('input', function () {
-      setSearchState({ query: queryInput.value });
+      setPendingSearchState({ query: queryInput.value });
     });
     fieldSelect.addEventListener('change', function () {
-      setSearchState({ field: fieldSelect.value });
+      setPendingSearchState({ field: fieldSelect.value });
     });
     qualifierInput.addEventListener('input', function () {
-      setSearchState({ qualifierKey: qualifierInput.value });
+      setPendingSearchState({ qualifierKey: qualifierInput.value });
     });
     regexInput.addEventListener('change', function () {
-      setSearchState({ useRegex: regexInput.checked });
+      setPendingSearchState({ useRegex: regexInput.checked });
     });
     searchButton.addEventListener('click', function () {
       setSearchState({
-        query: queryInput.value,
-        field: fieldSelect.value,
-        qualifierKey: qualifierInput.value,
-        useRegex: regexInput.checked
+        query: pendingSearchState.query,
+        field: pendingSearchState.field,
+        qualifierKey: pendingSearchState.qualifierKey,
+        useRegex: pendingSearchState.useRegex
       });
       if (searchState.matches.length) {
-        setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true });
+        setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true, openPopup: Boolean(popup) });
       }
       queryInput.focus();
     });
     prevButton.addEventListener('click', function () {
-      setActiveMatch(searchState.activeIndex - 1, { center: true });
+      setActiveMatch(searchState.activeIndex - 1, { center: true, openPopup: Boolean(popup) });
     });
     nextButton.addEventListener('click', function () {
-      setActiveMatch(searchState.activeIndex + 1, { center: true });
+      setActiveMatch(searchState.activeIndex + 1, { center: true, openPopup: Boolean(popup) });
+    });
+    openButton.addEventListener('click', function () {
+      openActiveMatchPopup();
     });
     clearButton.addEventListener('click', function () {
       clearSearch();

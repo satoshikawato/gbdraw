@@ -40,7 +40,8 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchMatchDetails,
     previewFeatureSearchActiveIndex,
     previewFeatureSearchError,
-    previewFeatureSearchRenderedCount
+    previewFeatureSearchRenderedCount,
+    clickedFeature
   } = state;
 
   const getPopupMode = () => (adv?.rich_feature_popup === false ? 'simple' : 'rich');
@@ -185,6 +186,42 @@ export const createPreviewFeatureSearch = ({
     scheduleRefreshSearch({ preserveActive: false });
   };
 
+  const getActiveMatchFeature = () => {
+    const activeId = getActiveMatchId();
+    if (!activeId) return null;
+    return featuresBySvgId.value?.get?.(activeId) ||
+      (Array.isArray(extractedFeatures.value)
+        ? extractedFeatures.value.find((candidate) => String(candidate?.svg_id || '').trim() === activeId)
+        : null);
+  };
+
+  const openActiveMatch = ({ center = true } = {}) => {
+    if (!previewFeatureSearchMatches.value.length) return;
+    if (previewFeatureSearchActiveIndex.value < 0) {
+      previewFeatureSearchActiveIndex.value = 0;
+    }
+    const activeId = getActiveMatchId();
+    const feature = getActiveMatchFeature();
+    if (!feature) return;
+
+    const svg = getSvg();
+    const featureIndex = getPreviewFeatureElementIndex(svg);
+    if (center) {
+      centerPreviewFeature({
+        svg,
+        featureId: activeId,
+        featureIndex,
+        canvasContainer: canvasContainerRef.value,
+        canvasPan
+      });
+    }
+    syncPreviewClasses();
+    nextTick(() => {
+      const centerPoint = getFeatureScreenCenter(getSvg(), activeId, featureIndex);
+      openFeatureEditorForFeature(feature, centerPoint);
+    });
+  };
+
   const goToMatch = (index, { center = true } = {}) => {
     const count = previewFeatureSearchMatches.value.length;
     if (!count) {
@@ -194,6 +231,9 @@ export const createPreviewFeatureSearch = ({
     }
     previewFeatureSearchActiveIndex.value = ((Number(index) || 0) % count + count) % count;
     syncPreviewClasses({ center });
+    if (clickedFeature?.value) {
+      openActiveMatch({ center: false });
+    }
   };
 
   const goToNext = () => goToMatch(previewFeatureSearchActiveIndex.value + 1);
@@ -214,34 +254,6 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchError.value = '';
     clearPreviewClasses();
     scheduleRefreshSearch({ preserveActive: false });
-  };
-
-  const openActiveMatch = () => {
-    if (!previewFeatureSearchMatches.value.length) return;
-    if (previewFeatureSearchActiveIndex.value < 0) {
-      previewFeatureSearchActiveIndex.value = 0;
-    }
-    const activeId = getActiveMatchId();
-    const feature = featuresBySvgId.value?.get?.(activeId) ||
-      (Array.isArray(extractedFeatures.value)
-        ? extractedFeatures.value.find((candidate) => String(candidate?.svg_id || '').trim() === activeId)
-        : null);
-    if (!feature) return;
-
-    const svg = getSvg();
-    const featureIndex = getPreviewFeatureElementIndex(svg);
-    centerPreviewFeature({
-      svg,
-      featureId: activeId,
-      featureIndex,
-      canvasContainer: canvasContainerRef.value,
-      canvasPan
-    });
-    syncPreviewClasses();
-    nextTick(() => {
-      const center = getFeatureScreenCenter(getSvg(), activeId, featureIndex);
-      openFeatureEditorForFeature(feature, center);
-    });
   };
 
   watch(
