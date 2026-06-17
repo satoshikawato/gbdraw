@@ -93,59 +93,6 @@ AP027132_NZ_CP006932.tblastx.out \
 
 ![hepatoplasmataceae_default.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae_default.svg)
 
-#### <i>Sorangium cellulosum</i> So ce56 (label whitelist)
-
-Interactive SVG version: [https://gbdraw.app/gallery/#sorangium-label-whitelist](https://gbdraw.app/gallery/#sorangium-label-whitelist)
-
-<details><summary>Expand to see the script</summary>
-
-```bash
-gbdraw circular \
---gbk NC_010162.gb \
--f svg \
---palette edelweiss \
---labels \
---separate_strands \
--t NC_010162.feature-specific_table.tsv \
---label_whitelist NC_010162.whitelist.tsv \
---species "<i>Sorangium cellulosum</i>" \
---strain "So ce56"
-```
-##### Label whitelist example
-| feature type | target qualifier | qualifier value regex (Python) |
-| ------ | ------- | ------- |
-| CDS | old_locus_tag | sce4138 |
-| CDS | old_locus_tag | sce4137 |
-
-[NC_010162.whitelist.tsv](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162.whitelist.tsv) (part)
-```
-CDS	old_locus_tag	sce4138
-CDS	old_locus_tag	sce4137
-CDS	old_locus_tag	sce4136
-CDS	old_locus_tag	sce4135
-CDS	old_locus_tag	sce4134
-CDS	old_locus_tag	sce4133
-CDS	old_locus_tag	sce4132
-...
-```
-
-[NC_010162.feature-specific_table.tsv](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162.feature-specific_table.tsv) (part)
-```
-CDS	old_locus_tag	sce4138	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4137	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4136	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4135	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4134	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4133	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4132	#a4d8a7	Chivosazol biosynthesis
-...
-```
-
-</details>
-
-![NC_010162_edelweiss](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162_edelweiss.svg)
-
-
 #### Human mitochondrial genome (feature qualifier priority)
 
 Interactive SVG version: [https://gbdraw.app/gallery/#human-mtdna-compact](https://gbdraw.app/gallery/#human-mtdna-compact)

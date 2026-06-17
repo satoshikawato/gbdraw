@@ -93,26 +93,6 @@
     "interactiveStep": "Generated with the same Rich Interactive SVG enrichment used by the web app export."
   },
   {
-    "id": "sorangium-label-whitelist",
-    "title": "Sorangium cellulosum label whitelist",
-    "tags": [
-      "Circular",
-      "Labels",
-      "Large"
-    ],
-    "description": "A large bacterial circular annotation with whitelist labels and custom feature colors.",
-    "svg": "./examples/sorangium-label-whitelist.svg",
-    "thumbnail": "./thumbnails/sorangium-label-whitelist.webp",
-    "sourceFigure": "examples/NC_010162_edelweiss.svg",
-    "sourceNote": "Base SVG is regenerated from the command during gallery asset preparation.",
-    "featureSources": [
-      "NC_010162.gb"
-    ],
-    "fileSizeLabel": "32.9 MB",
-    "command": "gbdraw circular --gbk NC_010162.gb -f svg --palette edelweiss --labels --separate_strands -t NC_010162.feature-specific_table.tsv --label_whitelist NC_010162.whitelist.tsv --species \"<i>Sorangium cellulosum</i>\" --strain \"So ce56\"",
-    "interactiveStep": "Generated with the same Rich Interactive SVG enrichment used by the web app export."
-  },
-  {
     "id": "tobacco-chloroplast",
     "title": "Nicotiana tabacum chloroplast genome",
     "tags": [

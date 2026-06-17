@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -17,10 +18,13 @@ _PROJECT_VERSION_RE = re.compile(r'^version\s*=\s*"([^"]+)"\s*$', re.MULTILINE)
 _WHEEL_NAME_RE = re.compile(r'^(export const GBDRAW_WHEEL_NAME\s*=\s*")[^"]+(";\s*)$', re.MULTILINE)
 _WHEEL_CACHE_BUST_RE = re.compile(r'^(export const GBDRAW_WHEEL_CACHE_BUST\s*=\s*")[^"]+(";\s*)$', re.MULTILINE)
 
-_BASE_PACKAGE_DATA = [
+_PYTHON_RUNTIME_PACKAGE_DATA = [
     "data/color_palettes.toml",
     "data/config.toml",
     "data/*.ttf",
+]
+
+_WEB_APP_PACKAGE_DATA = [
     "web/index.html",
     "web/open-source-notices.html",
     "web/gallery/*.html",
@@ -70,14 +74,32 @@ _BASE_PACKAGE_DATA = [
     "web/wasm/*/*.wasm",
 ]
 
+BROWSER_WHEEL_MAX_BYTES = 20 * 1024 * 1024
+
+_BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
+    "gbdraw/web/assets/",
+    "gbdraw/web/gallery/",
+    "gbdraw/web/js/",
+    "gbdraw/web/presets/",
+    "gbdraw/web/vendor/",
+    "gbdraw/web/wasm/",
+)
+
+_BROWSER_WHEEL_FORBIDDEN_FILES = {
+    "gbdraw/web/index.html",
+    "gbdraw/web/open-source-notices.html",
+}
+
 
 def is_browser_wheel_build() -> bool:
     return os.environ.get(BROWSER_WHEEL_BUILD_ENV) == "1"
 
 
 def get_package_data_patterns(*, include_browser_wheel: bool) -> list[str]:
-    patterns = list(_BASE_PACKAGE_DATA)
-    if include_browser_wheel:
+    patterns = list(_PYTHON_RUNTIME_PACKAGE_DATA)
+    if not is_browser_wheel_build():
+        patterns.extend(_WEB_APP_PACKAGE_DATA)
+    if include_browser_wheel and not is_browser_wheel_build():
         patterns.insert(3, f"web/{expected_browser_wheel_name()}")
     return patterns
 
@@ -136,6 +158,48 @@ def update_browser_wheel_config(*, wheel_name: str, cache_bust: str | None = Non
         CONFIG_PATH.write_text(updated_text, encoding="utf-8")
 
 
+def inspect_browser_wheel_payload(path: Path) -> None:
+    if path.stat().st_size > BROWSER_WHEEL_MAX_BYTES:
+        raise RuntimeError(
+            f"Browser wheel {path.relative_to(REPO_ROOT)} is too large: "
+            f"{path.stat().st_size} bytes, expected at most {BROWSER_WHEEL_MAX_BYTES}. "
+            "Run `python tools/prepare_browser_wheel.py`."
+        )
+
+    with zipfile.ZipFile(path) as zf:
+        names = set(zf.namelist())
+
+    forbidden = sorted(
+        name
+        for name in names
+        if name in _BROWSER_WHEEL_FORBIDDEN_FILES
+        or any(name.startswith(prefix) for prefix in _BROWSER_WHEEL_FORBIDDEN_PREFIXES)
+        or (name.startswith("gbdraw/web/gbdraw-") and name.endswith(".whl"))
+    )
+    if forbidden:
+        preview = "\n".join(forbidden[:20])
+        if len(forbidden) > 20:
+            preview += f"\n... and {len(forbidden) - 20} more"
+        raise RuntimeError(
+            "Browser wheel contains hosted web assets that should remain outside the "
+            "Pyodide runtime wheel:\n"
+            f"{preview}\n"
+            "Run `python tools/prepare_browser_wheel.py`."
+        )
+
+    required = {
+        "gbdraw/data/color_palettes.toml",
+        "gbdraw/data/config.toml",
+    }
+    missing = sorted(required - names)
+    if missing:
+        raise RuntimeError(
+            "Browser wheel is missing required Python runtime package data:\n"
+            + "\n".join(missing)
+            + "\nRun `python tools/prepare_browser_wheel.py`."
+        )
+
+
 def validate_browser_wheel_prepared() -> Path:
     expected_name = expected_browser_wheel_name()
     expected_path = WEB_ROOT / expected_name
@@ -161,4 +225,5 @@ def validate_browser_wheel_prepared() -> Path:
             "Run `python tools/prepare_browser_wheel.py`."
         )
 
+    inspect_browser_wheel_payload(expected_path)
     return expected_path

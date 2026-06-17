@@ -24,6 +24,22 @@ CITATION_PATH = REPO_ROOT / "CITATION.cff"
 
 PREPRINT_TITLE = "gbdraw: a genome diagram generator for microbes and organelles"
 PREPRINT_DOI = "10.64898/2026.04.07.716863"
+BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
+    "gbdraw/web/assets/",
+    "gbdraw/web/gallery/",
+    "gbdraw/web/js/",
+    "gbdraw/web/presets/",
+    "gbdraw/web/vendor/",
+    "gbdraw/web/wasm/",
+)
+BROWSER_WHEEL_FORBIDDEN_FILES = {
+    "gbdraw/web/index.html",
+    "gbdraw/web/open-source-notices.html",
+}
+BROWSER_WHEEL_REQUIRED_RUNTIME_DATA = {
+    "gbdraw/data/color_palettes.toml",
+    "gbdraw/data/config.toml",
+}
 
 
 def _load_verify_module():
@@ -126,7 +142,25 @@ def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
+    verify_module.BUILD_SUPPORT.inspect_browser_wheel_payload(expected_wheel_path)
     verify_module._assert_packaged_assets()
+
+
+def test_browser_wheel_excludes_hosted_web_assets() -> None:
+    verify_module, browser_wheel_path = ensure_prepared_browser_wheel()
+    with zipfile.ZipFile(browser_wheel_path) as zf:
+        names = set(zf.namelist())
+
+    forbidden = sorted(
+        name
+        for name in names
+        if name in BROWSER_WHEEL_FORBIDDEN_FILES
+        or any(name.startswith(prefix) for prefix in BROWSER_WHEEL_FORBIDDEN_PREFIXES)
+        or (name.startswith("gbdraw/web/gbdraw-") and name.endswith(".whl"))
+    )
+    assert forbidden == []
+    assert BROWSER_WHEEL_REQUIRED_RUNTIME_DATA <= names
+    assert browser_wheel_path.stat().st_size <= verify_module.BUILD_SUPPORT.BROWSER_WHEEL_MAX_BYTES
 
 
 def test_index_links_to_open_source_notices() -> None:
@@ -204,7 +238,6 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "human-mtdna-compact",
         "hepatoplasmataceae-comparison",
         "majanivirus-comparison",
-        "sorangium-label-whitelist",
         "tobacco-chloroplast",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))

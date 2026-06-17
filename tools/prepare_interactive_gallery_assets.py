@@ -153,20 +153,6 @@ EXAMPLES: tuple[GalleryExample, ...] = (
         ),
     ),
     GalleryExample(
-        id="sorangium-label-whitelist",
-        title="Sorangium cellulosum label whitelist",
-        tags=("Circular", "Labels", "Large"),
-        description="A large bacterial circular annotation with whitelist labels and custom feature colors.",
-        source_svg="NC_010162_edelweiss.svg",
-        feature_sources=("NC_010162.gb",),
-        command=(
-            "gbdraw circular --gbk NC_010162.gb -f svg --palette edelweiss --labels "
-            "--separate_strands -t NC_010162.feature-specific_table.tsv "
-            "--label_whitelist NC_010162.whitelist.tsv "
-            '--species "<i>Sorangium cellulosum</i>" --strain "So ce56"'
-        ),
-    ),
-    GalleryExample(
         id="tobacco-chloroplast",
         title="Nicotiana tabacum chloroplast genome",
         tags=("Circular", "Organellar", "Feature types"),
