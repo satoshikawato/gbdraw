@@ -9,6 +9,8 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_HELPERS_PATH = REPO_ROOT / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
@@ -36,6 +38,28 @@ def _extract_features(namespace: dict[str, object], path: Path) -> list[dict[str
     payload = json.loads(result)
     assert "error" not in payload
     return payload["features"]
+
+
+def test_importable_feature_metadata_matches_pyodide_wrapper(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000000", name="Importable")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 9, strand=1),
+            type="CDS",
+            qualifiers={
+                "locus_tag": ["ABC_0000"],
+                "product": ["importable protein"],
+                "translation": ["MK"],
+            },
+        )
+    )
+    path = _write_genbank(tmp_path, record)
+    wrapper_payload = json.loads(python_helpers_namespace["extract_features_from_genbank"](str(path)))  # type: ignore[operator]
+
+    assert wrapper_payload == extract_features_from_genbank_payload(path)
 
 
 def test_web_feature_extraction_includes_qualifiers_locations_and_translation(

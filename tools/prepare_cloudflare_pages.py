@@ -19,6 +19,10 @@ ISOLATION_HEADERS = """/*
   Cross-Origin-Embedder-Policy: require-corp
   Cross-Origin-Resource-Policy: same-origin
   Content-Security-Policy: frame-ancestors 'none'
+
+/gallery/examples/*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self' data: blob:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'self'
 """
 
 

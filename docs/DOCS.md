@@ -22,12 +22,14 @@ Use [https://gbdraw.app/](https://gbdraw.app/) if you want the fastest path to a
 
 - [CLI Reference](./CLI_Reference.md): current command help for `gbdraw`, `gbdraw circular`, and `gbdraw linear`.
 - [Gallery](./GALLERY.md): example plots and the commands used to generate them.
+- [Interactive SVG Gallery](https://gbdraw.app/gallery/): JavaScript-enabled SVG examples embedded in sandboxed iframes.
 - [FAQ](./FAQ.md): common questions, limitations, and workarounds.
 - [About](./ABOUT.md): citation information and project background.
 
 ## Interface Guide
 
 - Hosted web app: [https://gbdraw.app/](https://gbdraw.app/)
+- Interactive SVG gallery: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
 - Collinear linear comparisons: use `--protein_blastp_mode collinear`; `--collinear_min_anchors` sets the minimum anchors/genes required for a rendered Collinear block. The default 1 includes singleton links. `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients.

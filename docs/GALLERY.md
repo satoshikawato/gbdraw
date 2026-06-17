@@ -2,10 +2,14 @@
 # Gallery
 This gallery showcases representative `gbdraw` outputs and the commands used to generate them. For shorter copy-paste examples, see [Recipes](./RECIPES.md).
 
+Interactive SVG versions of selected examples are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub previews static SVG images, so use the public gallery when you want to inspect JavaScript-enabled standalone SVG output.
+
 For circular examples, `--track_type` names the simple-layout preset. Custom Track Slots use explicit geometry instead, and the circular axis remains fixed.
 
 
 #### Majaniviruses Multi-Genome Comparison
+
+Interactive SVG version: [https://gbdraw.app/gallery/#majanivirus-comparison](https://gbdraw.app/gallery/#majanivirus-comparison)
 
 <details><summary>Expand to see the script</summary>
 
@@ -57,58 +61,41 @@ gbdraw linear \
 
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
-#### <i>Sorangium cellulosum</i> So ce56 (label whitelist)
+#### Hepatoplasmataceae Five-Genome Comparison
+
+Interactive SVG version: [https://gbdraw.app/gallery/#hepatoplasmataceae-comparison](https://gbdraw.app/gallery/#hepatoplasmataceae-comparison)
 
 <details><summary>Expand to see the script</summary>
 
 ```bash
-gbdraw circular \
---gbk NC_010162.gb \
--f svg \
---palette edelweiss \
---labels \
+gbdraw linear \
+--gbk \
+AP027078.gb \
+AP027131.gb \
+AP027133.gb \
+AP027132.gb \
+NZ_CP006932.gb \
+-b \
+AP027078_AP027131.tblastx.out \
+AP027131_AP027133.tblastx.out \
+AP027133_AP027132.tblastx.out \
+AP027132_NZ_CP006932.tblastx.out \
+--align_center \
 --separate_strands \
--t NC_010162.feature-specific_table.tsv \
---label_whitelist NC_010162.whitelist.tsv \
---species "<i>Sorangium cellulosum</i>" \
---strain "So ce56"
-```
-##### Label whitelist example
-| feature type | target qualifier | qualifier value regex (Python) |
-| ------ | ------- | ------- |
-| CDS | old_locus_tag | sce4138 |
-| CDS | old_locus_tag | sce4137 |
-
-[NC_010162.whitelist.tsv](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162.whitelist.tsv) (part)
-```
-CDS	old_locus_tag	sce4138
-CDS	old_locus_tag	sce4137
-CDS	old_locus_tag	sce4136
-CDS	old_locus_tag	sce4135
-CDS	old_locus_tag	sce4134
-CDS	old_locus_tag	sce4133
-CDS	old_locus_tag	sce4132
-...
-```
-
-[NC_010162.feature-specific_table.tsv](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162.feature-specific_table.tsv) (part)
-```
-CDS	old_locus_tag	sce4138	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4137	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4136	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4135	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4134	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4133	#a4d8a7	Chivosazol biosynthesis
-CDS	old_locus_tag	sce4132	#a4d8a7	Chivosazol biosynthesis
-...
+--block_stroke_width 1 \
+--block_stroke_color gray \
+--palette default \
+-f svg \
+-o hepatoplasmataceae_default
 ```
 
 </details>
 
-![NC_010162_edelweiss](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162_edelweiss.svg)
-
+![hepatoplasmataceae_default.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae_default.svg)
 
 #### Human mitochondrial genome (feature qualifier priority)
+
+Interactive SVG version: [https://gbdraw.app/gallery/#human-mtdna-compact](https://gbdraw.app/gallery/#human-mtdna-compact)
 
 <details><summary>Expand to see the script</summary>
 
@@ -138,6 +125,8 @@ gbdraw circular \
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
 #### <i>Nicotiana tabacum</i> chloroplast genome
+
+Interactive SVG version: [https://gbdraw.app/gallery/#tobacco-chloroplast](https://gbdraw.app/gallery/#tobacco-chloroplast)
 
 <details><summary>Expand to see the script</summary>
 
@@ -173,6 +162,8 @@ gbdraw circular \
 ![NC_001879_color.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001879_color.svg)
 
 #### Lambda phage
+
+Interactive SVG version: [https://gbdraw.app/gallery/#lambda-phage-linear](https://gbdraw.app/gallery/#lambda-phage-linear)
 
 <details><summary>Expand to see the script</summary>
 
