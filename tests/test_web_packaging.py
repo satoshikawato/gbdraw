@@ -210,6 +210,16 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "function buildIupacQueryPattern(query, alphabet)" in export_source
     assert "function supportsStandaloneControls()" in export_source
     assert "function setSearchState(nextState)" in export_source
+    assert "var pendingSearchState = {" in export_source
+    assert "function setPendingSearchState(nextState)" in export_source
+    assert "queryInput.addEventListener('input', function () {\n      setPendingSearchState({ query: queryInput.value });" in export_source
+    assert "fieldSelect.addEventListener('change', function () {\n      setPendingSearchState({ field: fieldSelect.value });" in export_source
+    assert "queryInput.addEventListener('input', function () {\n      setSearchState({ query: queryInput.value });" not in export_source
+    assert "fieldSelect.addEventListener('change', function () {\n      setSearchState({ field: fieldSelect.value });" not in export_source
+    assert "searchButton.addEventListener('click', function () {\n      setSearchState({" in export_source
+    assert "query: pendingSearchState.query" in export_source
+    assert "setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true" not in export_source
+    assert "openButton.addEventListener('click', function () {\n      openActiveMatchPopup();" in export_source
     assert "function applySearchResults()" in export_source
     assert "function setActiveMatch(index, options)" in export_source
     assert "function clearSearch()" in export_source

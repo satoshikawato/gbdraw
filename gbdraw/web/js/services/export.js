@@ -1895,9 +1895,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         qualifierKey: pendingSearchState.qualifierKey,
         useRegex: pendingSearchState.useRegex
       });
-      if (searchState.matches.length) {
-        setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true, openPopup: Boolean(popup) });
-      }
       queryInput.focus();
     });
     prevButton.addEventListener('click', function () {
