@@ -2,10 +2,14 @@
 # Gallery
 This gallery showcases representative `gbdraw` outputs and the commands used to generate them. For shorter copy-paste examples, see [Recipes](./RECIPES.md).
 
+Interactive SVG versions of selected examples are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub previews static SVG images, so use the public gallery when you want to inspect JavaScript-enabled standalone SVG output.
+
 For circular examples, `--track_type` names the simple-layout preset. Custom Track Slots use explicit geometry instead, and the circular axis remains fixed.
 
 
 #### Majaniviruses Multi-Genome Comparison
+
+Interactive SVG version: [https://gbdraw.app/gallery/#majanivirus-comparison](https://gbdraw.app/gallery/#majanivirus-comparison)
 
 <details><summary>Expand to see the script</summary>
 
@@ -57,7 +61,41 @@ gbdraw linear \
 
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
+#### Hepatoplasmataceae Five-Genome Comparison
+
+Interactive SVG version: [https://gbdraw.app/gallery/#hepatoplasmataceae-comparison](https://gbdraw.app/gallery/#hepatoplasmataceae-comparison)
+
+<details><summary>Expand to see the script</summary>
+
+```bash
+gbdraw linear \
+--gbk \
+AP027078.gb \
+AP027131.gb \
+AP027133.gb \
+AP027132.gb \
+NZ_CP006932.gb \
+-b \
+AP027078_AP027131.tblastx.out \
+AP027131_AP027133.tblastx.out \
+AP027133_AP027132.tblastx.out \
+AP027132_NZ_CP006932.tblastx.out \
+--align_center \
+--separate_strands \
+--block_stroke_width 1 \
+--block_stroke_color gray \
+--palette default \
+-f svg \
+-o hepatoplasmataceae_default
+```
+
+</details>
+
+![hepatoplasmataceae_default.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae_default.svg)
+
 #### <i>Sorangium cellulosum</i> So ce56 (label whitelist)
+
+Interactive SVG version: [https://gbdraw.app/gallery/#sorangium-label-whitelist](https://gbdraw.app/gallery/#sorangium-label-whitelist)
 
 <details><summary>Expand to see the script</summary>
 
@@ -110,6 +148,8 @@ CDS	old_locus_tag	sce4132	#a4d8a7	Chivosazol biosynthesis
 
 #### Human mitochondrial genome (feature qualifier priority)
 
+Interactive SVG version: [https://gbdraw.app/gallery/#human-mtdna-compact](https://gbdraw.app/gallery/#human-mtdna-compact)
+
 <details><summary>Expand to see the script</summary>
 
 The following `qualifier_priority.tsv` designated by `--qualifier_priority` option specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
@@ -138,6 +178,8 @@ gbdraw circular \
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
 #### <i>Nicotiana tabacum</i> chloroplast genome
+
+Interactive SVG version: [https://gbdraw.app/gallery/#tobacco-chloroplast](https://gbdraw.app/gallery/#tobacco-chloroplast)
 
 <details><summary>Expand to see the script</summary>
 
@@ -173,6 +215,8 @@ gbdraw circular \
 ![NC_001879_color.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001879_color.svg)
 
 #### Lambda phage
+
+Interactive SVG version: [https://gbdraw.app/gallery/#lambda-phage-linear](https://gbdraw.app/gallery/#lambda-phage-linear)
 
 <details><summary>Expand to see the script</summary>
 

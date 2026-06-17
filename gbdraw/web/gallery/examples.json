@@ -1,0 +1,135 @@
+[
+  {
+    "id": "lambda-phage-linear",
+    "title": "Escherichia phage Lambda linear map",
+    "tags": [
+      "Linear",
+      "Lightweight"
+    ],
+    "description": "A compact linear genome map for quick hover, click, pan, and zoom testing.",
+    "svg": "./examples/lambda-phage-linear.svg",
+    "thumbnail": "./thumbnails/lambda-phage-linear.webp",
+    "sourceFigure": "examples/NC_001416.svg",
+    "sourceNote": "Base SVG is regenerated from the command during gallery asset preparation.",
+    "featureSources": [
+      "NC_001416.gb"
+    ],
+    "fileSizeLabel": "322 KB",
+    "command": "gbdraw linear --gbk NC_001416.gb --show_labels all --separate_strands --legend left -d cds_white.tsv -t lambda_specific_table.tsv --block_stroke_width 2 --axis_stroke_width 5 --definition_font_size 24 -f svg -o NC_001416",
+    "interactiveStep": "Generated with the same Rich Interactive SVG enrichment used by the web app export."
+  },
+  {
+    "id": "human-mtdna-compact",
+    "title": "Human mitochondrial genome, compact circular map",
+    "tags": [
+      "Circular",
+      "Compact",
+      "Labels"
+    ],
+    "description": "A small, label-rich circular genome for inspecting organellar labels and feature classes.",
+    "svg": "./examples/human-mtdna-compact.svg",
+    "thumbnail": "./thumbnails/human-mtdna-compact.webp",
+    "sourceFigure": "examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg",
+    "sourceNote": "Base SVG is regenerated from the command during gallery asset preparation.",
+    "featureSources": [
+      "NC_012920.gb"
+    ],
+    "fileSizeLabel": "223 KB",
+    "command": "gbdraw circular --gbk NC_012920.gb -f svg --track_type middle --species \"<i>Homo sapiens</i>\" --block_stroke_width 2 --axis_stroke_width 5 --labels both --qualifier_priority qualifier_priority.tsv -o NC_012920_middle_qualifier_priority_inner_axis5_def28_italic --definition_font_size 28",
+    "interactiveStep": "Generated with the same Rich Interactive SVG enrichment used by the web app export."
+  },
+  {
+    "id": "hepatoplasmataceae-comparison",
+    "title": "Hepatoplasmataceae five-genome comparison",
+    "tags": [
+      "Linear",
+      "Comparison",
+      "Featured",
+      "Large"
+    ],
+    "description": "A five-genome comparison spanning AP027078, AP027131, AP027133, AP027132, and NZ_CP006932.",
+    "svg": "./examples/hepatoplasmataceae-comparison.svg",
+    "thumbnail": "./thumbnails/hepatoplasmataceae-comparison.webp",
+    "sourceFigure": "examples/hepatoplasmataceae_default.svg",
+    "sourceNote": "Base SVG is regenerated from the command during gallery asset preparation.",
+    "featureSources": [
+      "AP027078.gb",
+      "AP027131.gb",
+      "AP027133.gb",
+      "AP027132.gb",
+      "NZ_CP006932.gb"
+    ],
+    "fileSizeLabel": "16.5 MB",
+    "command": "gbdraw linear --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb -b AP027078_AP027131.tblastx.out AP027131_AP027133.tblastx.out AP027133_AP027132.tblastx.out AP027132_NZ_CP006932.tblastx.out --align_center --separate_strands --block_stroke_width 1 --block_stroke_color gray --palette default -f svg -o hepatoplasmataceae_default",
+    "interactiveStep": "Generated with the same Rich Interactive SVG enrichment used by the web app export."
+  },
+  {
+    "id": "majanivirus-comparison",
+    "title": "Majanivirus ten-genome comparison",
+    "tags": [
+      "Linear",
+      "Comparison",
+      "Large"
+    ],
+    "description": "A dense ten-genome comparison with many match blocks for stress-testing interactive inspection.",
+    "svg": "./examples/majanivirus-comparison.svg",
+    "thumbnail": "./thumbnails/majanivirus-comparison.webp",
+    "sourceFigure": "examples/majani.svg",
+    "sourceNote": "Base SVG is regenerated from the command during gallery asset preparation.",
+    "featureSources": [
+      "MjeNMV.gb",
+      "MelaMJNV.gb",
+      "PemoMJNVA.gb",
+      "PeseMJNV.gb",
+      "PemoMJNVB.gb",
+      "LvMJNV.gb",
+      "TrcuMJNV.gb",
+      "MellatMJNV.gb",
+      "MeenMJNV.gb",
+      "MejoMJNV.gb"
+    ],
+    "fileSizeLabel": "16.7 MB",
+    "command": "gbdraw linear --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MellatMJNV.gb MeenMJNV.gb MejoMJNV.gb -b MjeNMV.MelaMJNV.tblastx.out MelaMJNV.PemoMJNVA.tblastx.out PemoMJNVA.PeseMJNV.tblastx.out PeseMJNV.PemoMJNVB.tblastx.out PemoMJNVB.LvMJNV.tblastx.out LvMJNV.TrcuMJNV.tblastx.out TrcuMJNV.MellatMJNV.tblastx.out MellatMJNV.MeenMJNV.tblastx.out MeenMJNV.MejoMJNV.tblastx.out -t majani_custom_color_table.tsv -d modified_default_colors.tsv --block_stroke_width 1 --block_stroke_color gray --align_center --separate_strands -f svg -o majani",
+    "interactiveStep": "Generated with the same Rich Interactive SVG enrichment used by the web app export."
+  },
+  {
+    "id": "sorangium-label-whitelist",
+    "title": "Sorangium cellulosum label whitelist",
+    "tags": [
+      "Circular",
+      "Labels",
+      "Large"
+    ],
+    "description": "A large bacterial circular annotation with whitelist labels and custom feature colors.",
+    "svg": "./examples/sorangium-label-whitelist.svg",
+    "thumbnail": "./thumbnails/sorangium-label-whitelist.webp",
+    "sourceFigure": "examples/NC_010162_edelweiss.svg",
+    "sourceNote": "Base SVG is regenerated from the command during gallery asset preparation.",
+    "featureSources": [
+      "NC_010162.gb"
+    ],
+    "fileSizeLabel": "32.9 MB",
+    "command": "gbdraw circular --gbk NC_010162.gb -f svg --palette edelweiss --labels --separate_strands -t NC_010162.feature-specific_table.tsv --label_whitelist NC_010162.whitelist.tsv --species \"<i>Sorangium cellulosum</i>\" --strain \"So ce56\"",
+    "interactiveStep": "Generated with the same Rich Interactive SVG enrichment used by the web app export."
+  },
+  {
+    "id": "tobacco-chloroplast",
+    "title": "Nicotiana tabacum chloroplast genome",
+    "tags": [
+      "Circular",
+      "Organellar",
+      "Feature types"
+    ],
+    "description": "A chloroplast example with clear feature classes, custom colors, and compact circular layout.",
+    "svg": "./examples/tobacco-chloroplast.svg",
+    "thumbnail": "./thumbnails/tobacco-chloroplast.webp",
+    "sourceFigure": "examples/NC_001879_color.svg",
+    "sourceNote": "Base SVG is regenerated from the command during gallery asset preparation.",
+    "featureSources": [
+      "NC_001879.gbk"
+    ],
+    "fileSizeLabel": "546 KB",
+    "command": "gbdraw circular --gbk NC_001879.gbk --separate_strands -f svg -o NC_001879_color -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin -t chloroplast_specific_table.tsv --block_stroke_width 1 --block_stroke_color black --axis_stroke_width 3 --line_stroke_width 2 --suppress_gc --suppress_skew -p default --track_type tuckin --labels both --qualifier_priority qualifier_priority.tsv --outer_label_x_radius_offset 0.90 --outer_label_y_radius_offset 0.90 --inner_label_x_radius_offset 0.975 --inner_label_y_radius_offset 0.975 --species \"<i>Nicotiana tabacum</i>\" --definition_font_size 28 --legend upper_left",
+    "interactiveStep": "Generated with the same Rich Interactive SVG enrichment used by the web app export."
+  }
+]

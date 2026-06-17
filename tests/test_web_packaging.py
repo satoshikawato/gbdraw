@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import html
 import importlib.util
+import json
 import re
 import shutil
 import socket
@@ -10,10 +12,12 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
+GALLERY_ROOT = WEB_ROOT / "gallery"
 README_PATH = REPO_ROOT / "README.md"
 ABOUT_PATH = REPO_ROOT / "docs" / "ABOUT.md"
 CITATION_PATH = REPO_ROOT / "CITATION.cff"
@@ -82,6 +86,40 @@ def _standalone_search_field_ids(source: str) -> list[str]:
     return re.findall(r"\['([^']+)',\s*'[^']+'\]", block)
 
 
+def _gallery_svg_metadata(svg_source: str) -> dict[str, object]:
+    metadata_match = re.search(
+        r'<metadata[^>]*id="gbdraw-interactive-feature-metadata"[^>]*>(.*?)</metadata>',
+        svg_source,
+        re.S,
+    )
+    assert metadata_match, "missing interactive feature metadata"
+    return json.loads(html.unescape(metadata_match.group(1)))
+
+
+def _assert_white_gallery_thumbnail(path: Path) -> None:
+    image = Image.open(path).convert("RGB")
+    assert image.size == (640, 360)
+
+    width, height = image.size
+    corners = [
+        image.getpixel((0, 0)),
+        image.getpixel((width - 1, 0)),
+        image.getpixel((0, height - 1)),
+        image.getpixel((width - 1, height - 1)),
+    ]
+    assert all(min(pixel) >= 245 for pixel in corners)
+
+    border_pixels = []
+    for x in range(width):
+        border_pixels.append(image.getpixel((x, 0)))
+        border_pixels.append(image.getpixel((x, height - 1)))
+    for y in range(height):
+        border_pixels.append(image.getpixel((0, y)))
+        border_pixels.append(image.getpixel((width - 1, y)))
+    average_luminance = sum(sum(pixel) / 3 for pixel in border_pixels) / len(border_pixels)
+    assert average_luminance >= 245
+
+
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
     expected_wheel_name = "gbdraw-0.12.0-py3-none-any.whl"
@@ -95,6 +133,12 @@ def test_index_links_to_open_source_notices() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "./open-source-notices.html" in index_html
     assert "Open Source Notices" in index_html
+
+
+def test_index_links_to_interactive_gallery() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert "./gallery/" in index_html
+    assert "Interactive Gallery" in index_html
 
 
 def test_index_uses_title_logo_separately_from_icon_assets() -> None:
@@ -114,8 +158,103 @@ def test_circular_gff3_input_renders_single_gff3_uploader() -> None:
 def test_meta_csp_omits_frame_ancestors_header_only_directive() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     notices_html = (WEB_ROOT / "open-source-notices.html").read_text(encoding="utf-8")
+    gallery_html = (GALLERY_ROOT / "index.html").read_text(encoding="utf-8")
     assert "frame-ancestors" not in index_html
     assert "frame-ancestors" not in notices_html
+    assert "frame-ancestors" not in gallery_html
+
+
+def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
+    gallery_html = (GALLERY_ROOT / "index.html").read_text(encoding="utf-8")
+    gallery_js = (GALLERY_ROOT / "gallery.js").read_text(encoding="utf-8")
+    gallery_css = (GALLERY_ROOT / "gallery.css").read_text(encoding="utf-8")
+
+    assert "default-src 'self';" in gallery_html
+    assert "script-src 'self';" in gallery_html
+    assert "style-src 'self';" in gallery_html
+    assert "frame-src 'self';" in gallery_html
+    assert '<script type="module" src="./gallery.js"></script>' in gallery_html
+    assert 'sandbox="allow-scripts"' in gallery_html
+    assert "allow-same-origin" not in gallery_html
+    assert 'id="demo-frame"' in gallery_html
+    assert "fetch('./examples.json'" in gallery_js
+    assert "frame.src = sample.svg" in gallery_js
+    assert "lambda-phage-linear.svg" not in gallery_html
+    assert "hepatoplasmataceae-comparison.svg" not in gallery_html
+    assert re.search(r"\.viewer-panel\s*>\s*\*\s*\{[^}]*min-width:\s*0;", gallery_css, re.S)
+    assert re.search(
+        r"\.frame-wrap\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;",
+        gallery_css,
+        re.S,
+    )
+    assert re.search(
+        r"\.demo-frame\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;",
+        gallery_css,
+        re.S,
+    )
+    combined = "\n".join([gallery_html, gallery_js, gallery_css]).lower()
+    assert "pyodide" not in combined
+    assert "vue" not in combined
+    assert "tailwind" not in combined
+
+
+def test_interactive_gallery_examples_are_wired() -> None:
+    expected_ids = [
+        "lambda-phage-linear",
+        "human-mtdna-compact",
+        "hepatoplasmataceae-comparison",
+        "majanivirus-comparison",
+        "sorangium-label-whitelist",
+        "tobacco-chloroplast",
+    ]
+    examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
+
+    assert [entry["id"] for entry in examples] == expected_ids
+    for entry in examples:
+        assert entry["title"]
+        assert entry["description"]
+        assert entry["tags"]
+        assert entry["command"].startswith("gbdraw ")
+        assert entry["fileSizeLabel"]
+        assert entry["sourceNote"]
+        assert entry["featureSources"]
+        assert entry["svg"].startswith("./examples/")
+        assert entry["thumbnail"].startswith("./thumbnails/")
+
+        svg_path = GALLERY_ROOT / entry["svg"].removeprefix("./")
+        thumbnail_path = GALLERY_ROOT / entry["thumbnail"].removeprefix("./")
+        assert svg_path.exists()
+        assert thumbnail_path.exists()
+
+        svg_source = svg_path.read_text(encoding="utf-8")
+        thumbnail_header = thumbnail_path.read_bytes()[:16]
+
+        assert svg_path.stat().st_size > 1024
+        assert thumbnail_path.stat().st_size > 1024
+        assert 'data-gbdraw-interactive-svg="true"' in svg_source
+        assert "gbdraw-interactive-feature-metadata" in svg_source
+        assert "gbdraw-interactive-feature-script" in svg_source
+        assert 'data-popup-mode="rich"' in svg_source
+        assert "data-gbdraw-original-viewbox" in svg_source
+        assert "gbdraw-gallery-interactive-script" not in svg_source
+        assert "data-gbdraw-gallery" not in svg_source
+        assert "parent." not in svg_source
+
+        payload = _gallery_svg_metadata(svg_source)
+        assert payload["schema"] == "gbdraw-interactive-feature-popup-v1"
+        assert payload["popup_mode"] == "rich"
+        features = payload["features"]
+        assert features
+        assert any(feature.get("qualifiers") for feature in features)
+        assert any(feature.get("location_parts") for feature in features)
+        assert any(
+            feature.get("nucleotide_sequence") or feature.get("sequence_warnings")
+            for feature in features
+        )
+
+        assert thumbnail_header.startswith(b"RIFF")
+        assert b"WEBP" in thumbnail_header
+        _assert_white_gallery_thumbnail(thumbnail_path)
 
 
 def test_index_cloaks_vue_template_until_mount() -> None:
@@ -140,6 +279,7 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     helper_source = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    feature_metadata_source = (REPO_ROOT / "gbdraw" / "web_support" / "feature_metadata.py").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
 
     assert "rich_feature_popup: true" in state_source
@@ -170,142 +310,192 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "label: 'Record index'" not in svg_actions_source
     assert "label: 'Strand'" not in svg_actions_source
     assert "navigator.clipboard?.writeText" in app_setup_source
-    assert "location_parts" in helper_source
-    assert "nucleotide_sequence" in helper_source
-    assert "amino_acid_sequence" in helper_source
+    assert "from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json" in helper_source
+    assert "return extract_features_from_genbank_json(" in helper_source
+    assert "location_parts" in feature_metadata_source
+    assert "nucleotide_sequence" in feature_metadata_source
+    assert "amino_acid_sequence" in feature_metadata_source
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
 def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload() -> None:
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
-    assert "gbdraw-interactive-feature-popup-v1" in export_source
-    assert "gbdraw-interactive-feature-metadata" in export_source
-    assert "gbdraw-interactive-feature-script" in export_source
-    assert "gbdraw-feature-search-controls" in export_source
-    assert "gbdraw-interactive-feature--match" in export_source
-    assert "gbdraw-interactive-feature--active-match" in export_source
-    assert "gbdraw-interactive-feature--dimmed" in export_source
-    assert "gbdraw-interactive-feature-match-glow" in export_source
-    assert "filter: url(#gbdraw-interactive-feature-match-glow);" in export_source
-    assert "stroke-opacity: 0.6;" in export_source
-    assert "stroke-opacity: 1;" in export_source
-    assert "function normalizeSearchText(value)" in export_source
-    assert "function featureSearchValues(feature, field, qualifierKey)" in export_source
-    assert "function featureSearchMatches(feature, matcher, field, qualifierKey)" in export_source
-    assert "function compileSearchMatcher(query, useRegex)" in export_source
-    assert "function featureMatchesSearch(feature, matcher, field, qualifierKey)" in export_source
-    assert "matchDetails: {}" in export_source
-    assert "data-search-match-detail" in export_source
-    assert "gfs-button--clear" in export_source
-    assert "gfs-match-detail" in export_source
-    assert "['orthogroup', 'Orthogroup']" in export_source
-    assert "['nucleotide', 'Nucleotide']" in export_source
-    assert "['amino-acid', 'Amino acid']" in export_source
-    assert "['sequence', 'Sequence']" not in export_source
-    assert "var NUCLEOTIDE_IUPAC = {" in export_source
-    assert "var AMINO_ACID_IUPAC = {" in export_source
-    assert "function buildIupacQueryPattern(query, alphabet)" in export_source
-    assert "function supportsStandaloneControls()" in export_source
-    assert "function setSearchState(nextState)" in export_source
-    assert "var pendingSearchState = {" in export_source
-    assert "function setPendingSearchState(nextState)" in export_source
-    assert "queryInput.addEventListener('input', function () {\n      setPendingSearchState({ query: queryInput.value });" in export_source
-    assert "fieldSelect.addEventListener('change', function () {\n      setPendingSearchState({ field: fieldSelect.value });" in export_source
-    assert "queryInput.addEventListener('input', function () {\n      setSearchState({ query: queryInput.value });" not in export_source
-    assert "fieldSelect.addEventListener('change', function () {\n      setSearchState({ field: fieldSelect.value });" not in export_source
-    assert "searchButton.addEventListener('click', function () {\n      setSearchState({" in export_source
-    assert "query: pendingSearchState.query" in export_source
-    assert "setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true" not in export_source
-    assert "openButton.addEventListener('click', function () {\n      openActiveMatchPopup();" in export_source
-    assert "function applySearchResults()" in export_source
-    assert "function setActiveMatch(index, options)" in export_source
-    assert "function clearSearch()" in export_source
-    assert "Search match" in export_source
-    assert "Orthogroup members" in export_source
-    assert "function scheduleInitialViewportRefresh()" in export_source
-    assert "var initialView = copyViewRect(getViewRect());" in export_source
-    assert "rectsNearlyEqual(getViewRect(), initialView)" in export_source
-    assert "scheduleInitialViewportRefresh();" in export_source
-    assert "var targetRect = fitRectToAspect({\n      x: bounds.x + bounds.width / 2 - targetWidth / 2," in export_source
-    assert "}, homeViewRect.width / homeViewRect.height);\n    setSvgViewRect(targetRect);" in export_source
-    assert "visibleView.x + visibleView.width - (controlWidth * unit) - margin" in export_source
-    assert "visibleView.y + margin + (searchControlsOffsetCss.y * unit)" in export_source
-    assert "var yOffset = 42 * unit" not in export_source
-    assert "gfi-og-members-table" in export_source
-    assert "Coordinates (+/-)" in export_source
-    assert "Product / note" in export_source
-    assert "displayProteinId(null, member)" in export_source
-    assert "function displayProteinId(feature, member)" in export_source
-    assert "['Source protein ID'" not in export_source
-    assert "display_label" in export_source
-    assert "search_labels" in export_source
-    assert "orthogroup_id" in export_source
-    assert "protein_id" in export_source
-    assert "const buildStandaloneOrthogroupPayloads = (features) => {" in export_source
-    assert "const orthogroups = buildStandaloneOrthogroupPayloads(features);" in export_source
-    assert "data-gbdraw-interactive-feature" in export_source
-    assert "data-gbdraw-original-viewbox" in export_source
-    assert "data-gbdraw-original-width" in export_source
-    assert "data-gbdraw-original-height" in export_source
+    assert "import { enrichSvgWithStandaloneInteractivity, stripEditorOnlyCursorStyles } from './standalone-interactivity.js';" in export_source
+    assert "gbdraw-interactive-feature-popup-v1" not in export_source
+    assert "gbdraw-feature-search-controls" not in export_source
+    assert "const STANDALONE_INTERACTIVE_SCRIPT" not in export_source
     assert "enrichSvgWithStandaloneFeaturePopup" not in export_source
-    assert "const enrichSvgWithStandaloneInteractivity = (svg, { popupMode = 'rich' } = {}) => {\n  if (!svg) return false;" in export_source
-    assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
+
+    standalone_needles = [
+        "gbdraw-interactive-feature-popup-v1",
+        "gbdraw-interactive-feature-metadata",
+        "gbdraw-interactive-feature-script",
+        "gbdraw-feature-search-controls",
+        "gbdraw-interactive-feature--match",
+        "gbdraw-interactive-feature--active-match",
+        "gbdraw-interactive-feature--dimmed",
+        "gbdraw-interactive-feature-match-glow",
+        "filter: url(#gbdraw-interactive-feature-match-glow);",
+        "stroke-opacity: 0.6;",
+        "stroke-opacity: 1;",
+        "function normalizeSearchText(value)",
+        "function featureSearchValues(feature, field, qualifierKey)",
+        "function featureSearchMatches(feature, matcher, field, qualifierKey)",
+        "function compileSearchMatcher(query, useRegex)",
+        "function featureMatchesSearch(feature, matcher, field, qualifierKey)",
+        "matchDetails: {}",
+        "data-search-match-detail",
+        "gfs-button--clear",
+        "gfs-match-detail",
+        "['orthogroup', 'Orthogroup']",
+        "['nucleotide', 'Nucleotide']",
+        "['amino-acid', 'Amino acid']",
+        "var NUCLEOTIDE_IUPAC = {",
+        "var AMINO_ACID_IUPAC = {",
+        "function buildIupacQueryPattern(query, alphabet)",
+        "function supportsStandaloneControls()",
+        "function setSearchState(nextState)",
+        "var pendingSearchState = {",
+        "function setPendingSearchState(nextState)",
+        "queryInput.addEventListener('input', function () {\n      setPendingSearchState({ query: queryInput.value });",
+        "fieldSelect.addEventListener('change', function () {\n      setPendingSearchState({ field: fieldSelect.value });",
+        "searchButton.addEventListener('click', function () {\n      setSearchState({",
+        "query: pendingSearchState.query",
+        "openButton.addEventListener('click', function () {\n      openActiveMatchPopup();",
+        "function applySearchResults()",
+        "function setActiveMatch(index, options)",
+        "function clearSearch()",
+        "Search match",
+        "Orthogroup members",
+        "function scheduleInitialViewportRefresh()",
+        "var initialView = copyViewRect(getViewRect());",
+        "rectsNearlyEqual(getViewRect(), initialView)",
+        "scheduleInitialViewportRefresh();",
+        "var targetRect = fitRectToAspect({\n      x: bounds.x + bounds.width / 2 - targetWidth / 2,",
+        "}, homeViewRect.width / homeViewRect.height);\n    setSvgViewRect(targetRect);",
+        "visibleView.x + visibleView.width - (controlWidth * unit) - margin",
+        "visibleView.y + margin + (searchControlsOffsetCss.y * unit)",
+        "gfi-og-members-table",
+        "Coordinates (+/-)",
+        "Product / note",
+        "displayProteinId(null, member)",
+        "function displayProteinId(feature, member)",
+        "display_label",
+        "search_labels",
+        "orthogroup_id",
+        "protein_id",
+        "const buildStandaloneOrthogroupPayloads = (features, context) => {",
+        "const orthogroups = buildStandaloneOrthogroupPayloads(features, context);",
+        "data-gbdraw-interactive-feature",
+        "data-gbdraw-original-viewbox",
+        "data-gbdraw-original-width",
+        "data-gbdraw-original-height",
+        "export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {\n  if (!svg) return false;",
+        "const features = buildStandaloneFeaturePayloads(svg, {\n    ...context,\n    popupMode: normalizedPopupMode\n  });",
+        "svg.setAttribute('width', '100vw');",
+        "svg.setAttribute('height', '100vh');",
+        "svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');",
+        "svg.style.setProperty('width', '100vw');",
+        "svg.style.setProperty('height', '100vh');",
+        "function parseOriginalViewRectFromSvg()",
+        "function getViewportAspect()",
+        "function fitRectToAspect(rect, targetAspect)",
+        "var homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());",
+        "homeViewRect.width / maxZoom",
+        "homeViewRect.width * nextScale",
+        "{ action: 'reset', label: 'Original', title: 'Return to original view', width: 62 }",
+        "function ensureStickyLegendBackground(legend, bbox)",
+        "gbdraw-sticky-legend-background",
+        "setClassToken(svg, 'gbdraw-interactive-pan-enabled', true);",
+        "function refitViewportToWindow()",
+        "function scheduleViewportRefit()",
+        "popup_mode: normalizedPopupMode",
+        "orthogroups",
+        "var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';",
+        "var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];",
+        "var richSearchFields = {",
+        "if (popupMode === 'simple') {\n      searchFieldOptions = searchFieldOptions.filter",
+        "function renderSimplePopup(feature)",
+        "if (normalizedPopupMode === 'rich') {\n      Object.assign(payload, {\n        qualifiers: normalizeQualifierMap(feature?.qualifiers),",
+        "nucleotide_sequence",
+        "amino_acid_sequence",
+        "getVisibleViewRect()",
+        "var visibleView = getVisibleViewRect();",
+        "window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });",
+        "window.addEventListener('resize', scheduleViewportRefit);",
+        "window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });",
+        "popupCssWidth",
+        "getPopupCssMetrics",
+        "var effectiveScaleX = safeScaleX * metrics.zoomScale;",
+        "var marginCss = metrics.margin;",
+        "var dragZoomScale = getBrowserZoomScale(getViewportClientRect());",
+        "var updateActivePopupViewportMetrics = null;",
+        "function refreshActivePopupForViewport()",
+        "updateActivePopupViewportMetrics();",
+        "updateActivePopupViewportMetrics = function () {",
+        "gbdraw-interactive-feature-glow",
+        "gbdraw-interactive-feature-match-glow",
+        "gbdraw-interactive-feature--hover",
+        "gbdraw-interactive-orthogroup-link--hover",
+        "function setOrthogroupHover(orthogroupId, highlight)",
+        "activePopupDrag",
+        "activeSearchControlsDrag",
+        "gbdraw-feature-hover-popup",
+        "function scheduleHoverPopup(feature, svgId, event)",
+        "function renderHoverPopupHtml(feature, svgId)",
+        "svg.addEventListener('mousemove'",
+        "const collectRenderedFeatureEntries = (svg) => {",
+        "const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) => {",
+        "function startSearchControlsDrag(event, root)",
+        "document.addEventListener('mouseup', onEnd, true);",
+        "window.addEventListener('blur', onEnd);",
+        'data-drag-handle="true"',
+        "function startPopupDrag(event)",
+        "setFeatureHighlight",
+        "svg.addEventListener('mouseover'",
+        "root.style.transform = 'scale('",
+        "overscroll-behavior: contain;",
+        "root.addEventListener('wheel', function (rootEvent) {\n      rootEvent.stopPropagation();\n    }, { passive: true });",
+    ]
+    for needle in standalone_needles:
+        assert needle in standalone_source
+
+    standalone_absent = [
+        "['sequence', 'Sequence']",
+        "queryInput.addEventListener('input', function () {\n      setSearchState({ query: queryInput.value });",
+        "fieldSelect.addEventListener('change', function () {\n      setSearchState({ field: fieldSelect.value });",
+        "setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true",
+        "var yOffset = 42 * unit",
+        "['Source protein ID'",
+        "enrichSvgWithStandaloneFeaturePopup",
+        "if (!svg || state.adv.rich_feature_popup === false) return false;",
+        "{ action: 'pan', label: 'Pan'",
+        "{ action: 'legend', label: 'Legend'",
+        "--gfi-text-scale",
+        "--gfi-font-size",
+        "getPopupTextScale",
+        "function setPopupTextScale",
+        "['SVG ID'",
+        "['Record index'",
+        "['Strand'",
+    ]
+    for needle in standalone_absent:
+        assert needle not in standalone_source
+
     assert "popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'" in export_source
-    assert "buildStandaloneFeaturePayloads(svg, { popupMode: normalizedPopupMode })" in export_source
-    assert "svg.setAttribute('width', '100vw');" in export_source
-    assert "svg.setAttribute('height', '100vh');" in export_source
-    assert "svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');" in export_source
-    assert "svg.style.setProperty('width', '100vw');" in export_source
-    assert "svg.style.setProperty('height', '100vh');" in export_source
-    assert "function parseOriginalViewRectFromSvg()" in export_source
-    assert "function getViewportAspect()" in export_source
-    assert "function fitRectToAspect(rect, targetAspect)" in export_source
-    assert "var homeViewRect = fitRectToAspect(originalViewRect, getViewportAspect());" in export_source
-    assert "homeViewRect.width / maxZoom" in export_source
-    assert "homeViewRect.width * nextScale" in export_source
-    assert "{ action: 'reset', label: 'Original', title: 'Return to original view', width: 62 }" in export_source
-    assert "{ action: 'pan', label: 'Pan'" not in export_source
-    assert "{ action: 'legend', label: 'Legend'" not in export_source
-    assert "function ensureStickyLegendBackground(legend, bbox)" in export_source
-    assert "gbdraw-sticky-legend-background" in export_source
-    assert "setClassToken(svg, 'gbdraw-interactive-pan-enabled', true);" in export_source
-    assert "function refitViewportToWindow()" in export_source
-    assert "function scheduleViewportRefit()" in export_source
-    assert "popup_mode: normalizedPopupMode" in export_source
-    assert "orthogroups" in export_source
-    assert "var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';" in export_source
-    assert "var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];" in export_source
-    assert "var richSearchFields = {" in export_source
-    assert "if (popupMode === 'simple') {\n      searchFieldOptions = searchFieldOptions.filter" in export_source
-    assert "function renderSimplePopup(feature)" in export_source
-    assert "if (normalizedPopupMode === 'rich') {\n      Object.assign(payload, {\n        qualifiers: normalizeQualifierMap(feature?.qualifiers)," in export_source
-    assert "nucleotide_sequence" in export_source
-    assert "amino_acid_sequence" in export_source
-    assert "getVisibleViewRect()" in export_source
-    assert "var visibleView = getVisibleViewRect();" in export_source
-    assert "window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });" in export_source
-    assert "window.addEventListener('resize', scheduleViewportRefit);" in export_source
-    assert "window.visualViewport.addEventListener('scroll', updateViewportControlsPosition, { passive: true });" in export_source
-    assert "popupCssWidth" in export_source
-    assert "getPopupCssMetrics" in export_source
-    assert "var effectiveScaleX = safeScaleX * metrics.zoomScale;" in export_source
-    assert "var marginCss = metrics.margin;" in export_source
-    assert "var dragZoomScale = getBrowserZoomScale(getViewportClientRect());" in export_source
-    assert "var updateActivePopupViewportMetrics = null;" in export_source
-    assert "function refreshActivePopupForViewport()" in export_source
-    assert "updateActivePopupViewportMetrics();" in export_source
-    assert "updateActivePopupViewportMetrics = function () {" in export_source
-    zoom_block = export_source.split("  function zoomViewBy", 1)[1].split("  function resetViewport", 1)[0]
+    assert "features: state.extractedFeatures.value" in export_source
+    assert "editableLabels: state.editableLabels.value" in export_source
+    assert "orthogroups: state.orthogroups.value" in export_source
+    assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
+
+    zoom_block = standalone_source.split("  function zoomViewBy", 1)[1].split("  function resetViewport", 1)[0]
     assert "closePopup();" not in zoom_block
-    assert "--gfi-text-scale" not in export_source
-    assert "--gfi-font-size" not in export_source
-    assert "getPopupTextScale" not in export_source
-    assert "function setPopupTextScale" not in export_source
-    popup_resize_block = export_source.split("    function startPopupResize", 1)[1].split("    function startPopupDrag", 1)[0]
-    popup_drag_block = export_source.split("    function startPopupDrag", 1)[1].split("    function redraw", 1)[0]
+    popup_resize_block = standalone_source.split("    function startPopupResize", 1)[1].split("    function startPopupDrag", 1)[0]
+    popup_drag_block = standalone_source.split("    function startPopupDrag", 1)[1].split("    function redraw", 1)[0]
     assert "document.addEventListener('mousemove', onMove, true);" in popup_resize_block
     assert "document.addEventListener('mouseup', onEnd, true);" in popup_resize_block
     assert "window.addEventListener('mouseup', onEnd, true);" in popup_resize_block
@@ -316,32 +506,7 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "window.addEventListener('mouseup', onEnd, true);" in popup_drag_block
     assert "window.addEventListener('blur', onEnd);" in popup_drag_block
     assert "typeof moveEvent.buttons === 'number' && (moveEvent.buttons & 1) !== 1" in popup_drag_block
-    assert "gbdraw-interactive-feature-glow" in export_source
-    assert "gbdraw-interactive-feature-match-glow" in export_source
-    assert "gbdraw-interactive-feature--hover" in export_source
-    assert "gbdraw-interactive-orthogroup-link--hover" in export_source
-    assert "function setOrthogroupHover(orthogroupId, highlight)" in export_source
-    assert "activePopupDrag" in export_source
-    assert "activeSearchControlsDrag" in export_source
-    assert "gbdraw-feature-hover-popup" in export_source
-    assert "function scheduleHoverPopup(feature, svgId, event)" in export_source
-    assert "function renderHoverPopupHtml(feature, svgId)" in export_source
-    assert "svg.addEventListener('mousemove'" in export_source
-    assert "const collectRenderedFeatureEntries = (svg) => {" in export_source
-    assert "const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) => {" in export_source
-    assert "function startSearchControlsDrag(event, root)" in export_source
-    assert "document.addEventListener('mouseup', onEnd, true);" in export_source
-    assert "window.addEventListener('blur', onEnd);" in export_source
-    assert 'data-drag-handle="true"' in export_source
-    assert "function startPopupDrag(event)" in export_source
-    assert "setFeatureHighlight" in export_source
-    assert "svg.addEventListener('mouseover'" in export_source
-    assert "['SVG ID'" not in export_source
-    assert "['Record index'" not in export_source
-    assert "['Strand'" not in export_source
-    assert "root.style.transform = 'scale('" in export_source
-    assert "overscroll-behavior: contain;" in export_source
-    assert "root.addEventListener('wheel', function (rootEvent) {\n      rootEvent.stopPropagation();\n    }, { passive: true });" in export_source
+
     assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
     assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
@@ -360,6 +525,7 @@ def test_gui_preview_feature_search_is_wired_and_kept_export_transient() -> None
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
     search_core_source = (WEB_ROOT / "js" / "app" / "feature-search" / "search-core.js").read_text(encoding="utf-8")
     preview_svg_source = (WEB_ROOT / "js" / "app" / "feature-search" / "preview-svg.js").read_text(encoding="utf-8")
 
@@ -380,7 +546,7 @@ def test_gui_preview_feature_search_is_wired_and_kept_export_transient() -> None
     assert "gbdraw-preview-feature-search-active-match" in index_html
     assert "gbdraw-preview-feature-search-dimmed" in index_html
 
-    assert _gui_search_field_ids(search_core_source) == _standalone_search_field_ids(export_source)
+    assert _gui_search_field_ids(search_core_source) == _standalone_search_field_ids(standalone_source)
     assert "RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([" in search_core_source
     assert "'qualifier-key'" in search_core_source
     assert "'qualifier-value'" in search_core_source
@@ -395,7 +561,7 @@ def test_gui_preview_feature_search_is_wired_and_kept_export_transient() -> None
     assert "centerPreviewFeature" in preview_svg_source
     assert "import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';" in export_source
     assert "stripPreviewFeatureSearchClasses(clone);" in export_source
-    assert "gbdraw-feature-search-controls" in export_source
+    assert "gbdraw-feature-search-controls" in standalone_source
     assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString();" in export_source
@@ -486,23 +652,25 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
 
     subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
-    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
-    assert "feature && feature.displayLabel" in export_source
-    assert "feature && feature.product" in export_source
-    assert "feature && feature.searchLabels" in export_source
-    assert "buildFeatureLocation(feature)" in export_source
-    assert "feature && (feature.nucleotide_sequence || feature.nucleotideSequence)" in export_source
-    assert "feature && (feature.amino_acid_sequence || feature.aminoAcidSequence)" in export_source
+    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
+    assert "feature && feature.displayLabel" in standalone_source
+    assert "feature && feature.product" in standalone_source
+    assert "feature && feature.searchLabels" in standalone_source
+    assert "buildFeatureLocation(feature)" in standalone_source
+    assert "feature && (feature.nucleotide_sequence || feature.nucleotideSequence)" in standalone_source
+    assert "feature && (feature.amino_acid_sequence || feature.aminoAcidSequence)" in standalone_source
 
 
 def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
 
-    assert "const stripEditorOnlyCursorStyles = (svg) => {" in export_source
-    assert "svg.querySelectorAll('[style]').forEach((element) => {" in export_source
-    assert "if (!style || !/\\bcursor\\s*:/i.test(style)) return;" in export_source
-    assert "element.style.removeProperty('cursor');" in export_source
-    assert "if (!element.getAttribute('style')?.trim()) {" in export_source
+    assert "export const stripEditorOnlyCursorStyles = (svg) => {" in standalone_source
+    assert "svg.querySelectorAll('[style]').forEach((element) => {" in standalone_source
+    assert "if (!style || !/\\bcursor\\s*:/i.test(style)) return;" in standalone_source
+    assert "element.style.removeProperty('cursor');" in standalone_source
+    assert "if (!element.getAttribute('style')?.trim()) {" in standalone_source
+    assert "import { enrichSvgWithStandaloneInteractivity, stripEditorOnlyCursorStyles } from './standalone-interactivity.js';" in export_source
     assert "  } else {\n    stripEditorOnlyCursorStyles(clone);\n  }\n  return new XMLSerializer().serializeToString(clone);" in export_source
     assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
 
@@ -609,6 +777,7 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     svg_styles_source = (WEB_ROOT / "js" / "app" / "svg-styles.js").read_text(encoding="utf-8")
     orthogroups_source = (WEB_ROOT / "js" / "app" / "orthogroups.js").read_text(encoding="utf-8")
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
 
     assert "'data-gbdraw-feature-id'" in state_source
     assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source
@@ -625,11 +794,12 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     assert "getFeatureElements(svg, svgId)" in stroke_actions_source
     assert "getFeatureIdentity(path)" in svg_styles_source
     assert "getFeatureElements(svg, featureId)" in orthogroups_source
-    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in export_source
-    assert "normalizeFeatureElementId" in export_source
-    assert "function getElementFeatureId(element)" in export_source
-    assert "var svgId = getElementFeatureId(featureElement);" in export_source
-    assert "const id = getElementFeatureId(element);" in export_source
+    assert "import { enrichSvgWithStandaloneInteractivity, stripEditorOnlyCursorStyles } from './standalone-interactivity.js';" in export_source
+    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in standalone_source
+    assert "normalizeFeatureElementId" in standalone_source
+    assert "function getElementFeatureId(element)" in standalone_source
+    assert "var svgId = getElementFeatureId(featureElement);" in standalone_source
+    assert "const id = getElementFeatureId(element);" in standalone_source
 
 
 def test_web_linear_custom_track_slots_are_wired() -> None:

@@ -1,0 +1,303 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from typing import Any
+
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+
+_NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
+
+
+def _normalize_record_selector(record_selector: object | None) -> str | None:
+    if record_selector is None:
+        return None
+    selector_raw = str(record_selector).strip()
+    if selector_raw.lower() in _NULLISH_TEXT:
+        return None
+    return selector_raw
+
+
+def _normalize_selected_feature_set(selected_features: object | None) -> set[str] | None:
+    if selected_features is None:
+        return None
+    parsed_features: list[str] = []
+    if isinstance(selected_features, (list, tuple, set)):
+        parsed_features = [str(value).strip() for value in selected_features if str(value).strip()]
+    else:
+        selected_raw = str(selected_features).strip()
+        if selected_raw.lower() in _NULLISH_TEXT:
+            return None
+        if selected_raw.startswith("["):
+            try:
+                loaded = json.loads(selected_raw)
+            except Exception:
+                loaded = None
+            if isinstance(loaded, list):
+                parsed_features = [str(value).strip() for value in loaded if str(value).strip()]
+        if not parsed_features:
+            parsed_features = [part.strip() for part in selected_raw.split(",") if part.strip()]
+    return set(parsed_features) if parsed_features else None
+
+
+def _compute_svg_feature_hash(feature: Any, record_id: str | None = None) -> str:
+    loc = feature.location
+    if hasattr(loc, "parts") and loc.parts:
+        first_part = loc.parts[0]
+        start = int(first_part.start)
+        end = int(first_part.end)
+        strand = first_part.strand
+    else:
+        start = int(loc.start)
+        end = int(loc.end)
+        strand = loc.strand
+    if record_id is not None:
+        key = f"{record_id}:{feature.type}:{start}:{end}:{strand}"
+    else:
+        key = f"{feature.type}:{start}:{end}:{strand}"
+    return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+
+
+def _normalize_qualifier_values(value: object | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        source = value
+    else:
+        source = [value]
+    normalized = []
+    for item in source:
+        if item is None:
+            continue
+        normalized.append(str(item))
+    return normalized
+
+
+def _first_qualifier_value(qualifiers: dict[str, object], key: str) -> str:
+    values = _normalize_qualifier_values(qualifiers.get(key))
+    for value in values:
+        if value.strip():
+            return value
+    return ""
+
+
+def _strand_display(strand: object | None) -> str:
+    if strand == 1:
+        return "+"
+    if strand == -1:
+        return "-"
+    return "undefined"
+
+
+def _get_location_parts(location: Any) -> list[Any]:
+    if hasattr(location, "parts") and location.parts:
+        return list(location.parts)
+    return [location]
+
+
+def _format_location_parts(location: Any) -> list[dict[str, object]]:
+    parts = []
+    for part in _get_location_parts(location):
+        try:
+            start = int(part.start)
+            end = int(part.end)
+            strand = part.strand if part.strand is not None else location.strand
+            parts.append(
+                {
+                    "start": start,
+                    "end": end,
+                    "strand": _strand_display(strand),
+                    "display": f"{start + 1}..{end}",
+                }
+            )
+        except Exception:
+            continue
+    return parts
+
+
+def _location_has_fuzzy_positions(location: Any) -> bool:
+    for part in _get_location_parts(location):
+        if type(part.start).__name__ != "ExactPosition" or type(part.end).__name__ != "ExactPosition":
+            return True
+    return False
+
+
+def _extract_nucleotide_sequence(feature: Any, record: Any) -> tuple[str, list[str]]:
+    try:
+        return str(feature.extract(record.seq)).upper(), []
+    except Exception as exc:
+        return "", [f"Nucleotide sequence extraction skipped: {exc}"]
+
+
+def _extract_amino_acid_sequence(feature: Any, nucleotide_sequence: str) -> tuple[str, list[str]]:
+    warnings: list[str] = []
+    qualifiers = feature.qualifiers or {}
+    translation = _first_qualifier_value(qualifiers, "translation")
+    if translation:
+        return "".join(str(translation).split()), warnings
+
+    if str(feature.type).upper() != "CDS":
+        return "", warnings
+
+    if "pseudo" in qualifiers or "pseudogene" in qualifiers:
+        warnings.append("CDS translation skipped for pseudo/pseudogene feature.")
+        return "", warnings
+
+    if _location_has_fuzzy_positions(feature.location):
+        warnings.append("CDS translation skipped for fuzzy feature location.")
+        return "", warnings
+
+    if not nucleotide_sequence:
+        warnings.append("CDS translation skipped because nucleotide sequence is unavailable.")
+        return "", warnings
+
+    codon_start_raw = _first_qualifier_value(qualifiers, "codon_start") or "1"
+    try:
+        codon_start = int(str(codon_start_raw).strip())
+    except Exception:
+        warnings.append(f"CDS translation skipped because codon_start is invalid: {codon_start_raw}")
+        return "", warnings
+    if codon_start not in {1, 2, 3}:
+        warnings.append(f"CDS translation skipped because codon_start is outside 1..3: {codon_start}")
+        return "", warnings
+
+    transl_table_raw = _first_qualifier_value(qualifiers, "transl_table") or "1"
+    try:
+        transl_table = int(str(transl_table_raw).strip())
+    except Exception:
+        warnings.append(f"CDS translation skipped because transl_table is invalid: {transl_table_raw}")
+        return "", warnings
+
+    coding_sequence = str(nucleotide_sequence)[codon_start - 1 :]
+    if len(coding_sequence) == 0:
+        warnings.append("CDS translation skipped because coding sequence is empty after codon_start.")
+        return "", warnings
+    if len(coding_sequence) % 3 != 0:
+        warnings.append("CDS translation skipped because coding sequence length is not divisible by 3.")
+        return "", warnings
+
+    try:
+        protein = str(Seq(coding_sequence).translate(table=transl_table, to_stop=False))
+        if protein.endswith("*"):
+            protein = protein[:-1]
+        return protein, warnings
+    except Exception as exc:
+        warnings.append(f"CDS translation skipped: {exc}")
+        return "", warnings
+
+
+def extract_features_from_genbank_payload(
+    gb_path: str | Path,
+    region_spec: object | None = None,
+    record_selector: object | None = None,
+    reverse_flag: object | None = None,
+    selected_features: object | None = None,
+) -> dict[str, object]:
+    """Extract the Rich Feature Popup payload shape from a GenBank file."""
+    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+
+    records = list(SeqIO.parse(str(gb_path), "genbank"))
+    selector = parse_record_selector(_normalize_record_selector(record_selector))
+    records = select_record(records, selector)
+    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
+    records = reverse_records(records, reverse)
+    selected_feature_set = _normalize_selected_feature_set(selected_features)
+    if region_spec:
+        from gbdraw.io.regions import apply_region_specs, parse_region_specs
+
+        records = apply_region_specs(records, parse_region_specs([str(region_spec)]))
+
+    features: list[dict[str, object]] = []
+    record_ids: list[str] = []
+    idx = 0
+    for rec_idx, record in enumerate(records):
+        record_id = record.id or f"Record_{rec_idx}"
+        hash_record_id = record.id
+        record_ids.append(record_id)
+        for feat in record.features:
+            if selected_feature_set is not None and feat.type not in selected_feature_set:
+                continue
+
+            start = int(feat.location.start)
+            end = int(feat.location.end)
+            strand_raw = feat.location.strand
+            location_parts = _format_location_parts(feat.location)
+            nucleotide_sequence, sequence_warnings = _extract_nucleotide_sequence(feat, record)
+            amino_acid_sequence, translation_warnings = _extract_amino_acid_sequence(
+                feat,
+                nucleotide_sequence,
+            )
+            sequence_warnings.extend(translation_warnings)
+
+            try:
+                svg_id = _compute_svg_feature_hash(feat, record_id=hash_record_id)
+            except Exception:
+                svg_id = None
+            if not svg_id:
+                if hasattr(feat.location, "parts") and feat.location.parts:
+                    first_part = feat.location.parts[0]
+                    hash_start = int(first_part.start)
+                    hash_end = int(first_part.end)
+                    hash_strand = first_part.strand
+                else:
+                    hash_start = start
+                    hash_end = end
+                    hash_strand = strand_raw
+                key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
+                svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+
+            qualifiers = {}
+            for q_key, q_vals in feat.qualifiers.items():
+                q_list = _normalize_qualifier_values(q_vals)
+                if not q_list:
+                    continue
+                qualifiers[q_key.lower()] = q_list
+
+            features.append(
+                {
+                    "id": f"f{idx}",
+                    "svg_id": svg_id,
+                    "record_id": record_id,
+                    "record_idx": rec_idx,
+                    "type": feat.type,
+                    "start": start,
+                    "end": end,
+                    "strand": _strand_display(strand_raw),
+                    "locus_tag": _first_qualifier_value(feat.qualifiers, "locus_tag"),
+                    "gene": _first_qualifier_value(feat.qualifiers, "gene"),
+                    "product": _first_qualifier_value(feat.qualifiers, "product"),
+                    "note": _first_qualifier_value(feat.qualifiers, "note")[:50],
+                    "qualifiers": qualifiers,
+                    "location_parts": location_parts,
+                    "nucleotide_sequence": nucleotide_sequence,
+                    "amino_acid_sequence": amino_acid_sequence,
+                    "sequence_warnings": sequence_warnings,
+                }
+            )
+            idx += 1
+
+    return {"features": features, "record_ids": record_ids}
+
+
+def extract_features_from_genbank_json(
+    gb_path: str | Path,
+    region_spec: object | None = None,
+    record_selector: object | None = None,
+    reverse_flag: object | None = None,
+    selected_features: object | None = None,
+) -> str:
+    try:
+        payload = extract_features_from_genbank_payload(
+            gb_path,
+            region_spec=region_spec,
+            record_selector=record_selector,
+            reverse_flag=reverse_flag,
+            selected_features=selected_features,
+        )
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+    return json.dumps(payload)
+

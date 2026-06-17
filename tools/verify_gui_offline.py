@@ -264,6 +264,10 @@ def _assert_packaged_assets() -> None:
     required = [
         WEB_ROOT / "index.html",
         WEB_ROOT / "open-source-notices.html",
+        WEB_ROOT / "gallery" / "index.html",
+        WEB_ROOT / "gallery" / "gallery.css",
+        WEB_ROOT / "gallery" / "gallery.js",
+        WEB_ROOT / "gallery" / "examples.json",
         WEB_ROOT / "assets" / "favicon.ico",
         WEB_ROOT / "assets" / "gbdraw-logo.svg",
         WEB_ROOT / "assets" / "gbdraw-logo-title.svg",
