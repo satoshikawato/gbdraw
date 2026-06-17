@@ -340,7 +340,9 @@ def test_gui_preview_feature_search_is_wired_and_kept_export_transient() -> None
     assert 'placeholder="Search features"' in index_html
     assert 'v-model="previewFeatureSearchField"' in index_html
     assert 'v-for="field in previewFeatureSearchFieldOptions"' in index_html
-    assert '@keydown.enter.prevent="openPreviewFeatureSearchActiveMatch"' in index_html
+    assert '@keydown.enter.prevent="applyPreviewFeatureSearch"' in index_html
+    assert '@click.stop="applyPreviewFeatureSearch"' in index_html
+    assert "applyPreviewFeatureSearch: previewFeatureSearch.applySearch" in app_setup_source
     assert "goToNextPreviewFeatureSearchMatch" in index_html
     assert "openPreviewFeatureSearchActiveMatch" in index_html
     assert "gbdraw-preview-feature-search-match" in index_html

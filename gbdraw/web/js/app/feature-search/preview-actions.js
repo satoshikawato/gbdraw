@@ -43,10 +43,11 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchRenderedCount
   } = state;
 
-  let inputDebounceId = null;
-  let refreshRequestId = 0;
-
   const getPopupMode = () => (adv?.rich_feature_popup === false ? 'simple' : 'rich');
+  let refreshRequestId = 0;
+  let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
+  let appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
+  let appliedUseRegex = Boolean(previewFeatureSearchUseRegex.value);
   const getSvg = () => resolvePreviewSvg(svgContainer.value);
   const getActiveMatchId = () => (
     previewFeatureSearchActiveIndex.value >= 0
@@ -62,6 +63,10 @@ export const createPreviewFeatureSearch = ({
   const previewFeatureSearchHasMatches = computed(() => previewFeatureSearchMatches.value.length > 0);
   const previewFeatureSearchCanOpenActive = computed(() => (
     previewFeatureSearchHasMatches.value && previewFeatureSearchActiveIndex.value >= 0
+  ));
+  const previewFeatureSearchCanSearch = computed(() => (
+    Boolean(String(previewFeatureSearchInput.value || '').trim()) ||
+    Boolean(String(previewFeatureSearchQuery.value || '').trim())
   ));
   const previewFeatureSearchStatusText = computed(() => {
     if (previewFeatureSearchError.value) return previewFeatureSearchError.value;
@@ -109,11 +114,8 @@ export const createPreviewFeatureSearch = ({
 
   const refreshSearchNow = ({ preserveActive = true, center = false } = {}) => {
     const popupMode = getPopupMode();
-    const normalizedField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode });
-    if (normalizedField !== previewFeatureSearchField.value) {
-      previewFeatureSearchField.value = normalizedField;
-      return;
-    }
+    const normalizedField = normalizeFeatureSearchField(appliedSearchField, { popupMode });
+    appliedSearchField = normalizedField;
 
     const previousActiveId = preserveActive ? getActiveMatchId() : '';
     const svg = getSvg();
@@ -124,8 +126,8 @@ export const createPreviewFeatureSearch = ({
       renderedFeatureIds,
       query: previewFeatureSearchQuery.value,
       field: normalizedField,
-      qualifierKey: previewFeatureSearchQualifierKey.value,
-      useRegex: previewFeatureSearchUseRegex.value,
+      qualifierKey: appliedQualifierKey,
+      useRegex: appliedUseRegex,
       popupMode,
       orthogroups: orthogroups.value,
       previousActiveId
@@ -170,6 +172,19 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchField.value = normalizeFeatureSearchField(field, { popupMode: getPopupMode() });
   };
 
+  const applySearch = () => {
+    const popupMode = getPopupMode();
+    const normalizedField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode });
+    if (normalizedField !== previewFeatureSearchField.value) {
+      previewFeatureSearchField.value = normalizedField;
+    }
+    appliedSearchField = normalizedField;
+    appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
+    appliedUseRegex = Boolean(previewFeatureSearchUseRegex.value);
+    previewFeatureSearchQuery.value = String(previewFeatureSearchInput.value || '');
+    scheduleRefreshSearch({ preserveActive: false });
+  };
+
   const goToMatch = (index, { center = true } = {}) => {
     const count = previewFeatureSearchMatches.value.length;
     if (!count) {
@@ -190,6 +205,9 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchField.value = 'all';
     previewFeatureSearchQualifierKey.value = '';
     previewFeatureSearchUseRegex.value = false;
+    appliedSearchField = 'all';
+    appliedQualifierKey = '';
+    appliedUseRegex = false;
     previewFeatureSearchMatches.value = [];
     previewFeatureSearchMatchDetails.value = {};
     previewFeatureSearchActiveIndex.value = -1;
@@ -226,33 +244,20 @@ export const createPreviewFeatureSearch = ({
     });
   };
 
-  watch(previewFeatureSearchInput, (value) => {
-    if (inputDebounceId !== null) {
-      clearTimeout(inputDebounceId);
-      inputDebounceId = null;
-    }
-    const delay = String(value || '').trim() ? 120 : 0;
-    inputDebounceId = setTimeout(() => {
-      previewFeatureSearchQuery.value = String(value || '');
-      inputDebounceId = null;
-    }, delay);
-  });
-
   watch(
     () => getPopupMode(),
     () => {
       if (getPopupMode() === 'simple' && isRichFeatureSearchField(previewFeatureSearchField.value)) {
         previewFeatureSearchField.value = 'all';
       }
+      if (getPopupMode() === 'simple' && isRichFeatureSearchField(appliedSearchField)) {
+        appliedSearchField = 'all';
+      }
       scheduleRefreshSearch();
     }
   );
   watch(
     [
-      previewFeatureSearchQuery,
-      previewFeatureSearchField,
-      previewFeatureSearchQualifierKey,
-      previewFeatureSearchUseRegex,
       selectedResultIndex,
       extractedFeatures,
       orthogroups,
@@ -265,10 +270,6 @@ export const createPreviewFeatureSearch = ({
 
   const dispose = () => {
     refreshRequestId += 1;
-    if (inputDebounceId !== null) {
-      clearTimeout(inputDebounceId);
-      inputDebounceId = null;
-    }
   };
 
   return {
@@ -276,10 +277,12 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchQualifierEnabled,
     previewFeatureSearchHasMatches,
     previewFeatureSearchCanOpenActive,
+    previewFeatureSearchCanSearch,
     previewFeatureSearchStatusText,
     previewFeatureSearchActiveDetail,
     setQuery,
     setField,
+    applySearch,
     goToNext,
     goToPrevious,
     clearSearch,

@@ -307,8 +307,19 @@
             border-bottom: 1px solid #dcfce7;
             background: rgba(240, 253, 244, 0.72);
         }
+        .preview-feature-search-main {
+            max-width: min(100%, 48rem);
+        }
         .preview-feature-search-input {
-            min-width: min(18rem, 100%);
+            flex: 0 1 22rem;
+            min-width: min(14rem, 100%);
+        }
+        .preview-feature-search-field {
+            flex: 0 0 10rem;
+        }
+        .preview-feature-search-qualifier {
+            flex: 0 1 9rem;
+            min-width: min(9rem, 100%);
         }
         .preview-feature-search-status {
             min-width: 12rem;
@@ -482,11 +493,14 @@
             }
 
             .preview-feature-search-main {
-                grid-template-columns: minmax(0, 1fr) !important;
+                max-width: none !important;
             }
 
             .preview-feature-search-input,
+            .preview-feature-search-field,
+            .preview-feature-search-qualifier,
             .preview-feature-search-status {
+                flex: 1 1 100% !important;
                 min-width: 0 !important;
             }
 
@@ -2663,18 +2677,18 @@
                 <div v-if="svgContent"
                      class="preview-feature-search -mx-4 px-4 py-2 shrink-0"
                      @click.stop>
-                    <div class="preview-feature-search-main grid grid-cols-[minmax(14rem,1fr)_10rem_minmax(0,9rem)_auto_auto] gap-2 items-center">
+                    <div class="preview-feature-search-main flex flex-wrap gap-2 items-center">
                         <div class="preview-feature-search-input relative">
                             <i class="ph ph-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
                             <input type="search"
                                    v-model="previewFeatureSearchInput"
-                                   @keydown.enter.prevent="openPreviewFeatureSearchActiveMatch"
+                                   @keydown.enter.prevent="applyPreviewFeatureSearch"
                                    class="form-input h-9 pl-8 pr-2 py-1 text-xs bg-white"
                                    placeholder="Search features"
                                    aria-label="Search features">
                         </div>
                         <select v-model="previewFeatureSearchField"
-                                class="form-input h-9 py-1 text-xs bg-white"
+                                class="preview-feature-search-field form-input h-9 py-1 text-xs bg-white"
                                 aria-label="Search field">
                             <option v-for="field in previewFeatureSearchFieldOptions" :key="field.id" :value="field.id">
                                 {{ field.label }}
@@ -2683,10 +2697,19 @@
                         <input v-if="previewFeatureSearchQualifierEnabled"
                                type="text"
                                v-model="previewFeatureSearchQualifierKey"
-                               class="form-input h-9 py-1 text-xs bg-white"
+                               @keydown.enter.prevent="applyPreviewFeatureSearch"
+                               class="preview-feature-search-qualifier form-input h-9 py-1 text-xs bg-white"
                                placeholder="Qualifier key"
                                aria-label="Qualifier key">
-                        <div v-else class="hidden md:block"></div>
+                        <button type="button"
+                                @click.stop="applyPreviewFeatureSearch"
+                                :disabled="!previewFeatureSearchCanSearch"
+                                class="btn btn-primary h-9 px-3 py-1 text-xs"
+                                title="Search features"
+                                aria-label="Search features">
+                            <i class="ph ph-magnifying-glass"></i>
+                            <span>Search</span>
+                        </button>
                         <label class="h-9 px-2 inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 select-none">
                             <input type="checkbox" v-model="previewFeatureSearchUseRegex" class="form-checkbox !w-3.5 !h-3.5">
                             <span>Regex</span>
