@@ -785,6 +785,9 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     assert "Cross-Origin-Embedder-Policy: require-corp" in headers
     assert "Cross-Origin-Resource-Policy: same-origin" in headers
     assert "Content-Security-Policy: frame-ancestors 'none'" in headers
+    assert "/gallery/examples/*" in headers
+    assert "! Content-Security-Policy" in headers
+    assert "frame-ancestors 'self'" in headers
 
 
 def test_wrangler_uses_cloudflare_bundle_directory() -> None:
