@@ -602,6 +602,16 @@ const showFeaturePanel = ref(false);
 const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
 const featureSearchInput = ref('');
 const featureSearch = ref('');
+const previewFeatureSearchInput = ref('');
+const previewFeatureSearchQuery = ref('');
+const previewFeatureSearchField = ref('all');
+const previewFeatureSearchQualifierKey = ref('');
+const previewFeatureSearchUseRegex = ref(false);
+const previewFeatureSearchMatches = ref([]);
+const previewFeatureSearchMatchDetails = ref({});
+const previewFeatureSearchActiveIndex = ref(-1);
+const previewFeatureSearchError = ref('');
+const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off'}
 const labelSearch = ref('');
@@ -1030,6 +1040,16 @@ export const state = {
   featurePanelTab,
   featureSearchInput,
   featureSearch,
+  previewFeatureSearchInput,
+  previewFeatureSearchQuery,
+  previewFeatureSearchField,
+  previewFeatureSearchQualifierKey,
+  previewFeatureSearchUseRegex,
+  previewFeatureSearchMatches,
+  previewFeatureSearchMatchDetails,
+  previewFeatureSearchActiveIndex,
+  previewFeatureSearchError,
+  previewFeatureSearchRenderedCount,
   featureListScrollTop,
   featureListViewportHeight,
   isFeatureDrawerMounted,

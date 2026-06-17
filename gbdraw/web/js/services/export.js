@@ -1,5 +1,6 @@
 import { state } from '../state.js';
 import { setDpiInPng } from '../utils/png.js';
+import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
 
 const getDownloadName = (extension) => {
   const baseName =
@@ -31,6 +32,7 @@ const cloneCurrentSvg = () => {
 const getCurrentSvgString = ({ interactive = false } = {}) => {
   const clone = cloneCurrentSvg();
   if (!clone) return state.svgContent.value;
+  stripPreviewFeatureSearchClasses(clone);
   if (interactive) {
     enrichSvgWithStandaloneInteractivity(clone, {
       popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'

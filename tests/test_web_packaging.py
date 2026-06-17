@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import socket
 import subprocess
@@ -69,6 +70,16 @@ def ensure_prepared_browser_wheel():
         _run_prepare_browser_wheel()
         browser_wheel_path = verify_module.BUILD_SUPPORT.validate_browser_wheel_prepared()
     return verify_module, browser_wheel_path
+
+
+def _gui_search_field_ids(source: str) -> list[str]:
+    block = source.split("FEATURE_SEARCH_FIELD_DEFINITIONS = Object.freeze([", 1)[1].split("]);", 1)[0]
+    return re.findall(r"\{\s*id:\s*'([^']+)'", block)
+
+
+def _standalone_search_field_ids(source: str) -> list[str]:
+    block = source.split("var searchFieldOptions = [", 1)[1].split("];", 1)[0]
+    return re.findall(r"\['([^']+)',\s*'[^']+'\]", block)
 
 
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
@@ -311,6 +322,50 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert '@click="downloadInteractiveSVG"' in index_html
     assert "Interactive SVG" in index_html
     assert "Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded." in index_html
+
+
+def test_gui_preview_feature_search_is_wired_and_kept_export_transient() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+    search_core_source = (WEB_ROOT / "js" / "app" / "feature-search" / "search-core.js").read_text(encoding="utf-8")
+    preview_svg_source = (WEB_ROOT / "js" / "app" / "feature-search" / "preview-svg.js").read_text(encoding="utf-8")
+
+    assert "import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';" in app_setup_source
+    assert "const previewFeatureSearch = createPreviewFeatureSearch({" in app_setup_source
+    assert "openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature" in app_setup_source
+    assert "previewFeatureSearchInput = ref('')" in state_source
+    assert "previewFeatureSearchField = ref('all')" in state_source
+    assert 'placeholder="Search features"' in index_html
+    assert 'v-model="previewFeatureSearchField"' in index_html
+    assert 'v-for="field in previewFeatureSearchFieldOptions"' in index_html
+    assert '@keydown.enter.prevent="openPreviewFeatureSearchActiveMatch"' in index_html
+    assert "goToNextPreviewFeatureSearchMatch" in index_html
+    assert "openPreviewFeatureSearchActiveMatch" in index_html
+    assert "gbdraw-preview-feature-search-match" in index_html
+    assert "gbdraw-preview-feature-search-active-match" in index_html
+    assert "gbdraw-preview-feature-search-dimmed" in index_html
+
+    assert _gui_search_field_ids(search_core_source) == _standalone_search_field_ids(export_source)
+    assert "RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([" in search_core_source
+    assert "'qualifier-key'" in search_core_source
+    assert "'qualifier-value'" in search_core_source
+    assert "'nucleotide'" in search_core_source
+    assert "'amino-acid'" in search_core_source
+    assert "buildIupacQueryPattern" in search_core_source
+    assert "featureSearchMatches" in search_core_source
+    assert "formatSearchMatchDetail" in search_core_source
+
+    assert "stripPreviewFeatureSearchClasses" in preview_svg_source
+    assert "centerPreviewFeature" in preview_svg_source
+    assert "import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';" in export_source
+    assert "stripPreviewFeatureSearchClasses(clone);" in export_source
+    assert "gbdraw-feature-search-controls" in export_source
+    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
 
 
 def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:
