@@ -175,6 +175,27 @@ def test_index_links_to_interactive_gallery() -> None:
     assert "Interactive Gallery" in index_html
 
 
+def test_public_web_html_entrypoints_are_not_gitignored() -> None:
+    required_html_paths = [
+        "gbdraw/web/index.html",
+        "gbdraw/web/open-source-notices.html",
+        "gbdraw/web/gallery/index.html",
+    ]
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+
+    for path in required_html_paths:
+        assert f"!{path}" in gitignore
+
+    if shutil.which("git") and (REPO_ROOT / ".git").exists():
+        for path in required_html_paths:
+            result = subprocess.run(
+                ["git", "check-ignore", "-q", path],
+                cwd=REPO_ROOT,
+                check=False,
+            )
+            assert result.returncode == 1, f"{path} must be commit-visible for hosted builds"
+
+
 def test_index_uses_title_logo_separately_from_icon_assets() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert './assets/gbdraw-logo-title.png' in index_html
