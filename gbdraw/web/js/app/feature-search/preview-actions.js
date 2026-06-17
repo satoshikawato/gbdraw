@@ -10,6 +10,7 @@ import {
   centerPreviewFeature,
   getFeatureScreenCenter,
   getPreviewFeatureElementIndex,
+  resolvePreviewSvg,
   stripPreviewFeatureSearchClasses
 } from './preview-svg.js';
 
@@ -46,7 +47,7 @@ export const createPreviewFeatureSearch = ({
   let refreshRequestId = 0;
 
   const getPopupMode = () => (adv?.rich_feature_popup === false ? 'simple' : 'rich');
-  const getSvg = () => svgContainer.value?.querySelector?.('svg') || null;
+  const getSvg = () => resolvePreviewSvg(svgContainer.value);
   const getActiveMatchId = () => (
     previewFeatureSearchActiveIndex.value >= 0
       ? String(previewFeatureSearchMatches.value?.[previewFeatureSearchActiveIndex.value] || '')

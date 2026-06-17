@@ -358,6 +358,7 @@ def test_gui_preview_feature_search_is_wired_and_kept_export_transient() -> None
     assert "formatSearchMatchDetail" in search_core_source
 
     assert "stripPreviewFeatureSearchClasses" in preview_svg_source
+    assert "resolvePreviewSvg" in preview_svg_source
     assert "centerPreviewFeature" in preview_svg_source
     assert "import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';" in export_source
     assert "stripPreviewFeatureSearchClasses(clone);" in export_source
@@ -366,6 +367,99 @@ def test_gui_preview_feature_search_is_wired_and_kept_export_transient() -> None
     assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString();" in export_source
     assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
+
+
+def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    source_path = WEB_ROOT / "js" / "app" / "feature-search" / "search-core.js"
+    module_path = tmp_path / "search-core.mjs"
+    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    check_path = tmp_path / "check-feature-search.mjs"
+    check_path.write_text(
+        f"""
+        import {{
+          featureSearchItems,
+          runFeatureSearch
+        }} from {module_path.as_uri()!r};
+
+        const assert = (condition, message) => {{
+          if (!condition) throw new Error(message);
+        }};
+
+        const feature = {{
+          svg_id: 'fabc12345',
+          displayLabel: 'Edited beta subunit',
+          gene: 'rpoB',
+          locus_tag: 'b3987',
+          product: 'DNA-directed RNA polymerase subunit beta',
+          recordId: 'NC_000913.3',
+          type: 'CDS',
+          start: 10,
+          end: 120,
+          strand: 'positive',
+          location_parts: [{{ display: 'join(11..40, 80..120)' }}],
+          qualifiers: {{
+            gene: ['rpoB'],
+            product: ['DNA-directed RNA polymerase subunit beta'],
+            note: ['core enzyme']
+          }},
+          nucleotideSequence: 'ATGGCN',
+          aminoAcidSequence: 'MXX'
+        }};
+        const renderedFeatureIds = new Set(['fabc12345']);
+
+        const productSearch = runFeatureSearch({{
+          features: [feature],
+          renderedFeatureIds,
+          query: 'polymerase',
+          field: 'all',
+          popupMode: 'rich'
+        }});
+        assert(productSearch.matches.join(',') === 'fabc12345', `Product search failed: ${{JSON.stringify(productSearch)}}`);
+        assert(
+          productSearch.matchDetails.fabc12345.some((detail) => detail.value.includes('polymerase')),
+          `Product match details missing product: ${{JSON.stringify(productSearch.matchDetails)}}`
+        );
+
+        const recordItems = featureSearchItems(feature, 'record-id', '', {{ popupMode: 'rich' }}).map((item) => item.value);
+        assert(recordItems.includes('NC_000913.3'), `recordId alias missing: ${{JSON.stringify(recordItems)}}`);
+
+        const locationItems = featureSearchItems(feature, 'location', '', {{ popupMode: 'rich' }}).map((item) => item.value);
+        assert(locationItems.includes('join(11..40, 80..120)'), `location_parts fallback missing: ${{JSON.stringify(locationItems)}}`);
+
+        const nucleotideSearch = runFeatureSearch({{
+          features: [feature],
+          renderedFeatureIds,
+          query: 'ATGGNN',
+          field: 'nucleotide',
+          popupMode: 'rich'
+        }});
+        assert(nucleotideSearch.matches.join(',') === 'fabc12345', `IUPAC nucleotide search failed: ${{JSON.stringify(nucleotideSearch)}}`);
+
+        const simpleSearch = runFeatureSearch({{
+          features: [feature],
+          renderedFeatureIds,
+          query: 'core enzyme',
+          field: 'all',
+          popupMode: 'simple'
+        }});
+        assert(simpleSearch.matches.length === 0, `Simple popup mode should not search rich qualifier payloads: ${{JSON.stringify(simpleSearch)}}`);
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
+
+    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+    assert "feature && feature.displayLabel" in export_source
+    assert "feature && feature.product" in export_source
+    assert "feature && feature.searchLabels" in export_source
+    assert "buildFeatureLocation(feature)" in export_source
+    assert "feature && (feature.nucleotide_sequence || feature.nucleotideSequence)" in export_source
+    assert "feature && (feature.amino_acid_sequence || feature.aminoAcidSequence)" in export_source
 
 
 def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:
@@ -474,6 +568,7 @@ def test_web_linear_run_ignores_hidden_circular_species_strain_args() -> None:
 
 
 def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() -> None:
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
     label_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "label-actions.js").read_text(encoding="utf-8")
     color_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "color-actions.js").read_text(encoding="utf-8")
@@ -482,7 +577,9 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     orthogroups_source = (WEB_ROOT / "js" / "app" / "orthogroups.js").read_text(encoding="utf-8")
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
 
+    assert "'data-gbdraw-feature-id'" in state_source
     assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source
+    assert "normalizeFeatureIdentity" in svg_actions_source
     assert "FEATURE_SELECTOR = [" in svg_actions_source
     assert "`path[${FEATURE_ID_ATTRIBUTE}]`" in svg_actions_source
     assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in svg_actions_source
@@ -496,6 +593,7 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     assert "getFeatureIdentity(path)" in svg_styles_source
     assert "getFeatureElements(svg, featureId)" in orthogroups_source
     assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in export_source
+    assert "normalizeFeatureElementId" in export_source
     assert "function getElementFeatureId(element)" in export_source
     assert "var svgId = getElementFeatureId(featureElement);" in export_source
     assert "const id = getElementFeatureId(element);" in export_source

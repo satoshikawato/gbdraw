@@ -13,6 +13,12 @@ export const PREVIEW_FEATURE_SEARCH_CLASSES = Object.freeze([
   PREVIEW_FEATURE_SEARCH_DIMMED_CLASS
 ]);
 
+export const resolvePreviewSvg = (root) => {
+  if (!root) return null;
+  if (root.matches?.('svg')) return root;
+  return root.querySelector?.('svg') || null;
+};
+
 const setClassToken = (element, token, enabled) => {
   if (!element) return;
   if (element.classList?.toggle) {

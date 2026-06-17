@@ -81,6 +81,10 @@ const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
 const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
 const INTERACTIVE_MATCH_GLOW_FILTER_ID = 'gbdraw-interactive-feature-match-glow';
+const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
+
+const normalizeFeatureElementId = (value) =>
+  String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
 
 const stripEditorOnlyCursorStyles = (svg) => {
   if (!svg) return;
@@ -95,11 +99,11 @@ const stripEditorOnlyCursorStyles = (svg) => {
 };
 
 const getElementFeatureId = (element) =>
-  String(
+  normalizeFeatureElementId(
     element?.getAttribute?.(FEATURE_ID_ATTRIBUTE) ||
     element?.getAttribute?.('id') ||
     ''
-  ).trim();
+  );
 
 const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
@@ -687,15 +691,20 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     error: ''
   };
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
+  var FEATURE_PART_SUFFIX_RE = /__part\\d+$/;
+
+  function normalizeFeatureElementId(value) {
+    return String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
+  }
 
   function getElementFeatureId(element) {
-    return String(
+    return normalizeFeatureElementId(
       element && (
         element.getAttribute(FEATURE_ID_ATTRIBUTE) ||
         element.getAttribute('id') ||
         element.id
       ) || ''
-    ).trim();
+    );
   }
 
   try {
@@ -707,6 +716,19 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var features = Array.isArray(payload.features) ? payload.features : [];
   var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
   var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';
+  var searchFieldIds = {
+    all: true,
+    label: true,
+    type: true,
+    'record-id': true,
+    location: true,
+    strand: true,
+    orthogroup: true,
+    'qualifier-key': true,
+    'qualifier-value': true,
+    nucleotide: true,
+    'amino-acid': true
+  };
   var richSearchFields = {
     'qualifier-key': true,
     'qualifier-value': true,
@@ -719,7 +741,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function normalizeSearchField(field) {
-    var selected = String(field || 'all');
+    var selected = String(field || 'all').trim() || 'all';
+    if (!searchFieldIds[selected]) {
+      return 'all';
+    }
     if (popupMode === 'simple' && isRichSearchField(selected)) {
       return 'all';
     }
@@ -735,10 +760,16 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   });
   var orthogroupsById = new Map();
   orthogroups.forEach(function (group) {
-    var id = String(group && group.id || '').trim();
-    if (id && !orthogroupsById.has(id)) {
-      orthogroupsById.set(id, group);
-    }
+    [
+      group && group.id,
+      group && group.orthogroupId,
+      group && group.orthogroup_id
+    ].forEach(function (candidate) {
+      var id = String(candidate || '').trim();
+      if (id && !orthogroupsById.has(id)) {
+        orthogroupsById.set(id, group);
+      }
+    });
   });
 
   function getOrthogroupIds(value) {
@@ -1000,17 +1031,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       : {};
   }
 
-  function getQualifierValuesByKey(feature, qualifierKey) {
-    var target = normalizeSearchText(qualifierKey).trim();
-    var qualifiers = getFeatureQualifiers(feature);
-    var values = [];
-    Object.keys(qualifiers).forEach(function (key) {
-      if (target && normalizeSearchText(key) !== target) return;
-      appendSearchValues(values, qualifiers[key]);
-    });
-    return values;
-  }
-
   function getQualifierSearchItems(feature, qualifierKey) {
     var target = normalizeSearchText(qualifierKey).trim();
     var qualifiers = getFeatureQualifiers(feature);
@@ -1022,22 +1042,65 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return items;
   }
 
-  function getLabelSearchValues(feature) {
+  function firstQualifierValue(feature, key) {
+    var qualifiers = getFeatureQualifiers(feature);
     var values = [];
-    appendSearchValues(values, feature && feature.display_label);
-    appendSearchValues(values, feature && feature.label);
-    appendSearchValues(values, feature && feature.search_labels);
-    appendSearchValues(values, feature && feature.svg_id);
-    return values;
+    appendSearchValues(values, qualifiers[key]);
+    for (var i = 0; i < values.length; i += 1) {
+      if (String(values[i] || '').trim()) return values[i];
+    }
+    return '';
+  }
+
+  function getFeatureLabelCandidates(feature) {
+    return [
+      feature && feature.display_label,
+      feature && feature.displayLabel,
+      feature && feature.label,
+      feature && feature.gene,
+      feature && feature.locus_tag,
+      feature && feature.locusTag,
+      feature && feature.product,
+      firstQualifierValue(feature, 'gene'),
+      firstQualifierValue(feature, 'locus_tag'),
+      firstQualifierValue(feature, 'product'),
+      feature && feature.search_labels,
+      feature && feature.searchLabels,
+      feature && feature.svg_id
+    ];
   }
 
   function getLabelSearchItems(feature) {
     var items = [];
-    appendSearchItems(items, 'Label', feature && feature.display_label);
-    appendSearchItems(items, 'Label', feature && feature.label);
-    appendSearchItems(items, 'Label', feature && feature.search_labels);
-    appendSearchItems(items, 'SVG ID', feature && feature.svg_id);
+    var seen = {};
+    getFeatureLabelCandidates(feature).forEach(function (value) {
+      var values = [];
+      appendSearchValues(values, value);
+      values.forEach(function (entry) {
+        var key = normalizeSearchText(entry);
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        appendSearchItems(items, key === normalizeSearchText(feature && feature.svg_id) ? 'SVG ID' : 'Label', entry);
+      });
+    });
     return items;
+  }
+
+  function buildFeatureLocation(feature) {
+    var direct = String(feature && feature.location || '').trim();
+    if (direct) return direct;
+    var parts = Array.isArray(feature && feature.location_parts) ? feature.location_parts : [];
+    var partText = parts.map(function (part) {
+      return String(part && part.display || '').trim();
+    }).filter(Boolean).join(', ');
+    if (partText) return partText;
+    var start = Number(feature && feature.start);
+    var end = Number(feature && feature.end);
+    var startText = Number.isFinite(start) ? String(start + 1) : String(feature && feature.start != null ? feature.start : '');
+    var endText = Number.isFinite(end) ? String(end) : String(feature && feature.end != null ? feature.end : '');
+    var range = startText + '..' + endText;
+    var strand = String(feature && feature.strand || '').trim();
+    return strand ? range + ' (' + strand + ')' : range;
   }
 
   function getOrthogroupById(orthogroupId) {
@@ -1047,20 +1110,23 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function getFeatureOrthogroup(feature) {
-    return getOrthogroupById(feature && feature.orthogroup_id);
+    return getOrthogroupById(feature && (feature.orthogroup_id || feature.orthogroupId));
   }
 
   function getFeatureOrthogroupMember(feature, group) {
     if (feature && feature.orthogroup_member && typeof feature.orthogroup_member === 'object') {
       return feature.orthogroup_member;
     }
+    if (feature && feature.orthogroupMember && typeof feature.orthogroupMember === 'object') {
+      return feature.orthogroupMember;
+    }
     var members = group && Array.isArray(group.members) ? group.members : [];
     var svgId = String(feature && feature.svg_id || '').trim();
-    var recordIndex = Number(feature && feature.record_idx);
+    var recordIndex = Number(feature && (feature.record_idx || feature.recordIndex || feature.fileIdx));
     for (var i = 0; i < members.length; i += 1) {
       var member = members[i] || {};
-      if (String(member.featureSvgId || '').trim() !== svgId) continue;
-      if (!Number.isInteger(recordIndex) || Number(member.recordIndex) === recordIndex) {
+      if (String(member.featureSvgId || member.feature_svg_id || '').trim() !== svgId) continue;
+      if (!Number.isInteger(recordIndex) || Number(member.recordIndex || member.record_index) === recordIndex) {
         return member;
       }
     }
@@ -1070,9 +1136,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function displayProteinId(feature, member) {
     return String(
       feature && feature.source_protein_id ||
+      feature && feature.sourceProteinId ||
       member && member.sourceProteinId ||
+      member && member.source_protein_id ||
       feature && feature.protein_id ||
+      feature && feature.proteinId ||
       member && member.proteinId ||
+      member && member.protein_id ||
       ''
     ).trim();
   }
@@ -1080,19 +1150,22 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function internalProteinId(feature, member) {
     return String(
       feature && feature.protein_id ||
+      feature && feature.proteinId ||
       member && member.proteinId ||
+      member && member.protein_id ||
       ''
     ).trim();
   }
 
   function getOrthogroupSearchItems(feature) {
+    var orthogroupId = String(feature && (feature.orthogroup_id || feature.orthogroupId) || '').trim();
     var group = getFeatureOrthogroup(feature);
     var member = getFeatureOrthogroupMember(feature, group);
     var proteinId = displayProteinId(feature, member);
     var internalId = internalProteinId(feature, member);
     var items = [];
-    appendSearchItems(items, 'Orthogroup ID', feature && feature.orthogroup_id);
-    appendSearchItems(items, 'Orthogroup name', group && (group.display_name || group.name));
+    appendSearchItems(items, 'Orthogroup ID', orthogroupId);
+    appendSearchItems(items, 'Orthogroup name', group && (group.display_name || group.displayName || group.name));
     appendSearchItems(items, 'Orthogroup description', group && group.description);
     appendSearchItems(items, 'Protein ID', proteinId);
     if (internalId && internalId !== proteinId) {
@@ -1102,7 +1175,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     appendSearchItems(items, 'Orthogroup member gene', member && member.gene);
     appendSearchItems(items, 'Orthogroup member product', member && member.product);
     appendSearchItems(items, 'Orthogroup member note', member && member.note);
-    appendSearchItems(items, 'Orthogroup member protein ID', member && (member.sourceProteinId || member.proteinId));
+    appendSearchItems(items, 'Orthogroup member protein ID', member && (member.sourceProteinId || member.source_protein_id || member.proteinId || member.protein_id));
     return items;
   }
 
@@ -1119,10 +1192,12 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     if (selectedField === 'record-id') {
       appendSearchItems(items, 'Record ID', feature && feature.record_id);
+      appendSearchItems(items, 'Record ID', feature && feature.recordId);
+      appendSearchItems(items, 'Record ID', feature && feature.displayRecordId);
       return items;
     }
     if (selectedField === 'location') {
-      appendSearchItems(items, 'Location', feature && feature.location);
+      appendSearchItems(items, 'Location', buildFeatureLocation(feature));
       appendSearchItems(items, 'Start', feature && feature.start);
       appendSearchItems(items, 'End', feature && feature.end);
       return items;
@@ -1142,18 +1217,20 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return getQualifierSearchItems(feature, qualifierKey);
     }
     if (selectedField === 'nucleotide') {
-      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence, { alphabet: 'nucleotide' });
+      appendSearchItems(items, 'Nucleotide sequence', feature && (feature.nucleotide_sequence || feature.nucleotideSequence), { alphabet: 'nucleotide' });
       return items;
     }
     if (selectedField === 'amino-acid') {
-      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence, { alphabet: 'amino-acid' });
+      appendSearchItems(items, 'Amino acid sequence', feature && (feature.amino_acid_sequence || feature.aminoAcidSequence), { alphabet: 'amino-acid' });
       return items;
     }
 
     Array.prototype.push.apply(items, getLabelSearchItems(feature));
     appendSearchItems(items, 'Record ID', feature && feature.record_id);
+    appendSearchItems(items, 'Record ID', feature && feature.recordId);
+    appendSearchItems(items, 'Record ID', feature && feature.displayRecordId);
     appendSearchItems(items, 'Feature type', feature && feature.type);
-    appendSearchItems(items, 'Location', feature && feature.location);
+    appendSearchItems(items, 'Location', buildFeatureLocation(feature));
     appendSearchItems(items, 'Strand', feature && feature.strand);
     Array.prototype.push.apply(items, getOrthogroupSearchItems(feature));
     if (popupMode !== 'simple') {
@@ -1161,8 +1238,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       Object.keys(qualifiers).sort().forEach(function (key) {
         appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
       });
-      appendSearchItems(items, 'Nucleotide sequence', feature && feature.nucleotide_sequence, { alphabet: 'nucleotide' });
-      appendSearchItems(items, 'Amino acid sequence', feature && feature.amino_acid_sequence, { alphabet: 'amino-acid' });
+      appendSearchItems(items, 'Nucleotide sequence', feature && (feature.nucleotide_sequence || feature.nucleotideSequence), { alphabet: 'nucleotide' });
+      appendSearchItems(items, 'Amino acid sequence', feature && (feature.amino_acid_sequence || feature.aminoAcidSequence), { alphabet: 'amino-acid' });
     }
     return items;
   }
