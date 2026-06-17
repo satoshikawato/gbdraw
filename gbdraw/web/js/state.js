@@ -57,6 +57,7 @@ const svgContent = computed(() => {
         'href',
         'id',
         'class',
+        'data-gbdraw-feature-id',
         'data-legend-key',
         'data-label-key',
         'data-label-feature-id',

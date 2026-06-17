@@ -303,15 +303,154 @@
             grid-template-columns: minmax(0, 1fr);
         }
         .preview-feature-search {
-            border-top: 1px solid #dcfce7;
-            border-bottom: 1px solid #dcfce7;
-            background: rgba(240, 253, 244, 0.72);
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            z-index: 30;
+            width: min(39.5rem, calc(100% - 2rem));
+            padding: 7px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.96);
+            color: #334155;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            pointer-events: auto;
         }
-        .preview-feature-search-input {
-            min-width: min(18rem, 100%);
+        .preview-feature-search * {
+            box-sizing: border-box;
         }
-        .preview-feature-search-status {
-            min-width: 12rem;
+        .preview-feature-search .gfs-row {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            min-width: 0;
+        }
+        .preview-feature-search .gfs-row + .gfs-row {
+            margin-top: 6px;
+        }
+        .preview-feature-search .gfs-input,
+        .preview-feature-search .gfs-select {
+            height: 26px;
+            min-width: 0;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #1e293b;
+            font: inherit;
+        }
+        .preview-feature-search .gfs-input {
+            padding: 0 7px;
+        }
+        .preview-feature-search .gfs-query {
+            flex: 1 1 126px;
+        }
+        .preview-feature-search .gfs-select {
+            flex: 0 0 104px;
+            padding: 0 5px;
+        }
+        .preview-feature-search .gfs-qualifier {
+            flex: 1 1 104px;
+        }
+        .preview-feature-search .gfs-qualifier:disabled {
+            opacity: 0.48;
+        }
+        .preview-feature-search .gfs-toggle {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+            white-space: nowrap;
+            user-select: none;
+        }
+        .preview-feature-search .gfs-button {
+            height: 26px;
+            min-width: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #f8fafc;
+            color: #334155;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 700;
+        }
+        .preview-feature-search .gfs-button--clear {
+            flex: 0 0 48px;
+        }
+        .preview-feature-search .gfs-button--open {
+            flex: 0 0 44px;
+        }
+        .preview-feature-search .gfs-button--search {
+            flex: 0 0 62px;
+            border-color: #1d4ed8;
+            background: #2563eb;
+            color: #ffffff;
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.25);
+        }
+        .preview-feature-search .gfs-button:hover:not(:disabled) {
+            background: #eff6ff;
+            border-color: #93c5fd;
+            color: #1d4ed8;
+        }
+        .preview-feature-search .gfs-button--search:hover:not(:disabled) {
+            background: #1d4ed8;
+            border-color: #1e40af;
+            color: #ffffff;
+        }
+        .preview-feature-search .gfs-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+            box-shadow: none;
+        }
+        .preview-feature-search .gfs-button:disabled:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+        .preview-feature-search .gfs-button--search:disabled:hover {
+            background: #2563eb;
+            border-color: #1d4ed8;
+            color: #ffffff;
+        }
+        .preview-feature-search .gfs-count {
+            margin-left: auto;
+            color: #475569;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .preview-feature-search .gfs-match-detail {
+            display: block;
+            min-width: 0;
+            margin-top: 5px;
+            overflow: hidden;
+            color: #64748b;
+            font-size: 10px;
+            line-height: 1.2;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .preview-feature-search input,
+        .preview-feature-search select,
+        .preview-feature-search button,
+        .preview-feature-search label {
+            cursor: auto;
+        }
+        .preview-feature-search button,
+        .preview-feature-search label {
+            cursor: pointer;
+        }
+        .preview-feature-search.is-invalid .gfs-query {
+            border-color: #ef4444;
+            color: #991b1b;
+        }
+        .preview-feature-search.is-invalid .gfs-count {
+            color: #b91c1c;
+        }
+        .preview-feature-search.is-invalid .gfs-button--search {
+            box-shadow: none;
         }
         .gbdraw-preview-feature-search-dimmed {
             opacity: 0.18;
@@ -481,13 +620,30 @@
                 flex: 1 1 auto !important;
             }
 
-            .preview-feature-search-main {
-                grid-template-columns: minmax(0, 1fr) !important;
+            .preview-feature-search {
+                top: 0.5rem !important;
+                right: 0.5rem !important;
+                left: 0.5rem !important;
+                width: auto !important;
+                max-height: calc(100% - 1rem) !important;
+                overflow: auto !important;
             }
 
-            .preview-feature-search-input,
-            .preview-feature-search-status {
+            .preview-feature-search .gfs-row {
+                flex-wrap: wrap !important;
+            }
+
+            .preview-feature-search .gfs-query,
+            .preview-feature-search .gfs-select,
+            .preview-feature-search .gfs-qualifier,
+            .preview-feature-search .gfs-count,
+            .preview-feature-search .gfs-match-detail {
+                flex: 1 1 100% !important;
                 min-width: 0 !important;
+            }
+
+            .preview-feature-search .gfs-count {
+                margin-left: 0 !important;
             }
 
             .preview-controls {
@@ -2660,86 +2816,81 @@
                     </div>
                 </div>
 
-                <div v-if="svgContent"
-                     class="preview-feature-search -mx-4 px-4 py-2 shrink-0"
-                     @click.stop>
-                    <div class="preview-feature-search-main grid grid-cols-[minmax(14rem,1fr)_10rem_minmax(0,9rem)_auto_auto] gap-2 items-center">
-                        <div class="preview-feature-search-input relative">
-                            <i class="ph ph-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <div class="relative flex-grow overflow-hidden bg-slate-50/30">
+
+                    <div v-if="svgContent"
+                         :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
+                         @click.stop
+                         @mousedown.stop
+                         @mousemove.stop
+                         @mouseup.stop
+                         @wheel.stop>
+                        <div class="gfs-row">
                             <input type="search"
                                    v-model="previewFeatureSearchInput"
-                                   @keydown.enter.prevent="openPreviewFeatureSearchActiveMatch"
-                                   class="form-input h-9 pl-8 pr-2 py-1 text-xs bg-white"
+                                   @keydown.enter.prevent="applyPreviewFeatureSearch"
+                                   class="gfs-input gfs-query"
                                    placeholder="Search features"
                                    aria-label="Search features">
+                            <select v-model="previewFeatureSearchField"
+                                    class="gfs-select"
+                                    aria-label="Search field">
+                                <option v-for="field in previewFeatureSearchFieldOptions" :key="field.id" :value="field.id">
+                                    {{ field.label }}
+                                </option>
+                            </select>
+                            <button type="button"
+                                    @click.stop="applyPreviewFeatureSearch"
+                                    :disabled="!previewFeatureSearchCanSearch"
+                                    class="gfs-button gfs-button--search"
+                                    title="Search features"
+                                    aria-label="Search features">
+                                Search
+                            </button>
                         </div>
-                        <select v-model="previewFeatureSearchField"
-                                class="form-input h-9 py-1 text-xs bg-white"
-                                aria-label="Search field">
-                            <option v-for="field in previewFeatureSearchFieldOptions" :key="field.id" :value="field.id">
-                                {{ field.label }}
-                            </option>
-                        </select>
-                        <input v-if="previewFeatureSearchQualifierEnabled"
-                               type="text"
-                               v-model="previewFeatureSearchQualifierKey"
-                               class="form-input h-9 py-1 text-xs bg-white"
-                               placeholder="Qualifier key"
-                               aria-label="Qualifier key">
-                        <div v-else class="hidden md:block"></div>
-                        <label class="h-9 px-2 inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 select-none">
-                            <input type="checkbox" v-model="previewFeatureSearchUseRegex" class="form-checkbox !w-3.5 !h-3.5">
-                            <span>Regex</span>
-                        </label>
-                        <div class="flex items-center justify-end gap-1">
+                        <div class="gfs-row">
+                            <input v-if="adv.rich_feature_popup !== false"
+                                   type="text"
+                                   v-model="previewFeatureSearchQualifierKey"
+                                   @keydown.enter.prevent="applyPreviewFeatureSearch"
+                                   :disabled="!previewFeatureSearchQualifierEnabled"
+                                   class="gfs-input gfs-qualifier"
+                                   placeholder="Qualifier key"
+                                   aria-label="Qualifier key">
+                            <label class="gfs-toggle">
+                                <input type="checkbox" v-model="previewFeatureSearchUseRegex">
+                                <span>Regex</span>
+                            </label>
                             <button type="button"
                                     @click.stop="goToPreviousPreviewFeatureSearchMatch"
                                     :disabled="!previewFeatureSearchHasMatches"
-                                    class="btn-icon-sm h-9 w-9"
+                                    class="gfs-button"
                                     title="Previous match"
-                                    aria-label="Previous match">
-                                <i class="ph ph-caret-left"></i>
-                            </button>
+                                    aria-label="Previous match">&lt;</button>
                             <button type="button"
                                     @click.stop="goToNextPreviewFeatureSearchMatch"
                                     :disabled="!previewFeatureSearchHasMatches"
-                                    class="btn-icon-sm h-9 w-9"
+                                    class="gfs-button"
                                     title="Next match"
-                                    aria-label="Next match">
-                                <i class="ph ph-caret-right"></i>
-                            </button>
+                                    aria-label="Next match">&gt;</button>
                             <button type="button"
                                     @click.stop="openPreviewFeatureSearchActiveMatch"
                                     :disabled="!previewFeatureSearchCanOpenActive"
-                                    class="btn-icon-sm h-9 w-9"
+                                    class="gfs-button gfs-button--open"
                                     title="Open active feature"
-                                    aria-label="Open active feature">
-                                <i class="ph ph-cursor-click"></i>
-                            </button>
+                                    aria-label="Open active feature">Open</button>
                             <button type="button"
                                     @click.stop="clearPreviewFeatureSearch"
                                     :disabled="!previewFeatureSearchInput && !previewFeatureSearchQuery"
-                                    class="btn-icon-sm h-9 w-9"
+                                    class="gfs-button gfs-button--clear"
                                     title="Clear search"
-                                    aria-label="Clear search">
-                                <i class="ph ph-x"></i>
-                            </button>
+                                    aria-label="Clear search">Clear</button>
+                            <span class="gfs-count">{{ previewFeatureSearchStatusText }}</span>
+                        </div>
+                        <div class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">
+                            {{ previewFeatureSearchActiveDetail }}
                         </div>
                     </div>
-                    <div :class="[
-                            'preview-feature-search-status mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold',
-                            previewFeatureSearchError ? 'text-red-600' : 'text-slate-500'
-                         ]">
-                        <span class="font-mono">{{ previewFeatureSearchStatusText }}</span>
-                        <span v-if="previewFeatureSearchActiveDetail"
-                              class="min-w-0 truncate text-slate-600"
-                              :title="previewFeatureSearchActiveDetail">
-                            {{ previewFeatureSearchActiveDetail }}
-                        </span>
-                    </div>
-                </div>
-
-                <div class="relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <!-- Zoom and Canvas controls -->
                     <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">

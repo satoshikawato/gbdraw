@@ -10,6 +10,7 @@ import {
   centerPreviewFeature,
   getFeatureScreenCenter,
   getPreviewFeatureElementIndex,
+  resolvePreviewSvg,
   stripPreviewFeatureSearchClasses
 } from './preview-svg.js';
 
@@ -39,14 +40,16 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchMatchDetails,
     previewFeatureSearchActiveIndex,
     previewFeatureSearchError,
-    previewFeatureSearchRenderedCount
+    previewFeatureSearchRenderedCount,
+    clickedFeature
   } = state;
 
-  let inputDebounceId = null;
-  let refreshRequestId = 0;
-
   const getPopupMode = () => (adv?.rich_feature_popup === false ? 'simple' : 'rich');
-  const getSvg = () => svgContainer.value?.querySelector?.('svg') || null;
+  let refreshRequestId = 0;
+  let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
+  let appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
+  let appliedUseRegex = Boolean(previewFeatureSearchUseRegex.value);
+  const getSvg = () => resolvePreviewSvg(svgContainer.value);
   const getActiveMatchId = () => (
     previewFeatureSearchActiveIndex.value >= 0
       ? String(previewFeatureSearchMatches.value?.[previewFeatureSearchActiveIndex.value] || '')
@@ -61,6 +64,10 @@ export const createPreviewFeatureSearch = ({
   const previewFeatureSearchHasMatches = computed(() => previewFeatureSearchMatches.value.length > 0);
   const previewFeatureSearchCanOpenActive = computed(() => (
     previewFeatureSearchHasMatches.value && previewFeatureSearchActiveIndex.value >= 0
+  ));
+  const previewFeatureSearchCanSearch = computed(() => (
+    Boolean(String(previewFeatureSearchInput.value || '').trim()) ||
+    Boolean(String(previewFeatureSearchQuery.value || '').trim())
   ));
   const previewFeatureSearchStatusText = computed(() => {
     if (previewFeatureSearchError.value) return previewFeatureSearchError.value;
@@ -108,11 +115,8 @@ export const createPreviewFeatureSearch = ({
 
   const refreshSearchNow = ({ preserveActive = true, center = false } = {}) => {
     const popupMode = getPopupMode();
-    const normalizedField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode });
-    if (normalizedField !== previewFeatureSearchField.value) {
-      previewFeatureSearchField.value = normalizedField;
-      return;
-    }
+    const normalizedField = normalizeFeatureSearchField(appliedSearchField, { popupMode });
+    appliedSearchField = normalizedField;
 
     const previousActiveId = preserveActive ? getActiveMatchId() : '';
     const svg = getSvg();
@@ -123,8 +127,8 @@ export const createPreviewFeatureSearch = ({
       renderedFeatureIds,
       query: previewFeatureSearchQuery.value,
       field: normalizedField,
-      qualifierKey: previewFeatureSearchQualifierKey.value,
-      useRegex: previewFeatureSearchUseRegex.value,
+      qualifierKey: appliedQualifierKey,
+      useRegex: appliedUseRegex,
       popupMode,
       orthogroups: orthogroups.value,
       previousActiveId
@@ -169,6 +173,55 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchField.value = normalizeFeatureSearchField(field, { popupMode: getPopupMode() });
   };
 
+  const applySearch = () => {
+    const popupMode = getPopupMode();
+    const normalizedField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode });
+    if (normalizedField !== previewFeatureSearchField.value) {
+      previewFeatureSearchField.value = normalizedField;
+    }
+    appliedSearchField = normalizedField;
+    appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
+    appliedUseRegex = Boolean(previewFeatureSearchUseRegex.value);
+    previewFeatureSearchQuery.value = String(previewFeatureSearchInput.value || '');
+    scheduleRefreshSearch({ preserveActive: false });
+  };
+
+  const getActiveMatchFeature = () => {
+    const activeId = getActiveMatchId();
+    if (!activeId) return null;
+    return featuresBySvgId.value?.get?.(activeId) ||
+      (Array.isArray(extractedFeatures.value)
+        ? extractedFeatures.value.find((candidate) => String(candidate?.svg_id || '').trim() === activeId)
+        : null);
+  };
+
+  const openActiveMatch = ({ center = true } = {}) => {
+    if (!previewFeatureSearchMatches.value.length) return;
+    if (previewFeatureSearchActiveIndex.value < 0) {
+      previewFeatureSearchActiveIndex.value = 0;
+    }
+    const activeId = getActiveMatchId();
+    const feature = getActiveMatchFeature();
+    if (!feature) return;
+
+    const svg = getSvg();
+    const featureIndex = getPreviewFeatureElementIndex(svg);
+    if (center) {
+      centerPreviewFeature({
+        svg,
+        featureId: activeId,
+        featureIndex,
+        canvasContainer: canvasContainerRef.value,
+        canvasPan
+      });
+    }
+    syncPreviewClasses();
+    nextTick(() => {
+      const centerPoint = getFeatureScreenCenter(getSvg(), activeId, featureIndex);
+      openFeatureEditorForFeature(feature, centerPoint);
+    });
+  };
+
   const goToMatch = (index, { center = true } = {}) => {
     const count = previewFeatureSearchMatches.value.length;
     if (!count) {
@@ -178,6 +231,9 @@ export const createPreviewFeatureSearch = ({
     }
     previewFeatureSearchActiveIndex.value = ((Number(index) || 0) % count + count) % count;
     syncPreviewClasses({ center });
+    if (clickedFeature?.value) {
+      openActiveMatch({ center: false });
+    }
   };
 
   const goToNext = () => goToMatch(previewFeatureSearchActiveIndex.value + 1);
@@ -189,6 +245,9 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchField.value = 'all';
     previewFeatureSearchQualifierKey.value = '';
     previewFeatureSearchUseRegex.value = false;
+    appliedSearchField = 'all';
+    appliedQualifierKey = '';
+    appliedUseRegex = false;
     previewFeatureSearchMatches.value = [];
     previewFeatureSearchMatchDetails.value = {};
     previewFeatureSearchActiveIndex.value = -1;
@@ -197,61 +256,20 @@ export const createPreviewFeatureSearch = ({
     scheduleRefreshSearch({ preserveActive: false });
   };
 
-  const openActiveMatch = () => {
-    if (!previewFeatureSearchMatches.value.length) return;
-    if (previewFeatureSearchActiveIndex.value < 0) {
-      previewFeatureSearchActiveIndex.value = 0;
-    }
-    const activeId = getActiveMatchId();
-    const feature = featuresBySvgId.value?.get?.(activeId) ||
-      (Array.isArray(extractedFeatures.value)
-        ? extractedFeatures.value.find((candidate) => String(candidate?.svg_id || '').trim() === activeId)
-        : null);
-    if (!feature) return;
-
-    const svg = getSvg();
-    const featureIndex = getPreviewFeatureElementIndex(svg);
-    centerPreviewFeature({
-      svg,
-      featureId: activeId,
-      featureIndex,
-      canvasContainer: canvasContainerRef.value,
-      canvasPan
-    });
-    syncPreviewClasses();
-    nextTick(() => {
-      const center = getFeatureScreenCenter(getSvg(), activeId, featureIndex);
-      openFeatureEditorForFeature(feature, center);
-    });
-  };
-
-  watch(previewFeatureSearchInput, (value) => {
-    if (inputDebounceId !== null) {
-      clearTimeout(inputDebounceId);
-      inputDebounceId = null;
-    }
-    const delay = String(value || '').trim() ? 120 : 0;
-    inputDebounceId = setTimeout(() => {
-      previewFeatureSearchQuery.value = String(value || '');
-      inputDebounceId = null;
-    }, delay);
-  });
-
   watch(
     () => getPopupMode(),
     () => {
       if (getPopupMode() === 'simple' && isRichFeatureSearchField(previewFeatureSearchField.value)) {
         previewFeatureSearchField.value = 'all';
       }
+      if (getPopupMode() === 'simple' && isRichFeatureSearchField(appliedSearchField)) {
+        appliedSearchField = 'all';
+      }
       scheduleRefreshSearch();
     }
   );
   watch(
     [
-      previewFeatureSearchQuery,
-      previewFeatureSearchField,
-      previewFeatureSearchQualifierKey,
-      previewFeatureSearchUseRegex,
       selectedResultIndex,
       extractedFeatures,
       orthogroups,
@@ -264,10 +282,6 @@ export const createPreviewFeatureSearch = ({
 
   const dispose = () => {
     refreshRequestId += 1;
-    if (inputDebounceId !== null) {
-      clearTimeout(inputDebounceId);
-      inputDebounceId = null;
-    }
   };
 
   return {
@@ -275,10 +289,12 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchQualifierEnabled,
     previewFeatureSearchHasMatches,
     previewFeatureSearchCanOpenActive,
+    previewFeatureSearchCanSearch,
     previewFeatureSearchStatusText,
     previewFeatureSearchActiveDetail,
     setQuery,
     setField,
+    applySearch,
     goToNext,
     goToPrevious,
     clearSearch,

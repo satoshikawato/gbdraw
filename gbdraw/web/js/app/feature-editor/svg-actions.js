@@ -11,13 +11,18 @@ export const FEATURE_SELECTOR = [
   'rect[id^="f"]'
 ].join(', ');
 
+const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
+
+export const normalizeFeatureIdentity = (value) =>
+  String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
+
 export const getFeatureIdentity = (element) =>
-  String(
+  normalizeFeatureIdentity(
     element?.getAttribute?.(FEATURE_ID_ATTRIBUTE) ||
     element?.getAttribute?.('id') ||
     element?.id ||
     ''
-  ).trim();
+  );
 
 const featureElementIndexCache = new WeakMap();
 
