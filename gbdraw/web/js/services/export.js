@@ -598,10 +598,22 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfs-button--clear {
   flex: 0 0 48px;
 }
+.gfs-button--search {
+  flex: 0 0 62px;
+  border-color: #1d4ed8;
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.25);
+}
 .gfs-button:hover {
   background: #eff6ff;
   border-color: #93c5fd;
   color: #1d4ed8;
+}
+.gfs-button--search:hover {
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #ffffff;
 }
 .gfs-count {
   margin-left: auto;
@@ -1683,6 +1695,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       var option = createXhtmlNode('option', { value: entry[0], text: entry[1] });
       fieldSelect.appendChild(option);
     });
+    var searchButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button gfs-button--search',
+      title: 'Search features',
+      'aria-label': 'Search features',
+      'data-search-apply': 'true',
+      text: 'Search'
+    });
     var qualifierInput = createXhtmlNode('input', {
       className: 'gfs-input gfs-qualifier',
       type: 'text',
@@ -1733,6 +1753,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
     firstRow.appendChild(queryInput);
     firstRow.appendChild(fieldSelect);
+    firstRow.appendChild(searchButton);
     if (popupMode !== 'simple') {
       secondRow.appendChild(qualifierInput);
     }
@@ -1770,6 +1791,18 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     regexInput.addEventListener('change', function () {
       setSearchState({ useRegex: regexInput.checked });
+    });
+    searchButton.addEventListener('click', function () {
+      setSearchState({
+        query: queryInput.value,
+        field: fieldSelect.value,
+        qualifierKey: qualifierInput.value,
+        useRegex: regexInput.checked
+      });
+      if (searchState.matches.length) {
+        setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true });
+      }
+      queryInput.focus();
     });
     prevButton.addEventListener('click', function () {
       setActiveMatch(searchState.activeIndex - 1, { center: true });
