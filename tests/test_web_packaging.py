@@ -229,6 +229,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "var initialView = copyViewRect(getViewRect());" in export_source
     assert "rectsNearlyEqual(getViewRect(), initialView)" in export_source
     assert "scheduleInitialViewportRefresh();" in export_source
+    assert "var targetRect = fitRectToAspect({\n      x: bounds.x + bounds.width / 2 - targetWidth / 2," in export_source
+    assert "}, homeViewRect.width / homeViewRect.height);\n    setSvgViewRect(targetRect);" in export_source
     assert "visibleView.x + visibleView.width - (controlWidth * unit) - margin" in export_source
     assert "visibleView.y + margin + (searchControlsOffsetCss.y * unit)" in export_source
     assert "var yOffset = 42 * unit" not in export_source
@@ -292,9 +294,28 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "var effectiveScaleX = safeScaleX * metrics.zoomScale;" in export_source
     assert "var marginCss = metrics.margin;" in export_source
     assert "var dragZoomScale = getBrowserZoomScale(getViewportClientRect());" in export_source
-    assert "--gfi-text-scale" in export_source
-    assert "getPopupTextScale" in export_source
-    assert "root.style.setProperty('--gfi-text-scale'" in export_source
+    assert "var updateActivePopupViewportMetrics = null;" in export_source
+    assert "function refreshActivePopupForViewport()" in export_source
+    assert "updateActivePopupViewportMetrics();" in export_source
+    assert "updateActivePopupViewportMetrics = function () {" in export_source
+    zoom_block = export_source.split("  function zoomViewBy", 1)[1].split("  function resetViewport", 1)[0]
+    assert "closePopup();" not in zoom_block
+    assert "--gfi-text-scale" not in export_source
+    assert "--gfi-font-size" not in export_source
+    assert "getPopupTextScale" not in export_source
+    assert "function setPopupTextScale" not in export_source
+    popup_resize_block = export_source.split("    function startPopupResize", 1)[1].split("    function startPopupDrag", 1)[0]
+    popup_drag_block = export_source.split("    function startPopupDrag", 1)[1].split("    function redraw", 1)[0]
+    assert "document.addEventListener('mousemove', onMove, true);" in popup_resize_block
+    assert "document.addEventListener('mouseup', onEnd, true);" in popup_resize_block
+    assert "window.addEventListener('mouseup', onEnd, true);" in popup_resize_block
+    assert "window.addEventListener('blur', onEnd);" in popup_resize_block
+    assert "typeof moveEvent.buttons === 'number' && (moveEvent.buttons & 1) !== 1" in popup_resize_block
+    assert "document.addEventListener('mousemove', onMove, true);" in popup_drag_block
+    assert "document.addEventListener('mouseup', onEnd, true);" in popup_drag_block
+    assert "window.addEventListener('mouseup', onEnd, true);" in popup_drag_block
+    assert "window.addEventListener('blur', onEnd);" in popup_drag_block
+    assert "typeof moveEvent.buttons === 'number' && (moveEvent.buttons & 1) !== 1" in popup_drag_block
     assert "gbdraw-interactive-feature-glow" in export_source
     assert "gbdraw-interactive-feature-match-glow" in export_source
     assert "gbdraw-interactive-feature--hover" in export_source

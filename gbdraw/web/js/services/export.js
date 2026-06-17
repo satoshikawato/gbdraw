@@ -243,7 +243,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   color: #334155;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
   font-family: Arial, Helvetica, sans-serif;
-  font-size: var(--gfi-font-size, 13px);
+  font-size: 13px;
 }
 .gfi--simple .gfi-content {
   padding-right: 12px;
@@ -275,7 +275,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfi-subtitle {
   margin-top: 2px;
   color: #64748b;
-  font-size: var(--gfi-subtitle-font-size, 11px);
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 .gfi-close,
@@ -291,7 +291,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfi-close {
   width: 28px;
   height: 28px;
-  font-size: var(--gfi-close-font-size, 20px);
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
 }
@@ -313,7 +313,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfi-tab {
   min-width: 0;
   padding: 6px 8px;
-  font-size: var(--gfi-tab-font-size, 11px);
+  font-size: 11px;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -341,7 +341,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gfi-key {
   color: #64748b;
-  font-size: var(--gfi-key-font-size, 10px);
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -349,7 +349,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   min-width: 0;
   color: #1e293b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--gfi-value-font-size, 11px);
+  font-size: 11px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -357,7 +357,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   width: 48px;
   padding: 5px 0;
   background: #f8fafc;
-  font-size: var(--gfi-copy-font-size, 10px);
+  font-size: 10px;
   font-weight: 700;
 }
 .gfi-block {
@@ -373,7 +373,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   padding: 7px 9px;
   background: #f8fafc;
   color: #475569;
-  font-size: var(--gfi-block-title-font-size, 10px);
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -387,7 +387,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   overflow: auto;
   color: #1e293b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--gfi-pre-font-size, 11px);
+  font-size: 11px;
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -400,7 +400,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   width: 100%;
   min-width: 620px;
   border-collapse: collapse;
-  font-size: var(--gfi-value-font-size, 11px);
+  font-size: 11px;
 }
 .gfi-table th,
 .gfi-table td {
@@ -415,7 +415,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   z-index: 1;
   background: #f8fafc;
   color: #64748b;
-  font-size: var(--gfi-key-font-size, 10px);
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -710,6 +710,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var activeHoverKey = '';
   var maxZoom = 16;
   var resizeFrame = null;
+  var overlayRefreshFrame = null;
+  var overlayRefreshTimer = null;
+  var updateActivePopupViewportMetrics = null;
   var searchState = {
     query: '',
     field: 'all',
@@ -1604,12 +1607,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var targetHeight = Math.min(view.height, Math.max(bounds.height * 6, originalViewRect.height / 8));
     targetWidth = Math.max(targetWidth, bounds.width * 1.4);
     targetHeight = Math.max(targetHeight, bounds.height * 1.4);
-    setSvgViewRect({
+    var targetRect = fitRectToAspect({
       x: bounds.x + bounds.width / 2 - targetWidth / 2,
       y: bounds.y + bounds.height / 2 - targetHeight / 2,
       width: targetWidth,
       height: targetHeight
-    });
+    }, homeViewRect.width / homeViewRect.height);
+    setSvgViewRect(targetRect);
   }
 
   function setActiveMatch(index, options) {
@@ -2299,15 +2303,47 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return { x: x, y: y, width: width, height: height };
   }
 
+  function refreshActivePopupForViewport() {
+    if (typeof updateActivePopupViewportMetrics === 'function') {
+      updateActivePopupViewportMetrics();
+      return;
+    }
+    keepPopupWithinVisibleView();
+  }
+
+  function refreshViewportOverlays() {
+    updateViewportControlsPosition();
+    refreshActivePopupForViewport();
+    scheduleHoverPopupPosition(hoverPopupLastEvent);
+  }
+
+  function scheduleViewportOverlayRefresh() {
+    var requestFrame = window.requestAnimationFrame || function (callback) {
+      return window.setTimeout(callback, 16);
+    };
+    if (overlayRefreshFrame === null) {
+      overlayRefreshFrame = requestFrame(function () {
+        overlayRefreshFrame = null;
+        refreshViewportOverlays();
+        requestFrame(refreshViewportOverlays);
+      });
+    }
+    if (overlayRefreshTimer === null) {
+      overlayRefreshTimer = window.setTimeout(function () {
+        overlayRefreshTimer = null;
+        refreshViewportOverlays();
+      }, 80);
+    }
+  }
+
   function setSvgViewRect(rect) {
     var next = normalizeViewRect(rect);
     svg.setAttribute(
       'viewBox',
       [next.x, next.y, next.width, next.height].map(formatSvgNumber).join(' ')
     );
-    updateViewportControlsPosition();
-    keepPopupWithinVisibleView();
-    scheduleHoverPopupPosition(hoverPopupLastEvent);
+    refreshViewportOverlays();
+    scheduleViewportOverlayRefresh();
     return next;
   }
 
@@ -2323,7 +2359,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var ratioX = width / view.width;
     var ratioY = height / view.height;
     closeHoverPopup();
-    closePopup();
     setSvgViewRect({
       x: anchor.x - (anchor.x - view.x) * ratioX,
       y: anchor.y - (anchor.y - view.y) * ratioY,
@@ -2817,21 +2852,26 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function stopPopupResize() {
     if (!activePopupResize) return;
-    document.removeEventListener('mousemove', activePopupResize.onMove);
-    document.removeEventListener('mouseup', activePopupResize.onEnd);
+    document.removeEventListener('mousemove', activePopupResize.onMove, true);
+    document.removeEventListener('mouseup', activePopupResize.onEnd, true);
+    window.removeEventListener('mouseup', activePopupResize.onEnd, true);
+    window.removeEventListener('blur', activePopupResize.onEnd);
     activePopupResize = null;
   }
 
   function stopPopupDrag() {
     if (!activePopupDrag) return;
-    document.removeEventListener('mousemove', activePopupDrag.onMove);
-    document.removeEventListener('mouseup', activePopupDrag.onEnd);
+    document.removeEventListener('mousemove', activePopupDrag.onMove, true);
+    document.removeEventListener('mouseup', activePopupDrag.onEnd, true);
+    window.removeEventListener('mouseup', activePopupDrag.onEnd, true);
+    window.removeEventListener('blur', activePopupDrag.onEnd);
     activePopupDrag = null;
   }
 
   function closePopup() {
     stopPopupResize();
     stopPopupDrag();
+    updateActivePopupViewportMetrics = null;
     if (popup && popup.parentNode) {
       popup.parentNode.removeChild(popup);
     }
@@ -3174,13 +3214,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return Math.max.apply(null, scales);
   }
 
-  function getPopupTextScale(viewport, popupCssWidth, popupCssHeight) {
-    var baseWidth = popupMode === 'simple' ? 360 : 460;
-    var baseHeight = popupMode === 'simple' ? 260 : 540;
-    var fitScale = Math.min(1, popupCssWidth / baseWidth, popupCssHeight / baseHeight);
-    return Math.max(0.38, Math.min(1, fitScale));
-  }
-
   function getPopupCssMetrics(viewport) {
     var zoomScale = getBrowserZoomScale(viewport);
     var margin = 12;
@@ -3208,24 +3241,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return Math.min(Math.max(numeric, safeMin), safeMax);
   }
 
-  function setPopupTextScale(root, textScale) {
-    var scale = Math.max(0.38, Math.min(1, Number(textScale) || 1));
-    root.style.setProperty('--gfi-text-scale', String(scale));
-    [
-      ['--gfi-font-size', 13],
-      ['--gfi-subtitle-font-size', 11],
-      ['--gfi-close-font-size', 20],
-      ['--gfi-tab-font-size', 11],
-      ['--gfi-key-font-size', 10],
-      ['--gfi-value-font-size', 11],
-      ['--gfi-copy-font-size', 10],
-      ['--gfi-block-title-font-size', 10],
-      ['--gfi-pre-font-size', 11]
-    ].forEach(function (entry) {
-      root.style.setProperty(entry[0], (entry[1] * scale).toFixed(3) + 'px');
-    });
-  }
-
   function openPopup(feature, event) {
     if (!supportsStandaloneControls()) return;
     closeHoverPopup();
@@ -3243,7 +3258,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var marginY = marginCss / effectiveScaleY;
     var popupCssWidth = metrics.width;
     var popupCssHeight = metrics.height;
-    var popupTextScale = getPopupTextScale(viewport, popupCssWidth, popupCssHeight);
     var width = popupCssWidth / effectiveScaleX;
     var height = popupCssHeight / effectiveScaleY;
     var point = eventPoint(event);
@@ -3266,6 +3280,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     foreignObject.setAttribute('y', y);
     foreignObject.setAttribute('width', width);
     foreignObject.setAttribute('height', height);
+    foreignObject.setAttribute('data-gbdraw-popup-css-width', String(popupCssWidth));
+    foreignObject.setAttribute('data-gbdraw-popup-css-height', String(popupCssHeight));
 
     var root = document.createElementNS(XHTML_NS, 'div');
     root.setAttribute('xmlns', XHTML_NS);
@@ -3273,7 +3289,6 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     root.style.height = popupCssHeight + 'px';
     root.style.transformOrigin = '0 0';
     root.style.transform = 'scale(' + (1 / effectiveScaleX) + ', ' + (1 / effectiveScaleY) + ')';
-    setPopupTextScale(root, popupTextScale);
 
     function getResizeLimits() {
       viewport = getViewportClientRect();
@@ -3339,19 +3354,32 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       height = popupCssHeight / effectiveScaleY;
       foreignObject.setAttribute('width', width);
       foreignObject.setAttribute('height', height);
+      foreignObject.setAttribute('data-gbdraw-popup-css-width', String(popupCssWidth));
+      foreignObject.setAttribute('data-gbdraw-popup-css-height', String(popupCssHeight));
       root.style.width = popupCssWidth + 'px';
       root.style.height = popupCssHeight + 'px';
       root.style.transform = 'scale(' + (1 / effectiveScaleX) + ', ' + (1 / effectiveScaleY) + ')';
-      setPopupTextScale(root, getPopupTextScale(viewport, popupCssWidth, popupCssHeight));
     }
 
+    updateActivePopupViewportMetrics = function () {
+      if (!popup || popup !== foreignObject) return;
+      applyPopupCssSize(popupCssWidth, popupCssHeight);
+      keepPopupWithinVisibleView();
+    };
+
     function startPopupResize(event) {
+      if (event.button !== 0) return;
+      stopPopupDrag();
       stopPopupResize();
       var startClientX = event.clientX;
       var startClientY = event.clientY;
       var startWidth = popupCssWidth;
       var startHeight = popupCssHeight;
       var onMove = function (moveEvent) {
+        if (typeof moveEvent.buttons === 'number' && (moveEvent.buttons & 1) !== 1) {
+          stopPopupResize();
+          return;
+        }
         var dragZoomScale = getBrowserZoomScale(getViewportClientRect());
         applyPopupCssSize(
           startWidth + (moveEvent.clientX - startClientX) * dragZoomScale,
@@ -3366,8 +3394,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         onMove: onMove,
         onEnd: onEnd
       };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onEnd);
+      document.addEventListener('mousemove', onMove, true);
+      document.addEventListener('mouseup', onEnd, true);
+      window.addEventListener('mouseup', onEnd, true);
+      window.addEventListener('blur', onEnd);
       event.preventDefault();
       event.stopPropagation();
     }
@@ -3380,6 +3410,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       var startX = parseFloat(foreignObject.getAttribute('x')) || 0;
       var startY = parseFloat(foreignObject.getAttribute('y')) || 0;
       var onMove = function (moveEvent) {
+        if (typeof moveEvent.buttons === 'number' && (moveEvent.buttons & 1) !== 1) {
+          stopPopupDrag();
+          return;
+        }
         var currentPoint = eventPoint(moveEvent);
         setPopupPosition(
           startX + (currentPoint.x - startPoint.x),
@@ -3394,8 +3428,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         onMove: onMove,
         onEnd: onEnd
       };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onEnd);
+      document.addEventListener('mousemove', onMove, true);
+      document.addEventListener('mouseup', onEnd, true);
+      window.addEventListener('mouseup', onEnd, true);
+      window.addEventListener('blur', onEnd);
       event.preventDefault();
       event.stopPropagation();
     }
