@@ -1,7 +1,7 @@
 import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
-import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
+import { exportConfig, exportSession, importConfig, importSession as importSessionFromFile } from '../services/config.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
   disposeDiagramGenerationWorker,
@@ -805,6 +805,41 @@ export const createAppSetup = () => {
       }
     }
   });
+
+  const refreshLoadedSessionSvgLayout = async () => {
+    await nextTick();
+    await new Promise((resolve) => {
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => resolve());
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+
+    if (mode.value !== 'linear') return;
+    const svg = svgContainer.value?.querySelector?.('svg');
+    if (!svg) return;
+    const legendGroup = svg.getElementById?.('legend');
+    if (!legendGroup || legendGroup.getAttribute('display') === 'none') return;
+
+    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+    const verticalLegend = legendGroup.querySelector('#legend_vertical');
+    if (horizontalLegend && verticalLegend) {
+      legendActions.reflowDualLegendLayout(svg);
+    } else {
+      legendActions.updatePairwiseLegendPositions(svg);
+    }
+    legendActions.recenterCurrentLegendRoot(svg);
+
+    const idx = selectedResultIndex.value;
+    if (idx >= 0 && results.value.length > idx) {
+      const serializer = new XMLSerializer();
+      results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+    }
+  };
+
+  const importSession = async (event) =>
+    importSessionFromFile(event, { afterLoad: refreshLoadedSessionSvgLayout });
 
   const {
     addNewLegendEntry,

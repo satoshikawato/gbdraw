@@ -102,6 +102,12 @@ def _translate_xy(transform: str | None) -> tuple[float, float]:
     return float(parts[0]), float(parts[1])
 
 
+def _translate_xy_or_zero(transform: str | None) -> tuple[float, float]:
+    if transform is None:
+        return 0.0, 0.0
+    return _translate_xy(transform)
+
+
 def _build_collinearity_match_group() -> PairWiseMatchGroup:
     group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
     group.canvas_config = SimpleNamespace(
@@ -1778,8 +1784,8 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
     legend_config = SimpleNamespace(
         font_family="'Liberation Sans', 'Arial', sans-serif",
         font_weight="normal",
-        font_size=10.0,
-        color_rect_size=12.0,
+        font_size=16.0,
+        color_rect_size=20.0,
         num_of_columns=1,
         has_gradient=True,
         total_feature_legend_width=0.0,
@@ -1828,6 +1834,163 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         "Collinear", legend_config.font_family, legend_config.font_size, legend_group.dpi
     )
     assert bar_x == pytest.approx(label_width + 0.2 * legend_config.color_rect_size)
+
+
+@pytest.mark.linear
+def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    canvas_config = SimpleNamespace(legend_position="right", total_width=800)
+    legend_config = SimpleNamespace(
+        font_family="'Liberation Sans', 'Arial', sans-serif",
+        font_weight="normal",
+        font_size=10.0,
+        color_rect_size=12.0,
+        num_of_columns=1,
+        has_gradient=True,
+        total_feature_legend_width=0.0,
+        pairwise_legend_width=120.0,
+    )
+    feature_key = "tyrosine recombinase"
+    gradient_key = "Pairwise match identity"
+    legend_table = {
+        feature_key: {
+            "type": "solid",
+            "fill": "#54bcf8",
+            "stroke": "none",
+            "width": 0,
+        },
+        gradient_key: {
+            "type": "gradient",
+            "min_color": "#ffffff",
+            "max_color": "#000000",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 20,
+        },
+    }
+
+    drawing = Drawing(debug=False)
+    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    drawing.add(legend_group.get_group())
+    root = ET.fromstring(drawing.tostring())
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+
+    vertical_legend = root.find(".//svg:g[@id='legend_vertical']", namespace)
+    assert vertical_legend is not None
+    feature_legend = vertical_legend.find("svg:g[@id='feature_legend_v']", namespace)
+    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend']", namespace)
+    assert feature_legend is not None
+    assert pairwise_legend is not None
+
+    feature_group_x, _ = _translate_xy_or_zero(feature_legend.get("transform"))
+    feature_entry = feature_legend.find(f"svg:g[@data-legend-key='{feature_key}']", namespace)
+    assert feature_entry is not None
+    feature_rect = feature_entry.find("svg:path", namespace)
+    feature_text = feature_entry.find("svg:text", namespace)
+    assert feature_rect is not None
+    assert feature_text is not None
+    feature_rect_x, _ = _translate_xy(feature_rect.get("transform"))
+
+    pairwise_group_x, _ = _translate_xy_or_zero(pairwise_legend.get("transform"))
+    pairwise_entry = pairwise_legend.find(
+        f"svg:g[@data-legend-key='{gradient_key}']", namespace
+    )
+    assert pairwise_entry is not None
+    pairwise_bar = next(
+        path
+        for path in pairwise_entry.findall("svg:path", namespace)
+        if str(path.get("fill", "")).startswith("url(")
+    )
+    pairwise_bar_x, _ = _translate_xy(pairwise_bar.get("transform"))
+    title = pairwise_entry.find("svg:text", namespace)
+    assert title is not None
+    title_x, _ = _translate_xy(title.get("transform"))
+
+    text_width, _ = calculate_bbox_dimensions(
+        feature_key, legend_config.font_family, legend_config.font_size, legend_group.dpi
+    )
+    text_x_offset = (22 / 14) * legend_config.color_rect_size
+    feature_width = text_x_offset + text_width
+    pairwise_alignment_width = legend_config.pairwise_legend_width
+
+    assert feature_width > pairwise_alignment_width
+    feature_left = feature_group_x + feature_rect_x
+    assert pairwise_group_x == pytest.approx(feature_left)
+    assert pairwise_group_x + pairwise_bar_x == pytest.approx(feature_left)
+    assert pairwise_bar_x == pytest.approx(0)
+    assert title_x == pytest.approx(pairwise_bar_x + pairwise_alignment_width / 2)
+    assert feature_group_x == pytest.approx(0)
+    assert title.get("text-anchor") == "middle"
+
+
+@pytest.mark.linear
+def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    canvas_config = SimpleNamespace(legend_position="right", total_width=800)
+    legend_config = SimpleNamespace(
+        font_family="'Liberation Sans', 'Arial', sans-serif",
+        font_weight="normal",
+        font_size=10.0,
+        color_rect_size=12.0,
+        num_of_columns=1,
+        has_gradient=True,
+        total_feature_legend_width=0.0,
+        pairwise_legend_width=220.0,
+    )
+    feature_key = "CDS"
+    gradient_key = "Pairwise match identity"
+    legend_table = {
+        feature_key: {
+            "type": "solid",
+            "fill": "#54bcf8",
+            "stroke": "none",
+            "width": 0,
+        },
+        gradient_key: {
+            "type": "gradient",
+            "min_color": "#ffffff",
+            "max_color": "#000000",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 20,
+        },
+    }
+
+    drawing = Drawing(debug=False)
+    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    drawing.add(legend_group.get_group())
+    root = ET.fromstring(drawing.tostring())
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+
+    vertical_legend = root.find(".//svg:g[@id='legend_vertical']", namespace)
+    assert vertical_legend is not None
+    feature_legend = vertical_legend.find("svg:g[@id='feature_legend_v']", namespace)
+    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend']", namespace)
+    assert feature_legend is not None
+    assert pairwise_legend is not None
+    pairwise_entry = pairwise_legend.find(
+        f"svg:g[@data-legend-key='{gradient_key}']", namespace
+    )
+    assert pairwise_entry is not None
+    title = pairwise_entry.find("svg:text", namespace)
+    assert title is not None
+
+    feature_group_x, _ = _translate_xy_or_zero(feature_legend.get("transform"))
+    pairwise_group_x, _ = _translate_xy_or_zero(pairwise_legend.get("transform"))
+
+    text_width, _ = calculate_bbox_dimensions(
+        feature_key, legend_config.font_family, legend_config.font_size, legend_group.dpi
+    )
+    text_x_offset = (22 / 14) * legend_config.color_rect_size
+    feature_width = text_x_offset + text_width
+    pairwise_alignment_width = legend_config.pairwise_legend_width
+    expected_feature_offset = (pairwise_alignment_width - feature_width) / 2
+    title_x, _ = _translate_xy(title.get("transform"))
+
+    assert pairwise_group_x == pytest.approx(0)
+    assert feature_group_x == pytest.approx(expected_feature_offset)
+    assert title_x == pytest.approx(pairwise_alignment_width / 2)
+    assert title.get("text-anchor") == "middle"
 
 
 @pytest.mark.linear
