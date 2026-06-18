@@ -12,6 +12,9 @@ from ..config.toml import load_config_toml
 from ..core.sequence import determine_length_parameter
 
 
+LEFT_LEGEND_DEFINITION_GAP = 40.0
+
+
 @lru_cache(maxsize=1)
 def _get_default_linear_non_stranded_cds_heights() -> dict[str, float]:
     """Return baseline CDS heights from the unmodified default config."""
@@ -411,7 +414,14 @@ class LinearCanvasConfigurator:
             self.legend_offset_y = calculate_optimal_legend_y()
 
         elif self.legend_position == "left":
-            self.horizontal_offset = 1 * padding + legend_width + 2 * padding + max_definition_width
+            definition_gap = min(padding, 20.0)
+            self.horizontal_offset = (
+                padding
+                + legend_width
+                + LEFT_LEGEND_DEFINITION_GAP
+                + max_definition_width
+                + definition_gap
+            )
             self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = padding
             self.legend_offset_y = calculate_optimal_legend_y()

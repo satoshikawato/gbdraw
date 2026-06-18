@@ -7,6 +7,7 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
+from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.linear.builders import add_record_definition_group
 from gbdraw.render.groups.linear import DefinitionGroup
@@ -143,3 +144,58 @@ def test_locked_linear_definition_column_can_shift_left_of_negative_record_offse
     )
 
     assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) - 30)
+
+
+@pytest.mark.linear
+def test_left_legend_definition_column_gap_is_40_px() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=2,
+        longest_genome=1000,
+        config_dict=config_dict,
+        legend="left",
+    )
+    legend_group = SimpleNamespace(legend_width=120.0, legend_height=80.0)
+    max_definition_width = 180.0
+
+    canvas_config.recalculate_canvas_dimensions(legend_group, max_definition_width)
+
+    definition_gap = min(canvas_config.canvas_padding, 20.0)
+    legend_right = canvas_config.legend_offset_x + legend_group.legend_width
+    definition_left = (
+        canvas_config.horizontal_offset
+        - max_definition_width
+        - definition_gap
+    )
+    assert definition_left - legend_right == pytest.approx(40.0)
+
+
+@pytest.mark.linear
+def test_left_legend_unlocked_definition_gap_is_40_px() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    record = _record("A much longer definition label", "record_a")
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=2,
+        longest_genome=1000,
+        config_dict=config_dict,
+        legend="left",
+    )
+    legend_group = SimpleNamespace(legend_width=120.0, legend_height=80.0)
+    definition_width = _definition_width(record, config_dict, canvas_config)
+
+    canvas_config.recalculate_canvas_dimensions(legend_group, definition_width)
+    canvas = Drawing()
+    add_record_definition_group(
+        canvas,
+        record,
+        record_offset_y=10,
+        record_offset_x=0,
+        canvas_config=canvas_config,
+        config_dict=config_dict,
+        max_def_width=definition_width,
+    )
+
+    legend_right = canvas_config.legend_offset_x + legend_group.legend_width
+    definition_left = _definition_translate_x(canvas) - (definition_width / 2)
+    assert _definition_text_anchors(canvas) == {"middle"}
+    assert definition_left - legend_right == pytest.approx(40.0)
