@@ -3655,9 +3655,9 @@
                                                 ]">
                                                 <td>
                                                     <div class="pairwise-match-feature-main">{{ featureRow.label }}</div>
-                                                    <div v-if="featureRow.locusId || featureRow.displayName"
+                                                    <div v-if="featureRow.subLabel"
                                                          class="pairwise-match-feature-sub">
-                                                        {{ [featureRow.locusId, featureRow.displayName].filter(Boolean).join(' / ') }}
+                                                        {{ featureRow.subLabel }}
                                                     </div>
                                                 </td>
                                                 <td class="pairwise-match-feature-mono">{{ featureRow.record }}</td>

@@ -157,11 +157,51 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(query.featureRows.length === 2, JSON.stringify(query.featureRows));
         assert(query.featureRows.every((row) => row.canOpen), JSON.stringify(query.featureRows));
         assert(query.featureRows.map((row) => row.label).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(query.featureRows));
+        assert(query.featureRows[0].subLabel === 'qlocus1 / qgene1', JSON.stringify(query.featureRows[0]));
         assert(query.featureRows[0].record === 'record_a', JSON.stringify(query.featureRows[0]));
         assert(query.featureRows[0].product === 'query product 1', JSON.stringify(query.featureRows[0]));
         assert(subject.featureRows.length === 2, JSON.stringify(subject.featureRows));
         assert(subject.featureRows.map((row) => row.label).join(',') === 'SLOCUS_001,SLOCUS_002', JSON.stringify(subject.featureRows));
+        assert(subject.featureRows[0].subLabel === 'subject display 1', JSON.stringify(subject.featureRows[0]));
         assert(subject.featureRows[0].feature.svg_id === 'fs1', JSON.stringify(subject.featureRows[0]));
+
+        const duplicateAttrs = new Map(Object.entries({{
+          'data-gbdraw-pairwise-match-id': 'comparison3_match4',
+          'data-match-kind': 'collinear',
+          'data-collinearity-block-id': 'block_0002',
+          'data-query-record-id': 'AP027131.1',
+          'data-qstart': '22946',
+          'data-qend': '24703',
+          'data-query-feature-svg-id': 'fq_dup',
+          'data-query-protein-id': 'BDV02135.1',
+          'data-query-locus-id': 'HPAVJP_0240',
+          'data-query-display-name': 'HPAVJP_0240'
+        }}));
+        const duplicatePayload = buildPairwiseMatchPayload({{
+          style: {{}},
+          getAttribute: (name) => duplicateAttrs.get(name) || ''
+        }}, {{
+          featureLookup: new Map([['fq_dup', {{
+            svg_id: 'fq_dup',
+            record_id: 'AP027131.1',
+            start: 22945,
+            end: 24703,
+            strand: '+',
+            sourceProteinId: 'BDV02135.1',
+            gene: 'HPAVJP_0240',
+            locus_tag: 'HPAVJP_0240',
+            product: 'DHH family phosphoesterase',
+            qualifiers: {{
+              protein_id: ['BDV02135.1'],
+              gene: ['HPAVJP_0240'],
+              locus_tag: ['HPAVJP_0240']
+            }}
+          }}]])
+        }});
+        const duplicateQuery = duplicatePayload.sections.find((section) => section.title === 'Query');
+        assert(duplicateQuery.featureRows[0].label === 'BDV02135.1', JSON.stringify(duplicateQuery.featureRows[0]));
+        assert(duplicateQuery.featureRows[0].subLabel === 'HPAVJP_0240', JSON.stringify(duplicateQuery.featureRows[0]));
+        assert(!duplicateQuery.featureRows[0].subLabel.includes(' / HPAVJP_0240'), JSON.stringify(duplicateQuery.featureRows[0]));
 
         const blockOgSection = payload.sections.find((section) => section.title === 'Orthogroups covered');
         assert(rowValue(blockOgSection, 'Number of orthogroups covered') === '2', JSON.stringify(blockOgSection.rows));

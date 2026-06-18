@@ -470,6 +470,19 @@ const featureRowLocusId = (feature, fallbackLocusId) => firstText(
   fallbackLocusId
 );
 
+const featureRowSubLabel = (primaryLabel, ...values) => {
+  const seen = new Set(splitMetadataValues(primaryLabel));
+  const labels = [];
+  values.forEach((value) => {
+    splitMetadataValues(value).forEach((entry) => {
+      if (seen.has(entry)) return;
+      seen.add(entry);
+      labels.push(entry);
+    });
+  });
+  return labels.join(' / ');
+};
+
 const buildFeatureListRows = ({
   featureSvgIds,
   featureLookup,
@@ -513,6 +526,7 @@ const buildFeatureListRows = ({
     const rowDisplayName = featureRowDisplayName(feature, displayNames[index]);
     const product = featureProduct(feature);
     const label = firstText(displayProteinId, rowDisplayName, rowLocusId, product, svgId, `Feature ${index + 1}`);
+    const subLabel = featureRowSubLabel(label, rowLocusId, rowDisplayName);
     const copyText = [
       rowRecord,
       rowLocation,
@@ -532,6 +546,7 @@ const buildFeatureListRows = ({
       proteinId: displayProteinId,
       locusId: rowLocusId,
       displayName: rowDisplayName,
+      subLabel,
       product,
       type: firstText(feature?.type),
       copyText
