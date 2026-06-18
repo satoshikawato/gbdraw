@@ -41,6 +41,8 @@ class DefinitionGroup:
         length_start_x: float = 0,
         length_start_y: float = 9,
         cfg: GbdrawConfig | None = None,
+        text_anchor: str | None = None,
+        text_x: float = 0.0,
     ) -> None:
         self.record: SeqRecord = record
         self.title_start_x: float = title_start_x
@@ -51,6 +53,7 @@ class DefinitionGroup:
         self.definition_bounding_box_height: float = 0.0
         self.canvas_config = canvas_config
         self.length_param = self.canvas_config.length_param
+        self.text_x = float(text_x)
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         def_cfg = cfg.objects.definition.linear
@@ -64,7 +67,7 @@ class DefinitionGroup:
         self.show_accession: bool = bool(def_cfg.show_accession)
         self.show_length: bool = bool(def_cfg.show_length)
         self.dpi: int = cfg.canvas.dpi
-        self.linear_text_anchor: str = def_cfg.text_anchor
+        self.linear_text_anchor: str = text_anchor if text_anchor is not None else def_cfg.text_anchor
         self.linear_dominant_baseline: str = def_cfg.dominant_baseline
         self.get_definition_details()
         self.definition_lines = self._build_definition_lines()
@@ -218,7 +221,7 @@ class DefinitionGroup:
                 self.definition_group.add(
                     create_text_element(
                         line.text,
-                        0,
+                        self.text_x,
                         line.y,
                         self.linear_definition_font_size,
                         self.linear_definition_font_weight,
@@ -231,7 +234,7 @@ class DefinitionGroup:
     def _create_name_text(self, parts: list[dict[str, str | bool | None]], y_pos: float) -> Text:
         text_el = Text(
             "",
-            insert=(0, y_pos),
+            insert=(self.text_x, y_pos),
             stroke=self.linear_definition_stroke,
             fill=self.linear_definition_fill,
             font_size=self.linear_definition_font_size,
