@@ -811,10 +811,14 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
 
     feature_utils_path = tmp_path / "feature-utils.mjs"
     feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
+    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
+    sequence_fasta_path.write_text((WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8"), encoding="utf-8")
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_path.write_text(
-        source_path.read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
+        source_path.read_text(encoding="utf-8")
+        .replace("./feature-utils.js", "./feature-utils.mjs")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
         encoding="utf-8",
     )
     check_path = tmp_path / "check-pairwise-popup.mjs"

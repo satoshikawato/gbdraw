@@ -1128,6 +1128,48 @@ export const createAppSetup = () => {
     return style;
   });
 
+  const selectedPairwiseBlockOrthogroupId = ref('');
+  const pairwiseBlockOrthogroups = computed(() => (
+    Array.isArray(clickedPairwiseMatch.value?.blockOrthogroups)
+      ? clickedPairwiseMatch.value.blockOrthogroups
+      : []
+  ));
+  const selectedPairwiseBlockOrthogroup = computed(() => {
+    const selectedId = String(selectedPairwiseBlockOrthogroupId.value || '').trim();
+    if (!selectedId) return null;
+    return pairwiseBlockOrthogroups.value.find((group) => String(group?.id || '').trim() === selectedId) || null;
+  });
+  const renderedPairwiseMatchSections = computed(() => {
+    const sections = Array.isArray(clickedPairwiseMatch.value?.sections)
+      ? clickedPairwiseMatch.value.sections
+      : [];
+    const selectedGroup = selectedPairwiseBlockOrthogroup.value;
+    if (!selectedGroup) return sections;
+    const selectedSection = {
+      title: 'Selected orthogroup',
+      rows: Array.isArray(selectedGroup.detailRows) ? selectedGroup.detailRows : [],
+      memberRows: Array.isArray(selectedGroup.memberRows) ? selectedGroup.memberRows : [],
+      memberCopyText: selectedGroup.memberCopyText || '',
+      memberNtFasta: selectedGroup.memberNtFasta || '',
+      memberAaFasta: selectedGroup.memberAaFasta || '',
+      memberNtFilename: selectedGroup.memberNtFilename || '',
+      memberAaFilename: selectedGroup.memberAaFilename || ''
+    };
+    const output = [];
+    sections.forEach((section) => {
+      output.push(section);
+      if (Array.isArray(section?.blockOrthogroups)) output.push(selectedSection);
+    });
+    return output;
+  });
+  const selectPairwiseBlockOrthogroup = (group) => {
+    selectedPairwiseBlockOrthogroupId.value = String(group?.id || '').trim();
+  };
+
+  watch(clickedPairwiseMatch, () => {
+    selectedPairwiseBlockOrthogroupId.value = '';
+  });
+
   const onPairwiseMatchPopupDrag = (event) => {
     if (!pairwiseMatchPopupDrag.active || pairwiseMatchPopupResize.active) return;
     const popup = pairwiseMatchPopupRef.value;
@@ -1949,6 +1991,9 @@ export const createAppSetup = () => {
     pairwiseMatchPopupStyle,
     startPairwiseMatchPopupDrag,
     startPairwiseMatchPopupResize,
+    selectedPairwiseBlockOrthogroupId,
+    renderedPairwiseMatchSections,
+    selectPairwiseBlockOrthogroup,
     clickedFeatureLocation,
     copyText,
     downloadText,

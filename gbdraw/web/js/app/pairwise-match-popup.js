@@ -27,6 +27,39 @@ const firstText = (...values) => {
   return '';
 };
 
+const splitMetadataValues = (value) => normalizeText(value)
+  .split(';')
+  .map((entry) => normalizeText(entry))
+  .filter(Boolean);
+
+const uniqueMetadataValues = (value) => {
+  const seen = new Set();
+  const values = [];
+  splitMetadataValues(value).forEach((entry) => {
+    if (seen.has(entry)) return;
+    seen.add(entry);
+    values.push(entry);
+  });
+  return values;
+};
+
+const generatedProteinIdPattern = /^(?:gbd_r\d+_cds\d+|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$/i;
+const generatedUnitIdPattern = /^gbd_r\d+_unit\d+$/i;
+
+const isInternalDisplayId = (value) => {
+  const text = normalizeText(value);
+  return Boolean(text && (
+    generatedProteinIdPattern.test(text) ||
+    generatedUnitIdPattern.test(text)
+  ));
+};
+
+const addUniqueDisplayText = (values, value) => {
+  const text = normalizeText(value);
+  if (!text || isInternalDisplayId(text) || values.includes(text)) return;
+  values.push(text);
+};
+
 const firstSequenceText = (...values) => {
   for (const value of values) {
     const sequence = normalizeSequence(value);
@@ -143,10 +176,10 @@ const getFeatureForMember = (member, featureLookup) => {
 };
 
 const groupHasFeatureSvgId = (group, featureSvgId) => {
-  const id = normalizeText(featureSvgId);
-  if (!id) return false;
+  const ids = splitMetadataValues(featureSvgId);
+  if (ids.length === 0) return false;
   return (Array.isArray(group?.members) ? group.members : [])
-    .some((member) => memberFeatureSvgId(member) === id);
+    .some((member) => ids.includes(memberFeatureSvgId(member)));
 };
 
 const getOrthogroupForMatch = (
@@ -363,6 +396,49 @@ const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId) => {
     .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote || row.ntFasta || row.aaFasta);
 };
 
+const getGroupMemberForFeatureSvgId = (group, featureSvgId) => {
+  const id = normalizeText(featureSvgId);
+  if (!id) return null;
+  const members = Array.isArray(group?.members) ? group.members : [];
+  return members.find((member) => memberFeatureSvgId(member) === id) || null;
+};
+
+const resolveFeatureSectionProteinIds = ({
+  feature,
+  featureSvgIds,
+  featureLookup,
+  group,
+  fallbackProteinIds,
+  locusId,
+  displayName
+}) => {
+  const values = [];
+  const addFeatureProteinId = (candidateFeature, member = null) => {
+    const text = resolveDisplayProteinId(candidateFeature, member, '');
+    addUniqueDisplayText(values, text);
+  };
+
+  const ids = splitMetadataValues(featureSvgIds);
+  ids.forEach((featureSvgId) => {
+    const candidateFeature = featureLookup?.get?.(featureSvgId) || null;
+    const member = getGroupMemberForFeatureSvgId(group, featureSvgId);
+    addFeatureProteinId(candidateFeature, member);
+  });
+  if (feature) {
+    addFeatureProteinId(feature, ids.length === 1 ? getGroupMemberForFeatureSvgId(group, ids[0]) : null);
+  }
+  if (values.length === 0) {
+    splitMetadataValues(locusId).forEach((value) => addUniqueDisplayText(values, value));
+  }
+  if (values.length === 0) {
+    splitMetadataValues(displayName).forEach((value) => addUniqueDisplayText(values, value));
+  }
+  if (values.length === 0) {
+    splitMetadataValues(fallbackProteinIds).forEach((value) => addUniqueDisplayText(values, value));
+  }
+  return values.join('; ');
+};
+
 const orthogroupMemberCopyText = (memberRows) => {
   if (!Array.isArray(memberRows) || memberRows.length === 0) return '';
   return [
@@ -394,25 +470,112 @@ const orthogroupMemberSectionExtras = (memberRows, orthogroupId, displayName) =>
   };
 };
 
+const resolveBlockMemberLabels = ({
+  group,
+  featureSvgIds,
+  featureLookup
+}) => {
+  if (!group) return '';
+  const values = [];
+  uniqueMetadataValues(featureSvgIds).forEach((featureSvgId) => {
+    const feature = featureLookup?.get?.(featureSvgId) || null;
+    const member = group ? getGroupMemberForFeatureSvgId(group, featureSvgId) : null;
+    if (!member) return;
+    addUniqueDisplayText(values, resolveDisplayProteinId(feature, member, ''));
+  });
+  return values.join('; ');
+};
+
+const buildOrthogroupDetailRows = ({
+  orthogroupId,
+  displayName,
+  description,
+  memberCount,
+  recordCoverage
+}) => {
+  const rows = [];
+  addRow(rows, 'Orthogroup ID', orthogroupId);
+  addRow(rows, 'Display name', displayName);
+  addRow(rows, 'Description', description);
+  addRow(rows, 'Members', memberCount);
+  addRow(rows, 'Record coverage', recordCoverage);
+  return rows;
+};
+
+const buildBlockOrthogroups = ({
+  orthogroupIds,
+  orthogroups,
+  featureLookup,
+  queryFeatureSvgId,
+  subjectFeatureSvgId,
+  orthogroupNameOverrides,
+  orthogroupDescriptionOverrides
+}) => orthogroupIds.map((orthogroupId) => {
+  const group = getOrthogroupById(orthogroups, orthogroupId);
+  const displayName = firstText(
+    overrideValue(orthogroupNameOverrides, orthogroupId),
+    group?.displayName,
+    group?.display_name,
+    group?.name
+  );
+  const description = firstText(
+    overrideValue(orthogroupDescriptionOverrides, orthogroupId),
+    group?.description
+  );
+  const memberCount = firstText(
+    group?.member_count,
+    group?.memberCount,
+    Array.isArray(group?.members) ? group.members.length : ''
+  );
+  const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
+  const memberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId);
+  return {
+    id: orthogroupId,
+    displayName,
+    description,
+    memberCount,
+    recordCoverage,
+    queryMember: resolveBlockMemberLabels({ group, featureSvgIds: queryFeatureSvgId, featureLookup }),
+    subjectMember: resolveBlockMemberLabels({ group, featureSvgIds: subjectFeatureSvgId, featureLookup }),
+    detailRows: buildOrthogroupDetailRows({
+      orthogroupId,
+      displayName,
+      description,
+      memberCount,
+      recordCoverage
+    }),
+    ...orthogroupMemberSectionExtras(memberRows, orthogroupId, displayName)
+  };
+});
+
 const buildFeatureRows = ({
   title,
   feature,
   recordId,
   interval,
   proteinId,
-  unitId,
   locusId,
   displayName,
-  svgId
+  featureSvgIds,
+  featureLookup,
+  group
 }) => {
   const rows = [];
+  const displayProteinIds = resolveFeatureSectionProteinIds({
+    feature,
+    featureSvgIds,
+    featureLookup,
+    group,
+    fallbackProteinIds: proteinId,
+    locusId,
+    displayName
+  });
   addRow(rows, 'Record', firstText(feature?.record_id, recordId));
   addRow(rows, 'Location', firstText(featureLocationText(feature), interval));
-  addRow(rows, 'Protein ID', resolveDisplayProteinId(feature, null, proteinId));
+  addRow(rows, displayProteinIds.includes(';') ? 'Protein IDs' : 'Protein ID', displayProteinIds);
   addRow(rows, 'Gene', firstText(feature?.gene, qualifierFirstValue(feature, 'gene')));
   addRow(rows, 'Locus tag', firstText(feature?.locus_tag, feature?.locusTag, qualifierFirstValue(feature, 'locus_tag')));
   addRow(rows, 'Product', firstText(feature?.product, qualifierFirstValue(feature, 'product')));
-  addRow(rows, 'Unit ID', unitId);
   addRow(rows, 'Locus ID', locusId);
   addRow(rows, 'Display name', displayName);
   return section(title, rows);
@@ -430,21 +593,35 @@ export const buildPairwiseMatchPayload = (
   if (!element) return null;
   const matchKind = normalizeMatchKind(attr(element, 'data-match-kind'), element);
   const orthogroupId = attr(element, 'data-orthogroup-id');
+  const orthogroupIds = uniqueMetadataValues(orthogroupId);
   const collinearityBlockId = attr(element, 'data-collinearity-block-id');
   const queryFeatureSvgId = attr(element, 'data-query-feature-svg-id');
   const subjectFeatureSvgId = attr(element, 'data-subject-feature-svg-id');
   const queryFeature = featureLookup.get?.(queryFeatureSvgId) || null;
   const subjectFeature = featureLookup.get?.(subjectFeatureSvgId) || null;
-  const group = getOrthogroupForMatch(orthogroups, {
-    orthogroupId,
-    queryFeatureSvgId,
-    subjectFeatureSvgId
-  }) || buildFallbackOrthogroup({
-    orthogroupId,
-    queryFeature,
-    subjectFeature,
-    featureLookup
-  });
+  const group = matchKind === 'collinear'
+    ? null
+    : getOrthogroupForMatch(orthogroups, {
+      orthogroupId,
+      queryFeatureSvgId,
+      subjectFeatureSvgId
+    }) || buildFallbackOrthogroup({
+      orthogroupId,
+      queryFeature,
+      subjectFeature,
+      featureLookup
+    });
+  const blockOrthogroups = matchKind === 'collinear'
+    ? buildBlockOrthogroups({
+      orthogroupIds,
+      orthogroups,
+      featureLookup,
+      queryFeatureSvgId,
+      subjectFeatureSvgId,
+      orthogroupNameOverrides,
+      orthogroupDescriptionOverrides
+    })
+    : [];
   const displayName = firstText(
     overrideValue(orthogroupNameOverrides, orthogroupId),
     group?.displayName,
@@ -463,7 +640,6 @@ export const buildPairwiseMatchPayload = (
   const subtitle = firstText(collinearityBlockId, orthogroupId, attr(element, 'data-gbdraw-pairwise-match-id'));
 
   const summaryRows = [];
-  addRow(summaryRows, 'Match ID', attr(element, 'data-gbdraw-pairwise-match-id'));
   addRow(summaryRows, 'Query record', attr(element, 'data-query-record-id'));
   addRow(summaryRows, 'Subject record', attr(element, 'data-subject-record-id'));
   addRow(summaryRows, 'Query interval', qInterval);
@@ -486,23 +662,25 @@ export const buildPairwiseMatchPayload = (
   addRow(blockRows, 'Kind', attr(element, 'data-collinearity-block-kind'));
   addRow(blockRows, 'Orientation', attr(element, 'data-collinearity-orientation'));
   addRow(blockRows, 'Color mode', attr(element, 'data-collinearity-color-mode'));
+  if (matchKind === 'collinear') {
+    addRow(blockRows, 'Average identity', attr(element, 'data-identity'));
+    addRow(blockRows, 'Aligned length', attr(element, 'data-alignment-length'));
+  }
   addRow(blockRows, 'Block score', attr(element, 'data-collinearity-block-score'));
   addRow(blockRows, 'Block e-value', attr(element, 'data-collinearity-block-evalue'));
   addRow(blockRows, 'Anchor', [
     attr(element, 'data-collinearity-anchor-index'),
     attr(element, 'data-collinearity-anchor-count')
   ].filter(Boolean).join(' / '));
-  addRow(blockRows, 'Query unit', attr(element, 'data-query-unit-id'));
-  addRow(blockRows, 'Subject unit', attr(element, 'data-subject-unit-id'));
-  addRow(blockRows, 'Query display', attr(element, 'data-query-display-name'));
-  addRow(blockRows, 'Subject display', attr(element, 'data-subject-display-name'));
 
   const orthogroupRows = [];
-  addRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
-  addRow(orthogroupRows, 'Display name', displayName);
-  addRow(orthogroupRows, 'Description', description);
-  addRow(orthogroupRows, 'Members', firstText(group?.member_count, group?.memberCount));
-  addRow(orthogroupRows, 'Record coverage', firstText(group?.record_coverage_count, group?.recordCoverage));
+  if (matchKind !== 'collinear') {
+    addRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
+    addRow(orthogroupRows, 'Display name', displayName);
+    addRow(orthogroupRows, 'Description', description);
+    addRow(orthogroupRows, 'Members', firstText(group?.member_count, group?.memberCount));
+    addRow(orthogroupRows, 'Record coverage', firstText(group?.record_coverage_count, group?.recordCoverage));
+  }
   const orthogroupMemberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId);
 
   if (matchKind === 'orthogroup') {
@@ -527,10 +705,10 @@ export const buildPairwiseMatchPayload = (
     };
   }
 
-  const sections = [
-    section('Summary', summaryRows),
-    section('Alignment', alignmentRows)
-  ];
+  const sections = [section('Summary', summaryRows)];
+  if (matchKind !== 'collinear') {
+    sections.push(section('Alignment', alignmentRows));
+  }
   if (matchKind === 'orthogroup' || orthogroupRows.length > 0) {
     sections.push(section(
       'Orthogroup',
@@ -538,30 +716,37 @@ export const buildPairwiseMatchPayload = (
       orthogroupMemberSectionExtras(orthogroupMemberRows, orthogroupId, displayName)
     ));
   }
+  if (matchKind === 'collinear') {
+    const blockOrthogroupRows = [];
+    addRow(blockOrthogroupRows, 'Number of orthogroups covered', String(orthogroupIds.length));
+    sections.push(section('Orthogroups covered', blockOrthogroupRows, { blockOrthogroups }));
+  }
   if (matchKind === 'collinear' || blockRows.length > 0) {
     sections.push(section('Collinearity', blockRows));
   }
   sections.push(buildFeatureRows({
-    title: 'Query feature',
+    title: 'Query',
     feature: queryFeature,
     recordId: attr(element, 'data-query-record-id'),
     interval: qInterval,
     proteinId: attr(element, 'data-query-protein-id'),
-    unitId: attr(element, 'data-query-unit-id'),
     locusId: attr(element, 'data-query-locus-id'),
     displayName: attr(element, 'data-query-display-name'),
-    svgId: queryFeatureSvgId
+    featureSvgIds: queryFeatureSvgId,
+    featureLookup,
+    group
   }));
   sections.push(buildFeatureRows({
-    title: 'Subject feature',
+    title: 'Subject',
     feature: subjectFeature,
     recordId: attr(element, 'data-subject-record-id'),
     interval: sInterval,
     proteinId: attr(element, 'data-subject-protein-id'),
-    unitId: attr(element, 'data-subject-unit-id'),
     locusId: attr(element, 'data-subject-locus-id'),
     displayName: attr(element, 'data-subject-display-name'),
-    svgId: subjectFeatureSvgId
+    featureSvgIds: subjectFeatureSvgId,
+    featureLookup,
+    group
   }));
 
   return {
@@ -573,6 +758,8 @@ export const buildPairwiseMatchPayload = (
     collinearityBlockId,
     queryFeatureSvgId,
     subjectFeatureSvgId,
+    blockOrthogroupCount: blockOrthogroups.length || (matchKind === 'collinear' ? orthogroupIds.length : 0),
+    blockOrthogroups,
     fill: firstText(element.getAttribute('fill'), element.style?.fill, '#94a3b8'),
     sections: sections.filter((entry) => entry.rows.length > 0)
   };
@@ -596,10 +783,14 @@ export const buildPairwiseMatchHoverRows = (payload) => {
   const block = payload.sections.find((entry) => entry.title === 'Collinearity');
   const orthogroup = payload.sections.find((entry) => entry.title === 'Orthogroup');
   addFirst('Kind', payload.matchKind);
-  addFirst('Identity', findValue(alignment, 'Identity'));
+  addFirst('Identity', findValue(alignment, 'Identity') || findValue(block, 'Average identity'));
   addFirst('Query', findValue(summary, 'Query interval'));
   addFirst('Subject', findValue(summary, 'Subject interval'));
-  addFirst('Orthogroup', findValue(orthogroup, 'Orthogroup ID'));
+  if (payload.matchKind === 'collinear') {
+    addFirst('Orthogroups', String(payload.blockOrthogroupCount ?? ''));
+  } else {
+    addFirst('Orthogroup', findValue(orthogroup, 'Orthogroup ID'));
+  }
   addFirst('Block', findValue(block, 'Block ID'));
   return rows.slice(0, 6);
 };

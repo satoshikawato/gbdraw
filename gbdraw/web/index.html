@@ -3558,7 +3558,7 @@
                             </button>
                         </div>
                         <div class="pairwise-match-popup-body custom-scrollbar" data-nodrag="true">
-                            <div v-for="section in clickedPairwiseMatch.sections"
+                            <div v-for="section in renderedPairwiseMatchSections"
                                  :key="`match-section-${section.title}`"
                                  class="pairwise-match-popup-section">
                                 <div class="pairwise-match-popup-section-title">{{ section.title }}</div>
@@ -3573,6 +3573,42 @@
                                             title="Copy">
                                         <i class="ph ph-copy"></i>
                                     </button>
+                                </div>
+                                <div v-if="section.blockOrthogroups && section.blockOrthogroups.length"
+                                     class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
+                                    <div class="bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase text-slate-500">
+                                        Orthogroups covered
+                                    </div>
+                                    <div class="overflow-auto custom-scrollbar max-h-52">
+                                        <table class="min-w-[54rem] w-full text-xs">
+                                            <thead class="bg-white sticky top-0">
+                                                <tr class="text-[10px] uppercase text-slate-400">
+                                                    <th class="text-left font-semibold px-3 py-2">OG ID</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Display name</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Members</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Record coverage</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Query member</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Subject member</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="group in section.blockOrthogroups"
+                                                    :key="`block-og-${group.id}`"
+                                                    @click="selectPairwiseBlockOrthogroup(group)"
+                                                    :class="[
+                                                      'border-t border-slate-100 cursor-pointer hover:bg-emerald-50/70',
+                                                      selectedPairwiseBlockOrthogroupId === group.id ? 'bg-emerald-50' : ''
+                                                    ]">
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.id }}</td>
+                                                    <td class="text-slate-700 px-3 py-2 align-top">{{ group.displayName }}</td>
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.memberCount }}</td>
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.recordCoverage }}</td>
+                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ group.queryMember }}</td>
+                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ group.subjectMember }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                                 <div v-if="section.memberRows && section.memberRows.length"
                                      class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
