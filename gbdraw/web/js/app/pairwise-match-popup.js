@@ -1,3 +1,5 @@
+import { resolveDisplayProteinId } from './feature-utils.js';
+
 export const PAIRWISE_MATCH_SELECTOR = [
   'path[data-gbdraw-pairwise-match-id]',
   'path[data-match-kind]',
@@ -85,14 +87,6 @@ const firstArrayValue = (value) => {
   return normalizeText(value);
 };
 
-const proteinIdText = (feature, fallback) => firstText(
-  fallback,
-  feature?.sourceProteinId,
-  feature?.source_protein_id,
-  feature?.proteinId,
-  feature?.protein_id
-);
-
 const getOrthogroupById = (orthogroups, orthogroupId) => {
   const id = normalizeText(orthogroupId);
   if (!id) return null;
@@ -107,7 +101,42 @@ const overrideValue = (overrides, key) => {
   return normalizeText(overrides[normalizedKey]);
 };
 
-const section = (title, rows) => ({ title, rows: rows.filter((row) => normalizeText(row.value)) });
+const section = (title, rows, extras = {}) => ({
+  title,
+  rows: rows.filter((row) => normalizeText(row.value)),
+  ...extras
+});
+
+const memberLocationText = (member) => {
+  if (!member || typeof member !== 'object') return '';
+  const start = Number(member.start);
+  const end = Number(member.end);
+  const startText = Number.isFinite(start) ? String(start + 1) : normalizeText(member.start);
+  const endText = Number.isFinite(end) ? String(end) : normalizeText(member.end);
+  const strand = normalizeText(member.strand);
+  const range = startText && endText ? `${startText}..${endText}` : startText || endText;
+  return range && strand ? `${range} (${strand})` : range;
+};
+
+const buildOrthogroupMemberRows = (group) => {
+  const members = Array.isArray(group?.members) ? group.members : [];
+  return members
+    .map((member) => ({
+      record: firstText(member?.recordId, member?.record_id),
+      coordinates: memberLocationText(member),
+      proteinId: resolveDisplayProteinId(null, member),
+      productOrNote: firstText(member?.product, member?.note)
+    }))
+    .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote);
+};
+
+const orthogroupMemberCopyText = (memberRows) => {
+  if (!Array.isArray(memberRows) || memberRows.length === 0) return '';
+  return [
+    'Record\tCoordinates (+/-)\tProtein ID\tProduct / note',
+    ...memberRows.map((row) => [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\t'))
+  ].join('\n');
+};
 
 const buildFeatureRows = ({
   title,
@@ -123,15 +152,13 @@ const buildFeatureRows = ({
   const rows = [];
   addRow(rows, 'Record', firstText(feature?.record_id, recordId));
   addRow(rows, 'Location', firstText(featureLocationText(feature), interval));
-  addRow(rows, 'Protein ID', proteinIdText(feature, proteinId));
-  addRow(rows, 'Source protein ID', firstText(feature?.sourceProteinId, feature?.source_protein_id));
+  addRow(rows, 'Protein ID', resolveDisplayProteinId(feature, null, proteinId));
   addRow(rows, 'Gene', firstText(feature?.gene, qualifierFirstValue(feature, 'gene')));
   addRow(rows, 'Locus tag', firstText(feature?.locus_tag, feature?.locusTag, qualifierFirstValue(feature, 'locus_tag')));
   addRow(rows, 'Product', firstText(feature?.product, qualifierFirstValue(feature, 'product')));
   addRow(rows, 'Unit ID', unitId);
   addRow(rows, 'Locus ID', locusId);
   addRow(rows, 'Display name', displayName);
-  addRow(rows, 'Feature SVG ID', svgId);
   return section(title, rows);
 };
 
@@ -174,7 +201,6 @@ export const buildPairwiseMatchPayload = (
   addRow(summaryRows, 'Subject record', attr(element, 'data-subject-record-id'));
   addRow(summaryRows, 'Query interval', qInterval);
   addRow(summaryRows, 'Subject interval', sInterval);
-  addRow(summaryRows, 'Match style', attr(element, 'data-pairwise-match-style'));
   addRow(summaryRows, 'Orientation', firstText(
     attr(element, 'data-collinearity-orientation'),
     attr(element, 'data-orientation')
@@ -210,13 +236,17 @@ export const buildPairwiseMatchPayload = (
   addRow(orthogroupRows, 'Description', description);
   addRow(orthogroupRows, 'Members', firstText(group?.member_count, group?.memberCount));
   addRow(orthogroupRows, 'Record coverage', firstText(group?.record_coverage_count, group?.recordCoverage));
+  const orthogroupMemberRows = buildOrthogroupMemberRows(group);
 
   const sections = [
     section('Summary', summaryRows),
     section('Alignment', alignmentRows)
   ];
   if (matchKind === 'orthogroup' || orthogroupRows.length > 0) {
-    sections.push(section('Orthogroup', orthogroupRows));
+    sections.push(section('Orthogroup', orthogroupRows, {
+      memberRows: orthogroupMemberRows,
+      memberCopyText: orthogroupMemberCopyText(orthogroupMemberRows)
+    }));
   }
   if (matchKind === 'collinear' || blockRows.length > 0) {
     sections.push(section('Collinearity', blockRows));

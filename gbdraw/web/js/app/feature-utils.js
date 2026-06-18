@@ -8,6 +8,74 @@ export const getFeatureCaption = (feature) => {
   );
 };
 
+export const firstFeatureText = (...values) => {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const nested = firstFeatureText(...value);
+      if (nested) return nested;
+      continue;
+    }
+    const text = String(value === null || value === undefined ? '' : value).trim();
+    if (text) return text;
+  }
+  return '';
+};
+
+export const getFeatureQualifierFirstValue = (feature, key) => {
+  const normalizedKey = String(key || '').trim().toLowerCase();
+  if (!feature || !normalizedKey) return '';
+  const qualifiers = feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
+    ? feature.qualifiers
+    : {};
+  if (Object.prototype.hasOwnProperty.call(qualifiers, normalizedKey)) {
+    return firstFeatureText(qualifiers[normalizedKey]);
+  }
+  const matchingKey = Object.keys(qualifiers).find((candidate) => candidate.toLowerCase() === normalizedKey);
+  return matchingKey ? firstFeatureText(qualifiers[matchingKey]) : '';
+};
+
+const directFeatureValue = (feature, ...keys) => {
+  if (!feature || typeof feature !== 'object') return '';
+  for (const key of keys) {
+    const value = firstFeatureText(feature[key]);
+    if (value) return value;
+  }
+  return '';
+};
+
+export const resolveDisplayProteinId = (feature, member = null, fallback = '') => firstFeatureText(
+  directFeatureValue(feature, 'sourceProteinId', 'source_protein_id'),
+  directFeatureValue(member, 'sourceProteinId', 'source_protein_id'),
+  getFeatureQualifierFirstValue(feature, 'protein_id'),
+  directFeatureValue(feature, 'locusTag', 'locus_tag'),
+  getFeatureQualifierFirstValue(feature, 'locus_tag'),
+  directFeatureValue(member, 'locusTag', 'locus_tag'),
+  directFeatureValue(feature, 'geneId', 'gene_id'),
+  getFeatureQualifierFirstValue(feature, 'gene_id'),
+  directFeatureValue(member, 'geneId', 'gene_id'),
+  directFeatureValue(feature, 'oldLocusTag', 'old_locus_tag'),
+  getFeatureQualifierFirstValue(feature, 'old_locus_tag'),
+  directFeatureValue(member, 'oldLocusTag', 'old_locus_tag'),
+  directFeatureValue(feature, 'ID'),
+  getFeatureQualifierFirstValue(feature, 'ID'),
+  directFeatureValue(feature, 'Name', 'name'),
+  getFeatureQualifierFirstValue(feature, 'Name'),
+  directFeatureValue(feature, 'Parent', 'parent'),
+  getFeatureQualifierFirstValue(feature, 'Parent'),
+  directFeatureValue(feature, 'gene'),
+  getFeatureQualifierFirstValue(feature, 'gene'),
+  directFeatureValue(member, 'gene'),
+  directFeatureValue(feature, 'proteinId', 'protein_id'),
+  directFeatureValue(member, 'proteinId', 'protein_id'),
+  fallback
+);
+
+export const resolveInternalProteinId = (feature, member = null, fallback = '') => firstFeatureText(
+  directFeatureValue(feature, 'proteinId', 'protein_id'),
+  directFeatureValue(member, 'proteinId', 'protein_id'),
+  fallback
+);
+
 export const getFeatureQualifierValue = (feat, qual) => {
   if (!qual) return null;
   const key = qual.toLowerCase();

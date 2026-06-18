@@ -376,6 +376,12 @@ const STANDALONE_INTERACTIVE_STYLE = `
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: nowrap;
 }
+.gfi-block-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  background: #f8fafc;
+}
 .gfi-empty,
 .gfi-warning {
   padding: 10px;
@@ -1209,18 +1215,47 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
-  function displayProteinId(feature, member) {
-    return String(
-      feature && feature.source_protein_id ||
-      feature && feature.sourceProteinId ||
-      member && member.sourceProteinId ||
-      member && member.source_protein_id ||
-      feature && feature.protein_id ||
-      feature && feature.proteinId ||
-      member && member.proteinId ||
-      member && member.protein_id ||
-      ''
-    ).trim();
+  function firstDisplayText() {
+    for (var i = 0; i < arguments.length; i += 1) {
+      var value = arguments[i];
+      if (Array.isArray(value)) {
+        var nested = firstDisplayText.apply(null, value);
+        if (nested) return nested;
+        continue;
+      }
+      var text = String(value == null ? '' : value).trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  function displayProteinId(feature, member, fallback) {
+    return firstDisplayText(
+      feature && (feature.source_protein_id || feature.sourceProteinId),
+      member && (member.sourceProteinId || member.source_protein_id),
+      firstQualifierValue(feature, 'protein_id'),
+      feature && (feature.locus_tag || feature.locusTag),
+      firstQualifierValue(feature, 'locus_tag'),
+      member && (member.locusTag || member.locus_tag),
+      feature && (feature.gene_id || feature.geneId),
+      firstQualifierValue(feature, 'gene_id'),
+      member && (member.geneId || member.gene_id),
+      feature && (feature.old_locus_tag || feature.oldLocusTag),
+      firstQualifierValue(feature, 'old_locus_tag'),
+      member && (member.oldLocusTag || member.old_locus_tag),
+      feature && feature.ID,
+      firstQualifierValue(feature, 'ID'),
+      feature && feature.Name,
+      firstQualifierValue(feature, 'Name'),
+      feature && feature.Parent,
+      firstQualifierValue(feature, 'Parent'),
+      feature && feature.gene,
+      firstQualifierValue(feature, 'gene'),
+      member && member.gene,
+      feature && (feature.proteinId || feature.protein_id),
+      member && (member.proteinId || member.protein_id),
+      fallback
+    );
   }
 
   function internalProteinId(feature, member) {
@@ -1251,7 +1286,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     appendSearchItems(items, 'Orthogroup member gene', member && member.gene);
     appendSearchItems(items, 'Orthogroup member product', member && member.product);
     appendSearchItems(items, 'Orthogroup member note', member && member.note);
-    appendSearchItems(items, 'Orthogroup member protein ID', member && (member.sourceProteinId || member.source_protein_id || member.proteinId || member.protein_id));
+    appendSearchItems(items, 'Orthogroup member protein ID', displayProteinId(null, member));
     return items;
   }
 
@@ -2897,6 +2932,43 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
+  function normalizeMatchMemberRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(function (row) {
+      return {
+        record: String(row && (row.record || row.record_id) || '').trim(),
+        coordinates: String(row && row.coordinates || '').trim(),
+        proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
+        productOrNote: String(row && (row.productOrNote || row.product_or_note) || '').trim()
+      };
+    }).filter(function (row) {
+      return row.record || row.coordinates || row.proteinId || row.productOrNote;
+    });
+  }
+
+  function renderMatchMemberTable(section, rows) {
+    if (!rows.length) return '';
+    var copyText = String(section && (section.member_copy_text || section.memberCopyText) || '').trim();
+    if (!copyText) {
+      copyText = ['Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'].concat(
+        rows.map(function (row) {
+          return [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\\t');
+        })
+      ).join('\\n');
+    }
+    var body = rows.map(function (row) {
+      return '<tr>' +
+        '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.coordinates) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.proteinId) + '</td>' +
+        '<td>' + escapeHtml(row.productOrNote) + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
+      '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>' +
+      '<div class="gfi-block-actions">' + copyButton(copyText) + '</div>';
+  }
+
   function renderMatchSections(match) {
     var sections = Array.isArray(match && match.sections) ? match.sections : [];
     if (!sections.length) {
@@ -2904,10 +2976,12 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     return sections.map(function (section) {
       var rows = normalizeMatchRows(section && section.rows);
-      if (!rows.length) return '';
+      var memberRows = normalizeMatchMemberRows(section && (section.member_rows || section.memberRows));
+      if (!rows.length && !memberRows.length) return '';
       return '<div class="gfi-block">' +
         '<div class="gfi-block-title">' + escapeHtml(section && section.title || 'Details') + '</div>' +
-        renderRows(rows) +
+        (rows.length ? renderRows(rows) : '') +
+        renderMatchMemberTable(section, memberRows) +
         '</div>';
     }).join('') || '<div class="gfi-empty">No match details available.</div>';
   }
@@ -4078,6 +4152,9 @@ const normalizeStandaloneOrthogroupMember = (member) => {
     strand: String(member.strand || ''),
     representative: Boolean(member.representative),
     gene: String(member.gene || ''),
+    locusTag: String(member.locusTag || member.locus_tag || ''),
+    geneId: String(member.geneId || member.gene_id || ''),
+    oldLocusTag: String(member.oldLocusTag || member.old_locus_tag || ''),
     product: String(member.product || ''),
     note: String(member.note || '')
   };
@@ -4110,7 +4187,7 @@ const getStandaloneOrthogroupDescription = (group, context) => {
 const buildStandaloneOrthogroupPayloads = (features, context) => {
   const neededIds = new Set(
     (Array.isArray(features) ? features : [])
-      .map((feature) => String(feature?.orthogroup_id || '').trim())
+      .map((feature) => String(feature?.orthogroup_id || feature?.orthogroupId || '').trim())
       .filter(Boolean)
   );
   if (neededIds.size === 0) return [];
@@ -4238,6 +4315,9 @@ const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) =>
     end: null,
     strand: '',
     location: '',
+    locus_tag: '',
+    gene_id: '',
+    old_locus_tag: '',
     fill_color: fillColor,
     orthogroup_id: '',
     orthogroup_member_count: 0,
@@ -4288,6 +4368,9 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
       strand: String(feature?.strand || ''),
       location: buildStandaloneFeatureLocation(feature),
+      locus_tag: String(feature?.locus_tag || feature?.locusTag || ''),
+      gene_id: String(feature?.gene_id || feature?.geneId || ''),
+      old_locus_tag: String(feature?.old_locus_tag || feature?.oldLocusTag || ''),
       orthogroup_id: String(orthogroupEntry?.orthogroupId || ''),
       orthogroup_member_count: Number.isFinite(Number(orthogroupEntry?.orthogroupMemberCount))
         ? Number(orthogroupEntry.orthogroupMemberCount)
@@ -4295,8 +4378,14 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       orthogroup_record_coverage: Number.isFinite(Number(orthogroupEntry?.orthogroupRecordCoverage))
         ? Number(orthogroupEntry.orthogroupRecordCoverage)
         : 0,
-      protein_id: String(orthogroupEntry?.proteinId || ''),
-      source_protein_id: String(orthogroupEntry?.sourceProteinId || ''),
+      protein_id: String(orthogroupEntry?.proteinId || feature?.proteinId || feature?.protein_id || ''),
+      source_protein_id: String(
+        orthogroupEntry?.sourceProteinId ||
+        feature?.sourceProteinId ||
+        feature?.source_protein_id ||
+        firstQualifierValue(feature, 'protein_id') ||
+        ''
+      ),
       orthogroup_representative: Boolean(orthogroupEntry?.orthogroupRepresentative)
     };
     if (normalizedPopupMode === 'rich') {
@@ -4333,6 +4422,43 @@ const firstStandaloneText = (...values) => {
   return '';
 };
 
+const resolveStandaloneDisplayProteinId = (feature, member = null, fallback = '') => firstStandaloneText(
+  feature?.sourceProteinId,
+  feature?.source_protein_id,
+  member?.sourceProteinId,
+  member?.source_protein_id,
+  firstQualifierValue(feature, 'protein_id'),
+  feature?.locusTag,
+  feature?.locus_tag,
+  firstQualifierValue(feature, 'locus_tag'),
+  member?.locusTag,
+  member?.locus_tag,
+  feature?.geneId,
+  feature?.gene_id,
+  firstQualifierValue(feature, 'gene_id'),
+  member?.geneId,
+  member?.gene_id,
+  feature?.oldLocusTag,
+  feature?.old_locus_tag,
+  firstQualifierValue(feature, 'old_locus_tag'),
+  member?.oldLocusTag,
+  member?.old_locus_tag,
+  feature?.ID,
+  firstQualifierValue(feature, 'ID'),
+  feature?.Name,
+  firstQualifierValue(feature, 'Name'),
+  feature?.Parent,
+  firstQualifierValue(feature, 'Parent'),
+  feature?.gene,
+  firstQualifierValue(feature, 'gene'),
+  member?.gene,
+  feature?.proteinId,
+  feature?.protein_id,
+  member?.proteinId,
+  member?.protein_id,
+  fallback
+);
+
 const addStandaloneMatchRow = (rows, label, value) => {
   const text = String(value === null || value === undefined ? '' : value).trim();
   if (!text) return;
@@ -4344,6 +4470,37 @@ const standaloneIntervalText = (start, end) => {
   const endText = String(end || '').trim();
   if (startText && endText) return `${startText}..${endText}`;
   return startText || endText;
+};
+
+const standaloneMemberLocationText = (member) => {
+  if (!member || typeof member !== 'object') return '';
+  const start = Number(member.start);
+  const end = Number(member.end);
+  const startText = Number.isFinite(start) ? String(start + 1) : String(member.start ?? '').trim();
+  const endText = Number.isFinite(end) ? String(end) : String(member.end ?? '').trim();
+  const range = startText && endText ? `${startText}..${endText}` : startText || endText;
+  const strand = String(member.strand || '').trim();
+  return range && strand ? `${range} (${strand})` : range;
+};
+
+const buildStandaloneMatchMemberRows = (orthogroup) => {
+  const members = Array.isArray(orthogroup?.members) ? orthogroup.members : [];
+  return members
+    .map((member) => ({
+      record: firstStandaloneText(member?.recordId, member?.record_id),
+      coordinates: standaloneMemberLocationText(member),
+      proteinId: resolveStandaloneDisplayProteinId(null, member),
+      productOrNote: firstStandaloneText(member?.product, member?.note)
+    }))
+    .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote);
+};
+
+const standaloneMemberCopyText = (memberRows) => {
+  if (!Array.isArray(memberRows) || memberRows.length === 0) return '';
+  return [
+    'Record\tCoordinates (+/-)\tProtein ID\tProduct / note',
+    ...memberRows.map((row) => [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\t'))
+  ].join('\n');
 };
 
 const standaloneMatchKind = (element) => {
@@ -4386,13 +4543,11 @@ const buildStandaloneMatchFeatureSection = ({
   const rows = [];
   addStandaloneMatchRow(rows, 'Record', firstStandaloneText(feature?.record_id, recordId));
   addStandaloneMatchRow(rows, 'Location', firstStandaloneText(feature?.location, interval));
-  addStandaloneMatchRow(rows, 'Protein ID', firstStandaloneText(proteinId, feature?.source_protein_id, feature?.protein_id));
-  addStandaloneMatchRow(rows, 'Source protein ID', feature?.source_protein_id);
+  addStandaloneMatchRow(rows, 'Protein ID', resolveStandaloneDisplayProteinId(feature, null, proteinId));
   addStandaloneMatchRow(rows, 'Type', feature?.type);
   addStandaloneMatchRow(rows, 'Unit ID', unitId);
   addStandaloneMatchRow(rows, 'Locus ID', locusId);
   addStandaloneMatchRow(rows, 'Display name', displayName);
-  addStandaloneMatchRow(rows, 'Feature SVG ID', svgId);
   return buildStandaloneMatchSection(title, rows);
 };
 
@@ -4425,7 +4580,6 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
     addStandaloneMatchRow(summaryRows, 'Subject record', firstStandaloneText(standaloneAttr(element, 'data-subject-record-id'), standaloneAttr(element, 'data-subject')));
     addStandaloneMatchRow(summaryRows, 'Query interval', qInterval);
     addStandaloneMatchRow(summaryRows, 'Subject interval', sInterval);
-    addStandaloneMatchRow(summaryRows, 'Match style', standaloneAttr(element, 'data-pairwise-match-style'));
     addStandaloneMatchRow(summaryRows, 'Orientation', firstStandaloneText(standaloneAttr(element, 'data-collinearity-orientation'), standaloneAttr(element, 'data-orientation')));
 
     const alignmentRows = [];
@@ -4442,6 +4596,7 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
     addStandaloneMatchRow(orthogroupRows, 'Description', orthogroup?.description);
     addStandaloneMatchRow(orthogroupRows, 'Members', firstStandaloneText(orthogroup?.member_count, orthogroup?.memberCount));
     addStandaloneMatchRow(orthogroupRows, 'Record coverage', firstStandaloneText(orthogroup?.record_coverage_count, orthogroup?.recordCoverage));
+    const orthogroupMemberRows = buildStandaloneMatchMemberRows(orthogroup);
 
     const blockRows = [];
     addStandaloneMatchRow(blockRows, 'Block ID', blockId);
@@ -4464,7 +4619,11 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
       buildStandaloneMatchSection('Alignment', alignmentRows)
     ];
     if (orthogroupRows.length || matchKind === 'orthogroup') {
-      sections.push(buildStandaloneMatchSection('Orthogroup', orthogroupRows));
+      sections.push({
+        ...buildStandaloneMatchSection('Orthogroup', orthogroupRows),
+        member_rows: orthogroupMemberRows,
+        member_copy_text: standaloneMemberCopyText(orthogroupMemberRows)
+      });
     }
     if (blockRows.length || matchKind === 'collinear') {
       sections.push(buildStandaloneMatchSection('Collinearity', blockRows));

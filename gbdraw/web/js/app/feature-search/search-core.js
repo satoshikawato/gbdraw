@@ -1,3 +1,5 @@
+import { resolveDisplayProteinId, resolveInternalProteinId } from '../feature-utils.js';
+
 export const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
   'qualifier-key',
   'qualifier-value',
@@ -268,32 +270,12 @@ const getFeatureOrthogroupMember = (feature, group) => {
   }) || null;
 };
 
-const displayProteinId = (feature, member) => String(
-  feature?.source_protein_id ||
-  feature?.sourceProteinId ||
-  member?.sourceProteinId ||
-  member?.source_protein_id ||
-  feature?.protein_id ||
-  feature?.proteinId ||
-  member?.proteinId ||
-  member?.protein_id ||
-  ''
-).trim();
-
-const internalProteinId = (feature, member) => String(
-  feature?.protein_id ||
-  feature?.proteinId ||
-  member?.proteinId ||
-  member?.protein_id ||
-  ''
-).trim();
-
 const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   const orthogroupId = getOrthogroupId(feature);
   const group = orthogroupsById.get(orthogroupId) || null;
   const member = getFeatureOrthogroupMember(feature, group);
-  const proteinId = displayProteinId(feature, member);
-  const internalId = internalProteinId(feature, member);
+  const proteinId = resolveDisplayProteinId(feature, member);
+  const internalId = resolveInternalProteinId(feature, member);
   const items = [];
   appendSearchItems(items, 'Orthogroup ID', orthogroupId);
   appendSearchItems(items, 'Orthogroup name', group?.display_name || group?.displayName || group?.name);
@@ -306,7 +288,7 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   appendSearchItems(items, 'Orthogroup member gene', member?.gene);
   appendSearchItems(items, 'Orthogroup member product', member?.product);
   appendSearchItems(items, 'Orthogroup member note', member?.note);
-  appendSearchItems(items, 'Orthogroup member protein ID', member?.sourceProteinId || member?.source_protein_id || member?.proteinId || member?.protein_id);
+  appendSearchItems(items, 'Orthogroup member protein ID', resolveDisplayProteinId(null, member));
   return items;
 };
 

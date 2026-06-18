@@ -740,6 +740,9 @@ def _serialize_orthogroups_payload(orthogroups):
                         "gene": getattr(member, "gene", None),
                         "product": getattr(member, "product", None),
                         "note": getattr(member, "note", None),
+                        "locusTag": getattr(member, "locus_tag", None),
+                        "geneId": getattr(member, "gene_id", None),
+                        "oldLocusTag": getattr(member, "old_locus_tag", None),
                     }
                     for member in members
                 ],

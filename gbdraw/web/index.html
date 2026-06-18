@@ -3483,6 +3483,40 @@
                                         <i class="ph ph-copy"></i>
                                     </button>
                                 </div>
+                                <div v-if="section.memberRows && section.memberRows.length"
+                                     class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
+                                    <div class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2">
+                                        <div class="text-[10px] font-semibold uppercase text-slate-500">Orthogroup members</div>
+                                        <button type="button"
+                                                @click="copyText(section.memberCopyText)"
+                                                class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                                                title="Copy member table">
+                                            <i class="ph ph-copy"></i>
+                                        </button>
+                                    </div>
+                                    <div class="overflow-auto custom-scrollbar max-h-56">
+                                        <table class="w-full text-xs">
+                                            <thead class="bg-white sticky top-0">
+                                                <tr class="text-[10px] uppercase text-slate-400">
+                                                    <th class="text-left font-semibold px-3 py-2">Record</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Coordinates (+/-)</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Protein ID</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Product / note</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="member in section.memberRows"
+                                                    :key="`match-member-${section.title}-${member.record}-${member.coordinates}-${member.proteinId}`"
+                                                    class="border-t border-slate-100">
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.record }}</td>
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.coordinates }}</td>
+                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ member.proteinId }}</td>
+                                                    <td class="text-slate-700 px-3 py-2 align-top">{{ member.productOrNote }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

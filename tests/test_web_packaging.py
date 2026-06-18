@@ -357,8 +357,10 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "locationParts" in svg_actions_source
     assert "nucleotideSequence" in svg_actions_source
     assert "aminoAcidSequence" in svg_actions_source
-    assert "const displayProteinId = (feat)" in svg_actions_source
+    assert "import { getFeatureCaption, resolveDisplayProteinId } from '../feature-utils.js';" in svg_actions_source
+    assert "const proteinId = resolveDisplayProteinId(feat, member);" in svg_actions_source
     assert "label: 'Protein ID', value: proteinId" in svg_actions_source
+    assert "document.elementsFromPoint(eventLike.clientX, eventLike.clientY)" in svg_actions_source
     assert "label: 'Source protein ID'" not in svg_actions_source
     assert "label: 'SVG ID'" not in svg_actions_source
     assert "label: 'Record index'" not in svg_actions_source
@@ -369,6 +371,9 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "location_parts" in feature_metadata_source
     assert "nucleotide_sequence" in feature_metadata_source
     assert "amino_acid_sequence" in feature_metadata_source
+    assert '"source_protein_id": _first_qualifier_value(feat.qualifiers, "protein_id")' in feature_metadata_source
+    assert '"gene_id": _first_qualifier_value(feat.qualifiers, "gene_id")' in feature_metadata_source
+    assert '"old_locus_tag": _first_qualifier_value(feat.qualifiers, "old_locus_tag")' in feature_metadata_source
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
@@ -437,7 +442,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "Coordinates (+/-)",
         "Product / note",
         "displayProteinId(null, member)",
-        "function displayProteinId(feature, member)",
+        "function displayProteinId(feature, member, fallback)",
+        "function firstDisplayText()",
         "display_label",
         "search_labels",
         "orthogroup_id",
@@ -496,6 +502,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "gbdraw-interactive-feature--hover",
         "gbdraw-interactive-orthogroup-link--hover",
         "function setOrthogroupHover(orthogroupId, highlight)",
+        "member_rows: orthogroupMemberRows",
+        "function renderMatchMemberTable(section, rows)",
         "activePopupDrag",
         "activeSearchControlsDrag",
         "gbdraw-feature-hover-popup",
@@ -525,6 +533,9 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true",
         "var yOffset = 42 * unit",
         "['Source protein ID'",
+        "addStandaloneMatchRow(rows, 'Source protein ID'",
+        "addStandaloneMatchRow(rows, 'Feature SVG ID'",
+        "addStandaloneMatchRow(summaryRows, 'Match style'",
         "enrichSvgWithStandaloneFeaturePopup",
         "if (!svg || state.adv.rich_feature_popup === false) return false;",
         "{ action: 'pan', label: 'Pan'",
@@ -629,7 +640,12 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
 
     source_path = WEB_ROOT / "js" / "app" / "feature-search" / "search-core.js"
     module_path = tmp_path / "search-core.mjs"
-    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
+    module_path.write_text(
+        source_path.read_text(encoding="utf-8").replace("../feature-utils.js", "./feature-utils.mjs"),
+        encoding="utf-8",
+    )
     check_path = tmp_path / "check-feature-search.mjs"
     check_path.write_text(
         f"""
@@ -713,6 +729,113 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
     assert "buildFeatureLocation(feature)" in standalone_source
     assert "feature && (feature.nucleotide_sequence || feature.nucleotideSequence)" in standalone_source
     assert "feature && (feature.amino_acid_sequence || feature.aminoAcidSequence)" in standalone_source
+
+
+def test_pairwise_match_popup_payload_hides_internal_rows_and_lists_orthogroup_members(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
+    source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
+    module_path = tmp_path / "pairwise-match-popup.mjs"
+    module_path.write_text(
+        source_path.read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
+        encoding="utf-8",
+    )
+    check_path = tmp_path / "check-pairwise-popup.mjs"
+    check_path.write_text(
+        f"""
+        import {{ buildPairwiseMatchPayload }} from {module_path.as_uri()!r};
+
+        const assert = (condition, message) => {{
+          if (!condition) throw new Error(message);
+        }};
+
+        const attrs = new Map(Object.entries({{
+          'data-gbdraw-pairwise-match-id': 'edge_1',
+          'data-match-kind': 'orthogroup',
+          'data-orthogroup-id': 'og_1',
+          'data-query-record-id': 'record_a',
+          'data-subject-record-id': 'record_b',
+          'data-qstart': '10',
+          'data-qend': '40',
+          'data-sstart': '90',
+          'data-send': '130',
+          'data-pairwise-match-style': 'ribbon',
+          'data-query-feature-svg-id': 'fq',
+          'data-subject-feature-svg-id': 'fs',
+          'data-query-protein-id': 'p_internal_query',
+          'data-subject-protein-id': 'p_internal_subject',
+          'data-identity': '99.0'
+        }}));
+        const element = {{
+          style: {{}},
+          getAttribute: (name) => attrs.get(name) || ''
+        }};
+        const featureLookup = new Map([
+          ['fq', {{
+            record_id: 'record_a',
+            proteinId: 'p_internal_query',
+            sourceProteinId: 'WP_000001.1',
+            qualifiers: {{ protein_id: ['WP_000001.1'] }},
+            product: 'query product'
+          }}],
+          ['fs', {{
+            record_id: 'record_b',
+            proteinId: 'p_internal_subject',
+            qualifiers: {{ protein_id: ['WP_000002.1'] }},
+            product: 'subject product'
+          }}]
+        ]);
+        const payload = buildPairwiseMatchPayload(element, {{
+          featureLookup,
+          orthogroups: [{{
+            id: 'og_1',
+            name: 'rpoB',
+            member_count: 2,
+            record_coverage_count: 2,
+            members: [
+              {{
+                recordId: 'record_a',
+                start: 9,
+                end: 40,
+                strand: '+',
+                proteinId: 'p_internal_query',
+                sourceProteinId: 'WP_000001.1',
+                product: 'query product'
+              }},
+              {{
+                recordId: 'record_b',
+                start: 89,
+                end: 130,
+                strand: '-',
+                proteinId: 'p_internal_subject',
+                sourceProteinId: 'WP_000002.1',
+                product: 'subject product'
+              }}
+            ]
+          }}]
+        }});
+
+        const labels = payload.sections.flatMap((section) => section.rows.map((row) => row.label));
+        assert(!labels.includes('Match style'), `Match style leaked: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Feature SVG ID'), `Feature SVG ID leaked: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Source protein ID'), `Source protein ID should be folded into Protein ID: ${{JSON.stringify(labels)}}`);
+        const query = payload.sections.find((section) => section.title === 'Query feature');
+        const subject = payload.sections.find((section) => section.title === 'Subject feature');
+        assert(query.rows.find((row) => row.label === 'Protein ID').value === 'WP_000001.1', JSON.stringify(query));
+        assert(subject.rows.find((row) => row.label === 'Protein ID').value === 'WP_000002.1', JSON.stringify(subject));
+        const orthogroup = payload.sections.find((section) => section.title === 'Orthogroup');
+        assert(orthogroup.memberRows.length === 2, JSON.stringify(orthogroup));
+        assert(orthogroup.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(orthogroup.memberRows));
+        assert(orthogroup.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'), orthogroup.memberCopyText);
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
 
 def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:

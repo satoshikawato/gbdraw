@@ -1,5 +1,5 @@
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption } from '../feature-utils.js';
+import { getFeatureCaption, resolveDisplayProteinId } from '../feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverRows,
@@ -241,13 +241,9 @@ export const createFeatureSvgActions = ({
     return rows;
   };
 
-  const displayProteinId = (feat) => String(
-    feat?.sourceProteinId || feat?.source_protein_id || feat?.proteinId || feat?.protein_id || ''
-  ).trim();
-
   const buildOrthogroupDetailRows = (feat) => {
     const member = feat?.orthogroupMember || feat?.orthogroup_member || null;
-    const proteinId = displayProteinId(feat) || displayProteinId(member);
+    const proteinId = resolveDisplayProteinId(feat, member);
     const rows = [
       { key: 'orthogroup_id', label: 'Orthogroup ID', value: feat?.orthogroupId || feat?.orthogroup_id },
       { key: 'orthogroup_members', label: 'Members', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },
@@ -297,6 +293,29 @@ export const createFeatureSvgActions = ({
     if (!matchEl || !svg.contains(matchEl)) return null;
     return matchEl;
   };
+
+  const getTopmostSvgTarget = (eventLike, svg, selector) => {
+    if (!svg || !selector || !Number.isFinite(eventLike?.clientX) || !Number.isFinite(eventLike?.clientY)) {
+      return null;
+    }
+    const stack = typeof document.elementsFromPoint === 'function'
+      ? document.elementsFromPoint(eventLike.clientX, eventLike.clientY)
+      : [];
+    for (const element of stack) {
+      if (!element || !svg.contains(element)) continue;
+      const target = element.matches?.(selector)
+        ? element
+        : element.closest?.(selector);
+      if (target && svg.contains(target)) return target;
+    }
+    return null;
+  };
+
+  const getFeatureClickTarget = (eventLike, svg) =>
+    getTopmostSvgTarget(eventLike, svg, FEATURE_SELECTOR) || getFeatureTarget(eventLike?.target, svg);
+
+  const getPairwiseMatchClickTarget = (eventLike, svg) =>
+    getTopmostSvgTarget(eventLike, svg, PAIRWISE_MATCH_SELECTOR) || getPairwiseMatchTarget(eventLike?.target, svg);
 
   const cleanupDelegatedFeatureHandlers = () => {
     if (!delegatedFeatureHandlers?.cleanup) return;
@@ -355,8 +374,8 @@ export const createFeatureSvgActions = ({
       labelSourceText: '',
       labelVisibility: 'default',
       featureVisibility: visibilityMode,
-      proteinId: feat.proteinId || '',
-      sourceProteinId: feat.sourceProteinId || '',
+      proteinId: feat.proteinId || feat.protein_id || '',
+      sourceProteinId: feat.sourceProteinId || feat.source_protein_id || '',
       orthogroupId: feat.orthogroupId || '',
       orthogroupMemberCount: feat.orthogroupMemberCount || 0,
       orthogroupRecordCoverage: feat.orthogroupRecordCoverage || 0,
@@ -884,7 +903,7 @@ export const createFeatureSvgActions = ({
       };
 
       const handleClick = (e) => {
-        const featureEl = getFeatureTarget(e.target, svg);
+        const featureEl = getFeatureClickTarget(e, svg);
         if (featureEl) {
           const svgId = getFeatureIdentity(featureEl);
           if (!svgId) return;
@@ -898,7 +917,7 @@ export const createFeatureSvgActions = ({
           }
           return;
         }
-        const matchEl = getPairwiseMatchTarget(e.target, svg);
+        const matchEl = getPairwiseMatchClickTarget(e, svg);
         if (matchEl) {
           e.stopPropagation();
           e.preventDefault();

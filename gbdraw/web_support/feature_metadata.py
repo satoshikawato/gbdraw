@@ -266,7 +266,11 @@ def extract_features_from_genbank_payload(
                     "start": start,
                     "end": end,
                     "strand": _strand_display(strand_raw),
+                    "protein_id": _first_qualifier_value(feat.qualifiers, "protein_id"),
+                    "source_protein_id": _first_qualifier_value(feat.qualifiers, "protein_id"),
                     "locus_tag": _first_qualifier_value(feat.qualifiers, "locus_tag"),
+                    "gene_id": _first_qualifier_value(feat.qualifiers, "gene_id"),
+                    "old_locus_tag": _first_qualifier_value(feat.qualifiers, "old_locus_tag"),
                     "gene": _first_qualifier_value(feat.qualifiers, "gene"),
                     "product": _first_qualifier_value(feat.qualifiers, "product"),
                     "note": _first_qualifier_value(feat.qualifiers, "note")[:50],
@@ -300,4 +304,3 @@ def extract_features_from_genbank_json(
     except Exception as exc:
         return json.dumps({"error": str(exc)})
     return json.dumps(payload)
-
