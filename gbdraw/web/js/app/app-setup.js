@@ -162,6 +162,10 @@ export const createAppSetup = () => {
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    clickedPairwiseMatch,
+    clickedPairwiseMatchPos,
+    pairwiseMatchPopupRef,
+    pairwiseMatchPopupDrag,
     featurePopupRef,
     featurePopupDrag,
     featurePopupSize,
@@ -1104,6 +1108,47 @@ export const createAppSetup = () => {
     return style;
   });
 
+  const pairwiseMatchPopupStyle = computed(() => ({
+    top: `${clickedPairwiseMatchPos.y}px`,
+    left: `${clickedPairwiseMatchPos.x}px`
+  }));
+
+  const onPairwiseMatchPopupDrag = (event) => {
+    if (!pairwiseMatchPopupDrag.active) return;
+    const popup = pairwiseMatchPopupRef.value;
+    const width = popup?.offsetWidth || 420;
+    const height = popup?.offsetHeight || 360;
+    const margin = 12;
+    const maxX = Math.max(margin, window.innerWidth - width - margin);
+    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const nextX = event.clientX - pairwiseMatchPopupDrag.offsetX;
+    const nextY = event.clientY - pairwiseMatchPopupDrag.offsetY;
+    clickedPairwiseMatchPos.x = Math.min(Math.max(nextX, margin), maxX);
+    clickedPairwiseMatchPos.y = Math.min(Math.max(nextY, margin), maxY);
+  };
+
+  const endPairwiseMatchPopupDrag = () => {
+    if (!pairwiseMatchPopupDrag.active) return;
+    pairwiseMatchPopupDrag.active = false;
+    document.removeEventListener('mousemove', onPairwiseMatchPopupDrag);
+    document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
+  };
+
+  const startPairwiseMatchPopupDrag = (event) => {
+    if (event.button !== 0) return;
+    if (!clickedPairwiseMatch.value) return;
+    if (isInteractiveTarget(event.target)) return;
+    const popup = pairwiseMatchPopupRef.value;
+    if (!popup) return;
+    const rect = popup.getBoundingClientRect();
+    pairwiseMatchPopupDrag.active = true;
+    pairwiseMatchPopupDrag.offsetX = event.clientX - rect.left;
+    pairwiseMatchPopupDrag.offsetY = event.clientY - rect.top;
+    document.addEventListener('mousemove', onPairwiseMatchPopupDrag);
+    document.addEventListener('mouseup', endPairwiseMatchPopupDrag);
+    event.preventDefault();
+  };
+
   const onFeaturePopupDrag = (event) => {
     if (!featurePopupDrag.active || featurePopupResize.active) return;
     const popup = featurePopupRef.value;
@@ -1813,12 +1858,17 @@ export const createAppSetup = () => {
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    clickedPairwiseMatch,
+    clickedPairwiseMatchPos,
     clickedLabel,
     clickedLabelPos,
     featurePopupRef,
     featurePopupStyle,
     startFeaturePopupDrag,
     startFeaturePopupResize,
+    pairwiseMatchPopupRef,
+    pairwiseMatchPopupStyle,
+    startPairwiseMatchPopupDrag,
     clickedFeatureLocation,
     copyText,
     canUseClickedOrthogroupActions,

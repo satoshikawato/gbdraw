@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import math
 from typing import Tuple, Dict
 
 from pandas import DataFrame
@@ -21,6 +22,30 @@ def _row_value(row: object, name: str, default: object = "") -> object:
     if value is None:
         return default
     return value
+
+
+def _is_missing_value(value: object) -> bool:
+    if value is None:
+        return True
+    try:
+        return bool(value != value)
+    except Exception:
+        return False
+
+
+def _attribute_text(value: object) -> str:
+    if _is_missing_value(value):
+        return ""
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return ""
+        return f"{value:.12g}"
+    return str(value).strip()
+
+
+def _required_attribute_text(value: object) -> str:
+    text = _attribute_text(value)
+    return text if text else " "
 
 
 def _row_float(row: object, name: str, default: float = 0.0) -> float:
@@ -55,6 +80,16 @@ def _match_draw_order_key(row: object) -> tuple[int, float, float, float, float,
 
 def _normalize_collinearity_color_mode(value: object) -> str:
     return str(value or "").strip().lower().replace("-", "_")
+
+
+def _match_kind(row: object) -> str:
+    collinearity_block_id = _attribute_text(_row_value(row, "collinearity_block_id", ""))
+    if collinearity_block_id:
+        return "collinear"
+    orthogroup_id = _attribute_text(_row_value(row, "orthogroup_id", ""))
+    if orthogroup_id:
+        return "orthogroup"
+    return "pairwise"
 
 
 class PairWiseMatchGroup:
@@ -117,6 +152,7 @@ class PairWiseMatchGroup:
         self.records = records
         self.record_offsets_x = record_offsets_x or {}
         self.track_id: str = "comparison" + str(self.comparison_count)
+        self._pairwise_match_counter = 0
         self.calculate_query_subject_offsets()
         self.match_group = Group(id=self.track_id)
         self.add_elements_to_group()
@@ -149,7 +185,26 @@ class PairWiseMatchGroup:
         self.query_alignment_offset_x = float(self.record_offsets_x.get(self.comparison_count - 1, 0.0))
         self.subject_alignment_offset_x = float(self.record_offsets_x.get(self.comparison_count, 0.0))
 
-    def generate_linear_match_path(self, row: DataFrame) -> Path:
+    def _record_id_for_index(self, index: int) -> str:
+        try:
+            record = self.records[index]
+        except (AttributeError, IndexError, TypeError):
+            return ""
+        return _attribute_text(
+            getattr(record, "id", None)
+            or getattr(record, "name", None)
+            or getattr(record, "description", None)
+            or ""
+        )
+
+    def _next_pairwise_match_id(self, match_index: int | None = None) -> str:
+        if match_index is None:
+            self._pairwise_match_counter = int(getattr(self, "_pairwise_match_counter", 0)) + 1
+            match_index = self._pairwise_match_counter
+        track_id = _attribute_text(getattr(self, "track_id", "")) or f"comparison{self.comparison_count}"
+        return f"{track_id}_match{int(match_index)}"
+
+    def generate_linear_match_path(self, row: DataFrame, match_index: int | None = None) -> Path:
         """
         Generates an SVG path for a pairwise match based on the provided row data.
 
@@ -217,8 +272,48 @@ class PairWiseMatchGroup:
         )
         path.attribs["data-pairwise-match-style"] = match_style
         path.attribs["data-identity-factor"] = f"{factor:.6g}"
+        self.add_required_metadata_attributes(path, row, match_index=match_index)
         self.add_optional_metadata_attributes(path, row)
         return path
+
+    def add_required_metadata_attributes(
+        self,
+        path: Path,
+        row: DataFrame,
+        match_index: int | None = None,
+    ) -> None:
+        query_record_index = int(getattr(self, "comparison_count", 1)) - 1
+        subject_record_index = int(getattr(self, "comparison_count", 1))
+        query_record_id = (
+            _attribute_text(_row_value(row, "query", ""))
+            or _attribute_text(_row_value(row, "qseqid", ""))
+            or self._record_id_for_index(query_record_index)
+        )
+        subject_record_id = (
+            _attribute_text(_row_value(row, "subject", ""))
+            or _attribute_text(_row_value(row, "sseqid", ""))
+            or self._record_id_for_index(subject_record_index)
+        )
+        required_attributes = {
+            "data-gbdraw-pairwise-match-id": self._next_pairwise_match_id(match_index),
+            "data-match-kind": _match_kind(row),
+            "data-query-record-index": query_record_index,
+            "data-subject-record-index": subject_record_index,
+            "data-query-record-id": query_record_id,
+            "data-subject-record-id": subject_record_id,
+            "data-qstart": _row_value(row, "qstart", ""),
+            "data-qend": _row_value(row, "qend", ""),
+            "data-sstart": _row_value(row, "sstart", ""),
+            "data-send": _row_value(row, "send", ""),
+            "data-identity": _row_value(row, "identity", ""),
+            "data-alignment-length": _row_value(row, "alignment_length", ""),
+            "data-evalue": _row_value(row, "evalue", ""),
+            "data-bitscore": _row_value(row, "bitscore", ""),
+            "data-mismatches": _row_value(row, "mismatches", ""),
+            "data-gap-opens": _row_value(row, "gap_opens", ""),
+        }
+        for attribute, value in required_attributes.items():
+            path.attribs[attribute] = _required_attribute_text(value)
 
     def resolve_match_fill_color(
         self,
@@ -260,12 +355,8 @@ class PairWiseMatchGroup:
         return default_gradient_color
 
     def add_optional_metadata_attributes(self, path: Path, row: DataFrame) -> None:
-        has_collinearity_metadata = bool(
-            str(_row_value(row, "collinearity_block_id", "") or "").strip()
-        )
-        has_orthogroup_metadata = bool(
-            str(_row_value(row, "orthogroup_id", "") or "").strip()
-        )
+        has_collinearity_metadata = bool(_attribute_text(_row_value(row, "collinearity_block_id", "")))
+        has_orthogroup_metadata = bool(_attribute_text(_row_value(row, "orthogroup_id", "")))
         if not (has_collinearity_metadata or has_orthogroup_metadata):
             return
 
@@ -273,7 +364,10 @@ class PairWiseMatchGroup:
             "collinearity_block_id": "data-collinearity-block-id",
             "collinearity_block_kind": "data-collinearity-block-kind",
             "collinearity_orientation": "data-collinearity-orientation",
+            "collinearity_block_score": "data-collinearity-block-score",
             "collinearity_block_evalue": "data-collinearity-block-evalue",
+            "collinearity_anchor_index": "data-collinearity-anchor-index",
+            "collinearity_anchor_count": "data-collinearity-anchor-count",
             "collinearity_color_mode": "data-collinearity-color-mode",
             "orthogroup_id": "data-orthogroup-id",
             "query_protein_id": "data-query-protein-id",
@@ -282,10 +376,13 @@ class PairWiseMatchGroup:
             "subject_feature_svg_id": "data-subject-feature-svg-id",
             "query_unit_id": "data-query-unit-id",
             "subject_unit_id": "data-subject-unit-id",
+            "query_locus_id": "data-query-locus-id",
+            "subject_locus_id": "data-subject-locus-id",
+            "query_display_name": "data-query-display-name",
+            "subject_display_name": "data-subject-display-name",
         }
         for column, attribute in metadata_columns.items():
-            value = _row_value(row, column, "")
-            text = str(value or "").strip()
+            text = _attribute_text(_row_value(row, column, ""))
             if text:
                 path.attribs[attribute] = text
 
@@ -395,8 +492,8 @@ class PairWiseMatchGroup:
             Group: The SVG group with all match paths added.
         """
         rows = sorted(self.comparison_df.itertuples(), key=_match_draw_order_key)
-        for row in rows:
-            match_path: Path = self.generate_linear_match_path(row)
+        for index, row in enumerate(rows, start=1):
+            match_path: Path = self.generate_linear_match_path(row, match_index=index)
             self.match_group.add(match_path)
         return self.match_group
 

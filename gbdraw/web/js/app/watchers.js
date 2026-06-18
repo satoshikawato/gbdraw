@@ -75,6 +75,7 @@ export const setupWatchers = ({
     labelOverrideBuildWarning,
     showFeaturePanel,
     clickedFeature,
+    clickedPairwiseMatch,
     clickedLabel,
     labelTextScopeDialog,
     globalLabelModeDialog,
@@ -549,6 +550,7 @@ export const setupWatchers = ({
       labelOverrideBuildWarning.value = '';
       labelSearch.value = '';
       featurePanelTab.value = 'colors';
+      clickedPairwiseMatch.value = null;
       clickedLabel.value = null;
       labelTextScopeDialog.show = false;
       labelTextScopeDialog.labelKey = '';

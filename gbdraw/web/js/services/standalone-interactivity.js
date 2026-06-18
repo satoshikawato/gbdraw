@@ -8,6 +8,11 @@ const FEATURE_SELECTOR = [
   'polygon[id^="f"]',
   'rect[id^="f"]'
 ].join(', ');
+const STANDALONE_MATCH_SELECTOR = [
+  'path[data-gbdraw-pairwise-match-id]',
+  'path[data-match-kind]',
+  'path[data-pairwise-match-style]'
+].join(', ');
 const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
@@ -72,6 +77,18 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-orthogroup-link.gbdraw-interactive-orthogroup-link--hover {
   opacity: 0.92;
   filter: url(#gbdraw-interactive-feature-glow);
+}
+.gbdraw-interactive-pairwise-match {
+  cursor: pointer;
+  transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease, stroke-opacity 120ms ease;
+}
+.gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--hover {
+  opacity: 0.92;
+  filter: url(#gbdraw-interactive-feature-glow);
+  stroke: #f59e0b;
+  stroke-opacity: 0.9;
+  stroke-width: 1.5;
+  paint-order: stroke fill markers;
 }
 .gbdraw-feature-popup {
   overflow: visible;
@@ -613,6 +630,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var FEATURE_SELECTOR =
     'path[' + FEATURE_ID_ATTRIBUTE + '], polygon[' + FEATURE_ID_ATTRIBUTE + '], rect[' + FEATURE_ID_ATTRIBUTE + '], ' +
     'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+  var MATCH_SELECTOR =
+    'path[data-gbdraw-pairwise-match-id], path[data-match-kind], path[data-pairwise-match-style]';
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
   var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
@@ -640,6 +659,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var hoverPopupLastEvent = null;
   var activeHoverSvgId = null;
   var activeHoverKey = '';
+  var activeHoverMatchId = '';
+  var activeHoverMatchKey = '';
   var maxZoom = 16;
   var resizeFrame = null;
   var overlayRefreshFrame = null;
@@ -686,6 +707,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   var features = Array.isArray(payload.features) ? payload.features : [];
   var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
+  var matches = Array.isArray(payload.matches) ? payload.matches : [];
   var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';
   var searchFieldIds = {
     all: true,
@@ -742,6 +764,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       }
     });
   });
+  var matchesById = new Map();
+  matches.forEach(function (match) {
+    var id = String(match && match.id || '').trim();
+    if (id && !matchesById.has(id)) {
+      matchesById.set(id, match);
+    }
+  });
 
   function getOrthogroupIds(value) {
     var seen = {};
@@ -786,6 +815,26 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
     });
     setClassToken(element, 'gbdraw-interactive-orthogroup-link', true);
+  });
+
+  var matchElementsById = new Map();
+  var comparisonElementsByCollinearityBlockId = new Map();
+  Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
+    var matchId = String(element.getAttribute('data-gbdraw-pairwise-match-id') || '').trim();
+    if (matchId) {
+      if (!matchElementsById.has(matchId)) {
+        matchElementsById.set(matchId, []);
+      }
+      matchElementsById.get(matchId).push(element);
+    }
+    var blockId = String(element.getAttribute('data-collinearity-block-id') || '').trim();
+    if (blockId) {
+      if (!comparisonElementsByCollinearityBlockId.has(blockId)) {
+        comparisonElementsByCollinearityBlockId.set(blockId, []);
+      }
+      comparisonElementsByCollinearityBlockId.get(blockId).push(element);
+    }
+    setClassToken(element, 'gbdraw-interactive-pairwise-match', true);
   });
 
   function setClassToken(element, token, enabled) {
@@ -835,6 +884,15 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
+  function setCollinearityBlockHover(blockId, highlight) {
+    var id = String(blockId || '').trim();
+    if (!id) return;
+    var comparisonElements = comparisonElementsByCollinearityBlockId.get(id) || [];
+    comparisonElements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-pairwise-match--hover', highlight);
+    });
+  }
+
   function setHoverHighlight(svgId, highlight) {
     var feature = featuresById.get(String(svgId || '').trim());
     var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
@@ -843,6 +901,53 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return;
     }
     setFeatureHighlight(svgId, highlight);
+  }
+
+  function matchAttr(element, name) {
+    return String(element && element.getAttribute && element.getAttribute(name) || '').trim();
+  }
+
+  function getElementMatchId(element) {
+    return matchAttr(element, 'data-gbdraw-pairwise-match-id');
+  }
+
+  function getMatchHoverKey(element) {
+    var blockId = matchAttr(element, 'data-collinearity-block-id');
+    if (blockId) return 'collinearity:' + blockId;
+    var orthogroupId = matchAttr(element, 'data-orthogroup-id');
+    if (orthogroupId) return 'orthogroup:' + orthogroupId;
+    return 'match:' + (getElementMatchId(element) || matchAttr(element, 'd'));
+  }
+
+  function setMatchHover(element, highlight) {
+    if (!element) return;
+    setClassToken(element, 'gbdraw-interactive-pairwise-match--hover', highlight);
+    var blockId = matchAttr(element, 'data-collinearity-block-id');
+    if (blockId) {
+      setCollinearityBlockHover(blockId, highlight);
+      return;
+    }
+    var orthogroupId = matchAttr(element, 'data-orthogroup-id');
+    if (orthogroupId) {
+      setOrthogroupHover(orthogroupId, highlight);
+    }
+  }
+
+  function clearActiveFeatureHover() {
+    if (!activeHoverSvgId) return;
+    setHoverHighlight(activeHoverSvgId, false);
+    activeHoverSvgId = null;
+    activeHoverKey = '';
+  }
+
+  function clearActiveMatchHover() {
+    if (!activeHoverMatchId) return;
+    var elements = matchElementsById.get(activeHoverMatchId) || [];
+    elements.forEach(function (element) {
+      setMatchHover(element, false);
+    });
+    activeHoverMatchId = '';
+    activeHoverMatchKey = '';
   }
 
   function supportsStandaloneControls() {
@@ -2782,6 +2887,44 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       '</div>';
   }
 
+  function normalizeMatchRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(function (row) {
+      if (Array.isArray(row)) return [row[0], row[1]];
+      return [row && row.label, row && row.value];
+    }).filter(function (row) {
+      return String(row[0] == null ? '' : row[0]).trim() &&
+        String(row[1] == null ? '' : row[1]).trim();
+    });
+  }
+
+  function renderMatchSections(match) {
+    var sections = Array.isArray(match && match.sections) ? match.sections : [];
+    if (!sections.length) {
+      return '<div class="gfi-empty">No match details available.</div>';
+    }
+    return sections.map(function (section) {
+      var rows = normalizeMatchRows(section && section.rows);
+      if (!rows.length) return '';
+      return '<div class="gfi-block">' +
+        '<div class="gfi-block-title">' + escapeHtml(section && section.title || 'Details') + '</div>' +
+        renderRows(rows) +
+        '</div>';
+    }).join('') || '<div class="gfi-empty">No match details available.</div>';
+  }
+
+  function renderMatchPopup(match) {
+    copyValues = [];
+    return '<div class="gfi gfi--simple">' +
+      '<div class="gfi-header" data-drag-handle="true">' +
+      '<div><div class="gfi-title">' + escapeHtml(match && match.title || 'Pairwise match') + '</div>' +
+      '<div class="gfi-subtitle">' + escapeHtml(match && (match.subtitle || match.id) || '') + '</div></div>' +
+      '<button type="button" class="gfi-close" data-close="true">x</button>' +
+      '</div>' +
+      '<div class="gfi-content">' + renderMatchSections(match) + '</div>' +
+      '<button type="button" class="gfi-resize-handle" data-resize="true" title="Drag to resize" aria-label="Resize popup"></button>' +
+      '</div>';
+  }
+
   function stopPopupResize() {
     if (!activePopupResize) return;
     document.removeEventListener('mousemove', activePopupResize.onMove, true);
@@ -2920,6 +3063,25 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       '</div>';
   }
 
+  function renderMatchHoverPopupHtml(match) {
+    var rows = normalizeMatchRows(match && match.hover_rows).slice(0, 6);
+    var rowHtml = rows.map(function (row) {
+      return '<div class="gfhs-row">' +
+        '<div class="gfhs-key">' + escapeHtml(row[0]) + '</div>' +
+        '<div class="gfhs-value">' + escapeHtml(row[1]) + '</div>' +
+        '</div>';
+    }).join('');
+    var color = String(match && match.fill || '#94a3b8');
+    return '<div class="gfhs">' +
+      '<div class="gfhs-title">' +
+      '<div class="gfhs-swatch" style="background:' + escapeHtml(color) + '"></div>' +
+      '<div class="gfhs-text"><div class="gfhs-heading">' + escapeHtml(match && match.title || 'Pairwise match') + '</div>' +
+      '<div class="gfhs-subtitle">' + escapeHtml(match && (match.subtitle || match.id) || '') + '</div></div>' +
+      '</div>' +
+      rowHtml +
+      '</div>';
+  }
+
   function getHoverPopupCssMetrics(viewport, rowCount) {
     var zoomScale = getBrowserZoomScale(viewport);
     var margin = 12;
@@ -3030,6 +3192,51 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     hoverPopupTimer = window.setTimeout(function () {
       hoverPopupTimer = null;
       showHoverPopup(feature, svgId, hoverPopupLastEvent);
+    }, 180);
+  }
+
+  function showMatchHoverPopup(match, event) {
+    if (!match || !hoverPopupAllowed()) {
+      closeHoverPopup();
+      return;
+    }
+    closeHoverPopup();
+    var rows = normalizeMatchRows(match.hover_rows);
+    var foreignObject = document.createElementNS(SVG_NS, 'foreignObject');
+    foreignObject.setAttribute('id', 'gbdraw-feature-hover-popup');
+    foreignObject.setAttribute('class', 'gbdraw-feature-hover-popup');
+    foreignObject.setAttribute('data-row-count', String(rows.length || 1));
+    var root = document.createElementNS(XHTML_NS, 'div');
+    root.setAttribute('xmlns', XHTML_NS);
+    root.innerHTML = renderMatchHoverPopupHtml(match);
+    foreignObject.appendChild(root);
+    svg.appendChild(foreignObject);
+    hoverPopup = foreignObject;
+    hoverPopupFeatureId = 'match:' + String(match.id || '').trim();
+    hoverPopupLastEvent = event;
+    positionHoverPopup(event);
+    syncStandaloneOverlayOrder();
+  }
+
+  function scheduleMatchHoverPopup(match, event) {
+    if (!match || !hoverPopupAllowed()) {
+      closeHoverPopup();
+      return;
+    }
+    hoverPopupLastEvent = event || hoverPopupLastEvent;
+    var hoverId = 'match:' + String(match.id || '').trim();
+    if (hoverPopup && hoverPopupFeatureId === hoverId) {
+      scheduleHoverPopupPosition(event);
+      return;
+    }
+    if (hoverPopupTimer) {
+      window.clearTimeout(hoverPopupTimer);
+      hoverPopupTimer = null;
+    }
+    hoverPopupFeatureId = hoverId;
+    hoverPopupTimer = window.setTimeout(function () {
+      hoverPopupTimer = null;
+      showMatchHoverPopup(match, hoverPopupLastEvent);
     }, 180);
   }
 
@@ -3173,10 +3380,11 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return Math.min(Math.max(numeric, safeMin), safeMax);
   }
 
-  function openPopup(feature, event) {
+  function openPopup(feature, event, popupKind) {
     if (!supportsStandaloneControls()) return;
     closeHoverPopup();
     closePopup();
+    var kind = popupKind === 'match' ? 'match' : 'feature';
     var viewport = getViewportClientRect();
     var view = getVisibleViewRect();
     var scale = getScreenScale();
@@ -3369,7 +3577,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
 
     function redraw() {
-      root.innerHTML = renderPopup(feature, activeTab);
+      root.innerHTML = kind === 'match' ? renderMatchPopup(feature) : renderPopup(feature, activeTab);
     }
 
     function closestFromTarget(target, selector) {
@@ -3458,6 +3666,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
+  function closestMatch(node) {
+    while (node && node !== svg) {
+      if (node.matches && node.matches(MATCH_SELECTOR)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
   setSvgViewRect(homeViewRect);
   setClassToken(svg, 'gbdraw-interactive-pan-enabled', true);
   setupStickyLegend();
@@ -3483,21 +3699,41 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
-    var svgId = getElementFeatureId(featureElement);
-    if (!svgId || !featureElementsById.has(svgId)) return;
-    var feature = featuresById.get(svgId);
-    var hoverKey = getFeatureHoverKey(svgId);
-    if (activeHoverKey === hoverKey) {
+    if (featureElement) {
+      clearActiveMatchHover();
+      var svgId = getElementFeatureId(featureElement);
+      if (!svgId || !featureElementsById.has(svgId)) return;
+      var feature = featuresById.get(svgId);
+      var hoverKey = getFeatureHoverKey(svgId);
+      if (activeHoverKey === hoverKey) {
+        scheduleHoverPopup(feature, svgId, event);
+        return;
+      }
+      if (activeHoverSvgId) {
+        setHoverHighlight(activeHoverSvgId, false);
+      }
+      activeHoverSvgId = svgId;
+      activeHoverKey = hoverKey;
+      setHoverHighlight(svgId, true);
       scheduleHoverPopup(feature, svgId, event);
       return;
     }
-    if (activeHoverSvgId) {
-      setHoverHighlight(activeHoverSvgId, false);
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) return;
+    clearActiveFeatureHover();
+    var matchId = getElementMatchId(matchElement);
+    if (!matchId || !matchesById.has(matchId)) return;
+    var match = matchesById.get(matchId);
+    var matchHoverKey = getMatchHoverKey(matchElement);
+    if (activeHoverMatchKey === matchHoverKey) {
+      scheduleMatchHoverPopup(match, event);
+      return;
     }
-    activeHoverSvgId = svgId;
-    activeHoverKey = hoverKey;
-    setHoverHighlight(svgId, true);
-    scheduleHoverPopup(feature, svgId, event);
+    clearActiveMatchHover();
+    activeHoverMatchId = matchId;
+    activeHoverMatchKey = matchHoverKey;
+    setMatchHover(matchElement, true);
+    scheduleMatchHoverPopup(match, event);
   });
 
   svg.addEventListener('mousemove', function (event) {
@@ -3510,23 +3746,45 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return;
     }
     var featureElement = closestFeature(event.target);
-    var svgId = getElementFeatureId(featureElement);
-    if (!svgId || !featureElementsById.has(svgId)) {
-      closeHoverPopup();
+    if (featureElement) {
+      var svgId = getElementFeatureId(featureElement);
+      if (!svgId || !featureElementsById.has(svgId)) {
+        closeHoverPopup();
+        return;
+      }
+      scheduleHoverPopup(featuresById.get(svgId), svgId, event);
       return;
     }
-    scheduleHoverPopup(featuresById.get(svgId), svgId, event);
+    var matchElement = closestMatch(event.target);
+    if (matchElement) {
+      var matchId = getElementMatchId(matchElement);
+      var match = matchesById.get(matchId);
+      if (match) {
+        scheduleMatchHoverPopup(match, event);
+        return;
+      }
+    }
+    closeHoverPopup();
   });
 
   svg.addEventListener('mouseout', function (event) {
     var featureElement = closestFeature(event.target);
-    var svgId = getElementFeatureId(featureElement);
-    if (!svgId || activeHoverSvgId !== svgId) return;
-    var relatedFeature = closestFeature(event.relatedTarget);
-    if (relatedFeature && getFeatureHoverKey(getElementFeatureId(relatedFeature)) === activeHoverKey) return;
-    setHoverHighlight(svgId, false);
-    activeHoverSvgId = null;
-    activeHoverKey = '';
+    if (featureElement) {
+      var svgId = getElementFeatureId(featureElement);
+      if (!svgId || activeHoverSvgId !== svgId) return;
+      var relatedFeature = closestFeature(event.relatedTarget);
+      if (relatedFeature && getFeatureHoverKey(getElementFeatureId(relatedFeature)) === activeHoverKey) return;
+      clearActiveFeatureHover();
+      closeHoverPopup();
+      return;
+    }
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) return;
+    var matchId = getElementMatchId(matchElement);
+    if (!matchId || activeHoverMatchId !== matchId) return;
+    var relatedMatch = closestMatch(event.relatedTarget);
+    if (relatedMatch && getMatchHoverKey(relatedMatch) === activeHoverMatchKey) return;
+    clearActiveMatchHover();
     closeHoverPopup();
   });
 
@@ -3541,8 +3799,19 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     var featureElement = closestFeature(event.target);
     if (!featureElement) {
+      var matchElement = closestMatch(event.target);
+      if (!matchElement) {
+        closeHoverPopup();
+        closePopup();
+        return;
+      }
+      var matchId = getElementMatchId(matchElement);
+      var match = matchesById.get(matchId);
+      if (!match) return;
+      event.preventDefault();
+      event.stopPropagation();
       closeHoverPopup();
-      closePopup();
+      openPopup(match, event, 'match');
       return;
     }
     var svgId = getElementFeatureId(featureElement);
@@ -3555,7 +3824,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     event.preventDefault();
     event.stopPropagation();
     closeHoverPopup();
-    openPopup(feature, event);
+    openPopup(feature, event, 'feature');
   });
 
   document.addEventListener('keydown', function (event) {
@@ -4053,6 +4322,203 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
   return payloads;
 };
 
+const standaloneAttr = (element, name) =>
+  String(element?.getAttribute?.(name) || '').trim();
+
+const firstStandaloneText = (...values) => {
+  for (const value of values) {
+    const text = String(value === null || value === undefined ? '' : value).trim();
+    if (text) return text;
+  }
+  return '';
+};
+
+const addStandaloneMatchRow = (rows, label, value) => {
+  const text = String(value === null || value === undefined ? '' : value).trim();
+  if (!text) return;
+  rows.push([label, text]);
+};
+
+const standaloneIntervalText = (start, end) => {
+  const startText = String(start || '').trim();
+  const endText = String(end || '').trim();
+  if (startText && endText) return `${startText}..${endText}`;
+  return startText || endText;
+};
+
+const standaloneMatchKind = (element) => {
+  const explicit = standaloneAttr(element, 'data-match-kind').toLowerCase();
+  if (explicit === 'pairwise' || explicit === 'orthogroup' || explicit === 'collinear') return explicit;
+  if (standaloneAttr(element, 'data-collinearity-block-id')) return 'collinear';
+  if (standaloneAttr(element, 'data-orthogroup-id')) return 'orthogroup';
+  return 'pairwise';
+};
+
+const STANDALONE_MATCH_TITLES = {
+  pairwise: 'Pairwise match',
+  orthogroup: 'Orthogroup match',
+  collinear: 'Collinearity block'
+};
+
+const buildStandaloneMatchSection = (title, rows) => ({
+  title,
+  rows: rows.filter((row) => String(row?.[1] || '').trim())
+});
+
+const getStandaloneOrthogroupPayload = (orthogroups, orthogroupId) => {
+  const id = String(orthogroupId || '').trim();
+  if (!id) return null;
+  return (Array.isArray(orthogroups) ? orthogroups : [])
+    .find((entry) => String(entry?.id || entry?.orthogroupId || entry?.orthogroup_id || '').trim() === id) || null;
+};
+
+const buildStandaloneMatchFeatureSection = ({
+  title,
+  feature,
+  recordId,
+  interval,
+  proteinId,
+  unitId,
+  locusId,
+  displayName,
+  svgId
+}) => {
+  const rows = [];
+  addStandaloneMatchRow(rows, 'Record', firstStandaloneText(feature?.record_id, recordId));
+  addStandaloneMatchRow(rows, 'Location', firstStandaloneText(feature?.location, interval));
+  addStandaloneMatchRow(rows, 'Protein ID', firstStandaloneText(proteinId, feature?.source_protein_id, feature?.protein_id));
+  addStandaloneMatchRow(rows, 'Source protein ID', feature?.source_protein_id);
+  addStandaloneMatchRow(rows, 'Type', feature?.type);
+  addStandaloneMatchRow(rows, 'Unit ID', unitId);
+  addStandaloneMatchRow(rows, 'Locus ID', locusId);
+  addStandaloneMatchRow(rows, 'Display name', displayName);
+  addStandaloneMatchRow(rows, 'Feature SVG ID', svgId);
+  return buildStandaloneMatchSection(title, rows);
+};
+
+const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } = {}) => {
+  if (!svg) return [];
+  const featuresById = new Map();
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const svgId = String(feature?.svg_id || '').trim();
+    if (svgId && !featuresById.has(svgId)) featuresById.set(svgId, feature);
+  });
+  return Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR)).map((element, index) => {
+    let id = standaloneAttr(element, 'data-gbdraw-pairwise-match-id');
+    if (!id) {
+      id = `pairwise_match_${index + 1}`;
+      element.setAttribute('data-gbdraw-pairwise-match-id', id);
+    }
+    const matchKind = standaloneMatchKind(element);
+    const orthogroupId = standaloneAttr(element, 'data-orthogroup-id');
+    const blockId = standaloneAttr(element, 'data-collinearity-block-id');
+    const queryFeatureSvgId = standaloneAttr(element, 'data-query-feature-svg-id');
+    const subjectFeatureSvgId = standaloneAttr(element, 'data-subject-feature-svg-id');
+    const queryFeature = featuresById.get(queryFeatureSvgId) || null;
+    const subjectFeature = featuresById.get(subjectFeatureSvgId) || null;
+    const orthogroup = getStandaloneOrthogroupPayload(orthogroups, orthogroupId);
+    const qInterval = standaloneIntervalText(standaloneAttr(element, 'data-qstart'), standaloneAttr(element, 'data-qend'));
+    const sInterval = standaloneIntervalText(standaloneAttr(element, 'data-sstart'), standaloneAttr(element, 'data-send'));
+    const summaryRows = [];
+    addStandaloneMatchRow(summaryRows, 'Match ID', id);
+    addStandaloneMatchRow(summaryRows, 'Query record', firstStandaloneText(standaloneAttr(element, 'data-query-record-id'), standaloneAttr(element, 'data-query')));
+    addStandaloneMatchRow(summaryRows, 'Subject record', firstStandaloneText(standaloneAttr(element, 'data-subject-record-id'), standaloneAttr(element, 'data-subject')));
+    addStandaloneMatchRow(summaryRows, 'Query interval', qInterval);
+    addStandaloneMatchRow(summaryRows, 'Subject interval', sInterval);
+    addStandaloneMatchRow(summaryRows, 'Match style', standaloneAttr(element, 'data-pairwise-match-style'));
+    addStandaloneMatchRow(summaryRows, 'Orientation', firstStandaloneText(standaloneAttr(element, 'data-collinearity-orientation'), standaloneAttr(element, 'data-orientation')));
+
+    const alignmentRows = [];
+    addStandaloneMatchRow(alignmentRows, 'Identity', standaloneAttr(element, 'data-identity'));
+    addStandaloneMatchRow(alignmentRows, 'Alignment length', standaloneAttr(element, 'data-alignment-length'));
+    addStandaloneMatchRow(alignmentRows, 'E-value', standaloneAttr(element, 'data-evalue'));
+    addStandaloneMatchRow(alignmentRows, 'Bit score', standaloneAttr(element, 'data-bitscore'));
+    addStandaloneMatchRow(alignmentRows, 'Mismatches', standaloneAttr(element, 'data-mismatches'));
+    addStandaloneMatchRow(alignmentRows, 'Gap opens', standaloneAttr(element, 'data-gap-opens'));
+
+    const orthogroupRows = [];
+    addStandaloneMatchRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
+    addStandaloneMatchRow(orthogroupRows, 'Display name', firstStandaloneText(orthogroup?.display_name, orthogroup?.displayName, orthogroup?.name));
+    addStandaloneMatchRow(orthogroupRows, 'Description', orthogroup?.description);
+    addStandaloneMatchRow(orthogroupRows, 'Members', firstStandaloneText(orthogroup?.member_count, orthogroup?.memberCount));
+    addStandaloneMatchRow(orthogroupRows, 'Record coverage', firstStandaloneText(orthogroup?.record_coverage_count, orthogroup?.recordCoverage));
+
+    const blockRows = [];
+    addStandaloneMatchRow(blockRows, 'Block ID', blockId);
+    addStandaloneMatchRow(blockRows, 'Kind', standaloneAttr(element, 'data-collinearity-block-kind'));
+    addStandaloneMatchRow(blockRows, 'Orientation', standaloneAttr(element, 'data-collinearity-orientation'));
+    addStandaloneMatchRow(blockRows, 'Color mode', standaloneAttr(element, 'data-collinearity-color-mode'));
+    addStandaloneMatchRow(blockRows, 'Block score', standaloneAttr(element, 'data-collinearity-block-score'));
+    addStandaloneMatchRow(blockRows, 'Block e-value', standaloneAttr(element, 'data-collinearity-block-evalue'));
+    addStandaloneMatchRow(blockRows, 'Anchor', [
+      standaloneAttr(element, 'data-collinearity-anchor-index'),
+      standaloneAttr(element, 'data-collinearity-anchor-count')
+    ].filter(Boolean).join(' / '));
+    addStandaloneMatchRow(blockRows, 'Query unit', standaloneAttr(element, 'data-query-unit-id'));
+    addStandaloneMatchRow(blockRows, 'Subject unit', standaloneAttr(element, 'data-subject-unit-id'));
+    addStandaloneMatchRow(blockRows, 'Query display', standaloneAttr(element, 'data-query-display-name'));
+    addStandaloneMatchRow(blockRows, 'Subject display', standaloneAttr(element, 'data-subject-display-name'));
+
+    const sections = [
+      buildStandaloneMatchSection('Summary', summaryRows),
+      buildStandaloneMatchSection('Alignment', alignmentRows)
+    ];
+    if (orthogroupRows.length || matchKind === 'orthogroup') {
+      sections.push(buildStandaloneMatchSection('Orthogroup', orthogroupRows));
+    }
+    if (blockRows.length || matchKind === 'collinear') {
+      sections.push(buildStandaloneMatchSection('Collinearity', blockRows));
+    }
+    sections.push(buildStandaloneMatchFeatureSection({
+      title: 'Query feature',
+      feature: queryFeature,
+      recordId: standaloneAttr(element, 'data-query-record-id'),
+      interval: qInterval,
+      proteinId: standaloneAttr(element, 'data-query-protein-id'),
+      unitId: standaloneAttr(element, 'data-query-unit-id'),
+      locusId: standaloneAttr(element, 'data-query-locus-id'),
+      displayName: standaloneAttr(element, 'data-query-display-name'),
+      svgId: queryFeatureSvgId
+    }));
+    sections.push(buildStandaloneMatchFeatureSection({
+      title: 'Subject feature',
+      feature: subjectFeature,
+      recordId: standaloneAttr(element, 'data-subject-record-id'),
+      interval: sInterval,
+      proteinId: standaloneAttr(element, 'data-subject-protein-id'),
+      unitId: standaloneAttr(element, 'data-subject-unit-id'),
+      locusId: standaloneAttr(element, 'data-subject-locus-id'),
+      displayName: standaloneAttr(element, 'data-subject-display-name'),
+      svgId: subjectFeatureSvgId
+    }));
+
+    const findRow = (sectionTitle, rowLabel) => {
+      const section = sections.find((entry) => entry.title === sectionTitle);
+      const row = section?.rows.find((entry) => entry[0] === rowLabel);
+      return row?.[1] || '';
+    };
+    const hoverRows = [];
+    addStandaloneMatchRow(hoverRows, 'Kind', matchKind);
+    addStandaloneMatchRow(hoverRows, 'Identity', findRow('Alignment', 'Identity'));
+    addStandaloneMatchRow(hoverRows, 'Query', findRow('Summary', 'Query interval'));
+    addStandaloneMatchRow(hoverRows, 'Subject', findRow('Summary', 'Subject interval'));
+    addStandaloneMatchRow(hoverRows, 'Orthogroup', orthogroupId);
+    addStandaloneMatchRow(hoverRows, 'Block', blockId);
+
+    return {
+      id,
+      title: STANDALONE_MATCH_TITLES[matchKind] || STANDALONE_MATCH_TITLES.pairwise,
+      subtitle: firstStandaloneText(blockId, orthogroupId, id),
+      match_kind: matchKind,
+      orthogroup_id: orthogroupId,
+      collinearity_block_id: blockId,
+      fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
+      sections: sections.filter((section) => section.rows.length > 0),
+      hover_rows: hoverRows
+    };
+  });
+};
+
 const ensureSvgDefs = (svg) => {
   let defs = svg.querySelector('defs');
   if (!defs) {
@@ -4236,6 +4702,7 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     popupMode: normalizedPopupMode
   });
   const orthogroups = buildStandaloneOrthogroupPayloads(features, context);
+  const matches = buildStandaloneMatchPayloads(svg, { features, orthogroups });
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
@@ -4243,6 +4710,13 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     if (!featureIds.has(id)) return;
     element.setAttribute('data-gbdraw-interactive-feature', 'true');
     addClassToken(element, 'gbdraw-interactive-feature');
+  });
+  const matchIds = new Set(matches.map((match) => match.id));
+  svg.querySelectorAll(STANDALONE_MATCH_SELECTOR).forEach((element) => {
+    const id = standaloneAttr(element, 'data-gbdraw-pairwise-match-id');
+    if (!matchIds.has(id)) return;
+    element.setAttribute('data-gbdraw-interactive-match', 'true');
+    addClassToken(element, 'gbdraw-interactive-pairwise-match');
   });
 
   const metadata = document.createElementNS(SVG_NS, 'metadata');
@@ -4253,7 +4727,8 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     schema: 'gbdraw-interactive-feature-popup-v1',
     popup_mode: normalizedPopupMode,
     features,
-    orthogroups
+    orthogroups,
+    matches
   });
 
   const style = document.createElementNS(SVG_NS, 'style');

@@ -161,6 +161,7 @@ export const createSidebarResize = (state) => {
 export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
   const {
     clickedFeature,
+    clickedPairwiseMatch,
     clickedLabel,
     showCanvasControls,
     showLegendPanel,
@@ -169,8 +170,9 @@ export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
   } = state;
 
   const closeFeaturePopup = (e) => {
-    if (!e.target.closest('.feature-popup') && !e.target.closest('.label-popup')) {
+    if (!e.target.closest('.feature-popup') && !e.target.closest('.pairwise-match-popup') && !e.target.closest('.label-popup')) {
       if (clickedFeature.value) clickedFeature.value = null;
+      if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
       if (clickedLabel.value) clickedLabel.value = null;
     }
   };
@@ -178,6 +180,7 @@ export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
   const handleEscapeKey = (e) => {
     if (e.key === 'Escape') {
       if (clickedFeature.value) clickedFeature.value = null;
+      if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
       if (clickedLabel.value) clickedLabel.value = null;
       if (showCanvasControls.value) showCanvasControls.value = false;
       if (showLegendPanel.value) showLegendPanel.value = false;

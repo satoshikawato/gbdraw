@@ -1557,7 +1557,10 @@ def test_collinearity_match_path_with_metadata_serializes() -> None:
         collinearity_block_id="block_0001",
         collinearity_block_kind="singleton",
         collinearity_orientation="plus",
+        collinearity_block_score=42.5,
         collinearity_block_evalue=1e-9,
+        collinearity_anchor_index=1,
+        collinearity_anchor_count=1,
         collinearity_color_mode="orientation",
         orthogroup_id="og_1",
         query_protein_id="qa0",
@@ -1566,17 +1569,114 @@ def test_collinearity_match_path_with_metadata_serializes() -> None:
         subject_feature_svg_id="feature_sb0",
         query_unit_id="qa0",
         subject_unit_id="sb0",
+        query_locus_id="locus_a",
+        subject_locus_id="locus_b",
+        query_display_name="geneA",
+        subject_display_name="geneB",
     )
 
     drawing = Drawing(debug=False)
     drawing.add(group.generate_linear_match_path(row))
 
+    svg_text = drawing.tostring()
+    assert 'data-gbdraw-pairwise-match-id="comparison1_match1"' in svg_text
+    assert 'data-match-kind="collinear"' in svg_text
+    assert 'data-query-record-index="0"' in svg_text
+    assert 'data-subject-record-index="1"' in svg_text
+    assert 'data-query-record-id="record_a"' in svg_text
+    assert 'data-subject-record-id="record_b"' in svg_text
+    assert 'data-qstart="1"' in svg_text
+    assert 'data-qend="100"' in svg_text
+    assert 'data-sstart="10"' in svg_text
+    assert 'data-send="110"' in svg_text
+    assert 'data-identity="95"' in svg_text
+    assert 'data-alignment-length=" "' in svg_text
+    assert 'data-evalue=" "' in svg_text
+    assert 'data-bitscore=" "' in svg_text
+    assert 'data-mismatches=" "' in svg_text
+    assert 'data-gap-opens=" "' in svg_text
     assert "data-collinearity-block-id" in drawing.tostring()
-    assert 'data-collinearity-block-kind="singleton"' in drawing.tostring()
-    assert 'data-orthogroup-id="og_1"' in drawing.tostring()
-    assert 'data-collinearity-block-evalue="1e-09"' in drawing.tostring()
-    assert 'data-collinearity-color-mode="orientation"' in drawing.tostring()
-    assert 'fill="#112233"' in drawing.tostring()
+    assert 'data-collinearity-block-kind="singleton"' in svg_text
+    assert 'data-orthogroup-id="og_1"' in svg_text
+    assert 'data-collinearity-block-score="42.5"' in svg_text
+    assert 'data-collinearity-block-evalue="1e-09"' in svg_text
+    assert 'data-collinearity-anchor-index="1"' in svg_text
+    assert 'data-collinearity-anchor-count="1"' in svg_text
+    assert 'data-collinearity-color-mode="orientation"' in svg_text
+    assert 'data-query-locus-id="locus_a"' in svg_text
+    assert 'data-subject-locus-id="locus_b"' in svg_text
+    assert 'data-query-display-name="geneA"' in svg_text
+    assert 'data-subject-display-name="geneB"' in svg_text
+    assert 'fill="#112233"' in svg_text
+
+
+@pytest.mark.linear
+def test_pairwise_match_path_emits_plain_required_metadata() -> None:
+    group = _build_collinearity_match_group()
+    row = SimpleNamespace(
+        query="query_record",
+        subject="subject_record",
+        identity=87.5,
+        alignment_length=120,
+        mismatches=3,
+        gap_opens=1,
+        qstart=5,
+        qend=125,
+        sstart=40,
+        send=160,
+        evalue=2e-30,
+        bitscore=240.5,
+    )
+
+    drawing = Drawing(debug=False)
+    drawing.add(group.generate_linear_match_path(row, match_index=7))
+    svg_text = drawing.tostring()
+
+    assert 'data-gbdraw-pairwise-match-id="comparison1_match7"' in svg_text
+    assert 'data-match-kind="pairwise"' in svg_text
+    assert 'data-query-record-id="query_record"' in svg_text
+    assert 'data-subject-record-id="subject_record"' in svg_text
+    assert 'data-identity="87.5"' in svg_text
+    assert 'data-alignment-length="120"' in svg_text
+    assert 'data-evalue="2e-30"' in svg_text
+    assert 'data-bitscore="240.5"' in svg_text
+    assert 'data-mismatches="3"' in svg_text
+    assert 'data-gap-opens="1"' in svg_text
+    assert "data-orthogroup-id" not in svg_text
+    assert "data-collinearity-block-id" not in svg_text
+
+
+@pytest.mark.linear
+def test_pairwise_match_path_marks_orthogroup_kind() -> None:
+    group = _build_collinearity_match_group()
+    row = SimpleNamespace(
+        identity=91,
+        alignment_length=95,
+        mismatches=0,
+        gap_opens=0,
+        qstart=10,
+        qend=105,
+        sstart=20,
+        send=115,
+        evalue=1e-20,
+        bitscore=180,
+        orthogroup_id="og_2",
+        query_protein_id="qa2",
+        subject_protein_id="sb2",
+        query_feature_svg_id="feature_qa2",
+        subject_feature_svg_id="feature_sb2",
+    )
+
+    drawing = Drawing(debug=False)
+    drawing.add(group.generate_linear_match_path(row, match_index=2))
+    svg_text = drawing.tostring()
+
+    assert 'data-match-kind="orthogroup"' in svg_text
+    assert 'data-orthogroup-id="og_2"' in svg_text
+    assert 'data-query-protein-id="qa2"' in svg_text
+    assert 'data-subject-protein-id="sb2"' in svg_text
+    assert 'data-query-feature-svg-id="feature_qa2"' in svg_text
+    assert 'data-subject-feature-svg-id="feature_sb2"' in svg_text
 
 
 @pytest.mark.linear
