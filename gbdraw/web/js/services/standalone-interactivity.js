@@ -4517,16 +4517,98 @@ const STANDALONE_MATCH_TITLES = {
   collinear: 'Collinearity block'
 };
 
+const standaloneOrthogroupTitle = (orthogroupId, displayName) => {
+  const id = String(orthogroupId || '').trim();
+  const name = String(displayName || '').trim();
+  if (id && name) return `${id}:${name}`;
+  return id || name || STANDALONE_MATCH_TITLES.orthogroup;
+};
+
 const buildStandaloneMatchSection = (title, rows) => ({
   title,
   rows: rows.filter((row) => String(row?.[1] || '').trim())
 });
 
-const getStandaloneOrthogroupPayload = (orthogroups, orthogroupId) => {
+const standaloneMemberFeatureSvgId = (member) => firstStandaloneText(member?.featureSvgId, member?.feature_svg_id);
+
+const standaloneGroupHasFeatureSvgId = (group, featureSvgId) => {
+  const id = String(featureSvgId || '').trim();
+  if (!id) return false;
+  return (Array.isArray(group?.members) ? group.members : [])
+    .some((member) => standaloneMemberFeatureSvgId(member) === id);
+};
+
+const getStandaloneOrthogroupPayload = (orthogroups, orthogroupId, queryFeatureSvgId = '', subjectFeatureSvgId = '') => {
+  const id = String(orthogroupId || '').trim();
+  const groups = Array.isArray(orthogroups) ? orthogroups : [];
+  const direct = id
+    ? groups.find((entry) => String(entry?.id || entry?.orthogroupId || entry?.orthogroup_id || '').trim() === id)
+    : null;
+  if (direct) return direct;
+  return groups.find((entry) => (
+    standaloneGroupHasFeatureSvgId(entry, queryFeatureSvgId) ||
+    standaloneGroupHasFeatureSvgId(entry, subjectFeatureSvgId)
+  )) || null;
+};
+
+const standaloneFeatureOrthogroupId = (feature) => firstStandaloneText(
+  feature?.orthogroup_id,
+  feature?.orthogroupId,
+  feature?.orthogroup_member?.orthogroupId,
+  feature?.orthogroup_member?.orthogroup_id,
+  feature?.orthogroupMember?.orthogroupId,
+  feature?.orthogroupMember?.orthogroup_id
+);
+
+const standaloneFeatureProduct = (feature) => firstStandaloneText(
+  feature?.product,
+  feature?.orthogroup_member?.product,
+  feature?.orthogroupMember?.product,
+  feature?.note,
+  feature?.label,
+  feature?.display_label,
+  feature?.displayLabel
+);
+
+const standaloneFeatureToMember = (feature) => {
+  if (!feature) return null;
+  const member = feature?.orthogroup_member || feature?.orthogroupMember || {};
+  return {
+    recordId: firstStandaloneText(member?.recordId, member?.record_id, feature?.record_id),
+    start: member?.start ?? feature?.start,
+    end: member?.end ?? feature?.end,
+    strand: firstStandaloneText(member?.strand, feature?.strand),
+    proteinId: firstStandaloneText(member?.proteinId, member?.protein_id, feature?.protein_id, feature?.proteinId),
+    sourceProteinId: firstStandaloneText(member?.sourceProteinId, member?.source_protein_id, feature?.source_protein_id, feature?.sourceProteinId),
+    product: firstStandaloneText(member?.product, standaloneFeatureProduct(feature)),
+    note: firstStandaloneText(member?.note, feature?.note),
+    featureSvgId: firstStandaloneText(member?.featureSvgId, member?.feature_svg_id, feature?.svg_id)
+  };
+};
+
+const buildStandaloneFallbackOrthogroup = ({ orthogroupId, queryFeature, subjectFeature, features }) => {
   const id = String(orthogroupId || '').trim();
   if (!id) return null;
-  return (Array.isArray(orthogroups) ? orthogroups : [])
-    .find((entry) => String(entry?.id || entry?.orthogroupId || entry?.orthogroup_id || '').trim() === id) || null;
+  const matchingFeatures = (Array.isArray(features) ? features : [])
+    .filter((feature) => standaloneFeatureOrthogroupId(feature) === id);
+  const fallbackFeatures = matchingFeatures.length
+    ? matchingFeatures
+    : [queryFeature, subjectFeature].filter(Boolean);
+  if (!fallbackFeatures.length) return null;
+  const members = fallbackFeatures.map(standaloneFeatureToMember).filter(Boolean);
+  const firstFeature = fallbackFeatures[0] || {};
+  const recordCoverageFallback = new Set(
+    fallbackFeatures
+      .map((feature) => firstStandaloneText(feature?.record_id, feature?.recordId, feature?.record_idx, feature?.recordIndex))
+      .filter(Boolean)
+  ).size;
+  return {
+    id,
+    name: standaloneFeatureProduct(firstFeature),
+    member_count: firstStandaloneText(firstFeature?.orthogroup_member_count, firstFeature?.orthogroupMemberCount, members.length),
+    record_coverage_count: firstStandaloneText(firstFeature?.orthogroup_record_coverage, firstFeature?.orthogroupRecordCoverage, recordCoverageFallback),
+    members
+  };
 };
 
 const buildStandaloneMatchFeatureSection = ({
@@ -4571,7 +4653,13 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
     const subjectFeatureSvgId = standaloneAttr(element, 'data-subject-feature-svg-id');
     const queryFeature = featuresById.get(queryFeatureSvgId) || null;
     const subjectFeature = featuresById.get(subjectFeatureSvgId) || null;
-    const orthogroup = getStandaloneOrthogroupPayload(orthogroups, orthogroupId);
+    const orthogroup = getStandaloneOrthogroupPayload(orthogroups, orthogroupId, queryFeatureSvgId, subjectFeatureSvgId) ||
+      buildStandaloneFallbackOrthogroup({
+        orthogroupId,
+        queryFeature,
+        subjectFeature,
+        features
+      });
     const qInterval = standaloneIntervalText(standaloneAttr(element, 'data-qstart'), standaloneAttr(element, 'data-qend'));
     const sInterval = standaloneIntervalText(standaloneAttr(element, 'data-sstart'), standaloneAttr(element, 'data-send'));
     const summaryRows = [];
@@ -4590,9 +4678,16 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
     addStandaloneMatchRow(alignmentRows, 'Mismatches', standaloneAttr(element, 'data-mismatches'));
     addStandaloneMatchRow(alignmentRows, 'Gap opens', standaloneAttr(element, 'data-gap-opens'));
 
+    const orthogroupDisplayName = firstStandaloneText(
+      orthogroup?.display_name,
+      orthogroup?.displayName,
+      orthogroup?.name,
+      standaloneFeatureProduct(queryFeature),
+      standaloneFeatureProduct(subjectFeature)
+    );
     const orthogroupRows = [];
     addStandaloneMatchRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
-    addStandaloneMatchRow(orthogroupRows, 'Display name', firstStandaloneText(orthogroup?.display_name, orthogroup?.displayName, orthogroup?.name));
+    addStandaloneMatchRow(orthogroupRows, 'Display name', orthogroupDisplayName);
     addStandaloneMatchRow(orthogroupRows, 'Description', orthogroup?.description);
     addStandaloneMatchRow(orthogroupRows, 'Members', firstStandaloneText(orthogroup?.member_count, orthogroup?.memberCount));
     addStandaloneMatchRow(orthogroupRows, 'Record coverage', firstStandaloneText(orthogroup?.record_coverage_count, orthogroup?.recordCoverage));
@@ -4613,6 +4708,31 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
     addStandaloneMatchRow(blockRows, 'Subject unit', standaloneAttr(element, 'data-subject-unit-id'));
     addStandaloneMatchRow(blockRows, 'Query display', standaloneAttr(element, 'data-query-display-name'));
     addStandaloneMatchRow(blockRows, 'Subject display', standaloneAttr(element, 'data-subject-display-name'));
+
+    if (matchKind === 'orthogroup') {
+      const summarySection = {
+        ...buildStandaloneMatchSection('Summary', orthogroupRows),
+        member_rows: orthogroupMemberRows,
+        member_copy_text: standaloneMemberCopyText(orthogroupMemberRows)
+      };
+      const hoverRows = [];
+      addStandaloneMatchRow(hoverRows, 'Kind', matchKind);
+      addStandaloneMatchRow(hoverRows, 'Orthogroup', orthogroupId);
+      addStandaloneMatchRow(hoverRows, 'Display name', orthogroupDisplayName);
+      addStandaloneMatchRow(hoverRows, 'Members', firstStandaloneText(orthogroup?.member_count, orthogroup?.memberCount));
+
+      return {
+        id,
+        title: standaloneOrthogroupTitle(orthogroupId, orthogroupDisplayName),
+        subtitle: '',
+        match_kind: matchKind,
+        orthogroup_id: orthogroupId,
+        collinearity_block_id: blockId,
+        fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
+        sections: (summarySection.rows.length || summarySection.member_rows.length) ? [summarySection] : [],
+        hover_rows: hoverRows
+      };
+    }
 
     const sections = [
       buildStandaloneMatchSection('Summary', summaryRows),

@@ -731,7 +731,7 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
     assert "feature && (feature.amino_acid_sequence || feature.aminoAcidSequence)" in standalone_source
 
 
-def test_pairwise_match_popup_payload_hides_internal_rows_and_lists_orthogroup_members(tmp_path: Path) -> None:
+def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not available")
@@ -747,7 +747,7 @@ def test_pairwise_match_popup_payload_hides_internal_rows_and_lists_orthogroup_m
     check_path = tmp_path / "check-pairwise-popup.mjs"
     check_path.write_text(
         f"""
-        import {{ buildPairwiseMatchPayload }} from {module_path.as_uri()!r};
+        import {{ buildPairwiseMatchHoverRows, buildPairwiseMatchPayload }} from {module_path.as_uri()!r};
 
         const assert = (condition, message) => {{
           if (!condition) throw new Error(message);
@@ -776,14 +776,22 @@ def test_pairwise_match_popup_payload_hides_internal_rows_and_lists_orthogroup_m
         }};
         const featureLookup = new Map([
           ['fq', {{
+            svg_id: 'fq',
             record_id: 'record_a',
+            orthogroupId: 'og_1',
+            orthogroupMemberCount: 2,
+            orthogroupRecordCoverage: 2,
             proteinId: 'p_internal_query',
             sourceProteinId: 'WP_000001.1',
             qualifiers: {{ protein_id: ['WP_000001.1'] }},
             product: 'query product'
           }}],
           ['fs', {{
+            svg_id: 'fs',
             record_id: 'record_b',
+            orthogroupId: 'og_1',
+            orthogroupMemberCount: 2,
+            orthogroupRecordCoverage: 2,
             proteinId: 'p_internal_subject',
             qualifiers: {{ protein_id: ['WP_000002.1'] }},
             product: 'subject product'
@@ -792,13 +800,14 @@ def test_pairwise_match_popup_payload_hides_internal_rows_and_lists_orthogroup_m
         const payload = buildPairwiseMatchPayload(element, {{
           featureLookup,
           orthogroups: [{{
-            id: 'og_1',
+            id: 'legacy_og_1',
             name: 'rpoB',
             member_count: 2,
             record_coverage_count: 2,
             members: [
               {{
                 recordId: 'record_a',
+                featureSvgId: 'fq',
                 start: 9,
                 end: 40,
                 strand: '+',
@@ -808,6 +817,7 @@ def test_pairwise_match_popup_payload_hides_internal_rows_and_lists_orthogroup_m
               }},
               {{
                 recordId: 'record_b',
+                featureSvgId: 'fs',
                 start: 89,
                 end: 130,
                 strand: '-',
@@ -819,18 +829,36 @@ def test_pairwise_match_popup_payload_hides_internal_rows_and_lists_orthogroup_m
           }}]
         }});
 
+        assert(payload.title === 'og_1:rpoB', `Unexpected title: ${{payload.title}}`);
+        assert(payload.subtitle === '', `Orthogroup popup should not duplicate subtitle: ${{payload.subtitle}}`);
+        assert(payload.sections.map((section) => section.title).join(',') === 'Summary', JSON.stringify(payload.sections));
         const labels = payload.sections.flatMap((section) => section.rows.map((row) => row.label));
         assert(!labels.includes('Match style'), `Match style leaked: ${{JSON.stringify(labels)}}`);
         assert(!labels.includes('Feature SVG ID'), `Feature SVG ID leaked: ${{JSON.stringify(labels)}}`);
-        assert(!labels.includes('Source protein ID'), `Source protein ID should be folded into Protein ID: ${{JSON.stringify(labels)}}`);
-        const query = payload.sections.find((section) => section.title === 'Query feature');
-        const subject = payload.sections.find((section) => section.title === 'Subject feature');
-        assert(query.rows.find((row) => row.label === 'Protein ID').value === 'WP_000001.1', JSON.stringify(query));
-        assert(subject.rows.find((row) => row.label === 'Protein ID').value === 'WP_000002.1', JSON.stringify(subject));
-        const orthogroup = payload.sections.find((section) => section.title === 'Orthogroup');
-        assert(orthogroup.memberRows.length === 2, JSON.stringify(orthogroup));
-        assert(orthogroup.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(orthogroup.memberRows));
-        assert(orthogroup.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'), orthogroup.memberCopyText);
+        assert(!labels.includes('Source protein ID'), `Source protein ID leaked: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Query record'), `Query record should be omitted: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Subject record'), `Subject record should be omitted: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Query interval'), `Query interval should be omitted: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Subject interval'), `Subject interval should be omitted: ${{JSON.stringify(labels)}}`);
+        assert(labels.includes('Orthogroup ID'), `Orthogroup ID missing: ${{JSON.stringify(labels)}}`);
+        assert(labels.includes('Display name'), `Display name missing: ${{JSON.stringify(labels)}}`);
+        const summary = payload.sections[0];
+        assert(summary.memberRows.length === 2, JSON.stringify(summary));
+        assert(summary.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(summary.memberRows));
+        assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'), summary.memberCopyText);
+        const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
+        assert(hoverLabels.includes('Orthogroup'), `Hover orthogroup row missing: ${{JSON.stringify(hoverLabels)}}`);
+        assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
+        assert(!hoverLabels.includes('Subject'), `Hover subject row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
+
+        const fallbackPayload = buildPairwiseMatchPayload(element, {{
+          featureLookup,
+          orthogroups: []
+        }});
+        assert(fallbackPayload.title === 'og_1:query product', `Feature fallback title failed: ${{fallbackPayload.title}}`);
+        const fallbackLabels = fallbackPayload.sections.flatMap((section) => section.rows.map((row) => row.label));
+        assert(fallbackLabels.includes('Members'), `Feature fallback members missing: ${{JSON.stringify(fallbackLabels)}}`);
+        assert(fallbackLabels.includes('Record coverage'), `Feature fallback coverage missing: ${{JSON.stringify(fallbackLabels)}}`);
         """,
         encoding="utf-8",
     )
