@@ -1563,7 +1563,7 @@ export const importConfig = async (e) => {
   }
 };
 
-export const importSession = async (e) => {
+export const importSession = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return;
 
@@ -1774,6 +1774,14 @@ export const importSession = async (e) => {
       state.adv.plot_title_position = activeCircularLayout.plotTitlePosition;
       state.circularLegendPosition.value = activeCircularLayout.legend;
       state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
+    }
+
+    if (typeof options?.afterLoad === 'function') {
+      try {
+        await options.afterLoad({ data, ui });
+      } catch (callbackError) {
+        console.warn('Session loaded, but post-load refresh failed.', callbackError);
+      }
     }
 
     alert('Session loaded successfully!');

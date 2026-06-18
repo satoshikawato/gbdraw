@@ -660,6 +660,14 @@ json.dumps({"width": width})
     }
 
     entry.caption = caption;
+    const legendGroup = svg.getElementById('legend');
+    const hasDualLegends =
+      !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
+    if (hasDualLegends) {
+      reflowDualLegendLayout(svg);
+    } else {
+      updatePairwiseLegendPositions(svg);
+    }
     recenterCurrentLegendRoot(svg);
 
     skipCaptureBaseConfig.value = true;

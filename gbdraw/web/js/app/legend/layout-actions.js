@@ -77,6 +77,59 @@ export const createLegendLayoutActions = ({ state }) => {
     });
   };
 
+  const getSingleComparisonLegendParts = (pairwiseLegend) => {
+    const texts = Array.from(pairwiseLegend?.querySelectorAll?.('text') || []);
+    const titleTexts = texts.filter((text) => {
+      const label = String(text.textContent || '').trim();
+      return label && !/^\d+(?:\.\d+)?%$/.test(label);
+    });
+    const barPaths = Array.from(pairwiseLegend?.querySelectorAll?.('path') || []).filter((path) =>
+      String(path.getAttribute('fill') || '').startsWith('url(')
+    );
+    if (titleTexts.length !== 1 || barPaths.length !== 1) return null;
+
+    const title = titleTexts[0];
+    const bar = barPaths[0];
+    const d = bar.getAttribute('d') || '';
+    const widthMatch = d.match(/L\s*([+-]?\d+(?:\.\d+)?),/);
+    const parsedBarWidth = widthMatch ? parseFloat(widthMatch[1]) : NaN;
+    const barWidth = Number.isFinite(parsedBarWidth) && parsedBarWidth > 0 ? parsedBarWidth : bar.getBBox().width;
+    const titleWidth = title.getBBox().width;
+    const percentLabels = texts.filter((text) => /^\d+(?:\.\d+)?%$/.test(String(text.textContent || '').trim()));
+    return { title, titleWidth, bar, barWidth, percentLabels };
+  };
+
+  const getComparisonLegendAlignmentWidth = (pairwiseLegend, fallbackWidth = 0) => {
+    const parts = getSingleComparisonLegendParts(pairwiseLegend);
+    if (parts) {
+      return parts.barWidth;
+    }
+
+    return fallbackWidth;
+  };
+
+  const centerSingleComparisonLegendParts = (pairwiseLegend) => {
+    const parts = getSingleComparisonLegendParts(pairwiseLegend);
+    if (!parts) return;
+
+    const { title, bar, barWidth, percentLabels } = parts;
+    const barX = 0;
+    const titleX = barWidth / 2;
+    const titlePos = parseTransformXY(title.getAttribute('transform'));
+    const barPos = parseTransformXY(bar.getAttribute('transform'));
+
+    title.setAttribute('text-anchor', 'middle');
+    title.setAttribute('transform', `translate(${titleX}, ${titlePos.y})`);
+    bar.setAttribute('transform', `translate(${barX}, ${barPos.y})`);
+
+    percentLabels.forEach((label) => {
+      const labelPos = parseTransformXY(label.getAttribute('transform'));
+      const text = String(label.textContent || '').trim();
+      const x = text === '100%' ? barX + barWidth : barX;
+      label.setAttribute('transform', `translate(${x}, ${labelPos.y})`);
+    });
+  };
+
   const getLegendLayoutRoot = (svg, layoutOverride = null) => {
     const legendGroup = svg?.getElementById?.('legend');
     if (!legendGroup) return null;
@@ -337,6 +390,8 @@ export const createLegendLayoutActions = ({ state }) => {
       const vPairwiseLegend = getLegendChildById(verticalLegend, 'pairwise_legend');
 
       if (vFeatureLegend && vPairwiseLegend) {
+        centerSingleComparisonLegendParts(vPairwiseLegend);
+
         let maxFeatureY = 0;
         const featureTexts = vFeatureLegend.querySelectorAll('text');
         featureTexts.forEach((el) => {
@@ -346,14 +401,7 @@ export const createLegendLayoutActions = ({ state }) => {
 
         const newPairwiseY = maxFeatureY + lineMargin + lineMargin / 2;
 
-        const currentTransform = vPairwiseLegend.getAttribute('transform');
-        let pairwiseX = 0;
-        if (currentTransform) {
-          const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,/);
-          if (match) pairwiseX = parseFloat(match[1]);
-        }
-
-        vPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
+        vPairwiseLegend.setAttribute('transform', `translate(0, ${newPairwiseY})`);
         console.log(`Repositioned vertical pairwise legend to y=${newPairwiseY}`);
       }
     }
@@ -363,6 +411,8 @@ export const createLegendLayoutActions = ({ state }) => {
       const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');
 
       if (hFeatureLegend && hPairwiseLegend) {
+        centerSingleComparisonLegendParts(hPairwiseLegend);
+
         let minFeatureY = Infinity,
           maxFeatureY = -Infinity;
         const featureTexts = hFeatureLegend.querySelectorAll('text');
@@ -440,6 +490,7 @@ export const createLegendLayoutActions = ({ state }) => {
       featureGroup.setAttribute('transform', 'translate(0, 0)');
       if (pairwiseLegend) {
         pairwiseLegend.setAttribute('transform', 'translate(0, 0)');
+        centerSingleComparisonLegendParts(pairwiseLegend);
       }
 
       let rectSize = 14;
@@ -546,6 +597,7 @@ export const createLegendLayoutActions = ({ state }) => {
         const pairwiseBBox = pairwiseLegend.getBBox();
         const pairwiseWidth = pairwiseBBox.width || 0;
         const pairwiseHeight = pairwiseBBox.height || 0;
+        const pairwiseAlignmentWidth = getComparisonLegendAlignmentWidth(pairwiseLegend, pairwiseWidth);
 
         if (layout === 'horizontal') {
           const featureYOffset = pairwiseHeight > featureHeight ? (pairwiseHeight - featureHeight) / 2 : 0;
@@ -556,13 +608,11 @@ export const createLegendLayoutActions = ({ state }) => {
           const pairwiseX = featureWidth + textXOffset;
           pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseYOffset})`);
         } else {
-          const featureXOffset = pairwiseWidth > featureWidth ? (pairwiseWidth - featureWidth) / 2 : 0;
-          const pairwiseXOffset = featureWidth > pairwiseWidth ? (featureWidth - pairwiseWidth) / 2 : 0;
-          if (featureXOffset > 0) {
-            featureGroup.setAttribute('transform', `translate(${featureXOffset}, 0)`);
-          }
+          const featureXOffset =
+            pairwiseAlignmentWidth > featureWidth ? (pairwiseAlignmentWidth - featureWidth) / 2 : 0;
+          featureGroup.setAttribute('transform', `translate(${featureXOffset}, 0)`);
           const pairwiseY = featureHeight + lineHeight / 2;
-          pairwiseLegend.setAttribute('transform', `translate(${pairwiseXOffset}, ${pairwiseY})`);
+          pairwiseLegend.setAttribute('transform', `translate(0, ${pairwiseY})`);
         }
       }
     };
@@ -763,6 +813,7 @@ export const createLegendLayoutActions = ({ state }) => {
     }
     if (pairwiseLegend) {
       pairwiseLegend.setAttribute('transform', 'translate(0, 0)');
+      centerSingleComparisonLegendParts(pairwiseLegend);
     }
 
     const featureOffset = { x: 0, y: 0 };
@@ -886,6 +937,7 @@ export const createLegendLayoutActions = ({ state }) => {
       const featureWidth = featureBBox.width;
       const featureHeight = featureBBox.height;
       const effectivePairwiseBBox = pairwiseBBox || pairwiseLegend.getBBox();
+      const pairwiseAlignmentWidth = getComparisonLegendAlignmentWidth(pairwiseLegend, effectivePairwiseBBox.width);
 
       let pairwiseX = featureX;
       let pairwiseY = featureY;
@@ -901,11 +953,9 @@ export const createLegendLayoutActions = ({ state }) => {
         }
         pairwiseX = featureX + featureWidth + textXOffset;
       } else {
-        const widthDiff = effectivePairwiseBBox.width - featureWidth;
+        const widthDiff = pairwiseAlignmentWidth - featureWidth;
         if (widthDiff > 0) {
           featureShiftX = widthDiff / 2;
-        } else if (widthDiff < 0) {
-          pairwiseX += (-widthDiff) / 2;
         }
         pairwiseY = featureY + featureHeight + lineHeight / 2;
       }

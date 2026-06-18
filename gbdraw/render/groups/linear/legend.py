@@ -75,6 +75,30 @@ class LegendGroup:
                 )
         return entry_widths
 
+    def _gradient_entries(self) -> list[tuple[str, dict]]:
+        return [
+            (str(key), properties)
+            for key, properties in self.legend_table.items()
+            if properties["type"] == "gradient"
+        ]
+
+    def _calculate_pairwise_legend_width(
+        self, gradient_entries: list[tuple[str, dict]] | None = None
+    ) -> float:
+        entries = gradient_entries if gradient_entries is not None else self._gradient_entries()
+        if not entries:
+            return 0.0
+
+        bar_width = self.pairwise_legend_width or (10 * self.rect_size)
+        if len(entries) > 1:
+            label_width = max(
+                calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)[0]
+                for key, _ in entries
+            )
+            return label_width + (0.2 * self.rect_size) + (10 * self.rect_size)
+
+        return float(bar_width)
+
     def _build_horizontal_feature_legend(self) -> tuple[Group, float, float]:
         """Build horizontal layout (entries side by side, for top/bottom positions)."""
         group = Group()
@@ -92,7 +116,7 @@ class LegendGroup:
         # when legend_position is left/right at generation time
         horizontal_wrap_width = self.canvas_config.total_width if self.canvas_config else 0
         if self.has_gradient and horizontal_wrap_width > 0:
-            reserved_width = self.pairwise_legend_width + self.text_x_offset
+            reserved_width = self._calculate_pairwise_legend_width() + self.text_x_offset
             min_width = self.rect_size + self.text_x_offset * 2
             horizontal_wrap_width = max(horizontal_wrap_width - reserved_width, min_width)
 
@@ -314,17 +338,15 @@ class LegendGroup:
 
     def _build_pairwise_legend(self) -> tuple[Group, float, float]:
         """Build pairwise (gradient) legend for BLAST comparisons."""
-        gradient_entries = [
-            (str(key), properties)
-            for key, properties in self.legend_table.items()
-            if properties["type"] == "gradient"
-        ]
+        gradient_entries = self._gradient_entries()
+        if not gradient_entries:
+            return Group(id="pairwise_legend"), 0.0, 0.0
         if len(gradient_entries) > 1:
             return self._build_compact_pairwise_legend(gradient_entries)
 
         group = Group(id="pairwise_legend")
         font = self.font_family
-        grad_bar_width = self.pairwise_legend_width
+        grad_bar_width = self.pairwise_legend_width or (10 * self.rect_size)
 
         gradient_y_offset = 0
 
@@ -436,8 +458,10 @@ class LegendGroup:
 
         # Build pairwise legend (same for both orientations, positioned differently)
         pairwise_width, pairwise_height = 0, 0
+        pairwise_alignment_width = 0.0
         if has_gradient:
             _, pairwise_width, pairwise_height = self._build_pairwise_legend()
+            pairwise_alignment_width = self._calculate_pairwise_legend_width()
 
         # Create horizontal legend group
         horizontal_group = Group(id="legend_horizontal")
@@ -471,13 +495,12 @@ class LegendGroup:
 
         if has_gradient:
             v_pairwise_group, _, _ = self._build_pairwise_legend()
+            if pairwise_alignment_width > v_feature_width:
+                vertical_feature_group.translate(
+                    (pairwise_alignment_width - v_feature_width) / 2, 0
+                )
             # Position pairwise legend below feature legend
             v_pairwise_group.translate(0, v_feature_height + self.line_height / 2)
-            # Horizontally center
-            if pairwise_width > v_feature_width:
-                vertical_feature_group.translate((pairwise_width - v_feature_width) / 2, 0)
-            elif v_feature_width > pairwise_width:
-                v_pairwise_group.translate((v_feature_width - pairwise_width) / 2, 0)
             vertical_group.add(vertical_feature_group)
             vertical_group.add(v_pairwise_group)
             self.vertical_legend_width = max(v_feature_width, pairwise_width)
