@@ -1,4 +1,5 @@
 import { resolveDisplayProteinId } from './feature-utils.js';
+import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
 
 export const PAIRWISE_MATCH_SELECTOR = [
   'path[data-gbdraw-pairwise-match-id]',
@@ -13,8 +14,8 @@ const MATCH_KIND_TITLES = {
 };
 
 const MATCH_KIND_ALIASES = new Set(['pairwise', 'orthogroup', 'collinear']);
-
 const normalizeText = (value) => String(value === null || value === undefined ? '' : value).trim();
+const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
 
 const attr = (element, name) => normalizeText(element?.getAttribute?.(name));
 
@@ -25,6 +26,22 @@ const firstText = (...values) => {
   }
   return '';
 };
+
+const firstSequenceText = (...values) => {
+  for (const value of values) {
+    const sequence = normalizeSequence(value);
+    if (sequence) return sequence;
+  }
+  return '';
+};
+
+const makeSafeFilename = (value, fallback = 'orthogroup') => {
+  const cleaned = normalizeText(value).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return cleaned || fallback;
+};
+
+const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
+const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
 
 const normalizeMatchKind = (value, element = null) => {
   const normalized = normalizeText(value).toLowerCase();
@@ -95,6 +112,15 @@ const getOrthogroupById = (orthogroups, orthogroupId) => {
 };
 
 const memberFeatureSvgId = (member) => firstText(member?.featureSvgId, member?.feature_svg_id);
+const memberRecordIndex = (member) => {
+  const recordIndex = Number(member?.recordIndex ?? member?.record_index);
+  return Number.isInteger(recordIndex) ? recordIndex : null;
+};
+
+const featureRecordIndex = (feature) => {
+  const recordIndex = Number(feature?.fileIdx ?? feature?.recordIndex ?? feature?.record_index);
+  return Number.isInteger(recordIndex) ? recordIndex : null;
+};
 
 const getFeatureLookupValues = (featureLookup) => {
   if (!featureLookup) return [];
@@ -102,6 +128,18 @@ const getFeatureLookupValues = (featureLookup) => {
   if (Array.isArray(featureLookup)) return featureLookup;
   if (typeof featureLookup === 'object') return Object.values(featureLookup);
   return [];
+};
+
+const getFeatureForMember = (member, featureLookup) => {
+  const svgId = memberFeatureSvgId(member);
+  if (!svgId || !featureLookup) return null;
+  const recordIndex = memberRecordIndex(member);
+  const direct = featureLookup.get?.(svgId) || null;
+  if (direct && (recordIndex === null || featureRecordIndex(direct) === recordIndex)) return direct;
+  return getFeatureLookupValues(featureLookup).find((feature) => {
+    if (normalizeText(feature?.svg_id || feature?.svgId) !== svgId) return false;
+    return recordIndex === null || featureRecordIndex(feature) === recordIndex;
+  }) || direct || null;
 };
 
 const groupHasFeatureSvgId = (group, featureSvgId) => {
@@ -231,16 +269,98 @@ const memberLocationText = (member) => {
   return range && strand ? `${range} (${strand})` : range;
 };
 
-const buildOrthogroupMemberRows = (group) => {
+const memberSequence = (member, feature, sequenceKind) => {
+  if (sequenceKindLabel(sequenceKind) === 'aa') {
+    return firstSequenceText(
+      member?.aminoAcidSequence,
+      member?.amino_acid_sequence,
+      member?.proteinSequence,
+      member?.sequence,
+      feature?.aminoAcidSequence,
+      feature?.amino_acid_sequence
+    );
+  }
+  return firstSequenceText(
+    member?.nucleotideSequence,
+    member?.nucleotide_sequence,
+    feature?.nucleotideSequence,
+    feature?.nucleotide_sequence
+  );
+};
+
+const normalizeMemberStrand = (strand) => {
+  if (strand === -1 || String(strand).trim() === '-1') return '-';
+  if (strand === 1 || String(strand).trim() === '1') return '+';
+  return normalizeText(strand);
+};
+
+const buildMemberFeaturePayload = (member, feature, nucleotideSequence, aminoAcidSequence) => {
+  const sourceFeature = feature && typeof feature === 'object' ? feature : {};
+  return {
+    ...sourceFeature,
+    record_id: sourceFeature.record_id || sourceFeature.recordId || member?.recordId || member?.record_id,
+    start: sourceFeature.start ?? member?.start,
+    end: sourceFeature.end ?? member?.end,
+    strand: sourceFeature.strand || normalizeMemberStrand(member?.strand),
+    source_protein_id: sourceFeature.source_protein_id || sourceFeature.sourceProteinId || member?.sourceProteinId || member?.source_protein_id,
+    protein_id: sourceFeature.protein_id || sourceFeature.proteinId || member?.proteinId || member?.protein_id,
+    product: sourceFeature.product || member?.product,
+    note: sourceFeature.note || member?.note,
+    gene: sourceFeature.gene || member?.gene,
+    organism: sourceFeature.organism || member?.organism,
+    nucleotide_sequence: nucleotideSequence,
+    amino_acid_sequence: aminoAcidSequence
+  };
+};
+
+const memberFastaText = (member, feature, nucleotideSequence, aminoAcidSequence, sequenceKind) => {
+  const fastaFeature = buildMemberFeaturePayload(member, feature, nucleotideSequence, aminoAcidSequence);
+  const fastas = buildFeatureSequenceFastas(fastaFeature, {
+    nucleotideSequence,
+    aminoAcidSequence
+  });
+  const text = sequenceKindLabel(sequenceKind) === 'aa' ? fastas.aminoAcidFasta : fastas.nucleotideFasta;
+  return text ? `${text}\n` : '';
+};
+
+const orthogroupSequenceFilename = (orthogroupId, displayName, sequenceKind) => {
+  const id = normalizeText(orthogroupId) || 'orthogroup';
+  const name = makeSafeFilename(displayName || id, id);
+  return `${makeSafeFilename(`${id}_${name}_${sequenceKindLabel(sequenceKind)}`)}.${sequenceExtension(sequenceKind)}`;
+};
+
+const orthogroupMemberSequenceFilename = (member, orthogroupId, sequenceKind) => {
+  const id = normalizeText(orthogroupId) || 'orthogroup';
+  const memberId = firstText(
+    member?.sourceProteinId,
+    member?.source_protein_id,
+    member?.proteinId,
+    member?.protein_id,
+    memberFeatureSvgId(member),
+    'member'
+  );
+  return `${makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`)}.${sequenceExtension(sequenceKind)}`;
+};
+
+const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId) => {
   const members = Array.isArray(group?.members) ? group.members : [];
   return members
-    .map((member) => ({
-      record: firstText(member?.recordId, member?.record_id),
-      coordinates: memberLocationText(member),
-      proteinId: resolveDisplayProteinId(null, member),
-      productOrNote: firstText(member?.product, member?.note)
-    }))
-    .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote);
+    .map((member) => {
+      const feature = getFeatureForMember(member, featureLookup);
+      const nucleotideSequence = memberSequence(member, feature, 'nt');
+      const aminoAcidSequence = memberSequence(member, feature, 'aa');
+      return {
+        record: firstText(member?.recordId, member?.record_id),
+        coordinates: memberLocationText(member),
+        proteinId: resolveDisplayProteinId(null, member),
+        productOrNote: firstText(member?.product, member?.note),
+        ntFasta: memberFastaText(member, feature, nucleotideSequence, aminoAcidSequence, 'nt'),
+        aaFasta: memberFastaText(member, feature, nucleotideSequence, aminoAcidSequence, 'aa'),
+        ntFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'nt'),
+        aaFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'aa')
+      };
+    })
+    .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote || row.ntFasta || row.aaFasta);
 };
 
 const orthogroupMemberCopyText = (memberRows) => {
@@ -249,6 +369,29 @@ const orthogroupMemberCopyText = (memberRows) => {
     'Record\tCoordinates (+/-)\tProtein ID\tProduct / note',
     ...memberRows.map((row) => [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\t'))
   ].join('\n');
+};
+
+const orthogroupMemberSequenceText = (memberRows, sequenceKind) => {
+  const key = sequenceKindLabel(sequenceKind) === 'aa' ? 'aaFasta' : 'ntFasta';
+  return (Array.isArray(memberRows) ? memberRows : [])
+    .map((row) => String(row?.[key] ?? ''))
+    .filter((text) => text.trim())
+    .join('');
+};
+
+const orthogroupMemberSectionExtras = (memberRows, orthogroupId, displayName) => {
+  const ntFasta = orthogroupMemberSequenceText(memberRows, 'nt');
+  const aaFasta = orthogroupMemberSequenceText(memberRows, 'aa');
+  return {
+    memberRows,
+    memberCopyText: orthogroupMemberCopyText(memberRows),
+    memberNtFasta: ntFasta,
+    memberAaFasta: aaFasta,
+    memberNtCount: memberRows.filter((row) => normalizeText(row.ntFasta)).length,
+    memberAaCount: memberRows.filter((row) => normalizeText(row.aaFasta)).length,
+    memberNtFilename: orthogroupSequenceFilename(orthogroupId, displayName, 'nt'),
+    memberAaFilename: orthogroupSequenceFilename(orthogroupId, displayName, 'aa')
+  };
 };
 
 const buildFeatureRows = ({
@@ -360,13 +503,14 @@ export const buildPairwiseMatchPayload = (
   addRow(orthogroupRows, 'Description', description);
   addRow(orthogroupRows, 'Members', firstText(group?.member_count, group?.memberCount));
   addRow(orthogroupRows, 'Record coverage', firstText(group?.record_coverage_count, group?.recordCoverage));
-  const orthogroupMemberRows = buildOrthogroupMemberRows(group);
+  const orthogroupMemberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId);
 
   if (matchKind === 'orthogroup') {
-    const summarySection = section('Summary', orthogroupRows, {
-      memberRows: orthogroupMemberRows,
-      memberCopyText: orthogroupMemberCopyText(orthogroupMemberRows)
-    });
+    const summarySection = section(
+      'Summary',
+      orthogroupRows,
+      orthogroupMemberSectionExtras(orthogroupMemberRows, orthogroupId, displayName)
+    );
     return {
       id: firstText(attr(element, 'data-gbdraw-pairwise-match-id'), orthogroupId),
       title: orthogroupTitle(orthogroupId, displayName),
@@ -388,10 +532,11 @@ export const buildPairwiseMatchPayload = (
     section('Alignment', alignmentRows)
   ];
   if (matchKind === 'orthogroup' || orthogroupRows.length > 0) {
-    sections.push(section('Orthogroup', orthogroupRows, {
-      memberRows: orthogroupMemberRows,
-      memberCopyText: orthogroupMemberCopyText(orthogroupMemberRows)
-    }));
+    sections.push(section(
+      'Orthogroup',
+      orthogroupRows,
+      orthogroupMemberSectionExtras(orthogroupMemberRows, orthogroupId, displayName)
+    ));
   }
   if (matchKind === 'collinear' || blockRows.length > 0) {
     sections.push(section('Collinearity', blockRows));

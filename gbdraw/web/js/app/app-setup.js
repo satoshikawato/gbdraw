@@ -969,29 +969,14 @@ export const createAppSetup = () => {
     const group = (Array.isArray(orthogroups.value) ? orthogroups.value : [])
       .find((entry) => String(entry?.id || '').trim() === orthogroupId);
     if (!group) return null;
-    const members = Array.isArray(group.members) ? group.members : [];
+    const members = orthogroupActions.getEnrichedOrthogroupMembers(group);
     const currentSvgId = String(cf?.svg_id || '').trim();
     const currentRecordIndex = Number(cf?.orthogroupMember?.recordIndex);
     const currentMember = members.find((member) => (
       String(member?.featureSvgId || '').trim() === currentSvgId &&
       (!Number.isInteger(currentRecordIndex) || Number(member?.recordIndex) === currentRecordIndex)
     )) || cf.orthogroupMember || null;
-    const grouped = new Map();
-    members.forEach((member) => {
-      const recordIndex = Number(member?.recordIndex);
-      const key = Number.isInteger(recordIndex) ? recordIndex : -1;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(member);
-    });
-    const membersByRecord = Array.from(grouped.entries())
-      .sort((left, right) => left[0] - right[0])
-      .map(([recordIndex, recordMembers]) => ({
-        recordIndex,
-        recordLabel: recordIndex >= 0
-          ? (linearSeqs[recordIndex]?.name || linearSeqs[recordIndex]?.gb?.name || linearSeqs[recordIndex]?.gff?.name || `Record ${recordIndex + 1}`)
-          : 'Record',
-        members: recordMembers
-      }));
+    const membersByRecord = orthogroupActions.groupOrthogroupMembersByRecord(members);
     return {
       id: orthogroupId,
       displayName: orthogroupActions.resolveOrthogroupName(group),
@@ -999,6 +984,8 @@ export const createAppSetup = () => {
       candidates: Array.isArray(group.nameCandidates) ? group.nameCandidates : [],
       memberCount: Number(group.member_count || members.length || 0),
       recordCoverage: Number(group.record_coverage_count || membersByRecord.length || 0),
+      ntSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'nt'),
+      aaSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'aa'),
       currentMember,
       membersByRecord
     };
@@ -1390,6 +1377,20 @@ export const createAppSetup = () => {
     } finally {
       document.body.removeChild(textarea);
     }
+  };
+
+  const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
+    const value = String(text ?? '');
+    if (!value) return;
+    const blob = new Blob([value], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = String(filename || 'gbdraw.txt');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const specificRuleLegendOptions = computed(() => {
@@ -1807,6 +1808,13 @@ export const createAppSetup = () => {
     resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
     resolveOrthogroupDescription: orthogroupActions.resolveOrthogroupDescription,
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
+    getOrthogroupSequenceCount: orthogroupActions.getOrthogroupSequenceCount,
+    hasOrthogroupSequence: orthogroupActions.hasOrthogroupSequence,
+    hasOrthogroupMemberSequence: orthogroupActions.hasOrthogroupMemberSequence,
+    copyOrthogroupSequences: orthogroupActions.copyOrthogroupSequences,
+    downloadOrthogroupSequences: orthogroupActions.downloadOrthogroupSequences,
+    copyOrthogroupMemberSequence: orthogroupActions.copyOrthogroupMemberSequence,
+    downloadOrthogroupMemberSequence: orthogroupActions.downloadOrthogroupMemberSequence,
     selectOrthogroup: orthogroupActions.selectOrthogroup,
     setOrthogroupNameOverride: orthogroupActions.setOrthogroupNameOverride,
     setOrthogroupDescriptionOverride: orthogroupActions.setOrthogroupDescriptionOverride,
@@ -1943,6 +1951,7 @@ export const createAppSetup = () => {
     startPairwiseMatchPopupResize,
     clickedFeatureLocation,
     copyText,
+    downloadText,
     canUseClickedOrthogroupActions,
     clickedOrthogroupDetail,
     alignByClickedOrthogroup,

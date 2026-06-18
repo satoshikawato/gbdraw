@@ -1,9 +1,61 @@
 import { getFeatureElements } from './feature-editor/svg-actions.js';
+import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
 
 const { computed } = window.Vue;
 
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
+
+const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
+
+const firstSequenceText = (...values) => {
+  for (const value of values) {
+    const normalized = normalizeSequence(value);
+    if (normalized) return normalized;
+  }
+  return '';
+};
+
+const makeSafeFilename = (value, fallback = 'orthogroup') => {
+  const cleaned = normalizeText(value).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return cleaned || fallback;
+};
+
+const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
+const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
+
+const downloadTextFile = (filename, text, type = 'text/plain;charset=utf-8') => {
+  const blob = new Blob([String(text ?? '')], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+const copyTextToClipboard = async (text) => {
+  const value = String(text ?? '');
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+};
 
 const numericOrthogroupId = (id) => {
   const match = String(id || '').match(/^og_(\d+)$/i);
@@ -20,6 +72,57 @@ const compareOrthogroupId = (left, right) => {
 };
 
 const getGroupMembers = (group) => (Array.isArray(group?.members) ? group.members : []);
+
+const getMemberSequence = (member, sequenceKind) => (
+  sequenceKindLabel(sequenceKind) === 'aa'
+    ? firstSequenceText(member?.aminoAcidSequence, member?.amino_acid_sequence, member?.proteinSequence, member?.sequence)
+    : firstSequenceText(member?.nucleotideSequence, member?.nucleotide_sequence)
+);
+
+const memberLocationText = (member) => {
+  const start = Number(member?.start);
+  const end = Number(member?.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return '';
+  const strand = member?.strand ? `(${member.strand})` : '';
+  return `${start + 1}-${end}${strand}`;
+};
+
+const normalizeMemberStrand = (strand) => {
+  if (strand === -1 || String(strand).trim() === '-1') return '-';
+  if (strand === 1 || String(strand).trim() === '1') return '+';
+  return normalizeText(strand);
+};
+
+const buildMemberFeaturePayload = (member) => {
+  const sourceFeature = member?.sequenceFeature && typeof member.sequenceFeature === 'object'
+    ? member.sequenceFeature
+    : {};
+  return {
+    ...sourceFeature,
+    record_id: sourceFeature.record_id || sourceFeature.recordId || member?.recordId || member?.record_id,
+    start: sourceFeature.start ?? member?.start,
+    end: sourceFeature.end ?? member?.end,
+    strand: sourceFeature.strand || normalizeMemberStrand(member?.strand),
+    source_protein_id: sourceFeature.source_protein_id || sourceFeature.sourceProteinId || member?.sourceProteinId || member?.source_protein_id,
+    protein_id: sourceFeature.protein_id || sourceFeature.proteinId || member?.proteinId || member?.protein_id,
+    product: sourceFeature.product || member?.product,
+    note: sourceFeature.note || member?.note,
+    gene: sourceFeature.gene || member?.gene,
+    organism: sourceFeature.organism || member?.organism,
+    nucleotide_sequence: getMemberSequence(member, 'nt'),
+    amino_acid_sequence: getMemberSequence(member, 'aa')
+  };
+};
+
+const memberFastaText = (member, sequenceKind, orthogroupId = '') => {
+  const feature = buildMemberFeaturePayload(member);
+  const fastas = buildFeatureSequenceFastas(feature, {
+    nucleotideSequence: getMemberSequence(member, 'nt'),
+    aminoAcidSequence: getMemberSequence(member, 'aa')
+  });
+  const text = sequenceKindLabel(sequenceKind) === 'aa' ? fastas.aminoAcidFasta : fastas.nucleotideFasta;
+  return text ? `${text}\n` : '';
+};
 
 const getMemberSearchText = (member) => [
   member?.proteinId,
@@ -58,7 +161,8 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     rightDrawerTab,
     showFeaturePanel,
     showLegendPanel,
-    linearSeqs
+    linearSeqs,
+    extractedFeatures
   } = state;
 
   const getOrthogroupById = (orthogroupId) => {
@@ -149,10 +253,56 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     return filteredOrthogroups.value[0] || (Array.isArray(orthogroups.value) ? orthogroups.value[0] : null) || null;
   });
 
-  const selectedOrthogroupMembersByRecord = computed(() => {
-    const group = selectedOrthogroup.value;
+  const featureSequenceLookup = computed(() => {
+    const lookup = new Map();
+    const features = Array.isArray(extractedFeatures?.value) ? extractedFeatures.value : [];
+    features.forEach((feature) => {
+      const svgId = normalizeText(feature?.svg_id || feature?.svgId);
+      if (!svgId) return;
+      const recordIndex = Number(feature?.fileIdx);
+      const entry = {
+        nucleotideSequence: firstSequenceText(feature?.nucleotideSequence, feature?.nucleotide_sequence),
+        aminoAcidSequence: firstSequenceText(feature?.aminoAcidSequence, feature?.amino_acid_sequence),
+        sequenceFeature: feature,
+        sequenceWarnings: Array.isArray(feature?.sequence_warnings)
+          ? feature.sequence_warnings
+          : (Array.isArray(feature?.sequenceWarnings) ? feature.sequenceWarnings : [])
+      };
+      if (!entry.nucleotideSequence && !entry.aminoAcidSequence) return;
+      if (Number.isInteger(recordIndex)) lookup.set(`${recordIndex}:${svgId}`, entry);
+      if (!lookup.has(svgId)) lookup.set(svgId, entry);
+    });
+    return lookup;
+  });
+
+  const enrichOrthogroupMember = (member) => {
+    const featureSvgId = normalizeText(member?.featureSvgId);
+    if (!featureSvgId) return member;
+    const recordIndex = Number(member?.recordIndex);
+    const lookup = featureSequenceLookup.value instanceof Map ? featureSequenceLookup.value : new Map();
+    const sequenceEntry = (
+      Number.isInteger(recordIndex) ? lookup.get(`${recordIndex}:${featureSvgId}`) : null
+    ) || lookup.get(featureSvgId) || null;
+    if (!sequenceEntry) return member;
+    return {
+      ...member,
+      nucleotideSequence: firstSequenceText(member?.nucleotideSequence, member?.nucleotide_sequence, sequenceEntry.nucleotideSequence),
+      aminoAcidSequence: firstSequenceText(member?.aminoAcidSequence, member?.amino_acid_sequence, sequenceEntry.aminoAcidSequence),
+      sequenceFeature: member?.sequenceFeature || sequenceEntry.sequenceFeature,
+      sequenceWarnings: Array.isArray(member?.sequenceWarnings)
+        ? member.sequenceWarnings
+        : (Array.isArray(member?.sequence_warnings) ? member.sequence_warnings : sequenceEntry.sequenceWarnings)
+    };
+  };
+
+  const getEnrichedOrthogroupMembers = (groupOrId) => {
+    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
+    return getGroupMembers(group).map(enrichOrthogroupMember);
+  };
+
+  const groupOrthogroupMembersByRecord = (members) => {
     const byRecord = new Map();
-    getGroupMembers(group).forEach((member) => {
+    (Array.isArray(members) ? members : []).forEach((member) => {
       const recordIndex = Number(member?.recordIndex);
       const key = Number.isInteger(recordIndex) ? recordIndex : -1;
       if (!byRecord.has(key)) byRecord.set(key, []);
@@ -172,7 +322,74 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
           : 'Record',
         members
       }));
+  };
+
+  const selectedOrthogroupMembersByRecord = computed(() => {
+    const group = selectedOrthogroup.value;
+    return groupOrthogroupMembersByRecord(getEnrichedOrthogroupMembers(group));
   });
+
+  const getOrthogroupSequenceCount = (groupOrId, sequenceKind) =>
+    getEnrichedOrthogroupMembers(groupOrId).filter((member) => getMemberSequence(member, sequenceKind)).length;
+
+  const hasOrthogroupSequence = (groupOrId, sequenceKind) => getOrthogroupSequenceCount(groupOrId, sequenceKind) > 0;
+
+  const hasOrthogroupMemberSequence = (member, sequenceKind) =>
+    Boolean(getMemberSequence(enrichOrthogroupMember(member), sequenceKind));
+
+  const buildOrthogroupFasta = (groupOrId, sequenceKind) => {
+    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
+    const orthogroupId = normalizeText(group?.id || groupOrId);
+    return getEnrichedOrthogroupMembers(group)
+      .map((member) => memberFastaText(member, sequenceKind, orthogroupId))
+      .filter(Boolean)
+      .join('');
+  };
+
+  const buildOrthogroupMemberFasta = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
+    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
+    return memberFastaText(enrichOrthogroupMember(member), sequenceKind, normalizeText(group?.id || groupOrId));
+  };
+
+  const orthogroupSequenceFilename = (groupOrId, sequenceKind) => {
+    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
+    const id = normalizeText(group?.id || groupOrId);
+    const name = makeSafeFilename(resolveOrthogroupName(group) || id, id || 'orthogroup');
+    const stem = makeSafeFilename(`${id || 'orthogroup'}_${name}_${sequenceKindLabel(sequenceKind)}`);
+    return `${stem}.${sequenceExtension(sequenceKind)}`;
+  };
+
+  const orthogroupMemberSequenceFilename = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
+    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
+    const id = normalizeText(group?.id || groupOrId) || 'orthogroup';
+    const memberId = normalizeText(member?.sourceProteinId || member?.proteinId || member?.featureSvgId || 'member');
+    const stem = makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`);
+    return `${stem}.${sequenceExtension(sequenceKind)}`;
+  };
+
+  const copyOrthogroupSequences = async (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt') => {
+    const text = buildOrthogroupFasta(groupOrId, sequenceKind);
+    if (!text) return;
+    await copyTextToClipboard(text);
+  };
+
+  const downloadOrthogroupSequences = (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt') => {
+    const text = buildOrthogroupFasta(groupOrId, sequenceKind);
+    if (!text) return;
+    downloadTextFile(orthogroupSequenceFilename(groupOrId, sequenceKind), text);
+  };
+
+  const copyOrthogroupMemberSequence = async (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
+    const text = buildOrthogroupMemberFasta(member, sequenceKind, groupOrId);
+    if (!text) return;
+    await copyTextToClipboard(text);
+  };
+
+  const downloadOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
+    const text = buildOrthogroupMemberFasta(member, sequenceKind, groupOrId);
+    if (!text) return;
+    downloadTextFile(orthogroupMemberSequenceFilename(member, sequenceKind, groupOrId), text);
+  };
 
   const selectOrthogroup = (orthogroupId) => {
     const id = normalizeText(orthogroupId);
@@ -289,10 +506,19 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     filteredOrthogroups,
     selectedOrthogroup,
     selectedOrthogroupMembersByRecord,
+    getEnrichedOrthogroupMembers,
+    groupOrthogroupMembersByRecord,
     getOrthogroupById,
     resolveOrthogroupName,
     resolveOrthogroupDescription,
     isOrthogroupRenamed,
+    getOrthogroupSequenceCount,
+    hasOrthogroupSequence,
+    hasOrthogroupMemberSequence,
+    copyOrthogroupSequences,
+    downloadOrthogroupSequences,
+    copyOrthogroupMemberSequence,
+    downloadOrthogroupMemberSequence,
     selectOrthogroup,
     setOrthogroupNameOverride,
     setOrthogroupDescriptionOverride,
