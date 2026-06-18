@@ -166,6 +166,8 @@ export const createAppSetup = () => {
     clickedPairwiseMatchPos,
     pairwiseMatchPopupRef,
     pairwiseMatchPopupDrag,
+    pairwiseMatchPopupSize,
+    pairwiseMatchPopupResize,
     featurePopupRef,
     featurePopupDrag,
     featurePopupSize,
@@ -1068,6 +1070,8 @@ export const createAppSetup = () => {
   const FEATURE_POPUP_RICH_MIN_WIDTH = 360;
   const FEATURE_POPUP_SIMPLE_MIN_WIDTH = 300;
   const FEATURE_POPUP_MIN_HEIGHT = 220;
+  const PAIRWISE_MATCH_POPUP_MIN_WIDTH = 280;
+  const PAIRWISE_MATCH_POPUP_MIN_HEIGHT = 180;
 
   const clampNumber = (value, min, max) => {
     const safeMin = Number.isFinite(min) ? min : 0;
@@ -1108,17 +1112,41 @@ export const createAppSetup = () => {
     return style;
   });
 
-  const pairwiseMatchPopupStyle = computed(() => ({
-    top: `${clickedPairwiseMatchPos.y}px`,
-    left: `${clickedPairwiseMatchPos.x}px`
-  }));
+  const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => {
+    const viewportWidth = Math.max(1, window.innerWidth || 1);
+    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
+    const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
+    const minWidth = Math.min(PAIRWISE_MATCH_POPUP_MIN_WIDTH, availableWidth);
+    const minHeight = Math.min(PAIRWISE_MATCH_POPUP_MIN_HEIGHT, availableHeight);
+    return {
+      minWidth,
+      minHeight,
+      maxWidth: Math.max(minWidth, viewportWidth - left - FEATURE_POPUP_MARGIN),
+      maxHeight: Math.max(minHeight, viewportHeight - top - FEATURE_POPUP_MARGIN)
+    };
+  };
+
+  const pairwiseMatchPopupStyle = computed(() => {
+    const style = {
+      top: `${clickedPairwiseMatchPos.y}px`,
+      left: `${clickedPairwiseMatchPos.x}px`
+    };
+    if (pairwiseMatchPopupSize.width > 0) {
+      style.width = `${pairwiseMatchPopupSize.width}px`;
+    }
+    if (pairwiseMatchPopupSize.height > 0) {
+      style.height = `${pairwiseMatchPopupSize.height}px`;
+    }
+    return style;
+  });
 
   const onPairwiseMatchPopupDrag = (event) => {
-    if (!pairwiseMatchPopupDrag.active) return;
+    if (!pairwiseMatchPopupDrag.active || pairwiseMatchPopupResize.active) return;
     const popup = pairwiseMatchPopupRef.value;
     const width = popup?.offsetWidth || 420;
     const height = popup?.offsetHeight || 360;
-    const margin = 12;
+    const margin = FEATURE_POPUP_MARGIN;
     const maxX = Math.max(margin, window.innerWidth - width - margin);
     const maxY = Math.max(margin, window.innerHeight - height - margin);
     const nextX = event.clientX - pairwiseMatchPopupDrag.offsetX;
@@ -1134,9 +1162,27 @@ export const createAppSetup = () => {
     document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
   };
 
+  const onPairwiseMatchPopupResize = (event) => {
+    if (!pairwiseMatchPopupResize.active) return;
+    const constraints = getPairwiseMatchPopupConstraints(clickedPairwiseMatchPos.x, clickedPairwiseMatchPos.y);
+    const nextWidth = pairwiseMatchPopupResize.startWidth + (event.clientX - pairwiseMatchPopupResize.startX);
+    const nextHeight = pairwiseMatchPopupResize.startHeight + (event.clientY - pairwiseMatchPopupResize.startY);
+    pairwiseMatchPopupSize.width = clampNumber(nextWidth, constraints.minWidth, constraints.maxWidth);
+    pairwiseMatchPopupSize.height = clampNumber(nextHeight, constraints.minHeight, constraints.maxHeight);
+    event.preventDefault();
+  };
+
+  const endPairwiseMatchPopupResize = () => {
+    if (!pairwiseMatchPopupResize.active) return;
+    pairwiseMatchPopupResize.active = false;
+    document.removeEventListener('mousemove', onPairwiseMatchPopupResize);
+    document.removeEventListener('mouseup', endPairwiseMatchPopupResize);
+  };
+
   const startPairwiseMatchPopupDrag = (event) => {
     if (event.button !== 0) return;
     if (!clickedPairwiseMatch.value) return;
+    if (pairwiseMatchPopupResize.active) return;
     if (isInteractiveTarget(event.target)) return;
     const popup = pairwiseMatchPopupRef.value;
     if (!popup) return;
@@ -1147,6 +1193,31 @@ export const createAppSetup = () => {
     document.addEventListener('mousemove', onPairwiseMatchPopupDrag);
     document.addEventListener('mouseup', endPairwiseMatchPopupDrag);
     event.preventDefault();
+  };
+
+  const startPairwiseMatchPopupResize = (event) => {
+    if (event.button !== 0) return;
+    if (!clickedPairwiseMatch.value) return;
+    const popup = pairwiseMatchPopupRef.value;
+    if (!popup) return;
+    const rect = popup.getBoundingClientRect();
+    const constraints = getPairwiseMatchPopupConstraints(rect.left, rect.top);
+
+    pairwiseMatchPopupDrag.active = false;
+    document.removeEventListener('mousemove', onPairwiseMatchPopupDrag);
+    document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
+
+    pairwiseMatchPopupResize.active = true;
+    pairwiseMatchPopupResize.startX = event.clientX;
+    pairwiseMatchPopupResize.startY = event.clientY;
+    pairwiseMatchPopupResize.startWidth = clampNumber(rect.width, constraints.minWidth, constraints.maxWidth);
+    pairwiseMatchPopupResize.startHeight = clampNumber(rect.height, constraints.minHeight, constraints.maxHeight);
+    pairwiseMatchPopupSize.width = pairwiseMatchPopupResize.startWidth;
+    pairwiseMatchPopupSize.height = pairwiseMatchPopupResize.startHeight;
+    document.addEventListener('mousemove', onPairwiseMatchPopupResize);
+    document.addEventListener('mouseup', endPairwiseMatchPopupResize);
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const onFeaturePopupDrag = (event) => {
@@ -1869,6 +1940,7 @@ export const createAppSetup = () => {
     pairwiseMatchPopupRef,
     pairwiseMatchPopupStyle,
     startPairwiseMatchPopupDrag,
+    startPairwiseMatchPopupResize,
     clickedFeatureLocation,
     copyText,
     canUseClickedOrthogroupActions,

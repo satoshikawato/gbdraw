@@ -190,7 +190,7 @@
             flex: 1 1 auto;
             min-height: 0;
             overflow: auto;
-            padding-right: 0.25rem;
+            padding: 0 0.25rem 1.5rem 0;
         }
         .pairwise-match-popup-section {
             border: 1px solid #e2e8f0;
@@ -3519,6 +3519,12 @@
                                 </div>
                             </div>
                         </div>
+                        <button type="button"
+                                class="feature-popup-resize-handle"
+                                @mousedown.stop.prevent="startPairwiseMatchPopupResize"
+                                title="Drag to resize"
+                                aria-label="Resize popup"
+                                data-nodrag="true"></button>
                     </div>
 
                     <!-- Label Text Scope Dialog -->

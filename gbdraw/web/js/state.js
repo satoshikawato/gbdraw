@@ -659,6 +659,14 @@ const clickedPairwiseMatch = ref(null); // {title, subtitle, sections}
 const clickedPairwiseMatchPos = reactive({ x: 0, y: 0 });
 const pairwiseMatchPopupRef = ref(null);
 const pairwiseMatchPopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
+const pairwiseMatchPopupSize = reactive({ width: 0, height: 0 });
+const pairwiseMatchPopupResize = reactive({
+  active: false,
+  startX: 0,
+  startY: 0,
+  startWidth: 0,
+  startHeight: 0
+});
 const featurePopupRef = ref(null);
 const featurePopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
 const featurePopupSize = reactive({ width: 0, height: 0 });
@@ -1105,6 +1113,8 @@ export const state = {
   clickedPairwiseMatchPos,
   pairwiseMatchPopupRef,
   pairwiseMatchPopupDrag,
+  pairwiseMatchPopupSize,
+  pairwiseMatchPopupResize,
   featurePopupRef,
   featurePopupDrag,
   featurePopupSize,
