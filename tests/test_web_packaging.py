@@ -353,12 +353,17 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "Sequence" in index_html
     assert "ph ph-copy" in index_html
     assert "copyText(row.value)" in index_html
+    assert "clickedFeature.nucleotideFasta" in index_html
+    assert "clickedFeature.aminoAcidFasta" in index_html
     assert "qualifierRows" in svg_actions_source
     assert "locationParts" in svg_actions_source
     assert "nucleotideSequence" in svg_actions_source
     assert "aminoAcidSequence" in svg_actions_source
-    assert "const displayProteinId = (feat)" in svg_actions_source
+    assert "buildFeatureSequenceFastas" in svg_actions_source
+    assert "import { getFeatureCaption, resolveDisplayProteinId } from '../feature-utils.js';" in svg_actions_source
+    assert "const proteinId = resolveDisplayProteinId(feat, member);" in svg_actions_source
     assert "label: 'Protein ID', value: proteinId" in svg_actions_source
+    assert "document.elementsFromPoint(eventLike.clientX, eventLike.clientY)" in svg_actions_source
     assert "label: 'Source protein ID'" not in svg_actions_source
     assert "label: 'SVG ID'" not in svg_actions_source
     assert "label: 'Record index'" not in svg_actions_source
@@ -369,7 +374,78 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "location_parts" in feature_metadata_source
     assert "nucleotide_sequence" in feature_metadata_source
     assert "amino_acid_sequence" in feature_metadata_source
+    assert '"organism": organism' in feature_metadata_source
+    assert '"source_protein_id": _first_qualifier_value(feat.qualifiers, "protein_id")' in feature_metadata_source
+    assert '"gene_id": _first_qualifier_value(feat.qualifiers, "gene_id")' in feature_metadata_source
+    assert '"old_locus_tag": _first_qualifier_value(feat.qualifiers, "old_locus_tag")' in feature_metadata_source
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
+
+
+def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    source_path = WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js"
+    module_path = tmp_path / "feature-sequence-fasta.mjs"
+    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    check_path = tmp_path / "check-feature-sequence-fasta.mjs"
+    check_path.write_text(
+        f"""
+        import {{ buildFeatureSequenceFastas }} from {module_path.as_uri()!r};
+
+        const assert = (condition, message) => {{
+          if (!condition) throw new Error(message);
+        }};
+
+        const feature = {{
+          record_id: 'NC_000001.1',
+          type: 'CDS',
+          start: 0,
+          end: 9,
+          strand: '+',
+          organism: 'Example organism',
+          qualifiers: {{
+            product: ['example protein'],
+            protein_id: ['WP_000001.1'],
+            locus_tag: ['ABC_0001']
+          }},
+          nucleotide_sequence: 'ATGAAATAA',
+          amino_acid_sequence: 'MK'
+        }};
+        const fasta = buildFeatureSequenceFastas(feature);
+        assert(
+          fasta.nucleotideFasta === '>NC_000001.1:1-9 example protein [Example organism]\\nATGAAATAA',
+          fasta.nucleotideFasta
+        );
+        assert(
+          fasta.aminoAcidFasta === '>WP_000001.1 example protein [Example organism]\\nMK',
+          fasta.aminoAcidFasta
+        );
+
+        const fallback = buildFeatureSequenceFastas({{
+          record_id: 'seq1',
+          start: 0,
+          end: 6,
+          strand: '-',
+          qualifiers: {{
+            locus_tag: ['LOC_1'],
+            product: ['fallback protein']
+          }},
+          nucleotide_sequence: 'ATGAAA',
+          amino_acid_sequence: 'M'.repeat(61)
+        }});
+        assert(
+          fallback.nucleotideFasta === '>seq1:c6-1 fallback protein\\nATGAAA',
+          fallback.nucleotideFasta
+        );
+        assert(fallback.aminoAcidFasta.startsWith('>LOC_1 fallback protein\\n'), fallback.aminoAcidFasta);
+        assert(fallback.aminoAcidFasta.endsWith('\\nM'), fallback.aminoAcidFasta);
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
 
 def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload() -> None:
@@ -437,7 +513,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "Coordinates (+/-)",
         "Product / note",
         "displayProteinId(null, member)",
-        "function displayProteinId(feature, member)",
+        "function displayProteinId(feature, member, fallback)",
+        "function firstDisplayText()",
         "display_label",
         "search_labels",
         "orthogroup_id",
@@ -477,6 +554,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "if (normalizedPopupMode === 'rich') {\n      Object.assign(payload, {\n        qualifiers: normalizeQualifierMap(feature?.qualifiers),",
         "nucleotide_sequence",
         "amino_acid_sequence",
+        "nucleotide_fasta",
+        "amino_acid_fasta",
         "getVisibleViewRect()",
         "var visibleView = getVisibleViewRect();",
         "window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });",
@@ -496,6 +575,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "gbdraw-interactive-feature--hover",
         "gbdraw-interactive-orthogroup-link--hover",
         "function setOrthogroupHover(orthogroupId, highlight)",
+        "member_rows: orthogroupMemberRows",
+        "function renderMatchMemberTable(section, rows)",
         "activePopupDrag",
         "activeSearchControlsDrag",
         "gbdraw-feature-hover-popup",
@@ -525,6 +606,9 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "setActiveMatch(searchState.activeIndex < 0 ? 0 : searchState.activeIndex, { center: true",
         "var yOffset = 42 * unit",
         "['Source protein ID'",
+        "addStandaloneMatchRow(rows, 'Source protein ID'",
+        "addStandaloneMatchRow(rows, 'Feature SVG ID'",
+        "addStandaloneMatchRow(summaryRows, 'Match style'",
         "enrichSvgWithStandaloneFeaturePopup",
         "if (!svg || state.adv.rich_feature_popup === false) return false;",
         "{ action: 'pan', label: 'Pan'",
@@ -629,7 +713,12 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
 
     source_path = WEB_ROOT / "js" / "app" / "feature-search" / "search-core.js"
     module_path = tmp_path / "search-core.mjs"
-    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
+    module_path.write_text(
+        source_path.read_text(encoding="utf-8").replace("../feature-utils.js", "./feature-utils.mjs"),
+        encoding="utf-8",
+    )
     check_path = tmp_path / "check-feature-search.mjs"
     check_path.write_text(
         f"""
@@ -713,6 +802,145 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
     assert "buildFeatureLocation(feature)" in standalone_source
     assert "feature && (feature.nucleotide_sequence || feature.nucleotideSequence)" in standalone_source
     assert "feature && (feature.amino_acid_sequence || feature.aminoAcidSequence)" in standalone_source
+
+
+def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
+    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
+    sequence_fasta_path.write_text((WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8"), encoding="utf-8")
+    source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
+    module_path = tmp_path / "pairwise-match-popup.mjs"
+    module_path.write_text(
+        source_path.read_text(encoding="utf-8")
+        .replace("./feature-utils.js", "./feature-utils.mjs")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
+        encoding="utf-8",
+    )
+    check_path = tmp_path / "check-pairwise-popup.mjs"
+    check_path.write_text(
+        f"""
+        import {{ buildPairwiseMatchHoverRows, buildPairwiseMatchPayload }} from {module_path.as_uri()!r};
+
+        const assert = (condition, message) => {{
+          if (!condition) throw new Error(message);
+        }};
+
+        const attrs = new Map(Object.entries({{
+          'data-gbdraw-pairwise-match-id': 'edge_1',
+          'data-match-kind': 'orthogroup',
+          'data-orthogroup-id': 'og_1',
+          'data-query-record-id': 'record_a',
+          'data-subject-record-id': 'record_b',
+          'data-qstart': '10',
+          'data-qend': '40',
+          'data-sstart': '90',
+          'data-send': '130',
+          'data-pairwise-match-style': 'ribbon',
+          'data-query-feature-svg-id': 'fq',
+          'data-subject-feature-svg-id': 'fs',
+          'data-query-protein-id': 'p_internal_query',
+          'data-subject-protein-id': 'p_internal_subject',
+          'data-identity': '99.0'
+        }}));
+        const element = {{
+          style: {{}},
+          getAttribute: (name) => attrs.get(name) || ''
+        }};
+        const featureLookup = new Map([
+          ['fq', {{
+            svg_id: 'fq',
+            record_id: 'record_a',
+            orthogroupId: 'og_1',
+            orthogroupMemberCount: 2,
+            orthogroupRecordCoverage: 2,
+            proteinId: 'p_internal_query',
+            sourceProteinId: 'WP_000001.1',
+            qualifiers: {{ protein_id: ['WP_000001.1'] }},
+            product: 'query product'
+          }}],
+          ['fs', {{
+            svg_id: 'fs',
+            record_id: 'record_b',
+            orthogroupId: 'og_1',
+            orthogroupMemberCount: 2,
+            orthogroupRecordCoverage: 2,
+            proteinId: 'p_internal_subject',
+            qualifiers: {{ protein_id: ['WP_000002.1'] }},
+            product: 'subject product'
+          }}]
+        ]);
+        const payload = buildPairwiseMatchPayload(element, {{
+          featureLookup,
+          orthogroups: [{{
+            id: 'legacy_og_1',
+            name: 'rpoB',
+            member_count: 2,
+            record_coverage_count: 2,
+            members: [
+              {{
+                recordId: 'record_a',
+                featureSvgId: 'fq',
+                start: 9,
+                end: 40,
+                strand: '+',
+                proteinId: 'p_internal_query',
+                sourceProteinId: 'WP_000001.1',
+                product: 'query product'
+              }},
+              {{
+                recordId: 'record_b',
+                featureSvgId: 'fs',
+                start: 89,
+                end: 130,
+                strand: '-',
+                proteinId: 'p_internal_subject',
+                sourceProteinId: 'WP_000002.1',
+                product: 'subject product'
+              }}
+            ]
+          }}]
+        }});
+
+        assert(payload.title === 'og_1:rpoB', `Unexpected title: ${{payload.title}}`);
+        assert(payload.subtitle === '', `Orthogroup popup should not duplicate subtitle: ${{payload.subtitle}}`);
+        assert(payload.sections.map((section) => section.title).join(',') === 'Summary', JSON.stringify(payload.sections));
+        const labels = payload.sections.flatMap((section) => section.rows.map((row) => row.label));
+        assert(!labels.includes('Match style'), `Match style leaked: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Feature SVG ID'), `Feature SVG ID leaked: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Source protein ID'), `Source protein ID leaked: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Query record'), `Query record should be omitted: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Subject record'), `Subject record should be omitted: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Query interval'), `Query interval should be omitted: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Subject interval'), `Subject interval should be omitted: ${{JSON.stringify(labels)}}`);
+        assert(labels.includes('Orthogroup ID'), `Orthogroup ID missing: ${{JSON.stringify(labels)}}`);
+        assert(labels.includes('Display name'), `Display name missing: ${{JSON.stringify(labels)}}`);
+        const summary = payload.sections[0];
+        assert(summary.memberRows.length === 2, JSON.stringify(summary));
+        assert(summary.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(summary.memberRows));
+        assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'), summary.memberCopyText);
+        const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
+        assert(hoverLabels.includes('Orthogroup'), `Hover orthogroup row missing: ${{JSON.stringify(hoverLabels)}}`);
+        assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
+        assert(!hoverLabels.includes('Subject'), `Hover subject row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
+
+        const fallbackPayload = buildPairwiseMatchPayload(element, {{
+          featureLookup,
+          orthogroups: []
+        }});
+        assert(fallbackPayload.title === 'og_1:query product', `Feature fallback title failed: ${{fallbackPayload.title}}`);
+        const fallbackLabels = fallbackPayload.sections.flatMap((section) => section.rows.map((row) => row.label));
+        assert(fallbackLabels.includes('Members'), `Feature fallback members missing: ${{JSON.stringify(fallbackLabels)}}`);
+        assert(fallbackLabels.includes('Record coverage'), `Feature fallback coverage missing: ${{JSON.stringify(fallbackLabels)}}`);
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
 
 def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:

@@ -181,6 +181,115 @@
             width: min(440px, calc(100vw - 24px));
             min-width: min(300px, calc(100vw - 24px));
         }
+        .pairwise-match-popup {
+            width: min(460px, calc(100vw - 24px));
+            min-width: min(280px, calc(100vw - 24px));
+            min-height: min(180px, calc(100vh - 24px));
+        }
+        .pairwise-match-popup-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            padding: 0 0.25rem 1.5rem 0;
+        }
+        .pairwise-match-popup-section {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            margin-bottom: 0.75rem;
+        }
+        .pairwise-match-popup-section-title {
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            color: #475569;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            padding: 0.45rem 0.65rem;
+            text-transform: uppercase;
+        }
+        .pairwise-match-popup-row {
+            display: grid;
+            grid-template-columns: minmax(5.75rem, 7.5rem) minmax(0, 1fr) 2rem;
+            gap: 0.5rem;
+            align-items: start;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 0.5rem 0.65rem;
+        }
+        .pairwise-match-popup-row:last-child {
+            border-bottom: 0;
+        }
+        .pairwise-match-popup-key {
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .pairwise-match-popup-value {
+            min-width: 0;
+            color: #1e293b;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 11px;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+        .pairwise-match-feature-list {
+            max-height: 18rem;
+            overflow: auto;
+        }
+        .pairwise-match-feature-table {
+            width: 100%;
+            min-width: 46rem;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        .pairwise-match-feature-table th,
+        .pairwise-match-feature-table td {
+            padding: 0.45rem 0.55rem;
+            border-bottom: 1px solid #f1f5f9;
+            text-align: left;
+            vertical-align: top;
+        }
+        .pairwise-match-feature-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #ffffff;
+            color: #94a3b8;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .pairwise-match-feature-row {
+            cursor: pointer;
+        }
+        .pairwise-match-feature-row:hover {
+            background: #eff6ff;
+        }
+        .pairwise-match-feature-row.is-disabled {
+            cursor: default;
+        }
+        .pairwise-match-feature-row.is-disabled:hover {
+            background: transparent;
+        }
+        .pairwise-match-feature-main {
+            min-width: 0;
+            color: #334155;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+        .pairwise-match-feature-sub {
+            margin-top: 0.15rem;
+            color: #94a3b8;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 10px;
+            overflow-wrap: anywhere;
+        }
+        .pairwise-match-feature-mono {
+            color: #475569;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            overflow-wrap: anywhere;
+        }
         .feature-hover-summary {
             position: fixed;
             z-index: 45;
@@ -476,6 +585,12 @@
         @media (max-width: 760px) {
             .feature-popup-grid {
                 grid-template-columns: minmax(0, 1fr);
+            }
+            .pairwise-match-popup-row {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .pairwise-match-popup-row button {
+                justify-self: end;
             }
         }
 
@@ -3098,6 +3213,52 @@
                                     <div class="font-medium">{{ clickedOrthogroupDetail.recordCoverage }}</div>
                                 </div>
                             </div>
+                            <div class="grid grid-cols-2 gap-2 mb-3">
+                                <button type="button"
+                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt')"
+                                        :disabled="!clickedOrthogroupDetail.ntSequenceCount"
+                                        :class="[
+                                          'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
+                                          clickedOrthogroupDetail.ntSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                        ]"
+                                        title="Copy all member nucleotide FASTA">
+                                    <i class="ph ph-copy"></i>
+                                    <span>Copy nt</span>
+                                </button>
+                                <button type="button"
+                                        @click="downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'nt')"
+                                        :disabled="!clickedOrthogroupDetail.ntSequenceCount"
+                                        :class="[
+                                          'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
+                                          clickedOrthogroupDetail.ntSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                        ]"
+                                        title="Download all member nucleotide FASTA">
+                                    <i class="ph ph-download-simple"></i>
+                                    <span>Download nt</span>
+                                </button>
+                                <button type="button"
+                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa')"
+                                        :disabled="!clickedOrthogroupDetail.aaSequenceCount"
+                                        :class="[
+                                          'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
+                                          clickedOrthogroupDetail.aaSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                        ]"
+                                        title="Copy all member amino-acid FASTA">
+                                    <i class="ph ph-copy"></i>
+                                    <span>Copy aa</span>
+                                </button>
+                                <button type="button"
+                                        @click="downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'aa')"
+                                        :disabled="!clickedOrthogroupDetail.aaSequenceCount"
+                                        :class="[
+                                          'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
+                                          clickedOrthogroupDetail.aaSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                        ]"
+                                        title="Download all member amino-acid FASTA">
+                                    <i class="ph ph-download-simple"></i>
+                                    <span>Download aa</span>
+                                </button>
+                            </div>
                             <div v-if="clickedOrthogroupDetail.currentMember" class="text-xs text-slate-600 mb-3">
                                 <div class="text-[10px] text-slate-400 mb-1">Current member</div>
                                 <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.label || clickedFeature.label }}</div>
@@ -3111,13 +3272,14 @@
                                 </div>
                             </div>
                             <div class="max-h-40 overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
-                                <table class="min-w-[42rem] text-[10px] text-slate-600">
+                                <table class="min-w-[52rem] text-[10px] text-slate-600">
                                     <thead class="sticky top-0 bg-slate-50 text-slate-400 uppercase">
                                         <tr>
                                             <th class="px-2 py-1 text-left font-semibold">Record</th>
                                             <th class="px-2 py-1 text-left font-semibold">Coordinates (+/-)</th>
                                             <th class="px-2 py-1 text-left font-semibold">Protein ID</th>
                                             <th class="px-2 py-1 text-left font-semibold">Product / note</th>
+                                            <th class="px-2 py-1 text-left font-semibold">Seq</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -3133,6 +3295,50 @@
                                                 </td>
                                                 <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.sourceProteinId || member.proteinId }}</td>
                                                 <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
+                                                <td class="px-2 py-1 whitespace-nowrap">
+                                                    <div class="grid grid-cols-2 gap-1 w-24">
+                                                        <button type="button"
+                                                                @click="copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id)"
+                                                                :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
+                                                                :class="[
+                                                                  'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                  hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                ]"
+                                                                title="Copy nucleotide FASTA">
+                                                            <i class="ph ph-copy"></i><span>nt</span>
+                                                        </button>
+                                                        <button type="button"
+                                                                @click="downloadOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id)"
+                                                                :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
+                                                                :class="[
+                                                                  'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                  hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                ]"
+                                                                title="Download nucleotide FASTA">
+                                                            <i class="ph ph-download-simple"></i><span>nt</span>
+                                                        </button>
+                                                        <button type="button"
+                                                                @click="copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id)"
+                                                                :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
+                                                                :class="[
+                                                                  'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                  hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                ]"
+                                                                title="Copy amino-acid FASTA">
+                                                            <i class="ph ph-copy"></i><span>aa</span>
+                                                        </button>
+                                                        <button type="button"
+                                                                @click="downloadOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id)"
+                                                                :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
+                                                                :class="[
+                                                                  'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                  hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                ]"
+                                                                title="Download amino-acid FASTA">
+                                                            <i class="ph ph-download-simple"></i><span>aa</span>
+                                                        </button>
+                                                    </div>
+                                                </td>
                                             </tr>
                                         </template>
                                     </tbody>
@@ -3340,18 +3546,18 @@
                                 <div class="flex items-center justify-between mb-1">
                                     <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Nucleotide</div>
                                     <button type="button"
-                                            @click="copyText(clickedFeature.nucleotideSequence)"
-                                            :disabled="!clickedFeature.nucleotideSequence"
+                                            @click="copyText(clickedFeature.nucleotideFasta)"
+                                            :disabled="!clickedFeature.nucleotideFasta"
                                             :class="[
                                               'w-7 h-7 rounded-md flex items-center justify-center',
-                                              clickedFeature.nucleotideSequence ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                              clickedFeature.nucleotideFasta ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                             ]"
                                             title="Copy nucleotide sequence">
                                         <i class="ph ph-copy"></i>
                                     </button>
                                 </div>
-                                <pre v-if="clickedFeature.nucleotideSequence"
-                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.nucleotideSequence }}</pre>
+                                <pre v-if="clickedFeature.nucleotideFasta"
+                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.nucleotideFasta }}</pre>
                                 <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                     No nucleotide sequence available.
                                 </div>
@@ -3360,18 +3566,18 @@
                                 <div class="flex items-center justify-between mb-1">
                                     <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Amino acid</div>
                                     <button type="button"
-                                            @click="copyText(clickedFeature.aminoAcidSequence)"
-                                            :disabled="!clickedFeature.aminoAcidSequence"
+                                            @click="copyText(clickedFeature.aminoAcidFasta)"
+                                            :disabled="!clickedFeature.aminoAcidFasta"
                                             :class="[
                                               'w-7 h-7 rounded-md flex items-center justify-center',
-                                              clickedFeature.aminoAcidSequence ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                              clickedFeature.aminoAcidFasta ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                             ]"
                                             title="Copy amino acid sequence">
                                         <i class="ph ph-copy"></i>
                                     </button>
                                 </div>
-                                <pre v-if="clickedFeature.aminoAcidSequence"
-                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.aminoAcidSequence }}</pre>
+                                <pre v-if="clickedFeature.aminoAcidFasta"
+                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.aminoAcidFasta }}</pre>
                                 <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                     No amino acid sequence available.
                                 </div>
@@ -3381,6 +3587,256 @@
                         <button type="button"
                                 class="feature-popup-resize-handle"
                                 @mousedown.stop.prevent="startFeaturePopupResize"
+                                title="Drag to resize"
+                                aria-label="Resize popup"
+                                data-nodrag="true"></button>
+                    </div>
+
+                    <!-- Pairwise Match Popup -->
+                    <div v-if="clickedPairwiseMatch"
+                         ref="pairwiseMatchPopupRef"
+                         @mousedown="startPairwiseMatchPopupDrag"
+                         class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
+                         :style="pairwiseMatchPopupStyle">
+                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
+                            <div class="w-4 h-4 rounded mt-1 border border-slate-200"
+                                 :style="{ backgroundColor: clickedPairwiseMatch.fill || '#94a3b8' }"></div>
+                            <div class="min-w-0">
+                                <div class="text-base font-bold text-slate-700 truncate max-w-[320px]">{{ clickedPairwiseMatch.title }}</div>
+                                <div v-if="clickedPairwiseMatch.subtitle" class="text-xs text-slate-500 mt-0.5 font-mono break-all">
+                                    {{ clickedPairwiseMatch.subtitle }}
+                                </div>
+                            </div>
+                            <button @click="clickedPairwiseMatch = null"
+                                    class="text-slate-400 hover:text-slate-600 ml-auto text-xl"
+                                    aria-label="Close match popup"
+                                    data-nodrag="true">
+                                <i class="ph ph-x"></i>
+                            </button>
+                        </div>
+                        <div class="pairwise-match-popup-body custom-scrollbar" data-nodrag="true">
+                            <div v-for="section in renderedPairwiseMatchSections"
+                                 :key="`match-section-${section.title}`"
+                                 class="pairwise-match-popup-section">
+                                <div class="pairwise-match-popup-section-title">{{ section.title }}</div>
+                                <template v-if="!section.featureRows || !section.featureRows.length">
+                                    <div v-for="row in section.rows"
+                                         :key="`match-row-${section.title}-${row.label}-${row.value}`"
+                                         class="pairwise-match-popup-row">
+                                        <div class="pairwise-match-popup-key">{{ row.label }}</div>
+                                        <div class="pairwise-match-popup-value">{{ row.value }}</div>
+                                        <button type="button"
+                                                @click="copyText(row.value)"
+                                                class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                                                title="Copy">
+                                            <i class="ph ph-copy"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                                <div v-if="section.featureRows && section.featureRows.length"
+                                     class="pairwise-match-feature-list custom-scrollbar">
+                                    <table class="pairwise-match-feature-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Feature</th>
+                                                <th>Record</th>
+                                                <th>Location</th>
+                                                <th>Product</th>
+                                                <th>Copy</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="featureRow in section.featureRows"
+                                                :key="`match-feature-${section.title}-${featureRow.key}`"
+                                                @click="openPairwiseFeatureRow(featureRow, $event)"
+                                                :class="[
+                                                  'pairwise-match-feature-row',
+                                                  featureRow.canOpen ? '' : 'is-disabled'
+                                                ]">
+                                                <td>
+                                                    <div class="pairwise-match-feature-main">{{ featureRow.label }}</div>
+                                                    <div v-if="featureRow.subLabel"
+                                                         class="pairwise-match-feature-sub">
+                                                        {{ featureRow.subLabel }}
+                                                    </div>
+                                                </td>
+                                                <td class="pairwise-match-feature-mono">{{ featureRow.record }}</td>
+                                                <td class="pairwise-match-feature-mono">{{ featureRow.location }}</td>
+                                                <td class="text-slate-700">{{ featureRow.product }}</td>
+                                                <td>
+                                                    <button type="button"
+                                                            @click.stop="copyText(featureRow.copyText)"
+                                                            class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                                                            title="Copy feature row">
+                                                        <i class="ph ph-copy"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div v-if="section.blockOrthogroups && section.blockOrthogroups.length"
+                                     class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
+                                    <div class="bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase text-slate-500">
+                                        Orthogroups covered
+                                    </div>
+                                    <div class="overflow-auto custom-scrollbar max-h-52">
+                                        <table class="min-w-[54rem] w-full text-xs">
+                                            <thead class="bg-white sticky top-0">
+                                                <tr class="text-[10px] uppercase text-slate-400">
+                                                    <th class="text-left font-semibold px-3 py-2">OG ID</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Display name</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Members</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Record coverage</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Query member</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Subject member</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="group in section.blockOrthogroups"
+                                                    :key="`block-og-${group.id}`"
+                                                    @click="selectPairwiseBlockOrthogroup(group)"
+                                                    :class="[
+                                                      'border-t border-slate-100 cursor-pointer hover:bg-emerald-50/70',
+                                                      selectedPairwiseBlockOrthogroupId === group.id ? 'bg-emerald-50' : ''
+                                                    ]">
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.id }}</td>
+                                                    <td class="text-slate-700 px-3 py-2 align-top">{{ group.displayName }}</td>
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.memberCount }}</td>
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ group.recordCoverage }}</td>
+                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ group.queryMember }}</td>
+                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ group.subjectMember }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div v-if="section.memberRows && section.memberRows.length"
+                                     class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
+                                    <div class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2">
+                                        <div class="text-[10px] font-semibold uppercase text-slate-500">Orthogroup members</div>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button"
+                                                    @click="copyText(section.memberNtFasta)"
+                                                    :disabled="!section.memberNtFasta"
+                                                    :class="[
+                                                      'h-7 px-2 rounded-md text-[10px] flex items-center justify-center gap-1',
+                                                      section.memberNtFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                                    ]"
+                                                    title="Copy all member nucleotide FASTA">
+                                                <i class="ph ph-copy"></i><span>nt</span>
+                                            </button>
+                                            <button type="button"
+                                                    @click="downloadText(section.memberNtFilename, section.memberNtFasta)"
+                                                    :disabled="!section.memberNtFasta"
+                                                    :class="[
+                                                      'h-7 px-2 rounded-md text-[10px] flex items-center justify-center gap-1',
+                                                      section.memberNtFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                                    ]"
+                                                    title="Download all member nucleotide FASTA">
+                                                <i class="ph ph-download-simple"></i><span>nt</span>
+                                            </button>
+                                            <button type="button"
+                                                    @click="copyText(section.memberAaFasta)"
+                                                    :disabled="!section.memberAaFasta"
+                                                    :class="[
+                                                      'h-7 px-2 rounded-md text-[10px] flex items-center justify-center gap-1',
+                                                      section.memberAaFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                                    ]"
+                                                    title="Copy all member amino-acid FASTA">
+                                                <i class="ph ph-copy"></i><span>aa</span>
+                                            </button>
+                                            <button type="button"
+                                                    @click="downloadText(section.memberAaFilename, section.memberAaFasta)"
+                                                    :disabled="!section.memberAaFasta"
+                                                    :class="[
+                                                      'h-7 px-2 rounded-md text-[10px] flex items-center justify-center gap-1',
+                                                      section.memberAaFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                                    ]"
+                                                    title="Download all member amino-acid FASTA">
+                                                <i class="ph ph-download-simple"></i><span>aa</span>
+                                            </button>
+                                            <button type="button"
+                                                    @click="copyText(section.memberCopyText)"
+                                                    class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                                                    title="Copy member table">
+                                                <i class="ph ph-table"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="overflow-auto custom-scrollbar max-h-56">
+                                        <table class="min-w-[52rem] w-full text-xs">
+                                            <thead class="bg-white sticky top-0">
+                                                <tr class="text-[10px] uppercase text-slate-400">
+                                                    <th class="text-left font-semibold px-3 py-2">Record</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Coordinates (+/-)</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Protein ID</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Product / note</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Seq</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="member in section.memberRows"
+                                                    :key="`match-member-${section.title}-${member.record}-${member.coordinates}-${member.proteinId}`"
+                                                    class="border-t border-slate-100">
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.record }}</td>
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.coordinates }}</td>
+                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ member.proteinId }}</td>
+                                                    <td class="text-slate-700 px-3 py-2 align-top">{{ member.productOrNote }}</td>
+                                                    <td class="px-3 py-2 align-top whitespace-nowrap">
+                                                        <div class="grid grid-cols-2 gap-1 w-24">
+                                                            <button type="button"
+                                                                    @click="copyText(member.ntFasta)"
+                                                                    :disabled="!member.ntFasta"
+                                                                    :class="[
+                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                      member.ntFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                    ]"
+                                                                    title="Copy nucleotide FASTA">
+                                                                <i class="ph ph-copy"></i><span>nt</span>
+                                                            </button>
+                                                            <button type="button"
+                                                                    @click="downloadText(member.ntFilename, member.ntFasta)"
+                                                                    :disabled="!member.ntFasta"
+                                                                    :class="[
+                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                      member.ntFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                    ]"
+                                                                    title="Download nucleotide FASTA">
+                                                                <i class="ph ph-download-simple"></i><span>nt</span>
+                                                            </button>
+                                                            <button type="button"
+                                                                    @click="copyText(member.aaFasta)"
+                                                                    :disabled="!member.aaFasta"
+                                                                    :class="[
+                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                      member.aaFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                    ]"
+                                                                    title="Copy amino-acid FASTA">
+                                                                <i class="ph ph-copy"></i><span>aa</span>
+                                                            </button>
+                                                            <button type="button"
+                                                                    @click="downloadText(member.aaFilename, member.aaFasta)"
+                                                                    :disabled="!member.aaFasta"
+                                                                    :class="[
+                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                      member.aaFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                    ]"
+                                                                    title="Download amino-acid FASTA">
+                                                                <i class="ph ph-download-simple"></i><span>aa</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button"
+                                class="feature-popup-resize-handle"
+                                @mousedown.stop.prevent="startPairwiseMatchPopupResize"
                                 title="Drag to resize"
                                 aria-label="Resize popup"
                                 data-nodrag="true"></button>
@@ -3907,15 +4363,69 @@
                             </div>
 
                             <div>
-                                <div class="text-xs font-semibold text-slate-600 mb-2">Members</div>
+                                <div class="mb-2 space-y-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="text-xs font-semibold text-slate-600">Members</div>
+                                        <div class="text-[10px] text-slate-400">
+                                            nt {{ getOrthogroupSequenceCount(selectedOrthogroup, 'nt') }} · aa {{ getOrthogroupSequenceCount(selectedOrthogroup, 'aa') }}
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <button type="button"
+                                                @click="copyOrthogroupSequences(selectedOrthogroup, 'nt')"
+                                                :disabled="!hasOrthogroupSequence(selectedOrthogroup, 'nt')"
+                                                :class="[
+                                                  'px-2 py-1.5 rounded text-xs flex items-center justify-center gap-1',
+                                                  hasOrthogroupSequence(selectedOrthogroup, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                ]"
+                                                title="Copy all member nucleotide FASTA">
+                                            <i class="ph ph-copy"></i>
+                                            <span>Copy nt</span>
+                                        </button>
+                                        <button type="button"
+                                                @click="downloadOrthogroupSequences(selectedOrthogroup, 'nt')"
+                                                :disabled="!hasOrthogroupSequence(selectedOrthogroup, 'nt')"
+                                                :class="[
+                                                  'px-2 py-1.5 rounded text-xs flex items-center justify-center gap-1',
+                                                  hasOrthogroupSequence(selectedOrthogroup, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                ]"
+                                                title="Download all member nucleotide FASTA">
+                                            <i class="ph ph-download-simple"></i>
+                                            <span>Download nt</span>
+                                        </button>
+                                        <button type="button"
+                                                @click="copyOrthogroupSequences(selectedOrthogroup, 'aa')"
+                                                :disabled="!hasOrthogroupSequence(selectedOrthogroup, 'aa')"
+                                                :class="[
+                                                  'px-2 py-1.5 rounded text-xs flex items-center justify-center gap-1',
+                                                  hasOrthogroupSequence(selectedOrthogroup, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                ]"
+                                                title="Copy all member amino-acid FASTA">
+                                            <i class="ph ph-copy"></i>
+                                            <span>Copy aa</span>
+                                        </button>
+                                        <button type="button"
+                                                @click="downloadOrthogroupSequences(selectedOrthogroup, 'aa')"
+                                                :disabled="!hasOrthogroupSequence(selectedOrthogroup, 'aa')"
+                                                :class="[
+                                                  'px-2 py-1.5 rounded text-xs flex items-center justify-center gap-1',
+                                                  hasOrthogroupSequence(selectedOrthogroup, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                ]"
+                                                title="Download all member amino-acid FASTA">
+                                            <i class="ph ph-download-simple"></i>
+                                            <span>Download aa</span>
+                                        </button>
+                                    </div>
+                                </div>
                                 <div class="border border-slate-100 rounded overflow-auto custom-scrollbar">
-                                    <table class="min-w-[42rem] text-[10px] text-slate-600">
+                                    <table class="min-w-[52rem] text-[10px] text-slate-600">
                                         <thead class="sticky top-0 bg-slate-50 text-slate-400 uppercase">
                                             <tr>
                                                 <th class="px-2 py-1 text-left font-semibold">Record</th>
                                                 <th class="px-2 py-1 text-left font-semibold">Coordinates (+/-)</th>
                                                 <th class="px-2 py-1 text-left font-semibold">Protein ID</th>
                                                 <th class="px-2 py-1 text-left font-semibold">Product / note</th>
+                                                <th class="px-2 py-1 text-left font-semibold">Seq</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -3931,6 +4441,50 @@
                                                     </td>
                                                     <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.sourceProteinId || member.proteinId }}</td>
                                                     <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
+                                                    <td class="px-2 py-1 whitespace-nowrap">
+                                                        <div class="grid grid-cols-2 gap-1 w-24">
+                                                            <button type="button"
+                                                                    @click="copyOrthogroupMemberSequence(member, 'nt', selectedOrthogroup)"
+                                                                    :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
+                                                                    :class="[
+                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                      hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                    ]"
+                                                                    title="Copy nucleotide FASTA">
+                                                                <i class="ph ph-copy"></i><span>nt</span>
+                                                            </button>
+                                                            <button type="button"
+                                                                    @click="downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup)"
+                                                                    :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
+                                                                    :class="[
+                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                      hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                    ]"
+                                                                    title="Download nucleotide FASTA">
+                                                                <i class="ph ph-download-simple"></i><span>nt</span>
+                                                            </button>
+                                                            <button type="button"
+                                                                    @click="copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"
+                                                                    :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
+                                                                    :class="[
+                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                      hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                    ]"
+                                                                    title="Copy amino-acid FASTA">
+                                                                <i class="ph ph-copy"></i><span>aa</span>
+                                                            </button>
+                                                            <button type="button"
+                                                                    @click="downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"
+                                                                    :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
+                                                                    :class="[
+                                                                      'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
+                                                                      hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                                    ]"
+                                                                    title="Download amino-acid FASTA">
+                                                                <i class="ph ph-download-simple"></i><span>aa</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             </template>
                                         </tbody>

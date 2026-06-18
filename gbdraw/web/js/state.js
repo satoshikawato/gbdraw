@@ -75,6 +75,26 @@ const svgContent = computed(() => {
         'data-subject-feature-svg-id',
         'data-query-unit-id',
         'data-subject-unit-id',
+        'data-gbdraw-pairwise-match-id',
+        'data-match-kind',
+        'data-query-record-index',
+        'data-subject-record-index',
+        'data-query-record-id',
+        'data-subject-record-id',
+        'data-qstart',
+        'data-qend',
+        'data-sstart',
+        'data-send',
+        'data-alignment-length',
+        'data-mismatches',
+        'data-gap-opens',
+        'data-collinearity-block-score',
+        'data-collinearity-anchor-index',
+        'data-collinearity-anchor-count',
+        'data-query-locus-id',
+        'data-subject-locus-id',
+        'data-query-display-name',
+        'data-subject-display-name',
         'data-pairwise-match-style',
         'data-identity-factor',
         'data-source-index',
@@ -635,6 +655,18 @@ const labelReflowLastError = ref(null);
 const svgContainer = ref(null);
 const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
 const clickedFeaturePos = reactive({ x: 0, y: 0 });
+const clickedPairwiseMatch = ref(null); // {title, subtitle, sections}
+const clickedPairwiseMatchPos = reactive({ x: 0, y: 0 });
+const pairwiseMatchPopupRef = ref(null);
+const pairwiseMatchPopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
+const pairwiseMatchPopupSize = reactive({ width: 0, height: 0 });
+const pairwiseMatchPopupResize = reactive({
+  active: false,
+  startX: 0,
+  startY: 0,
+  startWidth: 0,
+  startHeight: 0
+});
 const featurePopupRef = ref(null);
 const featurePopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
 const featurePopupSize = reactive({ width: 0, height: 0 });
@@ -1077,6 +1109,12 @@ export const state = {
   svgContainer,
   clickedFeature,
   clickedFeaturePos,
+  clickedPairwiseMatch,
+  clickedPairwiseMatchPos,
+  pairwiseMatchPopupRef,
+  pairwiseMatchPopupDrag,
+  pairwiseMatchPopupSize,
+  pairwiseMatchPopupResize,
   featurePopupRef,
   featurePopupDrag,
   featurePopupSize,

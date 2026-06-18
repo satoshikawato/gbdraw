@@ -1,3 +1,5 @@
+import { buildFeatureSequenceFastas } from '../app/feature-sequence-fasta.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
 const FEATURE_SELECTOR = [
@@ -7,6 +9,11 @@ const FEATURE_SELECTOR = [
   'path[id^="f"]',
   'polygon[id^="f"]',
   'rect[id^="f"]'
+].join(', ');
+const STANDALONE_MATCH_SELECTOR = [
+  'path[data-gbdraw-pairwise-match-id]',
+  'path[data-match-kind]',
+  'path[data-pairwise-match-style]'
 ].join(', ');
 const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
@@ -72,6 +79,18 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-orthogroup-link.gbdraw-interactive-orthogroup-link--hover {
   opacity: 0.92;
   filter: url(#gbdraw-interactive-feature-glow);
+}
+.gbdraw-interactive-pairwise-match {
+  cursor: pointer;
+  transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease, stroke-opacity 120ms ease;
+}
+.gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--hover {
+  opacity: 0.92;
+  filter: url(#gbdraw-interactive-feature-glow);
+  stroke: #f59e0b;
+  stroke-opacity: 0.9;
+  stroke-width: 1.5;
+  paint-order: stroke fill markers;
 }
 .gbdraw-feature-popup {
   overflow: visible;
@@ -359,6 +378,70 @@ const STANDALONE_INTERACTIVE_STYLE = `
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: nowrap;
 }
+.gfi-block-og-row {
+  cursor: pointer;
+}
+.gfi-block-og-row:hover,
+.gfi-block-og-row.is-active {
+  background: #ecfdf5;
+}
+.gfi-block--selected-og {
+  margin: 8px;
+}
+.gfi-block-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  background: #f8fafc;
+}
+.gfi-match-feature-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.gfi-match-feature-table th,
+.gfi-match-feature-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  vertical-align: top;
+}
+.gfi-match-feature-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #ffffff;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gfi-match-feature-row {
+  cursor: pointer;
+}
+.gfi-match-feature-row:hover {
+  background: #eff6ff;
+}
+.gfi-match-feature-row.is-disabled {
+  cursor: default;
+}
+.gfi-match-feature-row.is-disabled:hover {
+  background: transparent;
+}
+.gfi-match-feature-main {
+  min-width: 0;
+  color: #334155;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.gfi-match-feature-sub {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 .gfi-empty,
 .gfi-warning {
   padding: 10px;
@@ -613,6 +696,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var FEATURE_SELECTOR =
     'path[' + FEATURE_ID_ATTRIBUTE + '], polygon[' + FEATURE_ID_ATTRIBUTE + '], rect[' + FEATURE_ID_ATTRIBUTE + '], ' +
     'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+  var MATCH_SELECTOR =
+    'path[data-gbdraw-pairwise-match-id], path[data-match-kind], path[data-pairwise-match-style]';
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
   var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
@@ -640,6 +725,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var hoverPopupLastEvent = null;
   var activeHoverSvgId = null;
   var activeHoverKey = '';
+  var activeHoverMatchId = '';
+  var activeHoverMatchKey = '';
   var maxZoom = 16;
   var resizeFrame = null;
   var overlayRefreshFrame = null;
@@ -686,6 +773,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   var features = Array.isArray(payload.features) ? payload.features : [];
   var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
+  var matches = Array.isArray(payload.matches) ? payload.matches : [];
   var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';
   var searchFieldIds = {
     all: true,
@@ -742,6 +830,13 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       }
     });
   });
+  var matchesById = new Map();
+  matches.forEach(function (match) {
+    var id = String(match && match.id || '').trim();
+    if (id && !matchesById.has(id)) {
+      matchesById.set(id, match);
+    }
+  });
 
   function getOrthogroupIds(value) {
     var seen = {};
@@ -786,6 +881,26 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
     });
     setClassToken(element, 'gbdraw-interactive-orthogroup-link', true);
+  });
+
+  var matchElementsById = new Map();
+  var comparisonElementsByCollinearityBlockId = new Map();
+  Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
+    var matchId = String(element.getAttribute('data-gbdraw-pairwise-match-id') || '').trim();
+    if (matchId) {
+      if (!matchElementsById.has(matchId)) {
+        matchElementsById.set(matchId, []);
+      }
+      matchElementsById.get(matchId).push(element);
+    }
+    var blockId = String(element.getAttribute('data-collinearity-block-id') || '').trim();
+    if (blockId) {
+      if (!comparisonElementsByCollinearityBlockId.has(blockId)) {
+        comparisonElementsByCollinearityBlockId.set(blockId, []);
+      }
+      comparisonElementsByCollinearityBlockId.get(blockId).push(element);
+    }
+    setClassToken(element, 'gbdraw-interactive-pairwise-match', true);
   });
 
   function setClassToken(element, token, enabled) {
@@ -835,6 +950,15 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
+  function setCollinearityBlockHover(blockId, highlight) {
+    var id = String(blockId || '').trim();
+    if (!id) return;
+    var comparisonElements = comparisonElementsByCollinearityBlockId.get(id) || [];
+    comparisonElements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-pairwise-match--hover', highlight);
+    });
+  }
+
   function setHoverHighlight(svgId, highlight) {
     var feature = featuresById.get(String(svgId || '').trim());
     var orthogroupId = String(feature && feature.orthogroup_id || '').trim();
@@ -843,6 +967,53 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return;
     }
     setFeatureHighlight(svgId, highlight);
+  }
+
+  function matchAttr(element, name) {
+    return String(element && element.getAttribute && element.getAttribute(name) || '').trim();
+  }
+
+  function getElementMatchId(element) {
+    return matchAttr(element, 'data-gbdraw-pairwise-match-id');
+  }
+
+  function getMatchHoverKey(element) {
+    var blockId = matchAttr(element, 'data-collinearity-block-id');
+    if (blockId) return 'collinearity:' + blockId;
+    var orthogroupId = matchAttr(element, 'data-orthogroup-id');
+    if (orthogroupId) return 'orthogroup:' + orthogroupId;
+    return 'match:' + (getElementMatchId(element) || matchAttr(element, 'd'));
+  }
+
+  function setMatchHover(element, highlight) {
+    if (!element) return;
+    setClassToken(element, 'gbdraw-interactive-pairwise-match--hover', highlight);
+    var blockId = matchAttr(element, 'data-collinearity-block-id');
+    if (blockId) {
+      setCollinearityBlockHover(blockId, highlight);
+      return;
+    }
+    var orthogroupId = matchAttr(element, 'data-orthogroup-id');
+    if (orthogroupId) {
+      setOrthogroupHover(orthogroupId, highlight);
+    }
+  }
+
+  function clearActiveFeatureHover() {
+    if (!activeHoverSvgId) return;
+    setHoverHighlight(activeHoverSvgId, false);
+    activeHoverSvgId = null;
+    activeHoverKey = '';
+  }
+
+  function clearActiveMatchHover() {
+    if (!activeHoverMatchId) return;
+    var elements = matchElementsById.get(activeHoverMatchId) || [];
+    elements.forEach(function (element) {
+      setMatchHover(element, false);
+    });
+    activeHoverMatchId = '';
+    activeHoverMatchKey = '';
   }
 
   function supportsStandaloneControls() {
@@ -1104,18 +1275,47 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
-  function displayProteinId(feature, member) {
-    return String(
-      feature && feature.source_protein_id ||
-      feature && feature.sourceProteinId ||
-      member && member.sourceProteinId ||
-      member && member.source_protein_id ||
-      feature && feature.protein_id ||
-      feature && feature.proteinId ||
-      member && member.proteinId ||
-      member && member.protein_id ||
-      ''
-    ).trim();
+  function firstDisplayText() {
+    for (var i = 0; i < arguments.length; i += 1) {
+      var value = arguments[i];
+      if (Array.isArray(value)) {
+        var nested = firstDisplayText.apply(null, value);
+        if (nested) return nested;
+        continue;
+      }
+      var text = String(value == null ? '' : value).trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  function displayProteinId(feature, member, fallback) {
+    return firstDisplayText(
+      feature && (feature.source_protein_id || feature.sourceProteinId),
+      member && (member.sourceProteinId || member.source_protein_id),
+      firstQualifierValue(feature, 'protein_id'),
+      feature && (feature.locus_tag || feature.locusTag),
+      firstQualifierValue(feature, 'locus_tag'),
+      member && (member.locusTag || member.locus_tag),
+      feature && (feature.gene_id || feature.geneId),
+      firstQualifierValue(feature, 'gene_id'),
+      member && (member.geneId || member.gene_id),
+      feature && (feature.old_locus_tag || feature.oldLocusTag),
+      firstQualifierValue(feature, 'old_locus_tag'),
+      member && (member.oldLocusTag || member.old_locus_tag),
+      feature && feature.ID,
+      firstQualifierValue(feature, 'ID'),
+      feature && feature.Name,
+      firstQualifierValue(feature, 'Name'),
+      feature && feature.Parent,
+      firstQualifierValue(feature, 'Parent'),
+      feature && feature.gene,
+      firstQualifierValue(feature, 'gene'),
+      member && member.gene,
+      feature && (feature.proteinId || feature.protein_id),
+      member && (member.proteinId || member.protein_id),
+      fallback
+    );
   }
 
   function internalProteinId(feature, member) {
@@ -1146,7 +1346,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     appendSearchItems(items, 'Orthogroup member gene', member && member.gene);
     appendSearchItems(items, 'Orthogroup member product', member && member.product);
     appendSearchItems(items, 'Orthogroup member note', member && member.note);
-    appendSearchItems(items, 'Orthogroup member protein ID', member && (member.sourceProteinId || member.source_protein_id || member.proteinId || member.protein_id));
+    appendSearchItems(items, 'Orthogroup member protein ID', displayProteinId(null, member));
     return items;
   }
 
@@ -2717,8 +2917,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
   }
 
-  function renderSequenceBlock(title, sequence) {
-    var text = String(sequence || '');
+  function renderSequenceBlock(title, sequence, fasta) {
+    var text = String(fasta || sequence || '');
     if (!text) {
       return '<div class="gfi-block"><div class="gfi-block-title">' + escapeHtml(title) + '</div><div class="gfi-empty">No sequence available.</div></div>';
     }
@@ -2734,8 +2934,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return '<div class="gfi-warning">' + escapeHtml(warning) + '</div>';
     }).join('');
     return warningHtml +
-      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence) +
-      renderSequenceBlock('Amino acid', feature.amino_acid_sequence);
+      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence, feature.nucleotide_fasta || feature.nucleotideFasta) +
+      renderSequenceBlock('Amino acid', feature.amino_acid_sequence, feature.amino_acid_fasta || feature.aminoAcidFasta);
   }
 
   function renderSimplePopup(feature) {
@@ -2778,6 +2978,177 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       tabButton('sequence', 'Sequence') +
       '</div>' +
       '<div class="gfi-content">' + panel + '</div>' +
+      '<button type="button" class="gfi-resize-handle" data-resize="true" title="Drag to resize" aria-label="Resize popup"></button>' +
+      '</div>';
+  }
+
+  function normalizeMatchRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(function (row) {
+      if (Array.isArray(row)) return [row[0], row[1]];
+      return [row && row.label, row && row.value];
+    }).filter(function (row) {
+      return String(row[0] == null ? '' : row[0]).trim() &&
+        String(row[1] == null ? '' : row[1]).trim();
+    });
+  }
+
+  function normalizeMatchMemberRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(function (row) {
+      return {
+        record: String(row && (row.record || row.record_id) || '').trim(),
+        coordinates: String(row && row.coordinates || '').trim(),
+        proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
+        productOrNote: String(row && (row.productOrNote || row.product_or_note) || '').trim()
+      };
+    }).filter(function (row) {
+      return row.record || row.coordinates || row.proteinId || row.productOrNote;
+    });
+  }
+
+  function normalizeMatchBlockOrthogroups(groups) {
+    return (Array.isArray(groups) ? groups : []).map(function (group) {
+      return {
+        id: String(group && group.id || '').trim(),
+        displayName: String(group && (group.displayName || group.display_name) || '').trim(),
+        memberCount: String(group && (group.memberCount || group.member_count) || '').trim(),
+        recordCoverage: String(group && (group.recordCoverage || group.record_coverage) || '').trim(),
+        queryMember: String(group && (group.queryMember || group.query_member) || '').trim(),
+        subjectMember: String(group && (group.subjectMember || group.subject_member) || '').trim(),
+        detailRows: normalizeMatchRows(group && (group.detailRows || group.detail_rows)),
+        memberRows: normalizeMatchMemberRows(group && (group.memberRows || group.member_rows)),
+        member_copy_text: String(group && (group.member_copy_text || group.memberCopyText) || '').trim()
+      };
+    }).filter(function (group) {
+      return group.id;
+    });
+  }
+
+  function normalizeMatchFeatureRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(function (row, index) {
+      var svgId = String(row && (row.svgId || row.svg_id) || '').trim();
+      var canOpen = Boolean(row && (row.canOpen || row.can_open)) || Boolean(svgId && featuresById.has(svgId));
+      return {
+        key: String(row && row.key || svgId || index),
+        svgId: svgId,
+        canOpen: canOpen,
+        label: String(row && row.label || '').trim(),
+        record: String(row && row.record || '').trim(),
+        location: String(row && row.location || '').trim(),
+        proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
+        locusId: String(row && (row.locusId || row.locus_id) || '').trim(),
+        displayName: String(row && (row.displayName || row.display_name) || '').trim(),
+        product: String(row && row.product || '').trim(),
+        copyText: String(row && (row.copyText || row.copy_text) || '').trim()
+      };
+    }).filter(function (row) {
+      return row.svgId || row.label || row.record || row.location || row.product;
+    });
+  }
+
+  function renderMatchBlockOrthogroupTable(groups, selectedId) {
+    if (!groups.length) return '';
+    var body = groups.map(function (group) {
+      var isSelected = selectedId && group.id === selectedId;
+      return '<tr class="gfi-block-og-row' + (isSelected ? ' is-active' : '') + '" data-block-og-id="' + escapeHtml(group.id) + '">' +
+        '<td class="gfi-mono">' + escapeHtml(group.id) + '</td>' +
+        '<td>' + escapeHtml(group.displayName) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(group.memberCount) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(group.recordCoverage) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(group.queryMember) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(group.subjectMember) + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="gfi-table-wrap"><table class="gfi-table gfi-block-og-table">' +
+      '<thead><tr><th>OG ID</th><th>Display name</th><th>Members</th><th>Record coverage</th><th>Query member</th><th>Subject member</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>';
+  }
+
+  function renderMatchFeatureTable(rows) {
+    if (!rows.length) return '';
+    var body = rows.map(function (row) {
+      var sub = [row.locusId, row.displayName].filter(function (value) { return value; }).join(' / ');
+      var copyText = row.copyText || [row.record, row.location, row.proteinId, row.locusId, row.displayName, row.product].join('\\t');
+      var featureAttr = row.svgId ? ' data-match-feature-id="' + escapeHtml(row.svgId) + '"' : '';
+      return '<tr class="gfi-match-feature-row' + (row.canOpen ? '' : ' is-disabled') + '"' + featureAttr + '>' +
+        '<td><div class="gfi-match-feature-main">' + escapeHtml(row.label || row.proteinId || row.svgId || 'Feature') + '</div>' +
+        (sub ? '<div class="gfi-match-feature-sub">' + escapeHtml(sub) + '</div>' : '') + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.location) + '</td>' +
+        '<td>' + escapeHtml(row.product) + '</td>' +
+        '<td>' + copyButton(copyText) + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="gfi-table-wrap"><table class="gfi-match-feature-table">' +
+      '<thead><tr><th>Feature</th><th>Record</th><th>Location</th><th>Product</th><th>Copy</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>';
+  }
+
+  function renderMatchMemberTable(section, rows) {
+    if (!rows.length) return '';
+    var copyText = String(section && (section.member_copy_text || section.memberCopyText) || '').trim();
+    if (!copyText) {
+      copyText = ['Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'].concat(
+        rows.map(function (row) {
+          return [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\\t');
+        })
+      ).join('\\n');
+    }
+    var body = rows.map(function (row) {
+      return '<tr>' +
+        '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.coordinates) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.proteinId) + '</td>' +
+        '<td>' + escapeHtml(row.productOrNote) + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
+      '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>' +
+      '<div class="gfi-block-actions">' + copyButton(copyText) + '</div>';
+  }
+
+  function renderMatchSections(match) {
+    var sections = Array.isArray(match && match.sections) ? match.sections : [];
+    if (!sections.length) {
+      return '<div class="gfi-empty">No match details available.</div>';
+    }
+    var selectedBlockOrthogroupId = String(match && (match.selected_block_orthogroup_id || match.selectedBlockOrthogroupId) || '').trim();
+    return sections.map(function (section) {
+      var rows = normalizeMatchRows(section && section.rows);
+      var memberRows = normalizeMatchMemberRows(section && (section.member_rows || section.memberRows));
+      var blockOrthogroups = normalizeMatchBlockOrthogroups(section && (section.block_orthogroups || section.blockOrthogroups));
+      var featureRows = normalizeMatchFeatureRows(section && (section.feature_rows || section.featureRows));
+      if (!rows.length && !memberRows.length && !blockOrthogroups.length && !featureRows.length) return '';
+      var selectedBlockOrthogroup = blockOrthogroups.find(function (group) {
+        return group.id === selectedBlockOrthogroupId;
+      });
+      var selectedHtml = selectedBlockOrthogroup
+        ? '<div class="gfi-block gfi-block--selected-og">' +
+          '<div class="gfi-block-title">' + escapeHtml('Selected orthogroup') + '</div>' +
+          renderRows(selectedBlockOrthogroup.detailRows) +
+          renderMatchMemberTable(selectedBlockOrthogroup, selectedBlockOrthogroup.memberRows) +
+          '</div>'
+        : '';
+      return '<div class="gfi-block">' +
+        '<div class="gfi-block-title">' + escapeHtml(section && section.title || 'Details') + '</div>' +
+        (rows.length && !featureRows.length ? renderRows(rows) : '') +
+        renderMatchFeatureTable(featureRows) +
+        renderMatchBlockOrthogroupTable(blockOrthogroups, selectedBlockOrthogroupId) +
+        renderMatchMemberTable(section, memberRows) +
+        selectedHtml +
+        '</div>';
+    }).join('') || '<div class="gfi-empty">No match details available.</div>';
+  }
+
+  function renderMatchPopup(match) {
+    copyValues = [];
+    return '<div class="gfi gfi--simple">' +
+      '<div class="gfi-header" data-drag-handle="true">' +
+      '<div><div class="gfi-title">' + escapeHtml(match && match.title || 'Pairwise match') + '</div>' +
+      '<div class="gfi-subtitle">' + escapeHtml(match && (match.subtitle || match.id) || '') + '</div></div>' +
+      '<button type="button" class="gfi-close" data-close="true">x</button>' +
+      '</div>' +
+      '<div class="gfi-content">' + renderMatchSections(match) + '</div>' +
       '<button type="button" class="gfi-resize-handle" data-resize="true" title="Drag to resize" aria-label="Resize popup"></button>' +
       '</div>';
   }
@@ -2920,6 +3291,25 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       '</div>';
   }
 
+  function renderMatchHoverPopupHtml(match) {
+    var rows = normalizeMatchRows(match && match.hover_rows).slice(0, 6);
+    var rowHtml = rows.map(function (row) {
+      return '<div class="gfhs-row">' +
+        '<div class="gfhs-key">' + escapeHtml(row[0]) + '</div>' +
+        '<div class="gfhs-value">' + escapeHtml(row[1]) + '</div>' +
+        '</div>';
+    }).join('');
+    var color = String(match && match.fill || '#94a3b8');
+    return '<div class="gfhs">' +
+      '<div class="gfhs-title">' +
+      '<div class="gfhs-swatch" style="background:' + escapeHtml(color) + '"></div>' +
+      '<div class="gfhs-text"><div class="gfhs-heading">' + escapeHtml(match && match.title || 'Pairwise match') + '</div>' +
+      '<div class="gfhs-subtitle">' + escapeHtml(match && (match.subtitle || match.id) || '') + '</div></div>' +
+      '</div>' +
+      rowHtml +
+      '</div>';
+  }
+
   function getHoverPopupCssMetrics(viewport, rowCount) {
     var zoomScale = getBrowserZoomScale(viewport);
     var margin = 12;
@@ -3030,6 +3420,51 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     hoverPopupTimer = window.setTimeout(function () {
       hoverPopupTimer = null;
       showHoverPopup(feature, svgId, hoverPopupLastEvent);
+    }, 180);
+  }
+
+  function showMatchHoverPopup(match, event) {
+    if (!match || !hoverPopupAllowed()) {
+      closeHoverPopup();
+      return;
+    }
+    closeHoverPopup();
+    var rows = normalizeMatchRows(match.hover_rows);
+    var foreignObject = document.createElementNS(SVG_NS, 'foreignObject');
+    foreignObject.setAttribute('id', 'gbdraw-feature-hover-popup');
+    foreignObject.setAttribute('class', 'gbdraw-feature-hover-popup');
+    foreignObject.setAttribute('data-row-count', String(rows.length || 1));
+    var root = document.createElementNS(XHTML_NS, 'div');
+    root.setAttribute('xmlns', XHTML_NS);
+    root.innerHTML = renderMatchHoverPopupHtml(match);
+    foreignObject.appendChild(root);
+    svg.appendChild(foreignObject);
+    hoverPopup = foreignObject;
+    hoverPopupFeatureId = 'match:' + String(match.id || '').trim();
+    hoverPopupLastEvent = event;
+    positionHoverPopup(event);
+    syncStandaloneOverlayOrder();
+  }
+
+  function scheduleMatchHoverPopup(match, event) {
+    if (!match || !hoverPopupAllowed()) {
+      closeHoverPopup();
+      return;
+    }
+    hoverPopupLastEvent = event || hoverPopupLastEvent;
+    var hoverId = 'match:' + String(match.id || '').trim();
+    if (hoverPopup && hoverPopupFeatureId === hoverId) {
+      scheduleHoverPopupPosition(event);
+      return;
+    }
+    if (hoverPopupTimer) {
+      window.clearTimeout(hoverPopupTimer);
+      hoverPopupTimer = null;
+    }
+    hoverPopupFeatureId = hoverId;
+    hoverPopupTimer = window.setTimeout(function () {
+      hoverPopupTimer = null;
+      showMatchHoverPopup(match, hoverPopupLastEvent);
     }, 180);
   }
 
@@ -3173,10 +3608,11 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return Math.min(Math.max(numeric, safeMin), safeMax);
   }
 
-  function openPopup(feature, event) {
+  function openPopup(feature, event, popupKind) {
     if (!supportsStandaloneControls()) return;
     closeHoverPopup();
     closePopup();
+    var kind = popupKind === 'match' ? 'match' : 'feature';
     var viewport = getViewportClientRect();
     var view = getVisibleViewRect();
     var scale = getScreenScale();
@@ -3369,7 +3805,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
 
     function redraw() {
-      root.innerHTML = renderPopup(feature, activeTab);
+      root.innerHTML = kind === 'match' ? renderMatchPopup(feature) : renderPopup(feature, activeTab);
     }
 
     function closestFromTarget(target, selector) {
@@ -3384,7 +3820,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         startPopupResize(rootEvent);
         return;
       }
-      var interactiveTarget = closestFromTarget(rootEvent.target, 'button, input, textarea, select, a, [data-close], [data-copy-index], [data-tab]');
+      var interactiveTarget = closestFromTarget(rootEvent.target, 'button, input, textarea, select, a, [data-close], [data-copy-index], [data-tab], [data-block-og-id], [data-match-feature-id]');
       if (interactiveTarget) return;
       var dragHandle = closestFromTarget(rootEvent.target, '[data-drag-handle]');
       if (dragHandle) {
@@ -3405,11 +3841,27 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         redraw();
         return;
       }
+      var blockOrthogroupRow = closestFromTarget(rootEvent.target, '[data-block-og-id]');
+      if (blockOrthogroupRow && kind === 'match') {
+        feature.selected_block_orthogroup_id = blockOrthogroupRow.getAttribute('data-block-og-id') || '';
+        redraw();
+        return;
+      }
       var copyTarget = closestFromTarget(rootEvent.target, '[data-copy-index]');
       if (copyTarget) {
         var index = Number(copyTarget.getAttribute('data-copy-index'));
         var value = Number.isFinite(index) ? copyValues[index] || '' : '';
         Promise.resolve(copyText(value, copyTarget)).catch(function () {});
+        return;
+      }
+      var matchFeatureRow = closestFromTarget(rootEvent.target, '[data-match-feature-id]');
+      if (matchFeatureRow && kind === 'match') {
+        var featureId = String(matchFeatureRow.getAttribute('data-match-feature-id') || '').trim();
+        var matchedFeature = featureId ? featuresById.get(featureId) : null;
+        if (matchedFeature) {
+          openPopup(matchedFeature, rootEvent, 'feature');
+        }
+        return;
       }
     });
 
@@ -3458,6 +3910,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return null;
   }
 
+  function closestMatch(node) {
+    while (node && node !== svg) {
+      if (node.matches && node.matches(MATCH_SELECTOR)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
   setSvgViewRect(homeViewRect);
   setClassToken(svg, 'gbdraw-interactive-pan-enabled', true);
   setupStickyLegend();
@@ -3483,21 +3943,41 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
     var featureElement = closestFeature(event.target);
-    var svgId = getElementFeatureId(featureElement);
-    if (!svgId || !featureElementsById.has(svgId)) return;
-    var feature = featuresById.get(svgId);
-    var hoverKey = getFeatureHoverKey(svgId);
-    if (activeHoverKey === hoverKey) {
+    if (featureElement) {
+      clearActiveMatchHover();
+      var svgId = getElementFeatureId(featureElement);
+      if (!svgId || !featureElementsById.has(svgId)) return;
+      var feature = featuresById.get(svgId);
+      var hoverKey = getFeatureHoverKey(svgId);
+      if (activeHoverKey === hoverKey) {
+        scheduleHoverPopup(feature, svgId, event);
+        return;
+      }
+      if (activeHoverSvgId) {
+        setHoverHighlight(activeHoverSvgId, false);
+      }
+      activeHoverSvgId = svgId;
+      activeHoverKey = hoverKey;
+      setHoverHighlight(svgId, true);
       scheduleHoverPopup(feature, svgId, event);
       return;
     }
-    if (activeHoverSvgId) {
-      setHoverHighlight(activeHoverSvgId, false);
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) return;
+    clearActiveFeatureHover();
+    var matchId = getElementMatchId(matchElement);
+    if (!matchId || !matchesById.has(matchId)) return;
+    var match = matchesById.get(matchId);
+    var matchHoverKey = getMatchHoverKey(matchElement);
+    if (activeHoverMatchKey === matchHoverKey) {
+      scheduleMatchHoverPopup(match, event);
+      return;
     }
-    activeHoverSvgId = svgId;
-    activeHoverKey = hoverKey;
-    setHoverHighlight(svgId, true);
-    scheduleHoverPopup(feature, svgId, event);
+    clearActiveMatchHover();
+    activeHoverMatchId = matchId;
+    activeHoverMatchKey = matchHoverKey;
+    setMatchHover(matchElement, true);
+    scheduleMatchHoverPopup(match, event);
   });
 
   svg.addEventListener('mousemove', function (event) {
@@ -3510,23 +3990,45 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return;
     }
     var featureElement = closestFeature(event.target);
-    var svgId = getElementFeatureId(featureElement);
-    if (!svgId || !featureElementsById.has(svgId)) {
-      closeHoverPopup();
+    if (featureElement) {
+      var svgId = getElementFeatureId(featureElement);
+      if (!svgId || !featureElementsById.has(svgId)) {
+        closeHoverPopup();
+        return;
+      }
+      scheduleHoverPopup(featuresById.get(svgId), svgId, event);
       return;
     }
-    scheduleHoverPopup(featuresById.get(svgId), svgId, event);
+    var matchElement = closestMatch(event.target);
+    if (matchElement) {
+      var matchId = getElementMatchId(matchElement);
+      var match = matchesById.get(matchId);
+      if (match) {
+        scheduleMatchHoverPopup(match, event);
+        return;
+      }
+    }
+    closeHoverPopup();
   });
 
   svg.addEventListener('mouseout', function (event) {
     var featureElement = closestFeature(event.target);
-    var svgId = getElementFeatureId(featureElement);
-    if (!svgId || activeHoverSvgId !== svgId) return;
-    var relatedFeature = closestFeature(event.relatedTarget);
-    if (relatedFeature && getFeatureHoverKey(getElementFeatureId(relatedFeature)) === activeHoverKey) return;
-    setHoverHighlight(svgId, false);
-    activeHoverSvgId = null;
-    activeHoverKey = '';
+    if (featureElement) {
+      var svgId = getElementFeatureId(featureElement);
+      if (!svgId || activeHoverSvgId !== svgId) return;
+      var relatedFeature = closestFeature(event.relatedTarget);
+      if (relatedFeature && getFeatureHoverKey(getElementFeatureId(relatedFeature)) === activeHoverKey) return;
+      clearActiveFeatureHover();
+      closeHoverPopup();
+      return;
+    }
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) return;
+    var matchId = getElementMatchId(matchElement);
+    if (!matchId || activeHoverMatchId !== matchId) return;
+    var relatedMatch = closestMatch(event.relatedTarget);
+    if (relatedMatch && getMatchHoverKey(relatedMatch) === activeHoverMatchKey) return;
+    clearActiveMatchHover();
     closeHoverPopup();
   });
 
@@ -3541,8 +4043,19 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     var featureElement = closestFeature(event.target);
     if (!featureElement) {
+      var matchElement = closestMatch(event.target);
+      if (!matchElement) {
+        closeHoverPopup();
+        closePopup();
+        return;
+      }
+      var matchId = getElementMatchId(matchElement);
+      var match = matchesById.get(matchId);
+      if (!match) return;
+      event.preventDefault();
+      event.stopPropagation();
       closeHoverPopup();
-      closePopup();
+      openPopup(match, event, 'match');
       return;
     }
     var svgId = getElementFeatureId(featureElement);
@@ -3555,7 +4068,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     event.preventDefault();
     event.stopPropagation();
     closeHoverPopup();
-    openPopup(feature, event);
+    openPopup(feature, event, 'feature');
   });
 
   document.addEventListener('keydown', function (event) {
@@ -3809,6 +4322,9 @@ const normalizeStandaloneOrthogroupMember = (member) => {
     strand: String(member.strand || ''),
     representative: Boolean(member.representative),
     gene: String(member.gene || ''),
+    locusTag: String(member.locusTag || member.locus_tag || ''),
+    geneId: String(member.geneId || member.gene_id || ''),
+    oldLocusTag: String(member.oldLocusTag || member.old_locus_tag || ''),
     product: String(member.product || ''),
     note: String(member.note || '')
   };
@@ -3841,7 +4357,7 @@ const getStandaloneOrthogroupDescription = (group, context) => {
 const buildStandaloneOrthogroupPayloads = (features, context) => {
   const neededIds = new Set(
     (Array.isArray(features) ? features : [])
-      .map((feature) => String(feature?.orthogroup_id || '').trim())
+      .map((feature) => String(feature?.orthogroup_id || feature?.orthogroupId || '').trim())
       .filter(Boolean)
   );
   if (neededIds.size === 0) return [];
@@ -3969,6 +4485,9 @@ const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) =>
     end: null,
     strand: '',
     location: '',
+    locus_tag: '',
+    gene_id: '',
+    old_locus_tag: '',
     fill_color: fillColor,
     orthogroup_id: '',
     orthogroup_member_count: 0,
@@ -3981,6 +4500,8 @@ const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) =>
     nucleotide_sequence: '',
     amino_acid_sequence: '',
     sequence_warnings: [],
+    nucleotide_fasta: '',
+    amino_acid_fasta: '',
     orthogroup_member: null
   };
 };
@@ -4007,6 +4528,7 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
     const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel, context);
     const orthogroupEntry = getStandaloneFeatureOrthogroupEntry(feature, context);
     const orthogroupMember = normalizeStandaloneOrthogroupMember(orthogroupEntry?.orthogroupMember);
+    const sequenceFastas = buildFeatureSequenceFastas(feature);
     const payload = {
       svg_id: svgId,
       label: fallbackLabel,
@@ -4019,6 +4541,9 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
       strand: String(feature?.strand || ''),
       location: buildStandaloneFeatureLocation(feature),
+      locus_tag: String(feature?.locus_tag || feature?.locusTag || ''),
+      gene_id: String(feature?.gene_id || feature?.geneId || ''),
+      old_locus_tag: String(feature?.old_locus_tag || feature?.oldLocusTag || ''),
       orthogroup_id: String(orthogroupEntry?.orthogroupId || ''),
       orthogroup_member_count: Number.isFinite(Number(orthogroupEntry?.orthogroupMemberCount))
         ? Number(orthogroupEntry.orthogroupMemberCount)
@@ -4026,8 +4551,14 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       orthogroup_record_coverage: Number.isFinite(Number(orthogroupEntry?.orthogroupRecordCoverage))
         ? Number(orthogroupEntry.orthogroupRecordCoverage)
         : 0,
-      protein_id: String(orthogroupEntry?.proteinId || ''),
-      source_protein_id: String(orthogroupEntry?.sourceProteinId || ''),
+      protein_id: String(orthogroupEntry?.proteinId || feature?.proteinId || feature?.protein_id || ''),
+      source_protein_id: String(
+        orthogroupEntry?.sourceProteinId ||
+        feature?.sourceProteinId ||
+        feature?.source_protein_id ||
+        firstQualifierValue(feature, 'protein_id') ||
+        ''
+      ),
       orthogroup_representative: Boolean(orthogroupEntry?.orthogroupRepresentative)
     };
     if (normalizedPopupMode === 'rich') {
@@ -4037,6 +4568,8 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
         nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
         amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
         sequence_warnings: normalizeStringArray(feature?.sequence_warnings),
+        nucleotide_fasta: sequenceFastas.nucleotideFasta,
+        amino_acid_fasta: sequenceFastas.aminoAcidFasta,
         orthogroup_member: orthogroupMember
       });
     }
@@ -4051,6 +4584,721 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
     });
   }
   return payloads;
+};
+
+const standaloneAttr = (element, name) =>
+  String(element?.getAttribute?.(name) || '').trim();
+
+const firstStandaloneText = (...values) => {
+  for (const value of values) {
+    const text = String(value === null || value === undefined ? '' : value).trim();
+    if (text) return text;
+  }
+  return '';
+};
+
+const splitStandaloneMetadataValues = (value) => firstStandaloneText(value)
+  .split(';')
+  .map((entry) => firstStandaloneText(entry))
+  .filter(Boolean);
+
+const uniqueStandaloneMetadataValues = (value) => {
+  const seen = new Set();
+  const values = [];
+  splitStandaloneMetadataValues(value).forEach((entry) => {
+    if (seen.has(entry)) return;
+    seen.add(entry);
+    values.push(entry);
+  });
+  return values;
+};
+
+const standaloneGeneratedProteinIdPattern = /^(?:gbd_r\d+_cds\d+|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$/i;
+const standaloneGeneratedUnitIdPattern = /^gbd_r\d+_unit\d+$/i;
+
+const isStandaloneInternalDisplayId = (value) => {
+  const text = firstStandaloneText(value);
+  return Boolean(text && (
+    standaloneGeneratedProteinIdPattern.test(text) ||
+    standaloneGeneratedUnitIdPattern.test(text)
+  ));
+};
+
+const addUniqueStandaloneDisplayText = (values, value) => {
+  const text = firstStandaloneText(value);
+  if (!text || isStandaloneInternalDisplayId(text) || values.includes(text)) return;
+  values.push(text);
+};
+
+const resolveStandaloneDisplayProteinId = (feature, member = null, fallback = '') => firstStandaloneText(
+  feature?.sourceProteinId,
+  feature?.source_protein_id,
+  member?.sourceProteinId,
+  member?.source_protein_id,
+  firstQualifierValue(feature, 'protein_id'),
+  feature?.locusTag,
+  feature?.locus_tag,
+  firstQualifierValue(feature, 'locus_tag'),
+  member?.locusTag,
+  member?.locus_tag,
+  feature?.geneId,
+  feature?.gene_id,
+  firstQualifierValue(feature, 'gene_id'),
+  member?.geneId,
+  member?.gene_id,
+  feature?.oldLocusTag,
+  feature?.old_locus_tag,
+  firstQualifierValue(feature, 'old_locus_tag'),
+  member?.oldLocusTag,
+  member?.old_locus_tag,
+  feature?.ID,
+  firstQualifierValue(feature, 'ID'),
+  feature?.Name,
+  firstQualifierValue(feature, 'Name'),
+  feature?.Parent,
+  firstQualifierValue(feature, 'Parent'),
+  feature?.gene,
+  firstQualifierValue(feature, 'gene'),
+  member?.gene,
+  feature?.proteinId,
+  feature?.protein_id,
+  member?.proteinId,
+  member?.protein_id,
+  fallback
+);
+
+const addStandaloneMatchRow = (rows, label, value) => {
+  const text = String(value === null || value === undefined ? '' : value).trim();
+  if (!text) return;
+  rows.push([label, text]);
+};
+
+const standaloneIntervalText = (start, end) => {
+  const startText = String(start || '').trim();
+  const endText = String(end || '').trim();
+  if (startText && endText) return `${startText}..${endText}`;
+  return startText || endText;
+};
+
+const standaloneMemberLocationText = (member) => {
+  if (!member || typeof member !== 'object') return '';
+  const start = Number(member.start);
+  const end = Number(member.end);
+  const startText = Number.isFinite(start) ? String(start + 1) : String(member.start ?? '').trim();
+  const endText = Number.isFinite(end) ? String(end) : String(member.end ?? '').trim();
+  const range = startText && endText ? `${startText}..${endText}` : startText || endText;
+  const strand = String(member.strand || '').trim();
+  return range && strand ? `${range} (${strand})` : range;
+};
+
+const buildStandaloneMatchMemberRows = (orthogroup) => {
+  const members = Array.isArray(orthogroup?.members) ? orthogroup.members : [];
+  return members
+    .map((member) => ({
+      record: firstStandaloneText(member?.recordId, member?.record_id),
+      coordinates: standaloneMemberLocationText(member),
+      proteinId: resolveStandaloneDisplayProteinId(null, member),
+      productOrNote: firstStandaloneText(member?.product, member?.note)
+    }))
+    .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote);
+};
+
+const standaloneMemberCopyText = (memberRows) => {
+  if (!Array.isArray(memberRows) || memberRows.length === 0) return '';
+  return [
+    'Record\tCoordinates (+/-)\tProtein ID\tProduct / note',
+    ...memberRows.map((row) => [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\t'))
+  ].join('\n');
+};
+
+const standaloneMatchKind = (element) => {
+  const explicit = standaloneAttr(element, 'data-match-kind').toLowerCase();
+  if (explicit === 'pairwise' || explicit === 'orthogroup' || explicit === 'collinear') return explicit;
+  if (standaloneAttr(element, 'data-collinearity-block-id')) return 'collinear';
+  if (standaloneAttr(element, 'data-orthogroup-id')) return 'orthogroup';
+  return 'pairwise';
+};
+
+const STANDALONE_MATCH_TITLES = {
+  pairwise: 'Pairwise match',
+  orthogroup: 'Orthogroup match',
+  collinear: 'Collinearity block'
+};
+
+const standaloneOrthogroupTitle = (orthogroupId, displayName) => {
+  const id = String(orthogroupId || '').trim();
+  const name = String(displayName || '').trim();
+  if (id && name) return `${id}:${name}`;
+  return id || name || STANDALONE_MATCH_TITLES.orthogroup;
+};
+
+const buildStandaloneMatchSection = (title, rows) => ({
+  title,
+  rows: rows.filter((row) => String(row?.[1] || '').trim())
+});
+
+const standaloneMemberFeatureSvgId = (member) => firstStandaloneText(member?.featureSvgId, member?.feature_svg_id);
+
+const getStandaloneOrthogroupById = (orthogroups, orthogroupId) => {
+  const id = firstStandaloneText(orthogroupId);
+  if (!id) return null;
+  return (Array.isArray(orthogroups) ? orthogroups : [])
+    .find((entry) => firstStandaloneText(entry?.id, entry?.orthogroupId, entry?.orthogroup_id) === id) || null;
+};
+
+const standaloneGroupHasFeatureSvgId = (group, featureSvgId) => {
+  const ids = splitStandaloneMetadataValues(featureSvgId);
+  if (ids.length === 0) return false;
+  return (Array.isArray(group?.members) ? group.members : [])
+    .some((member) => ids.includes(standaloneMemberFeatureSvgId(member)));
+};
+
+const getStandaloneOrthogroupPayload = (orthogroups, orthogroupId, queryFeatureSvgId = '', subjectFeatureSvgId = '') => {
+  const id = String(orthogroupId || '').trim();
+  const groups = Array.isArray(orthogroups) ? orthogroups : [];
+  const direct = getStandaloneOrthogroupById(groups, id);
+  if (direct) return direct;
+  return groups.find((entry) => (
+    standaloneGroupHasFeatureSvgId(entry, queryFeatureSvgId) ||
+    standaloneGroupHasFeatureSvgId(entry, subjectFeatureSvgId)
+  )) || null;
+};
+
+const standaloneFeatureOrthogroupId = (feature) => firstStandaloneText(
+  feature?.orthogroup_id,
+  feature?.orthogroupId,
+  feature?.orthogroup_member?.orthogroupId,
+  feature?.orthogroup_member?.orthogroup_id,
+  feature?.orthogroupMember?.orthogroupId,
+  feature?.orthogroupMember?.orthogroup_id
+);
+
+const standaloneFeatureProduct = (feature) => firstStandaloneText(
+  feature?.product,
+  feature?.orthogroup_member?.product,
+  feature?.orthogroupMember?.product,
+  feature?.note,
+  feature?.label,
+  feature?.display_label,
+  feature?.displayLabel
+);
+
+const standaloneFeatureToMember = (feature) => {
+  if (!feature) return null;
+  const member = feature?.orthogroup_member || feature?.orthogroupMember || {};
+  return {
+    recordId: firstStandaloneText(member?.recordId, member?.record_id, feature?.record_id),
+    start: member?.start ?? feature?.start,
+    end: member?.end ?? feature?.end,
+    strand: firstStandaloneText(member?.strand, feature?.strand),
+    proteinId: firstStandaloneText(member?.proteinId, member?.protein_id, feature?.protein_id, feature?.proteinId),
+    sourceProteinId: firstStandaloneText(member?.sourceProteinId, member?.source_protein_id, feature?.source_protein_id, feature?.sourceProteinId),
+    product: firstStandaloneText(member?.product, standaloneFeatureProduct(feature)),
+    note: firstStandaloneText(member?.note, feature?.note),
+    featureSvgId: firstStandaloneText(member?.featureSvgId, member?.feature_svg_id, feature?.svg_id)
+  };
+};
+
+const buildStandaloneFallbackOrthogroup = ({ orthogroupId, queryFeature, subjectFeature, features }) => {
+  const id = String(orthogroupId || '').trim();
+  if (!id) return null;
+  const matchingFeatures = (Array.isArray(features) ? features : [])
+    .filter((feature) => standaloneFeatureOrthogroupId(feature) === id);
+  const fallbackFeatures = matchingFeatures.length
+    ? matchingFeatures
+    : [queryFeature, subjectFeature].filter(Boolean);
+  if (!fallbackFeatures.length) return null;
+  const members = fallbackFeatures.map(standaloneFeatureToMember).filter(Boolean);
+  const firstFeature = fallbackFeatures[0] || {};
+  const recordCoverageFallback = new Set(
+    fallbackFeatures
+      .map((feature) => firstStandaloneText(feature?.record_id, feature?.recordId, feature?.record_idx, feature?.recordIndex))
+      .filter(Boolean)
+  ).size;
+  return {
+    id,
+    name: standaloneFeatureProduct(firstFeature),
+    member_count: firstStandaloneText(firstFeature?.orthogroup_member_count, firstFeature?.orthogroupMemberCount, members.length),
+    record_coverage_count: firstStandaloneText(firstFeature?.orthogroup_record_coverage, firstFeature?.orthogroupRecordCoverage, recordCoverageFallback),
+    members
+  };
+};
+
+const getStandaloneGroupMemberForFeatureSvgId = (group, featureSvgId) => {
+  const id = firstStandaloneText(featureSvgId);
+  if (!id) return null;
+  const members = Array.isArray(group?.members) ? group.members : [];
+  return members.find((member) => standaloneMemberFeatureSvgId(member) === id) || null;
+};
+
+const resolveStandaloneFeatureSectionProteinIds = ({
+  feature,
+  featureSvgIds,
+  featuresById,
+  group,
+  fallbackProteinIds,
+  locusId,
+  displayName
+}) => {
+  const values = [];
+  const addFeatureProteinId = (candidateFeature, member = null) => {
+    const text = resolveStandaloneDisplayProteinId(candidateFeature, member, '');
+    addUniqueStandaloneDisplayText(values, text);
+  };
+
+  const ids = splitStandaloneMetadataValues(featureSvgIds);
+  ids.forEach((featureSvgId) => {
+    const candidateFeature = featuresById?.get?.(featureSvgId) || null;
+    const member = getStandaloneGroupMemberForFeatureSvgId(group, featureSvgId);
+    addFeatureProteinId(candidateFeature, member);
+  });
+  if (feature) {
+    addFeatureProteinId(feature, ids.length === 1 ? getStandaloneGroupMemberForFeatureSvgId(group, ids[0]) : null);
+  }
+  if (values.length === 0) {
+    splitStandaloneMetadataValues(locusId).forEach((value) => addUniqueStandaloneDisplayText(values, value));
+  }
+  if (values.length === 0) {
+    splitStandaloneMetadataValues(displayName).forEach((value) => addUniqueStandaloneDisplayText(values, value));
+  }
+  if (values.length === 0) {
+    splitStandaloneMetadataValues(fallbackProteinIds).forEach((value) => addUniqueStandaloneDisplayText(values, value));
+  }
+  return values.join('; ');
+};
+
+const firstStandaloneNonInternalDisplayText = (...values) => {
+  for (const value of values) {
+    const text = firstStandaloneText(value);
+    if (text && !isStandaloneInternalDisplayId(text)) return text;
+  }
+  return '';
+};
+
+const standaloneFeatureLocationText = (feature) => {
+  const direct = firstStandaloneText(feature?.location);
+  if (direct && direct !== '..') return direct;
+  const built = buildStandaloneFeatureLocation(feature);
+  return built && built !== '..' ? built : '';
+};
+
+const standaloneFeatureRowLocusId = (feature, fallbackLocusId) => firstStandaloneText(
+  feature?.locusTag,
+  feature?.locus_tag,
+  firstQualifierValue(feature, 'locus_tag'),
+  feature?.geneId,
+  feature?.gene_id,
+  firstQualifierValue(feature, 'gene_id'),
+  fallbackLocusId
+);
+
+const standaloneFeatureRowDisplayName = (feature, fallbackDisplayName) => firstStandaloneText(
+  fallbackDisplayName,
+  feature?.displayLabel,
+  feature?.display_label,
+  feature?.label,
+  feature?.gene,
+  firstQualifierValue(feature, 'gene'),
+  feature?.locus_tag,
+  feature?.locusTag,
+  firstQualifierValue(feature, 'locus_tag'),
+  standaloneFeatureProduct(feature)
+);
+
+const buildStandaloneFeatureListRows = ({
+  featureSvgIds,
+  featuresById,
+  group,
+  recordId,
+  interval,
+  proteinId,
+  locusId,
+  displayName
+}) => {
+  const featureIds = uniqueStandaloneMetadataValues(featureSvgIds);
+  const proteinIds = splitStandaloneMetadataValues(proteinId);
+  const locusIds = splitStandaloneMetadataValues(locusId);
+  const displayNames = splitStandaloneMetadataValues(displayName);
+  const count = Math.max(featureIds.length, proteinIds.length, locusIds.length, displayNames.length);
+  if (count === 0) return [];
+
+  return Array.from({ length: count }, (_unused, index) => {
+    const svgId = featureIds[index] || '';
+    const feature = svgId ? featuresById?.get?.(svgId) || null : null;
+    const member = svgId ? getStandaloneGroupMemberForFeatureSvgId(group, svgId) : null;
+    const fallbackProteinId = firstStandaloneNonInternalDisplayText(
+      locusIds[index],
+      displayNames[index],
+      proteinIds[index]
+    );
+    const resolvedProteinId = resolveStandaloneDisplayProteinId(feature, member, '');
+    const displayProteinId = firstStandaloneText(
+      isStandaloneInternalDisplayId(resolvedProteinId) ? '' : resolvedProteinId,
+      fallbackProteinId,
+      resolvedProteinId,
+      proteinIds[index]
+    );
+    const rowRecord = firstStandaloneText(feature?.record_id, feature?.recordId, member?.recordId, member?.record_id, recordId);
+    const rowLocation = firstStandaloneText(
+      standaloneFeatureLocationText(feature),
+      standaloneMemberLocationText(member),
+      count === 1 ? interval : ''
+    );
+    const rowLocusId = standaloneFeatureRowLocusId(feature, locusIds[index]);
+    const rowDisplayName = standaloneFeatureRowDisplayName(feature, displayNames[index]);
+    const product = standaloneFeatureProduct(feature);
+    const label = firstStandaloneText(displayProteinId, rowDisplayName, rowLocusId, product, svgId, `Feature ${index + 1}`);
+    const copyText = [
+      rowRecord,
+      rowLocation,
+      displayProteinId,
+      rowLocusId,
+      rowDisplayName,
+      product
+    ].join('\t');
+    return {
+      key: `${svgId || 'feature'}-${index}`,
+      svg_id: svgId,
+      svgId,
+      can_open: Boolean(feature?.svg_id),
+      canOpen: Boolean(feature?.svg_id),
+      label,
+      record: rowRecord,
+      location: rowLocation,
+      protein_id: displayProteinId,
+      proteinId: displayProteinId,
+      locus_id: rowLocusId,
+      locusId: rowLocusId,
+      display_name: rowDisplayName,
+      displayName: rowDisplayName,
+      product,
+      type: firstStandaloneText(feature?.type),
+      copy_text: copyText,
+      copyText
+    };
+  }).filter((row) => (
+    row.svg_id ||
+    row.record ||
+    row.location ||
+    row.protein_id ||
+    row.locus_id ||
+    row.display_name ||
+    row.product
+  ));
+};
+
+const resolveStandaloneBlockMemberLabels = ({
+  group,
+  featureSvgIds,
+  featuresById
+}) => {
+  if (!group) return '';
+  const values = [];
+  uniqueStandaloneMetadataValues(featureSvgIds).forEach((featureSvgId) => {
+    const feature = featuresById?.get?.(featureSvgId) || null;
+    const member = group ? getStandaloneGroupMemberForFeatureSvgId(group, featureSvgId) : null;
+    if (!member) return;
+    addUniqueStandaloneDisplayText(values, resolveStandaloneDisplayProteinId(feature, member, ''));
+  });
+  return values.join('; ');
+};
+
+const buildStandaloneOrthogroupDetailRows = ({
+  orthogroupId,
+  displayName,
+  description,
+  memberCount,
+  recordCoverage
+}) => {
+  const rows = [];
+  addStandaloneMatchRow(rows, 'Orthogroup ID', orthogroupId);
+  addStandaloneMatchRow(rows, 'Display name', displayName);
+  addStandaloneMatchRow(rows, 'Description', description);
+  addStandaloneMatchRow(rows, 'Members', memberCount);
+  addStandaloneMatchRow(rows, 'Record coverage', recordCoverage);
+  return rows;
+};
+
+const buildStandaloneBlockOrthogroups = ({
+  orthogroupIds,
+  orthogroups,
+  featuresById,
+  queryFeatureSvgId,
+  subjectFeatureSvgId
+}) => orthogroupIds.map((orthogroupId) => {
+  const group = getStandaloneOrthogroupById(orthogroups, orthogroupId);
+  const displayName = firstStandaloneText(group?.display_name, group?.displayName, group?.name);
+  const description = firstStandaloneText(group?.description);
+  const memberCount = firstStandaloneText(
+    group?.member_count,
+    group?.memberCount,
+    Array.isArray(group?.members) ? group.members.length : ''
+  );
+  const recordCoverage = firstStandaloneText(group?.record_coverage_count, group?.recordCoverage);
+  const memberRows = buildStandaloneMatchMemberRows(group);
+  return {
+    id: orthogroupId,
+    display_name: displayName,
+    displayName,
+    description,
+    member_count: memberCount,
+    memberCount,
+    record_coverage: recordCoverage,
+    recordCoverage,
+    query_member: resolveStandaloneBlockMemberLabels({ group, featureSvgIds: queryFeatureSvgId, featuresById }),
+    subject_member: resolveStandaloneBlockMemberLabels({ group, featureSvgIds: subjectFeatureSvgId, featuresById }),
+    detail_rows: buildStandaloneOrthogroupDetailRows({
+      orthogroupId,
+      displayName,
+      description,
+      memberCount,
+      recordCoverage
+    }),
+    member_rows: memberRows,
+    member_copy_text: standaloneMemberCopyText(memberRows)
+  };
+});
+
+const buildStandaloneMatchFeatureSection = ({
+  title,
+  feature,
+  recordId,
+  interval,
+  proteinId,
+  locusId,
+  displayName,
+  featureSvgIds,
+  featuresById,
+  group
+}) => {
+  const rows = [];
+  const featureRows = buildStandaloneFeatureListRows({
+    featureSvgIds,
+    featuresById,
+    group,
+    recordId,
+    interval,
+    proteinId,
+    locusId,
+    displayName
+  });
+  const displayProteinIds = resolveStandaloneFeatureSectionProteinIds({
+    feature,
+    featureSvgIds,
+    featuresById,
+    group,
+    fallbackProteinIds: proteinId,
+    locusId,
+    displayName
+  });
+  addStandaloneMatchRow(rows, 'Record', firstStandaloneText(feature?.record_id, recordId));
+  addStandaloneMatchRow(rows, 'Location', firstStandaloneText(feature?.location, interval));
+  addStandaloneMatchRow(rows, displayProteinIds.includes(';') ? 'Protein IDs' : 'Protein ID', displayProteinIds);
+  addStandaloneMatchRow(rows, 'Type', feature?.type);
+  addStandaloneMatchRow(rows, 'Locus ID', locusId);
+  addStandaloneMatchRow(rows, 'Display name', displayName);
+  return {
+    ...buildStandaloneMatchSection(title, rows),
+    feature_rows: featureRows,
+    featureRows
+  };
+};
+
+const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } = {}) => {
+  if (!svg) return [];
+  const featuresById = new Map();
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const svgId = String(feature?.svg_id || '').trim();
+    if (svgId && !featuresById.has(svgId)) featuresById.set(svgId, feature);
+  });
+  return Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR)).map((element, index) => {
+    let id = standaloneAttr(element, 'data-gbdraw-pairwise-match-id');
+    if (!id) {
+      id = `pairwise_match_${index + 1}`;
+      element.setAttribute('data-gbdraw-pairwise-match-id', id);
+    }
+    const matchKind = standaloneMatchKind(element);
+    const orthogroupId = standaloneAttr(element, 'data-orthogroup-id');
+    const orthogroupIds = uniqueStandaloneMetadataValues(orthogroupId);
+    const blockId = standaloneAttr(element, 'data-collinearity-block-id');
+    const queryFeatureSvgId = standaloneAttr(element, 'data-query-feature-svg-id');
+    const subjectFeatureSvgId = standaloneAttr(element, 'data-subject-feature-svg-id');
+    const queryFeature = featuresById.get(queryFeatureSvgId) || null;
+    const subjectFeature = featuresById.get(subjectFeatureSvgId) || null;
+    const orthogroup = matchKind === 'collinear'
+      ? null
+      : getStandaloneOrthogroupPayload(orthogroups, orthogroupId, queryFeatureSvgId, subjectFeatureSvgId) ||
+        buildStandaloneFallbackOrthogroup({
+          orthogroupId,
+          queryFeature,
+          subjectFeature,
+          features
+        });
+    const blockOrthogroups = matchKind === 'collinear'
+      ? buildStandaloneBlockOrthogroups({
+        orthogroupIds,
+        orthogroups,
+        featuresById,
+        queryFeatureSvgId,
+        subjectFeatureSvgId
+      })
+      : [];
+    const qInterval = standaloneIntervalText(standaloneAttr(element, 'data-qstart'), standaloneAttr(element, 'data-qend'));
+    const sInterval = standaloneIntervalText(standaloneAttr(element, 'data-sstart'), standaloneAttr(element, 'data-send'));
+    const summaryRows = [];
+    addStandaloneMatchRow(summaryRows, 'Query record', firstStandaloneText(standaloneAttr(element, 'data-query-record-id'), standaloneAttr(element, 'data-query')));
+    addStandaloneMatchRow(summaryRows, 'Subject record', firstStandaloneText(standaloneAttr(element, 'data-subject-record-id'), standaloneAttr(element, 'data-subject')));
+    addStandaloneMatchRow(summaryRows, 'Query interval', qInterval);
+    addStandaloneMatchRow(summaryRows, 'Subject interval', sInterval);
+    addStandaloneMatchRow(summaryRows, 'Orientation', firstStandaloneText(standaloneAttr(element, 'data-collinearity-orientation'), standaloneAttr(element, 'data-orientation')));
+
+    const alignmentRows = [];
+    addStandaloneMatchRow(alignmentRows, 'Identity', standaloneAttr(element, 'data-identity'));
+    addStandaloneMatchRow(alignmentRows, 'Alignment length', standaloneAttr(element, 'data-alignment-length'));
+    addStandaloneMatchRow(alignmentRows, 'E-value', standaloneAttr(element, 'data-evalue'));
+    addStandaloneMatchRow(alignmentRows, 'Bit score', standaloneAttr(element, 'data-bitscore'));
+    addStandaloneMatchRow(alignmentRows, 'Mismatches', standaloneAttr(element, 'data-mismatches'));
+    addStandaloneMatchRow(alignmentRows, 'Gap opens', standaloneAttr(element, 'data-gap-opens'));
+
+    const orthogroupDisplayName = firstStandaloneText(
+      orthogroup?.display_name,
+      orthogroup?.displayName,
+      orthogroup?.name,
+      standaloneFeatureProduct(queryFeature),
+      standaloneFeatureProduct(subjectFeature)
+    );
+    const orthogroupRows = [];
+    if (matchKind !== 'collinear') {
+      addStandaloneMatchRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
+      addStandaloneMatchRow(orthogroupRows, 'Display name', orthogroupDisplayName);
+      addStandaloneMatchRow(orthogroupRows, 'Description', orthogroup?.description);
+      addStandaloneMatchRow(orthogroupRows, 'Members', firstStandaloneText(orthogroup?.member_count, orthogroup?.memberCount));
+      addStandaloneMatchRow(orthogroupRows, 'Record coverage', firstStandaloneText(orthogroup?.record_coverage_count, orthogroup?.recordCoverage));
+    }
+    const orthogroupMemberRows = buildStandaloneMatchMemberRows(orthogroup);
+
+    const blockRows = [];
+    addStandaloneMatchRow(blockRows, 'Block ID', blockId);
+    addStandaloneMatchRow(blockRows, 'Kind', standaloneAttr(element, 'data-collinearity-block-kind'));
+    addStandaloneMatchRow(blockRows, 'Orientation', standaloneAttr(element, 'data-collinearity-orientation'));
+    addStandaloneMatchRow(blockRows, 'Color mode', standaloneAttr(element, 'data-collinearity-color-mode'));
+    if (matchKind === 'collinear') {
+      addStandaloneMatchRow(blockRows, 'Average identity', standaloneAttr(element, 'data-identity'));
+      addStandaloneMatchRow(blockRows, 'Aligned length', standaloneAttr(element, 'data-alignment-length'));
+    }
+    addStandaloneMatchRow(blockRows, 'Block score', standaloneAttr(element, 'data-collinearity-block-score'));
+    addStandaloneMatchRow(blockRows, 'Block e-value', standaloneAttr(element, 'data-collinearity-block-evalue'));
+    addStandaloneMatchRow(blockRows, 'Anchor', [
+      standaloneAttr(element, 'data-collinearity-anchor-index'),
+      standaloneAttr(element, 'data-collinearity-anchor-count')
+    ].filter(Boolean).join(' / '));
+
+    if (matchKind === 'orthogroup') {
+      const summarySection = {
+        ...buildStandaloneMatchSection('Summary', orthogroupRows),
+        member_rows: orthogroupMemberRows,
+        member_copy_text: standaloneMemberCopyText(orthogroupMemberRows)
+      };
+      const hoverRows = [];
+      addStandaloneMatchRow(hoverRows, 'Kind', matchKind);
+      addStandaloneMatchRow(hoverRows, 'Orthogroup', orthogroupId);
+      addStandaloneMatchRow(hoverRows, 'Display name', orthogroupDisplayName);
+      addStandaloneMatchRow(hoverRows, 'Members', firstStandaloneText(orthogroup?.member_count, orthogroup?.memberCount));
+
+      return {
+        id,
+        title: standaloneOrthogroupTitle(orthogroupId, orthogroupDisplayName),
+        subtitle: '',
+        match_kind: matchKind,
+        orthogroup_id: orthogroupId,
+        collinearity_block_id: blockId,
+        fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
+        sections: (summarySection.rows.length || summarySection.member_rows.length) ? [summarySection] : [],
+        hover_rows: hoverRows
+      };
+    }
+
+    const sections = [buildStandaloneMatchSection('Summary', summaryRows)];
+    if (matchKind !== 'collinear') {
+      sections.push(buildStandaloneMatchSection('Alignment', alignmentRows));
+    }
+    if (orthogroupRows.length || matchKind === 'orthogroup') {
+      sections.push({
+        ...buildStandaloneMatchSection('Orthogroup', orthogroupRows),
+        member_rows: orthogroupMemberRows,
+        member_copy_text: standaloneMemberCopyText(orthogroupMemberRows)
+      });
+    }
+    if (matchKind === 'collinear') {
+      const blockOrthogroupRows = [];
+      addStandaloneMatchRow(blockOrthogroupRows, 'Number of orthogroups covered', String(orthogroupIds.length));
+      sections.push({
+        ...buildStandaloneMatchSection('Orthogroups covered', blockOrthogroupRows),
+        block_orthogroups: blockOrthogroups
+      });
+    }
+    if (blockRows.length || matchKind === 'collinear') {
+      sections.push(buildStandaloneMatchSection('Collinearity', blockRows));
+    }
+    sections.push(buildStandaloneMatchFeatureSection({
+      title: 'Query',
+      feature: queryFeature,
+      recordId: standaloneAttr(element, 'data-query-record-id'),
+      interval: qInterval,
+      proteinId: standaloneAttr(element, 'data-query-protein-id'),
+      locusId: standaloneAttr(element, 'data-query-locus-id'),
+      displayName: standaloneAttr(element, 'data-query-display-name'),
+      featureSvgIds: queryFeatureSvgId,
+      featuresById,
+      group: orthogroup
+    }));
+    sections.push(buildStandaloneMatchFeatureSection({
+      title: 'Subject',
+      feature: subjectFeature,
+      recordId: standaloneAttr(element, 'data-subject-record-id'),
+      interval: sInterval,
+      proteinId: standaloneAttr(element, 'data-subject-protein-id'),
+      locusId: standaloneAttr(element, 'data-subject-locus-id'),
+      displayName: standaloneAttr(element, 'data-subject-display-name'),
+      featureSvgIds: subjectFeatureSvgId,
+      featuresById,
+      group: orthogroup
+    }));
+
+    const findRow = (sectionTitle, rowLabel) => {
+      const section = sections.find((entry) => entry.title === sectionTitle);
+      const row = section?.rows.find((entry) => entry[0] === rowLabel);
+      return row?.[1] || '';
+    };
+    const hoverRows = [];
+    addStandaloneMatchRow(hoverRows, 'Kind', matchKind);
+    addStandaloneMatchRow(hoverRows, 'Identity', findRow('Alignment', 'Identity') || findRow('Collinearity', 'Average identity'));
+    addStandaloneMatchRow(hoverRows, 'Query', findRow('Summary', 'Query interval'));
+    addStandaloneMatchRow(hoverRows, 'Subject', findRow('Summary', 'Subject interval'));
+    if (matchKind === 'collinear') {
+      addStandaloneMatchRow(hoverRows, 'Orthogroups', String(blockOrthogroups.length || orthogroupIds.length));
+    } else {
+      addStandaloneMatchRow(hoverRows, 'Orthogroup', orthogroupId);
+    }
+    addStandaloneMatchRow(hoverRows, 'Block', blockId);
+
+    return {
+      id,
+      title: STANDALONE_MATCH_TITLES[matchKind] || STANDALONE_MATCH_TITLES.pairwise,
+      subtitle: firstStandaloneText(blockId, orthogroupId, id),
+      match_kind: matchKind,
+      orthogroup_id: orthogroupId,
+      collinearity_block_id: blockId,
+      block_orthogroup_count: blockOrthogroups.length || (matchKind === 'collinear' ? orthogroupIds.length : 0),
+      block_orthogroups: blockOrthogroups,
+      fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
+      sections: sections.filter((section) => (
+        section.rows.length > 0 ||
+        (Array.isArray(section.feature_rows) && section.feature_rows.length > 0)
+      )),
+      hover_rows: hoverRows
+    };
+  });
 };
 
 const ensureSvgDefs = (svg) => {
@@ -4236,6 +5484,7 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     popupMode: normalizedPopupMode
   });
   const orthogroups = buildStandaloneOrthogroupPayloads(features, context);
+  const matches = buildStandaloneMatchPayloads(svg, { features, orthogroups });
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
@@ -4243,6 +5492,13 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     if (!featureIds.has(id)) return;
     element.setAttribute('data-gbdraw-interactive-feature', 'true');
     addClassToken(element, 'gbdraw-interactive-feature');
+  });
+  const matchIds = new Set(matches.map((match) => match.id));
+  svg.querySelectorAll(STANDALONE_MATCH_SELECTOR).forEach((element) => {
+    const id = standaloneAttr(element, 'data-gbdraw-pairwise-match-id');
+    if (!matchIds.has(id)) return;
+    element.setAttribute('data-gbdraw-interactive-match', 'true');
+    addClassToken(element, 'gbdraw-interactive-pairwise-match');
   });
 
   const metadata = document.createElementNS(SVG_NS, 'metadata');
@@ -4253,7 +5509,8 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     schema: 'gbdraw-interactive-feature-popup-v1',
     popup_mode: normalizedPopupMode,
     features,
-    orthogroups
+    orthogroups,
+    matches
   });
 
   const style = document.createElementNS(SVG_NS, 'style');

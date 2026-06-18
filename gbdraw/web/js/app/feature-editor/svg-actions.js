@@ -1,5 +1,11 @@
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption } from '../feature-utils.js';
+import { getFeatureCaption, resolveDisplayProteinId } from '../feature-utils.js';
+import {
+  PAIRWISE_MATCH_SELECTOR,
+  buildPairwiseMatchHoverRows,
+  buildPairwiseMatchPayload
+} from '../pairwise-match-popup.js';
+import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 
 export const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
 export const FEATURE_SELECTOR = [
@@ -74,6 +80,10 @@ export const createFeatureSvgActions = ({
   const {
     results,
     selectedResultIndex,
+    isPanning,
+    orthogroups,
+    orthogroupNameOverrides,
+    orthogroupDescriptionOverrides,
     extractedFeatures,
     featuresBySvgId,
     featureColorOverrides,
@@ -81,6 +91,8 @@ export const createFeatureSvgActions = ({
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    clickedPairwiseMatch,
+    clickedPairwiseMatchPos,
     featurePopupSize,
     skipCaptureBaseConfig,
     adv
@@ -230,13 +242,9 @@ export const createFeatureSvgActions = ({
     return rows;
   };
 
-  const displayProteinId = (feat) => String(
-    feat?.sourceProteinId || feat?.source_protein_id || feat?.proteinId || feat?.protein_id || ''
-  ).trim();
-
   const buildOrthogroupDetailRows = (feat) => {
     const member = feat?.orthogroupMember || feat?.orthogroup_member || null;
-    const proteinId = displayProteinId(feat) || displayProteinId(member);
+    const proteinId = resolveDisplayProteinId(feat, member);
     const rows = [
       { key: 'orthogroup_id', label: 'Orthogroup ID', value: feat?.orthogroupId || feat?.orthogroup_id },
       { key: 'orthogroup_members', label: 'Members', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },
@@ -273,10 +281,42 @@ export const createFeatureSvgActions = ({
 
   const getFeatureTarget = (target, svg) => {
     if (!target || typeof target.closest !== 'function') return null;
+    const matchEl = target.closest(PAIRWISE_MATCH_SELECTOR);
+    if (matchEl && svg.contains(matchEl)) return null;
     const featureEl = target.closest(FEATURE_SELECTOR);
     if (!featureEl || !svg.contains(featureEl)) return null;
     return featureEl;
   };
+
+  const getPairwiseMatchTarget = (target, svg) => {
+    if (!target || typeof target.closest !== 'function') return null;
+    const matchEl = target.closest(PAIRWISE_MATCH_SELECTOR);
+    if (!matchEl || !svg.contains(matchEl)) return null;
+    return matchEl;
+  };
+
+  const getTopmostSvgTarget = (eventLike, svg, selector) => {
+    if (!svg || !selector || !Number.isFinite(eventLike?.clientX) || !Number.isFinite(eventLike?.clientY)) {
+      return null;
+    }
+    const stack = typeof document.elementsFromPoint === 'function'
+      ? document.elementsFromPoint(eventLike.clientX, eventLike.clientY)
+      : [];
+    for (const element of stack) {
+      if (!element || !svg.contains(element)) continue;
+      const target = element.matches?.(selector)
+        ? element
+        : element.closest?.(selector);
+      if (target && svg.contains(target)) return target;
+    }
+    return null;
+  };
+
+  const getFeatureClickTarget = (eventLike, svg) =>
+    getTopmostSvgTarget(eventLike, svg, FEATURE_SELECTOR) || getFeatureTarget(eventLike?.target, svg);
+
+  const getPairwiseMatchClickTarget = (eventLike, svg) =>
+    getTopmostSvgTarget(eventLike, svg, PAIRWISE_MATCH_SELECTOR) || getPairwiseMatchTarget(eventLike?.target, svg);
 
   const cleanupDelegatedFeatureHandlers = () => {
     if (!delegatedFeatureHandlers?.cleanup) return;
@@ -294,6 +334,10 @@ export const createFeatureSvgActions = ({
     const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
     const nucleotideSequence = String(feat.nucleotide_sequence || '');
     const aminoAcidSequence = String(feat.amino_acid_sequence || '');
+    const { nucleotideFasta, aminoAcidFasta } = buildFeatureSequenceFastas(feat, {
+      nucleotideSequence,
+      aminoAcidSequence
+    });
 
     const currentColor = resolveColorToHex(
       featureElement?.getAttribute('fill') || getFeatureColor(feat)
@@ -323,6 +367,8 @@ export const createFeatureSvgActions = ({
       sequenceWarnings,
       nucleotideSequence,
       aminoAcidSequence,
+      nucleotideFasta,
+      aminoAcidFasta,
       detailRows: buildDetailRows({ defaultLabel, feat, locationText }),
       legendName: effectiveCaption,
       appliedLegendName: effectiveCaption,
@@ -335,8 +381,8 @@ export const createFeatureSvgActions = ({
       labelSourceText: '',
       labelVisibility: 'default',
       featureVisibility: visibilityMode,
-      proteinId: feat.proteinId || '',
-      sourceProteinId: feat.sourceProteinId || '',
+      proteinId: feat.proteinId || feat.protein_id || '',
+      sourceProteinId: feat.sourceProteinId || feat.source_protein_id || '',
       orthogroupId: feat.orthogroupId || '',
       orthogroupMemberCount: feat.orthogroupMemberCount || 0,
       orthogroupRecordCoverage: feat.orthogroupRecordCoverage || 0,
@@ -354,6 +400,7 @@ export const createFeatureSvgActions = ({
     if (!svg) return null;
 
     hideHoverSummary();
+    if (clickedPairwiseMatch) clickedPairwiseMatch.value = null;
     const featureElements = getFeatureElements(svg, feat.svg_id);
     const featureElement = featureElements[0] || null;
     clickedFeature.value = buildClickedFeaturePayload(feat, featureElement);
@@ -373,6 +420,8 @@ export const createFeatureSvgActions = ({
 
   const hoverSummaryIsAllowed = () => {
     if (clickedFeature.value) return false;
+    if (clickedPairwiseMatch?.value) return false;
+    if (isPanning?.value) return false;
     if (window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
       return false;
     }
@@ -477,6 +526,57 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.timer = window.setTimeout(show, 180);
   };
 
+  const renderMatchHoverSummary = (payload, eventLike) => {
+    if (!payload || !hoverSummaryIsAllowed()) {
+      hideHoverSummary();
+      return;
+    }
+    const element = ensureHoverSummaryElement();
+    const color = resolveColorToHex(payload.fill || '#94a3b8') || '#94a3b8';
+
+    element.replaceChildren();
+    const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
+    const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
+    swatch.style.backgroundColor = color;
+    const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
+    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', payload.title));
+    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', payload.subtitle || payload.id || ''));
+    title.appendChild(swatch);
+    title.appendChild(titleTextWrap);
+    element.appendChild(title);
+
+    buildPairwiseMatchHoverRows(payload).forEach((row) => {
+      addHoverSummaryRow(element, row.label, row.value, { clamp: row.label === 'Query' || row.label === 'Subject' });
+    });
+
+    element.hidden = false;
+    hoverSummaryState.visible = true;
+    hoverSummaryState.activeSvgId = String(payload.id || '').trim();
+    scheduleHoverSummaryPosition(eventLike);
+    positionHoverSummary(eventLike);
+  };
+
+  const scheduleMatchHoverSummary = (payload, eventLike) => {
+    if (hoverSummaryState.timer) {
+      window.clearTimeout(hoverSummaryState.timer);
+      hoverSummaryState.timer = null;
+    }
+    if (!payload || !hoverSummaryIsAllowed()) {
+      hideHoverSummary();
+      return;
+    }
+    scheduleHoverSummaryPosition(eventLike);
+    const show = () => {
+      hoverSummaryState.timer = null;
+      renderMatchHoverSummary(payload, eventLike);
+    };
+    if (hoverSummaryState.visible) {
+      show();
+      return;
+    }
+    hoverSummaryState.timer = window.setTimeout(show, 180);
+  };
+
   function hideHoverSummary() {
     if (hoverSummaryState.timer) {
       window.clearTimeout(hoverSummaryState.timer);
@@ -528,6 +628,26 @@ export const createFeatureSvgActions = ({
     } catch (e) {
       console.error('Instant preview error:', e);
     }
+  };
+
+  const buildMatchPayload = (matchElement, featureLookup) => buildPairwiseMatchPayload(matchElement, {
+    featureLookup,
+    orthogroups: orthogroups?.value,
+    orthogroupNameOverrides,
+    orthogroupDescriptionOverrides
+  });
+
+  const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
+    if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos) return null;
+    const payload = buildMatchPayload(matchElement, featureLookup);
+    if (!payload) return null;
+    hideHoverSummary();
+    clickedFeature.value = null;
+    clickedPairwiseMatch.value = payload;
+    const popupPosition = getPopupPosition(eventLike, 460, 520);
+    clickedPairwiseMatchPos.x = popupPosition.x;
+    clickedPairwiseMatchPos.y = popupPosition.y;
+    return payload;
   };
 
   const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => {
@@ -600,6 +720,17 @@ export const createFeatureSvgActions = ({
         comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
       });
     });
+    const pairwiseMatchElements = Array.from(svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR));
+    const comparisonElementsByCollinearityBlockId = new Map();
+    pairwiseMatchElements.forEach((element) => {
+      if (element?.style) element.style.cursor = 'pointer';
+      const blockId = String(element.getAttribute('data-collinearity-block-id') || '').trim();
+      if (!blockId) return;
+      if (!comparisonElementsByCollinearityBlockId.has(blockId)) {
+        comparisonElementsByCollinearityBlockId.set(blockId, []);
+      }
+      comparisonElementsByCollinearityBlockId.get(blockId).push(element);
+    });
     const indexDuration = getNow() - indexStartedAt;
 
     if (!delegatedFeatureHandlers) {
@@ -609,8 +740,12 @@ export const createFeatureSvgActions = ({
         featureLookup,
         featureIdsByOrthogroupId,
         comparisonElementsByOrthogroupId,
+        pairwiseMatchElements,
+        comparisonElementsByCollinearityBlockId,
         activeHoverSvgId: null,
         activeHoverKey: '',
+        activeMatchHoverElement: null,
+        activeMatchHoverKey: '',
         cleanup: null
       };
 
@@ -656,6 +791,14 @@ export const createFeatureSvgActions = ({
         });
       };
 
+      const setCollinearityBlockHover = (blockId, highlight) => {
+        const id = String(blockId || '').trim();
+        if (!id) return;
+        (handlerState.comparisonElementsByCollinearityBlockId.get(id) || []).forEach((element) => {
+          setHoverStyle(element, highlight);
+        });
+      };
+
       const setHoverHighlight = (svgId, highlight) => {
         const feat = handlerState.featureLookup.get(svgId);
         const orthogroupId = String(feat?.orthogroupId || '').trim();
@@ -666,24 +809,79 @@ export const createFeatureSvgActions = ({
         setFeatureHover(svgId, highlight);
       };
 
+      const matchAttr = (element, name) => String(element?.getAttribute?.(name) || '').trim();
+
+      const getMatchHoverKey = (matchElement) => {
+        const blockId = matchAttr(matchElement, 'data-collinearity-block-id');
+        if (blockId) return `collinearity:${blockId}`;
+        const orthogroupId = matchAttr(matchElement, 'data-orthogroup-id');
+        if (orthogroupId) return `orthogroup:${orthogroupId}`;
+        return `match:${matchAttr(matchElement, 'data-gbdraw-pairwise-match-id') || matchAttr(matchElement, 'd')}`;
+      };
+
+      const setMatchHover = (matchElement, highlight) => {
+        if (!matchElement) return;
+        const blockId = matchAttr(matchElement, 'data-collinearity-block-id');
+        const orthogroupId = matchAttr(matchElement, 'data-orthogroup-id');
+        setHoverStyle(matchElement, highlight);
+        if (blockId) {
+          setCollinearityBlockHover(blockId, highlight);
+          return;
+        }
+        if (orthogroupId) {
+          setOrthogroupHover(orthogroupId, highlight);
+        }
+      };
+
+      const clearActiveFeatureHover = () => {
+        if (!handlerState.activeHoverSvgId) return;
+        setHoverHighlight(handlerState.activeHoverSvgId, false);
+        handlerState.activeHoverSvgId = null;
+        handlerState.activeHoverKey = '';
+      };
+
+      const clearActiveMatchHover = () => {
+        if (!handlerState.activeMatchHoverElement) return;
+        setMatchHover(handlerState.activeMatchHoverElement, false);
+        handlerState.activeMatchHoverElement = null;
+        handlerState.activeMatchHoverKey = '';
+      };
+
       const handleMouseOver = (e) => {
         const featureEl = getFeatureTarget(e.target, svg);
-        const svgId = getFeatureIdentity(featureEl);
-        if (!svgId) return;
-        const hoverKey = getFeatureHoverKey(svgId);
-        if (handlerState.activeHoverKey !== hoverKey && handlerState.activeHoverSvgId) {
-          setHoverHighlight(handlerState.activeHoverSvgId, false);
+        if (featureEl) {
+          clearActiveMatchHover();
+          const svgId = getFeatureIdentity(featureEl);
+          if (!svgId) return;
+          const hoverKey = getFeatureHoverKey(svgId);
+          if (handlerState.activeHoverKey !== hoverKey && handlerState.activeHoverSvgId) {
+            setHoverHighlight(handlerState.activeHoverSvgId, false);
+          }
+          if (handlerState.activeHoverKey !== hoverKey) {
+            setHoverHighlight(svgId, true);
+          }
+          handlerState.activeHoverSvgId = svgId;
+          handlerState.activeHoverKey = hoverKey;
+          scheduleHoverSummary(handlerState.featureLookup.get(svgId), featureEl, e);
+          return;
         }
-        if (handlerState.activeHoverKey !== hoverKey) {
-          setHoverHighlight(svgId, true);
+        const matchEl = getPairwiseMatchTarget(e.target, svg);
+        if (!matchEl) return;
+        clearActiveFeatureHover();
+        const matchKey = getMatchHoverKey(matchEl);
+        if (handlerState.activeMatchHoverKey !== matchKey && handlerState.activeMatchHoverElement) {
+          setMatchHover(handlerState.activeMatchHoverElement, false);
         }
-        handlerState.activeHoverSvgId = svgId;
-        handlerState.activeHoverKey = hoverKey;
-        scheduleHoverSummary(handlerState.featureLookup.get(svgId), featureEl, e);
+        if (handlerState.activeMatchHoverKey !== matchKey) {
+          setMatchHover(matchEl, true);
+        }
+        handlerState.activeMatchHoverElement = matchEl;
+        handlerState.activeMatchHoverKey = matchKey;
+        scheduleMatchHoverSummary(buildMatchPayload(matchEl, handlerState.featureLookup), e);
       };
 
       const handleMouseMove = (e) => {
-        if (clickedFeature.value) {
+        if (clickedFeature.value || clickedPairwiseMatch?.value || isPanning?.value) {
           hideHoverSummary();
           return;
         }
@@ -694,27 +892,43 @@ export const createFeatureSvgActions = ({
 
       const handleMouseOut = (e) => {
         const featureEl = getFeatureTarget(e.target, svg);
-        const svgId = getFeatureIdentity(featureEl);
-        if (!svgId || handlerState.activeHoverSvgId !== svgId) return;
-        const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
-        if (relatedFeature && getFeatureHoverKey(getFeatureIdentity(relatedFeature)) === handlerState.activeHoverKey) return;
-        setHoverHighlight(svgId, false);
-        handlerState.activeHoverSvgId = null;
-        handlerState.activeHoverKey = '';
+        if (featureEl) {
+          const svgId = getFeatureIdentity(featureEl);
+          if (!svgId || handlerState.activeHoverSvgId !== svgId) return;
+          const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
+          if (relatedFeature && getFeatureHoverKey(getFeatureIdentity(relatedFeature)) === handlerState.activeHoverKey) return;
+          clearActiveFeatureHover();
+          hideHoverSummary();
+          return;
+        }
+        const matchEl = getPairwiseMatchTarget(e.target, svg);
+        if (!matchEl || handlerState.activeMatchHoverElement !== matchEl) return;
+        const relatedMatch = getPairwiseMatchTarget(e.relatedTarget, svg);
+        if (relatedMatch && getMatchHoverKey(relatedMatch) === handlerState.activeMatchHoverKey) return;
+        clearActiveMatchHover();
         hideHoverSummary();
       };
 
       const handleClick = (e) => {
-        const featureEl = getFeatureTarget(e.target, svg);
-        const svgId = getFeatureIdentity(featureEl);
-        if (!svgId) return;
-        e.stopPropagation();
-        hideHoverSummary();
-        const feat = handlerState.featureLookup.get(svgId);
-        if (feat) {
-          openFeatureEditorForFeature(feat, e);
-        } else {
-          console.log(`No feature found for svg_id: ${svgId}`);
+        const featureEl = getFeatureClickTarget(e, svg);
+        if (featureEl) {
+          const svgId = getFeatureIdentity(featureEl);
+          if (!svgId) return;
+          e.stopPropagation();
+          hideHoverSummary();
+          const feat = handlerState.featureLookup.get(svgId);
+          if (feat) {
+            openFeatureEditorForFeature(feat, e);
+          } else {
+            console.log(`No feature found for svg_id: ${svgId}`);
+          }
+          return;
+        }
+        const matchEl = getPairwiseMatchClickTarget(e, svg);
+        if (matchEl) {
+          e.stopPropagation();
+          e.preventDefault();
+          openPairwiseMatchPopup(matchEl, e, handlerState.featureLookup);
         }
       };
 
@@ -727,6 +941,8 @@ export const createFeatureSvgActions = ({
         svg.removeEventListener('mousemove', handleMouseMove);
         svg.removeEventListener('mouseout', handleMouseOut);
         svg.removeEventListener('click', handleClick);
+        clearActiveFeatureHover();
+        clearActiveMatchHover();
         hideHoverSummary();
       };
       delegatedFeatureHandlers = handlerState;
@@ -735,6 +951,8 @@ export const createFeatureSvgActions = ({
       delegatedFeatureHandlers.featureLookup = featureLookup;
       delegatedFeatureHandlers.featureIdsByOrthogroupId = featureIdsByOrthogroupId;
       delegatedFeatureHandlers.comparisonElementsByOrthogroupId = comparisonElementsByOrthogroupId;
+      delegatedFeatureHandlers.pairwiseMatchElements = pairwiseMatchElements;
+      delegatedFeatureHandlers.comparisonElementsByCollinearityBlockId = comparisonElementsByCollinearityBlockId;
     }
 
     console.groupCollapsed('post-gbdraw timing');

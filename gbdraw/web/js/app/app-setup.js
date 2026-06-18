@@ -162,6 +162,12 @@ export const createAppSetup = () => {
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    clickedPairwiseMatch,
+    clickedPairwiseMatchPos,
+    pairwiseMatchPopupRef,
+    pairwiseMatchPopupDrag,
+    pairwiseMatchPopupSize,
+    pairwiseMatchPopupResize,
     featurePopupRef,
     featurePopupDrag,
     featurePopupSize,
@@ -963,29 +969,14 @@ export const createAppSetup = () => {
     const group = (Array.isArray(orthogroups.value) ? orthogroups.value : [])
       .find((entry) => String(entry?.id || '').trim() === orthogroupId);
     if (!group) return null;
-    const members = Array.isArray(group.members) ? group.members : [];
+    const members = orthogroupActions.getEnrichedOrthogroupMembers(group);
     const currentSvgId = String(cf?.svg_id || '').trim();
     const currentRecordIndex = Number(cf?.orthogroupMember?.recordIndex);
     const currentMember = members.find((member) => (
       String(member?.featureSvgId || '').trim() === currentSvgId &&
       (!Number.isInteger(currentRecordIndex) || Number(member?.recordIndex) === currentRecordIndex)
     )) || cf.orthogroupMember || null;
-    const grouped = new Map();
-    members.forEach((member) => {
-      const recordIndex = Number(member?.recordIndex);
-      const key = Number.isInteger(recordIndex) ? recordIndex : -1;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(member);
-    });
-    const membersByRecord = Array.from(grouped.entries())
-      .sort((left, right) => left[0] - right[0])
-      .map(([recordIndex, recordMembers]) => ({
-        recordIndex,
-        recordLabel: recordIndex >= 0
-          ? (linearSeqs[recordIndex]?.name || linearSeqs[recordIndex]?.gb?.name || linearSeqs[recordIndex]?.gff?.name || `Record ${recordIndex + 1}`)
-          : 'Record',
-        members: recordMembers
-      }));
+    const membersByRecord = orthogroupActions.groupOrthogroupMembersByRecord(members);
     return {
       id: orthogroupId,
       displayName: orthogroupActions.resolveOrthogroupName(group),
@@ -993,6 +984,8 @@ export const createAppSetup = () => {
       candidates: Array.isArray(group.nameCandidates) ? group.nameCandidates : [],
       memberCount: Number(group.member_count || members.length || 0),
       recordCoverage: Number(group.record_coverage_count || membersByRecord.length || 0),
+      ntSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'nt'),
+      aaSequenceCount: orthogroupActions.getOrthogroupSequenceCount(group, 'aa'),
       currentMember,
       membersByRecord
     };
@@ -1064,6 +1057,8 @@ export const createAppSetup = () => {
   const FEATURE_POPUP_RICH_MIN_WIDTH = 360;
   const FEATURE_POPUP_SIMPLE_MIN_WIDTH = 300;
   const FEATURE_POPUP_MIN_HEIGHT = 220;
+  const PAIRWISE_MATCH_POPUP_MIN_WIDTH = 280;
+  const PAIRWISE_MATCH_POPUP_MIN_HEIGHT = 180;
 
   const clampNumber = (value, min, max) => {
     const safeMin = Number.isFinite(min) ? min : 0;
@@ -1103,6 +1098,160 @@ export const createAppSetup = () => {
     }
     return style;
   });
+
+  const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => {
+    const viewportWidth = Math.max(1, window.innerWidth || 1);
+    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
+    const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
+    const minWidth = Math.min(PAIRWISE_MATCH_POPUP_MIN_WIDTH, availableWidth);
+    const minHeight = Math.min(PAIRWISE_MATCH_POPUP_MIN_HEIGHT, availableHeight);
+    return {
+      minWidth,
+      minHeight,
+      maxWidth: Math.max(minWidth, viewportWidth - left - FEATURE_POPUP_MARGIN),
+      maxHeight: Math.max(minHeight, viewportHeight - top - FEATURE_POPUP_MARGIN)
+    };
+  };
+
+  const pairwiseMatchPopupStyle = computed(() => {
+    const style = {
+      top: `${clickedPairwiseMatchPos.y}px`,
+      left: `${clickedPairwiseMatchPos.x}px`
+    };
+    if (pairwiseMatchPopupSize.width > 0) {
+      style.width = `${pairwiseMatchPopupSize.width}px`;
+    }
+    if (pairwiseMatchPopupSize.height > 0) {
+      style.height = `${pairwiseMatchPopupSize.height}px`;
+    }
+    return style;
+  });
+
+  const selectedPairwiseBlockOrthogroupId = ref('');
+  const pairwiseBlockOrthogroups = computed(() => (
+    Array.isArray(clickedPairwiseMatch.value?.blockOrthogroups)
+      ? clickedPairwiseMatch.value.blockOrthogroups
+      : []
+  ));
+  const selectedPairwiseBlockOrthogroup = computed(() => {
+    const selectedId = String(selectedPairwiseBlockOrthogroupId.value || '').trim();
+    if (!selectedId) return null;
+    return pairwiseBlockOrthogroups.value.find((group) => String(group?.id || '').trim() === selectedId) || null;
+  });
+  const renderedPairwiseMatchSections = computed(() => {
+    const sections = Array.isArray(clickedPairwiseMatch.value?.sections)
+      ? clickedPairwiseMatch.value.sections
+      : [];
+    const selectedGroup = selectedPairwiseBlockOrthogroup.value;
+    if (!selectedGroup) return sections;
+    const selectedSection = {
+      title: 'Selected orthogroup',
+      rows: Array.isArray(selectedGroup.detailRows) ? selectedGroup.detailRows : [],
+      memberRows: Array.isArray(selectedGroup.memberRows) ? selectedGroup.memberRows : [],
+      memberCopyText: selectedGroup.memberCopyText || '',
+      memberNtFasta: selectedGroup.memberNtFasta || '',
+      memberAaFasta: selectedGroup.memberAaFasta || '',
+      memberNtFilename: selectedGroup.memberNtFilename || '',
+      memberAaFilename: selectedGroup.memberAaFilename || ''
+    };
+    const output = [];
+    sections.forEach((section) => {
+      output.push(section);
+      if (Array.isArray(section?.blockOrthogroups)) output.push(selectedSection);
+    });
+    return output;
+  });
+  const selectPairwiseBlockOrthogroup = (group) => {
+    selectedPairwiseBlockOrthogroupId.value = String(group?.id || '').trim();
+  };
+  const openPairwiseFeatureRow = (row, event) => {
+    if (!row?.feature?.svg_id) return;
+    openFeatureEditorForFeature(row.feature, event);
+  };
+
+  watch(clickedPairwiseMatch, () => {
+    selectedPairwiseBlockOrthogroupId.value = '';
+  });
+
+  const onPairwiseMatchPopupDrag = (event) => {
+    if (!pairwiseMatchPopupDrag.active || pairwiseMatchPopupResize.active) return;
+    const popup = pairwiseMatchPopupRef.value;
+    const width = popup?.offsetWidth || 420;
+    const height = popup?.offsetHeight || 360;
+    const margin = FEATURE_POPUP_MARGIN;
+    const maxX = Math.max(margin, window.innerWidth - width - margin);
+    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const nextX = event.clientX - pairwiseMatchPopupDrag.offsetX;
+    const nextY = event.clientY - pairwiseMatchPopupDrag.offsetY;
+    clickedPairwiseMatchPos.x = Math.min(Math.max(nextX, margin), maxX);
+    clickedPairwiseMatchPos.y = Math.min(Math.max(nextY, margin), maxY);
+  };
+
+  const endPairwiseMatchPopupDrag = () => {
+    if (!pairwiseMatchPopupDrag.active) return;
+    pairwiseMatchPopupDrag.active = false;
+    document.removeEventListener('mousemove', onPairwiseMatchPopupDrag);
+    document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
+  };
+
+  const onPairwiseMatchPopupResize = (event) => {
+    if (!pairwiseMatchPopupResize.active) return;
+    const constraints = getPairwiseMatchPopupConstraints(clickedPairwiseMatchPos.x, clickedPairwiseMatchPos.y);
+    const nextWidth = pairwiseMatchPopupResize.startWidth + (event.clientX - pairwiseMatchPopupResize.startX);
+    const nextHeight = pairwiseMatchPopupResize.startHeight + (event.clientY - pairwiseMatchPopupResize.startY);
+    pairwiseMatchPopupSize.width = clampNumber(nextWidth, constraints.minWidth, constraints.maxWidth);
+    pairwiseMatchPopupSize.height = clampNumber(nextHeight, constraints.minHeight, constraints.maxHeight);
+    event.preventDefault();
+  };
+
+  const endPairwiseMatchPopupResize = () => {
+    if (!pairwiseMatchPopupResize.active) return;
+    pairwiseMatchPopupResize.active = false;
+    document.removeEventListener('mousemove', onPairwiseMatchPopupResize);
+    document.removeEventListener('mouseup', endPairwiseMatchPopupResize);
+  };
+
+  const startPairwiseMatchPopupDrag = (event) => {
+    if (event.button !== 0) return;
+    if (!clickedPairwiseMatch.value) return;
+    if (pairwiseMatchPopupResize.active) return;
+    if (isInteractiveTarget(event.target)) return;
+    const popup = pairwiseMatchPopupRef.value;
+    if (!popup) return;
+    const rect = popup.getBoundingClientRect();
+    pairwiseMatchPopupDrag.active = true;
+    pairwiseMatchPopupDrag.offsetX = event.clientX - rect.left;
+    pairwiseMatchPopupDrag.offsetY = event.clientY - rect.top;
+    document.addEventListener('mousemove', onPairwiseMatchPopupDrag);
+    document.addEventListener('mouseup', endPairwiseMatchPopupDrag);
+    event.preventDefault();
+  };
+
+  const startPairwiseMatchPopupResize = (event) => {
+    if (event.button !== 0) return;
+    if (!clickedPairwiseMatch.value) return;
+    const popup = pairwiseMatchPopupRef.value;
+    if (!popup) return;
+    const rect = popup.getBoundingClientRect();
+    const constraints = getPairwiseMatchPopupConstraints(rect.left, rect.top);
+
+    pairwiseMatchPopupDrag.active = false;
+    document.removeEventListener('mousemove', onPairwiseMatchPopupDrag);
+    document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
+
+    pairwiseMatchPopupResize.active = true;
+    pairwiseMatchPopupResize.startX = event.clientX;
+    pairwiseMatchPopupResize.startY = event.clientY;
+    pairwiseMatchPopupResize.startWidth = clampNumber(rect.width, constraints.minWidth, constraints.maxWidth);
+    pairwiseMatchPopupResize.startHeight = clampNumber(rect.height, constraints.minHeight, constraints.maxHeight);
+    pairwiseMatchPopupSize.width = pairwiseMatchPopupResize.startWidth;
+    pairwiseMatchPopupSize.height = pairwiseMatchPopupResize.startHeight;
+    document.addEventListener('mousemove', onPairwiseMatchPopupResize);
+    document.addEventListener('mouseup', endPairwiseMatchPopupResize);
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   const onFeaturePopupDrag = (event) => {
     if (!featurePopupDrag.active || featurePopupResize.active) return;
@@ -1274,6 +1423,20 @@ export const createAppSetup = () => {
     } finally {
       document.body.removeChild(textarea);
     }
+  };
+
+  const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
+    const value = String(text ?? '');
+    if (!value) return;
+    const blob = new Blob([value], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = String(filename || 'gbdraw.txt');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const specificRuleLegendOptions = computed(() => {
@@ -1691,6 +1854,13 @@ export const createAppSetup = () => {
     resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
     resolveOrthogroupDescription: orthogroupActions.resolveOrthogroupDescription,
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
+    getOrthogroupSequenceCount: orthogroupActions.getOrthogroupSequenceCount,
+    hasOrthogroupSequence: orthogroupActions.hasOrthogroupSequence,
+    hasOrthogroupMemberSequence: orthogroupActions.hasOrthogroupMemberSequence,
+    copyOrthogroupSequences: orthogroupActions.copyOrthogroupSequences,
+    downloadOrthogroupSequences: orthogroupActions.downloadOrthogroupSequences,
+    copyOrthogroupMemberSequence: orthogroupActions.copyOrthogroupMemberSequence,
+    downloadOrthogroupMemberSequence: orthogroupActions.downloadOrthogroupMemberSequence,
     selectOrthogroup: orthogroupActions.selectOrthogroup,
     setOrthogroupNameOverride: orthogroupActions.setOrthogroupNameOverride,
     setOrthogroupDescriptionOverride: orthogroupActions.setOrthogroupDescriptionOverride,
@@ -1813,14 +1983,25 @@ export const createAppSetup = () => {
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    clickedPairwiseMatch,
+    clickedPairwiseMatchPos,
     clickedLabel,
     clickedLabelPos,
     featurePopupRef,
     featurePopupStyle,
     startFeaturePopupDrag,
     startFeaturePopupResize,
+    pairwiseMatchPopupRef,
+    pairwiseMatchPopupStyle,
+    startPairwiseMatchPopupDrag,
+    startPairwiseMatchPopupResize,
+    selectedPairwiseBlockOrthogroupId,
+    renderedPairwiseMatchSections,
+    selectPairwiseBlockOrthogroup,
+    openPairwiseFeatureRow,
     clickedFeatureLocation,
     copyText,
+    downloadText,
     canUseClickedOrthogroupActions,
     clickedOrthogroupDetail,
     alignByClickedOrthogroup,
