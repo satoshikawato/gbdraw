@@ -9,11 +9,12 @@ from svgwrite import Drawing
 
 from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.linear.builders import add_record_definition_group
+from gbdraw.render.groups.linear import DefinitionGroup
 
 
-def _record() -> SeqRecord:
-    record = SeqRecord(Seq("A" * 100), id="record_a")
-    record.annotations["gbdraw_record_label"] = "Record A"
+def _record(label: str = "Record A", record_id: str = "record_a") -> SeqRecord:
+    record = SeqRecord(Seq("A" * 100), id=record_id)
+    record.annotations["gbdraw_record_label"] = label
     return record
 
 
@@ -34,39 +35,23 @@ def _definition_translate_x(canvas: Drawing) -> float:
     return float(transform.split("translate(", 1)[1].split(",", 1)[0])
 
 
-@pytest.mark.linear
-def test_linear_definition_group_follows_record_offset_by_default() -> None:
-    config_dict = load_config_toml("gbdraw.data", "config.toml")
-    canvas = Drawing()
-
-    add_record_definition_group(
-        canvas,
-        _record(),
-        record_offset_y=10,
-        record_offset_x=30,
-        canvas_config=_canvas_config(keep_definition_left_aligned=False),
-        config_dict=config_dict,
-        max_def_width=0,
+def _definition_text_anchors(canvas: Drawing) -> set[str]:
+    definition_group = next(
+        element for element in canvas.elements if element.attribs.get("id") == "record_a_definition"
     )
+    return {
+        str(element.attribs.get("text-anchor"))
+        for element in definition_group.elements
+        if getattr(element, "elementname", "") == "text"
+    }
 
-    followed_x = _definition_translate_x(canvas)
 
-    locked_canvas = Drawing()
-    add_record_definition_group(
-        locked_canvas,
-        _record(),
-        record_offset_y=10,
-        record_offset_x=30,
-        canvas_config=_canvas_config(keep_definition_left_aligned=True),
-        config_dict=config_dict,
-        max_def_width=0,
-    )
-
-    assert followed_x == pytest.approx(_definition_translate_x(locked_canvas) + 30)
+def _definition_width(record: SeqRecord, config_dict: dict, canvas_config: SimpleNamespace) -> float:
+    return DefinitionGroup(record, config_dict, canvas_config).definition_bounding_box_width
 
 
 @pytest.mark.linear
-def test_linear_definition_group_can_stay_in_left_column() -> None:
+def test_linear_definition_group_follows_record_offset_by_default() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     canvas_a = Drawing()
     canvas_b = Drawing()
@@ -76,7 +61,7 @@ def test_linear_definition_group_can_stay_in_left_column() -> None:
         _record(),
         record_offset_y=10,
         record_offset_x=0,
-        canvas_config=_canvas_config(keep_definition_left_aligned=True),
+        canvas_config=_canvas_config(keep_definition_left_aligned=False),
         config_dict=config_dict,
         max_def_width=0,
     )
@@ -84,13 +69,50 @@ def test_linear_definition_group_can_stay_in_left_column() -> None:
         canvas_b,
         _record(),
         record_offset_y=10,
-        record_offset_x=45,
-        canvas_config=_canvas_config(keep_definition_left_aligned=True),
+        record_offset_x=30,
+        canvas_config=_canvas_config(keep_definition_left_aligned=False),
         config_dict=config_dict,
         max_def_width=0,
     )
 
+    assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) + 30)
+
+
+@pytest.mark.linear
+def test_linear_definition_group_can_stay_in_left_column() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    canvas_config = _canvas_config(keep_definition_left_aligned=True)
+    short_record = _record("Short")
+    long_record = _record("A much longer definition label", "record_a")
+    max_def_width = max(
+        _definition_width(short_record, config_dict, canvas_config),
+        _definition_width(long_record, config_dict, canvas_config),
+    )
+    canvas_a = Drawing()
+    canvas_b = Drawing()
+
+    add_record_definition_group(
+        canvas_a,
+        short_record,
+        record_offset_y=10,
+        record_offset_x=0,
+        canvas_config=canvas_config,
+        config_dict=config_dict,
+        max_def_width=max_def_width,
+    )
+    add_record_definition_group(
+        canvas_b,
+        long_record,
+        record_offset_y=10,
+        record_offset_x=45,
+        canvas_config=canvas_config,
+        config_dict=config_dict,
+        max_def_width=max_def_width,
+    )
+
     assert _definition_translate_x(canvas_a) == pytest.approx(_definition_translate_x(canvas_b))
+    assert _definition_text_anchors(canvas_a) == {"start"}
+    assert _definition_text_anchors(canvas_b) == {"start"}
 
 
 @pytest.mark.linear

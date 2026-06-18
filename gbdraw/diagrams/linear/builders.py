@@ -187,15 +187,37 @@ def add_record_definition_group(
     definition_column_shift_x: float = 0.0,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
-    definition_group_obj = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
+    keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
     definition_gap = min(canvas_config.canvas_padding, 20)
-    definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + definition_gap
-    locked_definition_offset_x = definition_offset_x + max(0.0, float(definition_column_shift_x))
-    positioned_definition_offset_x = (
-        locked_definition_offset_x
-        if getattr(canvas_config, "keep_definition_left_aligned", False)
-        else (definition_offset_x - record_offset_x)
-    )
+
+    if keep_definition_left_aligned:
+        try:
+            definition_column_width = max(0.0, float(max_def_width))
+        except (TypeError, ValueError):
+            definition_column_width = 0.0
+
+        if definition_column_width == 0.0:
+            provisional_group_obj = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
+            definition_column_width = provisional_group_obj.definition_bounding_box_width
+
+        definition_group_obj = DefinitionGroup(
+            record,
+            config_dict,
+            canvas_config,
+            cfg=cfg,
+            text_anchor="start",
+            text_x=0.0,
+        )
+        positioned_definition_offset_x = (
+            definition_column_width
+            + definition_gap
+            + max(0.0, float(definition_column_shift_x))
+        )
+    else:
+        definition_group_obj = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
+        definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + definition_gap
+        positioned_definition_offset_x = definition_offset_x - record_offset_x
+
     record_definition_group: Group = definition_group_obj.get_group()
 
     position_record_definition_group(
