@@ -3398,18 +3398,18 @@
                                 <div class="flex items-center justify-between mb-1">
                                     <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Nucleotide</div>
                                     <button type="button"
-                                            @click="copyText(clickedFeature.nucleotideSequence)"
-                                            :disabled="!clickedFeature.nucleotideSequence"
+                                            @click="copyText(clickedFeature.nucleotideFasta)"
+                                            :disabled="!clickedFeature.nucleotideFasta"
                                             :class="[
                                               'w-7 h-7 rounded-md flex items-center justify-center',
-                                              clickedFeature.nucleotideSequence ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                              clickedFeature.nucleotideFasta ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                             ]"
                                             title="Copy nucleotide sequence">
                                         <i class="ph ph-copy"></i>
                                     </button>
                                 </div>
-                                <pre v-if="clickedFeature.nucleotideSequence"
-                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.nucleotideSequence }}</pre>
+                                <pre v-if="clickedFeature.nucleotideFasta"
+                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.nucleotideFasta }}</pre>
                                 <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                     No nucleotide sequence available.
                                 </div>
@@ -3418,18 +3418,18 @@
                                 <div class="flex items-center justify-between mb-1">
                                     <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Amino acid</div>
                                     <button type="button"
-                                            @click="copyText(clickedFeature.aminoAcidSequence)"
-                                            :disabled="!clickedFeature.aminoAcidSequence"
+                                            @click="copyText(clickedFeature.aminoAcidFasta)"
+                                            :disabled="!clickedFeature.aminoAcidFasta"
                                             :class="[
                                               'w-7 h-7 rounded-md flex items-center justify-center',
-                                              clickedFeature.aminoAcidSequence ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
+                                              clickedFeature.aminoAcidFasta ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                             ]"
                                             title="Copy amino acid sequence">
                                         <i class="ph ph-copy"></i>
                                     </button>
                                 </div>
-                                <pre v-if="clickedFeature.aminoAcidSequence"
-                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.aminoAcidSequence }}</pre>
+                                <pre v-if="clickedFeature.aminoAcidFasta"
+                                     class="max-h-44 overflow-auto custom-scrollbar border border-slate-100 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ clickedFeature.aminoAcidFasta }}</pre>
                                 <div v-else class="text-sm text-slate-500 border border-slate-100 rounded-lg px-3 py-4">
                                     No amino acid sequence available.
                                 </div>

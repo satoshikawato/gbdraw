@@ -353,10 +353,13 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "Sequence" in index_html
     assert "ph ph-copy" in index_html
     assert "copyText(row.value)" in index_html
+    assert "clickedFeature.nucleotideFasta" in index_html
+    assert "clickedFeature.aminoAcidFasta" in index_html
     assert "qualifierRows" in svg_actions_source
     assert "locationParts" in svg_actions_source
     assert "nucleotideSequence" in svg_actions_source
     assert "aminoAcidSequence" in svg_actions_source
+    assert "buildFeatureSequenceFastas" in svg_actions_source
     assert "import { getFeatureCaption, resolveDisplayProteinId } from '../feature-utils.js';" in svg_actions_source
     assert "const proteinId = resolveDisplayProteinId(feat, member);" in svg_actions_source
     assert "label: 'Protein ID', value: proteinId" in svg_actions_source
@@ -371,10 +374,78 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "location_parts" in feature_metadata_source
     assert "nucleotide_sequence" in feature_metadata_source
     assert "amino_acid_sequence" in feature_metadata_source
+    assert '"organism": organism' in feature_metadata_source
     assert '"source_protein_id": _first_qualifier_value(feat.qualifiers, "protein_id")' in feature_metadata_source
     assert '"gene_id": _first_qualifier_value(feat.qualifiers, "gene_id")' in feature_metadata_source
     assert '"old_locus_tag": _first_qualifier_value(feat.qualifiers, "old_locus_tag")' in feature_metadata_source
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
+
+
+def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    source_path = WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js"
+    module_path = tmp_path / "feature-sequence-fasta.mjs"
+    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    check_path = tmp_path / "check-feature-sequence-fasta.mjs"
+    check_path.write_text(
+        f"""
+        import {{ buildFeatureSequenceFastas }} from {module_path.as_uri()!r};
+
+        const assert = (condition, message) => {{
+          if (!condition) throw new Error(message);
+        }};
+
+        const feature = {{
+          record_id: 'NC_000001.1',
+          type: 'CDS',
+          start: 0,
+          end: 9,
+          strand: '+',
+          organism: 'Example organism',
+          qualifiers: {{
+            product: ['example protein'],
+            protein_id: ['WP_000001.1'],
+            locus_tag: ['ABC_0001']
+          }},
+          nucleotide_sequence: 'ATGAAATAA',
+          amino_acid_sequence: 'MK'
+        }};
+        const fasta = buildFeatureSequenceFastas(feature);
+        assert(
+          fasta.nucleotideFasta === '>NC_000001.1:1-9 example protein [Example organism]\\nATGAAATAA',
+          fasta.nucleotideFasta
+        );
+        assert(
+          fasta.aminoAcidFasta === '>WP_000001.1 example protein [Example organism]\\nMK',
+          fasta.aminoAcidFasta
+        );
+
+        const fallback = buildFeatureSequenceFastas({{
+          record_id: 'seq1',
+          start: 0,
+          end: 6,
+          strand: '-',
+          qualifiers: {{
+            locus_tag: ['LOC_1'],
+            product: ['fallback protein']
+          }},
+          nucleotide_sequence: 'ATGAAA',
+          amino_acid_sequence: 'M'.repeat(61)
+        }});
+        assert(
+          fallback.nucleotideFasta === '>seq1:c6-1 fallback protein\\nATGAAA',
+          fallback.nucleotideFasta
+        );
+        assert(fallback.aminoAcidFasta.startsWith('>LOC_1 fallback protein\\n'), fallback.aminoAcidFasta);
+        assert(fallback.aminoAcidFasta.endsWith('\\nM'), fallback.aminoAcidFasta);
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
 
 def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload() -> None:
@@ -483,6 +554,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "if (normalizedPopupMode === 'rich') {\n      Object.assign(payload, {\n        qualifiers: normalizeQualifierMap(feature?.qualifiers),",
         "nucleotide_sequence",
         "amino_acid_sequence",
+        "nucleotide_fasta",
+        "amino_acid_fasta",
         "getVisibleViewRect()",
         "var visibleView = getVisibleViewRect();",
         "window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });",

@@ -67,6 +67,7 @@ def test_web_feature_extraction_includes_qualifiers_locations_and_translation(
     python_helpers_namespace: dict[str, object],
 ) -> None:
     record = SeqRecord(Seq("ATGAAATAAGGGCCC"), id="NC_000001", name="TestRecord")
+    record.annotations["organism"] = "Example organism"
     record.features.append(
         SeqFeature(
             FeatureLocation(0, 9, strand=1),
@@ -84,6 +85,7 @@ def test_web_feature_extraction_includes_qualifiers_locations_and_translation(
     feature = features[0]
 
     assert feature["record_id"] == "NC_000001"
+    assert feature["organism"] == "Example organism"
     assert feature["type"] == "CDS"
     assert feature["start"] == 0
     assert feature["end"] == 9

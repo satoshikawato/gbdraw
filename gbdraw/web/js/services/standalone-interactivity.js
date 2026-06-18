@@ -1,3 +1,5 @@
+import { buildFeatureSequenceFastas } from '../app/feature-sequence-fasta.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
 const FEATURE_SELECTOR = [
@@ -2857,8 +2859,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
   }
 
-  function renderSequenceBlock(title, sequence) {
-    var text = String(sequence || '');
+  function renderSequenceBlock(title, sequence, fasta) {
+    var text = String(fasta || sequence || '');
     if (!text) {
       return '<div class="gfi-block"><div class="gfi-block-title">' + escapeHtml(title) + '</div><div class="gfi-empty">No sequence available.</div></div>';
     }
@@ -2874,8 +2876,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return '<div class="gfi-warning">' + escapeHtml(warning) + '</div>';
     }).join('');
     return warningHtml +
-      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence) +
-      renderSequenceBlock('Amino acid', feature.amino_acid_sequence);
+      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence, feature.nucleotide_fasta || feature.nucleotideFasta) +
+      renderSequenceBlock('Amino acid', feature.amino_acid_sequence, feature.amino_acid_fasta || feature.aminoAcidFasta);
   }
 
   function renderSimplePopup(feature) {
@@ -4330,6 +4332,8 @@ const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) =>
     nucleotide_sequence: '',
     amino_acid_sequence: '',
     sequence_warnings: [],
+    nucleotide_fasta: '',
+    amino_acid_fasta: '',
     orthogroup_member: null
   };
 };
@@ -4356,6 +4360,7 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
     const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel, context);
     const orthogroupEntry = getStandaloneFeatureOrthogroupEntry(feature, context);
     const orthogroupMember = normalizeStandaloneOrthogroupMember(orthogroupEntry?.orthogroupMember);
+    const sequenceFastas = buildFeatureSequenceFastas(feature);
     const payload = {
       svg_id: svgId,
       label: fallbackLabel,
@@ -4395,6 +4400,8 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
         nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
         amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
         sequence_warnings: normalizeStringArray(feature?.sequence_warnings),
+        nucleotide_fasta: sequenceFastas.nucleotideFasta,
+        amino_acid_fasta: sequenceFastas.aminoAcidFasta,
         orthogroup_member: orthogroupMember
       });
     }

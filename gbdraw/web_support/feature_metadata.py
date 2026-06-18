@@ -84,6 +84,20 @@ def _first_qualifier_value(qualifiers: dict[str, object], key: str) -> str:
     return ""
 
 
+def _get_record_organism(record: Any) -> str:
+    annotations = getattr(record, "annotations", None) or {}
+    organism = str(annotations.get("organism") or "").strip()
+    if organism:
+        return organism
+    for feature in getattr(record, "features", []) or []:
+        if str(getattr(feature, "type", "")).lower() != "source":
+            continue
+        organism = _first_qualifier_value(getattr(feature, "qualifiers", {}) or {}, "organism").strip()
+        if organism:
+            return organism
+    return ""
+
+
 def _strand_display(strand: object | None) -> str:
     if strand == 1:
         return "+"
@@ -216,6 +230,7 @@ def extract_features_from_genbank_payload(
     for rec_idx, record in enumerate(records):
         record_id = record.id or f"Record_{rec_idx}"
         hash_record_id = record.id
+        organism = _get_record_organism(record)
         record_ids.append(record_id)
         for feat in record.features:
             if selected_feature_set is not None and feat.type not in selected_feature_set:
@@ -262,6 +277,7 @@ def extract_features_from_genbank_payload(
                     "svg_id": svg_id,
                     "record_id": record_id,
                     "record_idx": rec_idx,
+                    "organism": organism,
                     "type": feat.type,
                     "start": start,
                     "end": end,

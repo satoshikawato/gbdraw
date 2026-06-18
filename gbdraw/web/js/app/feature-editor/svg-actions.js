@@ -5,6 +5,7 @@ import {
   buildPairwiseMatchHoverRows,
   buildPairwiseMatchPayload
 } from '../pairwise-match-popup.js';
+import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 
 export const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
 export const FEATURE_SELECTOR = [
@@ -333,6 +334,10 @@ export const createFeatureSvgActions = ({
     const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
     const nucleotideSequence = String(feat.nucleotide_sequence || '');
     const aminoAcidSequence = String(feat.amino_acid_sequence || '');
+    const { nucleotideFasta, aminoAcidFasta } = buildFeatureSequenceFastas(feat, {
+      nucleotideSequence,
+      aminoAcidSequence
+    });
 
     const currentColor = resolveColorToHex(
       featureElement?.getAttribute('fill') || getFeatureColor(feat)
@@ -362,6 +367,8 @@ export const createFeatureSvgActions = ({
       sequenceWarnings,
       nucleotideSequence,
       aminoAcidSequence,
+      nucleotideFasta,
+      aminoAcidFasta,
       detailRows: buildDetailRows({ defaultLabel, feat, locationText }),
       legendName: effectiveCaption,
       appliedLegendName: effectiveCaption,
