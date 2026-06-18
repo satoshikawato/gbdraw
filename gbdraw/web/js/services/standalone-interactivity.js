@@ -394,6 +394,54 @@ const STANDALONE_INTERACTIVE_STYLE = `
   padding: 6px 8px;
   background: #f8fafc;
 }
+.gfi-match-feature-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.gfi-match-feature-table th,
+.gfi-match-feature-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  vertical-align: top;
+}
+.gfi-match-feature-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #ffffff;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gfi-match-feature-row {
+  cursor: pointer;
+}
+.gfi-match-feature-row:hover {
+  background: #eff6ff;
+}
+.gfi-match-feature-row.is-disabled {
+  cursor: default;
+}
+.gfi-match-feature-row.is-disabled:hover {
+  background: transparent;
+}
+.gfi-match-feature-main {
+  min-width: 0;
+  color: #334155;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.gfi-match-feature-sub {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 .gfi-empty,
 .gfi-warning {
   padding: 10px;
@@ -2975,6 +3023,28 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
+  function normalizeMatchFeatureRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(function (row, index) {
+      var svgId = String(row && (row.svgId || row.svg_id) || '').trim();
+      var canOpen = Boolean(row && (row.canOpen || row.can_open)) || Boolean(svgId && featuresById.has(svgId));
+      return {
+        key: String(row && row.key || svgId || index),
+        svgId: svgId,
+        canOpen: canOpen,
+        label: String(row && row.label || '').trim(),
+        record: String(row && row.record || '').trim(),
+        location: String(row && row.location || '').trim(),
+        proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
+        locusId: String(row && (row.locusId || row.locus_id) || '').trim(),
+        displayName: String(row && (row.displayName || row.display_name) || '').trim(),
+        product: String(row && row.product || '').trim(),
+        copyText: String(row && (row.copyText || row.copy_text) || '').trim()
+      };
+    }).filter(function (row) {
+      return row.svgId || row.label || row.record || row.location || row.product;
+    });
+  }
+
   function renderMatchBlockOrthogroupTable(groups, selectedId) {
     if (!groups.length) return '';
     var body = groups.map(function (group) {
@@ -2990,6 +3060,26 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
     return '<div class="gfi-table-wrap"><table class="gfi-table gfi-block-og-table">' +
       '<thead><tr><th>OG ID</th><th>Display name</th><th>Members</th><th>Record coverage</th><th>Query member</th><th>Subject member</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>';
+  }
+
+  function renderMatchFeatureTable(rows) {
+    if (!rows.length) return '';
+    var body = rows.map(function (row) {
+      var sub = [row.locusId, row.displayName].filter(function (value) { return value; }).join(' / ');
+      var copyText = row.copyText || [row.record, row.location, row.proteinId, row.locusId, row.displayName, row.product].join('\\t');
+      var featureAttr = row.svgId ? ' data-match-feature-id="' + escapeHtml(row.svgId) + '"' : '';
+      return '<tr class="gfi-match-feature-row' + (row.canOpen ? '' : ' is-disabled') + '"' + featureAttr + '>' +
+        '<td><div class="gfi-match-feature-main">' + escapeHtml(row.label || row.proteinId || row.svgId || 'Feature') + '</div>' +
+        (sub ? '<div class="gfi-match-feature-sub">' + escapeHtml(sub) + '</div>' : '') + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
+        '<td class="gfi-mono">' + escapeHtml(row.location) + '</td>' +
+        '<td>' + escapeHtml(row.product) + '</td>' +
+        '<td>' + copyButton(copyText) + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="gfi-table-wrap"><table class="gfi-match-feature-table">' +
+      '<thead><tr><th>Feature</th><th>Record</th><th>Location</th><th>Product</th><th>Copy</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
   }
 
@@ -3027,7 +3117,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       var rows = normalizeMatchRows(section && section.rows);
       var memberRows = normalizeMatchMemberRows(section && (section.member_rows || section.memberRows));
       var blockOrthogroups = normalizeMatchBlockOrthogroups(section && (section.block_orthogroups || section.blockOrthogroups));
-      if (!rows.length && !memberRows.length && !blockOrthogroups.length) return '';
+      var featureRows = normalizeMatchFeatureRows(section && (section.feature_rows || section.featureRows));
+      if (!rows.length && !memberRows.length && !blockOrthogroups.length && !featureRows.length) return '';
       var selectedBlockOrthogroup = blockOrthogroups.find(function (group) {
         return group.id === selectedBlockOrthogroupId;
       });
@@ -3040,7 +3131,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         : '';
       return '<div class="gfi-block">' +
         '<div class="gfi-block-title">' + escapeHtml(section && section.title || 'Details') + '</div>' +
-        (rows.length ? renderRows(rows) : '') +
+        (rows.length && !featureRows.length ? renderRows(rows) : '') +
+        renderMatchFeatureTable(featureRows) +
         renderMatchBlockOrthogroupTable(blockOrthogroups, selectedBlockOrthogroupId) +
         renderMatchMemberTable(section, memberRows) +
         selectedHtml +
@@ -3728,7 +3820,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         startPopupResize(rootEvent);
         return;
       }
-      var interactiveTarget = closestFromTarget(rootEvent.target, 'button, input, textarea, select, a, [data-close], [data-copy-index], [data-tab], [data-block-og-id]');
+      var interactiveTarget = closestFromTarget(rootEvent.target, 'button, input, textarea, select, a, [data-close], [data-copy-index], [data-tab], [data-block-og-id], [data-match-feature-id]');
       if (interactiveTarget) return;
       var dragHandle = closestFromTarget(rootEvent.target, '[data-drag-handle]');
       if (dragHandle) {
@@ -3760,6 +3852,16 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         var index = Number(copyTarget.getAttribute('data-copy-index'));
         var value = Number.isFinite(index) ? copyValues[index] || '' : '';
         Promise.resolve(copyText(value, copyTarget)).catch(function () {});
+        return;
+      }
+      var matchFeatureRow = closestFromTarget(rootEvent.target, '[data-match-feature-id]');
+      if (matchFeatureRow && kind === 'match') {
+        var featureId = String(matchFeatureRow.getAttribute('data-match-feature-id') || '').trim();
+        var matchedFeature = featureId ? featuresById.get(featureId) : null;
+        if (matchedFeature) {
+          openPopup(matchedFeature, rootEvent, 'feature');
+        }
+        return;
       }
     });
 
@@ -4765,6 +4867,126 @@ const resolveStandaloneFeatureSectionProteinIds = ({
   return values.join('; ');
 };
 
+const firstStandaloneNonInternalDisplayText = (...values) => {
+  for (const value of values) {
+    const text = firstStandaloneText(value);
+    if (text && !isStandaloneInternalDisplayId(text)) return text;
+  }
+  return '';
+};
+
+const standaloneFeatureLocationText = (feature) => {
+  const direct = firstStandaloneText(feature?.location);
+  if (direct && direct !== '..') return direct;
+  const built = buildStandaloneFeatureLocation(feature);
+  return built && built !== '..' ? built : '';
+};
+
+const standaloneFeatureRowLocusId = (feature, fallbackLocusId) => firstStandaloneText(
+  feature?.locusTag,
+  feature?.locus_tag,
+  firstQualifierValue(feature, 'locus_tag'),
+  feature?.geneId,
+  feature?.gene_id,
+  firstQualifierValue(feature, 'gene_id'),
+  fallbackLocusId
+);
+
+const standaloneFeatureRowDisplayName = (feature, fallbackDisplayName) => firstStandaloneText(
+  fallbackDisplayName,
+  feature?.displayLabel,
+  feature?.display_label,
+  feature?.label,
+  feature?.gene,
+  firstQualifierValue(feature, 'gene'),
+  feature?.locus_tag,
+  feature?.locusTag,
+  firstQualifierValue(feature, 'locus_tag'),
+  standaloneFeatureProduct(feature)
+);
+
+const buildStandaloneFeatureListRows = ({
+  featureSvgIds,
+  featuresById,
+  group,
+  recordId,
+  interval,
+  proteinId,
+  locusId,
+  displayName
+}) => {
+  const featureIds = uniqueStandaloneMetadataValues(featureSvgIds);
+  const proteinIds = splitStandaloneMetadataValues(proteinId);
+  const locusIds = splitStandaloneMetadataValues(locusId);
+  const displayNames = splitStandaloneMetadataValues(displayName);
+  const count = Math.max(featureIds.length, proteinIds.length, locusIds.length, displayNames.length);
+  if (count === 0) return [];
+
+  return Array.from({ length: count }, (_unused, index) => {
+    const svgId = featureIds[index] || '';
+    const feature = svgId ? featuresById?.get?.(svgId) || null : null;
+    const member = svgId ? getStandaloneGroupMemberForFeatureSvgId(group, svgId) : null;
+    const fallbackProteinId = firstStandaloneNonInternalDisplayText(
+      locusIds[index],
+      displayNames[index],
+      proteinIds[index]
+    );
+    const resolvedProteinId = resolveStandaloneDisplayProteinId(feature, member, '');
+    const displayProteinId = firstStandaloneText(
+      isStandaloneInternalDisplayId(resolvedProteinId) ? '' : resolvedProteinId,
+      fallbackProteinId,
+      resolvedProteinId,
+      proteinIds[index]
+    );
+    const rowRecord = firstStandaloneText(feature?.record_id, feature?.recordId, member?.recordId, member?.record_id, recordId);
+    const rowLocation = firstStandaloneText(
+      standaloneFeatureLocationText(feature),
+      standaloneMemberLocationText(member),
+      count === 1 ? interval : ''
+    );
+    const rowLocusId = standaloneFeatureRowLocusId(feature, locusIds[index]);
+    const rowDisplayName = standaloneFeatureRowDisplayName(feature, displayNames[index]);
+    const product = standaloneFeatureProduct(feature);
+    const label = firstStandaloneText(displayProteinId, rowDisplayName, rowLocusId, product, svgId, `Feature ${index + 1}`);
+    const copyText = [
+      rowRecord,
+      rowLocation,
+      displayProteinId,
+      rowLocusId,
+      rowDisplayName,
+      product
+    ].join('\t');
+    return {
+      key: `${svgId || 'feature'}-${index}`,
+      svg_id: svgId,
+      svgId,
+      can_open: Boolean(feature?.svg_id),
+      canOpen: Boolean(feature?.svg_id),
+      label,
+      record: rowRecord,
+      location: rowLocation,
+      protein_id: displayProteinId,
+      proteinId: displayProteinId,
+      locus_id: rowLocusId,
+      locusId: rowLocusId,
+      display_name: rowDisplayName,
+      displayName: rowDisplayName,
+      product,
+      type: firstStandaloneText(feature?.type),
+      copy_text: copyText,
+      copyText
+    };
+  }).filter((row) => (
+    row.svg_id ||
+    row.record ||
+    row.location ||
+    row.protein_id ||
+    row.locus_id ||
+    row.display_name ||
+    row.product
+  ));
+};
+
 const resolveStandaloneBlockMemberLabels = ({
   group,
   featureSvgIds,
@@ -4850,6 +5072,16 @@ const buildStandaloneMatchFeatureSection = ({
   group
 }) => {
   const rows = [];
+  const featureRows = buildStandaloneFeatureListRows({
+    featureSvgIds,
+    featuresById,
+    group,
+    recordId,
+    interval,
+    proteinId,
+    locusId,
+    displayName
+  });
   const displayProteinIds = resolveStandaloneFeatureSectionProteinIds({
     feature,
     featureSvgIds,
@@ -4865,7 +5097,11 @@ const buildStandaloneMatchFeatureSection = ({
   addStandaloneMatchRow(rows, 'Type', feature?.type);
   addStandaloneMatchRow(rows, 'Locus ID', locusId);
   addStandaloneMatchRow(rows, 'Display name', displayName);
-  return buildStandaloneMatchSection(title, rows);
+  return {
+    ...buildStandaloneMatchSection(title, rows),
+    feature_rows: featureRows,
+    featureRows
+  };
 };
 
 const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } = {}) => {
@@ -5056,7 +5292,10 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
       block_orthogroup_count: blockOrthogroups.length || (matchKind === 'collinear' ? orthogroupIds.length : 0),
       block_orthogroups: blockOrthogroups,
       fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
-      sections: sections.filter((section) => section.rows.length > 0),
+      sections: sections.filter((section) => (
+        section.rows.length > 0 ||
+        (Array.isArray(section.feature_rows) && section.feature_rows.length > 0)
+      )),
       hover_rows: hoverRows
     };
   });

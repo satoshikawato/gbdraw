@@ -1165,6 +1165,10 @@ export const createAppSetup = () => {
   const selectPairwiseBlockOrthogroup = (group) => {
     selectedPairwiseBlockOrthogroupId.value = String(group?.id || '').trim();
   };
+  const openPairwiseFeatureRow = (row, event) => {
+    if (!row?.feature?.svg_id) return;
+    openFeatureEditorForFeature(row.feature, event);
+  };
 
   watch(clickedPairwiseMatch, () => {
     selectedPairwiseBlockOrthogroupId.value = '';
@@ -1994,6 +1998,7 @@ export const createAppSetup = () => {
     selectedPairwiseBlockOrthogroupId,
     renderedPairwiseMatchSections,
     selectPairwiseBlockOrthogroup,
+    openPairwiseFeatureRow,
     clickedFeatureLocation,
     copyText,
     downloadText,

@@ -154,6 +154,14 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(!rowValue(query, 'Protein ID').includes('p_record_a_'), JSON.stringify(query.rows));
         assert(rowValue(subject, 'Protein ID') === 'SLOCUS_001; SLOCUS_002', JSON.stringify(subject.rows));
         assert(!rowValue(subject, 'Protein ID').includes('gbd_r0002_cds000001'), JSON.stringify(subject.rows));
+        assert(query.featureRows.length === 2, JSON.stringify(query.featureRows));
+        assert(query.featureRows.every((row) => row.canOpen), JSON.stringify(query.featureRows));
+        assert(query.featureRows.map((row) => row.label).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(query.featureRows));
+        assert(query.featureRows[0].record === 'record_a', JSON.stringify(query.featureRows[0]));
+        assert(query.featureRows[0].product === 'query product 1', JSON.stringify(query.featureRows[0]));
+        assert(subject.featureRows.length === 2, JSON.stringify(subject.featureRows));
+        assert(subject.featureRows.map((row) => row.label).join(',') === 'SLOCUS_001,SLOCUS_002', JSON.stringify(subject.featureRows));
+        assert(subject.featureRows[0].feature.svg_id === 'fs1', JSON.stringify(subject.featureRows[0]));
 
         const blockOgSection = payload.sections.find((section) => section.title === 'Orthogroups covered');
         assert(rowValue(blockOgSection, 'Number of orthogroups covered') === '2', JSON.stringify(blockOgSection.rows));

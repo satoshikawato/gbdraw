@@ -439,6 +439,114 @@ const resolveFeatureSectionProteinIds = ({
   return values.join('; ');
 };
 
+const firstNonInternalDisplayText = (...values) => {
+  for (const value of values) {
+    const text = normalizeText(value);
+    if (text && !isInternalDisplayId(text)) return text;
+  }
+  return '';
+};
+
+const featureRowDisplayName = (feature, fallbackDisplayName) => firstText(
+  fallbackDisplayName,
+  feature?.displayLabel,
+  feature?.display_label,
+  feature?.label,
+  feature?.gene,
+  qualifierFirstValue(feature, 'gene'),
+  feature?.locus_tag,
+  feature?.locusTag,
+  qualifierFirstValue(feature, 'locus_tag'),
+  featureProduct(feature)
+);
+
+const featureRowLocusId = (feature, fallbackLocusId) => firstText(
+  feature?.locus_tag,
+  feature?.locusTag,
+  qualifierFirstValue(feature, 'locus_tag'),
+  feature?.gene_id,
+  feature?.geneId,
+  qualifierFirstValue(feature, 'gene_id'),
+  fallbackLocusId
+);
+
+const buildFeatureListRows = ({
+  featureSvgIds,
+  featureLookup,
+  group,
+  recordId,
+  interval,
+  proteinId,
+  locusId,
+  displayName
+}) => {
+  const featureIds = uniqueMetadataValues(featureSvgIds);
+  const proteinIds = splitMetadataValues(proteinId);
+  const locusIds = splitMetadataValues(locusId);
+  const displayNames = splitMetadataValues(displayName);
+  const count = Math.max(featureIds.length, proteinIds.length, locusIds.length, displayNames.length);
+  if (count === 0) return [];
+
+  return Array.from({ length: count }, (_unused, index) => {
+    const svgId = featureIds[index] || '';
+    const feature = svgId ? featureLookup?.get?.(svgId) || null : null;
+    const member = svgId ? getGroupMemberForFeatureSvgId(group, svgId) : null;
+    const fallbackProteinId = firstNonInternalDisplayText(
+      locusIds[index],
+      displayNames[index],
+      proteinIds[index]
+    );
+    const resolvedProteinId = resolveDisplayProteinId(feature, member, '');
+    const displayProteinId = firstText(
+      isInternalDisplayId(resolvedProteinId) ? '' : resolvedProteinId,
+      fallbackProteinId,
+      resolvedProteinId,
+      proteinIds[index]
+    );
+    const rowRecord = firstText(feature?.record_id, feature?.recordId, member?.recordId, member?.record_id, recordId);
+    const rowLocation = firstText(
+      featureLocationText(feature),
+      memberLocationText(member),
+      count === 1 ? interval : ''
+    );
+    const rowLocusId = featureRowLocusId(feature, locusIds[index]);
+    const rowDisplayName = featureRowDisplayName(feature, displayNames[index]);
+    const product = featureProduct(feature);
+    const label = firstText(displayProteinId, rowDisplayName, rowLocusId, product, svgId, `Feature ${index + 1}`);
+    const copyText = [
+      rowRecord,
+      rowLocation,
+      displayProteinId,
+      rowLocusId,
+      rowDisplayName,
+      product
+    ].join('\t');
+    return {
+      key: `${svgId || 'feature'}-${index}`,
+      svgId,
+      feature,
+      canOpen: Boolean(feature?.svg_id),
+      label,
+      record: rowRecord,
+      location: rowLocation,
+      proteinId: displayProteinId,
+      locusId: rowLocusId,
+      displayName: rowDisplayName,
+      product,
+      type: firstText(feature?.type),
+      copyText
+    };
+  }).filter((row) => (
+    row.svgId ||
+    row.record ||
+    row.location ||
+    row.proteinId ||
+    row.locusId ||
+    row.displayName ||
+    row.product
+  ));
+};
+
 const orthogroupMemberCopyText = (memberRows) => {
   if (!Array.isArray(memberRows) || memberRows.length === 0) return '';
   return [
@@ -561,6 +669,16 @@ const buildFeatureRows = ({
   group
 }) => {
   const rows = [];
+  const featureRows = buildFeatureListRows({
+    featureSvgIds,
+    featureLookup,
+    group,
+    recordId,
+    interval,
+    proteinId,
+    locusId,
+    displayName
+  });
   const displayProteinIds = resolveFeatureSectionProteinIds({
     feature,
     featureSvgIds,
@@ -578,7 +696,7 @@ const buildFeatureRows = ({
   addRow(rows, 'Product', firstText(feature?.product, qualifierFirstValue(feature, 'product')));
   addRow(rows, 'Locus ID', locusId);
   addRow(rows, 'Display name', displayName);
-  return section(title, rows);
+  return section(title, rows, { featureRows });
 };
 
 export const buildPairwiseMatchPayload = (
@@ -761,7 +879,10 @@ export const buildPairwiseMatchPayload = (
     blockOrthogroupCount: blockOrthogroups.length || (matchKind === 'collinear' ? orthogroupIds.length : 0),
     blockOrthogroups,
     fill: firstText(element.getAttribute('fill'), element.style?.fill, '#94a3b8'),
-    sections: sections.filter((entry) => entry.rows.length > 0)
+    sections: sections.filter((entry) => (
+      entry.rows.length > 0 ||
+      (Array.isArray(entry.featureRows) && entry.featureRows.length > 0)
+    ))
   };
 };
 
