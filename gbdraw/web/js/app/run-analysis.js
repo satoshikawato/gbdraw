@@ -404,9 +404,6 @@ const normalizeOrthogroupMembershipMode = (value) => {
   const aliases = {
     legacy: 'rbh',
     rbh_only: 'rbh',
-    paralog: 'family_merge',
-    paralog_inclusive: 'family_merge',
-    inclusive: 'family_merge',
     merge: 'family_merge',
     family: 'family_merge'
   };

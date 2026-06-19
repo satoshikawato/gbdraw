@@ -362,7 +362,6 @@ def test_filter_protein_hits_by_thresholds_removes_low_confidence_bridge() -> No
 @pytest.mark.linear
 def test_orthogroup_membership_modes_expose_only_rbh_and_family_merge() -> None:
     assert protein_colinearity_module.ORTHOGROUP_MEMBERSHIP_MODES == ("rbh", "family_merge")
-    assert protein_colinearity_module.normalize_orthogroup_membership_mode("paralog_inclusive") == "family_merge"
 
 
 @pytest.mark.linear
