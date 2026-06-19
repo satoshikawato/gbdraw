@@ -767,6 +767,70 @@ def test_family_merge_display_edges_suppress_already_covered_cross_links() -> No
 
 
 @pytest.mark.linear
+def test_family_merge_display_edges_prefer_uncovered_alternative_links() -> None:
+    records = [
+        _record(
+            "record_a",
+            features=[
+                _cds(0, 9, qualifiers={"translation": ["MK*"], "protein_id": ["a0"]}),
+                _cds(12, 21, qualifiers={"translation": ["MK*"], "protein_id": ["a1"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            features=[
+                _cds(0, 9, qualifiers={"translation": ["MK*"], "protein_id": ["b0"]}),
+                _cds(12, 21, qualifiers={"translation": ["MK*"], "protein_id": ["b1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("a1", "b1", bitscore=400),
+                _hit_row("a0", "b1", bitscore=390),
+                _hit_row("a0", "b0", bitscore=200),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("b1", "a1", bitscore=400),
+                _hit_row("b1", "a0", bitscore=390),
+                _hit_row("b0", "a0", bitscore=200),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="family_merge",
+        orthogroup_member_max_hits=2,
+        max_related_edges_per_orthogroup=2,
+    )
+
+    display_edges = edge_selection.adjacent_display_edges_by_pair[(0, 1)]
+    assert {
+        (str(row.query), str(row.subject))
+        for row in display_edges.itertuples(index=False)
+    } == {
+        ("a1", "b1"),
+        ("a0", "b0"),
+    }
+    assert {
+        (edge.query_protein_id, edge.subject_protein_id)
+        for edge in edge_selection.orthogroups.ortholog_edges_by_orthogroup_id["og_1"]
+    } >= {
+        ("a0", "b1"),
+        ("a0", "b0"),
+    }
+
+
+@pytest.mark.linear
 def test_build_orthogroups_suggests_names_from_cds_annotations() -> None:
     records = [
         _record(

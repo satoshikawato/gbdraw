@@ -56,6 +56,11 @@ ORTHOGROUP_MEMBERSHIP_MODES = ("rbh", "family_merge")
 OrthogroupMembershipMode = Literal["rbh", "family_merge"]
 OrthologEdgeKind = Literal["rbh", "coortholog", "related_paralog"]
 OrthologRenderRole = Literal["block_anchor", "display_edge"]
+ORTHOLOG_DISPLAY_EDGE_KIND_RANK = {
+    "rbh": 0,
+    "coortholog": 1,
+    "related_paralog": 2,
+}
 
 
 @dataclass(frozen=True)
@@ -2311,6 +2316,7 @@ def _ortholog_edge_display_rank(
         and bool(subject_member.representative)
     )
     return (
+        ORTHOLOG_DISPLAY_EDGE_KIND_RANK.get(str(edge.edge_kind), 99),
         0 if both_representative else 1,
         float(edge.evalue),
         -float(edge.bitscore),
@@ -2373,6 +2379,65 @@ def _comparison_row_from_ortholog_edge_for_pair(
         "evalue": float(edge.evalue),
         "bitscore": float(edge.bitscore),
     }
+
+
+def _comparison_row_key(row: Mapping[str, object]) -> tuple[str, str]:
+    return str(row["query"]), str(row["subject"])
+
+
+def _has_uncovered_display_alternative(
+    row_key: tuple[str, str],
+    *,
+    current_kind_rank: int,
+    candidate_subjects_by_query: Mapping[str, set[str]],
+    candidate_queries_by_subject: Mapping[str, set[str]],
+    candidate_kind_rank_by_pair: Mapping[tuple[str, str], int],
+    covered_queries: set[str],
+    covered_subjects: set[str],
+    existing_pairs: set[tuple[str, str]],
+) -> bool:
+    query_id, subject_id = row_key
+    if query_id not in covered_queries and subject_id in covered_subjects:
+        for alternative_subject_id in candidate_subjects_by_query.get(query_id, set()):
+            alternative_key = (query_id, alternative_subject_id)
+            if alternative_subject_id == subject_id:
+                continue
+            if alternative_subject_id in covered_subjects:
+                continue
+            if alternative_key in existing_pairs or (alternative_key[1], alternative_key[0]) in existing_pairs:
+                continue
+            if candidate_kind_rank_by_pair.get(alternative_key, 99) > current_kind_rank:
+                continue
+            return True
+    if query_id in covered_queries and subject_id not in covered_subjects:
+        for alternative_query_id in candidate_queries_by_subject.get(subject_id, set()):
+            alternative_key = (alternative_query_id, subject_id)
+            if alternative_query_id == query_id:
+                continue
+            if alternative_query_id in covered_queries:
+                continue
+            if alternative_key in existing_pairs or (alternative_key[1], alternative_key[0]) in existing_pairs:
+                continue
+            if candidate_kind_rank_by_pair.get(alternative_key, 99) > current_kind_rank:
+                continue
+            return True
+    return False
+
+
+def _add_display_row(
+    row: dict[str, object],
+    *,
+    existing_pairs: set[tuple[str, str]],
+    covered_queries: set[str],
+    covered_subjects: set[str],
+    added_rows: list[dict[str, object]],
+) -> None:
+    row_key = _comparison_row_key(row)
+    existing_pairs.add(row_key)
+    existing_pairs.add((row_key[1], row_key[0]))
+    covered_queries.add(row_key[0])
+    covered_subjects.add(row_key[1])
+    added_rows.append(row)
 
 
 def _build_adjacent_display_edges_by_pair(
@@ -2446,16 +2511,54 @@ def _build_adjacent_display_edges_by_pair(
             added_for_group = 0
             covered_queries = covered_query_by_group.setdefault(orthogroup_id, set())
             covered_subjects = covered_subject_by_group.setdefault(orthogroup_id, set())
-            for _rank, row in sorted(candidates, key=lambda item: item[0]):
-                row_key = (str(row["query"]), str(row["subject"]))
-                if row_key[0] in covered_queries and row_key[1] in covered_subjects:
-                    continue
-                existing_pairs.add(row_key)
-                existing_pairs.add((row_key[1], row_key[0]))
-                covered_queries.add(row_key[0])
-                covered_subjects.add(row_key[1])
-                added_rows.append(row)
-                added_for_group += 1
+            sorted_candidates = sorted(candidates, key=lambda item: item[0])
+            candidate_subjects_by_query: dict[str, set[str]] = {}
+            candidate_queries_by_subject: dict[str, set[str]] = {}
+            candidate_kind_rank_by_pair: dict[tuple[str, str], int] = {}
+            for rank, row in sorted_candidates:
+                query_id, subject_id = _comparison_row_key(row)
+                candidate_subjects_by_query.setdefault(query_id, set()).add(subject_id)
+                candidate_queries_by_subject.setdefault(subject_id, set()).add(query_id)
+                candidate_kind_rank_by_pair[(query_id, subject_id)] = int(rank[0])
+
+            # Display selection is stricter than membership expansion: prefer
+            # same-quality links that introduce new endpoints on both records.
+            for require_both_uncovered in (True, False):
+                for rank, row in sorted_candidates:
+                    if added_for_group >= cap:
+                        break
+                    row_key = _comparison_row_key(row)
+                    if row_key in existing_pairs or (row_key[1], row_key[0]) in existing_pairs:
+                        continue
+                    query_covered = row_key[0] in covered_queries
+                    subject_covered = row_key[1] in covered_subjects
+                    if query_covered and subject_covered:
+                        continue
+                    if require_both_uncovered:
+                        if query_covered or subject_covered:
+                            continue
+                    else:
+                        if not (query_covered or subject_covered):
+                            continue
+                        if _has_uncovered_display_alternative(
+                            row_key,
+                            current_kind_rank=int(rank[0]),
+                            candidate_subjects_by_query=candidate_subjects_by_query,
+                            candidate_queries_by_subject=candidate_queries_by_subject,
+                            candidate_kind_rank_by_pair=candidate_kind_rank_by_pair,
+                            covered_queries=covered_queries,
+                            covered_subjects=covered_subjects,
+                            existing_pairs=existing_pairs,
+                        ):
+                            continue
+                    _add_display_row(
+                        row,
+                        existing_pairs=existing_pairs,
+                        covered_queries=covered_queries,
+                        covered_subjects=covered_subjects,
+                        added_rows=added_rows,
+                    )
+                    added_for_group += 1
                 if added_for_group >= cap:
                     break
         if added_rows:
