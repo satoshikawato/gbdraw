@@ -29,6 +29,7 @@ from gbdraw.analysis.protein_colinearity import (
     select_best_hits_per_query,
     select_reciprocal_best_hit_edges,
     select_reciprocal_best_hits,
+    select_rbh_orthogroup_edges_from_directional_hits,
     select_top_hits_per_query,
 )
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
@@ -359,6 +360,12 @@ def test_filter_protein_hits_by_thresholds_removes_low_confidence_bridge() -> No
 
 
 @pytest.mark.linear
+def test_orthogroup_membership_modes_expose_only_rbh_and_family_merge() -> None:
+    assert protein_colinearity_module.ORTHOGROUP_MEMBERSHIP_MODES == ("rbh", "family_merge")
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("paralog_inclusive") == "family_merge"
+
+
+@pytest.mark.linear
 def test_select_best_hits_per_query_avoids_secondary_paralog_merge() -> None:
     hits = pd.DataFrame.from_records(
         [
@@ -626,6 +633,138 @@ def test_build_rbh_orthogroup_protein_blastp_comparisons_keeps_transitive_all_vs
     }
     assert comparisons[0].iloc[0]["orthogroup_id"] == "og_1"
     assert comparisons[1].iloc[0]["orthogroup_id"] == "og_1"
+
+
+@pytest.mark.linear
+def test_orthogroup_expanded_display_edges_include_non_rbh_coorthologs() -> None:
+    records = [
+        _record(
+            "record_a",
+            features=[
+                _cds(0, 9, qualifiers={"translation": ["MK*"], "protein_id": ["a0"]}),
+                _cds(12, 21, qualifiers={"translation": ["MK*"], "protein_id": ["a1"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            features=[
+                _cds(0, 9, qualifiers={"translation": ["MK*"], "protein_id": ["b0"]}),
+                _cds(12, 21, qualifiers={"translation": ["MK*"], "protein_id": ["b1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("a0", "b0", bitscore=300),
+                _hit_row("a1", "b0", bitscore=250),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("b0", "a0", bitscore=300),
+                _hit_row("b1", "a0", bitscore=260),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="family_merge",
+        orthogroup_member_max_hits=2,
+        max_related_edges_per_orthogroup=2,
+    )
+
+    anchor_edges = edge_selection.adjacent_anchor_edges_by_pair[(0, 1)]
+    display_edges = edge_selection.adjacent_display_edges_by_pair[(0, 1)]
+    assert {
+        (str(row.query), str(row.subject))
+        for row in anchor_edges.itertuples(index=False)
+    } == {("a0", "b0")}
+    assert {
+        (str(row.query), str(row.subject))
+        for row in display_edges.itertuples(index=False)
+    } == {
+        ("a0", "b0"),
+        ("a0", "b1"),
+        ("a1", "b0"),
+    }
+
+    converted = convert_protein_hits_to_genomic_links(
+        display_edges,
+        extraction.protein_map,
+        orthogroups=edge_selection.orthogroups,
+    )
+    edge_kind_by_pair = {
+        (str(row.query_protein_id), str(row.subject_protein_id)): str(row.edge_kind)
+        for row in converted.itertuples(index=False)
+    }
+    assert edge_kind_by_pair[("a0", "b0")] == "rbh"
+    assert edge_kind_by_pair[("a0", "b1")] == "coortholog"
+    assert edge_kind_by_pair[("a1", "b0")] == "coortholog"
+
+
+@pytest.mark.linear
+def test_family_merge_display_edges_suppress_already_covered_cross_links() -> None:
+    records = [
+        _record(
+            "record_a",
+            features=[
+                _cds(0, 9, qualifiers={"translation": ["MK*"], "protein_id": ["a0"]}),
+                _cds(12, 21, qualifiers={"translation": ["MK*"], "protein_id": ["a1"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            features=[
+                _cds(0, 9, qualifiers={"translation": ["MK*"], "protein_id": ["b0"]}),
+                _cds(12, 21, qualifiers={"translation": ["MK*"], "protein_id": ["b1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("a0", "b0", bitscore=300),
+                _hit_row("a1", "b1", bitscore=310),
+                _hit_row("a0", "b1", bitscore=280),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("b0", "a0", bitscore=300),
+                _hit_row("b1", "a1", bitscore=310),
+                _hit_row("b1", "a0", bitscore=280),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="family_merge",
+        orthogroup_member_max_hits=2,
+        max_related_edges_per_orthogroup=2,
+    )
+
+    display_edges = edge_selection.adjacent_display_edges_by_pair[(0, 1)]
+    assert {
+        (str(row.query), str(row.subject))
+        for row in display_edges.itertuples(index=False)
+    } == {
+        ("a0", "b0"),
+        ("a1", "b1"),
+    }
+    assert edge_selection.orthogroups.related_edges_by_orthogroup_id["og_1"]
 
 
 @pytest.mark.linear
@@ -1121,6 +1260,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
         "1e-5",
         0,
         0,
+        orthogroup_membership_mode="rbh",
     )
     result = json.loads(str(raw_result))
 
@@ -1145,6 +1285,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
         "1e-5",
         0,
         0,
+        orthogroup_membership_mode="rbh",
     )))
     assert repeated_result["cache"]["convertedPayloadHit"] is True
     assert repeated_result["pairs"] == result["pairs"]
@@ -1157,6 +1298,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
         "1e-5",
         0,
         0,
+        orthogroup_membership_mode="rbh",
     )))
     assert filter_cached_result["cache"]["convertedPayloadHit"] is False
     assert filter_cached_result["cache"]["filteredHitCacheHits"] == 2
@@ -1460,6 +1602,7 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
     assert captured["losatp_threads"] == 8
     assert captured["protein_blastp_max_hits"] == 7
     assert captured["protein_blastp_candidate_limit"] == 99
+    assert captured["orthogroup_membership_mode"] == "family_merge"
     assert captured["align_orthogroup_feature"] is None
 
 
@@ -1572,6 +1715,7 @@ def test_linear_cli_forwards_protein_blastp_options(
     assert captured["losatp_threads"] == 6
     assert captured["protein_blastp_max_hits"] == 9
     assert captured["protein_blastp_candidate_limit"] == 123
+    assert captured["orthogroup_membership_mode"] == "family_merge"
     assert captured["align_orthogroup_feature"] is None
 
 

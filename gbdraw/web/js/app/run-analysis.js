@@ -399,6 +399,20 @@ const normalizeCollinearSearchScope = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
 };
+const normalizeOrthogroupMembershipMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const aliases = {
+    legacy: 'rbh',
+    rbh_only: 'rbh',
+    paralog: 'family_merge',
+    paralog_inclusive: 'family_merge',
+    inclusive: 'family_merge',
+    merge: 'family_merge',
+    family: 'family_merge'
+  };
+  const resolved = aliases[normalized] || normalized;
+  return ['rbh', 'family_merge'].includes(resolved) ? resolved : 'family_merge';
+};
 const normalizePairwiseMatchStyle = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
@@ -2770,6 +2784,13 @@ json.dumps({
         losat.blastp.mode = blastpMode;
         losat.blastp.maxHits = Math.max(1, blastpDisplayMaxHits);
         losat.blastp.candidateLimit = null;
+        losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(
+          losat.blastp?.orthogroupMembershipMode
+        );
+        losat.blastp.orthogroupMemberMaxHits = Math.max(
+          1,
+          normalizeBlastThresholdNumber(losat.blastp?.orthogroupMemberMaxHits, 5, { integer: true })
+        );
         losat.blastp.collinearMinAnchors = Math.max(
           1,
           normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
@@ -2782,9 +2803,19 @@ json.dumps({
           0,
           normalizeBlastThresholdNumber(losat.blastp?.collinearMaxDiagonalDrift, 0, { integer: true })
         );
+        losat.blastp.collinearMaxParalogLinksPerOrthogroup = Math.max(
+          1,
+          normalizeBlastThresholdNumber(
+            losat.blastp?.collinearMaxParalogLinksPerOrthogroup,
+            2,
+            { integer: true }
+          )
+        );
         losat.blastp.collinearColorMode = normalizeCollinearColorMode(losat.blastp?.collinearColorMode);
         losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode);
         losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope);
+        const orthogroupMembershipMode = losat.blastp.orthogroupMembershipMode;
+        const orthogroupMemberMaxHits = Math.max(1, losat.blastp.orthogroupMemberMaxHits);
         const collinearSearchScope = losat.blastp.collinearSearchScope;
         args.push(
           '--bitscore',
@@ -3320,9 +3351,12 @@ json.dumps({
 
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
-          if (useOrthogroupBlastp) return 1;
+          if (useOrthogroupBlastp) {
+            return orthogroupMembershipMode === 'rbh' ? 1 : orthogroupMemberMaxHits;
+          }
           if (useCollinearBlastp) {
-            return losat.blastp.collinearAnchorMode === 'all' ? null : 1;
+            if (losat.blastp.collinearAnchorMode === 'all') return null;
+            return orthogroupMembershipMode === 'rbh' ? 1 : orthogroupMemberMaxHits;
           }
           return Math.max(1, losat.blastp.maxHits);
         };
@@ -3395,7 +3429,7 @@ json.dumps({
               const subjectEnd = collinearSearchScope === 'all' ? linearSeqs.length : i + 2;
               for (let j = i + 1; j < subjectEnd; j++) {
                 jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
-                if (losat.blastp.collinearAnchorMode === 'rbh') {
+                if (losat.blastp.collinearAnchorMode === 'rbh' || orthogroupMembershipMode !== 'rbh') {
                   jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
                 }
               }
@@ -3561,8 +3595,10 @@ json.dumps({
                 25,
                 losat.blastp.collinearMaxDiagonalDrift,
                 0,
-                0,
-                collinearSearchScope
+                losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+                collinearSearchScope,
+                orthogroupMembershipMode,
+                orthogroupMemberMaxHits
               )
             );
             if (convertedPayload.error) throw new Error(convertedPayload.error);

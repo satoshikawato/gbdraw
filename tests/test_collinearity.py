@@ -674,6 +674,177 @@ def test_true_global_singleton_orthogroup_does_not_create_link() -> None:
 
 
 @pytest.mark.linear
+def test_family_merge_membership_adds_strong_non_rbh_member_without_new_anchor() -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
+        _record(
+            "record_b",
+            [
+                _cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]}),
+                _cds(12, 21, {"locus_tag": ["b1"], "protein_id": ["b1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [_hit_row("a0", "b0", bitscore=300), _hit_row("a0", "b1", bitscore=250)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [_hit_row("b0", "a0", bitscore=300), _hit_row("b1", "a0", bitscore=250)],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    rbh_result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        directional_hits,
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(min_anchors=1),
+        edge_mode="rbh",
+    )
+    expanded_result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        directional_hits,
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(min_anchors=1),
+        edge_mode="rbh",
+        orthogroup_membership_mode="family_merge",
+        orthogroup_member_max_hits=2,
+    )
+
+    assert rbh_result.orthogroups is not None
+    assert "b1" not in rbh_result.orthogroups.member_by_protein_id
+    assert expanded_result.orthogroups is not None
+    member = expanded_result.orthogroups.member_by_protein_id["b1"]
+    assert member.orthogroup_id == "og_1"
+    assert member.representative is False
+    assert expanded_result.blocks[0].anchors[0].subject_protein_id == "b0"
+    assert {
+        edge.edge_kind
+        for edge in expanded_result.orthogroups.ortholog_edges_by_orthogroup_id["og_1"]
+    } == {"rbh", "coortholog"}
+
+@pytest.mark.linear
+def test_family_merge_unions_connected_rbh_groups_but_keeps_separate_paths() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]}),
+                _cds(12, 21, {"locus_tag": ["b1"], "protein_id": ["b1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("a0", "b0", bitscore=300),
+                _hit_row("a0", "b1", bitscore=280),
+                _hit_row("a1", "b1", bitscore=310),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("b0", "a0", bitscore=300),
+                _hit_row("b1", "a1", bitscore=310),
+                _hit_row("b1", "a0", bitscore=280),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        directional_hits,
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(min_anchors=1),
+        edge_mode="rbh",
+        orthogroup_membership_mode="family_merge",
+        orthogroup_member_max_hits=2,
+    )
+
+    assert result.orthogroups is not None
+    assert set(result.orthogroups.orthogroups) == {"og_1"}
+    assert {member.protein_id for member in result.orthogroups.orthogroups["og_1"]} == {
+        "a0",
+        "a1",
+        "b0",
+        "b1",
+    }
+    assert result.orthogroups.rbh_orthogroups == {
+        "og_1": ("a0", "b0"),
+        "og_2": ("a1", "b1"),
+    }
+    path_sets = {
+        tuple(path.protein_ids)
+        for path in result.orthogroups.ortholog_paths_by_orthogroup_id["og_1"]
+    }
+    assert ("a0", "b0") in path_sets
+    assert ("a1", "b1") in path_sets
+
+
+@pytest.mark.linear
+def test_shared_node_paths_are_serialized_without_collapsing_to_one_to_one() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]}),
+                _cds(12, 21, {"locus_tag": ["b1"], "protein_id": ["b1"]}),
+            ],
+        ),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["c0"], "protein_id": ["c0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [_hit_row("a0", "b0", bitscore=300), _hit_row("a1", "b1", bitscore=240)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records([_hit_row("b0", "a0", bitscore=300)], columns=COMPARISON_COLUMNS),
+        (1, 2): pd.DataFrame.from_records(
+            [_hit_row("b0", "c0", bitscore=300), _hit_row("b1", "c0", bitscore=260)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (2, 1): pd.DataFrame.from_records([_hit_row("c0", "b0", bitscore=300)], columns=COMPARISON_COLUMNS),
+    }
+
+    result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        directional_hits,
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(min_anchors=1),
+        edge_mode="rbh",
+        orthogroup_membership_mode="family_merge",
+        orthogroup_member_max_hits=2,
+    )
+
+    assert result.orthogroups is not None
+    paths = result.orthogroups.ortholog_paths_by_orthogroup_id["og_1"]
+    path_sets = {tuple(path.protein_ids): tuple(path.shared_protein_ids) for path in paths}
+    assert path_sets[("a0", "b0", "c0")] == ("c0",)
+    assert path_sets[("a1", "b1", "c0")] == ("c0",)
+
+
+@pytest.mark.linear
 def test_build_blocks_from_hits_adjacent_scope_ignores_non_adjacent_tables() -> None:
     records = [
         _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
@@ -770,6 +941,35 @@ def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatc
     assert observed_pairs == [("qa0", "sb0"), ("sb0", "qa0"), ("sb0", "tc0"), ("tc0", "sb0")]
     assert len(result.blocks) == 2
     assert {block.query_record_index for block in result.blocks} == {0, 1}
+
+
+@pytest.mark.linear
+def test_orthogroup_collinearity_family_merge_uses_member_hit_depth(monkeypatch) -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["tc0"], "protein_id": ["tc0"]})]),
+    ]
+    observed_limits: list[int | None] = []
+
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, runner):
+        observed_limits.append(candidate_limit)
+        return pd.DataFrame.from_records(
+            [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+
+    collinearity_module.build_orthogroup_collinearity_blocks(
+        records,
+        params=LosslessCollinearityParameters(),
+        edge_mode="rbh",
+        orthogroup_membership_mode="family_merge",
+        orthogroup_member_max_hits=3,
+    )
+
+    assert observed_limits == [3, 3, 3, 3]
 
 
 @pytest.mark.linear
@@ -1000,6 +1200,9 @@ def test_linear_cli_builds_and_saves_native_collinearity(
         captured["unit_mode"] = kwargs["unit_mode"]
         captured["edge_mode"] = kwargs["edge_mode"]
         captured["search_scope"] = kwargs["search_scope"]
+        captured["orthogroup_membership_mode"] = kwargs["orthogroup_membership_mode"]
+        captured["orthogroup_member_max_hits"] = kwargs["orthogroup_member_max_hits"]
+        captured["max_paralog_links_per_orthogroup"] = kwargs["max_paralog_links_per_orthogroup"]
         anchor = _anchor(0, 0)
         return CollinearityResult(
             blocks=(
@@ -1037,6 +1240,10 @@ def test_linear_cli_builds_and_saves_native_collinearity(
             "rbh",
             "--collinear_search_scope",
             "all",
+            "--orthogroup_membership_mode",
+            "family_merge",
+            "--orthogroup_member_max_hits",
+            "3",
             "--collinear_block_merge_gap",
             "12",
             "--collinear_singleton_merge_gap",
@@ -1060,6 +1267,9 @@ def test_linear_cli_builds_and_saves_native_collinearity(
     assert captured["unit_mode"] == "cds"
     assert captured["edge_mode"] == "rbh"
     assert captured["search_scope"] == "all"
+    assert captured["orthogroup_membership_mode"] == "family_merge"
+    assert captured["orthogroup_member_max_hits"] == 3
+    assert captured["max_paralog_links_per_orthogroup"] == 2
     assert captured["protein_blastp_mode"] == "none"
     comparisons = captured["protein_comparisons"]
     assert isinstance(comparisons, list)
@@ -1217,6 +1427,8 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
         25,
         1,
         2,
+        "adjacent",
+        "rbh",
     )
     result = json.loads(str(raw_result))
 
@@ -1458,6 +1670,7 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
             1,
             2,
             scope,
+            "rbh",
         )
         return json.loads(str(raw_result))
 

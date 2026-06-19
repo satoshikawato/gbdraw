@@ -1106,6 +1106,19 @@
                                             <label class="text-[9px] flex items-center">Max hits per protein <help-tip text="Maximum distinct subject proteins drawn for each query protein in Pairwise mode. Higher values show repeats but increase clutter."></help-tip></label>
                                             <input type="number" min="1" v-model.number="losat.blastp.maxHits" class="form-input px-1 py-0.5 text-xs">
                                         </div>
+                                        <template v-if="losat.blastp.mode !== 'pairwise'">
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Membership <help-tip text="Family merge groups connected RBH families and adds strong non-RBH family members by default; RBH keeps only reciprocal-best-hit groups."></help-tip></label>
+                                                <select v-model="losat.blastp.orthogroupMembershipMode" class="form-input px-1 py-0.5 text-xs">
+                                                    <option value="family_merge">Family merge</option>
+                                                    <option value="rbh">RBH</option>
+                                                </select>
+                                            </div>
+                                            <div v-if="losat.blastp.orthogroupMembershipMode !== 'rbh'">
+                                                <label class="text-[9px] flex items-center">Member hits <help-tip text="Maximum filtered candidate hits per protein used to expand orthogroup membership."></help-tip></label>
+                                                <input type="number" min="1" step="1" v-model.number="losat.blastp.orthogroupMemberMaxHits" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                        </template>
                                         <template v-if="losat.blastp.mode === 'collinear'">
                                             <div>
                                                 <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring Orthogroup RBH anchors that can be merged into one span ribbon."></help-tip></label>

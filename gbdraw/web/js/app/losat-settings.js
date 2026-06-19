@@ -48,7 +48,9 @@ export const createLosatSettings = ({ state }) => {
       const pairCount = scope === 'all'
         ? Math.floor((recordCount * (recordCount - 1)) / 2)
         : recordCount - 1;
-      const directionMultiplier = String(losat.blastp?.collinearAnchorMode || '').trim().toLowerCase() === 'rbh'
+      const membershipMode = String(losat.blastp?.orthogroupMembershipMode || 'family_merge').trim().toLowerCase().replace(/-/g, '_');
+      const directionMultiplier = String(losat.blastp?.collinearAnchorMode || '').trim().toLowerCase() === 'rbh' ||
+        membershipMode !== 'rbh'
         ? 2
         : 1;
       return Math.max(1, pairCount * directionMultiplier);

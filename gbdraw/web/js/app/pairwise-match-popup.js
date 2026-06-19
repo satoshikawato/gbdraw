@@ -614,7 +614,10 @@ const buildOrthogroupDetailRows = ({
   displayName,
   description,
   memberCount,
-  recordCoverage
+  recordCoverage,
+  rbhOrthogroups,
+  orthologPathCount,
+  relatedEdgeCount
 }) => {
   const rows = [];
   addRow(rows, 'Orthogroup ID', orthogroupId);
@@ -622,6 +625,9 @@ const buildOrthogroupDetailRows = ({
   addRow(rows, 'Description', description);
   addRow(rows, 'Members', memberCount);
   addRow(rows, 'Record coverage', recordCoverage);
+  addRow(rows, 'RBH seeds', Array.isArray(rbhOrthogroups) ? rbhOrthogroups.join('; ') : rbhOrthogroups);
+  addRow(rows, 'Ortholog paths', orthologPathCount);
+  addRow(rows, 'Related edges', relatedEdgeCount);
   return rows;
 };
 
@@ -651,6 +657,9 @@ const buildBlockOrthogroups = ({
     Array.isArray(group?.members) ? group.members.length : ''
   );
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
+  const rbhOrthogroups = Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds : [];
+  const orthologPathCount = Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '';
+  const relatedEdgeCount = Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : '';
   const memberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId);
   return {
     id: orthogroupId,
@@ -665,7 +674,10 @@ const buildBlockOrthogroups = ({
       displayName,
       description,
       memberCount,
-      recordCoverage
+      recordCoverage,
+      rbhOrthogroups,
+      orthologPathCount,
+      relatedEdgeCount
     }),
     ...orthogroupMemberSectionExtras(memberRows, orthogroupId, displayName)
   };
@@ -789,6 +801,12 @@ export const buildPairwiseMatchPayload = (
   addRow(alignmentRows, 'Bit score', attr(element, 'data-bitscore'));
   addRow(alignmentRows, 'Mismatches', attr(element, 'data-mismatches'));
   addRow(alignmentRows, 'Gap opens', attr(element, 'data-gap-opens'));
+  addRow(alignmentRows, 'Edge kind', attr(element, 'data-edge-kind'));
+  addRow(alignmentRows, 'Render role', attr(element, 'data-render-role'));
+  addRow(alignmentRows, 'RBH seed', attr(element, 'data-rbh-orthogroup-id'));
+  addRow(alignmentRows, 'Path ID', attr(element, 'data-ortholog-path-id'));
+  addRow(alignmentRows, 'Query members', attr(element, 'data-query-orthogroup-member-count'));
+  addRow(alignmentRows, 'Subject members', attr(element, 'data-subject-orthogroup-member-count'));
 
   const blockRows = [];
   addRow(blockRows, 'Block ID', collinearityBlockId);
@@ -813,6 +831,9 @@ export const buildPairwiseMatchPayload = (
     addRow(orthogroupRows, 'Description', description);
     addRow(orthogroupRows, 'Members', firstText(group?.member_count, group?.memberCount));
     addRow(orthogroupRows, 'Record coverage', firstText(group?.record_coverage_count, group?.recordCoverage));
+    addRow(orthogroupRows, 'RBH seeds', Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
+    addRow(orthogroupRows, 'Ortholog paths', Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '');
+    addRow(orthogroupRows, 'Related edges', Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : '');
   }
   const orthogroupMemberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId);
 

@@ -330,6 +330,21 @@ const normalizeCollinearSearchScope = (value) => {
   return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
 };
 
+const normalizeOrthogroupMembershipMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const aliases = {
+    legacy: 'rbh',
+    rbh_only: 'rbh',
+    paralog: 'family_merge',
+    paralog_inclusive: 'family_merge',
+    inclusive: 'family_merge',
+    merge: 'family_merge',
+    family: 'family_merge'
+  };
+  const resolved = aliases[normalized] || normalized;
+  return ['rbh', 'family_merge'].includes(resolved) ? resolved : 'family_merge';
+};
+
 const normalizePairwiseMatchStyle = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
@@ -804,6 +819,16 @@ const applyConfigData = (data) => {
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
     state.losat.blastp.candidateLimit = null;
+    if (
+      (state.losat.blastp.orthogroupMemberMaxHits === null ||
+        state.losat.blastp.orthogroupMemberMaxHits === undefined) &&
+      state.losat.blastp.orthogroupMaxHits !== null &&
+      state.losat.blastp.orthogroupMaxHits !== undefined
+    ) {
+      state.losat.blastp.orthogroupMemberMaxHits = state.losat.blastp.orthogroupMaxHits;
+    }
+    state.losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(state.losat.blastp?.orthogroupMembershipMode);
+    state.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(state.losat.blastp?.orthogroupMemberMaxHits, 5);
     state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
     {
       const maxGap = Number(state.losat.blastp?.collinearMaxGeneGap);
