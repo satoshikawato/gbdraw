@@ -463,7 +463,7 @@ export const createDefaultLosat = () => ({
     mode: 'orthogroup',
     maxHits: 5,
     candidateLimit: null,
-    orthogroupMembershipMode: 'distribution_split',
+    orthogroupMembershipMode: 'anchor_core_v1',
     orthogroupMemberMaxHits: 5,
     collinearMinAnchors: 1,
     collinearMaxGeneGap: 0,

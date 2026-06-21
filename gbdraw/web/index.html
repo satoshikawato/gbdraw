@@ -1106,20 +1106,6 @@
                                             <label class="text-[9px] flex items-center">Max hits per protein <help-tip text="Maximum distinct subject proteins drawn for each query protein in Pairwise mode. Higher values show repeats but increase clutter."></help-tip></label>
                                             <input type="number" min="1" v-model.number="losat.blastp.maxHits" class="form-input px-1 py-0.5 text-xs">
                                         </div>
-                                        <template v-if="losat.blastp.mode !== 'pairwise'">
-                                            <div>
-                                                <label class="text-[9px] flex items-center">Membership <help-tip text="Distribution split refines broad homologous families by normalized score structure; Family merge keeps connected RBH families; RBH keeps only reciprocal-best-hit groups."></help-tip></label>
-                                                <select v-model="losat.blastp.orthogroupMembershipMode" class="form-input px-1 py-0.5 text-xs">
-                                                    <option value="distribution_split">Distribution split</option>
-                                                    <option value="family_merge">Family merge</option>
-                                                    <option value="rbh">RBH</option>
-                                                </select>
-                                            </div>
-                                            <div v-if="losat.blastp.orthogroupMembershipMode !== 'rbh'">
-                                                <label class="text-[9px] flex items-center">Member hits <help-tip text="Maximum filtered candidate hits per protein used to expand orthogroup membership."></help-tip></label>
-                                                <input type="number" min="1" step="1" v-model.number="losat.blastp.orthogroupMemberMaxHits" class="form-input px-1 py-0.5 text-xs">
-                                            </div>
-                                        </template>
                                         <template v-if="losat.blastp.mode === 'collinear'">
                                             <div>
                                                 <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring Orthogroup RBH anchors that can be merged into one span ribbon."></help-tip></label>
@@ -3779,12 +3765,14 @@
                                         </div>
                                     </div>
                                     <div class="overflow-auto custom-scrollbar max-h-56">
-                                        <table class="min-w-[52rem] w-full text-xs">
+                                        <table class="min-w-[62rem] w-full text-xs">
                                             <thead class="bg-white sticky top-0">
                                                 <tr class="text-[10px] uppercase text-slate-400">
                                                     <th class="text-left font-semibold px-3 py-2">Record</th>
                                                     <th class="text-left font-semibold px-3 py-2">Coordinates (+/-)</th>
                                                     <th class="text-left font-semibold px-3 py-2">Protein ID</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Role</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Confidence</th>
                                                     <th class="text-left font-semibold px-3 py-2">Product / note</th>
                                                     <th class="text-left font-semibold px-3 py-2">Seq</th>
                                                 </tr>
@@ -3796,6 +3784,8 @@
                                                     <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.record }}</td>
                                                     <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.coordinates }}</td>
                                                     <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ member.proteinId }}</td>
+                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top">{{ member.role }}</td>
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top" :title="member.assignmentReason">{{ member.confidence }}</td>
                                                     <td class="text-slate-700 px-3 py-2 align-top">{{ member.productOrNote }}</td>
                                                     <td class="px-3 py-2 align-top whitespace-nowrap">
                                                         <div class="grid grid-cols-2 gap-1 w-24">

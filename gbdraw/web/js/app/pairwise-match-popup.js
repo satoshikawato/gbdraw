@@ -386,6 +386,9 @@ const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId) => {
         record: firstText(member?.recordId, member?.record_id),
         coordinates: memberLocationText(member),
         proteinId: resolveDisplayProteinId(null, member),
+        role: firstText(member?.role, member?.memberRole, member?.member_role),
+        confidence: firstText(member?.confidence, member?.memberConfidence, member?.member_confidence),
+        assignmentReason: firstText(member?.assignmentReason, member?.assignment_reason),
         productOrNote: firstText(member?.product, member?.note),
         ntFasta: memberFastaText(member, feature, nucleotideSequence, aminoAcidSequence, 'nt'),
         aaFasta: memberFastaText(member, feature, nucleotideSequence, aminoAcidSequence, 'aa'),
@@ -393,7 +396,7 @@ const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId) => {
         aaFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'aa')
       };
     })
-    .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote || row.ntFasta || row.aaFasta);
+    .filter((row) => row.record || row.coordinates || row.proteinId || row.role || row.confidence || row.assignmentReason || row.productOrNote || row.ntFasta || row.aaFasta);
 };
 
 const getGroupMemberForFeatureSvgId = (group, featureSvgId) => {
@@ -565,8 +568,16 @@ const buildFeatureListRows = ({
 const orthogroupMemberCopyText = (memberRows) => {
   if (!Array.isArray(memberRows) || memberRows.length === 0) return '';
   return [
-    'Record\tCoordinates (+/-)\tProtein ID\tProduct / note',
-    ...memberRows.map((row) => [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\t'))
+    'Record\tCoordinates (+/-)\tProtein ID\tRole\tConfidence\tAssignment reason\tProduct / note',
+    ...memberRows.map((row) => [
+      row.record,
+      row.coordinates,
+      row.proteinId,
+      row.role,
+      row.confidence,
+      row.assignmentReason,
+      row.productOrNote
+    ].join('\t'))
   ].join('\n');
 };
 
@@ -807,6 +818,12 @@ export const buildPairwiseMatchPayload = (
   addRow(alignmentRows, 'Path ID', attr(element, 'data-ortholog-path-id'));
   addRow(alignmentRows, 'Query members', attr(element, 'data-query-orthogroup-member-count'));
   addRow(alignmentRows, 'Subject members', attr(element, 'data-subject-orthogroup-member-count'));
+  addRow(alignmentRows, 'Query member role', attr(element, 'data-query-orthogroup-role'));
+  addRow(alignmentRows, 'Subject member role', attr(element, 'data-subject-orthogroup-role'));
+  addRow(alignmentRows, 'Query confidence', attr(element, 'data-query-orthogroup-confidence'));
+  addRow(alignmentRows, 'Subject confidence', attr(element, 'data-subject-orthogroup-confidence'));
+  addRow(alignmentRows, 'Query assignment', attr(element, 'data-query-orthogroup-assignment-reason'));
+  addRow(alignmentRows, 'Subject assignment', attr(element, 'data-subject-orthogroup-assignment-reason'));
 
   const blockRows = [];
   addRow(blockRows, 'Block ID', collinearityBlockId);

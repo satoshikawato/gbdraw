@@ -23,6 +23,7 @@ from .analysis.collinearity import (
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
+    ORTHOGROUP_INFERENCE_VERSION,
     ORTHOGROUP_MEMBERSHIP_MODES,
     PROTEIN_BLASTP_MODES,
     normalize_orthogroup_membership_mode,
@@ -254,15 +255,15 @@ def _get_args(args) -> argparse.Namespace:
         '--orthogroup_membership_mode',
         '--orthogroup-membership-mode',
         dest='orthogroup_membership_mode',
-        help='Orthogroup membership policy for LOSATP Orthogroup/Collinear modes: rbh, family_merge, or distribution_split (default: family_merge).',
+        help='Orthogroup inference model for LOSATP Orthogroup/Collinear modes. Legacy values rbh, family_merge, and distribution_split are accepted as aliases for anchor_core_v1 (default: anchor_core_v1).',
         type=_parse_orthogroup_membership_mode,
         choices=ORTHOGROUP_MEMBERSHIP_MODES,
-        default='family_merge')
+        default=ORTHOGROUP_INFERENCE_VERSION)
     parser.add_argument(
         '--orthogroup_member_max_hits',
         '--orthogroup-member-max-hits',
         dest='orthogroup_member_max_hits',
-        help='Maximum filtered candidate hits per protein used for family-merge orthogroup membership (default: 5).',
+        help='Deprecated compatibility option; anchor_core_v1 inference no longer caps membership evidence with this value (default: 5).',
         type=int,
         default=5)
     parser.add_argument(
@@ -1160,7 +1161,7 @@ def linear_main(cmd_args) -> None:
     losatp_threads: int | None = args.losatp_threads
     protein_blastp_max_hits: int = args.protein_blastp_max_hits
     protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
-    orthogroup_membership_mode: str = str(args.orthogroup_membership_mode or "family_merge")
+    orthogroup_membership_mode: str = str(args.orthogroup_membership_mode or ORTHOGROUP_INFERENCE_VERSION)
     orthogroup_member_max_hits: int = args.orthogroup_member_max_hits
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
     collinear_unit_mode: str = str(args.collinear_unit_mode or "auto")

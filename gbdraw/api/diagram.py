@@ -1726,7 +1726,7 @@ def assemble_linear_diagram_from_records(
     losatp_threads: int | None = None,
     protein_blastp_max_hits: int = 5,
     protein_blastp_candidate_limit: int | None = None,
-    orthogroup_membership_mode: OrthogroupMembershipMode | str = "family_merge",
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int = 5,
     collinear_max_paralog_links_per_orthogroup: int = 2,
     align_orthogroup_feature: str | None = None,

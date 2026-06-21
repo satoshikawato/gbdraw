@@ -402,16 +402,21 @@ const normalizeCollinearSearchScope = (value) => {
 const normalizeOrthogroupMembershipMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   const aliases = {
-    legacy: 'rbh',
-    rbh_only: 'rbh',
-    merge: 'family_merge',
-    family: 'family_merge',
-    local_split: 'distribution_split',
-    density_split: 'distribution_split',
-    outparalog_split: 'distribution_split'
+    legacy: 'anchor_core_v1',
+    rbh: 'anchor_core_v1',
+    rbh_only: 'anchor_core_v1',
+    merge: 'anchor_core_v1',
+    family: 'anchor_core_v1',
+    family_merge: 'anchor_core_v1',
+    local_split: 'anchor_core_v1',
+    density_split: 'anchor_core_v1',
+    outparalog_split: 'anchor_core_v1',
+    distribution_split: 'anchor_core_v1',
+    orthogroups: 'anchor_core_v1',
+    anchor_core: 'anchor_core_v1'
   };
   const resolved = aliases[normalized] || normalized;
-  return ['rbh', 'family_merge', 'distribution_split'].includes(resolved) ? resolved : 'family_merge';
+  return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
 };
 const normalizePairwiseMatchStyle = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -3351,13 +3356,7 @@ json.dumps({
 
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
-          if (useOrthogroupBlastp) {
-            return orthogroupMembershipMode === 'rbh' ? 1 : orthogroupMemberMaxHits;
-          }
-          if (useCollinearBlastp) {
-            if (losat.blastp.collinearAnchorMode === 'all') return null;
-            return orthogroupMembershipMode === 'rbh' ? 1 : orthogroupMemberMaxHits;
-          }
+          if (useOrthogroupBlastp || useCollinearBlastp) return null;
           return Math.max(1, losat.blastp.maxHits);
         };
 
@@ -3419,19 +3418,21 @@ json.dumps({
           const jobSpecs = [];
           if (useOrthogroupBlastp) {
             for (let i = 0; i < linearSeqs.length; i++) {
+              jobSpecs.push({ queryIndex: i, subjectIndex: i, pairIndex: Math.min(i, Math.max(0, linearSeqs.length - 2)) });
               for (let j = i + 1; j < linearSeqs.length; j++) {
                 jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
                 jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
               }
             }
           } else if (useCollinearBlastp) {
+            for (let i = 0; i < linearSeqs.length; i++) {
+              jobSpecs.push({ queryIndex: i, subjectIndex: i, pairIndex: Math.min(i, Math.max(0, linearSeqs.length - 2)) });
+            }
             for (let i = 0; i < linearSeqs.length - 1; i++) {
               const subjectEnd = collinearSearchScope === 'all' ? linearSeqs.length : i + 2;
               for (let j = i + 1; j < subjectEnd; j++) {
                 jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
-                if (losat.blastp.collinearAnchorMode === 'rbh' || orthogroupMembershipMode !== 'rbh') {
-                  jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
-                }
+                jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
               }
             }
           } else {

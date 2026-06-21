@@ -175,18 +175,17 @@ def test_index_links_to_interactive_gallery() -> None:
     assert "Interactive Gallery" in index_html
 
 
-def test_web_losatp_orthogroup_membership_exposes_distribution_split() -> None:
+def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 
-    assert '<option value="distribution_split">Distribution split</option>' in index_html
-    assert "orthogroupMembershipMode: 'distribution_split'" in state_js
-    assert "'distribution_split'" in config_js
-    assert "'distribution_split'" in run_analysis_js
-    assert "outparalog_split: 'distribution_split'" in config_js
-    assert "outparalog_split: 'distribution_split'" in run_analysis_js
+    assert '<option value="distribution_split">Distribution split</option>' not in index_html
+    assert '<option value="family_merge">Family merge</option>' not in index_html
+    assert "orthogroupMembershipMode: 'anchor_core_v1'" in state_js
+    assert "outparalog_split: 'anchor_core_v1'" in config_js
+    assert "outparalog_split: 'anchor_core_v1'" in run_analysis_js
 
 
 def test_public_web_html_entrypoints_are_not_gitignored() -> None:
@@ -936,7 +935,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         const summary = payload.sections[0];
         assert(summary.memberRows.length === 2, JSON.stringify(summary));
         assert(summary.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(summary.memberRows));
-        assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'), summary.memberCopyText);
+        assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tRole\\tConfidence\\tAssignment reason\\tProduct / note'), summary.memberCopyText);
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
         assert(hoverLabels.includes('Orthogroup'), `Hover orthogroup row missing: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);

@@ -787,6 +787,15 @@ def _serialize_orthogroups_payload(orthogroups):
                         "end": member.end,
                         "strand": member.strand,
                         "representative": member.representative,
+                        "role": str(getattr(member, "role", "") or ""),
+                        "confidence": str(getattr(member, "confidence", "") or ""),
+                        "assignmentReason": str(getattr(member, "assignment_reason", "") or ""),
+                        "supportingEdges": [
+                            str(edge_id)
+                            for edge_id in (getattr(member, "supporting_edges", ()) or ())
+                        ],
+                        "bestCoreSupport": float(getattr(member, "best_core_support", 0.0) or 0.0),
+                        "secondBestCoreSupport": float(getattr(member, "second_best_core_support", 0.0) or 0.0),
                         "gene": getattr(member, "gene", None),
                         "product": getattr(member, "product", None),
                         "note": getattr(member, "note", None),
@@ -819,7 +828,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     collinear_max_conflicts_in_merge_gap=1,
     collinear_max_paralog_links_per_orthogroup=2,
     collinear_search_scope="adjacent",
-    orthogroup_membership_mode="family_merge",
+    orthogroup_membership_mode="anchor_core_v1",
     orthogroup_member_max_hits=5,
 ):
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
@@ -851,7 +860,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         normalized_mode = str(mode or "pairwise").strip().lower()
         if normalized_mode not in {"pairwise", "orthogroup", "collinear"}:
             normalized_mode = "pairwise"
-        normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode or "family_merge"))
+        normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode or "anchor_core_v1"))
         try:
             normalized_member_max_hits = int(orthogroup_member_max_hits or 5)
         except Exception:
@@ -1048,8 +1057,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             for item in pair_items:
                 query_index = int(item["query_index"])
                 subject_index = int(item["subject_index"])
-                if query_index != subject_index:
-                    directional_tables[(query_index, subject_index)] = item["hits"]
+                directional_tables[(query_index, subject_index)] = item["hits"]
             params = LosslessCollinearityParameters(
                 min_anchors=_collinear_int(collinear_min_anchors, 1),
                 max_unit_gap=_collinear_int(collinear_max_gene_gap, 0),

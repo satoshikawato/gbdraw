@@ -360,15 +360,13 @@ def test_filter_protein_hits_by_thresholds_removes_low_confidence_bridge() -> No
 
 
 @pytest.mark.linear
-def test_orthogroup_membership_modes_include_distribution_split_aliases() -> None:
-    assert protein_colinearity_module.ORTHOGROUP_MEMBERSHIP_MODES == (
-        "rbh",
-        "family_merge",
-        "distribution_split",
-    )
-    assert protein_colinearity_module.normalize_orthogroup_membership_mode("local-split") == "distribution_split"
-    assert protein_colinearity_module.normalize_orthogroup_membership_mode("density_split") == "distribution_split"
-    assert protein_colinearity_module.normalize_orthogroup_membership_mode("outparalog_split") == "distribution_split"
+def test_orthogroup_membership_modes_accept_legacy_aliases_for_anchor_core() -> None:
+    assert protein_colinearity_module.ORTHOGROUP_MEMBERSHIP_MODES == ("anchor_core_v1",)
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("rbh") == "anchor_core_v1"
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("family_merge") == "anchor_core_v1"
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("local-split") == "anchor_core_v1"
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("density_split") == "anchor_core_v1"
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("outparalog_split") == "anchor_core_v1"
 
 
 @pytest.mark.linear
@@ -610,12 +608,15 @@ def test_build_rbh_orthogroup_protein_blastp_comparisons_keeps_transitive_all_vs
     ]
     calls: list[tuple[str, str]] = []
     rows_by_call = [
+        [],
         [_hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001")],
         [_hit_row("gbd_r0002_cds000001", "gbd_r0001_cds000001")],
         [],
         [],
+        [],
         [_hit_row("gbd_r0002_cds000001", "gbd_r0003_cds000001")],
         [_hit_row("gbd_r0003_cds000001", "gbd_r0002_cds000001")],
+        [],
     ]
 
     def fake_runner(query_fasta: str, subject_fasta: str) -> pd.DataFrame:
@@ -630,7 +631,7 @@ def test_build_rbh_orthogroup_protein_blastp_comparisons_keeps_transitive_all_vs
     )
 
     comparisons = result.comparisons
-    assert len(calls) == 6
+    assert len(calls) == 9
     assert result.orthogroups is not None
     assert set(result.orthogroups.member_by_protein_id) == {
         "gbd_r0001_cds000001",
@@ -716,7 +717,7 @@ def test_orthogroup_expanded_display_edges_include_non_rbh_coorthologs() -> None
 
 
 @pytest.mark.linear
-def test_distribution_split_separates_weakly_bridged_outparalog_families() -> None:
+def test_anchor_core_separates_weakly_bridged_outparalog_families_for_legacy_aliases() -> None:
     records = [
         _record(
             "record_a",
@@ -800,7 +801,14 @@ def test_distribution_split_separates_weakly_bridged_outparalog_families() -> No
         orthogroup_member_max_hits=3,
         max_related_edges_per_orthogroup=2,
     )
-    assert len(merged_selection.orthogroups.orthogroups) == 1
+    merged_groups = {
+        orthogroup_id: {member.protein_id for member in members}
+        for orthogroup_id, members in merged_selection.orthogroups.orthogroups.items()
+    }
+    assert merged_groups == {
+        "og_1": {"d0", "d1", "d2"},
+        "og_2": {"p0", "p1", "p2"},
+    }
 
     split_selection = select_rbh_orthogroup_edges_from_directional_hits(
         directional_hits,
@@ -825,7 +833,7 @@ def test_distribution_split_separates_weakly_bridged_outparalog_families() -> No
 
 
 @pytest.mark.linear
-def test_distribution_split_display_edges_include_direct_adjacent_same_orthogroup_hits() -> None:
+def test_anchor_core_display_edges_include_direct_adjacent_assigned_same_orthogroup_hits() -> None:
     records = [
         _record(
             "record_a",
@@ -889,7 +897,7 @@ def test_distribution_split_display_edges_include_direct_adjacent_same_orthogrou
         (edge.query_protein_id, edge.subject_protein_id)
         for edges in edge_selection.orthogroups.ortholog_edges_by_orthogroup_id.values()
         for edge in edges
-    } == {("b0", "c0")}
+    } == {("a0", "b0"), ("b0", "c0")}
 
     display_edges = edge_selection.adjacent_display_edges_by_pair[(0, 1)]
     assert {
@@ -958,6 +966,7 @@ def test_family_merge_display_edges_suppress_already_covered_cross_links() -> No
         for row in display_edges.itertuples(index=False)
     } == {
         ("a0", "b0"),
+        ("a0", "b1"),
         ("a1", "b1"),
     }
     assert edge_selection.orthogroups.related_edges_by_orthogroup_id["og_1"]
@@ -1016,6 +1025,7 @@ def test_family_merge_display_edges_prefer_uncovered_alternative_links() -> None
         for row in display_edges.itertuples(index=False)
     } == {
         ("a1", "b1"),
+        ("a0", "b1"),
         ("a0", "b0"),
     }
     assert {
@@ -1525,7 +1535,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    assert result["orthogroups"][0]["member_count"] == 2
+    assert result["orthogroups"][0]["member_count"] == 3
     assert result["orthogroups"][0]["name"] == "rpoB"
     assert result["orthogroups"][0]["nameConfidence"] == "high"
     assert result["orthogroups"][0]["nameCandidates"][0]["recordCoverageCount"] == 2
@@ -1533,7 +1543,10 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
     assert result["orthogroups"][0]["members"][0]["product"] == "DNA-directed RNA polymerase beta subunit"
     rows = result["pairs"][0]["rows"]
     assert rows[0]["orthogroup_id"] == "og_1"
-    assert len(rows) == 1
+    assert rows[0]["edge_kind"] == "rbh"
+    assert rows[1]["orthogroup_id"] == "og_1"
+    assert rows[1]["edge_kind"] == "coortholog"
+    assert len(rows) == 2
     assert result["cache"]["convertedPayloadHit"] is False
     assert result["cache"]["filteredHitCacheMisses"] == 2
 
@@ -1862,7 +1875,7 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
     assert captured["losatp_threads"] == 8
     assert captured["protein_blastp_max_hits"] == 7
     assert captured["protein_blastp_candidate_limit"] == 99
-    assert captured["orthogroup_membership_mode"] == "family_merge"
+    assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
     assert captured["align_orthogroup_feature"] is None
 
 
@@ -1975,7 +1988,7 @@ def test_linear_cli_forwards_protein_blastp_options(
     assert captured["losatp_threads"] == 6
     assert captured["protein_blastp_max_hits"] == 9
     assert captured["protein_blastp_candidate_limit"] == 123
-    assert captured["orthogroup_membership_mode"] == "family_merge"
+    assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
     assert captured["align_orthogroup_feature"] is None
 
 

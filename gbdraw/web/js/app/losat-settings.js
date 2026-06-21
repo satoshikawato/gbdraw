@@ -42,18 +42,13 @@ export const createLosatSettings = ({ state }) => {
     if (losatProgram.value !== 'blastp') return recordCount - 1;
 
     const blastpMode = String(losat.blastp?.mode || 'orthogroup').trim().toLowerCase();
-    if (blastpMode === 'orthogroup') return recordCount * (recordCount - 1);
+    if (blastpMode === 'orthogroup') return recordCount * recordCount;
     if (blastpMode === 'collinear') {
       const scope = String(losat.blastp?.collinearSearchScope || 'adjacent').trim().toLowerCase();
       const pairCount = scope === 'all'
         ? Math.floor((recordCount * (recordCount - 1)) / 2)
         : recordCount - 1;
-      const membershipMode = String(losat.blastp?.orthogroupMembershipMode || 'family_merge').trim().toLowerCase().replace(/-/g, '_');
-      const directionMultiplier = String(losat.blastp?.collinearAnchorMode || '').trim().toLowerCase() === 'rbh' ||
-        membershipMode !== 'rbh'
-        ? 2
-        : 1;
-      return Math.max(1, pairCount * directionMultiplier);
+      return Math.max(1, recordCount + pairCount * 2);
     }
     return recordCount - 1;
   });

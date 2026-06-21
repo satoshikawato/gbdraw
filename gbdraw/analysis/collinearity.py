@@ -2112,7 +2112,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
     unit_mode: CollinearityUnitMode | str = "auto",
     edge_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
-    orthogroup_membership_mode: OrthogroupMembershipMode | str = "rbh",
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int = 5,
     max_paralog_links_per_orthogroup: int = 2,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
@@ -2212,7 +2212,7 @@ def build_orthogroup_collinearity_blocks(
     losatp_bin: str = "losat",
     losatp_threads: int | None = None,
     candidate_limit: int | None = None,
-    orthogroup_membership_mode: OrthogroupMembershipMode | str = "rbh",
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int = 5,
     max_paralog_links_per_orthogroup: int = 2,
     evalue: float = 1e-5,
@@ -2248,16 +2248,25 @@ def build_orthogroup_collinearity_blocks(
     extraction = extract_cds_proteins(records)
     _validate_collinearity_extraction(records, extraction)
 
-    search_candidate_limit = (
-        candidate_limit
-        if candidate_limit is not None
-        else (
-            None
-            if normalized_edge_mode == "all"
-            else (1 if normalized_membership_mode == "rbh" else int(orthogroup_member_max_hits))
-        )
-    )
+    search_candidate_limit = candidate_limit
     directional_tables: dict[tuple[int, int], DataFrame] = {}
+    for record_index in range(len(records)):
+        record_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
+        same_record_hits = _run_losatp_search(
+            record_fasta,
+            record_fasta,
+            losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
+            candidate_limit=search_candidate_limit,
+            runner=runner,
+        )
+        directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
+            same_record_hits,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        )
     for query_index, subject_index in iter_collinearity_search_pairs(
         len(records),
         scope=normalized_search_scope,
@@ -2279,22 +2288,21 @@ def build_orthogroup_collinearity_blocks(
             identity=identity,
             alignment_length=alignment_length,
         )
-        if normalized_edge_mode == "rbh" or normalized_membership_mode != "rbh":
-            reverse_hits = _run_losatp_search(
-                subject_fasta,
-                query_fasta,
-                losatp_bin=losatp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                runner=runner,
-            )
-            directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
-                reverse_hits,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-            )
+        reverse_hits = _run_losatp_search(
+            subject_fasta,
+            query_fasta,
+            losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
+            candidate_limit=search_candidate_limit,
+            runner=runner,
+        )
+        directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
+            reverse_hits,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        )
 
     return build_orthogroup_collinearity_blocks_from_hits(
         directional_tables,
@@ -2316,7 +2324,7 @@ def build_native_collinearity_blocks(
     losatp_bin: str = "losat",
     losatp_threads: int | None = None,
     candidate_limit: int | None = None,
-    orthogroup_membership_mode: OrthogroupMembershipMode | str = "rbh",
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int = 5,
     max_paralog_links_per_orthogroup: int = 2,
     evalue: float = 1e-5,
@@ -2360,7 +2368,7 @@ def build_collinearity_blocks_from_hits(
     unit_mode: CollinearityUnitMode | str = "auto",
     anchor_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
-    orthogroup_membership_mode: OrthogroupMembershipMode | str = "rbh",
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int = 5,
     max_paralog_links_per_orthogroup: int = 2,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
