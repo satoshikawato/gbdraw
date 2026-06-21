@@ -188,6 +188,17 @@ def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     assert "outparalog_split: 'anchor_core_v1'" in run_analysis_js
 
 
+def test_web_losatp_orthogroup_and_collinear_blastp_omit_hsp_cap() -> None:
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert (
+        "if (!useOrthogroupBlastp && !useCollinearBlastp) {\n"
+        "              pushArg(args, '--max-hsps-per-subject', 1);\n"
+        "            }"
+    ) in run_analysis_js
+    assert "pushArg(args, '--max-target-seqs', getBlastpCandidateLimit());" in run_analysis_js
+
+
 def test_public_web_html_entrypoints_are_not_gitignored() -> None:
     required_html_paths = [
         "gbdraw/web/index.html",

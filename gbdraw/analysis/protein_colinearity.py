@@ -12,6 +12,7 @@ import math
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 from typing import Callable, Literal, Mapping, Sequence
 
@@ -353,6 +354,7 @@ class _AnchorCoreEvidenceEdge:
 class _CoreSupportCandidate:
     group_id: str
     support: float
+    diagnostic_score: float
     same_record_score: float
     cross_record_score: float
     evidence_row: object
@@ -364,6 +366,18 @@ class _CoreSupportCandidate:
     high_confidence_pass: bool
     low_confidence_pass: bool
     reason: str
+
+
+@dataclass(frozen=True)
+class _BestCoreEvidence:
+    support_score: float
+    support_row: object | None
+    support_query_id: str
+    support_subject_id: str
+    diagnostic_score: float
+    diagnostic_row: object | None
+    diagnostic_query_id: str
+    diagnostic_subject_id: str
 
 
 @dataclass(frozen=True)
@@ -1156,15 +1170,175 @@ def _empty_normalized_hit_table(columns: Sequence[str]) -> DataFrame:
         "query_length",
         "subject_length",
         "length_product",
+        "hsp_count",
+        "query_covered_length",
+        "subject_covered_length",
         "query_coverage",
         "subject_coverage",
         "min_coverage",
+        "representative_alignment_length",
+        "total_hsp_alignment_length",
+        "coverage_source",
         "normalized_score",
         "normalization_fallback",
         "record_pair_normalization_source",
         "domain_only",
     )
     return pd.DataFrame(columns=tuple(dict.fromkeys([*columns, *extra_columns])))
+
+
+def _coverage_coordinate(value: object) -> int | None:
+    try:
+        coordinate = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(coordinate):
+        return None
+    return int(coordinate)
+
+
+def _coverage_interval_from_hsp(start: object, end: object, length: int) -> tuple[int, int] | None:
+    if int(length) <= 0:
+        return None
+    start_coordinate = _coverage_coordinate(start)
+    end_coordinate = _coverage_coordinate(end)
+    if start_coordinate is None or end_coordinate is None:
+        return None
+    low = min(start_coordinate, end_coordinate)
+    high = max(start_coordinate, end_coordinate)
+    clamped_low = max(1, low)
+    clamped_high = min(int(length), high)
+    if clamped_low > clamped_high:
+        return None
+    return clamped_low, clamped_high
+
+
+def _merge_coverage_intervals(intervals: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
+    cleaned = sorted(
+        (int(start), int(end))
+        for start, end in intervals
+        if int(start) <= int(end)
+    )
+    if not cleaned:
+        return ()
+    merged: list[tuple[int, int]] = []
+    current_start, current_end = cleaned[0]
+    for start, end in cleaned[1:]:
+        if start <= current_end + 1:
+            current_end = max(current_end, end)
+            continue
+        merged.append((current_start, current_end))
+        current_start, current_end = start, end
+    merged.append((current_start, current_end))
+    return tuple(merged)
+
+
+def _covered_length(intervals: Sequence[tuple[int, int]]) -> int:
+    return sum(
+        max(0, int(end) - int(start) + 1)
+        for start, end in _merge_coverage_intervals(intervals)
+    )
+
+
+def _raw_hsp_coordinate_rank(row: object, column: str) -> int:
+    coordinate = _coverage_coordinate(getattr(row, column, None))
+    return coordinate if coordinate is not None else sys.maxsize
+
+
+def _raw_hsp_representative_rank(row: object, row_index: int) -> tuple[float, float, float, int, int, int, int, int, int]:
+    return (
+        -_row_float(row, "bitscore", 0.0),
+        _row_float(row, "evalue", float("inf")),
+        -_row_float(row, "identity", 0.0),
+        -int(_row_float(row, "alignment_length", 0.0)),
+        _raw_hsp_coordinate_rank(row, "qstart"),
+        _raw_hsp_coordinate_rank(row, "qend"),
+        _raw_hsp_coordinate_rank(row, "sstart"),
+        _raw_hsp_coordinate_rank(row, "send"),
+        int(row_index),
+    )
+
+
+def _aggregate_hsps_by_protein_pair(
+    hits: DataFrame,
+    protein_map: Mapping[str, CdsProtein],
+) -> DataFrame:
+    if hits is None or hits.empty:
+        columns = tuple(hits.columns) if hits is not None else tuple(COMPARISON_COLUMNS)
+        return _empty_normalized_hit_table(columns)
+
+    rows: list[dict[str, object]] = []
+    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+        query_protein = protein_map.get(str(query_id))
+        subject_protein = protein_map.get(str(subject_id))
+        if query_protein is None or subject_protein is None:
+            continue
+        query_length = int(query_protein.protein_length)
+        subject_length = int(subject_protein.protein_length)
+        if query_length <= 0 or subject_length <= 0:
+            continue
+        hsp_rows = list(group.itertuples(index=False))
+        if not hsp_rows:
+            continue
+        representative_index, representative_row = min(
+            enumerate(hsp_rows),
+            key=lambda item: _raw_hsp_representative_rank(item[1], item[0]),
+        )
+        bitscore = _row_float(representative_row, "bitscore", 0.0)
+        representative_alignment_length = int(_row_float(representative_row, "alignment_length", 0.0))
+        if bitscore <= 0.0 or representative_alignment_length <= 0:
+            continue
+
+        query_intervals: list[tuple[int, int]] = []
+        subject_intervals: list[tuple[int, int]] = []
+        total_hsp_alignment_length = 0
+        for hsp_row in hsp_rows:
+            alignment_length = _row_float(hsp_row, "alignment_length", 0.0)
+            if math.isfinite(alignment_length) and alignment_length > 0:
+                total_hsp_alignment_length += int(alignment_length)
+            query_interval = _coverage_interval_from_hsp(
+                getattr(hsp_row, "qstart", None),
+                getattr(hsp_row, "qend", None),
+                query_length,
+            )
+            if query_interval is not None:
+                query_intervals.append(query_interval)
+            subject_interval = _coverage_interval_from_hsp(
+                getattr(hsp_row, "sstart", None),
+                getattr(hsp_row, "send", None),
+                subject_length,
+            )
+            if subject_interval is not None:
+                subject_intervals.append(subject_interval)
+
+        query_covered_length = _covered_length(query_intervals)
+        subject_covered_length = _covered_length(subject_intervals)
+        query_coverage = min(1.0, float(query_covered_length) / float(query_length))
+        subject_coverage = min(1.0, float(subject_covered_length) / float(subject_length))
+        min_hit_coverage = min(query_coverage, subject_coverage)
+
+        record = dict(representative_row._asdict())
+        record.update(
+            {
+                "query_length": query_length,
+                "subject_length": subject_length,
+                "length_product": float(query_length * subject_length),
+                "hsp_count": int(len(hsp_rows)),
+                "query_covered_length": int(query_covered_length),
+                "subject_covered_length": int(subject_covered_length),
+                "query_coverage": query_coverage,
+                "subject_coverage": subject_coverage,
+                "min_coverage": min_hit_coverage,
+                "representative_alignment_length": int(representative_alignment_length),
+                "total_hsp_alignment_length": int(total_hsp_alignment_length),
+                "coverage_source": "hsp_union",
+            }
+        )
+        rows.append(record)
+
+    if not rows:
+        return _empty_normalized_hit_table(tuple(hits.columns))
+    return pd.DataFrame.from_records(rows)
 
 
 def _normalize_directional_hit_table(
@@ -1179,43 +1353,16 @@ def _normalize_directional_hit_table(
         return _empty_normalized_hit_table(columns)
     _validate_comparison_columns(hits)
     coerced_hits = _coerce_outfmt6_numeric_columns(hits)
-    rows: list[dict[str, object]] = []
-    for row in coerced_hits.itertuples(index=False):
-        query_id = str(row.query)
-        subject_id = str(row.subject)
-        query_protein = protein_map.get(query_id)
-        subject_protein = protein_map.get(subject_id)
-        if query_protein is None or subject_protein is None:
-            continue
-        query_length = int(query_protein.protein_length)
-        subject_length = int(subject_protein.protein_length)
-        bitscore = _row_float(row, "bitscore", 0.0)
-        alignment_length = int(_row_float(row, "alignment_length", 0.0))
-        if query_length <= 0 or subject_length <= 0 or bitscore <= 0.0 or alignment_length <= 0:
-            continue
-        query_coverage = min(1.0, float(alignment_length) / float(query_length))
-        subject_coverage = min(1.0, float(alignment_length) / float(subject_length))
-        min_hit_coverage = min(query_coverage, subject_coverage)
-        if min_hit_coverage < float(min_coverage):
-            continue
-        length_product = float(query_length * subject_length)
-        record = dict(row._asdict())
-        record.update(
-            {
-                "query_length": query_length,
-                "subject_length": subject_length,
-                "length_product": length_product,
-                "query_coverage": query_coverage,
-                "subject_coverage": subject_coverage,
-                "min_coverage": min_hit_coverage,
-            }
-        )
-        rows.append(record)
-
-    if not rows:
+    aggregated_hits = _aggregate_hsps_by_protein_pair(coerced_hits, protein_map)
+    if aggregated_hits.empty:
         return _empty_normalized_hit_table(tuple(coerced_hits.columns))
 
-    normalized_hits = pd.DataFrame.from_records(rows)
+    normalized_hits = aggregated_hits.loc[
+        aggregated_hits["min_coverage"].astype(float) >= float(min_coverage)
+    ].reset_index(drop=True)
+    if normalized_hits.empty:
+        return _empty_normalized_hit_table(tuple(coerced_hits.columns))
+
     model = _fit_expected_bitscore_model(
         normalized_hits,
         top_fraction=top_fraction,
@@ -3189,9 +3336,10 @@ def _best_evidence_between_protein_and_members(
     protein_map: Mapping[str, CdsProtein],
     *,
     same_record: bool,
-) -> tuple[float, object | None, str, str]:
+) -> _BestCoreEvidence:
     protein = protein_map[protein_id]
-    best: tuple[float, object | None, str, str] = (0.0, None, "", "")
+    best_support: tuple[float, object | None, str, str] = (0.0, None, "", "")
+    best_diagnostic: tuple[float, object | None, str, str] = (0.0, None, "", "")
     member_set = set(member_ids)
     for member_id in member_set:
         if member_id == protein_id or member_id not in protein_map:
@@ -3207,17 +3355,38 @@ def _best_evidence_between_protein_and_members(
             score = _normalized_score_from_row(row)
             if score <= 0.0:
                 continue
-            current_row = best[1]
+            current_diagnostic_row = best_diagnostic[1]
             if (
-                current_row is None
-                or score > best[0]
+                current_diagnostic_row is None
+                or score > best_diagnostic[0]
                 or (
-                    score == best[0]
-                    and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_row, protein_map)
+                    score == best_diagnostic[0]
+                    and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_diagnostic_row, protein_map)
                 )
             ):
-                best = (float(score), row, query_id, subject_id)
-    return best
+                best_diagnostic = (float(score), row, query_id, subject_id)
+            if not _row_supports_membership(row):
+                continue
+            current_support_row = best_support[1]
+            if (
+                current_support_row is None
+                or score > best_support[0]
+                or (
+                    score == best_support[0]
+                    and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_support_row, protein_map)
+                )
+            ):
+                best_support = (float(score), row, query_id, subject_id)
+    return _BestCoreEvidence(
+        support_score=float(best_support[0]),
+        support_row=best_support[1],
+        support_query_id=best_support[2],
+        support_subject_id=best_support[3],
+        diagnostic_score=float(best_diagnostic[0]),
+        diagnostic_row=best_diagnostic[1],
+        diagnostic_query_id=best_diagnostic[2],
+        diagnostic_subject_id=best_diagnostic[3],
+    )
 
 
 def _support_gap_ratio(best_support: float, second_support: float) -> float:
@@ -3236,35 +3405,42 @@ def _build_core_support_candidate(
     thresholds: Mapping[str, _LocalThreshold],
     protein_map: Mapping[str, CdsProtein],
 ) -> _CoreSupportCandidate | None:
-    same_score, same_row, same_query_id, same_subject_id = _best_evidence_between_protein_and_members(
+    same_evidence = _best_evidence_between_protein_and_members(
         protein_id,
         member_ids,
         best_by_direction,
         protein_map,
         same_record=True,
     )
-    cross_score, cross_row, cross_query_id, cross_subject_id = _best_evidence_between_protein_and_members(
+    cross_evidence = _best_evidence_between_protein_and_members(
         protein_id,
         member_ids,
         best_by_direction,
         protein_map,
         same_record=False,
     )
-    if same_row is None and cross_row is None:
+    if same_evidence.diagnostic_row is None and cross_evidence.diagnostic_row is None:
         return None
 
+    same_score = float(same_evidence.support_score)
+    cross_score = float(cross_evidence.support_score)
     support = float(cross_score) + 0.5 * float(same_score)
-    if support <= 0.0:
-        return None
+    diagnostic_score = max(
+        float(same_evidence.diagnostic_score),
+        float(cross_evidence.diagnostic_score),
+    )
 
     candidate_threshold = thresholds.get(protein_id)
     same_member_id = ""
-    if same_row is not None:
-        same_member_id = same_subject_id if same_query_id == protein_id else same_query_id
+    if same_evidence.support_row is not None:
+        same_member_id = (
+            same_evidence.support_subject_id
+            if same_evidence.support_query_id == protein_id
+            else same_evidence.support_query_id
+        )
     same_member_threshold = thresholds.get(same_member_id)
     same_pass = (
-        same_row is not None
-        and _row_supports_membership(same_row)
+        same_evidence.support_row is not None
         and (
             (
                 candidate_threshold is not None
@@ -3277,29 +3453,54 @@ def _build_core_support_candidate(
         )
     )
     cross_pass = (
-        cross_row is not None
-        and _row_supports_membership(cross_row)
+        cross_evidence.support_row is not None
         and candidate_threshold is not None
         and cross_score >= float(candidate_threshold.score)
     )
 
-    if same_pass or same_score >= cross_score:
-        evidence_row = same_row
-        evidence_query_id = same_query_id
-        evidence_subject_id = same_subject_id
+    if same_pass:
+        evidence_row = same_evidence.support_row
+        evidence_query_id = same_evidence.support_query_id
+        evidence_subject_id = same_evidence.support_subject_id
         relation_kind: OrthologEdgeKind = "same_record_inparalog"
+    elif cross_pass:
+        evidence_row = cross_evidence.support_row
+        evidence_query_id = cross_evidence.support_query_id
+        evidence_subject_id = cross_evidence.support_subject_id
+        relation_kind = "coortholog"
+    elif same_evidence.support_row is not None and (
+        cross_evidence.support_row is None or same_score >= cross_score
+    ):
+        evidence_row = same_evidence.support_row
+        evidence_query_id = same_evidence.support_query_id
+        evidence_subject_id = same_evidence.support_subject_id
+        relation_kind = "same_record_inparalog"
+    elif cross_evidence.support_row is not None:
+        evidence_row = cross_evidence.support_row
+        evidence_query_id = cross_evidence.support_query_id
+        evidence_subject_id = cross_evidence.support_subject_id
+        relation_kind = "coortholog"
+    elif same_evidence.diagnostic_row is not None and (
+        cross_evidence.diagnostic_row is None
+        or same_evidence.diagnostic_score >= cross_evidence.diagnostic_score
+    ):
+        evidence_row = same_evidence.diagnostic_row
+        evidence_query_id = same_evidence.diagnostic_query_id
+        evidence_subject_id = same_evidence.diagnostic_subject_id
+        relation_kind = "same_record_inparalog"
     else:
-        evidence_row = cross_row
-        evidence_query_id = cross_query_id
-        evidence_subject_id = cross_subject_id
+        evidence_row = cross_evidence.diagnostic_row
+        evidence_query_id = cross_evidence.diagnostic_query_id
+        evidence_subject_id = cross_evidence.diagnostic_subject_id
         relation_kind = "coortholog"
     if evidence_row is None:
         return None
 
     min_coverage = _row_min_coverage(evidence_row)
     domain_only = _row_domain_only(evidence_row)
-    high_confidence_pass = bool(same_pass or cross_pass) and min_coverage >= _MIN_MEMBERSHIP_MIN_COVERAGE and not domain_only
-    low_confidence_pass = min_coverage >= _MIN_MEMBERSHIP_MIN_COVERAGE and not domain_only
+    has_support_row = same_evidence.support_row is not None or cross_evidence.support_row is not None
+    high_confidence_pass = bool(has_support_row and (same_pass or cross_pass)) and min_coverage >= _MIN_MEMBERSHIP_MIN_COVERAGE and not domain_only
+    low_confidence_pass = bool(has_support_row) and min_coverage >= _MIN_MEMBERSHIP_MIN_COVERAGE and not domain_only
     if same_pass:
         reason = "same-record support passed local anchor threshold"
     elif cross_pass:
@@ -3313,6 +3514,7 @@ def _build_core_support_candidate(
     return _CoreSupportCandidate(
         group_id=group_id,
         support=support,
+        diagnostic_score=diagnostic_score,
         same_record_score=float(same_score),
         cross_record_score=float(cross_score),
         evidence_row=evidence_row,
@@ -3327,8 +3529,8 @@ def _build_core_support_candidate(
     )
 
 
-def _core_support_sort_key(candidate: _CoreSupportCandidate) -> tuple[float, str]:
-    return (-float(candidate.support), candidate.group_id)
+def _core_support_sort_key(candidate: _CoreSupportCandidate) -> tuple[float, float, str]:
+    return (-float(candidate.support), -float(candidate.diagnostic_score), candidate.group_id)
 
 
 def _append_limited_related_edge(
@@ -4353,12 +4555,15 @@ def run_losatp_blastp(
     *,
     losatp_bin: str = "losat",
     max_hits: int | None = None,
+    max_hsps_per_subject: int | None = 1,
     threads: int | None = None,
 ) -> DataFrame:
     """Run external LOSATP blastp and parse outfmt 6 output."""
 
     if max_hits is not None:
         _validate_max_hits(max_hits, option_name="protein_blastp_candidate_limit")
+    if max_hsps_per_subject is not None:
+        _validate_max_hits(max_hsps_per_subject, option_name="max_hsps_per_subject")
     _validate_losatp_threads(threads)
     with tempfile.TemporaryDirectory(prefix="gbdraw_losatp_") as temp_dir:
         temp_path = Path(temp_dir)
@@ -4376,9 +4581,9 @@ def run_losatp_blastp(
             str(subject_path),
             "-outfmt",
             "6",
-            "-max_hsps_per_subject",
-            "1",
         ]
+        if max_hsps_per_subject is not None:
+            command.extend(["-max_hsps_per_subject", str(int(max_hsps_per_subject))])
         if max_hits is not None:
             command.extend(["-max_target_seqs", str(int(max_hits))])
         if threads is not None:
@@ -4427,6 +4632,7 @@ def _run_losatp_search(
     losatp_bin: str,
     losatp_threads: int | None,
     candidate_limit: int | None,
+    max_hsps_per_subject: int | None = 1,
     runner: LosatpRunner | None,
 ) -> DataFrame:
     if runner is not None:
@@ -4436,6 +4642,7 @@ def _run_losatp_search(
         subject_fasta,
         losatp_bin=losatp_bin,
         max_hits=candidate_limit,
+        max_hsps_per_subject=max_hsps_per_subject,
         threads=losatp_threads,
     )
 
@@ -4808,7 +5015,7 @@ def select_rbh_orthogroup_edges_from_directional_hits(
     anchors separate from additional non-anchor display edges.
     """
 
-    normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
+    normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
     return _select_anchor_core_orthogroup_edges_from_directional_hits(
         directional_hits_by_pair,
         protein_map,
@@ -4923,6 +5130,7 @@ def build_pairwise_protein_blastp_comparisons(
             losatp_bin=losatp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=candidate_limit,
+            max_hsps_per_subject=1,
             runner=runner,
         )
         filtered_hits = filter_protein_hits_by_thresholds(
@@ -4991,6 +5199,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 losatp_bin=losatp_bin,
                 losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
+                max_hsps_per_subject=None,
                 runner=runner,
             )
             filtered_forward_hits = filter_protein_hits_by_thresholds(
@@ -5009,6 +5218,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 losatp_bin=losatp_bin,
                 losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
+                max_hsps_per_subject=None,
                 runner=runner,
             )
             filtered_reverse_hits = filter_protein_hits_by_thresholds(

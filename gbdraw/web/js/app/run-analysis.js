@@ -3368,7 +3368,9 @@ json.dumps({
             pushArg(args, '--query-gencode', getGencode(queryIdx));
             pushArg(args, '--db-gencode', getGencode(subjectIdx));
           } else {
-            pushArg(args, '--max-hsps-per-subject', 1);
+            if (!useOrthogroupBlastp && !useCollinearBlastp) {
+              pushArg(args, '--max-hsps-per-subject', 1);
+            }
             pushArg(args, '--max-target-seqs', getBlastpCandidateLimit());
           }
           return args;

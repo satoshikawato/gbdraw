@@ -2258,6 +2258,7 @@ def build_orthogroup_collinearity_blocks(
             losatp_bin=losatp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
+            max_hsps_per_subject=None,
             runner=runner,
         )
         directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
@@ -2279,6 +2280,7 @@ def build_orthogroup_collinearity_blocks(
             losatp_bin=losatp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
+            max_hsps_per_subject=None,
             runner=runner,
         )
         directional_tables[(query_index, subject_index)] = filter_protein_hits_by_thresholds(
@@ -2294,6 +2296,7 @@ def build_orthogroup_collinearity_blocks(
             losatp_bin=losatp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
+            max_hsps_per_subject=None,
             runner=runner,
         )
         directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(

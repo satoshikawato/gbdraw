@@ -74,6 +74,10 @@ def _hit_row(
     *,
     identity: float = 90.0,
     alignment_length: int = 100,
+    qstart: object = 1,
+    qend: object = 100,
+    sstart: object = 1,
+    send: object = 100,
     evalue: float = 1e-30,
     bitscore: float = 200.0,
 ) -> dict[str, object]:
@@ -84,10 +88,10 @@ def _hit_row(
         "alignment_length": alignment_length,
         "mismatches": 0,
         "gap_opens": 0,
-        "qstart": 1,
-        "qend": 100,
-        "sstart": 1,
-        "send": 100,
+        "qstart": qstart,
+        "qend": qend,
+        "sstart": sstart,
+        "send": send,
         "evalue": evalue,
         "bitscore": bitscore,
     }
@@ -542,6 +546,103 @@ def test_parse_losatp_outfmt6_returns_standard_columns() -> None:
     assert parsed.iloc[0]["bitscore"] == pytest.approx(150)
 
 
+def _protein_map_for_lengths(lengths: dict[str, int]) -> dict[str, protein_colinearity_module.CdsProtein]:
+    return {
+        protein_id: protein_colinearity_module.CdsProtein(
+            protein_id=protein_id,
+            record_index=index,
+            feature_index=0,
+            record_id=f"record_{index}",
+            start=0,
+            end=int(length) * 3,
+            strand=1,
+            label=protein_id,
+            protein_length=int(length),
+            sequence="M" * int(length),
+        )
+        for index, (protein_id, length) in enumerate(lengths.items())
+    }
+
+
+@pytest.mark.linear
+def test_hsp_union_coverage_uses_merged_intervals() -> None:
+    protein_map = _protein_map_for_lengths({"BDT62853.1": 4741, "BDT62565.1": 4468})
+    hits = pd.DataFrame.from_records(
+        [
+            _hit_row("BDT62853.1", "BDT62565.1", identity=58.191, alignment_length=1172, qstart=1200, qend=2318, sstart=1039, send=2075, bitscore=800),
+            _hit_row("BDT62853.1", "BDT62565.1", identity=55.136, alignment_length=1032, qstart=33, qend=1034, sstart=48, send=964, bitscore=700),
+            _hit_row("BDT62853.1", "BDT62565.1", identity=64.078, alignment_length=824, qstart=2774, qend=3577, sstart=2524, send=3242, bitscore=600),
+            _hit_row("BDT62853.1", "BDT62565.1", identity=48.235, alignment_length=340, qstart=2417, qend=2709, sstart=2118, send=2436, bitscore=500),
+        ],
+        columns=COMPARISON_COLUMNS,
+    )
+
+    normalized = protein_colinearity_module._normalize_directional_hit_table(
+        hits,
+        protein_map,
+        min_coverage=0.0,
+    )
+
+    assert normalized.shape[0] == 1
+    row = normalized.iloc[0]
+    assert row["hsp_count"] == 4
+    assert row["coverage_source"] == "hsp_union"
+    assert row["query_coverage"] > 0.30
+    assert row["subject_coverage"] > 0.30
+    assert row["min_coverage"] > 0.30
+    assert not bool(row["domain_only"])
+
+
+@pytest.mark.linear
+def test_overlapping_hsps_do_not_double_count_coverage() -> None:
+    protein_map = _protein_map_for_lengths({"q": 1000, "s": 1000})
+    hits = pd.DataFrame.from_records(
+        [
+            _hit_row("q", "s", alignment_length=300, qstart=1, qend=300, sstart=1, send=300, bitscore=300),
+            _hit_row("q", "s", alignment_length=301, qstart=200, qend=500, sstart=200, send=500, bitscore=250),
+        ],
+        columns=COMPARISON_COLUMNS,
+    )
+
+    normalized = protein_colinearity_module._normalize_directional_hit_table(
+        hits,
+        protein_map,
+        min_coverage=0.0,
+    )
+
+    row = normalized.iloc[0]
+    assert row["hsp_count"] == 2
+    assert row["query_covered_length"] == 500
+    assert row["subject_covered_length"] == 500
+    assert row["total_hsp_alignment_length"] == 601
+    assert row["query_coverage"] == pytest.approx(0.5)
+    assert row["subject_coverage"] == pytest.approx(0.5)
+
+
+@pytest.mark.linear
+def test_invalid_hsp_coordinates_do_not_inflate_aggregate_coverage() -> None:
+    protein_map = _protein_map_for_lengths({"q": 1000, "s": 1000})
+    hits = pd.DataFrame.from_records(
+        [
+            _hit_row("q", "s", alignment_length=500, qstart="bad", qend="bad", sstart="bad", send="bad", bitscore=500),
+            _hit_row("q", "s", alignment_length=200, qstart=1, qend=200, sstart=1, send=200, bitscore=300),
+        ],
+        columns=COMPARISON_COLUMNS,
+    )
+
+    aggregated = protein_colinearity_module._aggregate_hsps_by_protein_pair(
+        hits,
+        protein_map,
+    )
+
+    row = aggregated.iloc[0]
+    assert row["hsp_count"] == 2
+    assert row["bitscore"] == 500
+    assert row["query_covered_length"] == 200
+    assert row["subject_covered_length"] == 200
+    assert row["min_coverage"] == pytest.approx(0.2)
+
+
 @pytest.mark.linear
 def test_run_losatp_blastp_passes_num_threads(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
@@ -563,10 +664,32 @@ def test_run_losatp_blastp_passes_num_threads(monkeypatch: pytest.MonkeyPatch) -
 
     command = captured["command"]
     assert command[0:2] == ["custom-losat", "blastp"]
+    assert "-max_hsps_per_subject" in command
+    assert command[command.index("-max_hsps_per_subject") + 1] == "1"
     assert "-max_target_seqs" in command
     assert command[command.index("-max_target_seqs") + 1] == "3"
     assert "--num-threads" in command
     assert command[command.index("--num-threads") + 1] == "4"
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_omits_hsp_cap_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    protein_colinearity_module.run_losatp_blastp(
+        ">query\nM\n",
+        ">subject\nM\n",
+        max_hsps_per_subject=None,
+    )
+
+    assert "-max_hsps_per_subject" not in captured["command"]
 
 
 @pytest.mark.linear
@@ -597,6 +720,197 @@ def test_build_pairwise_protein_blastp_comparisons_accepts_test_runner_without_o
     assert comparisons[0].iloc[0]["orthogroup_id"] == ""
     assert comparisons[0].iloc[0]["query_protein_id"] == "gbd_r0001_cds000001"
     assert comparisons[0].iloc[0]["subject_protein_id"] == "gbd_r0002_cds000001"
+
+
+@pytest.mark.linear
+def test_pairwise_blastp_search_keeps_one_hsp_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 9)]),
+        _record("record_b", features=[_cds(9, 18)]),
+    ]
+    observed_caps: list[int | None] = []
+
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+        observed_caps.append(max_hsps_per_subject)
+        return pd.DataFrame.from_records(
+            [_hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001")],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    monkeypatch.setattr(protein_colinearity_module, "_run_losatp_search", fake_search)
+
+    build_pairwise_protein_blastp_comparisons(records)
+
+    assert observed_caps == [1]
+
+
+@pytest.mark.linear
+def test_orthogroup_blastp_search_omits_one_hsp_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 9)]),
+        _record("record_b", features=[_cds(9, 18)]),
+    ]
+    observed_caps: list[int | None] = []
+
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+        observed_caps.append(max_hsps_per_subject)
+        query_id = query_fasta.splitlines()[0][1:].split()[0]
+        subject_id = subject_fasta.splitlines()[0][1:].split()[0]
+        return pd.DataFrame.from_records(
+            [_hit_row(query_id, subject_id)],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    monkeypatch.setattr(protein_colinearity_module, "_run_losatp_search", fake_search)
+
+    build_rbh_orthogroup_protein_blastp_comparisons(records)
+
+    assert observed_caps == [None, None, None, None]
+
+
+def _long_cds(protein_id: str, length: int = 1000) -> SeqFeature:
+    return _cds(
+        0,
+        int(length) * 3,
+        qualifiers={
+            "translation": ["M" * int(length) + "*"],
+            "protein_id": [protein_id],
+            "locus_tag": [protein_id],
+        },
+    )
+
+
+def _long_record(record_id: str, protein_id: str, length: int = 1000) -> SeqRecord:
+    return _record(
+        record_id,
+        sequence="ATG" * int(length),
+        features=[_long_cds(protein_id, length)],
+    )
+
+
+@pytest.mark.linear
+def test_anchor_core_assigns_member_with_multi_hsp_union_coverage() -> None:
+    records = [
+        _long_record("record_a", "a0"),
+        _long_record("record_b", "b0"),
+        _long_record("record_c", "c0"),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [_hit_row("a0", "b0", alignment_length=900, qstart=1, qend=900, sstart=1, send=900, bitscore=1000)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [_hit_row("b0", "a0", alignment_length=900, qstart=1, qend=900, sstart=1, send=900, bitscore=1000)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (2, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("c0", "b0", alignment_length=180, qstart=1, qend=180, sstart=1, send=180, bitscore=320),
+                _hit_row("c0", "b0", alignment_length=191, qstart=220, qend=410, sstart=220, send=410, bitscore=300),
+                _hit_row("c0", "b0", alignment_length=201, qstart=500, qend=700, sstart=500, send=700, bitscore=280),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert result.member_by_protein_id["c0"].orthogroup_id == result.member_by_protein_id["a0"].orthogroup_id
+    assert result.member_by_protein_id["c0"].role == "coortholog"
+
+
+@pytest.mark.linear
+def test_anchor_core_prefers_membership_support_over_domain_only_top_hit() -> None:
+    records = [
+        _long_record("record_a", "a0"),
+        _long_record("record_b", "b0"),
+        _long_record("record_c", "c0"),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [_hit_row("a0", "b0", alignment_length=900, qstart=1, qend=900, sstart=1, send=900, bitscore=1000)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [_hit_row("b0", "a0", alignment_length=900, qstart=1, qend=900, sstart=1, send=900, bitscore=1000)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (2, 0): pd.DataFrame.from_records(
+            [_hit_row("c0", "a0", alignment_length=200, qstart=1, qend=200, sstart=1, send=200, bitscore=400)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (2, 1): pd.DataFrame.from_records(
+            [_hit_row("c0", "b0", alignment_length=400, qstart=1, qend=400, sstart=1, send=400, bitscore=350)],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+        max_related_edges_per_orthogroup=2,
+    ).orthogroups
+
+    member = result.member_by_protein_id["c0"]
+    assert member.orthogroup_id == result.member_by_protein_id["a0"].orthogroup_id
+    assert member.confidence == "high"
+    assert any(
+        edge.edge_kind == "domain_only"
+        for edges in result.related_edges_by_orthogroup_id.values()
+        for edge in edges
+    )
+
+
+@pytest.mark.linear
+def test_anchor_core_keeps_true_domain_only_multi_hsp_hit_unassigned() -> None:
+    records = [
+        _long_record("record_a", "a0"),
+        _long_record("record_b", "b0"),
+        _long_record("record_c", "c0"),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [_hit_row("a0", "b0", alignment_length=900, qstart=1, qend=900, sstart=1, send=900, bitscore=1000)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [_hit_row("b0", "a0", alignment_length=900, qstart=1, qend=900, sstart=1, send=900, bitscore=1000)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (2, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("c0", "b0", alignment_length=200, qstart=1, qend=200, sstart=1, send=200, bitscore=320),
+                _hit_row("c0", "b0", alignment_length=191, qstart=50, qend=240, sstart=50, send=240, bitscore=300),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+        max_related_edges_per_orthogroup=2,
+    ).orthogroups
+
+    assert "c0" not in result.member_by_protein_id
+    assert any(
+        edge.edge_kind == "domain_only"
+        for edges in result.related_edges_by_orthogroup_id.values()
+        for edge in edges
+    )
 
 
 @pytest.mark.linear
