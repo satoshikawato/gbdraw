@@ -2919,11 +2919,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function downloadText(filename, text, mimeType) {
+    var safeFilename = filename || 'download.txt';
     var blob = new Blob([String(text == null ? '' : text)], { type: mimeType || 'text/plain;charset=utf-8' });
     var url = URL.createObjectURL(blob);
-    var link = document.createElement('a');
+    var link = document.createElementNS(XHTML_NS, 'a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', safeFilename);
     link.href = url;
-    link.download = filename || 'download.txt';
+    link.download = safeFilename;
     link.style.display = 'none';
     var parent = document.body || document.documentElement;
     parent.appendChild(link);
