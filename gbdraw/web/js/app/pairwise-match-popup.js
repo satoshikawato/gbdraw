@@ -1,5 +1,9 @@
 import { resolveDisplayProteinId } from './feature-utils.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import {
+  groupMetadataScopeLabel,
+  normalizeGroupMetadataScope
+} from './losat-normalization.js';
 
 export const PAIRWISE_MATCH_SELECTOR = [
   'path[data-gbdraw-pairwise-match-id]',
@@ -622,6 +626,7 @@ const resolveBlockMemberLabels = ({
 
 const buildOrthogroupDetailRows = ({
   orthogroupId,
+  idLabel = 'Orthogroup ID',
   displayName,
   description,
   scopeLabel,
@@ -632,7 +637,7 @@ const buildOrthogroupDetailRows = ({
   relatedEdgeCount
 }) => {
   const rows = [];
-  addRow(rows, 'Orthogroup ID', orthogroupId);
+  addRow(rows, idLabel, orthogroupId);
   addRow(rows, 'Display name', displayName);
   addRow(rows, 'Description', description);
   addRow(rows, 'Scope', scopeLabel);
@@ -651,9 +656,11 @@ const buildBlockOrthogroups = ({
   queryFeatureSvgId,
   subjectFeatureSvgId,
   orthogroupNameOverrides,
-  orthogroupDescriptionOverrides
+  orthogroupDescriptionOverrides,
+  groupScope
 }) => orthogroupIds.map((orthogroupId) => {
   const group = getOrthogroupById(orthogroups, orthogroupId);
+  const normalizedGroupScope = normalizeGroupMetadataScope(group?.scope || groupScope);
   const displayName = firstText(
     overrideValue(orthogroupNameOverrides, orthogroupId),
     group?.displayName,
@@ -669,9 +676,8 @@ const buildBlockOrthogroups = ({
     group?.memberCount,
     Array.isArray(group?.members) ? group.members.length : ''
   );
-  const scopeLabel = String(group?.scope || '').trim() === 'record_local'
-    ? 'Species-specific orthogroup'
-    : 'Cross-record orthogroup';
+  const scopeLabel = groupMetadataScopeLabel(normalizedGroupScope);
+  const idLabel = normalizedGroupScope === 'adjacent_local' ? 'Collinear group ID' : 'Orthogroup ID';
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
   const rbhOrthogroups = Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds : [];
   const orthologPathCount = Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '';
@@ -687,6 +693,7 @@ const buildBlockOrthogroups = ({
     subjectMember: resolveBlockMemberLabels({ group, featureSvgIds: subjectFeatureSvgId, featureLookup }),
     detailRows: buildOrthogroupDetailRows({
       orthogroupId,
+      idLabel,
       displayName,
       description,
       scopeLabel,
@@ -757,6 +764,8 @@ export const buildPairwiseMatchPayload = (
   const orthogroupId = attr(element, 'data-orthogroup-id');
   const orthogroupIds = uniqueMetadataValues(orthogroupId);
   const collinearityBlockId = attr(element, 'data-collinearity-block-id');
+  const groupScope = firstText(attr(element, 'data-collinear-group-scope'), attr(element, 'data-group-scope'));
+  const normalizedGroupScope = normalizeGroupMetadataScope(groupScope);
   const queryFeatureSvgId = attr(element, 'data-query-feature-svg-id');
   const subjectFeatureSvgId = attr(element, 'data-subject-feature-svg-id');
   const queryFeature = featureLookup.get?.(queryFeatureSvgId) || null;
@@ -781,7 +790,8 @@ export const buildPairwiseMatchPayload = (
       queryFeatureSvgId,
       subjectFeatureSvgId,
       orthogroupNameOverrides,
-      orthogroupDescriptionOverrides
+      orthogroupDescriptionOverrides,
+      groupScope
     })
     : [];
   const displayName = firstText(
@@ -895,8 +905,13 @@ export const buildPairwiseMatchPayload = (
   }
   if (matchKind === 'collinear') {
     const blockOrthogroupRows = [];
-    addRow(blockOrthogroupRows, 'Number of orthogroups covered', String(orthogroupIds.length));
-    sections.push(section('Orthogroups covered', blockOrthogroupRows, { blockOrthogroups }));
+    const localGroups = normalizedGroupScope === 'adjacent_local';
+    addRow(
+      blockOrthogroupRows,
+      localGroups ? 'Number of local collinear groups' : 'Number of orthogroups covered',
+      String(orthogroupIds.length)
+    );
+    sections.push(section(localGroups ? 'Local collinear groups' : 'Orthogroups covered', blockOrthogroupRows, { blockOrthogroups }));
   }
   if (matchKind === 'collinear' || blockRows.length > 0) {
     sections.push(section('Collinearity', blockRows));
@@ -932,6 +947,7 @@ export const buildPairwiseMatchPayload = (
     subtitle,
     matchKind,
     orthogroupId,
+    groupScope: normalizedGroupScope,
     collinearityBlockId,
     queryFeatureSvgId,
     subjectFeatureSvgId,
@@ -967,7 +983,7 @@ export const buildPairwiseMatchHoverRows = (payload) => {
   addFirst('Query', findValue(summary, 'Query interval'));
   addFirst('Subject', findValue(summary, 'Subject interval'));
   if (payload.matchKind === 'collinear') {
-    addFirst('Orthogroups', String(payload.blockOrthogroupCount ?? ''));
+    addFirst(payload.groupScope === 'adjacent_local' ? 'Collinear groups' : 'Orthogroups', String(payload.blockOrthogroupCount ?? ''));
   } else {
     addFirst('Orthogroup', findValue(orthogroup, 'Orthogroup ID'));
   }

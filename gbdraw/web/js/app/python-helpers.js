@@ -881,6 +881,12 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             normalized_max_paralog_links = 2
         if normalized_max_paralog_links <= 0:
             normalized_max_paralog_links = 2
+        normalized_collinear_anchor_mode = "rbh"
+        normalized_collinear_search_scope = str(collinear_search_scope or "adjacent").strip().lower().replace("-", "_")
+        if normalized_collinear_search_scope in {"all_records", "all_pairs", "all_record_pairs", "global"}:
+            normalized_collinear_search_scope = "all"
+        elif normalized_collinear_search_scope not in {"adjacent", "all"}:
+            normalized_collinear_search_scope = "adjacent"
 
         record_payloads = []
         for idx, record in enumerate(raw_records):
@@ -939,13 +945,13 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             str(collinear_max_gene_gap),
             str(collinear_unit_mode),
             str(collinear_color_mode),
-            str(collinear_anchor_mode),
+            normalized_collinear_anchor_mode,
             str(collinear_block_merge_gap),
             str(collinear_singleton_merge_gap),
             str(collinear_max_diagonal_drift),
             str(collinear_max_conflicts_in_merge_gap),
             str(collinear_max_paralog_links_per_orthogroup),
-            str(collinear_search_scope),
+            normalized_collinear_search_scope,
             tuple(
                 (
                     item["record_index"],
@@ -1058,8 +1064,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 if _is_blank_or_js_nullish(value):
                     return default
                 return str(value).strip()
-            anchor_mode = _collinear_text(collinear_anchor_mode, "rbh").lower().replace("-", "_")
-            search_scope = _collinear_text(collinear_search_scope, "adjacent").lower().replace("-", "_")
+            anchor_mode = normalized_collinear_anchor_mode
+            search_scope = normalized_collinear_search_scope
+            group_scope = "global_collinear" if search_scope == "all" else "adjacent_local"
             max_paralog_links = normalized_max_paralog_links
             directional_tables = {}
             for item in pair_items:
@@ -1087,6 +1094,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 record_ids=record_ids,
                 color_mode=_collinear_text(collinear_color_mode, "orientation"),
             )
+            for converted in converted_frames:
+                converted["group_kind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"
+                converted["group_scope"] = group_scope
+                converted["collinear_group_scope"] = group_scope
             converted_pairs = []
             for pair_index, converted in enumerate(converted_frames):
                 handle = StringIO()
@@ -1115,6 +1126,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "anchorCount": len(block.anchors),
                     "anchor_count": len(block.anchors),
                     "orthogroupIds": sorted({anchor.orthogroup_id for anchor in block.anchors if anchor.orthogroup_id}),
+                    "groupKind": "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group",
+                    "groupScope": group_scope,
+                    "collinearGroupScope": group_scope,
                     "querySpan": [
                         min(min(anchor.query_start, anchor.query_end) for anchor in block.anchors),
                         max(max(anchor.query_start, anchor.query_end) for anchor in block.anchors),
@@ -1128,9 +1142,17 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 }
                 for block in collinearity_result.blocks
             ]
+            serialized_groups = _serialize_orthogroups_payload(collinearity_result.orthogroups)
+            for group in serialized_groups:
+                group["scope"] = group_scope
+                group["groupKind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"
+            orthogroup_groups = serialized_groups if group_scope == "global_collinear" else []
+            collinear_groups = serialized_groups if group_scope == "adjacent_local" else []
             return _finalize_losatp_payload({
                 "pairs": converted_pairs,
-                "orthogroups": _serialize_orthogroups_payload(collinearity_result.orthogroups),
+                "orthogroups": orthogroup_groups,
+                "collinearGroups": collinear_groups,
+                "collinearGroupScope": group_scope,
                 "collinearityBlocks": block_payload,
             })
 

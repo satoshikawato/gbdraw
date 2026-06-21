@@ -36,6 +36,12 @@ import {
   depthSlotTrackIndex,
   syncDepthSlotLabels
 } from './depth-track-state.js';
+import {
+  collinearGroupScopeForEvidenceScope,
+  normalizeCollinearAnchorMode,
+  normalizeCollinearSearchScope,
+  normalizeGroupMetadataScope
+} from './losat-normalization.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -380,27 +386,6 @@ const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
-};
-const normalizeCollinearAnchorMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  const aliases = {
-    raw: 'all',
-    all_hits: 'all',
-    top_n: 'all',
-    topn: 'all',
-    one2one: 'one_to_one',
-    mutual_best: 'one_to_one',
-    top1: 'one_to_one',
-    top_1: 'one_to_one',
-    reciprocal_best: 'rbh',
-    strict_rbh: 'rbh'
-  };
-  const resolved = aliases[normalized] || normalized;
-  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
-};
-const normalizeCollinearSearchScope = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
 };
 const normalizeOrthogroupMembershipMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
@@ -782,7 +767,7 @@ export const createRunAnalysis = ({
       const recordCoverage = Number(group?.record_coverage_count || new Set(
         members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
       ).size || 0);
-      const orthogroupScope = String(group?.scope || 'cross_record').trim() === 'record_local' ? 'record_local' : 'cross_record';
+      const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
       const sourceRecordIndex = Number(group?.source_record_index);
       members.forEach((member) => {
         const featureSvgId = String(member?.featureSvgId || '').trim();
@@ -835,6 +820,8 @@ export const createRunAnalysis = ({
       orthogroupMemberCount: entry.orthogroupMemberCount,
       orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
       orthogroupRepresentative: entry.orthogroupRepresentative,
+      orthogroupScope: entry.orthogroupScope,
+      orthogroupSourceRecordIndex: entry.orthogroupSourceRecordIndex,
       orthogroupMember: entry.orthogroupMember
     };
   };
@@ -3600,7 +3587,7 @@ json.dumps({
                 losat.blastp.collinearMaxGeneGap,
                 'cds',
                 losat.blastp.collinearColorMode,
-                losat.blastp.collinearAnchorMode,
+                'rbh',
                 50,
                 25,
                 losat.blastp.collinearMaxDiagonalDrift,
@@ -3616,7 +3603,7 @@ json.dumps({
             if (conversionCache.convertedPayloadHit) losatTiming.proteinConversionCacheHits += 1;
             losatTiming.proteinFilteredHitCacheHits += Number(conversionCache.filteredHitCacheHits || 0);
             losatTiming.proteinFilteredHitCacheMisses += Number(conversionCache.filteredHitCacheMisses || 0);
-            if (useOrthogroupBlastp || useCollinearBlastp) {
+            if (useOrthogroupBlastp || (useCollinearBlastp && collinearGroupScopeForEvidenceScope(collinearSearchScope) === 'global_collinear')) {
               setOrthogroupMetadata(convertedPayload.orthogroups || []);
             } else {
               clearOrthogroupMetadata({ clearSelection: true });

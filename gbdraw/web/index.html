@@ -1124,15 +1124,7 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Edge mode <help-tip text="RBH is recommended because it matches the Orthogroup display-edge contract."></help-tip></label>
-                                                <select v-model="losat.blastp.collinearAnchorMode" class="form-input px-1 py-0.5 text-xs">
-                                                    <option value="rbh">RBH</option>
-                                                    <option value="one_to_one">Top1</option>
-                                                    <option value="all">All hits</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label class="text-[9px] flex items-center">Search scope <help-tip text="Adjacent pairs searches only neighboring records; All records uses every record pair as Collinear evidence."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Evidence scope <help-tip text="Adjacent pairs uses only neighboring records as Collinear evidence. All records uses every record pair as evidence for grouping and block support, but ribbons are still emitted for adjacent display pairs."></help-tip></label>
                                                 <select v-model="losat.blastp.collinearSearchScope" class="form-input px-1 py-0.5 text-xs">
                                                     <option value="adjacent">Adjacent pairs</option>
                                                     <option value="all">All records</option>

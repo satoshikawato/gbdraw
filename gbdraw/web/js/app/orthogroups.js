@@ -1,5 +1,9 @@
 import { getFeatureElements } from './feature-editor/svg-actions.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import {
+  groupMetadataScopeLabel,
+  normalizeGroupMetadataScope
+} from './losat-normalization.js';
 
 const { computed } = window.Vue;
 
@@ -191,11 +195,10 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const orthogroupScope = (groupOrId) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    return normalizeText(group?.scope) === 'record_local' ? 'record_local' : 'cross_record';
+    return normalizeGroupMetadataScope(group?.scope);
   };
 
-  const orthogroupScopeLabel = (groupOrId) =>
-    orthogroupScope(groupOrId) === 'record_local' ? 'Species-specific orthogroup' : 'Cross-record orthogroup';
+  const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
 
   const isOrthogroupRenamed = (groupOrId) => {
     const id = normalizeText(typeof groupOrId === 'string' ? groupOrId : groupOrId?.id);

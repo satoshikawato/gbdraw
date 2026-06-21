@@ -145,9 +145,10 @@ def _parse_collinear_color_mode(value: str) -> str:
 
 def _parse_collinear_anchor_mode(value: str) -> str:
     try:
-        return normalize_collinearity_anchor_mode(value)
+        normalize_collinearity_anchor_mode(value)
     except ValidationError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
+    return "rbh"
 
 
 def _parse_collinear_search_scope(value: str) -> str:
@@ -286,7 +287,7 @@ def _get_args(args) -> argparse.Namespace:
         '--collinear_orthogroup_edge_mode',
         '--collinear-orthogroup-edge-mode',
         dest='collinear_anchor_mode',
-        help='Collinear edge mode inside the selected search scope: rbh, one_to_one, or all (default: rbh).',
+        help='Deprecated compatibility option. Collinear blocks always use RBH anchors (default: rbh).',
         type=_parse_collinear_anchor_mode,
         choices=["all", "one_to_one", "rbh"],
         default='rbh')

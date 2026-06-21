@@ -1814,7 +1814,7 @@ def test_linear_cli_builds_and_saves_native_collinearity(
             "--collinear_unit_mode",
             "cds",
             "--collinear_anchor_mode",
-            "rbh",
+            "all",
             "--collinear_search_scope",
             "all",
             "--orthogroup_membership_mode",
@@ -2029,7 +2029,13 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
     assert rows[0]["collinearity_anchor_count"] == 8
     assert rows[0]["collinearity_color_mode"] == "orientation"
     assert rows[0]["collinearity_block_evalue"] == ""
-    assert len(result["orthogroups"]) == 8
+    assert rows[0]["group_kind"] == "collinear_gene_group"
+    assert rows[0]["group_scope"] == "adjacent_local"
+    assert rows[0]["collinear_group_scope"] == "adjacent_local"
+    assert result["orthogroups"] == []
+    assert result["collinearGroupScope"] == "adjacent_local"
+    assert len(result["collinearGroups"]) == 8
+    assert {group["scope"] for group in result["collinearGroups"]} == {"adjacent_local"}
 
 
 @pytest.mark.linear
@@ -2285,12 +2291,17 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
     assert "error" not in all_records
     adjacent_member_sets = [
         {member["proteinId"] for member in group["members"]}
-        for group in adjacent["orthogroups"]
+        for group in adjacent["collinearGroups"]
     ]
     all_member_sets = [
         {member["proteinId"] for member in group["members"]}
         for group in all_records["orthogroups"]
     ]
+    assert adjacent["orthogroups"] == []
+    assert adjacent["collinearGroupScope"] == "adjacent_local"
+    assert all_records["collinearGroups"] == []
+    assert all_records["collinearGroupScope"] == "global_collinear"
+    assert {group["scope"] for group in all_records["orthogroups"]} == {"global_collinear"}
     assert {"a0", "b0"} in adjacent_member_sets
     assert {"a0", "b0", "c0"} in all_member_sets
     assert all(

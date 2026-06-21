@@ -25,6 +25,11 @@ import {
   encodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
+import {
+  normalizeCollinearAnchorMode,
+  normalizeCollinearSearchScope,
+  normalizeGroupMetadataScope
+} from '../app/losat-normalization.js';
 
 const SESSION_VERSION = 27;
 const LOSAT_CACHE_SCHEMA = 2;
@@ -307,29 +312,6 @@ const normalizeCollinearColorMode = (value) => {
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
 
-const normalizeCollinearAnchorMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  const aliases = {
-    raw: 'all',
-    all_hits: 'all',
-    top_n: 'all',
-    topn: 'all',
-    one2one: 'one_to_one',
-    mutual_best: 'one_to_one',
-    top1: 'one_to_one',
-    top_1: 'one_to_one',
-    reciprocal_best: 'rbh',
-    strict_rbh: 'rbh'
-  };
-  const resolved = aliases[normalized] || normalized;
-  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
-};
-
-const normalizeCollinearSearchScope = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
-};
-
 const normalizeOrthogroupMembershipMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   const aliases = {
@@ -452,10 +434,18 @@ const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
 
 let lastSessionFilename = null;
 
+const cloneLosatForConfig = () => {
+  const cloned = JSON.parse(JSON.stringify(state.losat || {}));
+  if (cloned.blastp && typeof cloned.blastp === 'object' && !Array.isArray(cloned.blastp)) {
+    delete cloned.blastp.collinearAnchorMode;
+  }
+  return cloned;
+};
+
 const buildConfigData = () => ({
   form: state.form,
   adv: state.adv,
-  losat: state.losat,
+  losat: cloneLosatForConfig(),
   colors: state.currentColors.value,
   palette: state.selectedPalette.value,
   paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
@@ -1187,7 +1177,7 @@ const applyOrthogroupState = (orthogroupState = {}) => {
     const recordCoverage = Number(group?.record_coverage_count || new Set(
       members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
     ).size || 0);
-    const orthogroupScope = String(group?.scope || 'cross_record').trim() === 'record_local' ? 'record_local' : 'cross_record';
+    const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
     const sourceRecordIndex = Number(group?.source_record_index);
     members.forEach((member) => {
       const featureSvgId = String(member?.featureSvgId || '').trim();

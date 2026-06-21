@@ -1787,7 +1787,8 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
     normalized_pairwise_match_style = _resolve_pairwise_match_style(pairwise_match_style)
-    normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(str(collinearity_anchor_mode))
+    normalize_collinearity_anchor_mode(str(collinearity_anchor_mode))
+    normalized_collinearity_anchor_mode = "rbh"
     normalized_collinearity_search_scope = normalize_collinearity_search_scope(str(collinearity_search_scope))
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
@@ -3520,6 +3521,7 @@ def build_linear_diagram(
             cfg = options.config
     elif isinstance(options.config, dict):
         config_dict = options.config
+    normalize_collinearity_anchor_mode(str(options.collinearity_anchor_mode))
 
     return assemble_linear_diagram_from_records(
         records,
@@ -3531,7 +3533,7 @@ def build_linear_diagram(
         collinearity_blocks=options.collinearity_blocks,
         collinearity_params=options.collinearity_params,
         collinearity_unit_mode=options.collinearity_unit_mode,
-        collinearity_anchor_mode=options.collinearity_anchor_mode,
+        collinearity_anchor_mode="rbh",
         collinearity_search_scope=options.collinearity_search_scope,
         collinearity_color_mode=options.collinearity_color_mode,
         losatp_bin=options.losatp_bin,

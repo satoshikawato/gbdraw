@@ -54,7 +54,7 @@ gbdraw linear \
 
 The default pairwise link style is `ribbon`, which draws straight filled ribbons and is best when the exact BLAST alignment span is the main signal. Use `--pairwise_match_style curve` for curved filled ribbons in dense synteny-style views; the curve style still preserves each match span from `qstart/qend` and `sstart/send`.
 
-For LOSATP collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients.
+For LOSATP collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients. Collinear blocks use RBH anchors. In the web UI, Evidence scope controls which record pairs provide collinearity evidence; Adjacent pairs produces local collinear gene groups, while All records can provide collinearity-backed global metadata. Ribbons are still drawn for adjacent display pairs.
 
 ## 4. Select Records or Regions
 

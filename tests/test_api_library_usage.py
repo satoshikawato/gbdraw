@@ -44,10 +44,12 @@ def test_api_diagram_options_forward_collinearity_search_scope(monkeypatch: pyte
         [],
         options=DiagramOptions(
             protein_blastp_mode="collinear",
+            collinearity_anchor_mode="all",
             collinearity_search_scope="all",
         ),
     )
 
+    assert captured["collinearity_anchor_mode"] == "rbh"
     assert captured["collinearity_search_scope"] == "all"
 
 
