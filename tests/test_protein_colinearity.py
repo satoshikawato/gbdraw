@@ -825,6 +825,87 @@ def test_distribution_split_separates_weakly_bridged_outparalog_families() -> No
 
 
 @pytest.mark.linear
+def test_distribution_split_display_edges_include_direct_adjacent_same_orthogroup_hits() -> None:
+    records = [
+        _record(
+            "record_a",
+            sequence="ATG" * 120,
+            features=[
+                _cds(0, 300, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["a0"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            sequence="ATG" * 120,
+            features=[
+                _cds(0, 300, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["b0"]}),
+            ],
+        ),
+        _record(
+            "record_c",
+            sequence="ATG" * 120,
+            features=[
+                _cds(0, 300, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["c0"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("a0", "b0", bitscore=1000),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 2): pd.DataFrame.from_records(
+            [
+                _hit_row("b0", "c0", bitscore=900),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (2, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("c0", "b0", bitscore=900),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="distribution_split",
+        orthogroup_member_max_hits=1,
+        max_related_edges_per_orthogroup=2,
+    )
+
+    assert edge_selection.adjacent_anchor_edges_by_pair[(0, 1)].empty
+    assert {
+        frozenset(member.protein_id for member in members)
+        for members in edge_selection.orthogroups.orthogroups.values()
+    } == {frozenset({"a0", "b0", "c0"})}
+    assert {
+        (edge.query_protein_id, edge.subject_protein_id)
+        for edges in edge_selection.orthogroups.ortholog_edges_by_orthogroup_id.values()
+        for edge in edges
+    } == {("b0", "c0")}
+
+    display_edges = edge_selection.adjacent_display_edges_by_pair[(0, 1)]
+    assert {
+        (str(row.query), str(row.subject))
+        for row in display_edges.itertuples(index=False)
+    } == {("a0", "b0")}
+
+    converted = convert_protein_hits_to_genomic_links(
+        display_edges,
+        extraction.protein_map,
+        orthogroups=edge_selection.orthogroups,
+    )
+    assert converted.iloc[0]["orthogroup_id"] == "og_1"
+
+
+@pytest.mark.linear
 def test_family_merge_display_edges_suppress_already_covered_cross_links() -> None:
     records = [
         _record(

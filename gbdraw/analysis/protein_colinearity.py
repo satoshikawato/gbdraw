@@ -2038,6 +2038,15 @@ def _select_distribution_split_orthogroup_edges_from_directional_hits(
         for pair, table in rbnh_edge_tables.items()
         if int(pair[1]) == int(pair[0]) + 1
     }
+    adjacent_candidate_edges_by_pair = {
+        (query_index, query_index + 1): _comparison_columns_only(
+            directional_hits_by_pair.get(
+                (query_index, query_index + 1),
+                _empty_comparison_hits(),
+            )
+        )
+        for query_index in range(max(0, int(record_count) - 1))
+    }
     for query_index in range(max(0, int(record_count) - 1)):
         adjacent_anchor_edges_by_pair.setdefault(
             (query_index, query_index + 1),
@@ -2056,6 +2065,7 @@ def _select_distribution_split_orthogroup_edges_from_directional_hits(
         orthogroups,
         record_count=int(record_count),
         max_display_edges_per_orthogroup=int(max_related_edges_per_orthogroup),
+        adjacent_candidate_edges_by_pair=adjacent_candidate_edges_by_pair,
     )
     return OrthogroupEdgeSelectionResult(
         orthogroups=orthogroups,
@@ -3559,6 +3569,43 @@ def _comparison_row_key(row: Mapping[str, object]) -> tuple[str, str]:
     return str(row["query"]), str(row["subject"])
 
 
+def _comparison_row_display_rank(
+    row: Mapping[str, object],
+    orthogroups: OrthogroupResult,
+    *,
+    edge_kind_rank: int,
+) -> tuple[object, ...]:
+    query_id, subject_id = _comparison_row_key(row)
+    query_member = orthogroups.member_by_protein_id.get(query_id)
+    subject_member = orthogroups.member_by_protein_id.get(subject_id)
+    both_representative = (
+        query_member is not None
+        and subject_member is not None
+        and bool(query_member.representative)
+        and bool(subject_member.representative)
+    )
+    return (
+        int(edge_kind_rank),
+        0 if both_representative else 1,
+        float(row.get("evalue", float("inf"))),
+        -float(row.get("bitscore", 0.0)),
+        -float(row.get("identity", 0.0)),
+        -int(float(row.get("alignment_length", 0.0))),
+        int(query_member.record_index) if query_member is not None else 0,
+        int(subject_member.record_index) if subject_member is not None else 0,
+        query_id,
+        subject_id,
+        "direct_orthogroup",
+    )
+
+
+def _comparison_row_from_hit_row(row: object) -> dict[str, object]:
+    return {
+        column: getattr(row, column)
+        for column in COMPARISON_COLUMNS
+    }
+
+
 def _has_uncovered_display_alternative(
     row_key: tuple[str, str],
     *,
@@ -3620,6 +3667,7 @@ def _build_adjacent_display_edges_by_pair(
     *,
     record_count: int,
     max_display_edges_per_orthogroup: int,
+    adjacent_candidate_edges_by_pair: Mapping[tuple[int, int], DataFrame] | None = None,
 ) -> dict[tuple[int, int], DataFrame]:
     """Overlay bounded non-anchor orthogroup edges for adjacent display."""
 
@@ -3672,8 +3720,43 @@ def _build_adjacent_display_edges_by_pair(
             covered_query_by_group.setdefault(orthogroup_id, set()).add(query_id)
             covered_subject_by_group.setdefault(orthogroup_id, set()).add(subject_id)
         added_rows: list[dict[str, object]] = []
-        for orthogroup_id in sorted(all_secondary_edges_by_group):
+        direct_candidates_by_group: dict[str, list[tuple[tuple[object, ...], dict[str, object]]]] = {}
+        direct_candidate_table = (
+            adjacent_candidate_edges_by_pair.get(pair)
+            if adjacent_candidate_edges_by_pair is not None
+            else None
+        )
+        if direct_candidate_table is not None and not direct_candidate_table.empty:
+            direct_rows = _sort_hits_for_query_best(
+                _coerce_outfmt6_numeric_columns(
+                    direct_candidate_table.loc[:, list(COMPARISON_COLUMNS)]
+                )
+            ).drop_duplicates(["query", "subject"], keep="first")
+            for row in direct_rows.itertuples(index=False):
+                query_id = str(row.query)
+                subject_id = str(row.subject)
+                orthogroup_id = _display_pair_orthogroup_id(
+                    query_id,
+                    subject_id,
+                    orthogroups,
+                )
+                if orthogroup_id is None:
+                    continue
+                row_record = _comparison_row_from_hit_row(row)
+                direct_candidates_by_group.setdefault(orthogroup_id, []).append(
+                    (
+                        _comparison_row_display_rank(
+                            row_record,
+                            orthogroups,
+                            edge_kind_rank=ORTHOLOG_DISPLAY_EDGE_KIND_RANK["coortholog"],
+                        ),
+                        row_record,
+                    )
+                )
+
+        for orthogroup_id in sorted(set(all_secondary_edges_by_group).union(direct_candidates_by_group)):
             candidates: list[tuple[tuple[object, ...], dict[str, object]]] = []
+            candidates.extend(direct_candidates_by_group.get(orthogroup_id, []))
             for edge in all_secondary_edges_by_group[orthogroup_id]:
                 row = _comparison_row_from_ortholog_edge_for_pair(edge, pair)
                 if row is None:
@@ -3736,13 +3819,17 @@ def _build_adjacent_display_edges_by_pair(
                 if added_for_group >= cap:
                     break
         if added_rows:
-            display_edges_by_pair[pair] = pd.concat(
-                [
-                    anchor_table.loc[:, list(COMPARISON_COLUMNS)],
-                    pd.DataFrame.from_records(added_rows, columns=COMPARISON_COLUMNS),
-                ],
-                ignore_index=True,
-            )
+            added_frame = pd.DataFrame.from_records(added_rows, columns=COMPARISON_COLUMNS)
+            if anchor_table.empty:
+                display_edges_by_pair[pair] = added_frame.reset_index(drop=True)
+            else:
+                display_edges_by_pair[pair] = pd.concat(
+                    [
+                        anchor_table.loc[:, list(COMPARISON_COLUMNS)],
+                        added_frame,
+                    ],
+                    ignore_index=True,
+                )
     return display_edges_by_pair
 
 
@@ -3802,6 +3889,15 @@ def select_rbh_orthogroup_edges_from_directional_hits(
             (query_index, query_index + 1),
             _empty_comparison_hits(),
         )
+    adjacent_candidate_edges_by_pair = {
+        (query_index, query_index + 1): _comparison_columns_only(
+            directional_hits_by_pair.get(
+                (query_index, query_index + 1),
+                _empty_comparison_hits(),
+            )
+        )
+        for query_index in range(max(0, int(record_count) - 1))
+    }
 
     seed_orthogroups = build_orthogroups_from_protein_hits(
         tuple(all_edges_by_pair.values()),
@@ -3822,6 +3918,7 @@ def select_rbh_orthogroup_edges_from_directional_hits(
         orthogroups,
         record_count=int(record_count),
         max_display_edges_per_orthogroup=int(max_related_edges_per_orthogroup),
+        adjacent_candidate_edges_by_pair=adjacent_candidate_edges_by_pair,
     )
     return OrthogroupEdgeSelectionResult(
         orthogroups=orthogroups,
