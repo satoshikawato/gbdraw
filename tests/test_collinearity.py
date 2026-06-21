@@ -37,6 +37,7 @@ from gbdraw.analysis.collinearity import (
 from gbdraw.api import assemble_linear_diagram_from_records
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
+    convert_protein_hits_to_genomic_links,
     extract_cds_proteins,
     select_rbh_orthogroup_edges_from_directional_hits,
 )
@@ -807,6 +808,63 @@ def test_anchor_core_unions_connected_near_reciprocal_groups() -> None:
     }
     assert ("a0", "b0") in path_sets
     assert ("a1", "b1") in path_sets
+
+
+@pytest.mark.linear
+def test_orthogroup_display_edges_skip_cross_group_related_hits() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]}),
+                _cds(12, 21, {"locus_tag": ["b1"], "protein_id": ["b1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("a0", "b0", bitscore=300),
+                _hit_row("a1", "b1", bitscore=300),
+                _hit_row("a0", "b1", bitscore=120),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("b0", "a0", bitscore=300),
+                _hit_row("b1", "a1", bitscore=300),
+                _hit_row("b1", "a0", bitscore=120),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+    )
+    display_edges = edge_selection.adjacent_display_edges_by_pair[(0, 1)]
+    links = convert_protein_hits_to_genomic_links(
+        display_edges,
+        extraction.protein_map,
+        edge_selection.orthogroups,
+    )
+
+    assert {
+        (str(row.query), str(row.subject))
+        for row in display_edges.itertuples(index=False)
+    } == {("a0", "b0"), ("a1", "b1")}
+    assert set(links["orthogroup_id"]) == {"og_1", "og_2"}
 
 
 @pytest.mark.linear

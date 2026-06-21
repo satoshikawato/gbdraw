@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Implemented.
 
 This plan adds OrthoFinder-style species-specific orthogroups to the current
 `anchor_core_v1` inference path without weakening the existing outparalog

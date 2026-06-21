@@ -5263,6 +5263,32 @@ def _add_display_row(
     added_rows.append(row)
 
 
+def _orthogroup_display_table(
+    table: DataFrame,
+    orthogroups: OrthogroupResult,
+) -> DataFrame:
+    if table is None or table.empty:
+        return _empty_comparison_hits()
+
+    rows: list[dict[str, object]] = []
+    for row in table.itertuples(index=False):
+        query_id = str(row.query)
+        subject_id = str(row.subject)
+        orthogroup_id = _display_pair_orthogroup_id(
+            query_id,
+            subject_id,
+            orthogroups,
+        )
+        if orthogroup_id is None:
+            continue
+        if _orthogroup_scope(orthogroups, orthogroup_id) == "record_local":
+            continue
+        rows.append(_comparison_row_from_hit_row(row))
+    if not rows:
+        return _empty_comparison_hits()
+    return pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+
+
 def _build_adjacent_display_edges_by_pair(
     adjacent_anchor_edges_by_pair: Mapping[tuple[int, int], DataFrame],
     orthogroups: OrthogroupResult,
@@ -5278,7 +5304,7 @@ def _build_adjacent_display_edges_by_pair(
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
 
     display_edges_by_pair: dict[tuple[int, int], DataFrame] = {
-        (int(pair[0]), int(pair[1])): table.copy()
+        (int(pair[0]), int(pair[1])): _orthogroup_display_table(table, orthogroups)
         for pair, table in adjacent_anchor_edges_by_pair.items()
     }
     for query_index in range(max(0, int(record_count) - 1)):
@@ -5371,6 +5397,13 @@ def _build_adjacent_display_edges_by_pair(
                 if row is None:
                     continue
                 row_key = (str(row["query"]), str(row["subject"]))
+                row_orthogroup_id = _display_pair_orthogroup_id(
+                    row_key[0],
+                    row_key[1],
+                    orthogroups,
+                )
+                if row_orthogroup_id != orthogroup_id:
+                    continue
                 if row_key in existing_pairs or (row_key[1], row_key[0]) in existing_pairs:
                     continue
                 candidates.append((_ortholog_edge_display_rank(edge, orthogroups), row))
