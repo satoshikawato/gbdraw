@@ -10,6 +10,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -186,6 +187,76 @@ def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     assert "orthogroupMembershipMode: 'anchor_core_v1'" in state_js
     assert "outparalog_split: 'anchor_core_v1'" in config_js
     assert "outparalog_split: 'anchor_core_v1'" in run_analysis_js
+
+
+def test_web_orthogroup_payload_serializes_record_local_scope() -> None:
+    helpers_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    member = SimpleNamespace(
+        orthogroup_id="og_2",
+        protein_id="a0",
+        source_protein_id=None,
+        record_index=0,
+        record_id="record_a",
+        feature_index=0,
+        label="a0",
+        feature_svg_id="feature-a0",
+        start=0,
+        end=9,
+        strand=1,
+        representative=True,
+        role="local_paralog",
+        confidence="high",
+        assignment_reason="record-local reciprocal paralog cluster",
+        supporting_edges=("a0->a1:record_local_paralog",),
+        best_core_support=10.0,
+        second_best_core_support=0.0,
+        gene=None,
+        product=None,
+        note=None,
+        locus_tag=None,
+        gene_id=None,
+        old_locus_tag=None,
+    )
+    orthogroups = SimpleNamespace(
+        orthogroups={"og_2": [member]},
+        names_by_orthogroup_id={},
+        descriptions_by_orthogroup_id={},
+        name_candidates_by_orthogroup_id={},
+        confidence_by_orthogroup_id={},
+        rbh_orthogroups={"og_2": ("a0",)},
+        ortholog_edges_by_orthogroup_id={},
+        ortholog_paths_by_orthogroup_id={},
+        related_edges_by_orthogroup_id={},
+        scope_by_orthogroup_id={"og_2": "record_local"},
+        source_record_index_by_orthogroup_id={"og_2": 0},
+    )
+
+    payload = namespace["_serialize_orthogroups_payload"](orthogroups)
+
+    assert payload[0]["scope"] == "record_local"
+    assert payload[0]["source_record_index"] == 0
+    assert "sourceRecordIndex" not in payload[0]
+    assert payload[0]["member_count"] == 1
+    assert payload[0]["record_coverage_count"] == 1
+    assert payload[0]["members"][0]["role"] == "local_paralog"
+
+
+def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    orthogroups_js = (WEB_ROOT / "js" / "app" / "orthogroups.js").read_text(encoding="utf-8")
+
+    assert "state.orthogroups.value = groups;" in config_js
+    assert "orthogroupScope" in config_js
+    assert "orthogroupScope" in run_analysis_js
+    assert "Species-specific orthogroup" in orthogroups_js
+    assert "orthogroupScopeLabel(group)" in index_html
+    assert "orthogroupScopeLabel(selectedOrthogroup)" in index_html
 
 
 def test_web_losatp_orthogroup_and_collinear_blastp_omit_hsp_cap() -> None:

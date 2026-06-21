@@ -740,6 +740,8 @@ def _serialize_orthogroups_payload(orthogroups):
     ortholog_edges_by_orthogroup_id = getattr(orthogroups, "ortholog_edges_by_orthogroup_id", {}) or {}
     ortholog_paths_by_orthogroup_id = getattr(orthogroups, "ortholog_paths_by_orthogroup_id", {}) or {}
     related_edges_by_orthogroup_id = getattr(orthogroups, "related_edges_by_orthogroup_id", {}) or {}
+    scope_by_orthogroup_id = getattr(orthogroups, "scope_by_orthogroup_id", {}) or {}
+    source_record_index_by_orthogroup_id = getattr(orthogroups, "source_record_index_by_orthogroup_id", {}) or {}
     for orthogroup_id, members in orthogroups.orthogroups.items():
         record_coverage_count = len({int(member.record_index) for member in members})
         member_ids = {str(member.protein_id) for member in members}
@@ -754,6 +756,12 @@ def _serialize_orthogroups_payload(orthogroups):
                 "name": str(names_by_orthogroup_id.get(orthogroup_id, "") or ""),
                 "description": str(descriptions_by_orthogroup_id.get(orthogroup_id, "") or ""),
                 "nameConfidence": str(confidence_by_orthogroup_id.get(orthogroup_id, "none") or "none"),
+                "scope": str(scope_by_orthogroup_id.get(orthogroup_id, "cross_record") or "cross_record"),
+                "source_record_index": (
+                    int(source_record_index_by_orthogroup_id[orthogroup_id])
+                    if orthogroup_id in source_record_index_by_orthogroup_id
+                    else None
+                ),
                 "nameCandidates": [
                     _serialize_orthogroup_name_candidate(candidate)
                     for candidate in (candidates_by_orthogroup_id.get(orthogroup_id, []) or [])

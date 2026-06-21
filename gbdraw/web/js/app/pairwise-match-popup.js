@@ -624,6 +624,7 @@ const buildOrthogroupDetailRows = ({
   orthogroupId,
   displayName,
   description,
+  scopeLabel,
   memberCount,
   recordCoverage,
   rbhOrthogroups,
@@ -634,6 +635,7 @@ const buildOrthogroupDetailRows = ({
   addRow(rows, 'Orthogroup ID', orthogroupId);
   addRow(rows, 'Display name', displayName);
   addRow(rows, 'Description', description);
+  addRow(rows, 'Scope', scopeLabel);
   addRow(rows, 'Members', memberCount);
   addRow(rows, 'Record coverage', recordCoverage);
   addRow(rows, 'RBH seeds', Array.isArray(rbhOrthogroups) ? rbhOrthogroups.join('; ') : rbhOrthogroups);
@@ -667,6 +669,9 @@ const buildBlockOrthogroups = ({
     group?.memberCount,
     Array.isArray(group?.members) ? group.members.length : ''
   );
+  const scopeLabel = String(group?.scope || '').trim() === 'record_local'
+    ? 'Species-specific orthogroup'
+    : 'Cross-record orthogroup';
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
   const rbhOrthogroups = Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds : [];
   const orthologPathCount = Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '';
@@ -684,6 +689,7 @@ const buildBlockOrthogroups = ({
       orthogroupId,
       displayName,
       description,
+      scopeLabel,
       memberCount,
       recordCoverage,
       rbhOrthogroups,

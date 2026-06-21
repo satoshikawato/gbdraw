@@ -1187,6 +1187,8 @@ const applyOrthogroupState = (orthogroupState = {}) => {
     const recordCoverage = Number(group?.record_coverage_count || new Set(
       members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
     ).size || 0);
+    const orthogroupScope = String(group?.scope || 'cross_record').trim() === 'record_local' ? 'record_local' : 'cross_record';
+    const sourceRecordIndex = Number(group?.source_record_index);
     members.forEach((member) => {
       const featureSvgId = String(member?.featureSvgId || '').trim();
       const recordIndex = Number(member?.recordIndex);
@@ -1198,6 +1200,8 @@ const applyOrthogroupState = (orthogroupState = {}) => {
         proteinId: String(member?.proteinId || '').trim(),
         sourceProteinId: String(member?.sourceProteinId || '').trim(),
         orthogroupRepresentative: Boolean(member?.representative),
+        orthogroupScope,
+        orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
         orthogroupMember: member
       };
       index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);

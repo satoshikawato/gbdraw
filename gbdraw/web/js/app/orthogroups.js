@@ -186,6 +186,14 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     return normalizeText(orthogroupDescriptionOverrides[id]) || normalizeText(group?.description);
   };
 
+  const orthogroupScope = (groupOrId) => {
+    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
+    return normalizeText(group?.scope) === 'record_local' ? 'record_local' : 'cross_record';
+  };
+
+  const orthogroupScopeLabel = (groupOrId) =>
+    orthogroupScope(groupOrId) === 'record_local' ? 'Species-specific orthogroup' : 'Cross-record orthogroup';
+
   const isOrthogroupRenamed = (groupOrId) => {
     const id = normalizeText(typeof groupOrId === 'string' ? groupOrId : groupOrId?.id);
     return Boolean(
@@ -511,6 +519,8 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     getOrthogroupById,
     resolveOrthogroupName,
     resolveOrthogroupDescription,
+    orthogroupScope,
+    orthogroupScopeLabel,
     isOrthogroupRenamed,
     getOrthogroupSequenceCount,
     hasOrthogroupSequence,

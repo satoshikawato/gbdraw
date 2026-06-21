@@ -64,18 +64,28 @@ def _cds(start: int, end: int, qualifiers: dict[str, list[str]]) -> SeqFeature:
     return SeqFeature(FeatureLocation(start, end, strand=1), type="CDS", qualifiers=merged)
 
 
-def _hit_row(query: str, subject: str, bitscore: float = 200.0) -> dict[str, object]:
+def _hit_row(
+    query: str,
+    subject: str,
+    bitscore: float = 200.0,
+    *,
+    alignment_length: int = 100,
+    qend: int | None = None,
+    send: int | None = None,
+) -> dict[str, object]:
+    qend = alignment_length if qend is None else qend
+    send = alignment_length if send is None else send
     return {
         "query": query,
         "subject": subject,
         "identity": 90.0,
-        "alignment_length": 100,
+        "alignment_length": alignment_length,
         "mismatches": 0,
         "gap_opens": 0,
         "qstart": 1,
-        "qend": 100,
+        "qend": qend,
         "sstart": 1,
-        "send": 100,
+        "send": send,
         "evalue": 1e-30,
         "bitscore": bitscore,
     }
@@ -889,6 +899,285 @@ def test_anchor_core_same_record_hits_assign_inparalogs_to_existing_core() -> No
         edge.edge_kind
         for edge in result.ortholog_edges_by_orthogroup_id["og_1"]
     } == {"rbh", "same_record_inparalog"}
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_paralog_cluster_forms_species_specific_orthogroup() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 0): pd.DataFrame.from_records(
+            [_hit_row("a0", "a1", bitscore=300), _hit_row("a1", "a0", bitscore=300)],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert set(result.orthogroups) == {"og_1"}
+    assert {member.protein_id for member in result.orthogroups["og_1"]} == {"a0", "a1"}
+    assert result.scope_by_orthogroup_id["og_1"] == "record_local"
+    assert result.source_record_index_by_orthogroup_id["og_1"] == 0
+    assert {member.role for member in result.orthogroups["og_1"]} == {"local_paralog"}
+    assert {member.confidence for member in result.orthogroups["og_1"]} == {"high"}
+    assert {
+        edge.edge_kind
+        for edge in result.ortholog_edges_by_orthogroup_id["og_1"]
+    } == {"record_local_paralog"}
+    assert len({member.record_index for member in result.orthogroups["og_1"]}) == 1
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_singleton_remains_unassigned_with_singletons_requested() -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        {},
+        extraction.protein_map,
+        record_count=len(records),
+        include_singletons=True,
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert result.orthogroups == {}
+    assert result.member_by_protein_id == {}
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_ignores_already_assigned_members() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+            ],
+        ),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 0): pd.DataFrame.from_records(
+            [_hit_row("a0", "a1", bitscore=280), _hit_row("a1", "a0", bitscore=280)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (0, 1): pd.DataFrame.from_records([_hit_row("a0", "b0", bitscore=300)], columns=COMPARISON_COLUMNS),
+        (1, 0): pd.DataFrame.from_records([_hit_row("b0", "a0", bitscore=300)], columns=COMPARISON_COLUMNS),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert set(result.orthogroups) == {"og_1"}
+    assert {member.protein_id for member in result.orthogroups["og_1"]} == {"a0", "a1", "b0"}
+    assert result.member_by_protein_id["a1"].role == "inparalog"
+    assert set(result.scope_by_orthogroup_id.values()) == {"cross_record"}
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_rejects_domain_only_component() -> None:
+    long_translation = "M" * 100
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 300, {"locus_tag": ["a0"], "protein_id": ["a0"], "translation": [long_translation]}),
+                _cds(303, 603, {"locus_tag": ["a1"], "protein_id": ["a1"], "translation": [long_translation]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("a0", "a1", bitscore=300, alignment_length=20, qend=20, send=20),
+                _hit_row("a1", "a0", bitscore=300, alignment_length=20, qend=20, send=20),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert result.orthogroups == {}
+    assert "a0" not in result.member_by_protein_id
+    assert "a1" not in result.member_by_protein_id
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_ids_are_deterministic_after_cross_record_groups() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+                _cds(24, 33, {"locus_tag": ["a2"], "protein_id": ["a2"]}),
+            ],
+        ),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 0): pd.DataFrame.from_records(
+            [_hit_row("a1", "a2", bitscore=300), _hit_row("a2", "a1", bitscore=300)],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (0, 1): pd.DataFrame.from_records([_hit_row("a0", "b0", bitscore=300)], columns=COMPARISON_COLUMNS),
+        (1, 0): pd.DataFrame.from_records([_hit_row("b0", "a0", bitscore=300)], columns=COMPARISON_COLUMNS),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="anchor_core_v1",
+    ).orthogroups
+
+    assert {member.protein_id for member in result.orthogroups["og_1"]} == {"a0", "b0"}
+    assert {member.protein_id for member in result.orthogroups["og_2"]} == {"a1", "a2"}
+    assert result.scope_by_orthogroup_id == {"og_1": "cross_record", "og_2": "record_local"}
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_member_hit_limit_does_not_change_membership() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 0): pd.DataFrame.from_records(
+            [_hit_row("a0", "a1", bitscore=300), _hit_row("a1", "a0", bitscore=300)],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    max_one = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_member_max_hits=1,
+    ).orthogroups
+    max_five = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_member_max_hits=5,
+    ).orthogroups
+
+    assert {
+        frozenset(member.protein_id for member in members)
+        for members in max_one.orthogroups.values()
+    } == {frozenset({"a0", "a1"})}
+    assert {
+        frozenset(member.protein_id for member in members)
+        for members in max_five.orthogroups.values()
+    } == {frozenset({"a0", "a1"})}
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_membership_edge_not_duplicated_as_related() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 0): pd.DataFrame.from_records(
+            [_hit_row("a0", "a1", bitscore=300), _hit_row("a1", "a0", bitscore=300)],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+    ).orthogroups
+
+    membership_pairs = {
+        frozenset((edge.query_protein_id, edge.subject_protein_id))
+        for edge in result.ortholog_edges_by_orthogroup_id["og_1"]
+    }
+    related_pairs = {
+        frozenset((edge.query_protein_id, edge.subject_protein_id))
+        for edges in result.related_edges_by_orthogroup_id.values()
+        for edge in edges
+    }
+    assert membership_pairs == {frozenset({"a0", "a1"})}
+    assert not membership_pairs.intersection(related_pairs)
+
+
+@pytest.mark.linear
+def test_anchor_core_record_local_edges_do_not_create_collinearity_anchors() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]}),
+                _cds(12, 21, {"locus_tag": ["a1"], "protein_id": ["a1"]}),
+            ],
+        ),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 0): pd.DataFrame.from_records(
+            [_hit_row("a0", "a1", bitscore=300), _hit_row("a1", "a0", bitscore=300)],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+    )
+    anchors = orthogroup_edges_to_lossless_collinearity_anchors(
+        edge_selection.adjacent_display_edges_by_pair,
+        extraction.protein_map,
+        edge_selection.orthogroups,
+    )
+
+    assert edge_selection.orthogroups.scope_by_orthogroup_id["og_1"] == "record_local"
+    assert edge_selection.adjacent_display_edges_by_pair[(0, 1)].empty
+    assert anchors == ()
 
 
 @pytest.mark.linear
