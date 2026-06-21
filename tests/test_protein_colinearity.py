@@ -360,8 +360,15 @@ def test_filter_protein_hits_by_thresholds_removes_low_confidence_bridge() -> No
 
 
 @pytest.mark.linear
-def test_orthogroup_membership_modes_expose_only_rbh_and_family_merge() -> None:
-    assert protein_colinearity_module.ORTHOGROUP_MEMBERSHIP_MODES == ("rbh", "family_merge")
+def test_orthogroup_membership_modes_include_distribution_split_aliases() -> None:
+    assert protein_colinearity_module.ORTHOGROUP_MEMBERSHIP_MODES == (
+        "rbh",
+        "family_merge",
+        "distribution_split",
+    )
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("local-split") == "distribution_split"
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("density_split") == "distribution_split"
+    assert protein_colinearity_module.normalize_orthogroup_membership_mode("outparalog_split") == "distribution_split"
 
 
 @pytest.mark.linear
@@ -706,6 +713,115 @@ def test_orthogroup_expanded_display_edges_include_non_rbh_coorthologs() -> None
     assert edge_kind_by_pair[("a0", "b0")] == "rbh"
     assert edge_kind_by_pair[("a0", "b1")] == "coortholog"
     assert edge_kind_by_pair[("a1", "b0")] == "coortholog"
+
+
+@pytest.mark.linear
+def test_distribution_split_separates_weakly_bridged_outparalog_families() -> None:
+    records = [
+        _record(
+            "record_a",
+            sequence="ATG" * 260,
+            features=[
+                _cds(0, 300, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["d0"], "gene": ["dnaE"]}),
+                _cds(360, 660, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["p0"], "gene": ["polC"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            sequence="ATG" * 260,
+            features=[
+                _cds(0, 300, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["d1"], "gene": ["dnaE"]}),
+                _cds(360, 660, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["p1"], "gene": ["polC"]}),
+            ],
+        ),
+        _record(
+            "record_c",
+            sequence="ATG" * 260,
+            features=[
+                _cds(0, 300, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["d2"], "gene": ["dnaE"]}),
+                _cds(360, 660, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["p2"], "gene": ["polC"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("d0", "d1", bitscore=320),
+                _hit_row("p0", "p1", bitscore=330),
+                _hit_row("d0", "p1", bitscore=150),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("d1", "d0", bitscore=320),
+                _hit_row("p1", "p0", bitscore=330),
+                _hit_row("p1", "d0", bitscore=150),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (0, 2): pd.DataFrame.from_records(
+            [
+                _hit_row("d0", "d2", bitscore=315),
+                _hit_row("p0", "p2", bitscore=325),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (2, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("d2", "d0", bitscore=315),
+                _hit_row("p2", "p0", bitscore=325),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 2): pd.DataFrame.from_records(
+            [
+                _hit_row("d1", "d2", bitscore=318),
+                _hit_row("p1", "p2", bitscore=328),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (2, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("d2", "d1", bitscore=318),
+                _hit_row("p2", "p1", bitscore=328),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+
+    merged_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="family_merge",
+        orthogroup_member_max_hits=3,
+        max_related_edges_per_orthogroup=2,
+    )
+    assert len(merged_selection.orthogroups.orthogroups) == 1
+
+    split_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+        orthogroup_membership_mode="distribution_split",
+        orthogroup_member_max_hits=3,
+        max_related_edges_per_orthogroup=2,
+    )
+
+    groups = {
+        orthogroup_id: {member.protein_id for member in members}
+        for orthogroup_id, members in split_selection.orthogroups.orthogroups.items()
+    }
+    assert groups == {
+        "og_1": {"d0", "d1", "d2"},
+        "og_2": {"p0", "p1", "p2"},
+    }
+    assert split_selection.orthogroups.member_by_protein_id["d0"].orthogroup_id != (
+        split_selection.orthogroups.member_by_protein_id["p1"].orthogroup_id
+    )
 
 
 @pytest.mark.linear

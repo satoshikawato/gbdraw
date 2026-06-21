@@ -378,7 +378,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--losatp_bin LOSATP_BIN]
               [--losatp_threads LOSATP_THREADS]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
-              [--orthogroup_membership_mode {rbh,family_merge}]
+              [--orthogroup_membership_mode {rbh,family_merge,distribution_split}]
               [--orthogroup_member_max_hits ORTHOGROUP_MEMBER_MAX_HITS]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
@@ -463,12 +463,13 @@ options:
                         LOSATP blastp mode: none, pairwise adjacent ribbons,
                         all-record Orthogroups, or Collinear blocks (default:
                         none).
-  --orthogroup_membership_mode, --orthogroup-membership-mode {rbh,family_merge}
+  --orthogroup_membership_mode, --orthogroup-membership-mode {rbh,family_merge,distribution_split}
                         Orthogroup membership policy for LOSATP Orthogroup or
                         Collinear modes. rbh preserves legacy reciprocal-best-
                         hit membership; family_merge explicitly merges
                         connected RBH families and adds strong non-RBH family
-                        members (default: family_merge).
+                        members; distribution_split refines broad families by
+                        normalized hit-score structure (default: family_merge).
   --orthogroup_member_max_hits, --orthogroup-member-max-hits ORTHOGROUP_MEMBER_MAX_HITS
                         Maximum filtered candidate hits per protein used for
                         family-merge orthogroup membership expansion (default:

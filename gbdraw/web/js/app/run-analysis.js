@@ -405,10 +405,13 @@ const normalizeOrthogroupMembershipMode = (value) => {
     legacy: 'rbh',
     rbh_only: 'rbh',
     merge: 'family_merge',
-    family: 'family_merge'
+    family: 'family_merge',
+    local_split: 'distribution_split',
+    density_split: 'distribution_split',
+    outparalog_split: 'distribution_split'
   };
   const resolved = aliases[normalized] || normalized;
-  return ['rbh', 'family_merge'].includes(resolved) ? resolved : 'family_merge';
+  return ['rbh', 'family_merge', 'distribution_split'].includes(resolved) ? resolved : 'family_merge';
 };
 const normalizePairwiseMatchStyle = (value) => {
   const normalized = String(value || '').trim().toLowerCase();

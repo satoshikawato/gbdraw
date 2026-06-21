@@ -175,6 +175,20 @@ def test_index_links_to_interactive_gallery() -> None:
     assert "Interactive Gallery" in index_html
 
 
+def test_web_losatp_orthogroup_membership_exposes_distribution_split() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert '<option value="distribution_split">Distribution split</option>' in index_html
+    assert "orthogroupMembershipMode: 'distribution_split'" in state_js
+    assert "'distribution_split'" in config_js
+    assert "'distribution_split'" in run_analysis_js
+    assert "outparalog_split: 'distribution_split'" in config_js
+    assert "outparalog_split: 'distribution_split'" in run_analysis_js
+
+
 def test_public_web_html_entrypoints_are_not_gitignored() -> None:
     required_html_paths = [
         "gbdraw/web/index.html",

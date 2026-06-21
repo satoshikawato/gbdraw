@@ -32,6 +32,6 @@ Use [https://gbdraw.app/](https://gbdraw.app/) if you want the fastest path to a
 - Interactive SVG gallery: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
-- Collinear linear comparisons: use `--protein_blastp_mode collinear`; `--collinear_min_anchors` sets the minimum anchors/genes required for a rendered Collinear block. The default 1 includes singleton links. `--orthogroup_membership_mode family_merge` merges connected RBH families and adds strong non-RBH family members. `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients.
+- Collinear linear comparisons: use `--protein_blastp_mode collinear`; `--collinear_min_anchors` sets the minimum anchors/genes required for a rendered Collinear block. The default 1 includes singleton links. `--orthogroup_membership_mode distribution_split` refines broad homologous families by normalized hit-score structure; `family_merge` keeps the previous connected-family expansion. `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients.
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

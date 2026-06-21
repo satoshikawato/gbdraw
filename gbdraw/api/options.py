@@ -114,7 +114,7 @@ class DiagramOptions:
     losatp_threads: int | None = None
     protein_blastp_max_hits: int = 5
     protein_blastp_candidate_limit: int | None = None
-    orthogroup_membership_mode: Literal["rbh", "family_merge"] = "family_merge"
+    orthogroup_membership_mode: Literal["rbh", "family_merge", "distribution_split"] = "family_merge"
     orthogroup_member_max_hits: int = 5
     collinear_max_paralog_links_per_orthogroup: int = 2
     align_orthogroup_feature: str | None = None

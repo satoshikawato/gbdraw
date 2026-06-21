@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from io import StringIO
 import logging
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -52,8 +53,8 @@ LOSATP_METADATA_COLUMNS = (
 LOSATP_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + LOSATP_METADATA_COLUMNS
 PROTEIN_BLASTP_MODES = ("none", "pairwise", "orthogroup", "collinear")
 ProteinBlastpMode = Literal["none", "pairwise", "orthogroup", "collinear"]
-ORTHOGROUP_MEMBERSHIP_MODES = ("rbh", "family_merge")
-OrthogroupMembershipMode = Literal["rbh", "family_merge"]
+ORTHOGROUP_MEMBERSHIP_MODES = ("rbh", "family_merge", "distribution_split")
+OrthogroupMembershipMode = Literal["rbh", "family_merge", "distribution_split"]
 OrthologEdgeKind = Literal["rbh", "coortholog", "related_paralog"]
 OrthologRenderRole = Literal["block_anchor", "display_edge"]
 ORTHOLOG_DISPLAY_EDGE_KIND_RANK = {
@@ -61,6 +62,14 @@ ORTHOLOG_DISPLAY_EDGE_KIND_RANK = {
     "coortholog": 1,
     "related_paralog": 2,
 }
+_ORTHOGROUP_SPLIT_MIN_SEPARATION_RATIO = 1.35
+_ORTHOGROUP_SPLIT_MAX_CONDUCTANCE = 0.20
+_ORTHOGROUP_SPLIT_MIN_STABILITY = 2
+_ORTHOGROUP_SPLIT_MIN_CHILD_SIZE = 2
+_ORTHOGROUP_SPLIT_TOP_FRACTION = 0.05
+_ORTHOGROUP_SPLIT_MIN_COVERAGE = 0.30
+_ORTHOGROUP_SPLIT_MIN_FIT_HITS = 12
+_ORTHOGROUP_SPLIT_EPSILON = 1e-12
 
 
 @dataclass(frozen=True)
@@ -239,6 +248,55 @@ class EvidenceIndex:
 
     def strength_key(self, row: object) -> tuple[float, float, float, int, str, str]:
         return _hit_strength_key_from_row(row)
+
+
+@dataclass(frozen=True)
+class _NormalizedProteinHit:
+    query_id: str
+    subject_id: str
+    query_record_index: int
+    subject_record_index: int
+    bitscore: float
+    evalue: float
+    identity: float
+    alignment_length: int
+    query_length: int
+    subject_length: int
+    query_coverage: float
+    subject_coverage: float
+    normalized_score: float
+
+
+@dataclass(frozen=True)
+class _LocalThreshold:
+    protein_id: str
+    score: float
+    source: str
+    rbnh_count: int
+    accepted_edge_count: int
+
+
+@dataclass(frozen=True)
+class _SplitDecision:
+    accepted: bool
+    child_components: tuple[tuple[str, ...], ...]
+    threshold: float | None
+    separation_ratio: float
+    conductance: float
+    stability: int
+    reason: str
+
+
+@dataclass(frozen=True)
+class _DistributionEvidenceEdge:
+    query_id: str
+    subject_id: str
+    row: object
+    score: float
+    query_score: float | None
+    subject_score: float | None
+    is_anchor: bool
+    fallback_normalized: bool
 
 
 @dataclass(frozen=True)
@@ -721,6 +779,9 @@ def normalize_orthogroup_membership_mode(mode: str | None) -> OrthogroupMembersh
         "rbh_only": "rbh",
         "merge": "family_merge",
         "family": "family_merge",
+        "local_split": "distribution_split",
+        "density_split": "distribution_split",
+        "outparalog_split": "distribution_split",
     }
     normalized = aliases.get(normalized, normalized)
     if normalized not in ORTHOGROUP_MEMBERSHIP_MODES:
@@ -902,6 +963,1105 @@ def cap_hits_per_query(
         sorted_hits.groupby("query", group_keys=False, sort=False)
         .head(int(max_hits))
         .reset_index(drop=True)
+    )
+
+
+def _stable_quantile(values: Sequence[float], fraction: float) -> float:
+    cleaned = sorted(float(value) for value in values if math.isfinite(float(value)))
+    if not cleaned:
+        return 0.0
+    if len(cleaned) == 1:
+        return cleaned[0]
+    bounded_fraction = min(1.0, max(0.0, float(fraction)))
+    position = bounded_fraction * (len(cleaned) - 1)
+    lower_index = int(math.floor(position))
+    upper_index = int(math.ceil(position))
+    if lower_index == upper_index:
+        return cleaned[lower_index]
+    lower = cleaned[lower_index]
+    upper = cleaned[upper_index]
+    return lower + (upper - lower) * (position - lower_index)
+
+
+def _stable_median(values: Sequence[float]) -> float:
+    return _stable_quantile(values, 0.5)
+
+
+def _normalized_score_from_row(row: object) -> float:
+    score = _row_float(row, "normalized_score", 0.0)
+    return score if math.isfinite(score) and score > 0.0 else 0.0
+
+
+def _normalized_hit_rank_from_row(row: object) -> tuple[float, float, float, int, str, str]:
+    return (
+        -_normalized_score_from_row(row),
+        _row_float(row, "evalue", float("inf")),
+        -_row_float(row, "identity", 0.0),
+        -int(_row_float(row, "alignment_length", 0.0)),
+        str(getattr(row, "query", "")),
+        str(getattr(row, "subject", "")),
+    )
+
+
+def _sort_hits_for_normalized_query_best(hits: DataFrame) -> DataFrame:
+    return hits.sort_values(
+        ["query", "normalized_score", "evalue", "identity", "alignment_length", "subject"],
+        ascending=[True, False, True, False, False, True],
+        kind="mergesort",
+    )
+
+
+def _select_normalized_fit_rows(
+    normalized_hits: DataFrame,
+    *,
+    top_fraction: float,
+) -> list[tuple[float, float]]:
+    if normalized_hits.empty:
+        return []
+    sorted_hits = normalized_hits.sort_values(
+        ["length_product", "query", "subject"],
+        ascending=[True, True, True],
+        kind="mergesort",
+    )
+    bin_size = max(4, int(math.ceil(len(sorted_hits) / 8)))
+    fit_points: list[tuple[float, float]] = []
+    for start_index in range(0, len(sorted_hits), bin_size):
+        bin_hits = sorted_hits.iloc[start_index : start_index + bin_size]
+        top_count = max(1, int(math.ceil(len(bin_hits) * float(top_fraction))))
+        top_hits = bin_hits.sort_values(
+            ["bitscore", "query", "subject"],
+            ascending=[False, True, True],
+            kind="mergesort",
+        ).head(top_count)
+        for row in top_hits.itertuples(index=False):
+            length_product = _row_float(row, "length_product", 0.0)
+            bitscore = _row_float(row, "bitscore", 0.0)
+            if length_product <= 0.0 or bitscore <= 0.0:
+                continue
+            fit_points.append((math.log10(length_product), math.log10(bitscore)))
+    return fit_points
+
+
+def _fit_expected_bitscore_model(
+    normalized_hits: DataFrame,
+    *,
+    top_fraction: float,
+) -> tuple[float, float] | None:
+    if len(normalized_hits) < _ORTHOGROUP_SPLIT_MIN_FIT_HITS:
+        return None
+    fit_points = _select_normalized_fit_rows(
+        normalized_hits,
+        top_fraction=top_fraction,
+    )
+    if len(fit_points) < 3:
+        return None
+    x_values = [point[0] for point in fit_points]
+    y_values = [point[1] for point in fit_points]
+    if len(set(round(value, 9) for value in x_values)) < 2:
+        return None
+    x_mean = sum(x_values) / len(x_values)
+    y_mean = sum(y_values) / len(y_values)
+    denominator = sum((x_value - x_mean) ** 2 for x_value in x_values)
+    if denominator <= _ORTHOGROUP_SPLIT_EPSILON:
+        return None
+    slope = sum(
+        (x_value - x_mean) * (y_value - y_mean)
+        for x_value, y_value in zip(x_values, y_values)
+    ) / denominator
+    intercept = y_mean - slope * x_mean
+    if not (math.isfinite(slope) and math.isfinite(intercept)):
+        return None
+    return slope, intercept
+
+
+def _empty_normalized_hit_table(columns: Sequence[str]) -> DataFrame:
+    extra_columns = (
+        "query_length",
+        "subject_length",
+        "length_product",
+        "query_coverage",
+        "subject_coverage",
+        "min_coverage",
+        "normalized_score",
+        "normalization_fallback",
+    )
+    return pd.DataFrame(columns=tuple(dict.fromkeys([*columns, *extra_columns])))
+
+
+def _normalize_directional_hit_table(
+    hits: DataFrame,
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    top_fraction: float = _ORTHOGROUP_SPLIT_TOP_FRACTION,
+    min_coverage: float = _ORTHOGROUP_SPLIT_MIN_COVERAGE,
+) -> DataFrame:
+    if hits is None or hits.empty:
+        columns = tuple(hits.columns) if hits is not None else tuple(COMPARISON_COLUMNS)
+        return _empty_normalized_hit_table(columns)
+    _validate_comparison_columns(hits)
+    coerced_hits = _coerce_outfmt6_numeric_columns(hits)
+    rows: list[dict[str, object]] = []
+    for row in coerced_hits.itertuples(index=False):
+        query_id = str(row.query)
+        subject_id = str(row.subject)
+        query_protein = protein_map.get(query_id)
+        subject_protein = protein_map.get(subject_id)
+        if query_protein is None or subject_protein is None:
+            continue
+        query_length = int(query_protein.protein_length)
+        subject_length = int(subject_protein.protein_length)
+        bitscore = _row_float(row, "bitscore", 0.0)
+        alignment_length = int(_row_float(row, "alignment_length", 0.0))
+        if query_length <= 0 or subject_length <= 0 or bitscore <= 0.0 or alignment_length <= 0:
+            continue
+        query_coverage = min(1.0, float(alignment_length) / float(query_length))
+        subject_coverage = min(1.0, float(alignment_length) / float(subject_length))
+        min_hit_coverage = min(query_coverage, subject_coverage)
+        if min_hit_coverage < float(min_coverage):
+            continue
+        length_product = float(query_length * subject_length)
+        record = dict(row._asdict())
+        record.update(
+            {
+                "query_length": query_length,
+                "subject_length": subject_length,
+                "length_product": length_product,
+                "query_coverage": query_coverage,
+                "subject_coverage": subject_coverage,
+                "min_coverage": min_hit_coverage,
+            }
+        )
+        rows.append(record)
+
+    if not rows:
+        return _empty_normalized_hit_table(tuple(coerced_hits.columns))
+
+    normalized_hits = pd.DataFrame.from_records(rows)
+    model = _fit_expected_bitscore_model(
+        normalized_hits,
+        top_fraction=top_fraction,
+    )
+    fallback = model is None
+    normalized_scores: list[float] = []
+    for row in normalized_hits.itertuples(index=False):
+        bitscore = _row_float(row, "bitscore", 0.0)
+        length_product = _row_float(row, "length_product", 0.0)
+        if fallback:
+            denominator = math.sqrt(max(length_product, _ORTHOGROUP_SPLIT_EPSILON))
+            normalized_scores.append(bitscore / denominator)
+            continue
+        slope, intercept = model
+        expected_bitscore = 10 ** (slope * math.log10(length_product) + intercept)
+        if not math.isfinite(expected_bitscore) or expected_bitscore <= 0.0:
+            denominator = math.sqrt(max(length_product, _ORTHOGROUP_SPLIT_EPSILON))
+            normalized_scores.append(bitscore / denominator)
+        else:
+            normalized_scores.append(bitscore / expected_bitscore)
+    normalized_hits["normalized_score"] = normalized_scores
+    normalized_hits["normalization_fallback"] = bool(fallback)
+    return normalized_hits.reset_index(drop=True)
+
+
+def _normalize_directional_hit_tables(
+    directional_tables: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+) -> dict[tuple[int, int], DataFrame]:
+    return {
+        (int(pair[0]), int(pair[1])): _normalize_directional_hit_table(
+            hits,
+            protein_map,
+        )
+        for pair, hits in directional_tables.items()
+    }
+
+
+def _cap_hits_per_query_by_normalized_score(
+    hits: DataFrame,
+    *,
+    max_hits: int,
+    distinct_subjects: bool = True,
+) -> DataFrame:
+    _validate_max_hits(max_hits, option_name="orthogroup_member_max_hits")
+    if hits.empty:
+        return hits.copy()
+    sorted_hits = _sort_hits_for_normalized_query_best(hits)
+    if distinct_subjects:
+        sorted_hits = sorted_hits.drop_duplicates(["query", "subject"], keep="first")
+    return (
+        sorted_hits.groupby("query", group_keys=False, sort=False)
+        .head(int(max_hits))
+        .reset_index(drop=True)
+    )
+
+
+def _select_normalized_best_hits_per_query(hits: DataFrame) -> DataFrame:
+    if hits.empty:
+        return hits.copy()
+    return (
+        _sort_hits_for_normalized_query_best(hits)
+        .drop_duplicates(["query", "subject"], keep="first")
+        .drop_duplicates("query", keep="first")
+        .reset_index(drop=True)
+    )
+
+
+def _select_reciprocal_best_normalized_hit_edges(
+    forward_hits: DataFrame,
+    reverse_hits: DataFrame,
+) -> DataFrame:
+    if forward_hits.empty or reverse_hits.empty:
+        return forward_hits.iloc[0:0].copy()
+    forward_best = _select_normalized_best_hits_per_query(forward_hits)
+    reverse_best = _select_normalized_best_hits_per_query(reverse_hits)
+    reverse_best_by_query = {
+        str(row.query): str(row.subject)
+        for row in reverse_best.itertuples(index=False)
+    }
+    keep_mask = [
+        reverse_best_by_query.get(str(row.subject)) == str(row.query)
+        for row in forward_best.itertuples(index=False)
+    ]
+    return forward_best.loc[keep_mask].reset_index(drop=True)
+
+
+def _select_rbnh_edge_tables(
+    normalized_tables: Mapping[tuple[int, int], DataFrame],
+) -> dict[tuple[int, int], DataFrame]:
+    unordered_pairs = sorted(
+        {
+            (min(int(query_index), int(subject_index)), max(int(query_index), int(subject_index)))
+            for query_index, subject_index in normalized_tables
+            if int(query_index) != int(subject_index)
+        }
+    )
+    rbnh_edge_tables: dict[tuple[int, int], DataFrame] = {}
+    for query_index, subject_index in unordered_pairs:
+        forward_hits = normalized_tables.get((query_index, subject_index), _empty_normalized_hit_table(COMPARISON_COLUMNS))
+        reverse_hits = normalized_tables.get((subject_index, query_index), _empty_normalized_hit_table(COMPARISON_COLUMNS))
+        rbnh_edge_tables[(query_index, subject_index)] = _select_reciprocal_best_normalized_hit_edges(
+            forward_hits,
+            reverse_hits,
+        )
+    return rbnh_edge_tables
+
+
+def _comparison_columns_only(hits: DataFrame) -> DataFrame:
+    if hits.empty:
+        return pd.DataFrame(columns=COMPARISON_COLUMNS)
+    return hits.loc[:, list(COMPARISON_COLUMNS)].copy()
+
+
+def _normalized_hit_from_row(
+    row: object,
+    protein_map: Mapping[str, CdsProtein],
+) -> _NormalizedProteinHit | None:
+    query_id = str(getattr(row, "query", ""))
+    subject_id = str(getattr(row, "subject", ""))
+    query_protein = protein_map.get(query_id)
+    subject_protein = protein_map.get(subject_id)
+    if query_protein is None or subject_protein is None:
+        return None
+    return _NormalizedProteinHit(
+        query_id=query_id,
+        subject_id=subject_id,
+        query_record_index=int(query_protein.record_index),
+        subject_record_index=int(subject_protein.record_index),
+        bitscore=_row_float(row, "bitscore", 0.0),
+        evalue=_row_float(row, "evalue", float("inf")),
+        identity=_row_float(row, "identity", 0.0),
+        alignment_length=int(_row_float(row, "alignment_length", 0.0)),
+        query_length=int(_row_float(row, "query_length", query_protein.protein_length)),
+        subject_length=int(_row_float(row, "subject_length", subject_protein.protein_length)),
+        query_coverage=_row_float(row, "query_coverage", 0.0),
+        subject_coverage=_row_float(row, "subject_coverage", 0.0),
+        normalized_score=_normalized_score_from_row(row),
+    )
+
+
+def _canonical_edge_key_from_ids(
+    query_id: str,
+    subject_id: str,
+    protein_map: Mapping[str, CdsProtein],
+) -> tuple[str, str] | None:
+    if query_id not in protein_map or subject_id not in protein_map:
+        return None
+    if protein_map[query_id].record_index == protein_map[subject_id].record_index:
+        return None
+    return _canonical_edge_endpoint_ids(query_id, subject_id, protein_map)
+
+
+def _anchor_pairs_from_edge_tables(
+    rbnh_edge_tables: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+) -> set[tuple[str, str]]:
+    anchor_pairs: set[tuple[str, str]] = set()
+    for hits in rbnh_edge_tables.values():
+        if hits is None or hits.empty:
+            continue
+        for row in hits.itertuples(index=False):
+            key = _canonical_edge_key_from_ids(str(row.query), str(row.subject), protein_map)
+            if key is not None:
+                anchor_pairs.add(key)
+    return anchor_pairs
+
+
+def _collect_distribution_evidence_edges(
+    normalized_tables: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    anchor_pairs: set[tuple[str, str]],
+    max_hits: int,
+) -> tuple[_DistributionEvidenceEdge, ...]:
+    edge_data: dict[tuple[str, str], dict[str, object]] = {}
+    for hits in normalized_tables.values():
+        if hits is None or hits.empty:
+            continue
+        capped_hits = _cap_hits_per_query_by_normalized_score(
+            hits,
+            max_hits=int(max_hits),
+            distinct_subjects=True,
+        )
+        for row in capped_hits.itertuples(index=False):
+            query_id = str(row.query)
+            subject_id = str(row.subject)
+            key = _canonical_edge_key_from_ids(query_id, subject_id, protein_map)
+            if key is None:
+                continue
+            score = _normalized_score_from_row(row)
+            if score <= 0.0:
+                continue
+            record = edge_data.setdefault(
+                key,
+                {
+                    "row": row,
+                    "rank": _normalized_hit_rank_from_row(row),
+                    "score": score,
+                    "endpoint_scores": {},
+                    "fallback": bool(getattr(row, "normalization_fallback", False)),
+                },
+            )
+            endpoint_scores = record["endpoint_scores"]
+            if isinstance(endpoint_scores, dict):
+                endpoint_scores[query_id] = max(float(endpoint_scores.get(query_id, 0.0)), score)
+            if score > float(record["score"]):
+                record["score"] = score
+            record["fallback"] = bool(record["fallback"]) and bool(getattr(row, "normalization_fallback", False))
+            rank = _normalized_hit_rank_from_row(row)
+            if rank < record["rank"]:
+                record["row"] = row
+                record["rank"] = rank
+
+    evidence_edges: list[_DistributionEvidenceEdge] = []
+    for (query_id, subject_id), record in edge_data.items():
+        endpoint_scores = record["endpoint_scores"]
+        query_score = None
+        subject_score = None
+        if isinstance(endpoint_scores, dict):
+            query_score = endpoint_scores.get(query_id)
+            subject_score = endpoint_scores.get(subject_id)
+        evidence_edges.append(
+            _DistributionEvidenceEdge(
+                query_id=query_id,
+                subject_id=subject_id,
+                row=record["row"],
+                score=float(record["score"]),
+                query_score=float(query_score) if query_score is not None else None,
+                subject_score=float(subject_score) if subject_score is not None else None,
+                is_anchor=(query_id, subject_id) in anchor_pairs,
+                fallback_normalized=bool(record["fallback"]),
+            )
+        )
+    return tuple(sorted(evidence_edges, key=_distribution_edge_sort_key))
+
+
+def _distribution_edge_sort_key(edge: _DistributionEvidenceEdge) -> tuple[float, float, float, int, str, str]:
+    return (
+        -float(edge.score),
+        _row_float(edge.row, "evalue", float("inf")),
+        -_row_float(edge.row, "identity", 0.0),
+        -int(_row_float(edge.row, "alignment_length", 0.0)),
+        edge.query_id,
+        edge.subject_id,
+    )
+
+
+def _score_valley_threshold(scores: Sequence[float], rbnh_floor: float) -> float | None:
+    unique_scores = sorted(
+        {float(score) for score in scores if math.isfinite(float(score)) and float(score) > 0.0},
+        reverse=True,
+    )
+    if len(unique_scores) < 3 or rbnh_floor <= 0.0:
+        return None
+    best_ratio = 0.0
+    best_threshold: float | None = None
+    for high_score, low_score in zip(unique_scores, unique_scores[1:]):
+        if low_score <= 0.0:
+            continue
+        ratio = high_score / low_score
+        if (
+            ratio >= _ORTHOGROUP_SPLIT_MIN_SEPARATION_RATIO
+            and high_score >= rbnh_floor * 0.5
+            and low_score < rbnh_floor * 0.9
+            and ratio > best_ratio
+        ):
+            best_ratio = ratio
+            best_threshold = (high_score + low_score) / 2.0
+    return best_threshold
+
+
+def _derive_local_thresholds(
+    normalized_tables: Mapping[tuple[int, int], DataFrame],
+    rbnh_edge_tables: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+) -> dict[str, _LocalThreshold]:
+    scores_by_protein: dict[str, list[float]] = {}
+    rbnh_scores_by_protein: dict[str, list[float]] = {}
+    for hits in normalized_tables.values():
+        if hits is None or hits.empty:
+            continue
+        for row in hits.itertuples(index=False):
+            hit = _normalized_hit_from_row(row, protein_map)
+            if hit is None or hit.query_record_index == hit.subject_record_index:
+                continue
+            if hit.normalized_score <= 0.0:
+                continue
+            scores_by_protein.setdefault(hit.query_id, []).append(hit.normalized_score)
+
+    for hits in rbnh_edge_tables.values():
+        if hits is None or hits.empty:
+            continue
+        for row in hits.itertuples(index=False):
+            hit = _normalized_hit_from_row(row, protein_map)
+            if hit is None or hit.normalized_score <= 0.0:
+                continue
+            for protein_id in (hit.query_id, hit.subject_id):
+                scores_by_protein.setdefault(protein_id, []).append(hit.normalized_score)
+                rbnh_scores_by_protein.setdefault(protein_id, []).append(hit.normalized_score)
+
+    thresholds: dict[str, _LocalThreshold] = {}
+    for protein_id, scores in sorted(scores_by_protein.items()):
+        positive_scores = [score for score in scores if score > 0.0 and math.isfinite(score)]
+        if not positive_scores:
+            continue
+        rbnh_scores = [
+            score
+            for score in rbnh_scores_by_protein.get(protein_id, [])
+            if score > 0.0 and math.isfinite(score)
+        ]
+        if rbnh_scores:
+            rbnh_floor = _stable_quantile(rbnh_scores, 0.25)
+            threshold = rbnh_floor * 0.70
+            source = "rbnh"
+            valley_threshold = _score_valley_threshold(positive_scores, rbnh_floor)
+            if valley_threshold is not None and valley_threshold > threshold:
+                threshold = valley_threshold
+                source = "valley"
+        else:
+            threshold = max(positive_scores) * 0.85
+            source = "fallback"
+        thresholds[protein_id] = _LocalThreshold(
+            protein_id=protein_id,
+            score=float(threshold),
+            source=source,
+            rbnh_count=len(rbnh_scores),
+            accepted_edge_count=0,
+        )
+    return thresholds
+
+
+def _edge_passes_local_thresholds(
+    edge: _DistributionEvidenceEdge,
+    thresholds: Mapping[str, _LocalThreshold],
+) -> bool:
+    if edge.is_anchor:
+        return True
+    query_threshold = thresholds.get(edge.query_id)
+    subject_threshold = thresholds.get(edge.subject_id)
+    query_passes = (
+        query_threshold is not None
+        and edge.query_score is not None
+        and float(edge.query_score) >= float(query_threshold.score)
+    )
+    subject_passes = (
+        subject_threshold is not None
+        and edge.subject_score is not None
+        and float(edge.subject_score) >= float(subject_threshold.score)
+    )
+    if query_threshold is not None and subject_threshold is not None:
+        return query_passes and subject_passes
+    if query_threshold is not None:
+        return query_passes
+    if subject_threshold is not None:
+        return subject_passes
+    return False
+
+
+def _select_local_threshold_edges(
+    evidence_edges: Sequence[_DistributionEvidenceEdge],
+    thresholds: Mapping[str, _LocalThreshold],
+) -> tuple[tuple[_DistributionEvidenceEdge, ...], dict[str, _LocalThreshold]]:
+    accepted_edges: list[_DistributionEvidenceEdge] = []
+    accepted_counts: dict[str, int] = {}
+    for edge in evidence_edges:
+        if not _edge_passes_local_thresholds(edge, thresholds):
+            continue
+        accepted_edges.append(edge)
+        accepted_counts[edge.query_id] = accepted_counts.get(edge.query_id, 0) + 1
+        accepted_counts[edge.subject_id] = accepted_counts.get(edge.subject_id, 0) + 1
+
+    updated_thresholds = {
+        protein_id: replace(
+            threshold,
+            accepted_edge_count=accepted_counts.get(protein_id, 0),
+        )
+        for protein_id, threshold in thresholds.items()
+    }
+    for threshold in updated_thresholds.values():
+        logger.debug(
+            "orthogroup threshold: protein=%s source=%s score=%.6g accepted_edges=%s",
+            threshold.protein_id,
+            threshold.source,
+            threshold.score,
+            threshold.accepted_edge_count,
+        )
+    return tuple(sorted(accepted_edges, key=_distribution_edge_sort_key)), updated_thresholds
+
+
+def _components_from_distribution_edges(
+    member_ids: set[str],
+    edges: Sequence[_DistributionEvidenceEdge],
+    protein_map: Mapping[str, CdsProtein],
+) -> tuple[tuple[str, ...], ...]:
+    union_find = _UnionFind()
+    for member_id in member_ids:
+        union_find.add(member_id)
+    for edge in edges:
+        if edge.query_id in member_ids and edge.subject_id in member_ids:
+            union_find.union(edge.query_id, edge.subject_id)
+    components: dict[str, set[str]] = {}
+    for member_id in member_ids:
+        components.setdefault(union_find.find(member_id), set()).add(member_id)
+    return tuple(
+        tuple(sorted(component, key=lambda protein_id: _protein_sort_key(protein_map[protein_id])))
+        for component in sorted(
+            components.values(),
+            key=lambda component: min(_protein_sort_key(protein_map[protein_id]) for protein_id in component),
+        )
+    )
+
+
+def _partition_key(child_components: Sequence[Sequence[str]]) -> tuple[tuple[str, ...], ...]:
+    return tuple(sorted(tuple(sorted(component)) for component in child_components if component))
+
+
+def _score_split_partition(
+    child_components: Sequence[Sequence[str]],
+    edges: Sequence[_DistributionEvidenceEdge],
+) -> tuple[float, float]:
+    component_by_protein: dict[str, int] = {}
+    for component_index, component in enumerate(child_components):
+        for protein_id in component:
+            component_by_protein[str(protein_id)] = component_index
+    internal_scores_by_component: dict[int, list[float]] = {}
+    cross_scores: list[float] = []
+    internal_weight = 0.0
+    cross_weight = 0.0
+    for edge in edges:
+        query_component = component_by_protein.get(edge.query_id)
+        subject_component = component_by_protein.get(edge.subject_id)
+        if query_component is None or subject_component is None:
+            continue
+        if query_component == subject_component:
+            internal_scores_by_component.setdefault(query_component, []).append(float(edge.score))
+            internal_weight += float(edge.score)
+        else:
+            cross_scores.append(float(edge.score))
+            cross_weight += float(edge.score)
+
+    within_medians = [
+        _stable_median(scores)
+        for component_index, scores in internal_scores_by_component.items()
+        if len(child_components[component_index]) >= _ORTHOGROUP_SPLIT_MIN_CHILD_SIZE and scores
+    ]
+    within_median_min = min(within_medians) if within_medians else 0.0
+    cross_p95 = _stable_quantile(cross_scores, 0.95) if cross_scores else _ORTHOGROUP_SPLIT_EPSILON
+    separation_ratio = within_median_min / max(cross_p95, _ORTHOGROUP_SPLIT_EPSILON)
+    conductance = cross_weight / max(cross_weight + internal_weight, _ORTHOGROUP_SPLIT_EPSILON)
+    return separation_ratio, conductance
+
+
+def _child_has_strong_internal_evidence(
+    child_component: Sequence[str],
+    edges: Sequence[_DistributionEvidenceEdge],
+) -> bool:
+    child_ids = {str(protein_id) for protein_id in child_component}
+    if len(child_ids) <= 1:
+        return True
+    return any(
+        edge.query_id in child_ids
+        and edge.subject_id in child_ids
+        and (edge.is_anchor or not edge.fallback_normalized)
+        for edge in edges
+    )
+
+
+def _evaluate_split_partition(
+    parent_component: Sequence[str],
+    child_components: Sequence[Sequence[str]],
+    edges: Sequence[_DistributionEvidenceEdge],
+    *,
+    threshold: float | None,
+    stability: int,
+    reason: str,
+) -> _SplitDecision:
+    normalized_children = tuple(
+        tuple(child)
+        for child in child_components
+        if child
+    )
+    parent_key = _partition_key((tuple(parent_component),))
+    child_key = _partition_key(normalized_children)
+    if len(normalized_children) < 2 or child_key == parent_key:
+        return _SplitDecision(
+            accepted=False,
+            child_components=normalized_children,
+            threshold=threshold,
+            separation_ratio=0.0,
+            conductance=1.0,
+            stability=stability,
+            reason="not_split",
+        )
+    large_children = [
+        child
+        for child in normalized_children
+        if len(child) >= _ORTHOGROUP_SPLIT_MIN_CHILD_SIZE
+    ]
+    if len(large_children) < 2:
+        return _SplitDecision(
+            accepted=False,
+            child_components=normalized_children,
+            threshold=threshold,
+            separation_ratio=0.0,
+            conductance=1.0,
+            stability=stability,
+            reason="small_child",
+        )
+    if stability < _ORTHOGROUP_SPLIT_MIN_STABILITY:
+        separation_ratio, conductance = _score_split_partition(normalized_children, edges)
+        return _SplitDecision(
+            accepted=False,
+            child_components=normalized_children,
+            threshold=threshold,
+            separation_ratio=separation_ratio,
+            conductance=conductance,
+            stability=stability,
+            reason="unstable",
+        )
+    if not all(_child_has_strong_internal_evidence(child, edges) for child in large_children):
+        separation_ratio, conductance = _score_split_partition(normalized_children, edges)
+        return _SplitDecision(
+            accepted=False,
+            child_components=normalized_children,
+            threshold=threshold,
+            separation_ratio=separation_ratio,
+            conductance=conductance,
+            stability=stability,
+            reason="fallback_only_child",
+        )
+    separation_ratio, conductance = _score_split_partition(normalized_children, edges)
+    accepted = (
+        separation_ratio >= _ORTHOGROUP_SPLIT_MIN_SEPARATION_RATIO
+        and conductance <= _ORTHOGROUP_SPLIT_MAX_CONDUCTANCE
+    )
+    return _SplitDecision(
+        accepted=accepted,
+        child_components=normalized_children,
+        threshold=threshold,
+        separation_ratio=separation_ratio,
+        conductance=conductance,
+        stability=stability,
+        reason=reason if accepted else "weak_separation",
+    )
+
+
+def _threshold_sweep_split_decision(
+    member_ids: set[str],
+    edges: Sequence[_DistributionEvidenceEdge],
+    protein_map: Mapping[str, CdsProtein],
+) -> _SplitDecision:
+    unique_scores = sorted(
+        {float(edge.score) for edge in edges if edge.query_id in member_ids and edge.subject_id in member_ids},
+        reverse=True,
+    )
+    if len(unique_scores) < 2:
+        return _SplitDecision(False, (), None, 0.0, 1.0, 0, "no_sweep_levels")
+
+    partition_counts: dict[tuple[tuple[str, ...], ...], tuple[tuple[tuple[str, ...], ...], int, float]] = {}
+    for threshold in unique_scores[:-1]:
+        kept_edges = [
+            edge
+            for edge in edges
+            if edge.query_id in member_ids
+            and edge.subject_id in member_ids
+            and float(edge.score) >= float(threshold)
+        ]
+        child_components = _components_from_distribution_edges(member_ids, kept_edges, protein_map)
+        key = _partition_key(child_components)
+        if len(key) < 2:
+            continue
+        current = partition_counts.get(key)
+        if current is None:
+            partition_counts[key] = (child_components, 1, float(threshold))
+        else:
+            components, count, first_threshold = current
+            partition_counts[key] = (components, count + 1, first_threshold)
+
+    best_decision = _SplitDecision(False, (), None, 0.0, 1.0, 0, "no_candidate")
+    for child_components, stability, threshold in partition_counts.values():
+        decision = _evaluate_split_partition(
+            tuple(sorted(member_ids)),
+            child_components,
+            edges,
+            threshold=threshold,
+            stability=stability,
+            reason="threshold_sweep",
+        )
+        if not decision.accepted:
+            continue
+        if (
+            not best_decision.accepted
+            or decision.separation_ratio > best_decision.separation_ratio
+            or (
+                decision.separation_ratio == best_decision.separation_ratio
+                and decision.conductance < best_decision.conductance
+            )
+        ):
+            best_decision = decision
+    return best_decision
+
+
+def _split_component_recursively(
+    member_ids: set[str],
+    *,
+    all_edges: Sequence[_DistributionEvidenceEdge],
+    accepted_edges: Sequence[_DistributionEvidenceEdge],
+    protein_map: Mapping[str, CdsProtein],
+) -> tuple[tuple[str, ...], ...]:
+    if len(member_ids) <= 2:
+        return (
+            tuple(sorted(member_ids, key=lambda protein_id: _protein_sort_key(protein_map[protein_id]))),
+        )
+    internal_edges = [
+        edge
+        for edge in all_edges
+        if edge.query_id in member_ids and edge.subject_id in member_ids
+    ]
+    internal_accepted_edges = [
+        edge
+        for edge in accepted_edges
+        if edge.query_id in member_ids and edge.subject_id in member_ids
+    ]
+    local_components = _components_from_distribution_edges(
+        member_ids,
+        internal_accepted_edges,
+        protein_map,
+    )
+    local_decision = _evaluate_split_partition(
+        tuple(sorted(member_ids)),
+        local_components,
+        internal_edges,
+        threshold=None,
+        stability=_ORTHOGROUP_SPLIT_MIN_STABILITY,
+        reason="local_threshold",
+    )
+    decision = local_decision
+    if not decision.accepted:
+        decision = _threshold_sweep_split_decision(member_ids, internal_edges, protein_map)
+
+    if not decision.accepted:
+        return (
+            tuple(sorted(member_ids, key=lambda protein_id: _protein_sort_key(protein_map[protein_id]))),
+        )
+
+    logger.debug(
+        "orthogroup split: members=%s accepted=true children=%s separation=%.6g conductance=%.6g",
+        len(member_ids),
+        len(decision.child_components),
+        decision.separation_ratio,
+        decision.conductance,
+    )
+    split_components: list[tuple[str, ...]] = []
+    for child_component in decision.child_components:
+        split_components.extend(
+            _split_component_recursively(
+                set(child_component),
+                all_edges=internal_edges,
+                accepted_edges=internal_accepted_edges,
+                protein_map=protein_map,
+            )
+        )
+    return tuple(split_components)
+
+
+def _representative_ids_for_distribution_groups(
+    group_member_ids: Mapping[str, set[str]],
+    evidence_edges: Sequence[_DistributionEvidenceEdge],
+    protein_map: Mapping[str, CdsProtein],
+) -> dict[str, set[str]]:
+    group_by_protein = {
+        protein_id: group_id
+        for group_id, member_ids in group_member_ids.items()
+        for protein_id in member_ids
+    }
+    member_ranks: dict[str, tuple[float, float, float, float]] = {}
+    for edge in evidence_edges:
+        if group_by_protein.get(edge.query_id) != group_by_protein.get(edge.subject_id):
+            continue
+        rank = _member_rank_from_row(edge.row)
+        if _is_better_member_rank(rank, member_ranks.get(edge.query_id)):
+            member_ranks[edge.query_id] = rank
+        if _is_better_member_rank(rank, member_ranks.get(edge.subject_id)):
+            member_ranks[edge.subject_id] = rank
+
+    representative_ids_by_group: dict[str, set[str]] = {}
+    for group_id, member_ids in group_member_ids.items():
+        members_by_record: dict[int, list[str]] = {}
+        for member_id in member_ids:
+            protein = protein_map.get(member_id)
+            if protein is None:
+                continue
+            members_by_record.setdefault(int(protein.record_index), []).append(member_id)
+        representative_ids_by_group[group_id] = set()
+        for record_member_ids in members_by_record.values():
+            representative_id = min(
+                record_member_ids,
+                key=lambda member_id: (
+                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[0],
+                    member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[1],
+                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[2],
+                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[3],
+                    str(member_id),
+                ),
+            )
+            representative_ids_by_group[group_id].add(representative_id)
+    return representative_ids_by_group
+
+
+def _build_distribution_split_orthogroups_from_normalized_tables(
+    normalized_tables: Mapping[tuple[int, int], DataFrame],
+    rbnh_edge_tables: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    include_singletons: bool,
+    member_max_hits: int,
+) -> OrthogroupResult:
+    anchor_pairs = _anchor_pairs_from_edge_tables(rbnh_edge_tables, protein_map)
+    evidence_edges = _collect_distribution_evidence_edges(
+        normalized_tables,
+        protein_map,
+        anchor_pairs=anchor_pairs,
+        max_hits=int(member_max_hits),
+    )
+    thresholds = _derive_local_thresholds(
+        normalized_tables,
+        rbnh_edge_tables,
+        protein_map,
+    )
+    accepted_edges, _updated_thresholds = _select_local_threshold_edges(
+        evidence_edges,
+        thresholds,
+    )
+
+    broad_member_ids: set[str] = set()
+    for edge in evidence_edges:
+        broad_member_ids.update((edge.query_id, edge.subject_id))
+    if include_singletons:
+        broad_member_ids.update(str(protein_id) for protein_id in protein_map)
+
+    broad_components = _components_from_distribution_edges(
+        broad_member_ids,
+        evidence_edges,
+        protein_map,
+    )
+    final_components: list[tuple[str, ...]] = []
+    for broad_component in broad_components:
+        final_components.extend(
+            _split_component_recursively(
+                set(broad_component),
+                all_edges=evidence_edges,
+                accepted_edges=accepted_edges,
+                protein_map=protein_map,
+            )
+        )
+    if include_singletons:
+        assigned_ids = {
+            protein_id
+            for component in final_components
+            for protein_id in component
+        }
+        for protein_id in sorted(
+            set(protein_map).difference(assigned_ids),
+            key=lambda member_id: _protein_sort_key(protein_map[member_id]),
+        ):
+            final_components.append((protein_id,))
+
+    final_components = sorted(
+        {
+            tuple(sorted(component, key=lambda protein_id: _protein_sort_key(protein_map[protein_id])))
+            for component in final_components
+            if component
+        },
+        key=lambda component: min(_protein_sort_key(protein_map[member_id]) for member_id in component),
+    )
+    group_member_ids: dict[str, set[str]] = {
+        f"og_{component_index}": set(component)
+        for component_index, component in enumerate(final_components, start=1)
+    }
+    group_order = list(group_member_ids)
+    representative_ids_by_group = _representative_ids_for_distribution_groups(
+        group_member_ids,
+        [edge for edge in accepted_edges if edge.is_anchor or _edge_passes_local_thresholds(edge, thresholds)],
+        protein_map,
+    )
+    group_by_protein = {
+        protein_id: group_id
+        for group_id, member_ids in group_member_ids.items()
+        for protein_id in member_ids
+    }
+
+    ortholog_edges_by_group: dict[str, list[OrthologEdge]] = {}
+    rbh_members_by_group: dict[str, set[str]] = {
+        group_id: set()
+        for group_id in group_member_ids
+    }
+    accepted_keys = {
+        (edge.query_id, edge.subject_id)
+        for edge in accepted_edges
+    }
+    for edge in sorted(evidence_edges, key=_distribution_edge_sort_key):
+        group_id = group_by_protein.get(edge.query_id)
+        if group_id is None or group_by_protein.get(edge.subject_id) != group_id:
+            continue
+        if not edge.is_anchor and (edge.query_id, edge.subject_id) not in accepted_keys:
+            continue
+        if edge.is_anchor:
+            rbh_members_by_group.setdefault(group_id, set()).update((edge.query_id, edge.subject_id))
+        existing_edge_ids = {
+            (item.query_protein_id, item.subject_protein_id, item.edge_kind)
+            for item in ortholog_edges_by_group.get(group_id, [])
+        }
+        edge_kind: OrthologEdgeKind = "rbh" if edge.is_anchor else "coortholog"
+        if (
+            (edge.query_id, edge.subject_id, edge_kind) in existing_edge_ids
+            or (edge.subject_id, edge.query_id, edge_kind) in existing_edge_ids
+        ):
+            continue
+        ortholog_edges_by_group.setdefault(group_id, []).append(
+            _make_ortholog_edge(
+                orthogroup_id=group_id,
+                source_rbh_orthogroup_id=group_id,
+                target_rbh_orthogroup_id=group_id,
+                query_id=edge.query_id,
+                subject_id=edge.subject_id,
+                row=edge.row,
+                protein_map=protein_map,
+                edge_kind=edge_kind,
+                render_role="block_anchor" if edge.is_anchor else "display_edge",
+            )
+        )
+
+    for group_id, member_ids in group_member_ids.items():
+        if not rbh_members_by_group.get(group_id):
+            rbh_members_by_group[group_id] = set(member_ids)
+
+    updated_edges_by_group, paths_by_group = _build_ortholog_paths(
+        {
+            group_id: sorted(
+                edges,
+                key=lambda edge: (
+                    edge.query_record_index,
+                    edge.subject_record_index,
+                    edge.query_protein_id,
+                    edge.subject_protein_id,
+                    edge.edge_kind,
+                ),
+            )
+            for group_id, edges in ortholog_edges_by_group.items()
+        },
+        protein_map,
+    )
+
+    return _orthogroup_result_from_member_ids(
+        group_member_ids,
+        representative_ids_by_group,
+        protein_map,
+        group_order=group_order,
+        rbh_orthogroups={
+            group_id: tuple(
+                sorted(member_ids, key=lambda member_id: _protein_sort_key(protein_map[member_id]))
+            )
+            for group_id, member_ids in rbh_members_by_group.items()
+        },
+        ortholog_edges_by_orthogroup_id=updated_edges_by_group,
+        ortholog_paths_by_orthogroup_id=paths_by_group,
+        related_edges_by_orthogroup_id={},
+    )
+
+
+def _select_distribution_split_orthogroup_edges_from_directional_hits(
+    directional_hits_by_pair: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    record_count: int | None,
+    include_singletons: bool,
+    orthogroup_member_max_hits: int,
+    max_related_edges_per_orthogroup: int,
+) -> OrthogroupEdgeSelectionResult:
+    if int(max_related_edges_per_orthogroup) <= 0:
+        raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
+    normalized_tables = _normalize_directional_hit_tables(
+        directional_hits_by_pair,
+        protein_map,
+    )
+    rbnh_edge_tables = _select_rbnh_edge_tables(normalized_tables)
+    if record_count is None:
+        record_count = 0
+        for query_index, subject_index in normalized_tables:
+            record_count = max(record_count, int(query_index) + 1, int(subject_index) + 1)
+
+    all_edges_by_pair = {
+        pair: _comparison_columns_only(table)
+        for pair, table in rbnh_edge_tables.items()
+    }
+    adjacent_anchor_edges_by_pair = {
+        pair: _comparison_columns_only(table)
+        for pair, table in rbnh_edge_tables.items()
+        if int(pair[1]) == int(pair[0]) + 1
+    }
+    for query_index in range(max(0, int(record_count) - 1)):
+        adjacent_anchor_edges_by_pair.setdefault(
+            (query_index, query_index + 1),
+            _empty_comparison_hits(),
+        )
+
+    orthogroups = _build_distribution_split_orthogroups_from_normalized_tables(
+        normalized_tables,
+        rbnh_edge_tables,
+        protein_map,
+        include_singletons=include_singletons,
+        member_max_hits=int(orthogroup_member_max_hits),
+    )
+    adjacent_display_edges_by_pair = _build_adjacent_display_edges_by_pair(
+        adjacent_anchor_edges_by_pair,
+        orthogroups,
+        record_count=int(record_count),
+        max_display_edges_per_orthogroup=int(max_related_edges_per_orthogroup),
+    )
+    return OrthogroupEdgeSelectionResult(
+        orthogroups=orthogroups,
+        all_edges_by_pair=all_edges_by_pair,
+        adjacent_anchor_edges_by_pair=adjacent_anchor_edges_by_pair,
+        adjacent_display_edges_by_pair=adjacent_display_edges_by_pair,
     )
 
 
@@ -1671,6 +2831,20 @@ def expand_orthogroup_membership_from_evidence(
     _validate_max_hits(member_max_hits, option_name="orthogroup_member_max_hits")
     if int(max_related_edges_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
+
+    if normalized_mode == "distribution_split":
+        normalized_tables = _normalize_directional_hit_tables(
+            directional_tables,
+            protein_map,
+        )
+        rbnh_edge_tables = _select_rbnh_edge_tables(normalized_tables)
+        return _build_distribution_split_orthogroups_from_normalized_tables(
+            normalized_tables,
+            rbnh_edge_tables,
+            protein_map,
+            include_singletons=set(seed_orthogroups.member_by_protein_id) == set(protein_map),
+            member_max_hits=int(member_max_hits),
+        )
 
     rbh_orthogroups = _member_ids_for_result(seed_orthogroups)
     group_order = list(seed_orthogroups.orthogroups)
@@ -2590,6 +3764,17 @@ def select_rbh_orthogroup_edges_from_directional_hits(
     anchors separate from additional non-anchor display edges.
     """
 
+    normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
+    if normalized_membership_mode == "distribution_split":
+        return _select_distribution_split_orthogroup_edges_from_directional_hits(
+            directional_hits_by_pair,
+            protein_map,
+            record_count=record_count,
+            include_singletons=include_singletons,
+            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
+        )
+
     unordered_pairs = sorted(
         {
             (min(int(query_index), int(subject_index)), max(int(query_index), int(subject_index)))
@@ -2628,7 +3813,7 @@ def select_rbh_orthogroup_edges_from_directional_hits(
         all_edges_by_pair,
         directional_hits_by_pair,
         protein_map,
-        membership_mode=orthogroup_membership_mode,
+        membership_mode=normalized_membership_mode,
         member_max_hits=orthogroup_member_max_hits,
         max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
     )

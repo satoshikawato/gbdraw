@@ -1108,8 +1108,9 @@
                                         </div>
                                         <template v-if="losat.blastp.mode !== 'pairwise'">
                                             <div>
-                                                <label class="text-[9px] flex items-center">Membership <help-tip text="Family merge groups connected RBH families and adds strong non-RBH family members by default; RBH keeps only reciprocal-best-hit groups."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Membership <help-tip text="Distribution split refines broad homologous families by normalized score structure; Family merge keeps connected RBH families; RBH keeps only reciprocal-best-hit groups."></help-tip></label>
                                                 <select v-model="losat.blastp.orthogroupMembershipMode" class="form-input px-1 py-0.5 text-xs">
+                                                    <option value="distribution_split">Distribution split</option>
                                                     <option value="family_merge">Family merge</option>
                                                     <option value="rbh">RBH</option>
                                                 </select>

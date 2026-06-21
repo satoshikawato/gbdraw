@@ -254,7 +254,7 @@ def _get_args(args) -> argparse.Namespace:
         '--orthogroup_membership_mode',
         '--orthogroup-membership-mode',
         dest='orthogroup_membership_mode',
-        help='Orthogroup membership policy for LOSATP Orthogroup/Collinear modes: rbh or family_merge (default: family_merge).',
+        help='Orthogroup membership policy for LOSATP Orthogroup/Collinear modes: rbh, family_merge, or distribution_split (default: family_merge).',
         type=_parse_orthogroup_membership_mode,
         choices=ORTHOGROUP_MEMBERSHIP_MODES,
         default='family_merge')
