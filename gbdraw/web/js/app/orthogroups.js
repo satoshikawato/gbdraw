@@ -31,6 +31,9 @@ const downloadTextFile = (filename, text, type = 'text/plain;charset=utf-8') => 
   link.href = url;
   link.download = filename;
   document.body.appendChild(link);
+  link.addEventListener('click', (event) => {
+    event.stopPropagation();
+  }, { once: true });
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);

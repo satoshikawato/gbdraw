@@ -44,6 +44,9 @@ const downloadTextFile = (filename, text) => {
   const link = document.createElement('a');
   link.href = url;
   link.download = safeName;
+  link.addEventListener('click', (event) => {
+    event.stopPropagation();
+  }, { once: true });
   link.click();
   URL.revokeObjectURL(url);
 };

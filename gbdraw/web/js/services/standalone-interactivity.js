@@ -2930,6 +2930,9 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     link.style.display = 'none';
     var parent = document.body || document.documentElement;
     parent.appendChild(link);
+    link.addEventListener('click', function (event) {
+      event.stopPropagation();
+    }, { once: true });
     link.click();
     if (link.parentNode) {
       link.parentNode.removeChild(link);

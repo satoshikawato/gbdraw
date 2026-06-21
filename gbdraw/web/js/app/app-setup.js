@@ -1436,6 +1436,9 @@ export const createAppSetup = () => {
     link.href = url;
     link.download = String(filename || 'gbdraw.txt');
     document.body.appendChild(link);
+    link.addEventListener('click', (event) => {
+      event.stopPropagation();
+    }, { once: true });
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);

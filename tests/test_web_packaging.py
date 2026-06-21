@@ -415,6 +415,23 @@ def test_index_cloaks_vue_template_until_mount() -> None:
     assert "#app:not([v-cloak]) + #app-boot-splash" in index_html
 
 
+def test_download_helpers_stop_synthetic_link_clicks_from_closing_popups() -> None:
+    source_paths = [
+        WEB_ROOT / "js" / "app" / "app-setup.js",
+        WEB_ROOT / "js" / "app" / "orthogroups.js",
+        WEB_ROOT / "js" / "app" / "run-analysis.js",
+        WEB_ROOT / "js" / "app" / "feature-editor" / "label-actions.js",
+        WEB_ROOT / "js" / "services" / "export.js",
+        WEB_ROOT / "js" / "services" / "standalone-interactivity.js",
+    ]
+    for source_path in source_paths:
+        source = source_path.read_text(encoding="utf-8")
+        for match in re.finditer(r"link\.click\(\);", source):
+            preceding_source = source[max(0, match.start() - 260):match.start()]
+            assert "link.addEventListener('click'" in preceding_source, source_path
+            assert "event.stopPropagation();" in preceding_source, source_path
+
+
 def test_index_includes_preprint_citation() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "How to cite" in index_html
