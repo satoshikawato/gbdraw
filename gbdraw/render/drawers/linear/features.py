@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import hashlib
 from typing import Optional
 
 from svgwrite.container import Group
 from svgwrite.path import Path
 
 from ....configurators import FeatureDrawingConfigurator
+from ....features.ids import compute_feature_object_hash
 from ....svg.linear_features import (
     create_arrowhead_path_linear,
     create_intron_path_linear,
@@ -29,24 +29,7 @@ class FeatureDrawer:
 
     @staticmethod
     def get_feature_data_id(feature_object) -> Optional[str]:
-        """
-        Generate a stable identifier for SVG id attribute.
-        Hashes feature properties (record id, type, start, end, strand) to create a unique ID.
-        Must use original coordinates (not processed location) to match colors.py compute_feature_hash().
-        """
-        # Use original coordinates (SimpleLocation from BioPython) for consistent hashing
-        coords = getattr(feature_object, 'coordinates', None)
-        if not coords:
-            return None
-        coord = coords[0]  # First SimpleLocation
-        feat_type = getattr(feature_object, 'feature_type', '') or ''
-        record_id = getattr(feature_object, 'record_id', None)
-        # Use integer strand directly from SimpleLocation
-        if record_id is not None:
-            key = f"{record_id}:{feat_type}:{int(coord.start)}:{int(coord.end)}:{coord.strand}"
-        else:
-            key = f"{feat_type}:{int(coord.start)}:{int(coord.end)}:{coord.strand}"
-        return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+        return compute_feature_object_hash(feature_object)
 
     def draw_path(
         self,

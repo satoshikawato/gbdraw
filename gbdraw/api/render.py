@@ -9,35 +9,25 @@ from typing import Iterable, Sequence
 
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import GbdrawError, ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.render import export as _export  # type: ignore[reportMissingImports]
+from gbdraw.render.formats import (
+    CAIROSVG_FORMATS,
+    INTERACTIVE_SVG_FORMAT,
+    SVG_FORMAT,
+    classify_formats,
+    normalize_format_sequence,
+    normalize_format_token,
+    resolve_format_output_path,
+    resolve_output_paths,
+)
+from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 
 logger = logging.getLogger(__name__)
 
-_ACCEPTED_FORMATS = {"svg", "png", "eps", "ps", "pdf"}
-
 
 def _normalize_formats(formats: Sequence[str] | str | None) -> list[str]:
-    if formats is None:
-        return ["svg"]
-    if isinstance(formats, str):
-        return _export.parse_formats(formats)
-    out: list[str] = []
-    for fmt in formats:
-        if fmt is None:
-            continue
-        value = str(fmt).strip().lower()
-        if not value:
-            continue
-        if value not in _ACCEPTED_FORMATS:
-            logger.warning("WARNING: Unaccepted/unrecognized output file format: %s", value)
-            continue
-        if value not in out:
-            out.append(value)
-    if not out:
-        logger.warning("WARNING: No valid output file format was specified; generate a PNG file.")
-        return ["png"]
-    return out
+    return normalize_format_sequence(formats, logger=logger)
 
 
 def _resolve_base_prefix(canvas: Drawing, output_prefix: str | None, output_dir: str | None) -> str:
@@ -73,6 +63,7 @@ def save_figure_to(
     output_dir: str | None = None,
     output_prefix: str | None = None,
     overwrite: bool = False,
+    interactive_context: InteractiveSvgContext | None = None,
 ) -> list[str]:
     """Save a figure to an explicit output directory/prefix.
 
@@ -82,21 +73,30 @@ def save_figure_to(
 
     fmt_list = _normalize_formats(formats)
     base_prefix = _resolve_base_prefix(canvas, output_prefix, output_dir)
-    svg_filename = f"{base_prefix}.svg"
+    svg_filename = resolve_format_output_path(base_prefix, SVG_FORMAT)
 
-    # Always save SVG (base format).
-    output_paths = [svg_filename]
-    for fmt in fmt_list:
-        if fmt == "svg":
-            continue
-        output_paths.append(f"{base_prefix}.{fmt}")
+    output_paths = resolve_output_paths(base_prefix, fmt_list, include_base_svg=True)
 
     _ensure_overwrite_ok(output_paths, overwrite)
 
     canvas.saveas(svg_filename)
     logger.info("Generated SVG: %s", svg_filename)
 
-    formats_to_process = [f for f in fmt_list if f != "svg"]
+    classification = classify_formats(fmt_list)
+    svg_source = canvas.tostring()
+    if classification.interactive:
+        interactive_filename = resolve_format_output_path(base_prefix, "interactive-svg")
+        try:
+            interactive_svg = enrich_svg(svg_source, context=interactive_context)
+        except GbdrawError:
+            raise
+        except Exception as exc:
+            raise GbdrawError(f"Interactive SVG export failed: {exc}") from exc
+        with open(interactive_filename, "w", encoding="utf-8") as handle:
+            handle.write(interactive_svg)
+        logger.info("Generated interactive SVG: %s", interactive_filename)
+
+    formats_to_process = list(classification.cairosvg)
     if not formats_to_process:
         return output_paths
 
@@ -115,9 +115,11 @@ def save_figure_to(
         return output_paths
 
     try:
-        svg_bytes = canvas.tostring().encode("utf-8")
+        svg_bytes = svg_source.encode("utf-8")
         for fmt in formats_to_process:
-            out_file = f"{base_prefix}.{fmt}"
+            if fmt not in CAIROSVG_FORMATS:
+                continue
+            out_file = resolve_format_output_path(base_prefix, fmt)
             if fmt == "png":
                 cairosvg_module.svg2png(bytestring=svg_bytes, write_to=out_file)
             elif fmt == "pdf":
@@ -136,12 +138,14 @@ def save_figure_to(
 def render_to_bytes(canvas: Drawing, fmt: str) -> bytes:
     """Render a canvas to bytes (SVG always; PNG/PDF/PS/EPS require CairoSVG)."""
 
-    fmt_norm = str(fmt).strip().lower().lstrip(".")
+    fmt_norm = normalize_format_token(fmt)
     if not fmt_norm:
         raise ValidationError("Format must be specified (e.g., 'svg', 'png').")
 
     if fmt_norm == "svg":
         return canvas.tostring().encode("utf-8")
+    if fmt_norm == INTERACTIVE_SVG_FORMAT:
+        return enrich_svg(canvas.tostring()).encode("utf-8")
 
     if "pyodide" in sys.modules:
         raise ValidationError("Binary export is not available under WebAssembly (pyodide).")

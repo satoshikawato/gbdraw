@@ -24,6 +24,11 @@ _PYTHON_RUNTIME_PACKAGE_DATA = [
     "data/*.ttf",
 ]
 
+_NATIVE_RUNTIME_PACKAGE_DATA = [
+    "bin/*/losat",
+    "bin/*/losat.exe",
+]
+
 _WEB_APP_PACKAGE_DATA = [
     "web/index.html",
     "web/open-source-notices.html",
@@ -77,6 +82,7 @@ _WEB_APP_PACKAGE_DATA = [
 BROWSER_WHEEL_MAX_BYTES = 20 * 1024 * 1024
 
 _BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
+    "gbdraw/bin/",
     "gbdraw/web/assets/",
     "gbdraw/web/gallery/",
     "gbdraw/web/js/",
@@ -98,6 +104,7 @@ def is_browser_wheel_build() -> bool:
 def get_package_data_patterns(*, include_browser_wheel: bool) -> list[str]:
     patterns = list(_PYTHON_RUNTIME_PACKAGE_DATA)
     if not is_browser_wheel_build():
+        patterns.extend(_NATIVE_RUNTIME_PACKAGE_DATA)
         patterns.extend(_WEB_APP_PACKAGE_DATA)
     if include_browser_wheel and not is_browser_wheel_build():
         patterns.insert(3, f"web/{expected_browser_wheel_name()}")

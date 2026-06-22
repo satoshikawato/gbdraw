@@ -1813,14 +1813,8 @@ def test_linear_cli_builds_and_saves_native_collinearity(
             "1",
             "--collinear_unit_mode",
             "cds",
-            "--collinear_anchor_mode",
-            "all",
             "--collinear_search_scope",
             "all",
-            "--orthogroup_membership_mode",
-            "family_merge",
-            "--orthogroup_member_max_hits",
-            "3",
             "--collinear_block_merge_gap",
             "12",
             "--collinear_singleton_merge_gap",
@@ -1845,13 +1839,34 @@ def test_linear_cli_builds_and_saves_native_collinearity(
     assert captured["edge_mode"] == "rbh"
     assert captured["search_scope"] == "all"
     assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
-    assert captured["orthogroup_member_max_hits"] == 3
+    assert captured["orthogroup_member_max_hits"] == 5
     assert captured["max_paralog_links_per_orthogroup"] == 2
     assert captured["protein_blastp_mode"] == "none"
     comparisons = captured["protein_comparisons"]
     assert isinstance(comparisons, list)
     assert comparisons[0].iloc[0]["collinearity_color_mode"] == "orientation"
     assert "block_0001" in save_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.linear
+def test_linear_cli_help_omits_removed_collinearity_options(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        linear_cli_module._get_args(["--help"])
+
+    assert exc_info.value.code == 0
+    help_text = capsys.readouterr().out
+    removed_option_names = [
+        "orthogroup_membership_mode",
+        "orthogroup-membership-mode",
+        "orthogroup_member_max_hits",
+        "orthogroup-member-max-hits",
+        "collinear_anchor_mode",
+        "collinear-anchor-mode",
+        "collinear_orthogroup_edge_mode",
+        "collinear-orthogroup-edge-mode",
+    ]
+    for option_name in removed_option_names:
+        assert f"--{option_name}" not in help_text
 
 
 @pytest.mark.linear

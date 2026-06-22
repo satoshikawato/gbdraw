@@ -14,19 +14,23 @@ from .io.genome import load_gbks, load_gff_fasta
 from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
+from .render.formats import INTERACTIVE_SVG_FORMAT
+from .render.interactive_svg import InteractiveSvgContext
+from .web_support.feature_metadata import extract_features_from_records_payload
+from .web_support.orthogroup_metadata import (
+    enrich_features_with_orthogroups,
+    serialize_orthogroups_payload,
+)
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
 from .analysis.collinearity import (
     LosslessCollinearityParameters,
     build_orthogroup_collinearity_blocks,
     convert_collinearity_blocks_to_comparisons,
-    normalize_collinearity_anchor_mode,
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
     ORTHOGROUP_INFERENCE_VERSION,
-    ORTHOGROUP_MEMBERSHIP_MODES,
     PROTEIN_BLASTP_MODES,
-    normalize_orthogroup_membership_mode,
 )
 from .io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
@@ -84,6 +88,33 @@ def _parse_optional_nonnegative_float(value: str) -> float | None:
 # Setup for the logging system
 logger = logging.getLogger()
 setup_logging()
+
+
+def _build_interactive_svg_context(
+    records,
+    selected_features,
+    orthogroups=None,
+) -> InteractiveSvgContext:
+    try:
+        payload = extract_features_from_records_payload(
+            records,
+            selected_features=selected_features,
+        )
+        orthogroup_payload = serialize_orthogroups_payload(orthogroups)
+        features = payload.get("features", [])
+        if orthogroup_payload:
+            features = enrich_features_with_orthogroups(features, orthogroup_payload)
+    except Exception as exc:
+        logger.warning(
+            "WARNING: Rich interactive feature metadata could not be generated; "
+            "falling back to rendered SVG feature metadata. %s",
+            exc,
+        )
+        return InteractiveSvgContext()
+    return InteractiveSvgContext(
+        features=features,
+        orthogroups=orthogroup_payload,
+    )
 
 def _parse_linear_label_placement(value: str) -> str:
     normalized = str(value).strip().lower()
@@ -143,24 +174,9 @@ def _parse_collinear_color_mode(value: str) -> str:
     return normalized
 
 
-def _parse_collinear_anchor_mode(value: str) -> str:
-    try:
-        normalize_collinearity_anchor_mode(value)
-    except ValidationError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-    return "rbh"
-
-
 def _parse_collinear_search_scope(value: str) -> str:
     try:
         return normalize_collinearity_search_scope(value)
-    except ValidationError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-
-
-def _parse_orthogroup_membership_mode(value: str) -> str:
-    try:
-        return normalize_orthogroup_membership_mode(value)
     except ValidationError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
@@ -253,21 +269,6 @@ def _get_args(args) -> argparse.Namespace:
         type=_parse_optional_positive_int,
         default=None)
     parser.add_argument(
-        '--orthogroup_membership_mode',
-        '--orthogroup-membership-mode',
-        dest='orthogroup_membership_mode',
-        help='Orthogroup inference model for LOSATP Orthogroup/Collinear modes. Legacy values rbh, family_merge, and distribution_split are accepted as aliases for anchor_core_v1 (default: anchor_core_v1).',
-        type=_parse_orthogroup_membership_mode,
-        choices=ORTHOGROUP_MEMBERSHIP_MODES,
-        default=ORTHOGROUP_INFERENCE_VERSION)
-    parser.add_argument(
-        '--orthogroup_member_max_hits',
-        '--orthogroup-member-max-hits',
-        dest='orthogroup_member_max_hits',
-        help='Deprecated compatibility option; anchor_core_v1 inference no longer caps membership evidence with this value (default: 5).',
-        type=int,
-        default=5)
-    parser.add_argument(
         '--align_orthogroup_feature',
         '--align-orthogroup-feature',
         dest='align_orthogroup_feature',
@@ -281,16 +282,6 @@ def _get_args(args) -> argparse.Namespace:
         help=argparse.SUPPRESS,
         choices=["auto", "cds", "locus"],
         default='auto')
-    parser.add_argument(
-        '--collinear_anchor_mode',
-        '--collinear-anchor-mode',
-        '--collinear_orthogroup_edge_mode',
-        '--collinear-orthogroup-edge-mode',
-        dest='collinear_anchor_mode',
-        help='Deprecated compatibility option. Collinear blocks always use RBH anchors (default: rbh).',
-        type=_parse_collinear_anchor_mode,
-        choices=["all", "one_to_one", "rbh"],
-        default='rbh')
     parser.add_argument(
         '--collinear_search_scope',
         '--collinear-search-scope',
@@ -840,7 +831,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-f',
         '--format',
-        help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg; non-SVG requires CairoSVG).',
+        help='Comma-separated list of output file formats (svg, interactive-svg, png, pdf, eps, ps; default: svg; png/pdf/eps/ps require CairoSVG).',
         type=str,
         default="svg")
     parser.add_argument(
@@ -983,8 +974,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--save_collinear_blocks requires --protein_blastp_mode collinear or --collinear_blocks")
     if args.protein_blastp_max_hits <= 0:
         parser.error("--protein_blastp_max_hits must be > 0")
-    if args.orthogroup_member_max_hits <= 0:
-        parser.error("--orthogroup_member_max_hits must be > 0")
     if args.losatp_threads is not None and args.losatp_threads <= 0:
         parser.error("--losatp_threads must be > 0")
     if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
@@ -1162,11 +1151,11 @@ def linear_main(cmd_args) -> None:
     losatp_threads: int | None = args.losatp_threads
     protein_blastp_max_hits: int = args.protein_blastp_max_hits
     protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
-    orthogroup_membership_mode: str = str(args.orthogroup_membership_mode or ORTHOGROUP_INFERENCE_VERSION)
-    orthogroup_member_max_hits: int = args.orthogroup_member_max_hits
+    orthogroup_membership_mode: str = ORTHOGROUP_INFERENCE_VERSION
+    orthogroup_member_max_hits: int = 5
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
     collinear_unit_mode: str = str(args.collinear_unit_mode or "auto")
-    collinear_anchor_mode: str = str(args.collinear_anchor_mode or "rbh")
+    collinear_anchor_mode: str = "rbh"
     collinear_search_scope: str = str(args.collinear_search_scope or "adjacent")
     collinear_color_mode: str = str(args.collinear_color_mode or "orientation")
     collinear_blocks_path: str = str(args.collinear_blocks or "").strip()
@@ -1475,6 +1464,7 @@ def linear_main(cmd_args) -> None:
         record_count=len(records),
     )
     collinearity_comparisons: list[DataFrame] | None = None
+    collinearity_orthogroups = None
     if collinear_blocks_path:
         collinearity_result = parse_native_collinearity_tsv(
             collinear_blocks_path,
@@ -1482,6 +1472,7 @@ def linear_main(cmd_args) -> None:
             params=collinearity_params,
             unit_mode=collinear_unit_mode,
         )
+        collinearity_orthogroups = collinearity_result.orthogroups
         collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
             collinearity_result,
             records=records,
@@ -1505,6 +1496,7 @@ def linear_main(cmd_args) -> None:
             edge_mode=collinear_anchor_mode,
             search_scope=collinear_search_scope,
         )
+        collinearity_orthogroups = collinearity_result.orthogroups
         collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
             collinearity_result,
             records=records,
@@ -1550,6 +1542,7 @@ def linear_main(cmd_args) -> None:
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,
         protein_comparisons=collinearity_comparisons,
+        orthogroups=collinearity_orthogroups,
         protein_blastp_mode="none" if collinearity_comparisons is not None else protein_blastp_mode,
         losatp_bin=losatp_bin,
         losatp_threads=losatp_threads,
@@ -1566,7 +1559,18 @@ def linear_main(cmd_args) -> None:
         alignment_length=alignment_length,
         cfg=cfg,
     )
-    save_figure(canvas, out_formats)
+    if INTERACTIVE_SVG_FORMAT in out_formats:
+        save_figure(
+            canvas,
+            out_formats,
+            interactive_context=_build_interactive_svg_context(
+                records,
+                selected_features_set,
+                getattr(canvas, "_gbdraw_orthogroups", None) or collinearity_orthogroups,
+            ),
+        )
+    else:
+        save_figure(canvas, out_formats)
 
 
 if __name__ == "__main__":

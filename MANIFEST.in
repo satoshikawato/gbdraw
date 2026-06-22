@@ -3,6 +3,7 @@ include gbdraw/data/config.toml
 include gbdraw/data/*.ttf
 include gbdraw/web/index.html
 include gbdraw/web/*.whl
+recursive-include gbdraw/bin *
 recursive-include gbdraw/web/gallery *.html *.css *.js *.json *.svg *.webp
 recursive-include gbdraw/web/assets *.ico *.png *.svg
 recursive-include gbdraw/web/js *.js

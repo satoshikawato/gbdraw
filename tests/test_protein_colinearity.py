@@ -664,12 +664,55 @@ def test_run_losatp_blastp_passes_num_threads(monkeypatch: pytest.MonkeyPatch) -
 
     command = captured["command"]
     assert command[0:2] == ["custom-losat", "blastp"]
-    assert "-max_hsps_per_subject" in command
-    assert command[command.index("-max_hsps_per_subject") + 1] == "1"
-    assert "-max_target_seqs" in command
-    assert command[command.index("-max_target_seqs") + 1] == "3"
+    assert "--max-hsps-per-subject" in command
+    assert command[command.index("--max-hsps-per-subject") + 1] == "1"
+    assert "--max-target-seqs" in command
+    assert command[command.index("--max-target-seqs") + 1] == "3"
     assert "--num-threads" in command
     assert command[command.index("--num-threads") + 1] == "4"
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_uses_bundled_binary_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    bundled_losat = tmp_path / "losat"
+    bundled_losat.write_text("#!/bin/sh\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "_bundled_losatp_resource",
+        lambda: bundled_losat,
+    )
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    protein_colinearity_module.run_losatp_blastp(
+        ">query\nM\n",
+        ">subject\nM\n",
+    )
+
+    command = captured["command"]
+    assert command[0:2] == [str(bundled_losat), "blastp"]
+
+
+@pytest.mark.linear
+def test_bundled_losatp_platform_dir_is_platform_specific(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(protein_colinearity_module.sys, "platform", "linux")
+    monkeypatch.setattr(protein_colinearity_module.platform, "machine", lambda: "x86_64")
+    assert protein_colinearity_module._bundled_losatp_platform_dir() == "linux-x86_64"
+
+    monkeypatch.setattr(protein_colinearity_module.sys, "platform", "darwin")
+    monkeypatch.setattr(protein_colinearity_module.platform, "machine", lambda: "arm64")
+    assert protein_colinearity_module._bundled_losatp_platform_dir() == "macos-arm64"
 
 
 @pytest.mark.linear
@@ -689,7 +732,7 @@ def test_run_losatp_blastp_omits_hsp_cap_when_requested(monkeypatch: pytest.Monk
         max_hsps_per_subject=None,
     )
 
-    assert "-max_hsps_per_subject" not in captured["command"]
+    assert "--max-hsps-per-subject" not in captured["command"]
 
 
 @pytest.mark.linear

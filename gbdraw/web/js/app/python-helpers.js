@@ -319,15 +319,17 @@ def _web_transform_cds_span(start, end, strand, view_transform):
     return display_start, display_end, display_strand
 
 def _compute_web_feature_svg_id(record_id, feature_type, start, end, strand):
-    import hashlib
+    from gbdraw.features.ids import compute_feature_hash_from_parts
 
     normalized_record_id = str(record_id or "")
     normalized_type = str(feature_type or "CDS")
-    if normalized_record_id:
-        key = f"{normalized_record_id}:{normalized_type}:{int(start)}:{int(end)}:{strand}"
-    else:
-        key = f"{normalized_type}:{int(start)}:{int(end)}:{strand}"
-    return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+    return compute_feature_hash_from_parts(
+        normalized_type,
+        int(start),
+        int(end),
+        strand,
+        record_id=normalized_record_id or None,
+    )
 
 def _display_feature_svg_id_from_data(data, display_start, display_end, display_strand, view_transform):
     normalized = _normalize_web_view_transform(view_transform)

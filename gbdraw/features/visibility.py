@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from typing import Any, Optional, Sequence
@@ -14,6 +13,7 @@ from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
 from .colors import compute_feature_hash
+from .ids import compute_feature_hash_from_parts
 
 logger = logging.getLogger(__name__)
 
@@ -269,11 +269,13 @@ def _get_feature_hash(feature: Any, record_id: Optional[str]) -> Optional[str]:
         return None
     start, end, strand = first_part
     normalized_strand = _normalize_strand_for_hash(strand)
-    if resolved_record_id is not None:
-        key = f"{resolved_record_id}:{feature_type}:{start}:{end}:{normalized_strand}"
-    else:
-        key = f"{feature_type}:{start}:{end}:{normalized_strand}"
-    return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+    return compute_feature_hash_from_parts(
+        feature_type,
+        start,
+        end,
+        normalized_strand,
+        record_id=resolved_record_id,
+    )
 
 
 def _get_feature_location_str(feature: Any) -> Optional[str]:

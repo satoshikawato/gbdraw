@@ -176,8 +176,9 @@ options:
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 14 (pt) for
                         genomes <= 50 kb, 8 for genomes >= 50 kb)
-  -f, --format FORMAT   Comma-separated list of output file formats (svg, png,
-                        pdf, eps, ps; default: svg).
+  -f, --format FORMAT   Comma-separated list of output file formats (svg,
+                        interactive-svg, png, pdf, eps, ps; default: svg).
+                        PNG/PDF/EPS/PS require CairoSVG.
   --suppress_gc         Suppress GC content track (default: False).
   --suppress_skew       Suppress GC skew track (default: False).
   --conservation_blast BLAST [BLAST ...]
@@ -378,8 +379,6 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--losatp_bin LOSATP_BIN]
               [--losatp_threads LOSATP_THREADS]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
-              [--orthogroup_membership_mode {rbh,family_merge,distribution_split}]
-              [--orthogroup_member_max_hits ORTHOGROUP_MEMBER_MAX_HITS]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
               [--collinear_color_mode {average_identity,orientation,orientation_identity}]
@@ -463,17 +462,6 @@ options:
                         LOSATP blastp mode: none, pairwise adjacent ribbons,
                         all-record Orthogroups, or Collinear blocks (default:
                         none).
-  --orthogroup_membership_mode, --orthogroup-membership-mode {rbh,family_merge,distribution_split}
-                        Orthogroup membership policy for LOSATP Orthogroup or
-                        Collinear modes. rbh preserves legacy reciprocal-best-
-                        hit membership; family_merge explicitly merges
-                        connected RBH families and adds strong non-RBH family
-                        members; distribution_split refines broad families by
-                        normalized hit-score structure (default: family_merge).
-  --orthogroup_member_max_hits, --orthogroup-member-max-hits ORTHOGROUP_MEMBER_MAX_HITS
-                        Maximum filtered candidate hits per protein used for
-                        family-merge orthogroup membership expansion (default:
-                        5).
   --collinear_min_anchors, --collinear-min-anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block. The default 1 includes singleton
@@ -613,8 +601,9 @@ options:
   --ruler_on_axis       Use each record axis as the ruler in linear mode.
                         Effective only with --scale_style ruler and
                         --track_layout above|below.
-  -f, --format FORMAT   Comma-separated list of output file formats (svg, png,
-                        pdf, eps, ps; default: svg).
+  -f, --format FORMAT   Comma-separated list of output file formats (svg,
+                        interactive-svg, png, pdf, eps, ps; default: svg).
+                        PNG/PDF/EPS/PS require CairoSVG.
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
                         "top", "bottom", "none")
   --show_labels [{all,first,none}]
