@@ -1,5 +1,6 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
+import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
@@ -1394,6 +1395,50 @@ const reconcileDepthTrackStateAfterSessionFiles = () => {
   );
 };
 
+const clearObject = (target) => {
+  Object.keys(target).forEach((key) => {
+    delete target[key];
+  });
+};
+
+const resetSessionBaseline = () => {
+  resetSettingsState(state);
+  resetLayoutState(state);
+  state.mode.value = 'circular';
+  state.cInputType.value = 'gb';
+  state.lInputType.value = 'gb';
+  state.sessionTitle.value = '';
+  state.errorLog.value = null;
+  state.results.value = [];
+  state.selectedResultIndex.value = 0;
+  applyFiles(null);
+  state.losatCache.value = new Map();
+  state.losatCacheInfo.value = [];
+  state.orthogroups.value = [];
+  state.featureOrthogroupIndex.value = new Map();
+  state.selectedOrthogroupId.value = '';
+  state.selectedOrthogroupAlignmentFeature.value = '';
+  clearObject(state.orthogroupNameOverrides);
+  clearObject(state.orthogroupDescriptionOverrides);
+  state.extractedFeatures.value = [];
+  state.featureRecordIds.value = [];
+  state.selectedFeatureRecordIdx.value = 0;
+  clearObject(state.featureColorOverrides);
+  clearObject(state.featureVisibilityOverrides);
+  clearObject(state.labelTextFeatureOverrides);
+  clearObject(state.labelTextBulkOverrides);
+  clearObject(state.labelTextFeatureOverrideSources);
+  clearObject(state.labelVisibilityOverrides);
+  state.labelOverrideContextKey.value = '';
+  state.labelOverrideBuildWarning.value = '';
+  state.generatedMode.value = 'circular';
+  state.generatedLegendPosition.value = 'left';
+  state.generatedMultiRecordCanvas.value = false;
+  state.generatedCircularPlotTitlePosition.value = 'none';
+  state.showFeaturePanel.value = false;
+  state.showLegendPanel.value = false;
+};
+
 export const exportConfig = () => {
   const configData = buildConfigData();
   downloadJson(configData, 'gbdraw_config.json');
@@ -1609,6 +1654,8 @@ export const importSession = async (e, options = {}) => {
       alert('Invalid session file.');
       return;
     }
+
+    resetSessionBaseline();
 
     const ui = data.ui || {};
     state.sessionTitle.value = typeof data.title === 'string' ? data.title : '';

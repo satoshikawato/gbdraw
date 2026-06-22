@@ -7,6 +7,7 @@ import logging
 import math
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
@@ -57,6 +58,14 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
 )
+from .cli_utils.session import (
+    DiagramRunResult,
+    add_session_args,
+    make_rendered_svg,
+    parse_session_pre_args,
+    save_session_sidecar_if_requested,
+)
+from .session_io import load_session, session_to_cli_args
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -961,6 +970,8 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         action='append',
         default=[])
+    add_session_args(parser)
+
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
@@ -1140,10 +1151,47 @@ def linear_main(cmd_args) -> None:
     The final output includes linear genome diagrams in user-specified file formats,
     illustrating genomic features and optional BLAST comparison results.
     """
-    args: argparse.Namespace = _get_args(cmd_args)
+    session_request = parse_session_pre_args(cmd_args, mode="linear")
+    if session_request is not None:
+        with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
+            session = load_session(session_request.session_path)
+            run_spec = session_to_cli_args(
+                session,
+                mode="linear",
+                temp_dir=Path(temp_dir),
+                output_override=session_request.output,
+                format_override=session_request.format,
+            )
+            args = _get_args(list(run_spec.args))
+            run_result = run_linear_from_namespace(args)
+            save_session_sidecar_if_requested(
+                save_session=session_request.save_session,
+                session_output=session_request.session_output,
+                output_prefix=args.output,
+                run_result=run_result,
+                source_session=session,
+                cli_invocation_args=run_spec.cli_invocation_args,
+                file_bindings=run_spec.file_bindings,
+            )
+        return
+
     if '-i' in cmd_args or '--input' in cmd_args:
         logger.warning(
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")
+    args: argparse.Namespace = _get_args(cmd_args)
+    run_result = run_linear_from_namespace(args)
+    save_session_sidecar_if_requested(
+        save_session=bool(args.save_session or args.session_output),
+        session_output=args.session_output,
+        output_prefix=args.output,
+        run_result=run_result,
+        cmd_args=cmd_args,
+    )
+
+
+def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
+    """Run linear rendering from an already parsed argparse namespace."""
+
     out_file_prefix: str = args.output
     blast_files: str = args.blast
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
@@ -1571,6 +1619,14 @@ def linear_main(cmd_args) -> None:
         )
     else:
         save_figure(canvas, out_formats)
+
+    return DiagramRunResult(
+        mode="linear",
+        render_formats=tuple(out_formats),
+        outputs=(
+            make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name),
+        ),
+    )
 
 
 if __name__ == "__main__":

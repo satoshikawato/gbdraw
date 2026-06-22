@@ -5,7 +5,9 @@ import sys
 import argparse
 import logging
 import math
+from pathlib import Path
 from dataclasses import replace
+from tempfile import TemporaryDirectory
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
@@ -47,6 +49,14 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
 )
+from .cli_utils.session import (
+    DiagramRunResult,
+    add_session_args,
+    make_rendered_svg,
+    parse_session_pre_args,
+    save_session_sidecar_if_requested,
+)
+from .session_io import load_session, session_to_cli_args
 
 # Setup for the logging system
 logger = logging.getLogger()
@@ -668,6 +678,8 @@ def _get_args(args) -> argparse.Namespace:
         help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
         type=float)
 
+    add_session_args(parser)
+
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
@@ -843,7 +855,44 @@ def circular_main(cmd_args) -> None:
     - Plotting the circular diagrams with genomic features and GC-related tracks.
     - Generating output files in specified formats.
     """
+    session_request = parse_session_pre_args(cmd_args, mode="circular")
+    if session_request is not None:
+        with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
+            session = load_session(session_request.session_path)
+            run_spec = session_to_cli_args(
+                session,
+                mode="circular",
+                temp_dir=Path(temp_dir),
+                output_override=session_request.output,
+                format_override=session_request.format,
+            )
+            args = _get_args(list(run_spec.args))
+            run_result = run_circular_from_namespace(args)
+            save_session_sidecar_if_requested(
+                save_session=session_request.save_session,
+                session_output=session_request.session_output,
+                output_prefix=args.output,
+                run_result=run_result,
+                source_session=session,
+                cli_invocation_args=run_spec.cli_invocation_args,
+                file_bindings=run_spec.file_bindings,
+            )
+        return
+
     args: argparse.Namespace = _get_args(cmd_args)
+    run_result = run_circular_from_namespace(args)
+    save_session_sidecar_if_requested(
+        save_session=bool(args.save_session or args.session_output),
+        session_output=args.session_output,
+        output_prefix=args.output,
+        run_result=run_result,
+        cmd_args=cmd_args,
+    )
+
+
+def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
+    """Run circular rendering from an already parsed argparse namespace."""
+
     output_prefix = args.output
     dinucleotide: str = args.nt.upper()
     manual_window: int = args.window
@@ -1071,6 +1120,7 @@ def circular_main(cmd_args) -> None:
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
     record_count: int = 0
+    outputs = []
 
 
 
@@ -1199,6 +1249,7 @@ def circular_main(cmd_args) -> None:
             )
         else:
             save_figure(canvas, out_formats)
+        outputs.append(make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name))
     else:
         for gb_record in gb_records:
             record_count += 1
@@ -1266,6 +1317,13 @@ def circular_main(cmd_args) -> None:
                 )
             else:
                 save_figure(canvas, out_formats)
+            outputs.append(make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name))
+
+    return DiagramRunResult(
+        mode="circular",
+        render_formats=tuple(out_formats),
+        outputs=tuple(outputs),
+    )
 
 if __name__ == "__main__":
     # Entry point for the script when run as a standalone program.
