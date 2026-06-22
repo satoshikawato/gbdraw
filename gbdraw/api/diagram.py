@@ -1936,6 +1936,8 @@ def assemble_linear_diagram_from_records(
             collinearity_result = collinearity_blocks
         else:
             collinearity_result = CollinearityResult(blocks=tuple(collinearity_blocks))
+        if collinearity_result.orthogroups is not None:
+            resolved_orthogroups = collinearity_result.orthogroups
         resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
             collinearity_result,
             records=records,
@@ -1988,6 +1990,7 @@ def assemble_linear_diagram_from_records(
             edge_mode=normalized_collinearity_anchor_mode,
             search_scope=normalized_collinearity_search_scope,
         )
+        resolved_orthogroups = collinearity_result.orthogroups
         resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
             collinearity_result,
             records=records,
@@ -2104,7 +2107,7 @@ def assemble_linear_diagram_from_records(
         cfg=cfg,
     )
 
-    return assemble_linear_diagram(
+    canvas = assemble_linear_diagram(
         records=list(records),
         blast_files=list(blast_files) if blast_files else None,
         canvas_config=canvas_config,
@@ -2126,6 +2129,11 @@ def assemble_linear_diagram_from_records(
         align_orthogroup_feature=align_orthogroup_feature,
         cfg=cfg,
     )
+    try:
+        setattr(canvas, "_gbdraw_orthogroups", resolved_orthogroups)
+    except Exception:
+        pass
+    return canvas
 
 
 def assemble_circular_diagram_from_record(

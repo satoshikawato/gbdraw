@@ -1,36 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import hashlib
 import re
 from typing import Optional, Tuple
 
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
 
-
-def compute_feature_hash(feature: SeqFeature, record_id: Optional[str] = None) -> str:
-    """
-    Compute a stable hash for a feature based on record id, type, start, end, strand.
-    This matches the hash computed in render/drawers for SVG IDs.
-    For multi-exon features (CompoundLocation), uses first part's coordinates.
-    """
-    # Use first part's coordinates for CompoundLocation (matches drawer code)
-    loc = feature.location
-    if hasattr(loc, 'parts') and loc.parts:
-        first_part = loc.parts[0]
-        start = int(first_part.start)
-        end = int(first_part.end)
-        strand = first_part.strand
-    else:
-        start = int(loc.start)
-        end = int(loc.end)
-        strand = loc.strand
-    if record_id is not None:
-        key = f"{record_id}:{feature.type}:{start}:{end}:{strand}"
-    else:
-        key = f"{feature.type}:{start}:{end}:{strand}"
-    return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+from .ids import compute_feature_hash
 
 
 def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:

@@ -13,12 +13,14 @@ import sys
 from typing import Optional
 
 from gbdraw.render.export import CAIROSVG_AVAILABLE, has_cairosvg
+from gbdraw.render.formats import CAIROSVG_FORMATS, SVG_FORMAT, is_cairosvg_format
 
 logger = logging.getLogger(__name__)
 
 _OUTPUT_FORMAT_HELP = (
     "Comma-separated list of output file formats "
-    "(svg, png, pdf, eps, ps; default: svg; non-SVG requires CairoSVG)."
+    "(svg, interactive-svg, png, pdf, eps, ps; default: svg; "
+    "png/pdf/eps/ps require CairoSVG)."
 )
 
 
@@ -201,19 +203,19 @@ def validate_label_args(parser: argparse.ArgumentParser, args: argparse.Namespac
 
 def handle_output_formats(out_formats: list[str]) -> list[str]:
     """Handle WebAssembly and CairoSVG availability for output formats."""
+    cairo_formats = [f for f in out_formats if is_cairosvg_format(f)]
     if "pyodide" in sys.modules:
-        if any(f != 'svg' for f in out_formats):
-            logger.info("Running in WebAssembly mode: Output format constrained to SVG. (Image conversion is handled by the browser)")
-            return ['svg']
+        if cairo_formats:
+            logger.info("Running in WebAssembly mode: Image conversion is handled by the browser.")
+            return [f for f in out_formats if not is_cairosvg_format(f)] or [SVG_FORMAT]
     else:
-        non_svg_formats = [f for f in out_formats if f != 'svg']
-        if non_svg_formats and not has_cairosvg():
+        if cairo_formats and not has_cairosvg():
             logger.warning(
-                f"CairoSVG is not installed. Cannot generate: {', '.join(non_svg_formats).upper()}\n"
-                f"   Output restricted to SVG only.\n"
+                f"CairoSVG is not installed. Cannot generate: {', '.join(cairo_formats).upper()}\n"
+                f"   Output restricted to SVG-compatible formats only.\n"
                 f"   (To enable PNG/PDF, run: pip install gbdraw[export])"
             )
-            return ['svg']
+            return [f for f in out_formats if f not in CAIROSVG_FORMATS] or [SVG_FORMAT]
     return out_formats
 
 

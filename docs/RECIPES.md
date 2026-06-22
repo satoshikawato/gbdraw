@@ -299,4 +299,15 @@ gbdraw circular --gbk genome.gb -o output -f svg,png,pdf
 
 PNG, PDF, EPS, and PS require CairoSVG to be installed.
 
+### Export standalone interactive SVG
+
+```bash
+gbdraw circular --gbk genome.gb -o output -f interactive-svg
+gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg,interactive-svg
+```
+
+`interactive-svg` writes the normal `output.svg` plus `output.interactive.svg`.
+It does not require CairoSVG, Node.js, Playwright, Chromium, or a web build step.
+Open the interactive file in a browser; some desktop SVG viewers block embedded scripts.
+
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

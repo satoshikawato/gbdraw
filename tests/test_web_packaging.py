@@ -103,6 +103,16 @@ def _standalone_search_field_ids(source: str) -> list[str]:
     return re.findall(r"\['([^']+)',\s*'[^']+'\]", block)
 
 
+def _standalone_interactivity_source() -> str:
+    service_root = WEB_ROOT / "js" / "services"
+    return "\n".join(
+        [
+            (service_root / "standalone-interactivity.js").read_text(encoding="utf-8"),
+            (service_root / "standalone-interactivity-assets.js").read_text(encoding="utf-8"),
+        ]
+    )
+
+
 def _gallery_svg_metadata(svg_source: str) -> dict[str, object]:
     metadata_match = re.search(
         r'<metadata[^>]*id="gbdraw-interactive-feature-metadata"[^>]*>(.*?)</metadata>',
@@ -603,7 +613,7 @@ def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path
 
 def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload() -> None:
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
-    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
+    standalone_source = _standalone_interactivity_source()
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
@@ -839,7 +849,7 @@ def test_gui_preview_feature_search_is_wired_and_kept_export_transient() -> None
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
-    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
+    standalone_source = _standalone_interactivity_source()
     search_core_source = (WEB_ROOT / "js" / "app" / "feature-search" / "search-core.js").read_text(encoding="utf-8")
     preview_svg_source = (WEB_ROOT / "js" / "app" / "feature-search" / "preview-svg.js").read_text(encoding="utf-8")
 
@@ -971,7 +981,7 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
 
     subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
-    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
+    standalone_source = _standalone_interactivity_source()
     assert "feature && feature.displayLabel" in standalone_source
     assert "feature && feature.product" in standalone_source
     assert "feature && feature.searchLabels" in standalone_source
@@ -1194,7 +1204,7 @@ def test_collinear_adjacent_popup_labels_local_collinear_groups(tmp_path: Path) 
 
 def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
-    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
+    standalone_source = _standalone_interactivity_source()
 
     assert "export const stripEditorOnlyCursorStyles = (svg) => {" in standalone_source
     assert "svg.querySelectorAll('[style]').forEach((element) => {" in standalone_source
@@ -1311,7 +1321,7 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     svg_styles_source = (WEB_ROOT / "js" / "app" / "svg-styles.js").read_text(encoding="utf-8")
     orthogroups_source = (WEB_ROOT / "js" / "app" / "orthogroups.js").read_text(encoding="utf-8")
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
-    standalone_source = (WEB_ROOT / "js" / "services" / "standalone-interactivity.js").read_text(encoding="utf-8")
+    standalone_source = _standalone_interactivity_source()
 
     assert "'data-gbdraw-feature-id'" in state_source
     assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source

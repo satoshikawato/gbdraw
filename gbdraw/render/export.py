@@ -12,6 +12,17 @@ from typing import List
 
 from svgwrite import Drawing
 
+from gbdraw.exceptions import GbdrawError
+from gbdraw.render.formats import (
+    CAIROSVG_FORMATS,
+    INTERACTIVE_SVG_FORMAT,
+    SVG_FORMAT,
+    classify_formats,
+    parse_format_string,
+    resolve_format_output_path,
+)
+from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+
 logger = logging.getLogger(__name__)
 
 _cairosvg_module: ModuleType | None = None
@@ -53,30 +64,15 @@ CAIROSVG_AVAILABLE = _LazyCairoSvgAvailability()
 
 
 def parse_formats(out_formats: str) -> list[str]:
-    list_of_formats: list[str] = [fmt.strip().lower() for fmt in out_formats.split(",")]
-    accepted_formats: list[str] = ["svg", "png", "eps", "ps", "pdf"]
-
-    accepted_list_of_formats: list[str] = []
-
-    for fmt in list_of_formats:
-        if fmt in accepted_formats:
-            accepted_list_of_formats.append(fmt)
-        else:
-            logger.warning(f"WARNING: Unaccepted/unrecognized output file format: {fmt}")
-
-    # If no valid formats are found, default to 'png'
-    if not accepted_list_of_formats:
-        logger.warning(
-            "WARNING: No valid output file format was specified; generate a PNG file."
-        )
-        accepted_list_of_formats = ["png"]
-
-    # Remove duplicates if exist
-    accepted_list_of_formats = list(set(accepted_list_of_formats))
-    return accepted_list_of_formats
+    return parse_format_string(out_formats, logger=logger)
 
 
-def save_figure(canvas: Drawing, list_of_formats: List[str]) -> None:
+def save_figure(
+    canvas: Drawing,
+    list_of_formats: List[str],
+    *,
+    interactive_context: InteractiveSvgContext | None = None,
+) -> None:
     """
     Saves the rendered figure.
     Logic:
@@ -85,15 +81,31 @@ def save_figure(canvas: Drawing, list_of_formats: List[str]) -> None:
       3. If CLI, try CairoSVG. If not available, warn and skip.
     """
     base_filename = os.path.splitext(canvas.filename)[0]
-    svg_filename = f"{base_filename}.svg"
+    svg_filename = resolve_format_output_path(base_filename, SVG_FORMAT)
 
     # 1. Always save SVG
     canvas.saveas(svg_filename)
     logger.info(f"Generated SVG: {svg_filename}")
 
-    # 2. Prepare other formats (excluding SVG)
-    formats_to_process = [f for f in list_of_formats if f != "svg"]
+    classification = classify_formats(list_of_formats)
+    svg_source = canvas.tostring()
 
+    if classification.interactive:
+        interactive_filename = resolve_format_output_path(
+            base_filename,
+            INTERACTIVE_SVG_FORMAT,
+        )
+        try:
+            interactive_svg = enrich_svg(svg_source, context=interactive_context)
+        except GbdrawError:
+            raise
+        except Exception as exc:
+            raise GbdrawError(f"Interactive SVG export failed: {exc}") from exc
+        with open(interactive_filename, "w", encoding="utf-8") as handle:
+            handle.write(interactive_svg)
+        logger.info(f"Generated interactive SVG: {interactive_filename}")
+
+    formats_to_process = list(classification.cairosvg)
     if not formats_to_process:
         return
 
@@ -119,9 +131,11 @@ def save_figure(canvas: Drawing, list_of_formats: List[str]) -> None:
         return
 
     try:
-        svg_bytes = canvas.tostring().encode("utf-8")
+        svg_bytes = svg_source.encode("utf-8")
         for fmt in formats_to_process:
-            out_file = f"{base_filename}.{fmt}"
+            if fmt not in CAIROSVG_FORMATS:
+                continue
+            out_file = resolve_format_output_path(base_filename, fmt)
 
             if fmt == "png":
                 cairosvg_module.svg2png(bytestring=svg_bytes, write_to=out_file)

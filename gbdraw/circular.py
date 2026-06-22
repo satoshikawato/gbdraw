@@ -13,6 +13,9 @@ from .io.genome import load_gbks, load_gff_fasta
 from .io.colors import load_default_colors, read_color_table
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
+from .render.formats import INTERACTIVE_SVG_FORMAT
+from .render.interactive_svg import InteractiveSvgContext
+from .web_support.feature_metadata import extract_features_from_records_payload
 from .api.diagram import (  # type: ignore[reportMissingImports]
     assemble_circular_diagram_from_record,
     assemble_circular_diagram_from_records,
@@ -48,6 +51,22 @@ from .cli_utils.common import (
 # Setup for the logging system
 logger = logging.getLogger()
 setup_logging()
+
+
+def _build_interactive_svg_context(records, selected_features) -> InteractiveSvgContext:
+    try:
+        payload = extract_features_from_records_payload(
+            records,
+            selected_features=selected_features,
+        )
+    except Exception as exc:
+        logger.warning(
+            "WARNING: Rich interactive feature metadata could not be generated; "
+            "falling back to rendered SVG feature metadata. %s",
+            exc,
+        )
+        return InteractiveSvgContext()
+    return InteractiveSvgContext(features=payload.get("features", []))
 
 
 def _parse_feature_shape_assignment_arg(value: str) -> str:
@@ -243,7 +262,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-f',
         '--format',
-        help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg; non-SVG requires CairoSVG).',
+        help='Comma-separated list of output file formats (svg, interactive-svg, png, pdf, eps, ps; default: svg; png/pdf/eps/ps require CairoSVG).',
         type=str,
         default="svg")
     parser.add_argument(
@@ -1169,7 +1188,17 @@ def circular_main(cmd_args) -> None:
             identity=identity,
             alignment_length=alignment_length,
         )
-        save_figure(canvas, out_formats)
+        if INTERACTIVE_SVG_FORMAT in out_formats:
+            save_figure(
+                canvas,
+                out_formats,
+                interactive_context=_build_interactive_svg_context(
+                    gb_records,
+                    selected_features_set,
+                ),
+            )
+        else:
+            save_figure(canvas, out_formats)
     else:
         for gb_record in gb_records:
             record_count += 1
@@ -1226,7 +1255,17 @@ def circular_main(cmd_args) -> None:
                 identity=identity,
                 alignment_length=alignment_length,
             )
-            save_figure(canvas, out_formats)
+            if INTERACTIVE_SVG_FORMAT in out_formats:
+                save_figure(
+                    canvas,
+                    out_formats,
+                    interactive_context=_build_interactive_svg_context(
+                        [gb_record],
+                        selected_features_set,
+                    ),
+                )
+            else:
+                save_figure(canvas, out_formats)
 
 if __name__ == "__main__":
     # Entry point for the script when run as a standalone program.

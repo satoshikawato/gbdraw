@@ -5,12 +5,17 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
+from importlib import resources
 from io import StringIO
 import logging
 import math
+import os
+import platform
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -26,6 +31,9 @@ from gbdraw.features.colors import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_LOSATP_BIN = "losat"
+_BUNDLED_LOSATP_DIR = "bin"
 
 _VALID_PROTEIN_RE = re.compile(r"^[A-Z]+$")
 _VALID_FASTA_ID_RE = re.compile(r"^\S+$")
@@ -890,6 +898,92 @@ def normalize_orthogroup_membership_mode(mode: str | None) -> OrthogroupMembersh
             + ", ".join(_LEGACY_ORTHOGROUP_MEMBERSHIP_MODES)
         )
     return normalized  # type: ignore[return-value]
+
+
+def _normalize_losatp_machine(machine: str | None = None) -> str:
+    normalized = str(machine or platform.machine()).strip().lower()
+    aliases = {
+        "amd64": "x86_64",
+        "x64": "x86_64",
+        "arm64": "aarch64",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _bundled_losatp_platform_dir() -> str | None:
+    machine = _normalize_losatp_machine()
+    if sys.platform.startswith("linux"):
+        if machine == "x86_64":
+            return "linux-x86_64"
+        if machine == "aarch64":
+            return "linux-aarch64"
+    if sys.platform == "darwin":
+        if machine == "x86_64":
+            return "macos-x86_64"
+        if machine == "aarch64":
+            return "macos-arm64"
+    if os.name == "nt":
+        if machine == "x86_64":
+            return "windows-x86_64"
+        if machine == "aarch64":
+            return "windows-arm64"
+    return None
+
+
+def _bundled_losatp_filename() -> str:
+    return "losat.exe" if os.name == "nt" else "losat"
+
+
+def _bundled_losatp_resource():
+    platform_dir = _bundled_losatp_platform_dir()
+    if platform_dir is None:
+        return None
+    try:
+        package_root = resources.files("gbdraw")
+    except (ModuleNotFoundError, FileNotFoundError):
+        return None
+    candidate = (
+        package_root
+        .joinpath(_BUNDLED_LOSATP_DIR)
+        .joinpath(platform_dir)
+        .joinpath(_bundled_losatp_filename())
+    )
+    if not candidate.is_file():
+        return None
+    return candidate
+
+
+def _ensure_losatp_executable(path: Path) -> None:
+    if os.name == "nt":
+        return
+    try:
+        mode = path.stat().st_mode
+    except OSError:
+        return
+    if mode & stat.S_IXUSR:
+        return
+    try:
+        path.chmod(mode | stat.S_IXUSR)
+    except OSError:
+        logger.debug("Could not mark bundled LOSATP binary executable: %s", path)
+
+
+def _resolve_losatp_bin_for_subprocess(
+    losatp_bin: str,
+    stack: ExitStack,
+) -> str:
+    requested_bin = str(losatp_bin or _DEFAULT_LOSATP_BIN).strip() or _DEFAULT_LOSATP_BIN
+    if requested_bin != _DEFAULT_LOSATP_BIN:
+        return requested_bin
+
+    bundled_resource = _bundled_losatp_resource()
+    if bundled_resource is None:
+        return requested_bin
+
+    bundled_path = stack.enter_context(resources.as_file(bundled_resource))
+    _ensure_losatp_executable(bundled_path)
+    logger.debug("Using bundled LOSATP binary: %s", bundled_path)
+    return str(bundled_path)
 
 
 def _validate_comparison_columns(hits: DataFrame) -> None:
@@ -4996,7 +5090,9 @@ def run_losatp_blastp(
     if max_hsps_per_subject is not None:
         _validate_max_hits(max_hsps_per_subject, option_name="max_hsps_per_subject")
     _validate_losatp_threads(threads)
-    with tempfile.TemporaryDirectory(prefix="gbdraw_losatp_") as temp_dir:
+    with ExitStack() as stack:
+        resolved_losatp_bin = _resolve_losatp_bin_for_subprocess(losatp_bin, stack)
+        temp_dir = stack.enter_context(tempfile.TemporaryDirectory(prefix="gbdraw_losatp_"))
         temp_path = Path(temp_dir)
         query_path = temp_path / "query.faa"
         subject_path = temp_path / "subject.faa"
@@ -5004,7 +5100,7 @@ def run_losatp_blastp(
         subject_path.write_text(subject_fasta, encoding="utf-8")
 
         command = [
-            losatp_bin,
+            resolved_losatp_bin,
             "blastp",
             "-query",
             str(query_path),
@@ -5014,9 +5110,9 @@ def run_losatp_blastp(
             "6",
         ]
         if max_hsps_per_subject is not None:
-            command.extend(["-max_hsps_per_subject", str(int(max_hsps_per_subject))])
+            command.extend(["--max-hsps-per-subject", str(int(max_hsps_per_subject))])
         if max_hits is not None:
-            command.extend(["-max_target_seqs", str(int(max_hits))])
+            command.extend(["--max-target-seqs", str(int(max_hits))])
         if threads is not None:
             command.extend(["--num-threads", str(int(threads))])
         logger.info("INFO: Running LOSATP blastp for protein colinearity.")
@@ -5029,6 +5125,8 @@ def run_losatp_blastp(
             )
         except FileNotFoundError as exc:
             raise ValidationError(f"LOSATP binary not found: {losatp_bin}") from exc
+        except PermissionError as exc:
+            raise ValidationError(f"LOSATP binary is not executable: {resolved_losatp_bin}") from exc
 
     if completed.returncode != 0:
         stderr = completed.stderr.strip()

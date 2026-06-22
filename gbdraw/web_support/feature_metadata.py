@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 from Bio import SeqIO
 from Bio.Seq import Seq
+
+from gbdraw.features.ids import compute_feature_hash
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
@@ -44,21 +45,7 @@ def _normalize_selected_feature_set(selected_features: object | None) -> set[str
 
 
 def _compute_svg_feature_hash(feature: Any, record_id: str | None = None) -> str:
-    loc = feature.location
-    if hasattr(loc, "parts") and loc.parts:
-        first_part = loc.parts[0]
-        start = int(first_part.start)
-        end = int(first_part.end)
-        strand = first_part.strand
-    else:
-        start = int(loc.start)
-        end = int(loc.end)
-        strand = loc.strand
-    if record_id is not None:
-        key = f"{record_id}:{feature.type}:{start}:{end}:{strand}"
-    else:
-        key = f"{feature.type}:{start}:{end}:{strand}"
-    return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+    return compute_feature_hash(feature, record_id=record_id)
 
 
 def _normalize_qualifier_values(value: object | None) -> list[str]:
@@ -203,26 +190,15 @@ def _extract_amino_acid_sequence(feature: Any, nucleotide_sequence: str) -> tupl
         return "", warnings
 
 
-def extract_features_from_genbank_payload(
-    gb_path: str | Path,
-    region_spec: object | None = None,
-    record_selector: object | None = None,
-    reverse_flag: object | None = None,
+def extract_features_from_records_payload(
+    records: Any,
+    *,
     selected_features: object | None = None,
 ) -> dict[str, object]:
-    """Extract the Rich Feature Popup payload shape from a GenBank file."""
-    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+    """Extract the Rich Feature Popup payload shape from processed records."""
 
-    records = list(SeqIO.parse(str(gb_path), "genbank"))
-    selector = parse_record_selector(_normalize_record_selector(record_selector))
-    records = select_record(records, selector)
-    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
-    records = reverse_records(records, reverse)
+    records = list(records or [])
     selected_feature_set = _normalize_selected_feature_set(selected_features)
-    if region_spec:
-        from gbdraw.io.regions import apply_region_specs, parse_region_specs
-
-        records = apply_region_specs(records, parse_region_specs([str(region_spec)]))
 
     features: list[dict[str, object]] = []
     record_ids: list[str] = []
@@ -250,19 +226,9 @@ def extract_features_from_genbank_payload(
             try:
                 svg_id = _compute_svg_feature_hash(feat, record_id=hash_record_id)
             except Exception:
-                svg_id = None
+                svg_id = ""
             if not svg_id:
-                if hasattr(feat.location, "parts") and feat.location.parts:
-                    first_part = feat.location.parts[0]
-                    hash_start = int(first_part.start)
-                    hash_end = int(first_part.end)
-                    hash_strand = first_part.strand
-                else:
-                    hash_start = start
-                    hash_end = end
-                    hash_strand = strand_raw
-                key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
-                svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+                svg_id = _compute_svg_feature_hash(feat)
 
             qualifiers = {}
             for q_key, q_vals in feat.qualifiers.items():
@@ -300,6 +266,28 @@ def extract_features_from_genbank_payload(
             idx += 1
 
     return {"features": features, "record_ids": record_ids}
+
+
+def extract_features_from_genbank_payload(
+    gb_path: str | Path,
+    region_spec: object | None = None,
+    record_selector: object | None = None,
+    reverse_flag: object | None = None,
+    selected_features: object | None = None,
+) -> dict[str, object]:
+    """Extract the Rich Feature Popup payload shape from a GenBank file."""
+    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+
+    records = list(SeqIO.parse(str(gb_path), "genbank"))
+    selector = parse_record_selector(_normalize_record_selector(record_selector))
+    records = select_record(records, selector)
+    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
+    records = reverse_records(records, reverse)
+    if region_spec:
+        from gbdraw.io.regions import apply_region_specs, parse_region_specs
+
+        records = apply_region_specs(records, parse_region_specs([str(region_spec)]))
+    return extract_features_from_records_payload(records, selected_features=selected_features)
 
 
 def extract_features_from_genbank_json(
