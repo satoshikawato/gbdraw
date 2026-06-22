@@ -1283,7 +1283,15 @@ def test_family_merge_display_edges_suppress_already_covered_cross_links() -> No
         ("a0", "b1"),
         ("a1", "b1"),
     }
-    assert edge_selection.orthogroups.related_edges_by_orthogroup_id["og_1"]
+    assert {
+        (edge.query_protein_id, edge.subject_protein_id, edge.edge_kind)
+        for edge in edge_selection.orthogroups.ortholog_edges_by_orthogroup_id["og_1"]
+    } == {
+        ("a0", "b0", "rbh"),
+        ("a0", "b1", "coortholog"),
+        ("a1", "b1", "rbh"),
+    }
+    assert edge_selection.orthogroups.related_edges_by_orthogroup_id.get("og_1", ()) == ()
 
 
 @pytest.mark.linear
