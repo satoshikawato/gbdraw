@@ -32,7 +32,8 @@ import {
   normalizeGroupMetadataScope
 } from '../app/losat-normalization.js';
 
-const SESSION_VERSION = 27;
+const SESSION_VERSION = 28;
+const SUPPORTED_SESSION_VERSIONS = new Set([27, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -79,6 +80,8 @@ const cloneStringMap = (source) => {
   });
   return cloned;
 };
+
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const sanitizeExtractedFeatureForSession = (feature) => {
   if (!feature || typeof feature !== 'object' || Array.isArray(feature)) return feature;
@@ -363,6 +366,100 @@ const normalizeHexColor = (value, fallback = '#4e79a7') => {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
 };
 
+const normalizeOptionalHexColor = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const resolved = resolveColorToHex(String(value).trim());
+  const color = String(resolved || '').trim();
+  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
+  if (shortMatch) {
+    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
+  }
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
+};
+
+const normalizeStrokeWidth = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+};
+
+const cloneJsonArray = (value) => {
+  if (!Array.isArray(value)) return [];
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_err) {
+    return [];
+  }
+};
+
+const cloneJsonObject = (value) => {
+  if (!isPlainObject(value)) return {};
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_err) {
+    return {};
+  }
+};
+
+const normalizeLegendColorOverrides = (source) => {
+  const normalized = {};
+  if (!isPlainObject(source)) return normalized;
+  Object.entries(source).forEach(([key, value]) => {
+    const caption = String(key || '').trim();
+    const color = normalizeOptionalHexColor(value);
+    if (!caption || !color) return;
+    normalized[caption] = color;
+  });
+  return normalized;
+};
+
+const normalizeStrokeOverride = (source, { requireOverride = false } = {}) => {
+  if (!isPlainObject(source)) return null;
+  const normalized = {};
+  const strokeColor = normalizeOptionalHexColor(source.strokeColor);
+  const strokeWidth = normalizeStrokeWidth(source.strokeWidth);
+  const originalStrokeColor = normalizeOptionalHexColor(source.originalStrokeColor);
+  const originalStrokeWidth = normalizeStrokeWidth(source.originalStrokeWidth);
+
+  if (strokeColor !== null) normalized.strokeColor = strokeColor;
+  if (strokeWidth !== null) normalized.strokeWidth = strokeWidth;
+  if (Object.prototype.hasOwnProperty.call(source, 'originalStrokeColor')) {
+    normalized.originalStrokeColor = originalStrokeColor;
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'originalStrokeWidth')) {
+    normalized.originalStrokeWidth = originalStrokeWidth;
+  }
+
+  if (
+    requireOverride &&
+    !Object.prototype.hasOwnProperty.call(normalized, 'strokeColor') &&
+    !Object.prototype.hasOwnProperty.call(normalized, 'strokeWidth')
+  ) {
+    return null;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
+};
+
+const normalizeStrokeOverrideMap = (source, { requireOverride = false } = {}) => {
+  const normalized = {};
+  if (!isPlainObject(source)) return normalized;
+  Object.entries(source).forEach(([key, value]) => {
+    const normalizedKey = String(key || '').trim();
+    if (!normalizedKey) return;
+    const override = normalizeStrokeOverride(value, { requireOverride });
+    if (!override) return;
+    normalized[normalizedKey] = override;
+  });
+  return normalized;
+};
+
+const normalizeStringArray = (source) => {
+  if (!Array.isArray(source)) return [];
+  return source
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+};
+
 const normalizeCircularConservationSeries = (series) => {
   if (!Array.isArray(series)) return [];
   return series
@@ -463,6 +560,149 @@ const buildConfigData = () => ({
     orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
   }
 });
+
+const defaultEditorStateData = () => ({
+  legend: {
+    entries: [],
+    deletedEntries: [],
+    originalOrder: [],
+    originalColors: {},
+    colorOverrides: {},
+    strokeOverrides: {},
+    addedCaptions: []
+  },
+  featureStrokes: {
+    overrides: {}
+  },
+  originalSvgStroke: {
+    color: null,
+    width: null
+  }
+});
+
+const buildEditorStateData = () => ({
+  legend: {
+    entries: cloneJsonArray(state.legendEntries.value),
+    deletedEntries: cloneJsonArray(state.deletedLegendEntries.value),
+    originalOrder: cloneJsonArray(state.originalLegendOrder.value),
+    originalColors: cloneStringMap(state.originalLegendColors.value),
+    colorOverrides: cloneJsonObject(state.legendColorOverrides),
+    strokeOverrides: cloneJsonObject(state.legendStrokeOverrides),
+    addedCaptions: Array.from(state.addedLegendCaptions.value || [])
+      .map((caption) => String(caption || '').trim())
+      .filter(Boolean)
+  },
+  featureStrokes: {
+    overrides: cloneJsonObject(state.featureStrokeOverrides)
+  },
+  originalSvgStroke: {
+    color: state.originalSvgStroke.value?.color ?? null,
+    width: state.originalSvgStroke.value?.width ?? null
+  }
+});
+
+const normalizeEditorStateData = (editorState = {}) => {
+  const defaults = defaultEditorStateData();
+  const source = isPlainObject(editorState) ? editorState : {};
+  const legend = isPlainObject(source.legend) ? source.legend : {};
+  const featureStrokes = isPlainObject(source.featureStrokes) ? source.featureStrokes : {};
+  const originalSvgStroke = isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {};
+
+  return {
+    legend: {
+      entries: cloneJsonArray(legend.entries),
+      deletedEntries: cloneJsonArray(legend.deletedEntries),
+      originalOrder: normalizeStringArray(legend.originalOrder),
+      originalColors: normalizeLegendColorOverrides(legend.originalColors),
+      colorOverrides: normalizeLegendColorOverrides(legend.colorOverrides),
+      strokeOverrides: normalizeStrokeOverrideMap(legend.strokeOverrides, { requireOverride: true }),
+      addedCaptions: normalizeStringArray(legend.addedCaptions)
+    },
+    featureStrokes: {
+      overrides: normalizeStrokeOverrideMap(featureStrokes.overrides, { requireOverride: true })
+    },
+    originalSvgStroke: {
+      color: Object.prototype.hasOwnProperty.call(originalSvgStroke, 'color')
+        ? normalizeOptionalHexColor(originalSvgStroke.color)
+        : defaults.originalSvgStroke.color,
+      width: Object.prototype.hasOwnProperty.call(originalSvgStroke, 'width')
+        ? normalizeStrokeWidth(originalSvgStroke.width)
+        : defaults.originalSvgStroke.width
+    }
+  };
+};
+
+const replacePlainObject = (target, source) => {
+  Object.keys(target).forEach((key) => delete target[key]);
+  Object.entries(source || {}).forEach(([key, value]) => {
+    target[key] = value;
+  });
+};
+
+const applyEditorStateData = (editorState = {}) => {
+  const normalized = normalizeEditorStateData(editorState);
+
+  state.legendEntries.value = normalized.legend.entries;
+  state.deletedLegendEntries.value = normalized.legend.deletedEntries;
+  state.originalLegendOrder.value = normalized.legend.originalOrder;
+  state.originalLegendColors.value = normalized.legend.originalColors;
+  replacePlainObject(state.legendColorOverrides, normalized.legend.colorOverrides);
+  replacePlainObject(state.legendStrokeOverrides, normalized.legend.strokeOverrides);
+  state.addedLegendCaptions.value = new Set(normalized.legend.addedCaptions);
+  replacePlainObject(state.featureStrokeOverrides, normalized.featureStrokes.overrides);
+  state.originalSvgStroke.value = normalized.originalSvgStroke;
+};
+
+const normalizeSessionData = (data) => {
+  if (!isPlainObject(data) || data.format !== 'gbdraw-session') {
+    throw new Error('Invalid session file.');
+  }
+  const version = data.version;
+  if (!Number.isInteger(version)) {
+    throw new Error('Session version is required and must be an integer.');
+  }
+  if (version > SESSION_VERSION) {
+    throw new Error(`Session version ${version} is newer than this gbdraw supports (${SESSION_VERSION}).`);
+  }
+  if (!SUPPORTED_SESSION_VERSIONS.has(version)) {
+    throw new Error(`Unsupported session version: ${version}.`);
+  }
+
+  return {
+    ...data,
+    version: SESSION_VERSION,
+    editorState: normalizeEditorStateData(data.editorState)
+  };
+};
+
+const LEGACY_CONFIG_KEYS = new Set([
+  'form',
+  'adv',
+  'losat',
+  'colors',
+  'palette',
+  'rules',
+  'qualifierPriorityRules',
+  'filterMode',
+  'whitelist',
+  'blacklistText',
+  'blastSource',
+  'losatProgram',
+  'circularConservation'
+]);
+
+const isLegacyConfigPayload = (data) =>
+  isPlainObject(data) &&
+  !Object.prototype.hasOwnProperty.call(data, 'format') &&
+  Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
+
+const applyLegacyConfigPayload = (data) => {
+  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.form);
+  validateImportedCircularTrackSlots(data);
+  validateImportedLinearTrackSlots(data);
+  applyConfigData(data);
+  restorePaletteStateAfterConfigImport();
+};
 
 const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
   if (state.mode.value !== 'circular') return false;
@@ -1425,6 +1665,7 @@ const resetSessionBaseline = () => {
   state.selectedFeatureRecordIdx.value = 0;
   clearObject(state.featureColorOverrides);
   clearObject(state.featureVisibilityOverrides);
+  clearObject(state.featureStrokeOverrides);
   clearObject(state.labelTextFeatureOverrides);
   clearObject(state.labelTextBulkOverrides);
   clearObject(state.labelTextFeatureOverrideSources);
@@ -1437,11 +1678,6 @@ const resetSessionBaseline = () => {
   state.generatedCircularPlotTitlePosition.value = 'none';
   state.showFeaturePanel.value = false;
   state.showLegendPanel.value = false;
-};
-
-export const exportConfig = () => {
-  const configData = buildConfigData();
-  downloadJson(configData, 'gbdraw_config.json');
 };
 
 export const exportSession = async (titleOverride = null) => {
@@ -1579,6 +1815,7 @@ export const exportSession = async (titleOverride = null) => {
       labelVisibilityOverrides: JSON.parse(JSON.stringify(state.labelVisibilityOverrides)),
       labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
     },
+    editorState: buildEditorStateData(),
     orthogroupState: {
       groups: Array.isArray(state.orthogroups.value) ? JSON.parse(JSON.stringify(state.orthogroups.value)) : [],
       selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
@@ -1599,39 +1836,6 @@ export const exportSession = async (titleOverride = null) => {
   downloadJson(sessionData, sessionFilename, { pretty: false });
 };
 
-export const importConfig = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  if (file.size > 10 * 1024 * 1024) {
-    alert('Config file is too large.');
-    return;
-  }
-
-  try {
-    const text = await file.text();
-    const data = JSON.parse(text, (key, value) => {
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-        return undefined;
-      }
-      return value;
-    });
-    state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.form);
-    validateImportedCircularTrackSlots(data);
-    validateImportedLinearTrackSlots(data);
-    applyConfigData(data);
-    restorePaletteStateAfterConfigImport();
-    alert('Configuration loaded successfully!');
-  } catch (err) {
-    console.error(err);
-    state.suppressCircularMultiRecordDefaults.value = false;
-    const message = err?.message || 'Invalid JSON structure.';
-    alert(`Failed to load config: ${message}`);
-  } finally {
-    e.target.value = '';
-  }
-};
-
 export const importSession = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -1643,18 +1847,20 @@ export const importSession = async (e, options = {}) => {
 
   try {
     const text = await file.text();
-    const data = JSON.parse(text, (key, value) => {
+    let data = JSON.parse(text, (key, value) => {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         return undefined;
       }
       return value;
     });
 
-    if (!data || data.format !== 'gbdraw-session') {
-      alert('Invalid session file.');
+    if (isLegacyConfigPayload(data)) {
+      applyLegacyConfigPayload(data);
+      alert('Legacy configuration loaded. Save as a session to use the current format.');
       return;
     }
 
+    data = normalizeSessionData(data);
     resetSessionBaseline();
 
     const ui = data.ui || {};
@@ -1854,6 +2060,8 @@ export const importSession = async (e, options = {}) => {
         console.warn('Session loaded, but post-load refresh failed.', callbackError);
       }
     }
+
+    applyEditorStateData(data.editorState);
 
     alert('Session loaded successfully!');
   } catch (err) {

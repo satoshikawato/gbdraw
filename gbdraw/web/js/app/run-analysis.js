@@ -534,6 +534,7 @@ export const createRunAnalysis = ({
     fileLegendCaptions,
     featureColorOverrides,
     featureVisibilityOverrides,
+    featureStrokeOverrides,
     legendEntries,
     deletedLegendEntries,
     legendColorOverrides,
@@ -1514,6 +1515,7 @@ json.dumps({
           addedLegendCaptions: new Set(addedLegendCaptions.value || []),
           fileLegendCaptions: new Set(fileLegendCaptions.value || []),
           featureColorOverrides: cloneJsonSafe(featureColorOverrides, {}),
+          featureStrokeOverrides: cloneJsonSafe(featureStrokeOverrides, {}),
           legendEntries: cloneJsonSafe(legendEntries.value || [], []),
           deletedLegendEntries: cloneJsonSafe(deletedLegendEntries.value || [], []),
           legendColorOverrides: cloneJsonSafe(legendColorOverrides, {}),
@@ -1541,6 +1543,8 @@ json.dumps({
       fileLegendCaptions.value = new Set(manualCancelSnapshot.fileLegendCaptions);
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
       Object.assign(featureColorOverrides, cloneJsonSafe(manualCancelSnapshot.featureColorOverrides, {}));
+      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
+      Object.assign(featureStrokeOverrides, cloneJsonSafe(manualCancelSnapshot.featureStrokeOverrides, {}));
       legendEntries.value = cloneJsonSafe(manualCancelSnapshot.legendEntries, []);
       deletedLegendEntries.value = cloneJsonSafe(manualCancelSnapshot.deletedLegendEntries, []);
       Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
@@ -1608,6 +1612,7 @@ json.dumps({
       addedLegendCaptions.value = new Set();
       fileLegendCaptions.value = new Set();
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
+      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
       legendEntries.value = [];
       deletedLegendEntries.value = [];
       Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);

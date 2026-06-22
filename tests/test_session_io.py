@@ -18,6 +18,7 @@ from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
     SESSION_FORMAT,
+    SUPPORTED_SESSION_VERSIONS,
     decode_depth_payload,
     load_session,
     materialize_embedded_file,
@@ -60,6 +61,14 @@ def test_future_session_version_fails() -> None:
 
     with pytest.raises(ValidationError, match="newer"):
         validate_session(session)
+
+
+def test_session_version_27_remains_supported() -> None:
+    session = _minimal_session({})
+    session["version"] = 27
+
+    validate_session(session)
+    assert 27 in SUPPORTED_SESSION_VERSIONS
 
 
 def test_embedded_file_materialization_sanitizes_name(tmp_path: Path) -> None:

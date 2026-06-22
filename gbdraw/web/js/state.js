@@ -640,6 +640,7 @@ const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off'}
+const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const labelTextFeatureOverrides = reactive({}); // { featureId: text }
@@ -1096,6 +1097,7 @@ export const state = {
   featureListBottomSpacerPx,
   featureColorOverrides,
   featureVisibilityOverrides,
+  featureStrokeOverrides,
   labelSearch,
   editableLabels,
   labelTextFeatureOverrides,

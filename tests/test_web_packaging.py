@@ -2500,8 +2500,9 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
     assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
     assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
     assert "validateImportedCircularTrackSlots(data);" in config_source
+    assert "isLegacyConfigPayload(data)" in config_source
     assert "validateImportedCircularTrackSlots(data.config);" in config_source
-    assert "Failed to load config: ${message}" in config_source
+    assert "Legacy configuration loaded. Save as a session to use the current format." in config_source
     assert "Failed to load session: ${message}" in config_source
 
     for obsolete_key in [
@@ -2578,6 +2579,21 @@ def test_web_config_persists_manual_qualifier_priority_rules() -> None:
     assert "qualifierPriorityRules: cloneQualifierPriorityRules(state.manualPriorityRules)" in source
     assert "replaceQualifierPriorityRules(data.qualifierPriorityRules)" in source
     assert "replaceQualifierPriorityRules(data.priorityRules)" in source
+
+
+def test_web_session_json_is_single_visible_settings_workflow() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert "Save Config" not in index_html
+    assert "Load Config" not in index_html
+    assert 'ref="configInput"' not in index_html
+    assert "exportConfig" not in app_setup_source
+    assert "importConfig" not in app_setup_source
+    assert "editorState: buildEditorStateData()" in config_source
+    assert "applyEditorStateData(data.editorState)" in config_source
+    assert "featureStrokeOverrides" in config_source
 
 
 @pytest.mark.slow

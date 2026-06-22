@@ -1,7 +1,7 @@
 import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
-import { exportConfig, exportSession, importConfig, importSession as importSessionFromFile } from '../services/config.js';
+import { exportSession, importSession as importSessionFromFile } from '../services/config.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
   disposeDiagramGenerationWorker,
@@ -159,6 +159,7 @@ export const createAppSetup = () => {
     labelReflowLastError,
     featureColorOverrides,
     featureVisibilityOverrides,
+    featureStrokeOverrides,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
@@ -1980,6 +1981,7 @@ export const createAppSetup = () => {
     filteredFeatures,
     featureColorOverrides,
     featureVisibilityOverrides,
+    featureStrokeOverrides,
     getFeatureColor,
     getFeatureVisibility,
     setFeatureVisibility,
@@ -2074,11 +2076,9 @@ export const createAppSetup = () => {
     downloadInteractiveSVG,
     downloadPNG,
     downloadPDF,
-    exportConfig,
     resetSettings,
     saveSessionWithTitle,
     editSessionTitle,
-    importConfig,
     importSession,
     manualPriorityRules,
     newPriorityRule,

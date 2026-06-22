@@ -851,16 +851,9 @@
             
                 <div class="app-toolbar flex items-center gap-2 min-w-0">
                 <div class="app-file-actions flex gap-0.5">
-                    <button @click="exportConfig" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5" title="Save Config" aria-label="Save Config">
-                        <i class="ph ph-export"></i> Save Config
-                    </button>
-                    <button @click="$refs.configInput.click()" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5" title="Load Config" aria-label="Load Config">
-                        <i class="ph ph-arrow-square-in"></i> Load Config
-                    </button>
                     <button @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
                         <i class="ph ph-arrow-clockwise"></i> Reset Settings
                     </button>
-                    <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
                     <button @click="saveSessionWithTitle" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Save Session" aria-label="Save Session">
                         <i class="ph ph-archive"></i> Save Session
                     </button>

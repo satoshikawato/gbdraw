@@ -20,8 +20,8 @@ from typing import Any, Literal, Mapping, Sequence
 from .exceptions import ValidationError
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 27
-SUPPORTED_SESSION_VERSIONS = frozenset({CURRENT_SESSION_VERSION})
+CURRENT_SESSION_VERSION = 28
+SUPPORTED_SESSION_VERSIONS = frozenset({27, CURRENT_SESSION_VERSION})
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
