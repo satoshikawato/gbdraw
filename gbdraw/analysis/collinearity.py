@@ -23,12 +23,14 @@ from gbdraw.analysis.protein_colinearity import (
     CdsProtein,
     LosatpRunner,
     OrthogroupMember,
+    OrthogroupMembershipMode,
     OrthogroupResult,
     ProteinExtractionResult,
     _run_losatp_search,
     build_orthogroups_from_protein_hits,
     extract_cds_proteins,
     filter_protein_hits_by_thresholds,
+    normalize_orthogroup_membership_mode,
     proteins_to_fasta,
     select_reciprocal_best_hit_edges,
     select_reciprocal_best_hits,
@@ -66,6 +68,14 @@ COLLINEARITY_METADATA_COLUMNS = (
     "subject_protein_id",
     "query_feature_svg_id",
     "subject_feature_svg_id",
+    "rbh_orthogroup_id",
+    "ortholog_path_id",
+    "edge_kind",
+    "render_role",
+    "query_orthogroup_representative",
+    "subject_orthogroup_representative",
+    "query_orthogroup_member_count",
+    "subject_orthogroup_member_count",
 )
 COLLINEARITY_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + COLLINEARITY_METADATA_COLUMNS
 COLLINEARITY_COLOR_MODES = ("average_identity", "orientation", "orientation_identity")
@@ -103,6 +113,12 @@ class CollinearityAnchor:
     query_strand: int | None = None
     subject_strand: int | None = None
     orthogroup_id: str = ""
+    rbh_orthogroup_id: str = ""
+    ortholog_path_id: str = ""
+    edge_kind: str = ""
+    render_role: str = ""
+    query_orthogroup_representative: bool = False
+    subject_orthogroup_representative: bool = False
     query_orthogroup_member_count: int = 0
     subject_orthogroup_member_count: int = 0
 
@@ -1018,6 +1034,58 @@ def _orthogroup_id_for_edge(
     return str(query_member.orthogroup_id)
 
 
+def _orthogroup_edge_metadata_for_anchor(
+    query_id: str,
+    subject_id: str,
+    orthogroup_id: str,
+    orthogroups: OrthogroupResult,
+) -> dict[str, object]:
+    metadata = {
+        "rbh_orthogroup_id": "",
+        "ortholog_path_id": "",
+        "edge_kind": "",
+        "render_role": "",
+        "query_orthogroup_representative": False,
+        "subject_orthogroup_representative": False,
+    }
+    query_member = orthogroups.member_by_protein_id.get(query_id)
+    subject_member = orthogroups.member_by_protein_id.get(subject_id)
+    if query_member is not None:
+        metadata["query_orthogroup_representative"] = bool(query_member.representative)
+    if subject_member is not None:
+        metadata["subject_orthogroup_representative"] = bool(subject_member.representative)
+    if not orthogroup_id:
+        return metadata
+    candidate_edges = [
+        *orthogroups.ortholog_edges_by_orthogroup_id.get(orthogroup_id, ()),
+        *orthogroups.related_edges_by_orthogroup_id.get(orthogroup_id, ()),
+    ]
+    for edge in candidate_edges:
+        if (
+            edge.query_protein_id == query_id
+            and edge.subject_protein_id == subject_id
+        ) or (
+            edge.query_protein_id == subject_id
+            and edge.subject_protein_id == query_id
+        ):
+            source_group = str(edge.source_rbh_orthogroup_id or "")
+            target_group = str(edge.target_rbh_orthogroup_id or "")
+            if source_group and target_group and source_group != target_group:
+                rbh_group = f"{source_group};{target_group}"
+            else:
+                rbh_group = source_group or target_group
+            metadata.update(
+                {
+                    "rbh_orthogroup_id": rbh_group,
+                    "ortholog_path_id": str(edge.path_id or ""),
+                    "edge_kind": edge.edge_kind,
+                    "render_role": edge.render_role,
+                }
+            )
+            return metadata
+    return metadata
+
+
 def _protein_locus_metadata(protein: CdsProtein) -> str | None:
     for attr in ("locus_tag", "gene_id", "old_locus_tag", "gene"):
         text = str(getattr(protein, attr, None) or "").strip()
@@ -1043,6 +1111,12 @@ def _lossless_anchor_from_edge_row(
     if query_protein is None or subject_protein is None:
         return None
     orthogroup_id = _orthogroup_id_for_edge(query_id, subject_id, orthogroups)
+    edge_metadata = _orthogroup_edge_metadata_for_anchor(
+        query_id,
+        subject_id,
+        orthogroup_id,
+        orthogroups,
+    )
     qstart, qend = _genomic_link_coordinates(query_protein)
     sstart, send = _genomic_link_coordinates(subject_protein)
     return CollinearityAnchor(
@@ -1074,6 +1148,12 @@ def _lossless_anchor_from_edge_row(
         query_display_name=str(query_protein.label or query_id),
         subject_display_name=str(subject_protein.label or subject_id),
         orthogroup_id=orthogroup_id,
+        rbh_orthogroup_id=str(edge_metadata["rbh_orthogroup_id"]),
+        ortholog_path_id=str(edge_metadata["ortholog_path_id"]),
+        edge_kind=str(edge_metadata["edge_kind"]),
+        render_role=str(edge_metadata["render_role"]),
+        query_orthogroup_representative=bool(edge_metadata["query_orthogroup_representative"]),
+        subject_orthogroup_representative=bool(edge_metadata["subject_orthogroup_representative"]),
         query_orthogroup_member_count=int(
             member_counts_by_record.get((orthogroup_id, int(query_record_index)), 0)
         ),
@@ -1931,6 +2011,11 @@ def _make_orthogroup_anchor(
         query_display_name=query_unit.display_name,
         subject_display_name=subject_unit.display_name,
         orthogroup_id=str(orthogroup_id),
+        rbh_orthogroup_id=str(orthogroup_id),
+        edge_kind="rbh" if query_member.representative and subject_member.representative else "coortholog",
+        render_role="display_edge",
+        query_orthogroup_representative=bool(query_member.representative),
+        subject_orthogroup_representative=bool(subject_member.representative),
         query_orthogroup_member_count=int(query_member_count),
         subject_orthogroup_member_count=int(subject_member_count),
     )
@@ -2027,6 +2112,9 @@ def build_orthogroup_collinearity_blocks_from_hits(
     unit_mode: CollinearityUnitMode | str = "auto",
     edge_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
+    orthogroup_member_max_hits: int = 5,
+    max_paralog_links_per_orthogroup: int = 2,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
 ) -> CollinearityResult:
     """Call lossless Orthogroup-sourced collinearity blocks from filtered hits."""
@@ -2035,6 +2123,17 @@ def build_orthogroup_collinearity_blocks_from_hits(
     directional_tables = _normalize_hit_tables(hits_by_pair, reverse_hits_by_pair)
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
+    normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
+    if int(orthogroup_member_max_hits) <= 0:
+        raise ValidationError("orthogroup_member_max_hits must be > 0")
+    resolved_max_paralog_links = int(max_paralog_links_per_orthogroup)
+    if (
+        isinstance(params, CollinearityParameters)
+        and resolved_max_paralog_links == 2
+    ):
+        resolved_max_paralog_links = int(params.max_paralog_links_per_orthogroup)
+    if resolved_max_paralog_links <= 0:
+        raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     record_count = len(records) if records is not None else len(extraction.proteins_by_record)
     directional_tables = _filter_hit_tables_by_search_scope(
         directional_tables,
@@ -2046,16 +2145,30 @@ def build_orthogroup_collinearity_blocks_from_hits(
             directional_tables,
             extraction.protein_map,
             record_count=record_count,
+            orthogroup_membership_mode=normalized_membership_mode,
+            orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+            max_related_edges_per_orthogroup=resolved_max_paralog_links,
         )
         orthogroups = edge_selection.orthogroups
-        adjacent_edges_by_pair = edge_selection.adjacent_display_edges_by_pair
+        adjacent_edges_by_pair = edge_selection.adjacent_anchor_edges_by_pair
     else:
         edge_tables = _select_orthogroup_edges(directional_tables, edge_mode=normalized_edge_mode)
-        orthogroups = build_orthogroups_from_protein_hits(
-            tuple(edge_tables.values()),
-            extraction.protein_map,
-            include_singletons=False,
-        )
+        if normalized_membership_mode == "rbh":
+            orthogroups = build_orthogroups_from_protein_hits(
+                tuple(edge_tables.values()),
+                extraction.protein_map,
+                include_singletons=False,
+            )
+        else:
+            seed_selection = select_rbh_orthogroup_edges_from_directional_hits(
+                directional_tables,
+                extraction.protein_map,
+                record_count=record_count,
+                orthogroup_membership_mode=normalized_membership_mode,
+                orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+                max_related_edges_per_orthogroup=resolved_max_paralog_links,
+            )
+            orthogroups = seed_selection.orthogroups
         adjacent_edges_by_pair = {
             pair: table
             for pair, table in edge_tables.items()
@@ -2099,6 +2212,9 @@ def build_orthogroup_collinearity_blocks(
     losatp_bin: str = "losat",
     losatp_threads: int | None = None,
     candidate_limit: int | None = None,
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
+    orthogroup_member_max_hits: int = 5,
+    max_paralog_links_per_orthogroup: int = 2,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
     identity: float = 70.0,
@@ -2118,15 +2234,40 @@ def build_orthogroup_collinearity_blocks(
     lossless_params = _lossless_params_from_legacy(params)
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
+    normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
+    if int(orthogroup_member_max_hits) <= 0:
+        raise ValidationError("orthogroup_member_max_hits must be > 0")
+    resolved_max_paralog_links = int(max_paralog_links_per_orthogroup)
+    if (
+        isinstance(params, CollinearityParameters)
+        and resolved_max_paralog_links == 2
+    ):
+        resolved_max_paralog_links = int(params.max_paralog_links_per_orthogroup)
+    if resolved_max_paralog_links <= 0:
+        raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     extraction = extract_cds_proteins(records)
     _validate_collinearity_extraction(records, extraction)
 
-    search_candidate_limit = (
-        candidate_limit
-        if candidate_limit is not None or normalized_edge_mode == "all"
-        else 1
-    )
+    search_candidate_limit = candidate_limit
     directional_tables: dict[tuple[int, int], DataFrame] = {}
+    for record_index in range(len(records)):
+        record_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
+        same_record_hits = _run_losatp_search(
+            record_fasta,
+            record_fasta,
+            losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
+            candidate_limit=search_candidate_limit,
+            max_hsps_per_subject=None,
+            runner=runner,
+        )
+        directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
+            same_record_hits,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        )
     for query_index, subject_index in iter_collinearity_search_pairs(
         len(records),
         scope=normalized_search_scope,
@@ -2139,6 +2280,7 @@ def build_orthogroup_collinearity_blocks(
             losatp_bin=losatp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
+            max_hsps_per_subject=None,
             runner=runner,
         )
         directional_tables[(query_index, subject_index)] = filter_protein_hits_by_thresholds(
@@ -2148,22 +2290,22 @@ def build_orthogroup_collinearity_blocks(
             identity=identity,
             alignment_length=alignment_length,
         )
-        if normalized_edge_mode == "rbh":
-            reverse_hits = _run_losatp_search(
-                subject_fasta,
-                query_fasta,
-                losatp_bin=losatp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                runner=runner,
-            )
-            directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
-                reverse_hits,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-            )
+        reverse_hits = _run_losatp_search(
+            subject_fasta,
+            query_fasta,
+            losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
+            candidate_limit=search_candidate_limit,
+            max_hsps_per_subject=None,
+            runner=runner,
+        )
+        directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
+            reverse_hits,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        )
 
     return build_orthogroup_collinearity_blocks_from_hits(
         directional_tables,
@@ -2173,6 +2315,9 @@ def build_orthogroup_collinearity_blocks(
         unit_mode=unit_mode,
         edge_mode=normalized_edge_mode,
         search_scope=normalized_search_scope,
+        orthogroup_membership_mode=normalized_membership_mode,
+        orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+        max_paralog_links_per_orthogroup=resolved_max_paralog_links,
     )
 
 
@@ -2182,6 +2327,9 @@ def build_native_collinearity_blocks(
     losatp_bin: str = "losat",
     losatp_threads: int | None = None,
     candidate_limit: int | None = None,
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
+    orthogroup_member_max_hits: int = 5,
+    max_paralog_links_per_orthogroup: int = 2,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
     identity: float = 70.0,
@@ -2199,6 +2347,9 @@ def build_native_collinearity_blocks(
         losatp_bin=losatp_bin,
         losatp_threads=losatp_threads,
         candidate_limit=candidate_limit,
+        orthogroup_membership_mode=orthogroup_membership_mode,
+        orthogroup_member_max_hits=orthogroup_member_max_hits,
+        max_paralog_links_per_orthogroup=max_paralog_links_per_orthogroup,
         evalue=evalue,
         bitscore=bitscore,
         identity=identity,
@@ -2220,6 +2371,9 @@ def build_collinearity_blocks_from_hits(
     unit_mode: CollinearityUnitMode | str = "auto",
     anchor_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
+    orthogroup_member_max_hits: int = 5,
+    max_paralog_links_per_orthogroup: int = 2,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
 ) -> CollinearityResult:
     """Call orthogroup-first blocks from already filtered directional hit tables."""
@@ -2232,6 +2386,9 @@ def build_collinearity_blocks_from_hits(
         unit_mode=unit_mode,
         edge_mode=anchor_mode,
         search_scope=search_scope,
+        orthogroup_membership_mode=orthogroup_membership_mode,
+        orthogroup_member_max_hits=orthogroup_member_max_hits,
+        max_paralog_links_per_orthogroup=max_paralog_links_per_orthogroup,
         reverse_hits_by_pair=reverse_hits_by_pair,
     )
 
@@ -2364,6 +2521,14 @@ def convert_collinearity_blocks_to_comparisons(
                 "subject_protein_id": _joined_anchor_values(block.anchors, "subject_protein_id"),
                 "query_feature_svg_id": _joined_anchor_values(block.anchors, "query_feature_svg_id"),
                 "subject_feature_svg_id": _joined_anchor_values(block.anchors, "subject_feature_svg_id"),
+                "rbh_orthogroup_id": _joined_anchor_values(block.anchors, "rbh_orthogroup_id"),
+                "ortholog_path_id": _joined_anchor_values(block.anchors, "ortholog_path_id"),
+                "edge_kind": _joined_anchor_values(block.anchors, "edge_kind") or "rbh",
+                "render_role": _joined_anchor_values(block.anchors, "render_role") or "block_anchor",
+                "query_orthogroup_representative": _joined_anchor_values(block.anchors, "query_orthogroup_representative"),
+                "subject_orthogroup_representative": _joined_anchor_values(block.anchors, "subject_orthogroup_representative"),
+                "query_orthogroup_member_count": _joined_anchor_values(block.anchors, "query_orthogroup_member_count"),
+                "subject_orthogroup_member_count": _joined_anchor_values(block.anchors, "subject_orthogroup_member_count"),
             }
         )
 

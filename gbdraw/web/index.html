@@ -1124,15 +1124,7 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Edge mode <help-tip text="RBH is recommended because it matches the Orthogroup display-edge contract."></help-tip></label>
-                                                <select v-model="losat.blastp.collinearAnchorMode" class="form-input px-1 py-0.5 text-xs">
-                                                    <option value="rbh">RBH</option>
-                                                    <option value="one_to_one">Top1</option>
-                                                    <option value="all">All hits</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label class="text-[9px] flex items-center">Search scope <help-tip text="Adjacent pairs searches only neighboring records; All records uses every record pair as Collinear evidence."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Evidence scope <help-tip text="Adjacent pairs uses only neighboring records as Collinear evidence. All records uses every record pair as evidence for grouping and block support, but ribbons are still emitted for adjacent display pairs."></help-tip></label>
                                                 <select v-model="losat.blastp.collinearSearchScope" class="form-input px-1 py-0.5 text-xs">
                                                     <option value="adjacent">Adjacent pairs</option>
                                                     <option value="all">All records</option>
@@ -3199,6 +3191,7 @@
                             </div>
                             <div class="mb-3">
                                 <div class="text-sm font-semibold text-slate-700 truncate">{{ clickedOrthogroupDetail.displayName }}</div>
+                                <div class="text-[10px] text-slate-500">{{ clickedOrthogroupDetail.scopeLabel }}</div>
                                 <div v-if="clickedOrthogroupDetail.description" class="text-[10px] text-slate-500 line-clamp-2">
                                     {{ clickedOrthogroupDetail.description }}
                                 </div>
@@ -3765,12 +3758,14 @@
                                         </div>
                                     </div>
                                     <div class="overflow-auto custom-scrollbar max-h-56">
-                                        <table class="min-w-[52rem] w-full text-xs">
+                                        <table class="min-w-[62rem] w-full text-xs">
                                             <thead class="bg-white sticky top-0">
                                                 <tr class="text-[10px] uppercase text-slate-400">
                                                     <th class="text-left font-semibold px-3 py-2">Record</th>
                                                     <th class="text-left font-semibold px-3 py-2">Coordinates (+/-)</th>
                                                     <th class="text-left font-semibold px-3 py-2">Protein ID</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Role</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Confidence</th>
                                                     <th class="text-left font-semibold px-3 py-2">Product / note</th>
                                                     <th class="text-left font-semibold px-3 py-2">Seq</th>
                                                 </tr>
@@ -3782,6 +3777,8 @@
                                                     <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.record }}</td>
                                                     <td class="font-mono text-slate-600 px-3 py-2 align-top">{{ member.coordinates }}</td>
                                                     <td class="font-mono text-slate-700 px-3 py-2 align-top break-all">{{ member.proteinId }}</td>
+                                                    <td class="font-mono text-slate-700 px-3 py-2 align-top">{{ member.role }}</td>
+                                                    <td class="font-mono text-slate-600 px-3 py-2 align-top" :title="member.assignmentReason">{{ member.confidence }}</td>
                                                     <td class="text-slate-700 px-3 py-2 align-top">{{ member.productOrNote }}</td>
                                                     <td class="px-3 py-2 align-top whitespace-nowrap">
                                                         <div class="grid grid-cols-2 gap-1 w-24">
@@ -4298,6 +4295,7 @@
                                 <div class="flex items-start gap-2">
                                     <div class="min-w-0 flex-1">
                                         <div class="text-xs font-semibold text-slate-700 truncate">{{ resolveOrthogroupName(group) }}</div>
+                                        <div class="text-[10px] text-slate-500 truncate">{{ orthogroupScopeLabel(group) }}</div>
                                         <div class="text-[10px] font-mono text-slate-400">{{ group.id }}</div>
                                     </div>
                                 </div>
@@ -4316,6 +4314,7 @@
                                     <span class="text-[10px] font-mono text-slate-400">{{ selectedOrthogroup.id }}</span>
                                     <span v-if="isOrthogroupRenamed(selectedOrthogroup)" class="text-[10px] text-blue-600 font-medium">Edited</span>
                                 </div>
+                                <div class="text-[10px] font-medium text-slate-500">{{ orthogroupScopeLabel(selectedOrthogroup) }}</div>
                                 <div>
                                     <label class="text-xs font-medium text-slate-500 block mb-1">Display name</label>
                                     <input type="text"

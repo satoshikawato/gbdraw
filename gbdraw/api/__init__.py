@@ -45,6 +45,12 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     iter_collinearity_search_pairs,
     normalize_collinearity_search_scope,
 )
+from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+    OrthogroupMembershipMode,
+    OrthologEdge,
+    OrthologPath,
+    normalize_orthogroup_membership_mode,
+)
 from .options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
 from .render import parse_formats, render_to_bytes, save_figure, save_figure_to
 from .tracks import (  # type: ignore[reportMissingImports]
@@ -115,6 +121,10 @@ __all__ = [
     "build_orthogroup_collinearity_blocks",
     "iter_collinearity_search_pairs",
     "normalize_collinearity_search_scope",
+    "OrthogroupMembershipMode",
+    "OrthologEdge",
+    "OrthologPath",
+    "normalize_orthogroup_membership_mode",
     # options
     "ColorOptions",
     "DiagramOptions",

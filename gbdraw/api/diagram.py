@@ -41,10 +41,12 @@ from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
     normalize_conservation_tracks_for_record,
 )
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+    OrthogroupMembershipMode,
     OrthogroupResult,
     ProteinBlastpMode,
     build_pairwise_protein_blastp_comparisons,
     build_rbh_orthogroup_protein_blastp_comparisons,
+    normalize_orthogroup_membership_mode,
     normalize_protein_blastp_mode,
 )
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
@@ -1724,6 +1726,9 @@ def assemble_linear_diagram_from_records(
     losatp_threads: int | None = None,
     protein_blastp_max_hits: int = 5,
     protein_blastp_candidate_limit: int | None = None,
+    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
+    orthogroup_member_max_hits: int = 5,
+    collinear_max_paralog_links_per_orthogroup: int = 2,
     align_orthogroup_feature: str | None = None,
     config_dict: dict | None = None,
     config_overrides: Mapping[str, object] | None = None,
@@ -1782,11 +1787,17 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
     normalized_pairwise_match_style = _resolve_pairwise_match_style(pairwise_match_style)
-    normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(str(collinearity_anchor_mode))
+    normalize_collinearity_anchor_mode(str(collinearity_anchor_mode))
+    normalized_collinearity_anchor_mode = "rbh"
     normalized_collinearity_search_scope = normalize_collinearity_search_scope(str(collinearity_search_scope))
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
+    normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
+    if int(orthogroup_member_max_hits) <= 0:
+        raise ValidationError("orthogroup_member_max_hits must be > 0")
+    if int(collinear_max_paralog_links_per_orthogroup) <= 0:
+        raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     if losatp_threads is not None and int(losatp_threads) <= 0:
         raise ValidationError("losatp_threads must be > 0 or None")
     if protein_blastp_candidate_limit is not None and int(protein_blastp_candidate_limit) <= 0:
@@ -1949,6 +1960,9 @@ def assemble_linear_diagram_from_records(
             losatp_bin=losatp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
+            orthogroup_membership_mode=normalized_orthogroup_membership_mode,
+            orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+            max_related_edges_per_orthogroup=int(collinear_max_paralog_links_per_orthogroup),
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -1962,6 +1976,9 @@ def assemble_linear_diagram_from_records(
             losatp_bin=losatp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
+            orthogroup_membership_mode=normalized_orthogroup_membership_mode,
+            orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+            max_paralog_links_per_orthogroup=int(collinear_max_paralog_links_per_orthogroup),
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -3504,6 +3521,7 @@ def build_linear_diagram(
             cfg = options.config
     elif isinstance(options.config, dict):
         config_dict = options.config
+    normalize_collinearity_anchor_mode(str(options.collinearity_anchor_mode))
 
     return assemble_linear_diagram_from_records(
         records,
@@ -3515,13 +3533,16 @@ def build_linear_diagram(
         collinearity_blocks=options.collinearity_blocks,
         collinearity_params=options.collinearity_params,
         collinearity_unit_mode=options.collinearity_unit_mode,
-        collinearity_anchor_mode=options.collinearity_anchor_mode,
+        collinearity_anchor_mode="rbh",
         collinearity_search_scope=options.collinearity_search_scope,
         collinearity_color_mode=options.collinearity_color_mode,
         losatp_bin=options.losatp_bin,
         losatp_threads=options.losatp_threads,
         protein_blastp_max_hits=options.protein_blastp_max_hits,
         protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,
+        orthogroup_membership_mode=options.orthogroup_membership_mode,
+        orthogroup_member_max_hits=options.orthogroup_member_max_hits,
+        collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
         align_orthogroup_feature=options.align_orthogroup_feature,
         config_dict=config_dict,
         config_overrides=config_overrides,

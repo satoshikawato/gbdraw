@@ -981,6 +981,8 @@ export const createAppSetup = () => {
       id: orthogroupId,
       displayName: orthogroupActions.resolveOrthogroupName(group),
       description: orthogroupActions.resolveOrthogroupDescription(group),
+      scope: orthogroupActions.orthogroupScope(group),
+      scopeLabel: orthogroupActions.orthogroupScopeLabel(group),
       candidates: Array.isArray(group.nameCandidates) ? group.nameCandidates : [],
       memberCount: Number(group.member_count || members.length || 0),
       recordCoverage: Number(group.record_coverage_count || membersByRecord.length || 0),
@@ -1434,6 +1436,9 @@ export const createAppSetup = () => {
     link.href = url;
     link.download = String(filename || 'gbdraw.txt');
     document.body.appendChild(link);
+    link.addEventListener('click', (event) => {
+      event.stopPropagation();
+    }, { once: true });
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
@@ -1853,6 +1858,8 @@ export const createAppSetup = () => {
     selectedOrthogroupMembersByRecord: orthogroupActions.selectedOrthogroupMembersByRecord,
     resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
     resolveOrthogroupDescription: orthogroupActions.resolveOrthogroupDescription,
+    orthogroupScope: orthogroupActions.orthogroupScope,
+    orthogroupScopeLabel: orthogroupActions.orthogroupScopeLabel,
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
     getOrthogroupSequenceCount: orthogroupActions.getOrthogroupSequenceCount,
     hasOrthogroupSequence: orthogroupActions.hasOrthogroupSequence,

@@ -305,11 +305,12 @@ const STANDALONE_INTERACTIVE_STYLE = `
   white-space: pre-wrap;
 }
 .gfi-copy {
-  width: 48px;
+  min-width: 48px;
   padding: 5px 0;
   background: #f8fafc;
   font-size: 10px;
   font-weight: 700;
+  white-space: nowrap;
 }
 .gfi-block {
   margin-bottom: 10px;
@@ -330,6 +331,9 @@ const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gfi-block-title .gfi-copy {
   margin-left: auto;
+}
+.gfi-block-title .gfi-copy + .gfi-copy {
+  margin-left: 0;
 }
 .gfi-pre {
   max-height: 120px;
@@ -391,8 +395,19 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfi-block-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 6px;
   padding: 6px 8px;
   background: #f8fafc;
+}
+.gfi-seq-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 118px;
+}
+.gfi-seq-actions .gfi-copy {
+  min-width: 0;
+  padding: 4px 5px;
 }
 .gfi-match-feature-table {
   width: 100%;
@@ -2765,6 +2780,168 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return [String(value)];
   }
 
+  function sequenceKindLabel(sequenceKind) {
+    return sequenceKind === 'aa' ? 'aa' : 'nt';
+  }
+
+  function sequenceExtension(sequenceKind) {
+    return sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna';
+  }
+
+  function makeSafeFilename(value, fallback) {
+    var cleaned = String(value || '').trim().replace(/[^\\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+    return cleaned || fallback || 'sequence';
+  }
+
+  function normalizeSequence(value) {
+    return String(value || '').replace(/\\s+/g, '').trim();
+  }
+
+  function normalizeFastaHeaderText(value) {
+    return String(value || '').replace(/\\s+/g, ' ').trim();
+  }
+
+  function normalizeFastaId(value) {
+    return normalizeFastaHeaderText(value).replace(/^>+/, '').replace(/\\s+/g, '_') || 'sequence';
+  }
+
+  function wrapFastaSequence(sequence) {
+    var text = normalizeSequence(sequence);
+    var lines = [];
+    var width = 60;
+    for (var i = 0; i < text.length; i += width) {
+      lines.push(text.slice(i, i + width));
+    }
+    return lines.join('\\n');
+  }
+
+  function formatFastaEntry(id, description, sequence) {
+    var wrapped = wrapFastaSequence(sequence);
+    if (!wrapped) return '';
+    var headerDescription = normalizeFastaHeaderText(description);
+    var header = '>' + normalizeFastaId(id);
+    if (headerDescription) header += ' ' + headerDescription;
+    return header + '\\n' + wrapped;
+  }
+
+  function featureDescription(feature) {
+    return firstDisplayText(
+      feature && feature.product,
+      firstQualifierValue(feature, 'product'),
+      feature && feature.gene,
+      firstQualifierValue(feature, 'gene'),
+      feature && (feature.locus_tag || feature.locusTag),
+      firstQualifierValue(feature, 'locus_tag'),
+      feature && (feature.display_label || feature.displayLabel || feature.label),
+      feature && feature.type
+    );
+  }
+
+  function memberFeatureSvgId(memberOrRow) {
+    return String(memberOrRow && (
+      memberOrRow.featureSvgId ||
+      memberOrRow.feature_svg_id ||
+      memberOrRow.svgId ||
+      memberOrRow.svg_id
+    ) || '').trim();
+  }
+
+  function featureForMember(memberOrRow) {
+    var svgId = memberFeatureSvgId(memberOrRow);
+    return svgId ? featuresById.get(svgId) || null : null;
+  }
+
+  function featureSequenceFilename(feature, sequenceKind) {
+    var label = sequenceKindLabel(sequenceKind);
+    var id = firstDisplayText(
+      label === 'aa' ? displayProteinId(feature, null, '') : '',
+      feature && (feature.display_label || feature.displayLabel || feature.label),
+      feature && feature.svg_id,
+      'feature'
+    );
+    return makeSafeFilename(id + '_' + label, 'feature_' + label) + '.' + sequenceExtension(label);
+  }
+
+  function featureFasta(feature, sequenceKind) {
+    if (!feature) return '';
+    var label = sequenceKindLabel(sequenceKind);
+    var existing = label === 'aa'
+      ? firstDisplayText(feature.amino_acid_fasta, feature.aminoAcidFasta)
+      : firstDisplayText(feature.nucleotide_fasta, feature.nucleotideFasta);
+    if (existing) return existing;
+    var sequence = label === 'aa'
+      ? firstDisplayText(feature.amino_acid_sequence, feature.aminoAcidSequence)
+      : firstDisplayText(feature.nucleotide_sequence, feature.nucleotideSequence);
+    if (!normalizeSequence(sequence)) return '';
+    var id = label === 'aa'
+      ? displayProteinId(feature, null, feature.svg_id || 'protein')
+      : firstDisplayText(feature.record_id, feature.recordId, feature.svg_id || 'record') + ':' + locationText(feature);
+    return formatFastaEntry(id, featureDescription(feature), sequence);
+  }
+
+  function memberFasta(memberOrRow, sequenceKind) {
+    return featureFasta(featureForMember(memberOrRow), sequenceKind);
+  }
+
+  function memberSequenceFilename(memberOrRow, sequenceKind, orthogroupId) {
+    var label = sequenceKindLabel(sequenceKind);
+    var feature = featureForMember(memberOrRow);
+    var memberId = firstDisplayText(
+      memberOrRow && (memberOrRow.sourceProteinId || memberOrRow.source_protein_id),
+      memberOrRow && (memberOrRow.proteinId || memberOrRow.protein_id),
+      feature && displayProteinId(feature, null, ''),
+      memberFeatureSvgId(memberOrRow),
+      'member'
+    );
+    var groupId = firstDisplayText(orthogroupId, memberOrRow && (memberOrRow.orthogroupId || memberOrRow.orthogroup_id), 'orthogroup');
+    return makeSafeFilename(groupId + '_' + memberId + '_' + label, 'orthogroup_member_' + label) + '.' + sequenceExtension(label);
+  }
+
+  function groupFasta(memberRows, sequenceKind) {
+    return (Array.isArray(memberRows) ? memberRows : []).map(function (row) {
+      return String(memberFasta(row, sequenceKind) || '').trim();
+    }).filter(function (text) {
+      return text;
+    }).join('\\n');
+  }
+
+  function groupFastaCount(memberRows, sequenceKind) {
+    return (Array.isArray(memberRows) ? memberRows : []).filter(function (row) {
+      return String(memberFasta(row, sequenceKind) || '').trim();
+    }).length;
+  }
+
+  function groupSequenceFilename(orthogroupId, displayName, sequenceKind) {
+    var label = sequenceKindLabel(sequenceKind);
+    var id = firstDisplayText(orthogroupId, 'orthogroup');
+    var name = makeSafeFilename(firstDisplayText(displayName, id), id);
+    return makeSafeFilename(id + '_' + name + '_' + label, 'orthogroup_' + label) + '.' + sequenceExtension(label);
+  }
+
+  function downloadText(filename, text, mimeType) {
+    var safeFilename = filename || 'download.txt';
+    var blob = new Blob([String(text == null ? '' : text)], { type: mimeType || 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElementNS(XHTML_NS, 'a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', safeFilename);
+    link.href = url;
+    link.download = safeFilename;
+    link.style.display = 'none';
+    var parent = document.body || document.documentElement;
+    parent.appendChild(link);
+    link.addEventListener('click', function (event) {
+      event.stopPropagation();
+    }, { once: true });
+    link.click();
+    if (link.parentNode) {
+      link.parentNode.removeChild(link);
+    }
+    window.setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
+
   function locationText(feature) {
     if (feature.location) return String(feature.location);
     var start = Number(feature.start);
@@ -2839,12 +3016,49 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
-  function copyButton(value) {
+  function copyButton(value, label) {
     var index = copyValues.push(String(value == null ? '' : value)) - 1;
-    return '<button type="button" class="gfi-copy" data-copy-index="' + index + '">Copy</button>';
+    return '<button type="button" class="gfi-copy" data-copy-index="' + index + '">' + escapeHtml(label || 'Copy') + '</button>';
+  }
+
+  function downloadButton(filename, text, label) {
+    var index = downloadValues.push({
+      filename: filename,
+      text: String(text == null ? '' : text),
+      type: 'text/plain;charset=utf-8'
+    }) - 1;
+    return '<button type="button" class="gfi-copy" data-download-index="' + index + '">' + escapeHtml(label || 'DL') + '</button>';
+  }
+
+  function renderGroupSequenceActions(memberRows, options) {
+    var rows = Array.isArray(memberRows) ? memberRows : [];
+    var orthogroupId = firstDisplayText(options && options.orthogroupId, rows[0] && (rows[0].orthogroupId || rows[0].orthogroup_id));
+    var displayName = firstDisplayText(options && options.displayName, rows[0] && (rows[0].displayName || rows[0].display_name), orthogroupId);
+    var html = [];
+    ['nt', 'aa'].forEach(function (sequenceKind) {
+      var text = groupFasta(rows, sequenceKind);
+      if (!text) return;
+      var count = groupFastaCount(rows, sequenceKind);
+      var suffix = count > 1 ? ' (' + count + ')' : '';
+      html.push(copyButton(text, 'Copy ' + sequenceKind + suffix));
+      html.push(downloadButton(groupSequenceFilename(orthogroupId, displayName, sequenceKind), text, 'DL ' + sequenceKind + suffix));
+    });
+    return html.join('');
+  }
+
+  function renderMemberSequenceActions(memberOrRow, orthogroupId) {
+    var html = [];
+    ['nt', 'aa'].forEach(function (sequenceKind) {
+      var text = String(memberFasta(memberOrRow, sequenceKind) || '').trim();
+      if (!text) return;
+      html.push(copyButton(text, 'Copy ' + sequenceKind));
+      html.push(downloadButton(memberSequenceFilename(memberOrRow, sequenceKind, orthogroupId), text, 'DL ' + sequenceKind));
+    });
+    return html.length ? '<div class="gfi-seq-actions">' + html.join('') + '</div>' : '';
   }
 
   var copyValues = [];
+  var downloadValues = [];
 
   function renderRows(rows) {
     if (!rows.length) {
@@ -2863,16 +3077,22 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return String(member && (member.product || member.note) || '').trim();
   }
 
-  function orthogroupMemberTableRows(members) {
+  function orthogroupMemberTableRows(members, group) {
+    var orthogroupId = String(group && (group.id || group.orthogroupId || group.orthogroup_id) || '').trim();
+    var displayName = String(group && (group.display_name || group.displayName || group.name) || '').trim();
     return members.map(function (member) {
+      var feature = featureForMember(member);
       return {
-        record: String(member && member.recordId || '').trim(),
-        coordinates: memberLocationText(member),
-        proteinId: displayProteinId(null, member),
-        productOrNote: memberProductOrNote(member)
+        featureSvgId: memberFeatureSvgId(member),
+        orthogroupId: orthogroupId,
+        displayName: displayName,
+        record: firstDisplayText(member && (member.recordId || member.record_id), feature && (feature.record_id || feature.recordId)),
+        coordinates: firstDisplayText(memberLocationText(member), feature ? locationText(feature) : ''),
+        proteinId: displayProteinId(feature, member),
+        productOrNote: firstDisplayText(memberProductOrNote(member), featureDescription(feature))
       };
     }).filter(function (row) {
-      return row.record || row.coordinates || row.proteinId || row.productOrNote;
+      return row.record || row.coordinates || row.proteinId || row.productOrNote || row.featureSvgId;
     });
   }
 
@@ -2881,26 +3101,35 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     if (!group) return '';
     var members = Array.isArray(group.members) ? group.members : [];
     if (!members.length) return '';
-    var rows = orthogroupMemberTableRows(members);
+    var rows = orthogroupMemberTableRows(members, group);
     if (!rows.length) return '';
+    var orthogroupId = String(group && (group.id || group.orthogroupId || group.orthogroup_id) || feature && (feature.orthogroup_id || feature.orthogroupId) || '').trim();
+    var displayName = String(group && (group.display_name || group.displayName || group.name) || '').trim();
     var text = ['Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'].concat(
       rows.map(function (row) {
         return [row.record, row.coordinates, row.proteinId, row.productOrNote].join('\\t');
       })
     ).join('\\n');
+    var sequenceActions = renderGroupSequenceActions(rows, {
+      orthogroupId: orthogroupId,
+      displayName: displayName
+    });
     var body = rows.map(function (row) {
+      var sequenceActions = renderMemberSequenceActions(row, orthogroupId);
       return '<tr>' +
         '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.coordinates) + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.proteinId) + '</td>' +
         '<td>' + escapeHtml(row.productOrNote) + '</td>' +
+        '<td>' + sequenceActions + '</td>' +
         '</tr>';
     }).join('');
     return '<div class="gfi-block">' +
       '<div class="gfi-block-title"><span>Orthogroup members</span><span>' + members.length + '</span>' + copyButton(text) + '</div>' +
       '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
-      '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th></tr></thead>' +
+      '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th><th>Seq</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>' +
+      (sequenceActions ? '<div class="gfi-block-actions">' + sequenceActions + '</div>' : '') +
       '</div>';
   }
 
@@ -2917,13 +3146,18 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
   }
 
-  function renderSequenceBlock(title, sequence, fasta) {
-    var text = String(fasta || sequence || '');
+  function renderSequenceBlock(title, sequence, fasta, sequenceKind, feature) {
+    var text = String(sequenceKind ? featureFasta(feature, sequenceKind) : '');
+    if (!text) text = String(fasta || sequence || '');
     if (!text) {
       return '<div class="gfi-block"><div class="gfi-block-title">' + escapeHtml(title) + '</div><div class="gfi-empty">No sequence available.</div></div>';
     }
+    var label = sequenceKindLabel(sequenceKind);
+    var download = sequenceKind
+      ? downloadButton(featureSequenceFilename(feature, label), text, 'DL ' + label)
+      : '';
     return '<div class="gfi-block">' +
-      '<div class="gfi-block-title"><span>' + escapeHtml(title) + '</span>' + copyButton(text) + '</div>' +
+      '<div class="gfi-block-title"><span>' + escapeHtml(title) + '</span>' + copyButton(text) + download + '</div>' +
       '<pre class="gfi-pre">' + escapeHtml(text) + '</pre>' +
       '</div>';
   }
@@ -2934,8 +3168,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       return '<div class="gfi-warning">' + escapeHtml(warning) + '</div>';
     }).join('');
     return warningHtml +
-      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence, feature.nucleotide_fasta || feature.nucleotideFasta) +
-      renderSequenceBlock('Amino acid', feature.amino_acid_sequence, feature.amino_acid_fasta || feature.aminoAcidFasta);
+      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence, feature.nucleotide_fasta || feature.nucleotideFasta, 'nt', feature) +
+      renderSequenceBlock('Amino acid', feature.amino_acid_sequence, feature.amino_acid_fasta || feature.aminoAcidFasta, 'aa', feature);
   }
 
   function renderSimplePopup(feature) {
@@ -2951,6 +3185,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function renderPopup(feature, activeTab) {
     copyValues = [];
+    downloadValues = [];
     if (popupMode === 'simple') {
       return renderSimplePopup(feature);
     }
@@ -2995,27 +3230,37 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   function normalizeMatchMemberRows(rows) {
     return (Array.isArray(rows) ? rows : []).map(function (row) {
       return {
+        featureSvgId: String(row && (row.featureSvgId || row.feature_svg_id || row.svgId || row.svg_id) || '').trim(),
+        orthogroupId: String(row && (row.orthogroupId || row.orthogroup_id) || '').trim(),
+        displayName: String(row && (row.displayName || row.display_name) || '').trim(),
         record: String(row && (row.record || row.record_id) || '').trim(),
         coordinates: String(row && row.coordinates || '').trim(),
         proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
         productOrNote: String(row && (row.productOrNote || row.product_or_note) || '').trim()
       };
     }).filter(function (row) {
-      return row.record || row.coordinates || row.proteinId || row.productOrNote;
+      return row.record || row.coordinates || row.proteinId || row.productOrNote || row.featureSvgId;
     });
   }
 
   function normalizeMatchBlockOrthogroups(groups) {
     return (Array.isArray(groups) ? groups : []).map(function (group) {
+      var id = String(group && group.id || '').trim();
+      var displayName = String(group && (group.displayName || group.display_name) || '').trim();
+      var memberRows = normalizeMatchMemberRows(group && (group.memberRows || group.member_rows)).map(function (row) {
+        if (!row.orthogroupId) row.orthogroupId = id;
+        if (!row.displayName) row.displayName = displayName;
+        return row;
+      });
       return {
-        id: String(group && group.id || '').trim(),
-        displayName: String(group && (group.displayName || group.display_name) || '').trim(),
+        id: id,
+        displayName: displayName,
         memberCount: String(group && (group.memberCount || group.member_count) || '').trim(),
         recordCoverage: String(group && (group.recordCoverage || group.record_coverage) || '').trim(),
         queryMember: String(group && (group.queryMember || group.query_member) || '').trim(),
         subjectMember: String(group && (group.subjectMember || group.subject_member) || '').trim(),
         detailRows: normalizeMatchRows(group && (group.detailRows || group.detail_rows)),
-        memberRows: normalizeMatchMemberRows(group && (group.memberRows || group.member_rows)),
+        memberRows: memberRows,
         member_copy_text: String(group && (group.member_copy_text || group.memberCopyText) || '').trim()
       };
     }).filter(function (group) {
@@ -3085,6 +3330,8 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function renderMatchMemberTable(section, rows) {
     if (!rows.length) return '';
+    var orthogroupId = String(section && (section.id || section.orthogroupId || section.orthogroup_id) || rows[0] && (rows[0].orthogroupId || rows[0].orthogroup_id) || '').trim();
+    var displayName = String(section && (section.displayName || section.display_name || section.name) || rows[0] && (rows[0].displayName || rows[0].display_name) || '').trim();
     var copyText = String(section && (section.member_copy_text || section.memberCopyText) || '').trim();
     if (!copyText) {
       copyText = ['Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'].concat(
@@ -3094,17 +3341,23 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       ).join('\\n');
     }
     var body = rows.map(function (row) {
+      var sequenceActions = renderMemberSequenceActions(row, orthogroupId);
       return '<tr>' +
         '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.coordinates) + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.proteinId) + '</td>' +
         '<td>' + escapeHtml(row.productOrNote) + '</td>' +
+        '<td>' + sequenceActions + '</td>' +
         '</tr>';
     }).join('');
+    var sequenceActions = renderGroupSequenceActions(rows, {
+      orthogroupId: orthogroupId,
+      displayName: displayName
+    });
     return '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
-      '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th></tr></thead>' +
+      '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th><th>Seq</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>' +
-      '<div class="gfi-block-actions">' + copyButton(copyText) + '</div>';
+      '<div class="gfi-block-actions">' + copyButton(copyText) + sequenceActions + '</div>';
   }
 
   function renderMatchSections(match) {
@@ -3142,6 +3395,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function renderMatchPopup(match) {
     copyValues = [];
+    downloadValues = [];
     return '<div class="gfi gfi--simple">' +
       '<div class="gfi-header" data-drag-handle="true">' +
       '<div><div class="gfi-title">' + escapeHtml(match && match.title || 'Pairwise match') + '</div>' +
@@ -3820,7 +4074,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         startPopupResize(rootEvent);
         return;
       }
-      var interactiveTarget = closestFromTarget(rootEvent.target, 'button, input, textarea, select, a, [data-close], [data-copy-index], [data-tab], [data-block-og-id], [data-match-feature-id]');
+      var interactiveTarget = closestFromTarget(rootEvent.target, 'button, input, textarea, select, a, [data-close], [data-copy-index], [data-download-index], [data-tab], [data-block-og-id], [data-match-feature-id]');
       if (interactiveTarget) return;
       var dragHandle = closestFromTarget(rootEvent.target, '[data-drag-handle]');
       if (dragHandle) {
@@ -3852,6 +4106,15 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
         var index = Number(copyTarget.getAttribute('data-copy-index'));
         var value = Number.isFinite(index) ? copyValues[index] || '' : '';
         Promise.resolve(copyText(value, copyTarget)).catch(function () {});
+        return;
+      }
+      var downloadTarget = closestFromTarget(rootEvent.target, '[data-download-index]');
+      if (downloadTarget) {
+        var downloadIndex = Number(downloadTarget.getAttribute('data-download-index'));
+        var payload = Number.isFinite(downloadIndex) ? downloadValues[downloadIndex] : null;
+        if (payload && payload.text) {
+          downloadText(payload.filename, payload.text, payload.type);
+        }
         return;
       }
       var matchFeatureRow = closestFromTarget(rootEvent.target, '[data-match-feature-id]');
@@ -4693,14 +4956,22 @@ const standaloneMemberLocationText = (member) => {
 
 const buildStandaloneMatchMemberRows = (orthogroup) => {
   const members = Array.isArray(orthogroup?.members) ? orthogroup.members : [];
+  const orthogroupId = firstStandaloneText(orthogroup?.id, orthogroup?.orthogroupId, orthogroup?.orthogroup_id);
+  const displayName = firstStandaloneText(orthogroup?.display_name, orthogroup?.displayName, orthogroup?.name);
   return members
     .map((member) => ({
+      featureSvgId: standaloneMemberFeatureSvgId(member),
+      feature_svg_id: standaloneMemberFeatureSvgId(member),
+      orthogroupId,
+      orthogroup_id: orthogroupId,
+      displayName,
+      display_name: displayName,
       record: firstStandaloneText(member?.recordId, member?.record_id),
       coordinates: standaloneMemberLocationText(member),
       proteinId: resolveStandaloneDisplayProteinId(null, member),
       productOrNote: firstStandaloneText(member?.product, member?.note)
     }))
-    .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote);
+    .filter((row) => row.record || row.coordinates || row.proteinId || row.productOrNote || row.featureSvgId);
 };
 
 const standaloneMemberCopyText = (memberRows) => {

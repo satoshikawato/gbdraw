@@ -25,6 +25,11 @@ import {
   encodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
+import {
+  normalizeCollinearAnchorMode,
+  normalizeCollinearSearchScope,
+  normalizeGroupMetadataScope
+} from '../app/losat-normalization.js';
 
 const SESSION_VERSION = 27;
 const LOSAT_CACHE_SCHEMA = 2;
@@ -307,27 +312,24 @@ const normalizeCollinearColorMode = (value) => {
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
 
-const normalizeCollinearAnchorMode = (value) => {
+const normalizeOrthogroupMembershipMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   const aliases = {
-    raw: 'all',
-    all_hits: 'all',
-    top_n: 'all',
-    topn: 'all',
-    one2one: 'one_to_one',
-    mutual_best: 'one_to_one',
-    top1: 'one_to_one',
-    top_1: 'one_to_one',
-    reciprocal_best: 'rbh',
-    strict_rbh: 'rbh'
+    legacy: 'anchor_core_v1',
+    rbh: 'anchor_core_v1',
+    rbh_only: 'anchor_core_v1',
+    merge: 'anchor_core_v1',
+    family: 'anchor_core_v1',
+    family_merge: 'anchor_core_v1',
+    local_split: 'anchor_core_v1',
+    density_split: 'anchor_core_v1',
+    outparalog_split: 'anchor_core_v1',
+    distribution_split: 'anchor_core_v1',
+    orthogroups: 'anchor_core_v1',
+    anchor_core: 'anchor_core_v1'
   };
   const resolved = aliases[normalized] || normalized;
-  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
-};
-
-const normalizeCollinearSearchScope = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
+  return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
 };
 
 const normalizePairwiseMatchStyle = (value) => {
@@ -432,10 +434,18 @@ const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
 
 let lastSessionFilename = null;
 
+const cloneLosatForConfig = () => {
+  const cloned = JSON.parse(JSON.stringify(state.losat || {}));
+  if (cloned.blastp && typeof cloned.blastp === 'object' && !Array.isArray(cloned.blastp)) {
+    delete cloned.blastp.collinearAnchorMode;
+  }
+  return cloned;
+};
+
 const buildConfigData = () => ({
   form: state.form,
   adv: state.adv,
-  losat: state.losat,
+  losat: cloneLosatForConfig(),
   colors: state.currentColors.value,
   palette: state.selectedPalette.value,
   paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
@@ -804,6 +814,16 @@ const applyConfigData = (data) => {
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
     state.losat.blastp.candidateLimit = null;
+    if (
+      (state.losat.blastp.orthogroupMemberMaxHits === null ||
+        state.losat.blastp.orthogroupMemberMaxHits === undefined) &&
+      state.losat.blastp.orthogroupMaxHits !== null &&
+      state.losat.blastp.orthogroupMaxHits !== undefined
+    ) {
+      state.losat.blastp.orthogroupMemberMaxHits = state.losat.blastp.orthogroupMaxHits;
+    }
+    state.losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(state.losat.blastp?.orthogroupMembershipMode);
+    state.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(state.losat.blastp?.orthogroupMemberMaxHits, 5);
     state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
     {
       const maxGap = Number(state.losat.blastp?.collinearMaxGeneGap);
@@ -1157,6 +1177,8 @@ const applyOrthogroupState = (orthogroupState = {}) => {
     const recordCoverage = Number(group?.record_coverage_count || new Set(
       members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
     ).size || 0);
+    const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
+    const sourceRecordIndex = Number(group?.source_record_index);
     members.forEach((member) => {
       const featureSvgId = String(member?.featureSvgId || '').trim();
       const recordIndex = Number(member?.recordIndex);
@@ -1168,6 +1190,8 @@ const applyOrthogroupState = (orthogroupState = {}) => {
         proteinId: String(member?.proteinId || '').trim(),
         sourceProteinId: String(member?.sourceProteinId || '').trim(),
         orthogroupRepresentative: Boolean(member?.representative),
+        orthogroupScope,
+        orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
         orthogroupMember: member
       };
       index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);

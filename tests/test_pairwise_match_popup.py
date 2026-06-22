@@ -26,12 +26,18 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    losat_normalization_path = tmp_path / "losat-normalization.mjs"
+    losat_normalization_path.write_text(
+        (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_path.write_text(
         source_path.read_text(encoding="utf-8")
         .replace("./feature-utils.js", "./feature-utils.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./losat-normalization.js", "./losat-normalization.mjs"),
         encoding="utf-8",
     )
     check_path = tmp_path / "check-collinearity-popup.mjs"

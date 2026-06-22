@@ -36,6 +36,12 @@ import {
   depthSlotTrackIndex,
   syncDepthSlotLabels
 } from './depth-track-state.js';
+import {
+  collinearGroupScopeForEvidenceScope,
+  normalizeCollinearAnchorMode,
+  normalizeCollinearSearchScope,
+  normalizeGroupMetadataScope
+} from './losat-normalization.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -44,6 +50,9 @@ const downloadTextFile = (filename, text) => {
   const link = document.createElement('a');
   link.href = url;
   link.download = safeName;
+  link.addEventListener('click', (event) => {
+    event.stopPropagation();
+  }, { once: true });
   link.click();
   URL.revokeObjectURL(url);
 };
@@ -378,26 +387,24 @@ const normalizeCollinearColorMode = (value) => {
   if (normalized === 'identity') return 'average_identity';
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
-const normalizeCollinearAnchorMode = (value) => {
+const normalizeOrthogroupMembershipMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   const aliases = {
-    raw: 'all',
-    all_hits: 'all',
-    top_n: 'all',
-    topn: 'all',
-    one2one: 'one_to_one',
-    mutual_best: 'one_to_one',
-    top1: 'one_to_one',
-    top_1: 'one_to_one',
-    reciprocal_best: 'rbh',
-    strict_rbh: 'rbh'
+    legacy: 'anchor_core_v1',
+    rbh: 'anchor_core_v1',
+    rbh_only: 'anchor_core_v1',
+    merge: 'anchor_core_v1',
+    family: 'anchor_core_v1',
+    family_merge: 'anchor_core_v1',
+    local_split: 'anchor_core_v1',
+    density_split: 'anchor_core_v1',
+    outparalog_split: 'anchor_core_v1',
+    distribution_split: 'anchor_core_v1',
+    orthogroups: 'anchor_core_v1',
+    anchor_core: 'anchor_core_v1'
   };
   const resolved = aliases[normalized] || normalized;
-  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
-};
-const normalizeCollinearSearchScope = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
+  return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
 };
 const normalizePairwiseMatchStyle = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -760,6 +767,8 @@ export const createRunAnalysis = ({
       const recordCoverage = Number(group?.record_coverage_count || new Set(
         members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
       ).size || 0);
+      const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
+      const sourceRecordIndex = Number(group?.source_record_index);
       members.forEach((member) => {
         const featureSvgId = String(member?.featureSvgId || '').trim();
         const recordIndex = Number(member?.recordIndex);
@@ -771,6 +780,8 @@ export const createRunAnalysis = ({
           proteinId: String(member?.proteinId || '').trim(),
           sourceProteinId: String(member?.sourceProteinId || '').trim(),
           orthogroupRepresentative: Boolean(member?.representative),
+          orthogroupScope,
+          orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
           orthogroupMember: member
         };
         index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);
@@ -809,6 +820,8 @@ export const createRunAnalysis = ({
       orthogroupMemberCount: entry.orthogroupMemberCount,
       orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
       orthogroupRepresentative: entry.orthogroupRepresentative,
+      orthogroupScope: entry.orthogroupScope,
+      orthogroupSourceRecordIndex: entry.orthogroupSourceRecordIndex,
       orthogroupMember: entry.orthogroupMember
     };
   };
@@ -2770,6 +2783,13 @@ json.dumps({
         losat.blastp.mode = blastpMode;
         losat.blastp.maxHits = Math.max(1, blastpDisplayMaxHits);
         losat.blastp.candidateLimit = null;
+        losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(
+          losat.blastp?.orthogroupMembershipMode
+        );
+        losat.blastp.orthogroupMemberMaxHits = Math.max(
+          1,
+          normalizeBlastThresholdNumber(losat.blastp?.orthogroupMemberMaxHits, 5, { integer: true })
+        );
         losat.blastp.collinearMinAnchors = Math.max(
           1,
           normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
@@ -2782,9 +2802,19 @@ json.dumps({
           0,
           normalizeBlastThresholdNumber(losat.blastp?.collinearMaxDiagonalDrift, 0, { integer: true })
         );
+        losat.blastp.collinearMaxParalogLinksPerOrthogroup = Math.max(
+          1,
+          normalizeBlastThresholdNumber(
+            losat.blastp?.collinearMaxParalogLinksPerOrthogroup,
+            2,
+            { integer: true }
+          )
+        );
         losat.blastp.collinearColorMode = normalizeCollinearColorMode(losat.blastp?.collinearColorMode);
         losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode);
         losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope);
+        const orthogroupMembershipMode = losat.blastp.orthogroupMembershipMode;
+        const orthogroupMemberMaxHits = Math.max(1, losat.blastp.orthogroupMemberMaxHits);
         const collinearSearchScope = losat.blastp.collinearSearchScope;
         args.push(
           '--bitscore',
@@ -3320,10 +3350,7 @@ json.dumps({
 
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
-          if (useOrthogroupBlastp) return 1;
-          if (useCollinearBlastp) {
-            return losat.blastp.collinearAnchorMode === 'all' ? null : 1;
-          }
+          if (useOrthogroupBlastp || useCollinearBlastp) return null;
           return Math.max(1, losat.blastp.maxHits);
         };
 
@@ -3335,7 +3362,9 @@ json.dumps({
             pushArg(args, '--query-gencode', getGencode(queryIdx));
             pushArg(args, '--db-gencode', getGencode(subjectIdx));
           } else {
-            pushArg(args, '--max-hsps-per-subject', 1);
+            if (!useOrthogroupBlastp && !useCollinearBlastp) {
+              pushArg(args, '--max-hsps-per-subject', 1);
+            }
             pushArg(args, '--max-target-seqs', getBlastpCandidateLimit());
           }
           return args;
@@ -3385,19 +3414,21 @@ json.dumps({
           const jobSpecs = [];
           if (useOrthogroupBlastp) {
             for (let i = 0; i < linearSeqs.length; i++) {
+              jobSpecs.push({ queryIndex: i, subjectIndex: i, pairIndex: Math.min(i, Math.max(0, linearSeqs.length - 2)) });
               for (let j = i + 1; j < linearSeqs.length; j++) {
                 jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
                 jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
               }
             }
           } else if (useCollinearBlastp) {
+            for (let i = 0; i < linearSeqs.length; i++) {
+              jobSpecs.push({ queryIndex: i, subjectIndex: i, pairIndex: Math.min(i, Math.max(0, linearSeqs.length - 2)) });
+            }
             for (let i = 0; i < linearSeqs.length - 1; i++) {
               const subjectEnd = collinearSearchScope === 'all' ? linearSeqs.length : i + 2;
               for (let j = i + 1; j < subjectEnd; j++) {
                 jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
-                if (losat.blastp.collinearAnchorMode === 'rbh') {
-                  jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
-                }
+                jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
               }
             }
           } else {
@@ -3556,13 +3587,15 @@ json.dumps({
                 losat.blastp.collinearMaxGeneGap,
                 'cds',
                 losat.blastp.collinearColorMode,
-                losat.blastp.collinearAnchorMode,
+                'rbh',
                 50,
                 25,
                 losat.blastp.collinearMaxDiagonalDrift,
                 0,
-                0,
-                collinearSearchScope
+                losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+                collinearSearchScope,
+                orthogroupMembershipMode,
+                orthogroupMemberMaxHits
               )
             );
             if (convertedPayload.error) throw new Error(convertedPayload.error);
@@ -3570,7 +3603,7 @@ json.dumps({
             if (conversionCache.convertedPayloadHit) losatTiming.proteinConversionCacheHits += 1;
             losatTiming.proteinFilteredHitCacheHits += Number(conversionCache.filteredHitCacheHits || 0);
             losatTiming.proteinFilteredHitCacheMisses += Number(conversionCache.filteredHitCacheMisses || 0);
-            if (useOrthogroupBlastp || useCollinearBlastp) {
+            if (useOrthogroupBlastp || (useCollinearBlastp && collinearGroupScopeForEvidenceScope(collinearSearchScope) === 'global_collinear')) {
               setOrthogroupMetadata(convertedPayload.orthogroups || []);
             } else {
               clearOrthogroupMetadata({ clearSelection: true });

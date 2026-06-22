@@ -22,7 +22,12 @@ from .analysis.collinearity import (
     normalize_collinearity_anchor_mode,
     normalize_collinearity_search_scope,
 )
-from .analysis.protein_colinearity import PROTEIN_BLASTP_MODES
+from .analysis.protein_colinearity import (
+    ORTHOGROUP_INFERENCE_VERSION,
+    ORTHOGROUP_MEMBERSHIP_MODES,
+    PROTEIN_BLASTP_MODES,
+    normalize_orthogroup_membership_mode,
+)
 from .io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -140,14 +145,22 @@ def _parse_collinear_color_mode(value: str) -> str:
 
 def _parse_collinear_anchor_mode(value: str) -> str:
     try:
-        return normalize_collinearity_anchor_mode(value)
+        normalize_collinearity_anchor_mode(value)
     except ValidationError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
+    return "rbh"
 
 
 def _parse_collinear_search_scope(value: str) -> str:
     try:
         return normalize_collinearity_search_scope(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _parse_orthogroup_membership_mode(value: str) -> str:
+    try:
+        return normalize_orthogroup_membership_mode(value)
     except ValidationError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
@@ -240,6 +253,21 @@ def _get_args(args) -> argparse.Namespace:
         type=_parse_optional_positive_int,
         default=None)
     parser.add_argument(
+        '--orthogroup_membership_mode',
+        '--orthogroup-membership-mode',
+        dest='orthogroup_membership_mode',
+        help='Orthogroup inference model for LOSATP Orthogroup/Collinear modes. Legacy values rbh, family_merge, and distribution_split are accepted as aliases for anchor_core_v1 (default: anchor_core_v1).',
+        type=_parse_orthogroup_membership_mode,
+        choices=ORTHOGROUP_MEMBERSHIP_MODES,
+        default=ORTHOGROUP_INFERENCE_VERSION)
+    parser.add_argument(
+        '--orthogroup_member_max_hits',
+        '--orthogroup-member-max-hits',
+        dest='orthogroup_member_max_hits',
+        help='Deprecated compatibility option; anchor_core_v1 inference no longer caps membership evidence with this value (default: 5).',
+        type=int,
+        default=5)
+    parser.add_argument(
         '--align_orthogroup_feature',
         '--align-orthogroup-feature',
         dest='align_orthogroup_feature',
@@ -259,7 +287,7 @@ def _get_args(args) -> argparse.Namespace:
         '--collinear_orthogroup_edge_mode',
         '--collinear-orthogroup-edge-mode',
         dest='collinear_anchor_mode',
-        help='Collinear edge mode inside the selected search scope: rbh, one_to_one, or all (default: rbh).',
+        help='Deprecated compatibility option. Collinear blocks always use RBH anchors (default: rbh).',
         type=_parse_collinear_anchor_mode,
         choices=["all", "one_to_one", "rbh"],
         default='rbh')
@@ -955,6 +983,8 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--save_collinear_blocks requires --protein_blastp_mode collinear or --collinear_blocks")
     if args.protein_blastp_max_hits <= 0:
         parser.error("--protein_blastp_max_hits must be > 0")
+    if args.orthogroup_member_max_hits <= 0:
+        parser.error("--orthogroup_member_max_hits must be > 0")
     if args.losatp_threads is not None and args.losatp_threads <= 0:
         parser.error("--losatp_threads must be > 0")
     if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
@@ -1132,6 +1162,8 @@ def linear_main(cmd_args) -> None:
     losatp_threads: int | None = args.losatp_threads
     protein_blastp_max_hits: int = args.protein_blastp_max_hits
     protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
+    orthogroup_membership_mode: str = str(args.orthogroup_membership_mode or ORTHOGROUP_INFERENCE_VERSION)
+    orthogroup_member_max_hits: int = args.orthogroup_member_max_hits
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
     collinear_unit_mode: str = str(args.collinear_unit_mode or "auto")
     collinear_anchor_mode: str = str(args.collinear_anchor_mode or "rbh")
@@ -1461,6 +1493,9 @@ def linear_main(cmd_args) -> None:
             losatp_bin=losatp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
+            orthogroup_membership_mode=orthogroup_membership_mode,
+            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -1520,6 +1555,9 @@ def linear_main(cmd_args) -> None:
         losatp_threads=losatp_threads,
         protein_blastp_max_hits=protein_blastp_max_hits,
         protein_blastp_candidate_limit=protein_blastp_candidate_limit,
+        orthogroup_membership_mode=orthogroup_membership_mode,
+        orthogroup_member_max_hits=orthogroup_member_max_hits,
+        collinear_max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
         align_orthogroup_feature=align_orthogroup_feature or None,
         pairwise_match_style=pairwise_match_style,
         evalue=evalue,

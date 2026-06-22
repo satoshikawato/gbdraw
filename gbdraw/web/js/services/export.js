@@ -297,6 +297,9 @@ export const downloadPNG = () => {
       const link = document.createElement('a');
       link.download = getDownloadName('png');
       link.href = downloadUrl;
+      link.addEventListener('click', (event) => {
+        event.stopPropagation();
+      }, { once: true });
       link.click();
       URL.revokeObjectURL(downloadUrl);
       URL.revokeObjectURL(url);

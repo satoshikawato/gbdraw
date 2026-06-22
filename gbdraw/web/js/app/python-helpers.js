@@ -701,6 +701,33 @@ def _serialize_orthogroup_name_candidate(candidate):
         "score": float(getter("score", 0.0) or 0.0),
     }
 
+def _serialize_ortholog_edge(edge):
+    return {
+        "orthogroupId": str(getattr(edge, "orthogroup_id", "") or ""),
+        "sourceRbhOrthogroupId": getattr(edge, "source_rbh_orthogroup_id", None),
+        "targetRbhOrthogroupId": getattr(edge, "target_rbh_orthogroup_id", None),
+        "queryProteinId": str(getattr(edge, "query_protein_id", "") or ""),
+        "subjectProteinId": str(getattr(edge, "subject_protein_id", "") or ""),
+        "queryRecordIndex": int(getattr(edge, "query_record_index", 0) or 0),
+        "subjectRecordIndex": int(getattr(edge, "subject_record_index", 0) or 0),
+        "edgeKind": str(getattr(edge, "edge_kind", "") or ""),
+        "renderRole": str(getattr(edge, "render_role", "") or ""),
+        "pathId": getattr(edge, "path_id", None),
+        "identity": float(getattr(edge, "identity", 0.0) or 0.0),
+        "evalue": float(getattr(edge, "evalue", 0.0) or 0.0),
+        "bitscore": float(getattr(edge, "bitscore", 0.0) or 0.0),
+        "alignmentLength": int(getattr(edge, "alignment_length", 0) or 0),
+    }
+
+def _serialize_ortholog_path(path):
+    return {
+        "orthogroupId": str(getattr(path, "orthogroup_id", "") or ""),
+        "pathId": str(getattr(path, "path_id", "") or ""),
+        "proteinIds": [str(item) for item in (getattr(path, "protein_ids", ()) or ())],
+        "edgeIds": [str(item) for item in (getattr(path, "edge_ids", ()) or ())],
+        "sharedProteinIds": [str(item) for item in (getattr(path, "shared_protein_ids", ()) or ())],
+    }
+
 def _serialize_orthogroups_payload(orthogroups):
     if orthogroups is None:
         return []
@@ -709,20 +736,51 @@ def _serialize_orthogroups_payload(orthogroups):
     descriptions_by_orthogroup_id = getattr(orthogroups, "descriptions_by_orthogroup_id", {}) or {}
     candidates_by_orthogroup_id = getattr(orthogroups, "name_candidates_by_orthogroup_id", {}) or {}
     confidence_by_orthogroup_id = getattr(orthogroups, "confidence_by_orthogroup_id", {}) or {}
+    rbh_orthogroups = getattr(orthogroups, "rbh_orthogroups", {}) or {}
+    ortholog_edges_by_orthogroup_id = getattr(orthogroups, "ortholog_edges_by_orthogroup_id", {}) or {}
+    ortholog_paths_by_orthogroup_id = getattr(orthogroups, "ortholog_paths_by_orthogroup_id", {}) or {}
+    related_edges_by_orthogroup_id = getattr(orthogroups, "related_edges_by_orthogroup_id", {}) or {}
+    scope_by_orthogroup_id = getattr(orthogroups, "scope_by_orthogroup_id", {}) or {}
+    source_record_index_by_orthogroup_id = getattr(orthogroups, "source_record_index_by_orthogroup_id", {}) or {}
     for orthogroup_id, members in orthogroups.orthogroups.items():
         record_coverage_count = len({int(member.record_index) for member in members})
+        member_ids = {str(member.protein_id) for member in members}
+        rbh_ids = [
+            str(rbh_id)
+            for rbh_id, protein_ids in rbh_orthogroups.items()
+            if member_ids.intersection({str(protein_id) for protein_id in protein_ids})
+        ]
         payload.append(
             {
                 "id": orthogroup_id,
                 "name": str(names_by_orthogroup_id.get(orthogroup_id, "") or ""),
                 "description": str(descriptions_by_orthogroup_id.get(orthogroup_id, "") or ""),
                 "nameConfidence": str(confidence_by_orthogroup_id.get(orthogroup_id, "none") or "none"),
+                "scope": str(scope_by_orthogroup_id.get(orthogroup_id, "cross_record") or "cross_record"),
+                "source_record_index": (
+                    int(source_record_index_by_orthogroup_id[orthogroup_id])
+                    if orthogroup_id in source_record_index_by_orthogroup_id
+                    else None
+                ),
                 "nameCandidates": [
                     _serialize_orthogroup_name_candidate(candidate)
                     for candidate in (candidates_by_orthogroup_id.get(orthogroup_id, []) or [])
                 ],
                 "member_count": len(members),
                 "record_coverage_count": record_coverage_count,
+                "rbhOrthogroupIds": rbh_ids,
+                "orthologEdges": [
+                    _serialize_ortholog_edge(edge)
+                    for edge in (ortholog_edges_by_orthogroup_id.get(orthogroup_id, []) or [])
+                ],
+                "orthologPaths": [
+                    _serialize_ortholog_path(path)
+                    for path in (ortholog_paths_by_orthogroup_id.get(orthogroup_id, []) or [])
+                ],
+                "relatedEdges": [
+                    _serialize_ortholog_edge(edge)
+                    for edge in (related_edges_by_orthogroup_id.get(orthogroup_id, []) or [])
+                ],
                 "members": [
                     {
                         "orthogroupId": member.orthogroup_id,
@@ -737,6 +795,15 @@ def _serialize_orthogroups_payload(orthogroups):
                         "end": member.end,
                         "strand": member.strand,
                         "representative": member.representative,
+                        "role": str(getattr(member, "role", "") or ""),
+                        "confidence": str(getattr(member, "confidence", "") or ""),
+                        "assignmentReason": str(getattr(member, "assignment_reason", "") or ""),
+                        "supportingEdges": [
+                            str(edge_id)
+                            for edge_id in (getattr(member, "supporting_edges", ()) or ())
+                        ],
+                        "bestCoreSupport": float(getattr(member, "best_core_support", 0.0) or 0.0),
+                        "secondBestCoreSupport": float(getattr(member, "second_best_core_support", 0.0) or 0.0),
                         "gene": getattr(member, "gene", None),
                         "product": getattr(member, "product", None),
                         "note": getattr(member, "note", None),
@@ -769,8 +836,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     collinear_max_conflicts_in_merge_gap=1,
     collinear_max_paralog_links_per_orthogroup=2,
     collinear_search_scope="adjacent",
+    orthogroup_membership_mode="anchor_core_v1",
+    orthogroup_member_max_hits=5,
 ):
-    """Convert LOSATP blastp outputs for pairwise display or RBH orthogroups."""
+    """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
         from io import StringIO
         import pandas as pd
@@ -782,6 +851,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         from gbdraw.analysis.protein_colinearity import (
             convert_pair_protein_hits_to_genomic_links,
             filter_protein_hits_by_thresholds,
+            normalize_orthogroup_membership_mode,
             parse_losatp_outfmt6,
             select_rbh_orthogroup_edges_from_directional_hits,
             select_top_hits_per_query,
@@ -798,6 +868,25 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         normalized_mode = str(mode or "pairwise").strip().lower()
         if normalized_mode not in {"pairwise", "orthogroup", "collinear"}:
             normalized_mode = "pairwise"
+        normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode or "anchor_core_v1"))
+        try:
+            normalized_member_max_hits = int(orthogroup_member_max_hits or 5)
+        except Exception:
+            normalized_member_max_hits = 5
+        if normalized_member_max_hits <= 0:
+            normalized_member_max_hits = 5
+        try:
+            normalized_max_paralog_links = int(collinear_max_paralog_links_per_orthogroup or 2)
+        except Exception:
+            normalized_max_paralog_links = 2
+        if normalized_max_paralog_links <= 0:
+            normalized_max_paralog_links = 2
+        normalized_collinear_anchor_mode = "rbh"
+        normalized_collinear_search_scope = str(collinear_search_scope or "adjacent").strip().lower().replace("-", "_")
+        if normalized_collinear_search_scope in {"all_records", "all_pairs", "all_record_pairs", "global"}:
+            normalized_collinear_search_scope = "all"
+        elif normalized_collinear_search_scope not in {"adjacent", "all"}:
+            normalized_collinear_search_scope = "adjacent"
 
         record_payloads = []
         for idx, record in enumerate(raw_records):
@@ -850,17 +939,19 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             str(evalue),
             str(identity),
             str(alignment_length),
+            str(normalized_membership_mode),
+            str(normalized_member_max_hits),
             str(collinear_min_anchors),
             str(collinear_max_gene_gap),
             str(collinear_unit_mode),
             str(collinear_color_mode),
-            str(collinear_anchor_mode),
+            normalized_collinear_anchor_mode,
             str(collinear_block_merge_gap),
             str(collinear_singleton_merge_gap),
             str(collinear_max_diagonal_drift),
             str(collinear_max_conflicts_in_merge_gap),
             str(collinear_max_paralog_links_per_orthogroup),
-            str(collinear_search_scope),
+            normalized_collinear_search_scope,
             tuple(
                 (
                     item["record_index"],
@@ -973,14 +1064,15 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 if _is_blank_or_js_nullish(value):
                     return default
                 return str(value).strip()
-            anchor_mode = _collinear_text(collinear_anchor_mode, "rbh").lower().replace("-", "_")
-            search_scope = _collinear_text(collinear_search_scope, "adjacent").lower().replace("-", "_")
+            anchor_mode = normalized_collinear_anchor_mode
+            search_scope = normalized_collinear_search_scope
+            group_scope = "global_collinear" if search_scope == "all" else "adjacent_local"
+            max_paralog_links = normalized_max_paralog_links
             directional_tables = {}
             for item in pair_items:
                 query_index = int(item["query_index"])
                 subject_index = int(item["subject_index"])
-                if query_index != subject_index:
-                    directional_tables[(query_index, subject_index)] = item["hits"]
+                directional_tables[(query_index, subject_index)] = item["hits"]
             params = LosslessCollinearityParameters(
                 min_anchors=_collinear_int(collinear_min_anchors, 1),
                 max_unit_gap=_collinear_int(collinear_max_gene_gap, 0),
@@ -993,12 +1085,19 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 unit_mode="cds",
                 edge_mode=anchor_mode,
                 search_scope=search_scope,
+                orthogroup_membership_mode=normalized_membership_mode,
+                orthogroup_member_max_hits=normalized_member_max_hits,
+                max_paralog_links_per_orthogroup=max_paralog_links,
             )
             converted_frames = convert_collinearity_blocks_to_comparisons(
                 collinearity_result,
                 record_ids=record_ids,
                 color_mode=_collinear_text(collinear_color_mode, "orientation"),
             )
+            for converted in converted_frames:
+                converted["group_kind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"
+                converted["group_scope"] = group_scope
+                converted["collinear_group_scope"] = group_scope
             converted_pairs = []
             for pair_index, converted in enumerate(converted_frames):
                 handle = StringIO()
@@ -1027,6 +1126,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "anchorCount": len(block.anchors),
                     "anchor_count": len(block.anchors),
                     "orthogroupIds": sorted({anchor.orthogroup_id for anchor in block.anchors if anchor.orthogroup_id}),
+                    "groupKind": "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group",
+                    "groupScope": group_scope,
+                    "collinearGroupScope": group_scope,
                     "querySpan": [
                         min(min(anchor.query_start, anchor.query_end) for anchor in block.anchors),
                         max(max(anchor.query_start, anchor.query_end) for anchor in block.anchors),
@@ -1040,9 +1142,17 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 }
                 for block in collinearity_result.blocks
             ]
+            serialized_groups = _serialize_orthogroups_payload(collinearity_result.orthogroups)
+            for group in serialized_groups:
+                group["scope"] = group_scope
+                group["groupKind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"
+            orthogroup_groups = serialized_groups if group_scope == "global_collinear" else []
+            collinear_groups = serialized_groups if group_scope == "adjacent_local" else []
             return _finalize_losatp_payload({
                 "pairs": converted_pairs,
-                "orthogroups": _serialize_orthogroups_payload(collinearity_result.orthogroups),
+                "orthogroups": orthogroup_groups,
+                "collinearGroups": collinear_groups,
+                "collinearGroupScope": group_scope,
                 "collinearityBlocks": block_payload,
             })
 
@@ -1088,6 +1198,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
             directional_tables,
             combined_protein_map,
+            orthogroup_membership_mode=normalized_membership_mode,
+            orthogroup_member_max_hits=normalized_member_max_hits,
+            max_related_edges_per_orthogroup=normalized_max_paralog_links,
         )
         orthogroups = edge_selection.orthogroups
 

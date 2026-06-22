@@ -1,5 +1,9 @@
 import { getFeatureElements } from './feature-editor/svg-actions.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import {
+  groupMetadataScopeLabel,
+  normalizeGroupMetadataScope
+} from './losat-normalization.js';
 
 const { computed } = window.Vue;
 
@@ -31,6 +35,9 @@ const downloadTextFile = (filename, text, type = 'text/plain;charset=utf-8') => 
   link.href = url;
   link.download = filename;
   document.body.appendChild(link);
+  link.addEventListener('click', (event) => {
+    event.stopPropagation();
+  }, { once: true });
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
@@ -185,6 +192,13 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     if (!id) return '';
     return normalizeText(orthogroupDescriptionOverrides[id]) || normalizeText(group?.description);
   };
+
+  const orthogroupScope = (groupOrId) => {
+    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
+    return normalizeGroupMetadataScope(group?.scope);
+  };
+
+  const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
 
   const isOrthogroupRenamed = (groupOrId) => {
     const id = normalizeText(typeof groupOrId === 'string' ? groupOrId : groupOrId?.id);
@@ -511,6 +525,8 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     getOrthogroupById,
     resolveOrthogroupName,
     resolveOrthogroupDescription,
+    orthogroupScope,
+    orthogroupScopeLabel,
     isOrthogroupRenamed,
     getOrthogroupSequenceCount,
     hasOrthogroupSequence,

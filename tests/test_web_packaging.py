@@ -10,6 +10,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -175,6 +176,141 @@ def test_index_links_to_interactive_gallery() -> None:
     assert "Interactive Gallery" in index_html
 
 
+def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert '<option value="distribution_split">Distribution split</option>' not in index_html
+    assert '<option value="family_merge">Family merge</option>' not in index_html
+    assert "orthogroupMembershipMode: 'anchor_core_v1'" in state_js
+    assert "outparalog_split: 'anchor_core_v1'" in config_js
+    assert "outparalog_split: 'anchor_core_v1'" in run_analysis_js
+
+
+def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    normalizer_js = (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+
+    assert "Edge mode" not in index_html
+    assert 'v-model="losat.blastp.collinearAnchorMode"' not in index_html
+    assert "Top1" not in index_html
+    assert "All hits" not in index_html
+    assert "Evidence scope" in index_html
+    assert "ribbons are still emitted for adjacent display pairs" in index_html
+    assert "export const normalizeCollinearAnchorMode = (_value) => 'rbh';" in normalizer_js
+    assert "delete cloned.blastp.collinearAnchorMode;" in config_js
+    assert "losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode" in run_analysis_js
+    assert "normalized_collinear_anchor_mode = \"rbh\"" in helper_js
+    assert "normalized_collinear_anchor_mode," in helper_js
+    assert "'data-group-kind'" in state_js
+    assert "'data-group-scope'" in state_js
+    assert "'data-collinear-group-scope'" in state_js
+
+
+def test_web_orthogroup_payload_serializes_record_local_scope() -> None:
+    helpers_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    member = SimpleNamespace(
+        orthogroup_id="og_2",
+        protein_id="a0",
+        source_protein_id=None,
+        record_index=0,
+        record_id="record_a",
+        feature_index=0,
+        label="a0",
+        feature_svg_id="feature-a0",
+        start=0,
+        end=9,
+        strand=1,
+        representative=True,
+        role="local_paralog",
+        confidence="high",
+        assignment_reason="record-local reciprocal paralog cluster",
+        supporting_edges=("a0->a1:record_local_paralog",),
+        best_core_support=10.0,
+        second_best_core_support=0.0,
+        gene=None,
+        product=None,
+        note=None,
+        locus_tag=None,
+        gene_id=None,
+        old_locus_tag=None,
+    )
+    orthogroups = SimpleNamespace(
+        orthogroups={"og_2": [member]},
+        names_by_orthogroup_id={},
+        descriptions_by_orthogroup_id={},
+        name_candidates_by_orthogroup_id={},
+        confidence_by_orthogroup_id={},
+        rbh_orthogroups={"og_2": ("a0",)},
+        ortholog_edges_by_orthogroup_id={},
+        ortholog_paths_by_orthogroup_id={},
+        related_edges_by_orthogroup_id={},
+        scope_by_orthogroup_id={"og_2": "record_local"},
+        source_record_index_by_orthogroup_id={"og_2": 0},
+    )
+
+    payload = namespace["_serialize_orthogroups_payload"](orthogroups)
+
+    assert payload[0]["scope"] == "record_local"
+    assert payload[0]["source_record_index"] == 0
+    assert "sourceRecordIndex" not in payload[0]
+    assert payload[0]["member_count"] == 1
+    assert payload[0]["record_coverage_count"] == 1
+    assert payload[0]["members"][0]["role"] == "local_paralog"
+
+
+def test_web_collinear_payload_splits_local_groups_from_global_orthogroups() -> None:
+    helpers_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+
+    assert 'group_scope = "global_collinear" if search_scope == "all" else "adjacent_local"' in helpers_js
+    assert 'converted["group_kind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"' in helpers_js
+    assert 'converted["collinear_group_scope"] = group_scope' in helpers_js
+    assert 'orthogroup_groups = serialized_groups if group_scope == "global_collinear" else []' in helpers_js
+    assert 'collinear_groups = serialized_groups if group_scope == "adjacent_local" else []' in helpers_js
+    assert '"orthogroups": orthogroup_groups' in helpers_js
+    assert '"collinearGroups": collinear_groups' in helpers_js
+    assert '"collinearGroupScope": group_scope' in helpers_js
+
+
+def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    orthogroups_js = (WEB_ROOT / "js" / "app" / "orthogroups.js").read_text(encoding="utf-8")
+    normalizer_js = (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8")
+
+    assert "state.orthogroups.value = groups;" in config_js
+    assert "orthogroupScope" in config_js
+    assert "orthogroupScope" in run_analysis_js
+    assert "Species-specific orthogroup" in normalizer_js
+    assert "Collinearity-backed global evidence" in normalizer_js
+    assert "Local collinear group" in normalizer_js
+    assert "groupMetadataScopeLabel(orthogroupScope(groupOrId))" in orthogroups_js
+    assert "orthogroupScopeLabel(group)" in index_html
+    assert "orthogroupScopeLabel(selectedOrthogroup)" in index_html
+
+
+def test_web_losatp_orthogroup_and_collinear_blastp_omit_hsp_cap() -> None:
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert (
+        "if (!useOrthogroupBlastp && !useCollinearBlastp) {\n"
+        "              pushArg(args, '--max-hsps-per-subject', 1);\n"
+        "            }"
+    ) in run_analysis_js
+    assert "pushArg(args, '--max-target-seqs', getBlastpCandidateLimit());" in run_analysis_js
+
+
 def test_public_web_html_entrypoints_are_not_gitignored() -> None:
     required_html_paths = [
         "gbdraw/web/index.html",
@@ -318,6 +454,23 @@ def test_index_cloaks_vue_template_until_mount() -> None:
     assert 'id="app-boot-splash"' in index_html
     assert "Initializing gbdraw..." in index_html
     assert "#app:not([v-cloak]) + #app-boot-splash" in index_html
+
+
+def test_download_helpers_stop_synthetic_link_clicks_from_closing_popups() -> None:
+    source_paths = [
+        WEB_ROOT / "js" / "app" / "app-setup.js",
+        WEB_ROOT / "js" / "app" / "orthogroups.js",
+        WEB_ROOT / "js" / "app" / "run-analysis.js",
+        WEB_ROOT / "js" / "app" / "feature-editor" / "label-actions.js",
+        WEB_ROOT / "js" / "services" / "export.js",
+        WEB_ROOT / "js" / "services" / "standalone-interactivity.js",
+    ]
+    for source_path in source_paths:
+        source = source_path.read_text(encoding="utf-8")
+        for match in re.finditer(r"link\.click\(\);", source):
+            preceding_source = source[max(0, match.start() - 260):match.start()]
+            assert "link.addEventListener('click'" in preceding_source, source_path
+            assert "event.stopPropagation();" in preceding_source, source_path
 
 
 def test_index_includes_preprint_citation() -> None:
@@ -577,6 +730,25 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "function setOrthogroupHover(orthogroupId, highlight)",
         "member_rows: orthogroupMemberRows",
         "function renderMatchMemberTable(section, rows)",
+        "function memberFeatureSvgId(memberOrRow)",
+        "function featureForMember(memberOrRow)",
+        "function featureFasta(feature, sequenceKind)",
+        "function memberFasta(memberOrRow, sequenceKind)",
+        "function memberSequenceFilename(memberOrRow, sequenceKind, orthogroupId)",
+        "function renderMemberSequenceActions(memberOrRow, orthogroupId)",
+        "renderMemberSequenceActions(row, orthogroupId)",
+        "gfi-seq-actions",
+        "<th>Seq</th>",
+        "function groupFasta(memberRows, sequenceKind)",
+        "function groupSequenceFilename(orthogroupId, displayName, sequenceKind)",
+        "function downloadText(filename, text, mimeType)",
+        "var safeFilename = filename || 'download.txt';",
+        "var link = document.createElementNS(XHTML_NS, 'a');",
+        "link.setAttribute('download', safeFilename);",
+        "data-download-index",
+        "var downloadValues = [];",
+        "downloadText(payload.filename, payload.text, payload.type);",
+        "featureSvgId: standaloneMemberFeatureSvgId(member)",
         "activePopupDrag",
         "activeSearchControlsDrag",
         "gbdraw-feature-hover-popup",
@@ -620,6 +792,10 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "['SVG ID'",
         "['Record index'",
         "['Strand'",
+        "memberNtFasta",
+        "memberAaFasta",
+        "ntFasta",
+        "aaFasta",
     ]
     for needle in standalone_absent:
         assert needle not in standalone_source
@@ -813,12 +989,15 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
     feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
     sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
     sequence_fasta_path.write_text((WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8"), encoding="utf-8")
+    normalization_path = tmp_path / "losat-normalization.mjs"
+    normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_path.write_text(
         source_path.read_text(encoding="utf-8")
         .replace("./feature-utils.js", "./feature-utils.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./losat-normalization.js", "./losat-normalization.mjs"),
         encoding="utf-8",
     )
     check_path = tmp_path / "check-pairwise-popup.mjs"
@@ -922,7 +1101,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         const summary = payload.sections[0];
         assert(summary.memberRows.length === 2, JSON.stringify(summary));
         assert(summary.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(summary.memberRows));
-        assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'), summary.memberCopyText);
+        assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tRole\\tConfidence\\tAssignment reason\\tProduct / note'), summary.memberCopyText);
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
         assert(hoverLabels.includes('Orthogroup'), `Hover orthogroup row missing: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
@@ -936,6 +1115,76 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         const fallbackLabels = fallbackPayload.sections.flatMap((section) => section.rows.map((row) => row.label));
         assert(fallbackLabels.includes('Members'), `Feature fallback members missing: ${{JSON.stringify(fallbackLabels)}}`);
         assert(fallbackLabels.includes('Record coverage'), `Feature fallback coverage missing: ${{JSON.stringify(fallbackLabels)}}`);
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
+
+
+def test_collinear_adjacent_popup_labels_local_collinear_groups(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
+    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
+    sequence_fasta_path.write_text((WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8"), encoding="utf-8")
+    normalization_path = tmp_path / "losat-normalization.mjs"
+    normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
+    source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
+    module_path = tmp_path / "pairwise-match-popup.mjs"
+    module_path.write_text(
+        source_path.read_text(encoding="utf-8")
+        .replace("./feature-utils.js", "./feature-utils.mjs")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./losat-normalization.js", "./losat-normalization.mjs"),
+        encoding="utf-8",
+    )
+    check_path = tmp_path / "check-collinear-popup.mjs"
+    check_path.write_text(
+        f"""
+        import {{ buildPairwiseMatchHoverRows, buildPairwiseMatchPayload }} from {module_path.as_uri()!r};
+
+        const assert = (condition, message) => {{
+          if (!condition) throw new Error(message);
+        }};
+
+        const attrs = new Map(Object.entries({{
+          'data-gbdraw-pairwise-match-id': 'block_path_1',
+          'data-match-kind': 'collinear',
+          'data-collinearity-block-id': 'block_1',
+          'data-collinearity-block-kind': 'syntenic',
+          'data-collinear-group-scope': 'adjacent_local',
+          'data-group-kind': 'collinear_gene_group',
+          'data-orthogroup-id': 'og_local_1;og_local_2',
+          'data-query-record-id': 'record_a',
+          'data-subject-record-id': 'record_b',
+          'data-qstart': '10',
+          'data-qend': '40',
+          'data-sstart': '90',
+          'data-send': '130',
+          'data-identity': '88.5'
+        }}));
+        const element = {{
+          style: {{}},
+          getAttribute: (name) => attrs.get(name) || ''
+        }};
+        const payload = buildPairwiseMatchPayload(element, {{ featureLookup: new Map(), orthogroups: [] }});
+        const sectionTitles = payload.sections.map((section) => section.title);
+        assert(sectionTitles.includes('Local collinear groups'), JSON.stringify(sectionTitles));
+        assert(!sectionTitles.includes('Orthogroups covered'), JSON.stringify(sectionTitles));
+        const groupSection = payload.sections.find((section) => section.title === 'Local collinear groups');
+        const groupLabels = groupSection.rows.map((row) => row.label);
+        assert(groupLabels.includes('Number of local collinear groups'), JSON.stringify(groupLabels));
+        assert(payload.blockOrthogroupCount === 2, `Unexpected group count: ${{payload.blockOrthogroupCount}}`);
+        const detailLabels = payload.blockOrthogroups[0].detailRows.map((row) => row.label);
+        assert(detailLabels.includes('Collinear group ID'), JSON.stringify(detailLabels));
+        assert(!detailLabels.includes('Orthogroup ID'), JSON.stringify(detailLabels));
+        const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
+        assert(hoverLabels.includes('Collinear groups'), JSON.stringify(hoverLabels));
+        assert(!hoverLabels.includes('Orthogroups'), JSON.stringify(hoverLabels));
         """,
         encoding="utf-8",
     )
