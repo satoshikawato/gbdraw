@@ -40,7 +40,6 @@ from .analysis.protein_colinearity import (
     build_rbh_orthogroup_protein_blastp_comparisons,
     extract_web_stable_cds_proteins,
 )
-from .io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import (
@@ -629,22 +628,6 @@ def _get_args(args) -> argparse.Namespace:
         type=_parse_collinear_color_mode,
         choices=["average_identity", "orientation", "orientation_identity"],
         default='orientation')
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--collinear_blocks',
-        hidden_aliases=('--collinear-blocks',),
-        dest='collinear_blocks',
-        help='Headered native .collinear.tsv file to import instead of running LOSATP.',
-        type=str,
-        default="")
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--save_collinear_blocks',
-        hidden_aliases=('--save-collinear-blocks',),
-        dest='save_collinear_blocks',
-        help='Write accepted or validated native collinear blocks to this TSV path.',
-        type=str,
-        default="")
     parser.add_argument(
         '-t',
         '--table',
@@ -1210,12 +1193,6 @@ def _get_args(args) -> argparse.Namespace:
     validate_label_args(parser, args)
     if args.protein_blastp_mode != "none" and args.blast:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
-    if args.collinear_blocks and args.blast:
-        parser.error("--collinear_blocks cannot be used with -b/--blast")
-    if args.collinear_blocks and args.protein_blastp_mode != "none":
-        parser.error("--collinear_blocks imports native blocks and cannot be used with --protein_blastp_mode")
-    if args.save_collinear_blocks and not args.collinear_blocks and args.protein_blastp_mode != "collinear":
-        parser.error("--save_collinear_blocks requires --protein_blastp_mode collinear or --collinear_blocks")
     if args.protein_blastp_max_hits <= 0:
         parser.error("--protein_blastp_max_hits must be > 0")
     if args.losatp_threads is not None and args.losatp_threads <= 0:
@@ -1455,8 +1432,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     collinear_anchor_mode: str = "rbh"
     collinear_search_scope: str = str(args.collinear_search_scope or "adjacent")
     collinear_color_mode: str = str(args.collinear_color_mode or "orientation")
-    collinear_blocks_path: str = str(args.collinear_blocks or "").strip()
-    save_collinear_blocks_path: str = str(args.save_collinear_blocks or "").strip()
     collinearity_params = LosslessCollinearityParameters(
         min_anchors=args.collinear_min_anchors,
         max_unit_gap=args.collinear_max_unit_gap,
@@ -1540,7 +1515,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files or protein_blastp_mode != "none" or collinear_blocks_path:
+    if blast_files or protein_blastp_mode != "none":
         load_comparison = True
     else:
         load_comparison = False
@@ -1754,8 +1729,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             )
     if protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("--protein_blastp_mode requires at least two linear records.")
-    if collinear_blocks_path and len(records) < 2:
-        raise ValidationError("--collinear_blocks requires at least two linear records.")
     depth_track_files = _record_major_depth_track_files_from_cli(
         depth_track_groups,
         record_count=len(records),
@@ -1786,20 +1759,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         losat_cache_filenames = _linear_losat_cache_filenames(records)
     collinearity_comparisons: list[DataFrame] | None = None
     collinearity_orthogroups = None
-    if collinear_blocks_path:
-        collinearity_result = parse_native_collinearity_tsv(
-            collinear_blocks_path,
-            records,
-            params=collinearity_params,
-            unit_mode=collinear_unit_mode,
-        )
-        collinearity_orthogroups = collinearity_result.orthogroups
-        collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
-            collinearity_result,
-            records=records,
-            color_mode=collinear_color_mode,
-        )
-    elif protein_blastp_mode == "pairwise" and losatp_cache is not None:
+    if protein_blastp_mode == "pairwise" and losatp_cache is not None:
         protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
@@ -1861,11 +1821,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             collinearity_result,
             records=records,
             color_mode=collinear_color_mode,
-        )
-    if save_collinear_blocks_path:
-        Path(save_collinear_blocks_path).write_text(
-            write_native_collinearity_tsv(collinearity_result),
-            encoding="utf-8",
         )
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)

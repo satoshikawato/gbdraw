@@ -382,8 +382,6 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
               [--collinear_color_mode {average_identity,orientation,orientation_identity}]
-              [--collinear_blocks COLLINEAR_BLOCKS]
-              [--save_collinear_blocks SAVE_COLLINEAR_BLOCKS]
               [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW]
               [-s STEP] [--separate_strands] [--show_gc]
               [--gc_content_mode {deviation,percent}]
@@ -473,12 +471,6 @@ options:
                         Collinear ribbon color mode: average_identity,
                         orientation, or orientation_identity (default:
                         orientation).
-  --collinear_blocks COLLINEAR_BLOCKS
-                        Headered native .collinear.tsv file to import instead
-                        of running LOSATP.
-  --save_collinear_blocks SAVE_COLLINEAR_BLOCKS
-                        Write accepted or validated native collinear blocks to
-                        this TSV path.
   -t, --table TABLE     color table (optional)
   -p, --palette PALETTE
                         Palette name (default: default)

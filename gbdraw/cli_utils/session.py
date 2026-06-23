@@ -348,7 +348,6 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "--qualifier_priority": "files.qualifier_priority",
     "--label_table": "files.cliInputs[]",
     "--feature_table": "files.cliInputs[]",
-    "--collinear_blocks": "files.cliInputs[]",
 }
 
 

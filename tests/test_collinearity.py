@@ -1758,13 +1758,12 @@ def test_native_tsv_parser_rejects_conflicting_block_evalues() -> None:
 
 
 @pytest.mark.linear
-def test_linear_cli_builds_and_saves_native_collinearity(
+def test_linear_cli_builds_collinearity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     records = [_record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"]})]), _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"]})])]
     captured: dict[str, object] = {}
-    save_path = tmp_path / "blocks.collinear.tsv"
 
     monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
@@ -1821,8 +1820,6 @@ def test_linear_cli_builds_and_saves_native_collinearity(
             "7",
             "--collinear_color_mode",
             "orientation",
-            "--save_collinear_blocks",
-            str(save_path),
             "--format",
             "svg",
             "-o",
@@ -1845,7 +1842,6 @@ def test_linear_cli_builds_and_saves_native_collinearity(
     comparisons = captured["protein_comparisons"]
     assert isinstance(comparisons, list)
     assert comparisons[0].iloc[0]["collinearity_color_mode"] == "orientation"
-    assert "block_0001" in save_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.linear
@@ -1864,6 +1860,10 @@ def test_linear_cli_help_omits_removed_collinearity_options(capsys: pytest.Captu
         "collinear-anchor-mode",
         "collinear_orthogroup_edge_mode",
         "collinear-orthogroup-edge-mode",
+        "collinear_blocks",
+        "collinear-blocks",
+        "save_collinear_blocks",
+        "save-collinear-blocks",
     ]
     for option_name in removed_option_names:
         assert f"--{option_name}" not in help_text
@@ -1883,8 +1883,6 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
         "collinear_min_anchors",
         "collinear_max_unit_gap",
         "collinear_color_mode",
-        "collinear_blocks",
-        "save_collinear_blocks",
         "keep_definition_left_aligned",
         "pairwise_match_style",
         "save_session",
@@ -1897,8 +1895,6 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
         "collinear-min-anchors",
         "collinear-max-unit-gap",
         "collinear-color-mode",
-        "collinear-blocks",
-        "save-collinear-blocks",
         "keep-definition-left-aligned",
         "pairwise-match-style",
         "save-session",
@@ -1908,6 +1904,23 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
         assert f"--{option_name}" in help_text
     for option_name in hidden_option_names:
         assert f"--{option_name}" not in help_text
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    "option_name",
+    [
+        "--collinear_blocks",
+        "--save_collinear_blocks",
+        "--collinear-blocks",
+        "--save-collinear-blocks",
+    ],
+)
+def test_linear_cli_rejects_removed_collinear_block_options(option_name: str) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        linear_cli_module._get_args(["--gbk", "a.gb", "b.gb", option_name, "blocks.tsv"])
+
+    assert exc_info.value.code == 2
 
 
 @pytest.mark.linear
