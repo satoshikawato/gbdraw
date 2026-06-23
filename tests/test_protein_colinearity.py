@@ -878,7 +878,7 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
             str(output_prefix),
             "-f",
             "svg",
-            "--save-session",
+            "--save_session",
         ]
     )
 

@@ -1870,6 +1870,47 @@ def test_linear_cli_help_omits_removed_collinearity_options(capsys: pytest.Captu
 
 
 @pytest.mark.linear
+def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        linear_cli_module._get_args(["--help"])
+
+    assert exc_info.value.code == 0
+    help_text = capsys.readouterr().out
+    visible_option_names = [
+        "losatp_bin",
+        "losatp_threads",
+        "protein_blastp_mode",
+        "collinear_min_anchors",
+        "collinear_max_unit_gap",
+        "collinear_color_mode",
+        "collinear_blocks",
+        "save_collinear_blocks",
+        "keep_definition_left_aligned",
+        "pairwise_match_style",
+        "save_session",
+        "session_output",
+    ]
+    hidden_option_names = [
+        "losatp-bin",
+        "losatp-threads",
+        "protein-blastp-mode",
+        "collinear-min-anchors",
+        "collinear-max-unit-gap",
+        "collinear-color-mode",
+        "collinear-blocks",
+        "save-collinear-blocks",
+        "keep-definition-left-aligned",
+        "pairwise-match-style",
+        "save-session",
+        "session-output",
+    ]
+    for option_name in visible_option_names:
+        assert f"--{option_name}" in help_text
+    for option_name in hidden_option_names:
+        assert f"--{option_name}" not in help_text
+
+
+@pytest.mark.linear
 def test_linear_cli_parses_collinear_block_evalue_none() -> None:
     args = linear_cli_module._get_args(
         [

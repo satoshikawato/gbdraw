@@ -75,6 +75,23 @@ from .cli_utils.session import (
 from .session_io import load_session, session_to_cli_args
 
 
+def _add_argument_with_hidden_aliases(
+    parser: argparse.ArgumentParser,
+    *option_strings: str,
+    hidden_aliases: Sequence[str] = (),
+    **kwargs: Any,
+) -> None:
+    """Add public underscore options and hidden legacy hyphen aliases."""
+
+    parser.add_argument(*option_strings, **kwargs)
+    if not hidden_aliases:
+        return
+    alias_kwargs = dict(kwargs)
+    alias_kwargs["help"] = argparse.SUPPRESS
+    alias_kwargs["default"] = argparse.SUPPRESS
+    parser.add_argument(*hidden_aliases, **alias_kwargs)
+
+
 def _web_json_dumps(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -433,174 +450,197 @@ def _get_args(args) -> argparse.Namespace:
         help="input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)",
         type=str,
         nargs='*')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--losatp_bin',
-        '--losatp-bin',
+        hidden_aliases=('--losatp-bin',),
         dest='losatp_bin',
         help='LOSATP executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: losat).',
         type=str,
         default='losat')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--losatp_threads',
-        '--losatp-threads',
+        hidden_aliases=('--losatp-threads',),
         dest='losatp_threads',
         help='Threads passed to LOSATP via --num-threads for --protein_blastp_mode pairwise/orthogroup/collinear (default: LOSAT default).',
         type=int,
         default=None)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--protein_blastp_mode',
-        '--protein-blastp-mode',
+        hidden_aliases=('--protein-blastp-mode',),
         dest='protein_blastp_mode',
         help='LOSATP blastp mode: none, pairwise adjacent ribbons, all-record Orthogroups, or Collinear blocks (default: none).',
         choices=PROTEIN_BLASTP_MODES,
         default='none')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--protein_blastp_max_hits',
-        '--protein-blastp-max-hits',
+        hidden_aliases=('--protein-blastp-max-hits',),
         dest='protein_blastp_max_hits',
         help='Maximum distinct subject protein hits per query protein for pairwise LOSATP blastp display links (default: 5).',
         type=int,
         default=5)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--protein_blastp_candidate_limit',
-        '--protein-blastp-candidate-limit',
+        hidden_aliases=('--protein-blastp-candidate-limit',),
         dest='protein_blastp_candidate_limit',
         help="Optional LOSATP blastp candidate cap per query; use 'none' for no cap (default: none).",
         type=_parse_optional_positive_int,
         default=None)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--align_orthogroup_feature',
-        '--align-orthogroup-feature',
+        hidden_aliases=('--align-orthogroup-feature',),
         dest='align_orthogroup_feature',
         help='Align linear records by the LOSATP blastp orthogroup containing this feature SVG hash or protein ID.',
         type=str,
         default="")
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_unit_mode',
-        '--collinear-unit-mode',
+        hidden_aliases=('--collinear-unit-mode',),
         dest='collinear_unit_mode',
         help=argparse.SUPPRESS,
         choices=["auto", "cds", "locus"],
         default='auto')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_search_scope',
-        '--collinear-search-scope',
+        hidden_aliases=('--collinear-search-scope',),
         dest='collinear_search_scope',
         help='Collinear LOSATP evidence search scope: adjacent record pairs or all record pairs (default: adjacent).',
         type=_parse_collinear_search_scope,
         choices=["adjacent", "all"],
         default='adjacent')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_min_anchors',
-        '--collinear-min-anchors',
+        hidden_aliases=('--collinear-min-anchors',),
         dest='collinear_min_anchors',
         help='Minimum anchors/genes required for a rendered Collinear block; 1 allows singleton links (default: 1).',
         type=int,
         default=1)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_max_unit_gap',
-        '--collinear-max-unit-gap',
         '--collinear_max_gene_gap',
-        '--collinear-max-gene-gap',
+        hidden_aliases=('--collinear-max-unit-gap', '--collinear-max-gene-gap'),
         dest='collinear_max_unit_gap',
         help='Maximum unit gap between neighboring collinear anchors (default: 0).',
         type=int,
         default=0)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_block_merge_gap',
-        '--collinear-block-merge-gap',
+        hidden_aliases=('--collinear-block-merge-gap',),
         dest='collinear_block_merge_gap',
         help=argparse.SUPPRESS,
         type=int,
         default=50)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_singleton_merge_gap',
-        '--collinear-singleton-merge-gap',
+        hidden_aliases=('--collinear-singleton-merge-gap',),
         dest='collinear_singleton_merge_gap',
         help=argparse.SUPPRESS,
         type=int,
         default=25)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_max_diagonal_drift',
-        '--collinear-max-diagonal-drift',
+        hidden_aliases=('--collinear-max-diagonal-drift',),
         dest='collinear_max_diagonal_drift',
         help='Maximum order-space diagonal drift allowed within or between collinear runs (default: 0).',
         type=int,
         default=0)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_max_conflicts_in_merge_gap',
-        '--collinear-max-conflicts-in-merge-gap',
+        hidden_aliases=('--collinear-max-conflicts-in-merge-gap',),
         dest='collinear_max_conflicts_in_merge_gap',
         help=argparse.SUPPRESS,
         type=int,
         default=1)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_max_paralog_links_per_orthogroup',
-        '--collinear-max-paralog-links-per-orthogroup',
+        hidden_aliases=('--collinear-max-paralog-links-per-orthogroup',),
         dest='collinear_max_paralog_links_per_orthogroup',
         help=argparse.SUPPRESS,
         type=int,
         default=2)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_gap_penalty',
-        '--collinear-gap-penalty',
+        hidden_aliases=('--collinear-gap-penalty',),
         dest='collinear_gap_penalty',
         help=argparse.SUPPRESS,
         type=float,
         default=1.0)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_nearby_duplicate_window',
-        '--collinear-nearby-duplicate-window',
+        hidden_aliases=('--collinear-nearby-duplicate-window',),
         dest='collinear_nearby_duplicate_window',
         help=argparse.SUPPRESS,
         type=int,
         default=0)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_score_mode',
-        '--collinear-score-mode',
+        hidden_aliases=('--collinear-score-mode',),
         dest='collinear_score_mode',
         help=argparse.SUPPRESS,
         choices=["constant", "bitscore"],
         default='constant')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_constant_anchor_score',
-        '--collinear-constant-anchor-score',
+        hidden_aliases=('--collinear-constant-anchor-score',),
         dest='collinear_constant_anchor_score',
         help=argparse.SUPPRESS,
         type=float,
         default=50.0)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_min_block_score',
-        '--collinear-min-block-score',
+        hidden_aliases=('--collinear-min-block-score',),
         dest='collinear_min_block_score',
         help=argparse.SUPPRESS,
         type=float,
         default=None)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_block_evalue',
-        '--collinear-block-evalue',
+        hidden_aliases=('--collinear-block-evalue',),
         dest='collinear_block_evalue',
         help=argparse.SUPPRESS,
         type=_parse_optional_nonnegative_float,
         default=None)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_color_mode',
-        '--collinear-color-mode',
+        hidden_aliases=('--collinear-color-mode',),
         dest='collinear_color_mode',
         help='Collinear ribbon color mode: average_identity, orientation, or orientation_identity (default: orientation).',
         type=_parse_collinear_color_mode,
         choices=["average_identity", "orientation", "orientation_identity"],
         default='orientation')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_blocks',
-        '--collinear-blocks',
+        hidden_aliases=('--collinear-blocks',),
         dest='collinear_blocks',
         help='Headered native .collinear.tsv file to import instead of running LOSATP.',
         type=str,
         default="")
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--save_collinear_blocks',
-        '--save-collinear-blocks',
+        hidden_aliases=('--save-collinear-blocks',),
         dest='save_collinear_blocks',
         help='Write accepted or validated native collinear blocks to this TSV path.',
         type=str,
@@ -842,9 +882,10 @@ def _get_args(args) -> argparse.Namespace:
         '--align_center',
         help='Align genomes to the center (default: False). ',
         action='store_true')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--keep_definition_left_aligned',
-        '--keep-definition-left-aligned',
+        hidden_aliases=('--keep-definition-left-aligned',),
         dest='keep_definition_left_aligned',
         help='Keep linear definition labels in the left column when records are center-aligned or aligned by orthogroup (default: False).',
         action='store_true')
@@ -868,9 +909,10 @@ def _get_args(args) -> argparse.Namespace:
         help='minimum BLAST alignment length threshold (default=0)',
         type=int,
         default=0)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--pairwise_match_style',
-        '--pairwise-match-style',
+        hidden_aliases=('--pairwise-match-style',),
         dest='pairwise_match_style',
         help=(
             'Pairwise comparison link style: ribbon keeps straight filled ribbons; '

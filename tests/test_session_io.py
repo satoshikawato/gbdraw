@@ -6,11 +6,13 @@ from pathlib import Path
 
 import pytest
 
+import gbdraw.circular as circular_cli_module
 from gbdraw.circular import circular_main
 from gbdraw.cli_utils.session import (
     make_rendered_svg,
     parse_session_pre_args,
     resolve_session_sidecar_path,
+    strip_session_output_args,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.formats import ACCEPTED_FORMATS
@@ -222,6 +224,42 @@ def test_session_pre_parse_rejects_unsupported_options() -> None:
         )
 
 
+def test_session_cli_help_uses_underscore_options(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        circular_cli_module._get_args(["--help"])
+
+    assert exc_info.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "--save_session" in help_text
+    assert "--session_output" in help_text
+    assert "--save-session" not in help_text
+    assert "--session-output" not in help_text
+
+
+def test_session_hyphen_aliases_remain_compatible() -> None:
+    request = parse_session_pre_args(
+        [
+            "--session",
+            "session.gbdraw-session.json",
+            "--session-output",
+            "roundtrip.gbdraw-session.json",
+        ],
+        mode="circular",
+    )
+
+    assert request is not None
+    assert request.save_session is True
+    assert request.session_output == "roundtrip.gbdraw-session.json"
+    assert strip_session_output_args(
+        [
+            "--gbk",
+            "input.gb",
+            "--save-session",
+            "--session_output=roundtrip.gbdraw-session.json",
+        ]
+    ) == ["--gbk", "input.gb"]
+
+
 def test_default_sidecar_path_resolution(tmp_path: Path) -> None:
     output = make_rendered_svg(str(tmp_path / "diagram"))
 
@@ -257,7 +295,7 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, test_inputs_dir: P
             str(output_prefix),
             "-f",
             "svg",
-            "--save-session",
+            "--save_session",
         ]
     )
 

@@ -451,32 +451,32 @@ options:
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
-  --losatp_bin, --losatp-bin LOSATP_BIN
+  --losatp_bin LOSATP_BIN
                         LOSATP executable for --protein_blastp_mode
                         pairwise/orthogroup/collinear (default: losat).
-  --losatp_threads, --losatp-threads LOSATP_THREADS
+  --losatp_threads LOSATP_THREADS
                         Threads passed to LOSATP via --num-threads for
                         --protein_blastp_mode pairwise/orthogroup/collinear
                         (default: LOSAT default).
-  --protein_blastp_mode, --protein-blastp-mode {none,pairwise,orthogroup,collinear}
+  --protein_blastp_mode {none,pairwise,orthogroup,collinear}
                         LOSATP blastp mode: none, pairwise adjacent ribbons,
                         all-record Orthogroups, or Collinear blocks (default:
                         none).
-  --collinear_min_anchors, --collinear-min-anchors COLLINEAR_MIN_ANCHORS
+  --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block. The default 1 includes singleton
                         links.
-  --collinear_max_unit_gap, --collinear-max-unit-gap, --collinear_max_gene_gap, --collinear-max-gene-gap COLLINEAR_MAX_UNIT_GAP
+  --collinear_max_unit_gap, --collinear_max_gene_gap COLLINEAR_MAX_UNIT_GAP
                         Maximum unit gap between neighboring collinear anchors
                         (default: 0).
-  --collinear_color_mode, --collinear-color-mode {average_identity,orientation,orientation_identity}
+  --collinear_color_mode {average_identity,orientation,orientation_identity}
                         Collinear ribbon color mode: average_identity,
                         orientation, or orientation_identity (default:
                         orientation).
-  --collinear_blocks, --collinear-blocks COLLINEAR_BLOCKS
+  --collinear_blocks COLLINEAR_BLOCKS
                         Headered native .collinear.tsv file to import instead
                         of running LOSATP.
-  --save_collinear_blocks, --save-collinear-blocks SAVE_COLLINEAR_BLOCKS
+  --save_collinear_blocks SAVE_COLLINEAR_BLOCKS
                         Write accepted or validated native collinear blocks to
                         this TSV path.
   -t, --table TABLE     color table (optional)

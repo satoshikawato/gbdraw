@@ -56,14 +56,26 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
         type=str,
     )
     parser.add_argument(
-        "--save-session",
+        "--save_session",
         help="Write one GUI-loadable .gbdraw-session.json sidecar for this run.",
         action="store_true",
     )
     parser.add_argument(
-        "--session-output",
+        "--save-session",
+        dest="save_session",
+        help=argparse.SUPPRESS,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--session_output",
         metavar="PATH",
-        help="Write the session sidecar to PATH; implies --save-session.",
+        help="Write the session sidecar to PATH; implies --save_session.",
+        type=str,
+    )
+    parser.add_argument(
+        "--session-output",
+        dest="session_output",
+        help=argparse.SUPPRESS,
         type=str,
     )
 
@@ -87,8 +99,10 @@ def parse_session_pre_args(
     parser.add_argument("--session", required=True)
     parser.add_argument("-o", "--output")
     parser.add_argument("-f", "--format")
-    parser.add_argument("--save-session", action="store_true")
-    parser.add_argument("--session-output")
+    parser.add_argument("--save_session", action="store_true")
+    parser.add_argument("--save-session", dest="save_session", action="store_true")
+    parser.add_argument("--session_output")
+    parser.add_argument("--session-output", dest="session_output")
     namespace, unknown = parser.parse_known_args(list(cmd_args))
     if unknown:
         parser.error(
@@ -206,10 +220,13 @@ def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
     index = 0
     while index < len(cmd_args):
         token = str(cmd_args[index])
-        if token == "--save-session":
+        if token in {"--save_session", "--save-session"}:
             index += 1
             continue
-        if token == "--session-output":
+        if token.startswith("--session_output=") or token.startswith("--session-output="):
+            index += 1
+            continue
+        if token in {"--session_output", "--session-output"}:
             index += 2
             continue
         result.append(token)
