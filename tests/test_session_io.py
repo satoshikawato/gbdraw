@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import re
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,8 @@ from gbdraw.session_io import (
     DEPTH_FILE_ENCODING,
     SESSION_FORMAT,
     SUPPORTED_SESSION_VERSIONS,
+    SessionBuildContext,
+    build_session_json,
     decode_depth_payload,
     load_session,
     materialize_embedded_file,
@@ -214,6 +217,96 @@ def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> 
     assert spec.args[spec.args.index("--collinear_max_diagonal_drift") + 1] == "4"
     assert spec.args[spec.args.index("--collinear_search_scope") + 1] == "all"
     assert spec.args[spec.args.index("--collinear_color_mode") + 1] == "orientation_identity"
+
+
+def test_gui_only_linear_session_restores_top_level_losatp_keys(tmp_path: Path) -> None:
+    session = _minimal_session(
+        {
+            "linearSeqs": [
+                {"gb": _file_entry("a.gb", b"LOCUS       A\n")},
+                {"gb": _file_entry("b.gb", b"LOCUS       B\n")},
+            ]
+        },
+        mode="linear",
+    )
+    session["config"]["blastSource"] = "losat"
+    session["config"]["losatProgram"] = "blastp"
+    session["config"]["losat"] = {
+        "threadsPerJob": "4",
+        "blastp": {"mode": "orthogroup"},
+    }
+
+    spec = session_to_cli_args(
+        session,
+        mode="linear",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "--protein_blastp_mode" in spec.args
+    assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "orthogroup"
+    assert spec.args[spec.args.index("--losatp_threads") + 1] == "4"
+
+
+def test_cli_session_config_includes_lossless_cli_options() -> None:
+    args = (
+        "-f",
+        "interactive_svg",
+        "--gbk",
+        "AP027078.gb",
+        "AP027131.gb",
+        "AP027133.gb",
+        "AP027132.gb",
+        "NZ_CP006932.gb",
+        "--protein_blastp_mode",
+        "orthogroup",
+        "--losatp_threads",
+        "32",
+        "--align_center",
+        "--separate_strands",
+        "--pairwise_match_style",
+        "curve",
+        "--scale_style",
+        "ruler",
+        "--palette",
+        "ajisai",
+        "--show_gc",
+        "--show_skew",
+    )
+
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("interactive-svg",),
+            cli_invocation_args=args,
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 6, 23),
+    )
+
+    config = payload["config"]
+    assert config["form"]["prefix"] == "out"
+    assert config["form"]["align_center"] is True
+    assert config["form"]["separate_strands"] is True
+    assert config["form"]["scale_style"] == "ruler"
+    assert config["form"]["show_gc"] is True
+    assert config["form"]["show_skew"] is True
+    assert config["adv"]["pairwise_match_style"] == "curve"
+    assert config["palette"] == "ajisai"
+    assert config["blastSource"] == "losat"
+    assert config["losatProgram"] == "blastp"
+    assert config["losat"]["threadsPerJob"] == "32"
+    assert config["losat"]["blastp"]["mode"] == "orthogroup"
+    assert config["cliOptions"]["rawArgs"] == list(args)
+    assert config["cliOptions"]["byKey"]["protein_blastp_mode"] == ["orthogroup"]
+    assert config["cliOptions"]["byKey"]["losatp_threads"] == ["32"]
+    assert config["cliOptions"]["byKey"]["palette"] == ["ajisai"]
+    assert config["cliOptions"]["byKey"]["gbk"] == [
+        ["AP027078.gb", "AP027131.gb", "AP027133.gb", "AP027132.gb", "NZ_CP006932.gb"]
+    ]
 
 
 def test_session_pre_parse_rejects_unsupported_options() -> None:

@@ -815,7 +815,7 @@ def _append_linear_gui_args(
                 slot=f"files.linearSeqs[{index}].blast",
                 temp_dir=temp_dir,
             )
-    elif _gui_linear_losat_program(adv) == "blastp":
+    elif _gui_linear_losat_program(config, adv) == "blastp":
         _append_linear_gui_blastp_args(
             run_args,
             invocation_args,
@@ -847,9 +847,9 @@ def _append_linear_gui_args(
             _append_flag(run_args, invocation_args, "--show_depth")
 
 
-def _gui_linear_losat_program(adv: Mapping[str, Any]) -> str:
-    blast_source = str(adv.get("blastSource") or "").strip().lower()
-    losat_program = str(adv.get("losatProgram") or "").strip().lower()
+def _gui_linear_losat_program(config: Mapping[str, Any], adv: Mapping[str, Any]) -> str:
+    blast_source = str(config.get("blastSource") or adv.get("blastSource") or "").strip().lower()
+    losat_program = str(config.get("losatProgram") or adv.get("losatProgram") or "").strip().lower()
     if blast_source != "losat":
         return ""
     return losat_program
@@ -1209,15 +1209,51 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
     args = list(context.cli_invocation_args)
     form: dict[str, Any] = {
         "prefix": context.output_prefix or _option_value(args, "-o", "--output") or "",
+        "species": _option_value(args, "--species") or "",
+        "strain": _option_value(args, "--strain") or "",
+        "plot_title": _option_value(args, "--plot_title") or "",
         "separate_strands": "--separate_strands" in args,
     }
     adv: dict[str, Any] = {}
+    losat: dict[str, Any] = {
+        "outfmt": "6",
+        "parallelWorkers": None,
+        "executionMode": "auto",
+        "totalThreadBudget": "safe",
+        "threadsPerJob": "auto",
+        "blastn": {"task": "megablast"},
+        "blastp": {
+            "mode": "orthogroup",
+            "maxHits": 5,
+            "candidateLimit": None,
+            "orthogroupMembershipMode": "anchor_core_v1",
+            "orthogroupMemberMaxHits": 5,
+            "collinearMinAnchors": 1,
+            "collinearMaxGeneGap": 0,
+            "collinearBlockMergeGap": 50,
+            "collinearSingletonMergeGap": 25,
+            "collinearMaxDiagonalDrift": 0,
+            "collinearMaxConflictsInMergeGap": 1,
+            "collinearMaxParalogLinksPerOrthogroup": 2,
+            "collinearColorMode": "orientation",
+            "collinearUnitMode": "auto",
+            "collinearAnchorMode": "rbh",
+            "collinearSearchScope": "adjacent",
+        },
+    }
+    circular_conservation: dict[str, Any] | None = None
     if context.mode == "circular":
         form.update(
             {
                 "track_type": _option_value(args, "--track_type") or "tuckin",
                 "legend": _option_value(args, "-l", "--legend") or "left",
-                "labels_mode": "both" if _option_value(args, "--labels") == "both" else ("out" if "--labels" in args else "none"),
+                "labels_mode": _optional_choice_option_value(
+                    args,
+                    "--labels",
+                    choices=("none", "out", "both"),
+                    default_when_present="out",
+                    default_when_absent="none",
+                ),
                 "multi_record_canvas": "--multi_record_canvas" in args,
                 "suppress_gc": "--suppress_gc" in args,
                 "suppress_skew": "--suppress_skew" in args,
@@ -1225,22 +1261,37 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
             }
         )
         adv["plot_title_position"] = _option_value(args, "--plot_title_position") or "none"
+        circular_conservation = _populate_circular_cli_config(args, form, adv)
     else:
         form.update(
             {
                 "legend": _option_value(args, "-l", "--legend") or "bottom",
                 "scale_style": _option_value(args, "--scale_style") or "bar",
                 "linear_track_layout": _option_value(args, "--track_layout") or "middle",
+                "linear_ruler_on_axis": "--ruler_on_axis" in args,
                 "align_center": "--align_center" in args,
+                "keep_definition_left_aligned": "--keep_definition_left_aligned" in args,
                 "show_gc": "--show_gc" in args,
                 "show_skew": "--show_skew" in args,
                 "show_depth": "--show_depth" in args or "--depth" in args or "--depth_track" in args,
+                "normalize_length": "--normalize_length" in args,
+                "show_labels_linear": _optional_choice_option_value(
+                    args,
+                    "--show_labels",
+                    choices=("all", "first", "none"),
+                    default_when_present="all",
+                    default_when_absent="none",
+                ),
             }
         )
         adv["plot_title_position"] = _option_value(args, "--plot_title_position") or "bottom"
+        _populate_linear_cli_config(args, form, adv, losat)
     features = _option_value(args, "-k", "--features")
     if features:
         adv["features"] = [item for item in features.split(",") if item]
+    feature_shapes = _feature_shapes_from_cli_args(args)
+    if feature_shapes:
+        adv["feature_shapes"] = feature_shapes
     for key, option_names in {
         "nt": ("-n", "--nt"),
         "window_size": ("-w", "--window"),
@@ -1252,17 +1303,505 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
         value = _option_value(args, *option_names)
         if value is not None:
             adv[key] = value
+    _populate_shared_cli_config(args, adv)
+    filter_mode, blacklist_text = _label_filter_config_from_cli_args(args)
+    blast_source = str(
+        adv.get("blastSource")
+        or ("upload" if _has_option(args, "-b", "--blast") else "losat")
+    )
+    losat_program = str(adv.get("losatProgram") or "blastn")
     return {
         "form": form,
         "adv": adv,
+        "losat": losat,
+        "cliOptions": _cli_options_payload(args),
         "colors": {},
-        "palette": "default",
+        "palette": _option_value(args, "-p", "--palette") or "default",
         "rules": [],
         "qualifierPriorityRules": [],
-        "filterMode": "none",
+        "filterMode": filter_mode,
         "whitelist": [],
-        "blacklistText": "",
+        "blacklistText": blacklist_text,
+        "blastSource": blast_source,
+        "losatProgram": losat_program,
+        "circularConservation": circular_conservation
+        or {
+            "enabled": False,
+            "source": "losat",
+            "losat_program": "blastn",
+            "subject_gencode": 1,
+            "reference": "auto",
+            "labels": "",
+            "series": [],
+            "ring_width": None,
+            "ring_gap": None,
+        },
     }
+
+
+def _populate_shared_cli_config(args: Sequence[str], adv: dict[str, Any]) -> None:
+    for key, option_names in {
+        "block_stroke_width": ("--block_stroke_width", "--block-stroke-width"),
+        "block_stroke_color": ("--block_stroke_color", "--block-stroke-color"),
+        "line_stroke_width": ("--line_stroke_width", "--line-stroke-width"),
+        "line_stroke_color": ("--line_stroke_color", "--line-stroke-color"),
+        "axis_stroke_width": ("--axis_stroke_width", "--axis-stroke-width"),
+        "axis_stroke_color": ("--axis_stroke_color", "--axis-stroke-color"),
+        "legend_box_size": ("--legend_box_size", "--legend-box-size"),
+        "legend_font_size": ("--legend_font_size", "--legend-font-size"),
+        "scale_interval": ("--scale_interval", "--scale-interval"),
+        "label_rendering": ("--label_rendering", "--label-rendering"),
+    }.items():
+        _copy_option_value(args, adv, key, *option_names)
+    if _has_option(args, "--resolve_overlaps", "--resolve-overlaps"):
+        adv["resolve_overlaps"] = True
+    _populate_gc_percent_cli_config(args, adv)
+    _populate_depth_cli_config(args, adv)
+
+
+def _populate_gc_percent_cli_config(args: Sequence[str], adv: dict[str, Any]) -> None:
+    mode = _option_value(args, "--gc_content_mode", "--gc-content-mode")
+    if mode is not None:
+        adv["gc_content_mode"] = mode
+    for key, option_names in {
+        "gc_content_min_percent": ("--gc_content_min_percent", "--gc-content-min-percent"),
+        "gc_content_max_percent": ("--gc_content_max_percent", "--gc-content-max-percent"),
+        "gc_content_tick_interval": (
+            "--gc_content_large_tick_interval",
+            "--gc_content_tick_interval",
+            "--gc-content-large-tick-interval",
+            "--gc-content-tick-interval",
+        ),
+        "gc_content_small_tick_interval": (
+            "--gc_content_small_tick_interval",
+            "--gc-content-small-tick-interval",
+        ),
+        "gc_content_tick_font_size": ("--gc_content_tick_font_size", "--gc-content-tick-font-size"),
+    }.items():
+        _copy_option_value(args, adv, key, *option_names)
+    if _has_option(args, "--show_gc_content_axis", "--show-gc-content-axis"):
+        adv["gc_content_show_axis"] = True
+    if _has_option(args, "--hide_gc_content_axis", "--hide-gc-content-axis"):
+        adv["gc_content_show_axis"] = False
+    if _has_option(args, "--show_gc_content_ticks", "--show-gc-content-ticks"):
+        adv["gc_content_show_ticks"] = True
+    if _has_option(args, "--hide_gc_content_ticks", "--hide-gc-content-ticks"):
+        adv["gc_content_show_ticks"] = False
+
+
+def _populate_depth_cli_config(args: Sequence[str], adv: dict[str, Any]) -> None:
+    for key, option_names in {
+        "depth_color": ("--depth_color", "--depth-color"),
+        "depth_height": ("--depth_height", "--depth-height"),
+        "depth_width_circular": ("--depth_width", "--depth-width"),
+        "depth_window_size": ("--depth_window", "--depth-window"),
+        "depth_step_size": ("--depth_step", "--depth-step"),
+        "depth_min": ("--depth_min", "--depth-min"),
+        "depth_max": ("--depth_max", "--depth-max"),
+        "depth_tick_interval": (
+            "--depth_large_tick_interval",
+            "--depth_tick_interval",
+            "--depth-large-tick-interval",
+            "--depth-tick-interval",
+        ),
+        "depth_small_tick_interval": ("--depth_small_tick_interval", "--depth-small-tick-interval"),
+        "depth_tick_font_size": ("--depth_tick_font_size", "--depth-tick-font-size"),
+    }.items():
+        _copy_option_value(args, adv, key, *option_names)
+    if _has_option(args, "--share_depth_axis", "--share-depth-axis"):
+        adv["depth_share_axis"] = True
+    if _has_option(args, "--depth_log_scale", "--depth-log-scale"):
+        adv["depth_normalize"] = True
+    if _has_option(args, "--no_depth_log_scale", "--no-depth-log-scale"):
+        adv["depth_normalize"] = False
+    if _has_option(args, "--show_depth_axis", "--show-depth-axis"):
+        adv["depth_show_axis"] = True
+    if _has_option(args, "--hide_depth_axis", "--hide-depth-axis"):
+        adv["depth_show_axis"] = False
+    if _has_option(args, "--show_depth_ticks", "--show-depth-ticks"):
+        adv["depth_show_ticks"] = True
+    if _has_option(args, "--hide_depth_ticks", "--hide-depth-ticks"):
+        adv["depth_show_ticks"] = False
+
+    labels = _option_values(args, "--depth_track_label", "--depth-track-label")
+    colors = _option_values(args, "--depth_track_color", "--depth-track-color")
+    heights = _option_values(args, "--depth_track_height", "--depth-track-height")
+    large_ticks = _option_values(
+        args,
+        "--depth_track_large_tick_interval",
+        "--depth-track-large-tick-interval",
+    )
+    small_ticks = _option_values(
+        args,
+        "--depth_track_small_tick_interval",
+        "--depth-track-small-tick-interval",
+    )
+    tick_fonts = _option_values(args, "--depth_track_tick_font_size", "--depth-track-tick-font-size")
+    track_count = max(
+        len(labels),
+        len(colors),
+        len(heights),
+        len(large_ticks),
+        len(small_ticks),
+        len(tick_fonts),
+        0,
+    )
+    if track_count:
+        tracks: list[dict[str, Any]] = []
+        for index in range(track_count):
+            entry: dict[str, Any] = {}
+            if index < len(labels):
+                entry["label"] = labels[index]
+            if index < len(colors):
+                entry["color"] = colors[index]
+            if index < len(heights):
+                entry["height"] = heights[index]
+            if index < len(large_ticks):
+                entry["large_tick_interval"] = large_ticks[index]
+            if index < len(small_ticks):
+                entry["small_tick_interval"] = small_ticks[index]
+            if index < len(tick_fonts):
+                entry["tick_font_size"] = tick_fonts[index]
+            tracks.append(entry)
+        adv["depth_tracks"] = tracks
+
+
+def _populate_circular_cli_config(
+    args: Sequence[str],
+    form: dict[str, Any],
+    adv: dict[str, Any],
+) -> dict[str, Any] | None:
+    circular_conservation: dict[str, Any] | None = None
+    if _has_option(args, "--conservation_blast", "--conservation-blast"):
+        labels = _option_values(args, "--conservation_labels", "--conservation-labels")
+        colors = _option_values(args, "--conservation_colors", "--conservation-colors")
+        series: list[dict[str, Any]] = []
+        for index in range(max(len(labels), len(colors))):
+            entry: dict[str, Any] = {"sourceIndex": index}
+            if index < len(labels):
+                entry["label"] = labels[index]
+            if index < len(colors):
+                entry["color"] = colors[index]
+            series.append(entry)
+        adv["min_bitscore"] = _option_value(args, "--bitscore") or 50
+        adv["evalue"] = _option_value(args, "--evalue") or "1e-5"
+        adv["identity"] = _option_value(args, "--identity") or 70
+        adv["alignment_length"] = _option_value(args, "--alignment_length", "--alignment-length") or 0
+        circular_conservation = {
+            "enabled": True,
+            "source": "upload",
+            "losat_program": "blastn",
+            "subject_gencode": 1,
+            "reference": _option_value(args, "--conservation_reference", "--conservation-reference") or "auto",
+            "labels": "\n".join(labels),
+            "series": series,
+            "ring_width": _option_value(args, "--conservation_ring_width", "--conservation-ring-width"),
+            "ring_gap": _option_value(args, "--conservation_ring_gap", "--conservation-ring-gap"),
+        }
+    for key, option_names in {
+        "multi_record_size_mode": ("--multi_record_size_mode", "--multi-record-size-mode"),
+        "multi_record_min_radius_ratio": ("--multi_record_min_radius_ratio", "--multi-record-min-radius-ratio"),
+        "multi_record_column_gap_ratio": (
+            "--multi_record_column_gap_ratio",
+            "--multi-record-column-gap-ratio",
+        ),
+        "multi_record_row_gap_ratio": ("--multi_record_row_gap_ratio", "--multi-record-row-gap-ratio"),
+        "tick_label_font_size": ("--tick_label_font_size", "--tick-label-font-size"),
+        "circular_label_spacing": ("--circular_label_spacing", "--circular-label-spacing"),
+        "feature_width_circular": ("--feature_width", "--feature-width"),
+        "gc_content_width_circular": ("--gc_content_width", "--gc-content-width"),
+        "gc_content_radius_circular": ("--gc_content_radius", "--gc-content-radius"),
+        "gc_skew_width_circular": ("--gc_skew_width", "--gc-skew-width"),
+        "gc_skew_radius_circular": ("--gc_skew_radius", "--gc-skew-radius"),
+        "center_reserved_radius": ("--center_reserved_radius", "--center-reserved-radius"),
+        "outer_label_x_offset": ("--outer_label_x_radius_offset", "--outer-label-x-radius-offset"),
+        "outer_label_y_offset": ("--outer_label_y_radius_offset", "--outer-label-y-radius-offset"),
+        "inner_label_x_offset": ("--inner_label_x_radius_offset", "--inner-label-x-radius-offset"),
+        "inner_label_y_offset": ("--inner_label_y_radius_offset", "--inner-label-y-radius-offset"),
+    }.items():
+        _copy_option_value(args, adv, key, *option_names)
+    if _has_option(args, "--keep_full_definition_with_plot_title", "--keep-full-definition-with-plot-title"):
+        adv["keep_full_definition_with_plot_title"] = True
+    circular_slots = _option_all_values(args, "--circular_track_slot", "--circular-track-slot")
+    if circular_slots or _has_option(args, "--circular_track_order", "--circular-track-order"):
+        adv["circular_track_slots_enabled"] = True
+        adv["cli_circular_track_order"] = _option_value(args, "--circular_track_order", "--circular-track-order") or ""
+        adv["cli_circular_track_slots"] = circular_slots
+        _copy_option_value(args, adv, "circular_track_slots_axis_index", "--circular_track_axis_index", "--circular-track-axis-index")
+    return circular_conservation
+
+
+def _populate_linear_cli_config(
+    args: Sequence[str],
+    form: dict[str, Any],
+    adv: dict[str, Any],
+    losat: dict[str, Any],
+) -> None:
+    for key, option_names in {
+        "feature_height": ("--feature_height", "--feature-height"),
+        "gc_height": ("--gc_height", "--gc-height"),
+        "comparison_height": ("--comparison_height", "--comparison-height"),
+        "scale_font_size": ("--scale_font_size", "--scale-font-size"),
+        "scale_stroke_width": ("--scale_stroke_width", "--scale-stroke-width"),
+        "scale_stroke_color": ("--scale_stroke_color", "--scale-stroke-color"),
+        "ruler_label_color": ("--ruler_label_color", "--ruler-label-color"),
+        "pairwise_match_style": ("--pairwise_match_style", "--pairwise-match-style"),
+        "track_axis_gap": ("--track_axis_gap", "--track-axis-gap"),
+        "label_placement": ("--label_placement", "--label-placement"),
+        "label_rotation": ("--label_rotation", "--label-rotation"),
+        "linear_label_spacing": ("--linear_label_spacing", "--linear-label-spacing"),
+    }.items():
+        _copy_option_value(args, adv, key, *option_names)
+    if _has_option(args, "--show_replicon", "--show-replicon"):
+        adv["linear_show_replicon"] = True
+    if _has_option(args, "--hide_accession", "--hide-accession"):
+        adv["linear_show_accession"] = False
+    if _has_option(args, "--hide_length", "--hide-length"):
+        adv["linear_show_length"] = False
+    for key, option_names in {
+        "min_bitscore": ("--bitscore",),
+        "evalue": ("--evalue",),
+        "identity": ("--identity",),
+        "alignment_length": ("--alignment_length", "--alignment-length"),
+    }.items():
+        _copy_option_value(args, adv, key, *option_names)
+
+    protein_mode = _option_value(args, "--protein_blastp_mode", "--protein-blastp-mode") or "none"
+    if protein_mode != "none":
+        adv["blastSource"] = "losat"
+        adv["losatProgram"] = "blastp"
+        losat["threadsPerJob"] = _option_value(args, "--losatp_threads", "--losatp-threads") or "auto"
+        blastp = losat.setdefault("blastp", {})
+        blastp["mode"] = protein_mode
+        blastp["maxHits"] = _option_value(args, "--protein_blastp_max_hits", "--protein-blastp-max-hits") or 5
+        candidate_limit = _option_value(
+            args,
+            "--protein_blastp_candidate_limit",
+            "--protein-blastp-candidate-limit",
+        )
+        blastp["candidateLimit"] = candidate_limit if candidate_limit not in (None, "none") else None
+        blastp["collinearMinAnchors"] = _option_value(args, "--collinear_min_anchors", "--collinear-min-anchors") or 1
+        blastp["collinearMaxGeneGap"] = (
+            _option_value(
+                args,
+                "--collinear_max_unit_gap",
+                "--collinear_max_gene_gap",
+                "--collinear-max-unit-gap",
+                "--collinear-max-gene-gap",
+            )
+            or 0
+        )
+        blastp["collinearBlockMergeGap"] = _option_value(
+            args,
+            "--collinear_block_merge_gap",
+            "--collinear-block-merge-gap",
+        ) or 50
+        blastp["collinearSingletonMergeGap"] = _option_value(
+            args,
+            "--collinear_singleton_merge_gap",
+            "--collinear-singleton-merge-gap",
+        ) or 25
+        blastp["collinearMaxDiagonalDrift"] = _option_value(
+            args,
+            "--collinear_max_diagonal_drift",
+            "--collinear-max-diagonal-drift",
+        ) or 0
+        blastp["collinearMaxConflictsInMergeGap"] = _option_value(
+            args,
+            "--collinear_max_conflicts_in_merge_gap",
+            "--collinear-max-conflicts-in-merge-gap",
+        ) or 1
+        blastp["collinearMaxParalogLinksPerOrthogroup"] = _option_value(
+            args,
+            "--collinear_max_paralog_links_per_orthogroup",
+            "--collinear-max-paralog-links-per-orthogroup",
+        ) or 2
+        blastp["collinearColorMode"] = _option_value(args, "--collinear_color_mode", "--collinear-color-mode") or "orientation"
+        blastp["collinearUnitMode"] = _option_value(args, "--collinear_unit_mode", "--collinear-unit-mode") or "auto"
+        blastp["collinearSearchScope"] = _option_value(args, "--collinear_search_scope", "--collinear-search-scope") or "adjacent"
+    elif _has_option(args, "-b", "--blast"):
+        adv["blastSource"] = "upload"
+    else:
+        adv["blastSource"] = "losat"
+        adv["losatProgram"] = "blastn"
+
+    linear_slots = _option_all_values(args, "--linear_track_slot", "--linear-track-slot")
+    if linear_slots or _has_option(args, "--linear_track_order", "--linear-track-order"):
+        adv["linear_track_slots_enabled"] = True
+        adv["cli_linear_track_order"] = _option_value(args, "--linear_track_order", "--linear-track-order") or ""
+        adv["cli_linear_track_slots"] = linear_slots
+        _copy_option_value(args, adv, "linear_track_slots_axis_index", "--linear_track_axis_index", "--linear-track-axis-index")
+
+
+def _copy_option_value(
+    args: Sequence[str],
+    target: dict[str, Any],
+    key: str,
+    *names: str,
+) -> None:
+    value = _option_value(args, *names)
+    if value is not None:
+        target[key] = value
+
+
+def _cli_options_payload(args: Sequence[str]) -> dict[str, Any]:
+    raw_args = [str(arg) for arg in args]
+    entries: list[dict[str, Any]] = []
+    by_key: dict[str, list[Any]] = {}
+    positionals: list[str] = []
+
+    index = 0
+    while index < len(raw_args):
+        token = raw_args[index]
+        if not _looks_like_cli_option(token):
+            positionals.append(token)
+            index += 1
+            continue
+
+        option = token
+        values: list[str] = []
+        if token.startswith("--") and "=" in token:
+            option, value = token.split("=", 1)
+            values.append(value)
+            index += 1
+        else:
+            index += 1
+            while index < len(raw_args) and not _looks_like_cli_option(raw_args[index]):
+                values.append(raw_args[index])
+                index += 1
+
+        key = _cli_option_key(option)
+        entry = {
+            "option": option,
+            "key": key,
+            "values": values,
+        }
+        if not values:
+            entry["flag"] = True
+        entries.append(entry)
+        by_key.setdefault(key, []).append(True if not values else (values[0] if len(values) == 1 else values))
+
+    return {
+        "schema": 1,
+        "mode": "argv",
+        "rawArgs": raw_args,
+        "options": entries,
+        "byKey": by_key,
+        "positionals": positionals,
+    }
+
+
+def _looks_like_cli_option(token: object) -> bool:
+    text = str(token)
+    if text == "-":
+        return False
+    if not text.startswith("-"):
+        return False
+    if re.match(r"^-\d", text):
+        return False
+    return True
+
+
+def _cli_option_key(option: str) -> str:
+    aliases = {
+        "-b": "blast",
+        "-d": "default_colors",
+        "-f": "format",
+        "-k": "features",
+        "-l": "legend",
+        "-n": "nt",
+        "-o": "output",
+        "-p": "palette",
+        "-s": "step",
+        "-t": "table",
+        "-w": "window",
+    }
+    if option in aliases:
+        return aliases[option]
+    return option.lstrip("-").replace("-", "_")
+
+
+def _feature_shapes_from_cli_args(args: Sequence[str]) -> dict[str, str]:
+    shapes: dict[str, str] = {}
+    for assignment in _option_all_values(args, "--feature_shape", "--feature-shape"):
+        feature_type, separator, shape = str(assignment).partition("=")
+        feature_type = feature_type.strip()
+        shape = shape.strip().lower()
+        if separator and feature_type and shape in {"arrow", "rectangle"}:
+            shapes[feature_type] = shape
+    return shapes
+
+
+def _label_filter_config_from_cli_args(args: Sequence[str]) -> tuple[str, str]:
+    blacklist = _option_value(args, "--label_blacklist", "--label-blacklist")
+    if blacklist is not None:
+        try:
+            is_file = Path(blacklist).is_file()
+        except OSError:
+            is_file = False
+        return "Blacklist", "" if is_file else blacklist
+    if _has_option(args, "--label_whitelist", "--label-whitelist"):
+        return "Whitelist", ""
+    return "None", ""
+
+
+def _has_option(args: Sequence[str], *names: str) -> bool:
+    for token in args:
+        text = str(token)
+        if any(text == name or text.startswith(f"{name}=") for name in names):
+            return True
+    return False
+
+
+def _optional_choice_option_value(
+    args: Sequence[str],
+    name: str,
+    *,
+    choices: Sequence[str],
+    default_when_present: str,
+    default_when_absent: str,
+) -> str:
+    if not _has_option(args, name):
+        return default_when_absent
+    value = _option_value(args, name)
+    return value if value in choices else default_when_present
+
+
+def _option_all_values(args: Sequence[str], *names: str) -> list[str]:
+    values: list[str] = []
+    for index, token in enumerate(args):
+        text = str(token)
+        for name in names:
+            if text == name:
+                if index + 1 < len(args):
+                    values.append(str(args[index + 1]))
+                break
+            prefix = f"{name}="
+            if text.startswith(prefix):
+                values.append(text[len(prefix):])
+                break
+    return values
+
+
+def _option_values(args: Sequence[str], *names: str) -> list[str]:
+    values: list[str] = []
+    index = 0
+    while index < len(args):
+        text = str(args[index])
+        matched_name = next((name for name in names if text == name or text.startswith(f"{name}=")), None)
+        if matched_name is None:
+            index += 1
+            continue
+        prefix = f"{matched_name}="
+        if text.startswith(prefix):
+            values.append(text[len(prefix):])
+            index += 1
+            continue
+        index += 1
+        while index < len(args) and not str(args[index]).startswith("-"):
+            values.append(str(args[index]))
+            index += 1
+    return values
 
 
 def _update_config_prefix(config: dict[str, Any], output_prefix: str | None) -> None:
@@ -1278,9 +1817,14 @@ def _input_type_from_args(args: Sequence[str]) -> str:
 
 
 def _option_value(args: Sequence[str], *names: str) -> str | None:
-    for index, token in enumerate(args[:-1]):
-        if token in names:
-            return str(args[index + 1])
+    for index, token in enumerate(args):
+        text = str(token)
+        for name in names:
+            prefix = f"{name}="
+            if text.startswith(prefix):
+                return text[len(prefix):]
+            if text == name and index + 1 < len(args):
+                return str(args[index + 1])
     return None
 
 

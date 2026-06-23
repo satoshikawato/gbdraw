@@ -186,6 +186,31 @@ def test_index_links_to_interactive_gallery() -> None:
     assert "Interactive Gallery" in index_html
 
 
+def test_web_run_info_tab_source_contract() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert "Preview" in index_html
+    assert "Run info" in index_html
+    assert "copyRunCommand" in index_html
+    assert "lastRunInfo" in index_html
+    assert "const resultPanelTab = ref('preview');" in state_js
+    assert "const lastRunInfo = ref(null);" in state_js
+    assert "buildRunInfo({" in run_analysis_js
+    assert "resultPanelTab.value = 'preview';" in run_analysis_js
+    assert "cliInvocation: exportableCliInvocation" in config_js
+
+
+def test_web_run_info_helper_builds_display_commands() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/run-info.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")

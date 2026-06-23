@@ -2889,16 +2889,42 @@
 
             <div v-if="results.length > 0" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
                 <div class="card-header bg-green-50/50 -m-4 mb-0 p-3 pl-5 pr-6 border-green-100 flex justify-between items-center shrink-0 flex-wrap gap-2">
-                    <span class="text-green-600 flex items-center gap-2 text-base font-bold">
-                        <i class="ph ph-check-circle text-xl"></i>
-                        <span v-if="results.length === 1">Result Preview</span>
-                        <span v-else>
-                            <select v-model="selectedResultIndex" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500">
-                                <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
-                            </select>
+                    <div class="flex items-center gap-3 flex-wrap min-w-0">
+                        <span class="text-green-600 flex items-center gap-2 text-base font-bold min-w-0">
+                            <i class="ph ph-check-circle text-xl shrink-0"></i>
+                            <span v-if="results.length === 1">Result Preview</span>
+                            <span v-else>
+                                <select v-model="selectedResultIndex" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
+                                    <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
+                                </select>
+                            </span>
                         </span>
-                    </span>
-                    <div class="preview-toolbar flex gap-2 items-center flex-wrap mr-2">
+                        <div class="result-tabs inline-flex items-center gap-1 rounded border border-green-200 bg-white p-1">
+                            <button type="button"
+                                    @click="resultPanelTab = 'preview'"
+                                    :class="[
+                                      'px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1',
+                                      resultPanelTab === 'preview' ? 'bg-green-100 text-green-800' : 'text-slate-500 hover:bg-slate-50'
+                                    ]"
+                                    :aria-pressed="resultPanelTab === 'preview'">
+                                <i class="ph ph-image"></i>
+                                <span>Preview</span>
+                            </button>
+                            <button type="button"
+                                    @click="resultPanelTab = 'run-info'"
+                                    :disabled="!lastRunInfo"
+                                    :class="[
+                                      'px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1',
+                                      resultPanelTab === 'run-info' ? 'bg-green-100 text-green-800' : 'text-slate-500 hover:bg-slate-50',
+                                      !lastRunInfo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''
+                                    ]"
+                                    :aria-pressed="resultPanelTab === 'run-info'">
+                                <i class="ph ph-terminal-window"></i>
+                                <span>Run info</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-2 items-center flex-wrap mr-2">
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">
                             <span class="text-sm font-bold text-green-700">DPI</span>
                             <select v-model="downloadDpi" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
@@ -2916,7 +2942,7 @@
                     </div>
                 </div>
 
-                <div class="relative flex-grow overflow-hidden bg-slate-50/30">
+                <div v-show="resultPanelTab === 'preview'" class="relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <div v-if="svgContent"
                          :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
@@ -4077,8 +4103,57 @@
 
                 </div>
 
+                <div v-show="resultPanelTab === 'run-info'" class="run-info-panel flex-grow overflow-auto bg-white p-4 custom-scrollbar">
+                    <div v-if="lastRunInfo" class="max-w-5xl space-y-4">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div class="border border-slate-200 rounded p-3">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mode</div>
+                                <div class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.mode }}</div>
+                            </div>
+                            <div class="border border-slate-200 rounded p-3">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Run time</div>
+                                <div class="mt-1 font-mono font-semibold text-slate-700">{{ runInfoElapsedText(lastRunInfo) }}</div>
+                            </div>
+                            <div class="border border-slate-200 rounded p-3">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Results</div>
+                                <div class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.resultCount }}</div>
+                            </div>
+                            <div class="border border-slate-200 rounded p-3">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reproducibility</div>
+                                <div class="mt-1 font-semibold text-slate-700">{{ runInfoReproducibilityText(lastRunInfo) }}</div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Command</div>
+                                <button type="button"
+                                        @click="copyRunCommand"
+                                        class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
+                                        title="Copy command">
+                                    <i class="ph ph-copy"></i>
+                                    <span>{{ runInfoCopyStatus || 'Copy' }}</span>
+                                </button>
+                            </div>
+                            <pre class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.command }}</pre>
+                        </div>
+
+                        <div v-if="lastRunInfo.sessionCommand" class="space-y-2">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Session command</div>
+                            <pre class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sessionCommand }}</pre>
+                        </div>
+
+                        <div class="space-y-1 text-xs text-slate-500 leading-relaxed">
+                            <p v-for="(note, idx) in lastRunInfo.reproducibility.notes" :key="`run-info-note-${idx}`">{{ note }}</p>
+                        </div>
+                    </div>
+                    <div v-else class="h-full flex items-center justify-center text-slate-400 text-sm">
+                        Run info is available after a successful manual generation.
+                    </div>
+                </div>
+
                 <!-- Right-side editor drawer -->
-                <button v-if="svgContent"
+                <button v-if="svgContent && resultPanelTab === 'preview'"
                         @click="showRightDrawer ? closeRightDrawer() : openRightDrawerTab(rightDrawerTab || (orthogroupCount > 0 ? 'orthogroups' : 'features'))"
                         class="drawer-toggle absolute right-0 top-1/2 -translate-y-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
                         :class="{ '-translate-x-[360px] drawer-open': showRightDrawer }"
@@ -4086,7 +4161,7 @@
                     <i class="ph ph-sidebar-simple text-lg"></i>
                 </button>
 
-                <div v-if="svgContent"
+                <div v-if="svgContent && resultPanelTab === 'preview'"
                      class="right-drawer absolute right-0 top-0 bottom-0 w-[360px] bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
                      :class="showRightDrawer ? 'translate-x-0' : 'translate-x-full'">
                     <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">

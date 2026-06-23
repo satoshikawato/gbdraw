@@ -31,6 +31,7 @@ import {
   normalizeCollinearSearchScope,
   normalizeGroupMetadataScope
 } from '../app/losat-normalization.js';
+import { isCliInvocationSessionExportable } from '../app/run-info.js';
 
 const SESSION_VERSION = 28;
 const SUPPORTED_SESSION_VERSIONS = new Set([27, SESSION_VERSION]);
@@ -82,6 +83,11 @@ const cloneStringMap = (source) => {
 };
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const cloneJsonData = (value) => {
+  if (value === null || value === undefined) return value;
+  return JSON.parse(JSON.stringify(value));
+};
 
 const sanitizeExtractedFeatureForSession = (feature) => {
   if (!feature || typeof feature !== 'object' || Array.isArray(feature)) return feature;
@@ -531,6 +537,7 @@ const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
 };
 
 let lastSessionFilename = null;
+let preservedCliOptions = null;
 
 const cloneLosatForConfig = () => {
   const cloned = JSON.parse(JSON.stringify(state.losat || {}));
@@ -544,6 +551,7 @@ const buildConfigData = () => ({
   form: state.form,
   adv: state.adv,
   losat: cloneLosatForConfig(),
+  cliOptions: preservedCliOptions ? cloneJsonData(preservedCliOptions) : undefined,
   colors: state.currentColors.value,
   palette: state.selectedPalette.value,
   paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
@@ -679,6 +687,7 @@ const LEGACY_CONFIG_KEYS = new Set([
   'form',
   'adv',
   'losat',
+  'cliOptions',
   'colors',
   'palette',
   'rules',
@@ -1153,6 +1162,7 @@ const applyConfigData = (data) => {
   );
   state.circularConservation.ring_width = normalizePositiveNumberOrNull(state.circularConservation.ring_width);
   state.circularConservation.ring_gap = normalizePositiveNumberOrNull(state.circularConservation.ring_gap);
+  preservedCliOptions = isPlainObject(data.cliOptions) ? cloneJsonData(data.cliOptions) : null;
   const webEdits = data.webEdits && typeof data.webEdits === 'object' ? data.webEdits : {};
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupNameOverrides')) {
     replaceStringMap(state.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
@@ -1642,6 +1652,7 @@ const clearObject = (target) => {
 };
 
 const resetSessionBaseline = () => {
+  preservedCliOptions = null;
   resetSettingsState(state);
   resetLayoutState(state);
   state.mode.value = 'circular';
@@ -1651,6 +1662,8 @@ const resetSessionBaseline = () => {
   state.errorLog.value = null;
   state.results.value = [];
   state.selectedResultIndex.value = 0;
+  state.resultPanelTab.value = 'preview';
+  state.lastRunInfo.value = null;
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatCacheInfo.value = [];
@@ -1764,6 +1777,10 @@ export const exportSession = async (titleOverride = null) => {
     if (!proceed) return;
   }
 
+  const lastRunInvocation = state.lastRunInfo.value?.invocation;
+  const exportableCliInvocation = isCliInvocationSessionExportable(lastRunInvocation)
+    ? JSON.parse(JSON.stringify(lastRunInvocation))
+    : undefined;
   const sessionData = {
     format: 'gbdraw-session',
     version: SESSION_VERSION,
@@ -1825,7 +1842,8 @@ export const exportSession = async (titleOverride = null) => {
     },
     losatCache: {
       entries: losatEntries
-    }
+    },
+    cliInvocation: exportableCliInvocation
   };
 
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {

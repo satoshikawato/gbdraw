@@ -24,6 +24,8 @@ const sessionTitle = ref('');
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
+const resultPanelTab = ref('preview');
+const lastRunInfo = ref(null);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 const svgContent = computed(() => {
@@ -1006,6 +1008,8 @@ export const state = {
   sessionTitle,
   results,
   selectedResultIndex,
+  resultPanelTab,
+  lastRunInfo,
   pairwiseMatchFactors,
   svgContent,
   zoom,
