@@ -36,6 +36,7 @@ class DiagramRunResult:
     render_formats: tuple[str, ...]
     outputs: tuple[RenderedSvg, ...]
     losat_cache_entries: tuple[Mapping[str, Any], ...] | None = None
+    linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -203,6 +204,7 @@ def save_session_sidecar_if_requested(
             source_session=source_session,
             cli_invocation_args=invocation_args,
             file_bindings=tuple(bindings),
+            linear_record_metadata=run_result.linear_record_metadata,
         ),
         svg_results=svg_results,
         embedded_files=session_files,

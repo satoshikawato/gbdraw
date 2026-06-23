@@ -135,6 +135,88 @@ def _linear_losat_cache_filenames(records: Sequence[object]) -> tuple[str, ...]:
     return tuple(filenames)
 
 
+def _linear_session_record_metadata(
+    records: Sequence[object],
+    input_paths: Sequence[str],
+) -> tuple[Mapping[str, object], ...]:
+    source_indices: list[int] = []
+    for record_index, record in enumerate(records):
+        source_indices.append(
+            _linear_record_source_index(
+                record,
+                input_paths,
+                fallback_index=record_index if len(records) == len(input_paths) else None,
+            )
+        )
+    source_counts: dict[int, int] = {}
+    for source_index in source_indices:
+        if source_index >= 0:
+            source_counts[source_index] = source_counts.get(source_index, 0) + 1
+    source_seen: dict[int, int] = {}
+    metadata: list[Mapping[str, object]] = []
+    for loaded_index, (record, source_index) in enumerate(zip(records, source_indices)):
+        source_loaded_index = source_seen.get(source_index, 0)
+        if source_index >= 0:
+            source_seen[source_index] = source_loaded_index + 1
+        annotations = getattr(record, "annotations", {}) or {}
+        source_file = str(
+            annotations.get("gbdraw_source_file")
+            or (input_paths[source_index] if 0 <= source_index < len(input_paths) else "")
+        )
+        source_basename = str(
+            annotations.get("gbdraw_source_basename")
+            or (Path(source_file).name if source_file else "")
+        )
+        metadata.append(
+            {
+                "loaded_index": loaded_index,
+                "source_index": source_index,
+                "source_loaded_index": source_loaded_index,
+                "source_loaded_count": source_counts.get(source_index, 0),
+                "record_id": str(getattr(record, "id", "") or ""),
+                "source_file": source_file,
+                "source_basename": source_basename,
+            }
+        )
+    return tuple(metadata)
+
+
+def _linear_record_source_index(
+    record: object,
+    input_paths: Sequence[str],
+    *,
+    fallback_index: int | None,
+) -> int:
+    annotations = getattr(record, "annotations", {}) or {}
+    source_file = str(annotations.get("gbdraw_source_file") or "")
+    source_basename = str(annotations.get("gbdraw_source_basename") or "")
+    if source_file:
+        for index, path in enumerate(input_paths):
+            if source_file == str(path):
+                return index
+        try:
+            resolved_source = str(Path(source_file).resolve())
+        except OSError:
+            resolved_source = ""
+        if resolved_source:
+            for index, path in enumerate(input_paths):
+                try:
+                    if resolved_source == str(Path(path).resolve()):
+                        return index
+                except OSError:
+                    continue
+    candidates = {source_basename, Path(source_file).name if source_file else ""}
+    basenames: dict[str, list[int]] = {}
+    for index, path in enumerate(input_paths):
+        basenames.setdefault(Path(str(path)).name, []).append(index)
+    for candidate in candidates:
+        if candidate and len(basenames.get(candidate, [])) == 1:
+            return basenames[candidate][0]
+    if fallback_index is not None and 0 <= fallback_index < len(input_paths):
+        return fallback_index
+    return -1
+
+
 def _source_session_losat_entries(source_session: Mapping[str, Any] | None) -> tuple[Mapping[str, object], ...]:
     if not isinstance(source_session, Mapping):
         return ()
@@ -285,19 +367,6 @@ def _parse_optional_positive_int(value: str) -> int | None:
         raise argparse.ArgumentTypeError("must be a positive integer or 'none'") from exc
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer or 'none'")
-    return parsed
-
-
-def _parse_optional_nonnegative_float(value: str) -> float | None:
-    normalized = str(value or "").strip().lower()
-    if normalized in {"", "none", "null"}:
-        return None
-    try:
-        parsed = float(normalized)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a non-negative number or 'none'") from exc
-    if not math.isfinite(parsed) or parsed < 0:
-        raise argparse.ArgumentTypeError("must be a non-negative number or 'none'")
     return parsed
 
 
@@ -533,22 +602,6 @@ def _get_args(args) -> argparse.Namespace:
         default=0)
     _add_argument_with_hidden_aliases(
         parser,
-        '--collinear_block_merge_gap',
-        hidden_aliases=('--collinear-block-merge-gap',),
-        dest='collinear_block_merge_gap',
-        help=argparse.SUPPRESS,
-        type=int,
-        default=50)
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--collinear_singleton_merge_gap',
-        hidden_aliases=('--collinear-singleton-merge-gap',),
-        dest='collinear_singleton_merge_gap',
-        help=argparse.SUPPRESS,
-        type=int,
-        default=25)
-    _add_argument_with_hidden_aliases(
-        parser,
         '--collinear_max_diagonal_drift',
         hidden_aliases=('--collinear-max-diagonal-drift',),
         dest='collinear_max_diagonal_drift',
@@ -571,54 +624,6 @@ def _get_args(args) -> argparse.Namespace:
         help=argparse.SUPPRESS,
         type=int,
         default=2)
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--collinear_gap_penalty',
-        hidden_aliases=('--collinear-gap-penalty',),
-        dest='collinear_gap_penalty',
-        help=argparse.SUPPRESS,
-        type=float,
-        default=1.0)
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--collinear_nearby_duplicate_window',
-        hidden_aliases=('--collinear-nearby-duplicate-window',),
-        dest='collinear_nearby_duplicate_window',
-        help=argparse.SUPPRESS,
-        type=int,
-        default=0)
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--collinear_score_mode',
-        hidden_aliases=('--collinear-score-mode',),
-        dest='collinear_score_mode',
-        help=argparse.SUPPRESS,
-        choices=["constant", "bitscore"],
-        default='constant')
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--collinear_constant_anchor_score',
-        hidden_aliases=('--collinear-constant-anchor-score',),
-        dest='collinear_constant_anchor_score',
-        help=argparse.SUPPRESS,
-        type=float,
-        default=50.0)
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--collinear_min_block_score',
-        hidden_aliases=('--collinear-min-block-score',),
-        dest='collinear_min_block_score',
-        help=argparse.SUPPRESS,
-        type=float,
-        default=None)
-    _add_argument_with_hidden_aliases(
-        parser,
-        '--collinear_block_evalue',
-        hidden_aliases=('--collinear-block-evalue',),
-        dest='collinear_block_evalue',
-        help=argparse.SUPPRESS,
-        type=_parse_optional_nonnegative_float,
-        default=None)
     _add_argument_with_hidden_aliases(
         parser,
         '--collinear_color_mode',
@@ -1289,22 +1294,12 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--collinear_min_anchors must be > 0")
     if args.collinear_max_unit_gap < 0:
         parser.error("--collinear_max_unit_gap must be >= 0")
-    if args.collinear_block_merge_gap < 0:
-        parser.error("--collinear_block_merge_gap must be >= 0")
-    if args.collinear_singleton_merge_gap < 0:
-        parser.error("--collinear_singleton_merge_gap must be >= 0")
     if args.collinear_max_diagonal_drift < 0:
         parser.error("--collinear_max_diagonal_drift must be >= 0")
     if args.collinear_max_conflicts_in_merge_gap < 0:
         parser.error("--collinear_max_conflicts_in_merge_gap must be >= 0")
     if args.collinear_max_paralog_links_per_orthogroup <= 0:
         parser.error("--collinear_max_paralog_links_per_orthogroup must be > 0")
-    if args.collinear_gap_penalty < 0:
-        parser.error("--collinear_gap_penalty must be >= 0")
-    if args.collinear_nearby_duplicate_window < 0:
-        parser.error("--collinear_nearby_duplicate_window must be >= 0")
-    if args.collinear_constant_anchor_score <= 0:
-        parser.error("--collinear_constant_anchor_score must be > 0")
     return args
 
 
@@ -1436,6 +1431,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         min_anchors=args.collinear_min_anchors,
         max_unit_gap=args.collinear_max_unit_gap,
         max_diagonal_drift=args.collinear_max_diagonal_drift,
+        max_conflicts=args.collinear_max_conflicts_in_merge_gap,
     )
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands
@@ -1671,8 +1667,10 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         logger.error("ERROR: Invalid reverse_complement value: %s", value)
         raise ValidationError(f"Invalid reverse_complement value: {value}")
 
+    linear_source_paths: list[str]
     if args.gbk:
         file_count = len(args.gbk)
+        linear_source_paths = list(args.gbk)
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
         reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
@@ -1685,6 +1683,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
     elif args.gff and args.fasta:
         file_count = len(args.gff)
+        linear_source_paths = list(args.gff)
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
         reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
@@ -1727,6 +1726,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
             )
+    linear_record_metadata = _linear_session_record_metadata(records, linear_source_paths)
     if protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("--protein_blastp_mode requires at least two linear records.")
     depth_track_files = _record_major_depth_track_files_from_cli(
@@ -1897,6 +1897,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name),
         ),
         losat_cache_entries=losatp_cache_entries,
+        linear_record_metadata=linear_record_metadata,
     )
 
 

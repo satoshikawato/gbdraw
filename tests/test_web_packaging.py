@@ -246,9 +246,18 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "All hits" not in index_html
     assert "Evidence scope" in index_html
     assert "ribbons are still emitted for adjacent display pairs" in index_html
+    assert "Merge conflicts" in index_html
     assert "export const normalizeCollinearAnchorMode = (_value) => 'rbh';" in normalizer_js
     assert "delete cloned.blastp.collinearAnchorMode;" in config_js
+    assert "collinearBlockMergeGap" not in state_js
+    assert "collinearSingletonMergeGap" not in state_js
+    assert "delete state.losat.blastp.collinearBlockMergeGap;" in config_js
+    assert "delete state.losat.blastp.collinearSingletonMergeGap;" in config_js
     assert "losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode" in run_analysis_js
+    assert "losat.blastp.collinearMaxConflictsInMergeGap" in run_analysis_js
+    assert "max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1)" in helper_js
+    assert "collinear_block_merge_gap=50" not in helper_js
+    assert "collinear_singleton_merge_gap=25" not in helper_js
     assert "normalized_collinear_anchor_mode = \"rbh\"" in helper_js
     assert "normalized_collinear_anchor_mode," in helper_js
     assert "'data-group-kind'" in state_js

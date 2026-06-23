@@ -1127,6 +1127,10 @@
                                                 <label class="text-[9px] flex items-center">Diagonal drift <help-tip text="Maximum order-space diagonal drift allowed when merging neighboring Orthogroup RBH anchors."></help-tip></label>
                                                 <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" class="form-input px-1 py-0.5 text-xs">
                                             </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Merge conflicts <help-tip text="Maximum conflicting anchors tolerated while merging neighboring Collinear runs."></help-tip></label>
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
                                         </template>
                                         <div class="col-span-2 grid grid-cols-2 gap-1 pt-2 border-t border-slate-200">
                                             <div>

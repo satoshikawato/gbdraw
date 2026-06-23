@@ -14,10 +14,11 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Literal, Mapping, Sequence
 
 from .exceptions import ValidationError
+from .io.regions import RegionSpec, parse_region_specs
 
 SESSION_FORMAT = "gbdraw-session"
 CURRENT_SESSION_VERSION = 28
@@ -56,6 +57,7 @@ class SessionBuildContext:
     source_session: Mapping[str, Any] | None = None
     cli_invocation_args: tuple[str, ...] = ()
     file_bindings: tuple[SessionFileBinding | Mapping[str, Any], ...] = ()
+    linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
 
 
 def load_session(path: str | Path) -> dict[str, Any]:
@@ -373,6 +375,8 @@ def build_session_json(
         payload["losatCache"] = {"entries": _json_clone(list(losat_cache_entries))}
     else:
         payload.setdefault("losatCache", {})
+    if context.mode == "linear":
+        _populate_linear_session_fields_from_cli_context(payload, context)
     payload["cliInvocation"] = {
         "schema": 1,
         "mode": context.mode,
@@ -819,9 +823,15 @@ def _append_linear_gui_args(
         _append_linear_gui_blastp_args(
             run_args,
             invocation_args,
+            session=session,
             config=config,
             adv=adv,
         )
+    _append_linear_gui_sequence_options(
+        run_args,
+        invocation_args,
+        linear_seqs=linear_seqs,
+    )
     if form.get("show_depth") is True:
         depth_rows = [
             _as_list(seq.get("depth") if isinstance(seq, Mapping) else None)
@@ -847,6 +857,67 @@ def _append_linear_gui_args(
             _append_flag(run_args, invocation_args, "--show_depth")
 
 
+def _append_linear_gui_sequence_options(
+    run_args: list[str],
+    invocation_args: list[str],
+    *,
+    linear_seqs: Sequence[Any],
+) -> None:
+    labels = [
+        str(seq.get("definition") or "") if isinstance(seq, Mapping) else ""
+        for seq in linear_seqs
+    ]
+    if any(label.strip() for label in labels):
+        for label in labels:
+            _append_pair(run_args, invocation_args, "--record_label", label)
+
+    record_selectors: list[str] = []
+    reverse_flags: list[bool] = []
+    region_specs: list[str] = []
+    for index, seq in enumerate(linear_seqs):
+        if not isinstance(seq, Mapping):
+            record_selectors.append("")
+            reverse_flags.append(False)
+            continue
+        record_selector = str(seq.get("region_record_id") or "").strip()
+        record_selectors.append(record_selector)
+        start = seq.get("region_start")
+        end = seq.get("region_end")
+        has_start = start not in (None, "")
+        has_end = end not in (None, "")
+        if has_start != has_end:
+            raise ValidationError(
+                f"Linear sequence #{index + 1} has an incomplete region start/end."
+            )
+        wants_reverse = bool(seq.get("region_reverse"))
+        if has_start and has_end:
+            try:
+                start_int = int(start)
+                end_int = int(end)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(
+                    f"Linear sequence #{index + 1} has invalid region coordinates."
+                ) from exc
+            if start_int < 1 or end_int < 1:
+                raise ValidationError(
+                    f"Linear sequence #{index + 1} region coordinates must be >= 1."
+                )
+            suffix = ":rc" if wants_reverse else ""
+            region_specs.append(f"#{index + 1}:{start_int}-{end_int}{suffix}")
+            reverse_flags.append(False)
+        else:
+            reverse_flags.append(wants_reverse)
+
+    if any(selector for selector in record_selectors):
+        for selector in record_selectors:
+            _append_pair(run_args, invocation_args, "--record_id", selector)
+    if any(reverse_flags):
+        for flag in reverse_flags:
+            _append_pair(run_args, invocation_args, "--reverse_complement", "1" if flag else "0")
+    for spec in region_specs:
+        _append_pair(run_args, invocation_args, "--region", spec)
+
+
 def _gui_linear_losat_program(config: Mapping[str, Any], adv: Mapping[str, Any]) -> str:
     blast_source = str(config.get("blastSource") or adv.get("blastSource") or "").strip().lower()
     losat_program = str(config.get("losatProgram") or adv.get("losatProgram") or "").strip().lower()
@@ -859,6 +930,7 @@ def _append_linear_gui_blastp_args(
     run_args: list[str],
     invocation_args: list[str],
     *,
+    session: Mapping[str, Any],
     config: Mapping[str, Any],
     adv: Mapping[str, Any],
 ) -> None:
@@ -900,12 +972,23 @@ def _append_linear_gui_blastp_args(
         if value not in (None, "", False):
             _append_pair(run_args, invocation_args, option, str(value))
 
+    if mode == "orthogroup":
+        orthogroup_state = session.get("orthogroupState")
+        selected_target = (
+            str(orthogroup_state.get("selectedOrthogroupAlignmentFeature") or "").strip()
+            if isinstance(orthogroup_state, Mapping)
+            else ""
+        )
+        if selected_target:
+            _append_pair(run_args, invocation_args, "--align_orthogroup_feature", selected_target)
+
     if mode != "collinear":
         return
     for key, option in (
         ("collinearMinAnchors", "--collinear_min_anchors"),
         ("collinearMaxGeneGap", "--collinear_max_gene_gap"),
         ("collinearMaxDiagonalDrift", "--collinear_max_diagonal_drift"),
+        ("collinearMaxConflictsInMergeGap", "--collinear_max_conflicts_in_merge_gap"),
         ("collinearUnitMode", "--collinear_unit_mode"),
         ("collinearSearchScope", "--collinear_search_scope"),
         ("collinearColorMode", "--collinear_color_mode"),
@@ -1230,8 +1313,6 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
             "orthogroupMemberMaxHits": 5,
             "collinearMinAnchors": 1,
             "collinearMaxGeneGap": 0,
-            "collinearBlockMergeGap": 50,
-            "collinearSingletonMergeGap": 25,
             "collinearMaxDiagonalDrift": 0,
             "collinearMaxConflictsInMergeGap": 1,
             "collinearMaxParalogLinksPerOrthogroup": 2,
@@ -1337,6 +1418,310 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
             "ring_gap": None,
         },
     }
+
+
+def _populate_linear_session_fields_from_cli_context(
+    payload: dict[str, Any],
+    context: SessionBuildContext,
+) -> None:
+    args = tuple(str(arg) for arg in context.cli_invocation_args)
+    _populate_linear_orthogroup_state_from_cli_args(payload, args)
+
+    files = payload.get("files")
+    if not isinstance(files, dict):
+        return
+    linear_seqs = files.get("linearSeqs")
+    if not isinstance(linear_seqs, list) or not linear_seqs:
+        return
+
+    file_count = len(linear_seqs)
+    selectors = _linear_input_selectors_from_cli_args(args, file_count)
+    for index, selector in enumerate(selectors["record_ids"]):
+        if not selector or index >= len(linear_seqs) or not isinstance(linear_seqs[index], dict):
+            continue
+        linear_seqs[index]["region_record_id"] = selector
+
+    metadata = _normalize_linear_record_metadata(context.linear_record_metadata)
+    labels = _linear_record_labels_from_cli_args(args, metadata)
+    for source_index, label in labels.items():
+        if 0 <= source_index < len(linear_seqs) and isinstance(linear_seqs[source_index], dict):
+            linear_seqs[source_index]["definition"] = label
+
+    region_fields = _linear_region_metadata_from_cli_args(args, metadata)
+    region_sources = set(region_fields)
+    for source_index, fields in region_fields.items():
+        if 0 <= source_index < len(linear_seqs) and isinstance(linear_seqs[source_index], dict):
+            linear_seqs[source_index].update(fields)
+
+    for index, reverse_flag in enumerate(selectors["reverse_flags"]):
+        if (
+            reverse_flag
+            and index not in region_sources
+            and index < len(linear_seqs)
+            and isinstance(linear_seqs[index], dict)
+        ):
+            linear_seqs[index]["region_reverse"] = True
+
+
+def _populate_linear_orthogroup_state_from_cli_args(
+    payload: dict[str, Any],
+    args: Sequence[str],
+) -> None:
+    selected = _option_value(
+        args,
+        "--align_orthogroup_feature",
+        "--align-orthogroup-feature",
+    )
+    if not selected:
+        return
+    protein_mode = _option_value(args, "--protein_blastp_mode", "--protein-blastp-mode")
+    if protein_mode != "orthogroup":
+        return
+    orthogroup_state = payload.get("orthogroupState")
+    if not isinstance(orthogroup_state, dict):
+        orthogroup_state = {}
+        payload["orthogroupState"] = orthogroup_state
+    orthogroup_state["selectedOrthogroupAlignmentFeature"] = str(selected).strip()
+
+
+def _normalize_linear_record_metadata(
+    value: Sequence[Mapping[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    if not value:
+        return normalized
+    for index, item in enumerate(value):
+        if not isinstance(item, Mapping):
+            continue
+        try:
+            loaded_index = int(item.get("loaded_index", index))
+        except (TypeError, ValueError):
+            loaded_index = index
+        try:
+            source_index = int(item.get("source_index"))
+        except (TypeError, ValueError):
+            source_index = -1
+        try:
+            source_loaded_count = int(item.get("source_loaded_count", 0))
+        except (TypeError, ValueError):
+            source_loaded_count = 0
+        try:
+            source_loaded_index = int(item.get("source_loaded_index", 0))
+        except (TypeError, ValueError):
+            source_loaded_index = 0
+        normalized.append(
+            {
+                "loaded_index": loaded_index,
+                "source_index": source_index,
+                "source_loaded_index": source_loaded_index,
+                "source_loaded_count": source_loaded_count,
+                "record_id": str(item.get("record_id") or ""),
+                "source_file": str(item.get("source_file") or ""),
+                "source_basename": str(item.get("source_basename") or ""),
+            }
+        )
+    return sorted(normalized, key=lambda item: int(item["loaded_index"]))
+
+
+def _linear_record_labels_from_cli_args(
+    args: Sequence[str],
+    record_metadata: Sequence[Mapping[str, Any]],
+) -> dict[int, str]:
+    labels = _option_all_values(args, "--record_label", "--record-label")
+    mapped: dict[int, str] = {}
+    if not labels or not record_metadata:
+        return mapped
+    for loaded_index, raw_label in enumerate(labels):
+        if loaded_index >= len(record_metadata):
+            break
+        label = str(raw_label or "").strip()
+        if not label:
+            continue
+        record = record_metadata[loaded_index]
+        if int(record.get("source_loaded_count", 0) or 0) != 1:
+            continue
+        try:
+            source_index = int(record.get("source_index", -1))
+        except (TypeError, ValueError):
+            source_index = -1
+        if source_index >= 0:
+            mapped[source_index] = label
+    return mapped
+
+
+def _linear_region_metadata_from_cli_args(
+    args: Sequence[str],
+    record_metadata: Sequence[Mapping[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    raw_specs = _option_all_values(args, "--region")
+    if not raw_specs or not record_metadata:
+        return {}
+    try:
+        specs = parse_region_specs(raw_specs)
+    except ValueError:
+        return {}
+    assignments = _assign_linear_region_specs_to_metadata(specs, record_metadata)
+    reverse_flags = _linear_input_selectors_from_cli_args(
+        args,
+        _linear_file_count_from_metadata(record_metadata),
+    )["reverse_flags"]
+    mapped: dict[int, dict[str, Any]] = {}
+    for loaded_index, spec in assignments.items():
+        if loaded_index < 0 or loaded_index >= len(record_metadata):
+            continue
+        record = record_metadata[loaded_index]
+        if int(record.get("source_loaded_count", 0) or 0) != 1:
+            continue
+        try:
+            source_index = int(record.get("source_index", -1))
+        except (TypeError, ValueError):
+            source_index = -1
+        if source_index < 0:
+            continue
+        if source_index < len(reverse_flags) and reverse_flags[source_index]:
+            continue
+        mapped[source_index] = {
+            "region_start": int(spec.start),
+            "region_end": int(spec.end),
+            "region_reverse": bool(spec.reverse_complement),
+        }
+    return mapped
+
+
+def _assign_linear_region_specs_to_metadata(
+    specs: Sequence[RegionSpec],
+    record_metadata: Sequence[Mapping[str, Any]],
+) -> dict[int, RegionSpec]:
+    total = len(record_metadata)
+    if total == 0:
+        return {}
+    selectorless = [
+        spec
+        for spec in specs
+        if spec.record_id is None and spec.record_index is None and spec.file_selector is None
+    ]
+    selectorful = [spec for spec in specs if spec not in selectorless]
+    assignments: dict[int, RegionSpec] = {}
+    if selectorless:
+        if selectorful:
+            return {}
+        if total == 1 and len(specs) == 1:
+            return {0: selectorless[0]}
+        if len(specs) == total:
+            return {index: spec for index, spec in enumerate(specs)}
+        return {}
+
+    id_to_indices: dict[str, list[int]] = {}
+    file_aliases: list[set[str]] = []
+    for index, record in enumerate(record_metadata):
+        record_id = str(record.get("record_id") or "")
+        id_to_indices.setdefault(record_id, []).append(index)
+        aliases = _linear_metadata_file_aliases(record)
+        file_aliases.append(aliases)
+
+    def _find_file_indices(file_selector: str) -> list[int]:
+        return [
+            index
+            for index, aliases in enumerate(file_aliases)
+            if file_selector in aliases
+        ]
+
+    for spec in selectorful:
+        file_indices: list[int] | None = None
+        if spec.file_selector:
+            file_indices = _find_file_indices(spec.file_selector)
+            if not file_indices:
+                return {}
+        if spec.record_index is not None:
+            if file_indices is None:
+                target_index = spec.record_index
+                if target_index < 0 or target_index >= total:
+                    return {}
+            else:
+                if spec.record_index < 0 or spec.record_index >= len(file_indices):
+                    return {}
+                target_index = file_indices[spec.record_index]
+            if target_index in assignments:
+                return {}
+            assignments[target_index] = spec
+            continue
+
+        record_id = spec.record_id or ""
+        matches = (
+            id_to_indices.get(record_id, [])
+            if file_indices is None
+            else [index for index in file_indices if str(record_metadata[index].get("record_id") or "") == record_id]
+        )
+        if len(matches) != 1:
+            return {}
+        target_index = matches[0]
+        if target_index in assignments:
+            return {}
+        assignments[target_index] = spec
+    return assignments
+
+
+def _linear_metadata_file_aliases(record: Mapping[str, Any]) -> set[str]:
+    aliases = {
+        str(record.get("source_file") or ""),
+        str(record.get("source_basename") or ""),
+    }
+    expanded: set[str] = set()
+    for alias in aliases:
+        if not alias:
+            continue
+        expanded.add(alias)
+        try:
+            expanded.add(PurePath(alias).name)
+        except Exception:
+            pass
+        try:
+            expanded.add(PureWindowsPath(alias).name)
+        except Exception:
+            pass
+    return {alias for alias in expanded if alias}
+
+
+def _linear_file_count_from_metadata(record_metadata: Sequence[Mapping[str, Any]]) -> int:
+    max_source = -1
+    for record in record_metadata:
+        try:
+            max_source = max(max_source, int(record.get("source_index", -1)))
+        except (TypeError, ValueError):
+            continue
+    return max_source + 1
+
+
+def _linear_input_selectors_from_cli_args(
+    args: Sequence[str],
+    file_count: int,
+) -> dict[str, list[Any]]:
+    record_ids = _option_all_values(args, "--record_id", "--record-id")[:file_count]
+    reverse_values = _option_all_values(args, "--reverse_complement", "--reverse-complement")[:file_count]
+    while len(record_ids) < file_count:
+        record_ids.append("")
+    while len(reverse_values) < file_count:
+        reverse_values.append("")
+    return {
+        "record_ids": [_normalize_optional_cli_text(value) for value in record_ids],
+        "reverse_flags": [_parse_cli_bool(value) for value in reverse_values],
+    }
+
+
+def _normalize_optional_cli_text(value: object) -> str:
+    text = str(value or "").strip()
+    if text.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
+        return ""
+    return text
+
+
+def _parse_cli_bool(value: object) -> bool:
+    text = str(value or "").strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"", "0", "false", "no", "n", "off", "none", "null", "-"}:
+        return False
+    return False
 
 
 def _populate_shared_cli_config(args: Sequence[str], adv: dict[str, Any]) -> None:
@@ -1591,16 +1976,6 @@ def _populate_linear_cli_config(
             )
             or 0
         )
-        blastp["collinearBlockMergeGap"] = _option_value(
-            args,
-            "--collinear_block_merge_gap",
-            "--collinear-block-merge-gap",
-        ) or 50
-        blastp["collinearSingletonMergeGap"] = _option_value(
-            args,
-            "--collinear_singleton_merge_gap",
-            "--collinear-singleton-merge-gap",
-        ) or 25
         blastp["collinearMaxDiagonalDrift"] = _option_value(
             args,
             "--collinear_max_diagonal_drift",

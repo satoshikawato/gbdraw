@@ -832,8 +832,6 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     collinear_unit_mode="auto",
     collinear_color_mode="orientation",
     collinear_anchor_mode="rbh",
-    collinear_block_merge_gap=50,
-    collinear_singleton_merge_gap=25,
     collinear_max_diagonal_drift=0,
     collinear_max_conflicts_in_merge_gap=1,
     collinear_max_paralog_links_per_orthogroup=2,
@@ -948,8 +946,6 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             str(collinear_unit_mode),
             str(collinear_color_mode),
             normalized_collinear_anchor_mode,
-            str(collinear_block_merge_gap),
-            str(collinear_singleton_merge_gap),
             str(collinear_max_diagonal_drift),
             str(collinear_max_conflicts_in_merge_gap),
             str(collinear_max_paralog_links_per_orthogroup),
@@ -1079,6 +1075,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 min_anchors=_collinear_int(collinear_min_anchors, 1),
                 max_unit_gap=_collinear_int(collinear_max_gene_gap, 0),
                 max_diagonal_drift=_collinear_int(collinear_max_diagonal_drift, 0),
+                max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1),
             )
             collinearity_result = build_orthogroup_collinearity_blocks_from_hits(
                 directional_tables,

@@ -1098,10 +1098,6 @@ const applyConfigData = (data) => {
     {
       const maxGap = Number(state.losat.blastp?.collinearMaxGeneGap);
       state.losat.blastp.collinearMaxGeneGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
-      const blockMergeGap = Number(state.losat.blastp?.collinearBlockMergeGap);
-      state.losat.blastp.collinearBlockMergeGap = Number.isInteger(blockMergeGap) && blockMergeGap >= 0 ? blockMergeGap : 50;
-      const singletonMergeGap = Number(state.losat.blastp?.collinearSingletonMergeGap);
-      state.losat.blastp.collinearSingletonMergeGap = Number.isInteger(singletonMergeGap) && singletonMergeGap >= 0 ? singletonMergeGap : 25;
       const diagonalDrift = Number(state.losat.blastp?.collinearMaxDiagonalDrift);
       state.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
       const mergeConflicts = Number(state.losat.blastp?.collinearMaxConflictsInMergeGap);
@@ -1114,6 +1110,8 @@ const applyConfigData = (data) => {
       state.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(state.losat.blastp?.collinearAnchorMode);
       state.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(state.losat.blastp?.collinearSearchScope);
     }
+    delete state.losat.blastp.collinearBlockMergeGap;
+    delete state.losat.blastp.collinearSingletonMergeGap;
     delete state.losat.blastp.orthogroupHitPolicy;
     delete state.losat.blastp.orthogroupMaxHits;
   }

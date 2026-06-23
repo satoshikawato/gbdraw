@@ -2935,6 +2935,14 @@ json.dumps({
           0,
           normalizeBlastThresholdNumber(losat.blastp?.collinearMaxDiagonalDrift, 0, { integer: true })
         );
+        losat.blastp.collinearMaxConflictsInMergeGap = Math.max(
+          0,
+          normalizeBlastThresholdNumber(
+            losat.blastp?.collinearMaxConflictsInMergeGap,
+            1,
+            { integer: true }
+          )
+        );
         losat.blastp.collinearMaxParalogLinksPerOrthogroup = Math.max(
           1,
           normalizeBlastThresholdNumber(
@@ -3730,10 +3738,8 @@ json.dumps({
                 'cds',
                 losat.blastp.collinearColorMode,
                 'rbh',
-                50,
-                25,
                 losat.blastp.collinearMaxDiagonalDrift,
-                0,
+                losat.blastp.collinearMaxConflictsInMergeGap,
                 losat.blastp.collinearMaxParalogLinksPerOrthogroup,
                 collinearSearchScope,
                 orthogroupMembershipMode,

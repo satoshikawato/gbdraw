@@ -472,8 +472,6 @@ export const createDefaultLosat = () => ({
     orthogroupMemberMaxHits: 5,
     collinearMinAnchors: 1,
     collinearMaxGeneGap: 0,
-    collinearBlockMergeGap: 50,
-    collinearSingletonMergeGap: 25,
     collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1,
     collinearMaxParalogLinksPerOrthogroup: 2,
