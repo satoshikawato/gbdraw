@@ -71,6 +71,26 @@ const isRawLosatCacheEntry = (entry) =>
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
+const hasColorEntries = (colors) =>
+  Boolean(colors) && typeof colors === 'object' && !Array.isArray(colors) && Object.keys(colors).length > 0;
+
+const normalizeColorMap = (colors) => {
+  const normalized = {};
+  if (!colors || typeof colors !== 'object' || Array.isArray(colors)) return normalized;
+  Object.entries(colors).forEach(([key, value]) => {
+    normalized[key] = resolveColorToHex(String(value || '').trim());
+  });
+  return normalized;
+};
+
+const paletteColorsFromDefinitions = (paletteName) => {
+  const name = String(paletteName || '').trim();
+  if (!name) return null;
+  const definitions = state.paletteDefinitions?.value || {};
+  const colors = definitions[name];
+  return hasColorEntries(colors) ? state.normalizePaletteColors(cloneColors(colors)) : null;
+};
+
 const cloneStringMap = (source) => {
   const cloned = {};
   if (!source || typeof source !== 'object' || Array.isArray(source)) return cloned;
@@ -1100,14 +1120,14 @@ const applyConfigData = (data) => {
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
   }
-  if (data.colors) {
-    const normalized = {};
-    Object.entries(data.colors).forEach(([key, value]) => {
-      normalized[key] = resolveColorToHex(String(value || '').trim());
-    });
-    state.currentColors.value = state.normalizePaletteColors(normalized);
+  const importedPalette = String(data.palette || '').trim();
+  if (importedPalette) state.selectedPalette.value = importedPalette;
+  if (hasColorEntries(data.colors)) {
+    state.currentColors.value = state.normalizePaletteColors(normalizeColorMap(data.colors));
+  } else {
+    const paletteColors = paletteColorsFromDefinitions(state.selectedPalette.value);
+    if (paletteColors) state.currentColors.value = paletteColors;
   }
-  if (data.palette) state.selectedPalette.value = data.palette;
 
   if (data.rules && Array.isArray(data.rules)) {
     state.manualSpecificRules.length = 0;
