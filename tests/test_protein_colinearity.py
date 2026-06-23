@@ -789,6 +789,14 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
         subject_fasta=subject_fasta,
         args=["--max-hsps-per-subject", "1"],
     )
+    threaded_key, _, _ = build_web_losat_cache_key(
+        query_fasta=query_fasta,
+        subject_fasta=subject_fasta,
+        args=["--max-hsps-per-subject", "1"],
+        runtime_compatibility="serial-v1",
+        threads_per_job=32,
+    )
+    assert threaded_key == cache_key
     raw_text = (
         f"{query_id}\t{subject_id}\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n"
     )
@@ -823,6 +831,67 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
     assert entries[0]["key"] == cache_key
     assert entries[0]["display"] is True
     assert entries[0]["filename"] == "record_a.record_b.losatp.tsv"
+
+
+@pytest.mark.linear
+def test_pairwise_blastp_reuses_legacy_thread_sensitive_web_losat_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 9)]),
+        _record("record_b", features=[_cds(9, 18)]),
+    ]
+    extraction = extract_web_stable_cds_proteins(
+        records,
+        record_instance_keys=("r_left", "r_right"),
+    )
+    query_fasta = proteins_to_fasta(extraction.proteins_by_record[0])
+    subject_fasta = proteins_to_fasta(extraction.proteins_by_record[1])
+    query_id = extraction.proteins_by_record[0][0].protein_id
+    subject_id = extraction.proteins_by_record[1][0].protein_id
+    _, query_hash, subject_hash = build_web_losat_cache_key(
+        query_fasta=query_fasta,
+        subject_fasta=subject_fasta,
+        args=["--max-hsps-per-subject", "1"],
+    )
+    legacy_key = "legacy-thread-sensitive-key"
+    raw_text = (
+        f"{query_id}\t{subject_id}\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n"
+    )
+    cache = LosatpCacheManager(
+        [
+            {
+                "schema": 2,
+                "kind": "raw-losat",
+                "key": legacy_key,
+                "text": raw_text,
+                "program": "blastp",
+                "queryCanonicalHash": query_hash,
+                "subjectCanonicalHash": subject_hash,
+            }
+        ],
+        threads_per_job=32,
+    )
+
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("LOSATP should not run on a legacy cache hit")
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fail_run)
+
+    result = build_pairwise_protein_blastp_comparisons(
+        records,
+        losatp_cache=cache,
+        protein_extraction=extraction,
+        cache_filenames=("record_a.record_b.losatp.tsv",),
+    )
+
+    assert result.comparisons[0].iloc[0]["query_protein_id"] == query_id
+    assert result.comparisons[0].iloc[0]["subject_protein_id"] == subject_id
+    entries = cache.session_entries()
+    assert entries[0]["key"] != legacy_key
+    assert entries[0]["display"] is True
+    assert entries[0]["args"] == ["--max-hsps-per-subject", "1"]
+    assert entries[0]["outfmt"] == "6"
 
 
 @pytest.mark.linear

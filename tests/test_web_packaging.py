@@ -211,6 +211,14 @@ def test_web_run_info_helper_builds_display_commands() -> None:
     subprocess.run([node, "tests/web/run-info.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_losat_settings_preserve_requested_thread_count() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/losat-settings.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
@@ -1260,7 +1268,9 @@ def test_web_losat_threaded_browser_wiring() -> None:
     assert 'v-model="losat.parallelWorkers"' in index_html
     assert 'v-model="losat.threadsPerJob"' in index_html
     assert "executionMode: 'auto'" in (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
-    assert "losatRuntimeCompatibility" in run_source
+    assert "buildLosatCachePayload" in run_source
+    assert "losatRuntimeCompatibility" not in run_source
+    assert "losatThreadsPerJob" not in run_source
     assert "onRuntimeStatus" in run_source
 
 
@@ -1269,8 +1279,9 @@ def test_web_losat_thread_count_options_are_contiguous() -> None:
     service_source = (WEB_ROOT / "js" / "services" / "losat.js").read_text(encoding="utf-8")
     worker_source = (WEB_ROOT / "js" / "workers" / "losat-threaded-worker.js").read_text(encoding="utf-8")
     assert "const createPositiveIntegerOptions = (maxValue) =>" in source
+    assert "const appendRequestedIntegerOption = (options, requestedValue) =>" in source
     assert "return createPositiveIntegerOptions(losatHardwareThreads.value);" in source
-    assert "return createPositiveIntegerOptions(maxThreads);" in source
+    assert "createPositiveIntegerOptions(maxThreads)," in source
     assert "const perJobSlots = losatEffectiveThreadsPerJob.value;" in source
     assert "const workersPerThreadedJob = Math.max(1, threadsPerJob);" in service_source
     assert "getChildWorkerCount(effectiveThreads)" in worker_source

@@ -89,6 +89,78 @@ const isRawLosatCacheEntry = (entry) =>
   entry.kind === 'raw-losat' &&
   typeof entry.text === 'string';
 
+const normalizeLosatArgs = (args) => Array.isArray(args)
+  ? args.map((arg) => String(arg))
+  : [];
+
+const buildLosatCachePayload = ({
+  flow,
+  program,
+  outfmt,
+  args,
+  queryCanonicalHash,
+  subjectCanonicalHash
+}) => {
+  const payload = {
+    cacheSchema: LOSAT_CACHE_SCHEMA,
+    program,
+    outfmt: String(outfmt || '6'),
+    args: normalizeLosatArgs(args),
+    queryCanonicalHash,
+    subjectCanonicalHash
+  };
+  if (flow) payload.flow = flow;
+  return payload;
+};
+
+const sameLosatArgs = (left, right) => {
+  const a = normalizeLosatArgs(left);
+  const b = normalizeLosatArgs(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+};
+
+const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata) => {
+  if (!cacheMap) return null;
+  const direct = cacheMap.get(cacheKey);
+  if (isRawLosatCacheEntry(direct)) return { key: cacheKey, entry: direct };
+
+  const expectedProgram = String(metadata?.program || '');
+  const expectedOutfmt = String(metadata?.outfmt || '6');
+  const expectedFlow = String(metadata?.flow || '');
+  const expectedQuery = String(metadata?.queryCanonicalHash || '');
+  const expectedSubject = String(metadata?.subjectCanonicalHash || '');
+
+  for (const [key, entry] of cacheMap.entries()) {
+    if (!isRawLosatCacheEntry(entry)) continue;
+    if (String(entry.queryCanonicalHash || '') !== expectedQuery) continue;
+    if (String(entry.subjectCanonicalHash || '') !== expectedSubject) continue;
+    const entryProgram = String(entry.program || expectedProgram);
+    if (entryProgram && expectedProgram && entryProgram !== expectedProgram) continue;
+    if (entry.outfmt && String(entry.outfmt) !== expectedOutfmt) continue;
+    if (entry.flow && String(entry.flow) !== expectedFlow) continue;
+    if (Array.isArray(entry.args) && !sameLosatArgs(entry.args, metadata?.args)) continue;
+    return { key, entry };
+  }
+
+  return null;
+};
+
+const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
+  if (!cacheMap || !found?.entry) return found?.entry || null;
+  const promoted = {
+    ...found.entry,
+    program: metadata.program || found.entry.program || '',
+    outfmt: String(metadata.outfmt || found.entry.outfmt || '6'),
+    args: normalizeLosatArgs(metadata.args || found.entry.args),
+    queryCanonicalHash: metadata.queryCanonicalHash || found.entry.queryCanonicalHash || '',
+    subjectCanonicalHash: metadata.subjectCanonicalHash || found.entry.subjectCanonicalHash || ''
+  };
+  if (metadata.flow) promoted.flow = metadata.flow;
+  if (found.key && found.key !== cacheKey) cacheMap.delete(found.key);
+  cacheMap.set(cacheKey, promoted);
+  return promoted;
+};
+
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || 'losat';
@@ -2574,9 +2646,6 @@ json.dumps({
             const losatJobs = [];
             const pendingJobKeys = new Set();
             const executionMode = getLosatExecutionMode();
-            const runtimeCompatibility = executionMode === 'serial'
-              ? 'serial-v1'
-              : 'threaded-compatible-v1';
 
             for (let index = 0; index < comparisonEntries.length; index += 1) {
               throwIfGenerationCanceled();
@@ -2590,17 +2659,15 @@ json.dumps({
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
-              const cacheKey = await hashText(JSON.stringify({
-                cacheSchema: LOSAT_CACHE_SCHEMA,
+              const cacheMetadata = {
                 flow: 'circular-conservation',
-                losatRuntimeCompatibility: runtimeCompatibility,
-                losatThreadsPerJob: 1,
                 program: circularLosatProgram,
                 outfmt: String(losat.outfmt || '6'),
                 args: extraArgs,
                 queryCanonicalHash: queryHash,
                 subjectCanonicalHash: subjectHash
-              }));
+              };
+              const cacheKey = await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
               const fallbackName = makeSafeFilename(
                 `${String(fileObj?.name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.${circularLosatSuffix}.tsv`
               );
@@ -2615,7 +2682,10 @@ json.dumps({
                 filename: fallbackName,
                 display: true
               });
-              if (!isRawLosatCacheEntry(cacheMap.get(cacheKey)) && !pendingJobKeys.has(cacheKey)) {
+              const cached = getRawLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
+              const hasCachedText = Boolean(cached);
+              if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
+              if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
                 pendingJobKeys.add(cacheKey);
                 losatJobs.push({
                   pairIndex: index,
@@ -2663,6 +2733,9 @@ json.dumps({
                   kind: 'raw-losat',
                   text: result.text,
                   program: circularLosatProgram,
+                  flow: 'circular-conservation',
+                  outfmt: String(losat.outfmt || '6'),
+                  args: job?.extraArgs || [],
                   queryCanonicalHash: job?.queryCanonicalHash || '',
                   subjectCanonicalHash: job?.subjectCanonicalHash || ''
                 });
@@ -3367,24 +3440,20 @@ json.dumps({
           };
         };
 
-        const buildCacheKey = async (argsKey, queryIdx, subjectIdx) => {
+        const buildCacheMetadata = async (argsKey, queryIdx, subjectIdx) => {
           const queryHash = await getSeqHash(queryIdx);
           const subjectHash = await getSeqHash(subjectIdx);
-          const payload = JSON.stringify({
-            cacheSchema: LOSAT_CACHE_SCHEMA,
-            losatRuntimeCompatibility: losatExecutionMode === 'serial'
-              ? 'serial-v1'
-              : 'threaded-compatible-v1',
-            losatThreadsPerJob: losatExecutionMode === 'serial'
-              ? 1
-              : (losatRequestedThreadsPerJob || 'auto'),
+          return {
             program: losatProgram.value,
             outfmt: String(losat.outfmt || '6'),
             args: argsKey,
             queryCanonicalHash: queryHash,
             subjectCanonicalHash: subjectHash
-          });
-          return hashText(payload);
+          };
+        };
+
+        const buildCacheKey = async (metadata) => {
+          return hashText(JSON.stringify(buildLosatCachePayload(metadata)));
         };
 
         const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) =>
@@ -3513,7 +3582,8 @@ json.dumps({
             const subjectEntry = await getSeqEntry(spec.subjectIndex);
             throwIfGenerationCanceled();
             const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
-            const cacheKey = await buildCacheKey(losatArgs, spec.queryIndex, spec.subjectIndex);
+            const cacheMetadata = await buildCacheMetadata(losatArgs, spec.queryIndex, spec.subjectIndex);
+            const cacheKey = await buildCacheKey(cacheMetadata);
             throwIfGenerationCanceled();
             const queryCanonicalHash = await getSeqHash(spec.queryIndex);
             throwIfGenerationCanceled();
@@ -3524,8 +3594,9 @@ json.dumps({
             }
             sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
             sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
-            const cached = cacheMap.get(cacheKey);
-            const hasCachedText = isRawLosatCacheEntry(cached);
+            const cached = getRawLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
+            const hasCachedText = Boolean(cached);
+            if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
@@ -3600,6 +3671,8 @@ json.dumps({
                 kind: 'raw-losat',
                 text: result.text,
                 program: losatProgram.value,
+                outfmt: String(losat.outfmt || '6'),
+                args: job?.extraArgs || [],
                 queryCanonicalHash: job?.queryCanonicalHash || '',
                 subjectCanonicalHash: job?.subjectCanonicalHash || ''
               });

@@ -1338,38 +1338,39 @@ const serializeLosatCache = () => {
   const entries = [];
   const seen = new Set();
 
-  info.forEach((entry, idx) => {
-    if (!entry || !entry.key) return;
-    const cached = cacheMap.get(entry.key);
-    if (!isRawLosatCacheEntry(cached)) return;
-    entries.push({
+  const buildEntry = (key, cached, { filename = '', display = false } = {}) => {
+    const entry = {
       schema: LOSAT_CACHE_SCHEMA,
       kind: 'raw-losat',
-      key: entry.key,
-      filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
-      display: entry.display !== false,
+      key,
+      filename,
+      display,
       text: cached.text,
       program: cached.program || '',
       queryCanonicalHash: cached.queryCanonicalHash || '',
       subjectCanonicalHash: cached.subjectCanonicalHash || ''
-    });
+    };
+    if (cached.flow) entry.flow = cached.flow;
+    if (cached.outfmt) entry.outfmt = cached.outfmt;
+    if (Array.isArray(cached.args)) entry.args = cached.args.map((arg) => String(arg));
+    return entry;
+  };
+
+  info.forEach((entry, idx) => {
+    if (!entry || !entry.key) return;
+    const cached = cacheMap.get(entry.key);
+    if (!isRawLosatCacheEntry(cached)) return;
+    entries.push(buildEntry(entry.key, cached, {
+      filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
+      display: entry.display !== false
+    }));
     seen.add(entry.key);
   });
 
   cacheMap.forEach((value, key) => {
     if (seen.has(key)) return;
     if (!isRawLosatCacheEntry(value)) return;
-    entries.push({
-      schema: LOSAT_CACHE_SCHEMA,
-      kind: 'raw-losat',
-      key,
-      filename: '',
-      display: false,
-      text: value.text,
-      program: value.program || '',
-      queryCanonicalHash: value.queryCanonicalHash || '',
-      subjectCanonicalHash: value.subjectCanonicalHash || ''
-    });
+    entries.push(buildEntry(key, value));
   });
 
   return entries;
@@ -1390,14 +1391,18 @@ const applyLosatCache = (entries) => {
       ) {
         return;
       }
-      map.set(entry.key, {
+      const restored = {
         schema: LOSAT_CACHE_SCHEMA,
         kind: 'raw-losat',
         text: entry.text,
         program: entry.program || '',
         queryCanonicalHash: entry.queryCanonicalHash || '',
         subjectCanonicalHash: entry.subjectCanonicalHash || ''
-      });
+      };
+      if (entry.flow) restored.flow = entry.flow;
+      if (entry.outfmt) restored.outfmt = entry.outfmt;
+      if (Array.isArray(entry.args)) restored.args = entry.args.map((arg) => String(arg));
+      map.set(entry.key, restored);
       if (entry.display === false) return;
       info.push({
         key: entry.key,

@@ -505,14 +505,16 @@ def build_web_losat_cache_key(
     runtime_compatibility: str = "threaded-compatible-v1",
     threads_per_job: str | int = "auto",
 ) -> tuple[str, str, str]:
-    """Build the same raw LOSAT cache key that the browser stores in sessions."""
+    """Build the same raw LOSAT cache key that the browser stores in sessions.
+
+    Thread/runtime options are intentionally excluded: they control execution
+    resources, not the raw LOSAT result identity.
+    """
 
     query_hash = _hash_text_sha256(query_fasta)
     subject_hash = _hash_text_sha256(subject_fasta)
     payload = {
         "cacheSchema": LOSAT_CACHE_SCHEMA,
-        "losatRuntimeCompatibility": runtime_compatibility,
-        "losatThreadsPerJob": threads_per_job,
         "program": program,
         "outfmt": str(outfmt),
         "args": [str(arg) for arg in args],
@@ -558,6 +560,10 @@ class LosatpCacheManager:
                 "queryCanonicalHash": str(entry.get("queryCanonicalHash") or ""),
                 "subjectCanonicalHash": str(entry.get("subjectCanonicalHash") or ""),
             }
+            if "outfmt" in entry:
+                normalized["outfmt"] = str(entry.get("outfmt") or "")
+            if "args" in entry:
+                normalized["args"] = [str(arg) for arg in entry.get("args") or ()]
             self._entries_by_key[key] = normalized
             if normalized["display"] is not False and key not in self._display_info:
                 self._display_order.append(key)
@@ -566,6 +572,52 @@ class LosatpCacheManager:
     @property
     def has_entries(self) -> bool:
         return bool(self._entries_by_key)
+
+    def _find_cached_entry(
+        self,
+        *,
+        cache_key: str,
+        program: str,
+        query_hash: str,
+        subject_hash: str,
+        outfmt: str,
+        args: Sequence[str],
+    ) -> dict[str, object] | None:
+        cached = self._entries_by_key.get(cache_key)
+        if cached is not None:
+            return cached
+
+        expected_args = tuple(str(arg) for arg in args)
+        for legacy_key, entry in list(self._entries_by_key.items()):
+            if str(entry.get("queryCanonicalHash") or "") != query_hash:
+                continue
+            if str(entry.get("subjectCanonicalHash") or "") != subject_hash:
+                continue
+            entry_program = str(entry.get("program") or program)
+            if entry_program and entry_program != program:
+                continue
+            entry_outfmt = str(entry.get("outfmt") or "")
+            if entry_outfmt and entry_outfmt != outfmt:
+                continue
+            if "args" in entry and tuple(str(arg) for arg in entry.get("args") or ()) != expected_args:
+                continue
+
+            migrated = dict(entry)
+            migrated["key"] = cache_key
+            migrated["program"] = program
+            migrated["outfmt"] = outfmt
+            migrated["args"] = list(expected_args)
+            self._entries_by_key.pop(legacy_key, None)
+            self._entries_by_key[cache_key] = migrated
+            if legacy_key in self._display_info:
+                self._display_info[cache_key] = self._display_info.pop(legacy_key)
+            self._display_order = [
+                cache_key if key == legacy_key else key
+                for key in self._display_order
+            ]
+            return migrated
+
+        return None
 
     def runner_for_search(
         self,
@@ -588,7 +640,14 @@ class LosatpCacheManager:
                 runtime_compatibility=self.runtime_compatibility,
                 threads_per_job=self.threads_per_job,
             )
-            cached = self._entries_by_key.get(cache_key)
+            cached = self._find_cached_entry(
+                cache_key=cache_key,
+                program="blastp",
+                query_hash=query_hash,
+                subject_hash=subject_hash,
+                outfmt="6",
+                args=args,
+            )
             if cached is not None:
                 if display:
                     self._mark_display(cache_key, filename)
@@ -614,6 +673,8 @@ class LosatpCacheManager:
                 "program": "blastp",
                 "queryCanonicalHash": query_hash,
                 "subjectCanonicalHash": subject_hash,
+                "outfmt": "6",
+                "args": [str(arg) for arg in args],
             }
             self._entries_by_key[cache_key] = entry
             if display:
