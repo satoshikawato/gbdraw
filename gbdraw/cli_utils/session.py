@@ -35,6 +35,7 @@ class DiagramRunResult:
     mode: Literal["circular", "linear"]
     render_formats: tuple[str, ...]
     outputs: tuple[RenderedSvg, ...]
+    losat_cache_entries: tuple[Mapping[str, Any], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -192,6 +193,7 @@ def save_session_sidecar_if_requested(
         svg_results=svg_results,
         embedded_files=session_files,
         generated_at=datetime.now(timezone.utc),
+        losat_cache_entries=run_result.losat_cache_entries,
     )
     write_session_json(sidecar_path, payload)
     return sidecar_path

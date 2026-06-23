@@ -21,11 +21,13 @@ from gbdraw.analysis.collinearity_units import (
 )
 from gbdraw.analysis.protein_colinearity import (
     CdsProtein,
+    LosatpCacheManager,
     LosatpRunner,
     OrthogroupMember,
     OrthogroupMembershipMode,
     OrthogroupResult,
     ProteinExtractionResult,
+    _cache_runner_for_search,
     _run_losatp_search,
     build_orthogroups_from_protein_hits,
     extract_cds_proteins,
@@ -2224,6 +2226,9 @@ def build_orthogroup_collinearity_blocks(
     edge_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
     runner: LosatpRunner | None = None,
+    losatp_cache: LosatpCacheManager | None = None,
+    protein_extraction: ProteinExtractionResult | None = None,
+    cache_filenames: Sequence[str] | None = None,
 ) -> CollinearityResult:
     """Run scoped LOSATP blastp evidence searches, infer orthogroups, and call blocks."""
 
@@ -2245,7 +2250,7 @@ def build_orthogroup_collinearity_blocks(
         resolved_max_paralog_links = int(params.max_paralog_links_per_orthogroup)
     if resolved_max_paralog_links <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
-    extraction = extract_cds_proteins(records)
+    extraction = protein_extraction or extract_cds_proteins(records)
     _validate_collinearity_extraction(records, extraction)
 
     search_candidate_limit = candidate_limit
@@ -2259,7 +2264,15 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=runner,
+            runner=_cache_runner_for_search(
+                losatp_cache,
+                runner=runner,
+                losatp_bin=losatp_bin,
+                losatp_threads=losatp_threads,
+                candidate_limit=search_candidate_limit,
+                max_hsps_per_subject=None,
+                display=False,
+            ),
         )
         directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
             same_record_hits,
@@ -2281,7 +2294,20 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=runner,
+            runner=_cache_runner_for_search(
+                losatp_cache,
+                runner=runner,
+                losatp_bin=losatp_bin,
+                losatp_threads=losatp_threads,
+                candidate_limit=search_candidate_limit,
+                max_hsps_per_subject=None,
+                filename=(
+                    str(cache_filenames[query_index])
+                    if cache_filenames is not None and query_index < len(cache_filenames)
+                    else ""
+                ),
+                display=subject_index == query_index + 1,
+            ),
         )
         directional_tables[(query_index, subject_index)] = filter_protein_hits_by_thresholds(
             forward_hits,
@@ -2297,7 +2323,15 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=runner,
+            runner=_cache_runner_for_search(
+                losatp_cache,
+                runner=runner,
+                losatp_bin=losatp_bin,
+                losatp_threads=losatp_threads,
+                candidate_limit=search_candidate_limit,
+                max_hsps_per_subject=None,
+                display=False,
+            ),
         )
         directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
             reverse_hits,

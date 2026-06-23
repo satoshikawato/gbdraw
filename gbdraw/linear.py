@@ -3,12 +3,15 @@
 
 
 import argparse
+import hashlib
+import json
 import logging
 import math
+import re
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Optional
+from typing import Any, Mapping, Optional, Sequence
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
 from .io.genome import load_gbks, load_gff_fasta
@@ -30,8 +33,12 @@ from .analysis.collinearity import (
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
+    LosatpCacheManager,
     ORTHOGROUP_INFERENCE_VERSION,
     PROTEIN_BLASTP_MODES,
+    build_pairwise_protein_blastp_comparisons,
+    build_rbh_orthogroup_protein_blastp_comparisons,
+    extract_web_stable_cds_proteins,
 )
 from .io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
@@ -66,6 +73,190 @@ from .cli_utils.session import (
     save_session_sidecar_if_requested,
 )
 from .session_io import load_session, session_to_cli_args
+
+
+def _web_json_dumps(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _web_hash_text(text: str) -> str:
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+def _web_safe_filename(name: object, fallback: str = "losat") -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or ""))
+    cleaned = cleaned.strip("_")
+    return cleaned or fallback
+
+
+def _web_normalize_label(label: object, fallback: str) -> str:
+    base = str(label or "").strip() or str(fallback or "")
+    dotted = re.sub(r"\.+", ".", re.sub(r"[\s/]+", ".", base)).strip(".")
+    return _web_safe_filename(dotted, _web_safe_filename(fallback, "losat"))
+
+
+def _record_cache_label(record: object, fallback: str) -> str:
+    annotations = getattr(record, "annotations", {}) or {}
+    label = str(annotations.get("gbdraw_record_label") or "").strip()
+    if label:
+        return label
+    record_id = str(getattr(record, "id", "") or "").strip()
+    return record_id or fallback
+
+
+def _linear_losat_cache_filenames(records: Sequence[object]) -> tuple[str, ...]:
+    filenames: list[str] = []
+    for index in range(max(0, len(records) - 1)):
+        left = _web_normalize_label(
+            _record_cache_label(records[index], f"seq_{index + 1}"),
+            f"seq_{index + 1}",
+        )
+        right = _web_normalize_label(
+            _record_cache_label(records[index + 1], f"seq_{index + 2}"),
+            f"seq_{index + 2}",
+        )
+        filenames.append(f"{left}.{right}.losatp.tsv")
+    return tuple(filenames)
+
+
+def _source_session_losat_entries(source_session: Mapping[str, Any] | None) -> tuple[Mapping[str, object], ...]:
+    if not isinstance(source_session, Mapping):
+        return ()
+    losat_cache = source_session.get("losatCache")
+    if not isinstance(losat_cache, Mapping):
+        return ()
+    entries = losat_cache.get("entries")
+    if not isinstance(entries, list):
+        return ()
+    return tuple(entry for entry in entries if isinstance(entry, Mapping))
+
+
+def _source_session_losat_config(source_session: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    if not isinstance(source_session, Mapping):
+        return {}
+    config = source_session.get("config")
+    if not isinstance(config, Mapping):
+        return {}
+    losat = config.get("losat")
+    return losat if isinstance(losat, Mapping) else {}
+
+
+def _source_session_threads_per_job(source_session: Mapping[str, Any] | None) -> str | int:
+    losat = _source_session_losat_config(source_session)
+    raw = str(losat.get("threadsPerJob") or "auto").strip().lower()
+    if raw == "auto":
+        return "auto"
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return "auto"
+    return parsed if parsed >= 1 else "auto"
+
+
+def _source_session_runtime_compatibility(source_session: Mapping[str, Any] | None) -> str:
+    losat = _source_session_losat_config(source_session)
+    execution_mode = str(losat.get("executionMode") or "auto").strip().lower()
+    return "serial-v1" if execution_mode == "serial" else "threaded-compatible-v1"
+
+
+def _fingerprint_from_session_entry(entry: object) -> dict[str, object] | None:
+    if not isinstance(entry, Mapping):
+        return None
+    return {
+        "name": str(entry.get("name") or ""),
+        "size": int(entry.get("size") or 0),
+        "lastModified": int(entry.get("lastModified") or 0),
+    }
+
+
+def _fingerprint_from_path(path: object) -> dict[str, object] | None:
+    if path in (None, "", False):
+        return None
+    file_path = Path(str(path))
+    try:
+        stat = file_path.stat()
+    except OSError:
+        return {"name": file_path.name, "size": 0, "lastModified": 0}
+    return {
+        "name": file_path.name,
+        "size": int(stat.st_size),
+        "lastModified": int(stat.st_mtime * 1000),
+    }
+
+
+def _linear_session_seq_entry(
+    source_session: Mapping[str, Any] | None,
+    index: int,
+) -> Mapping[str, Any] | None:
+    if not isinstance(source_session, Mapping):
+        return None
+    files = source_session.get("files")
+    if not isinstance(files, Mapping):
+        return None
+    linear_seqs = files.get("linearSeqs")
+    if not isinstance(linear_seqs, list) or index >= len(linear_seqs):
+        return None
+    entry = linear_seqs[index]
+    return entry if isinstance(entry, Mapping) else None
+
+
+def _canonical_region_spec_from_session_seq(seq: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(seq, Mapping):
+        return None
+    start = seq.get("region_start")
+    end = seq.get("region_end")
+    if start in (None, "") or end in (None, ""):
+        return None
+    try:
+        start_int = int(start)
+        end_int = int(end)
+    except (TypeError, ValueError):
+        return None
+    return f"{min(start_int, end_int)}-{max(start_int, end_int)}"
+
+
+def _record_instance_keys_for_web_losat(
+    args: argparse.Namespace,
+    *,
+    source_session: Mapping[str, Any] | None,
+    record_count: int,
+) -> tuple[str, ...]:
+    input_format = "gb" if args.gbk else "gff"
+    primary_paths = list(args.gbk or args.gff or [])
+    paired_fasta_paths = list(args.fasta or [])
+    record_selectors = list(args.record_id or [])
+    occurrences: dict[str, int] = {}
+    keys: list[str] = []
+    for index in range(record_count):
+        session_seq = _linear_session_seq_entry(source_session, index)
+        if session_seq is not None:
+            primary_entry = session_seq.get("gb") if input_format == "gb" else session_seq.get("gff")
+            paired_entry = session_seq.get("fasta") if input_format == "gff" else None
+            primary_fingerprint = _fingerprint_from_session_entry(primary_entry)
+            paired_fingerprint = _fingerprint_from_session_entry(paired_entry)
+            record_selector = str(session_seq.get("region_record_id") or "").strip()
+            canonical_region = _canonical_region_spec_from_session_seq(session_seq)
+        else:
+            primary_fingerprint = _fingerprint_from_path(
+                primary_paths[index] if index < len(primary_paths) else None
+            )
+            paired_fingerprint = _fingerprint_from_path(
+                paired_fasta_paths[index] if input_format == "gff" and index < len(paired_fasta_paths) else None
+            )
+            record_selector = str(record_selectors[index] if index < len(record_selectors) else "").strip()
+            canonical_region = None
+        descriptor = {
+            "inputFormat": input_format,
+            "primaryFile": primary_fingerprint,
+            "pairedFastaFile": paired_fingerprint,
+            "recordSelector": record_selector,
+            "canonicalRegionSpec": canonical_region,
+        }
+        base = _web_hash_text(_web_json_dumps(descriptor))[:16]
+        occurrence = occurrences.get(base, 0) + 1
+        occurrences[base] = occurrence
+        keys.append(f"r_{base}_o{occurrence}" if occurrence > 1 else f"r_{base}")
+    return tuple(keys)
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -1163,6 +1354,12 @@ def linear_main(cmd_args) -> None:
                 format_override=session_request.format,
             )
             args = _get_args(list(run_spec.args))
+            args._gbdraw_source_session = session
+            args._gbdraw_collect_losat_cache = bool(
+                session_request.save_session
+                or session_request.session_output
+                or _source_session_losat_entries(session)
+            )
             run_result = run_linear_from_namespace(args)
             save_session_sidecar_if_requested(
                 save_session=session_request.save_session,
@@ -1192,6 +1389,16 @@ def linear_main(cmd_args) -> None:
 def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     """Run linear rendering from an already parsed argparse namespace."""
 
+    source_session = getattr(args, "_gbdraw_source_session", None)
+    if not isinstance(source_session, Mapping):
+        source_session = None
+    source_losat_entries = _source_session_losat_entries(source_session)
+    collect_losat_cache = bool(
+        getattr(args, "_gbdraw_collect_losat_cache", False)
+        or getattr(args, "save_session", False)
+        or getattr(args, "session_output", None)
+        or source_losat_entries
+    )
     out_file_prefix: str = args.output
     blast_files: str = args.blast
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
@@ -1511,6 +1718,30 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_track_groups,
         record_count=len(records),
     )
+    losatp_cache: LosatpCacheManager | None = None
+    losatp_cache_entries: tuple[dict[str, object], ...] | None = None
+    protein_extraction = None
+    losat_cache_filenames: tuple[str, ...] = ()
+    if protein_blastp_mode != "none" and collect_losat_cache:
+        losatp_cache = LosatpCacheManager(
+            source_losat_entries,
+            threads_per_job=(
+                losatp_threads
+                if losatp_threads is not None
+                else _source_session_threads_per_job(source_session)
+            ),
+            runtime_compatibility=_source_session_runtime_compatibility(source_session),
+        )
+        record_instance_keys = _record_instance_keys_for_web_losat(
+            args,
+            source_session=source_session,
+            record_count=len(records),
+        )
+        protein_extraction = extract_web_stable_cds_proteins(
+            records,
+            record_instance_keys=record_instance_keys,
+        )
+        losat_cache_filenames = _linear_losat_cache_filenames(records)
     collinearity_comparisons: list[DataFrame] | None = None
     collinearity_orthogroups = None
     if collinear_blocks_path:
@@ -1526,6 +1757,42 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             records=records,
             color_mode=collinear_color_mode,
         )
+    elif protein_blastp_mode == "pairwise" and losatp_cache is not None:
+        protein_blastp_result = build_pairwise_protein_blastp_comparisons(
+            records,
+            losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
+            max_hits=protein_blastp_max_hits,
+            candidate_limit=protein_blastp_candidate_limit,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
+            cache_filenames=losat_cache_filenames,
+        )
+        collinearity_comparisons = protein_blastp_result.comparisons
+        collinearity_orthogroups = protein_blastp_result.orthogroups
+    elif protein_blastp_mode == "orthogroup" and losatp_cache is not None:
+        protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons(
+            records,
+            losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
+            candidate_limit=protein_blastp_candidate_limit,
+            orthogroup_membership_mode=orthogroup_membership_mode,
+            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            max_related_edges_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
+            cache_filenames=losat_cache_filenames,
+        )
+        collinearity_comparisons = protein_blastp_result.comparisons
+        collinearity_orthogroups = protein_blastp_result.orthogroups
     elif protein_blastp_mode == "collinear":
         collinearity_result = build_orthogroup_collinearity_blocks(
             records,
@@ -1543,6 +1810,9 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             unit_mode=collinear_unit_mode,
             edge_mode=collinear_anchor_mode,
             search_scope=collinear_search_scope,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
+            cache_filenames=losat_cache_filenames,
         )
         collinearity_orthogroups = collinearity_result.orthogroups
         collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
@@ -1620,12 +1890,16 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     else:
         save_figure(canvas, out_formats)
 
+    if losatp_cache is not None:
+        losatp_cache_entries = losatp_cache.session_entries()
+
     return DiagramRunResult(
         mode="linear",
         render_formats=tuple(out_formats),
         outputs=(
             make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name),
         ),
+        losat_cache_entries=losatp_cache_entries,
     )
 
 

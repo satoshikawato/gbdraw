@@ -163,6 +163,57 @@ def test_gui_only_circular_session_maps_to_cli_args(tmp_path: Path) -> None:
     assert spec.file_bindings[0].argIndex == gbk_index
 
 
+def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> None:
+    session = _minimal_session(
+        {
+            "linearSeqs": [
+                {"gb": _file_entry("a.gb", b"LOCUS       A\n")},
+                {"gb": _file_entry("b.gb", b"LOCUS       B\n")},
+            ]
+        },
+        mode="linear",
+    )
+    session["config"]["adv"] = {
+        "blastSource": "losat",
+        "losatProgram": "blastp",
+        "min_bitscore": 25,
+        "evalue": "1e-4",
+        "identity": 55,
+        "alignment_length": 30,
+    }
+    session["config"]["losat"] = {
+        "executionMode": "auto",
+        "threadsPerJob": "2",
+        "blastp": {
+            "mode": "collinear",
+            "maxHits": 7,
+            "collinearMinAnchors": 2,
+            "collinearMaxGeneGap": 3,
+            "collinearMaxDiagonalDrift": 4,
+            "collinearUnitMode": "cds",
+            "collinearSearchScope": "all",
+            "collinearColorMode": "orientation_identity",
+            "collinearMaxParalogLinksPerOrthogroup": 5,
+        },
+    }
+
+    spec = session_to_cli_args(
+        session,
+        mode="linear",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "--protein_blastp_mode" in spec.args
+    assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "collinear"
+    assert spec.args[spec.args.index("--losatp_threads") + 1] == "2"
+    assert spec.args[spec.args.index("--collinear_max_gene_gap") + 1] == "3"
+    assert spec.args[spec.args.index("--collinear_max_diagonal_drift") + 1] == "4"
+    assert spec.args[spec.args.index("--collinear_search_scope") + 1] == "all"
+    assert spec.args[spec.args.index("--collinear_color_mode") + 1] == "orientation_identity"
+
+
 def test_session_pre_parse_rejects_unsupported_options() -> None:
     with pytest.raises(SystemExit):
         parse_session_pre_args(

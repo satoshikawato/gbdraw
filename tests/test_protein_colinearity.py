@@ -16,6 +16,8 @@ import gbdraw.api.diagram as api_diagram_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
+    LosatpCacheManager,
+    build_web_losat_cache_key,
     build_orthogroups_from_protein_hits,
     build_pairwise_protein_blastp_comparisons,
     build_rbh_orthogroup_protein_blastp_comparisons,
@@ -23,6 +25,7 @@ from gbdraw.analysis.protein_colinearity import (
     convert_pair_protein_hits_to_genomic_links,
     convert_protein_hits_to_genomic_links,
     extract_cds_proteins,
+    extract_web_stable_cds_proteins,
     filter_protein_hits_by_thresholds,
     parse_losatp_outfmt6,
     proteins_to_fasta,
@@ -763,6 +766,132 @@ def test_build_pairwise_protein_blastp_comparisons_accepts_test_runner_without_o
     assert comparisons[0].iloc[0]["orthogroup_id"] == ""
     assert comparisons[0].iloc[0]["query_protein_id"] == "gbd_r0001_cds000001"
     assert comparisons[0].iloc[0]["subject_protein_id"] == "gbd_r0002_cds000001"
+
+
+@pytest.mark.linear
+def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 9)]),
+        _record("record_b", features=[_cds(9, 18)]),
+    ]
+    extraction = extract_web_stable_cds_proteins(
+        records,
+        record_instance_keys=("r_left", "r_right"),
+    )
+    query_fasta = proteins_to_fasta(extraction.proteins_by_record[0])
+    subject_fasta = proteins_to_fasta(extraction.proteins_by_record[1])
+    query_id = extraction.proteins_by_record[0][0].protein_id
+    subject_id = extraction.proteins_by_record[1][0].protein_id
+    cache_key, query_hash, subject_hash = build_web_losat_cache_key(
+        query_fasta=query_fasta,
+        subject_fasta=subject_fasta,
+        args=["--max-hsps-per-subject", "1"],
+    )
+    raw_text = (
+        f"{query_id}\t{subject_id}\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n"
+    )
+    cache = LosatpCacheManager(
+        [
+            {
+                "schema": 2,
+                "kind": "raw-losat",
+                "key": cache_key,
+                "text": raw_text,
+                "program": "blastp",
+                "queryCanonicalHash": query_hash,
+                "subjectCanonicalHash": subject_hash,
+            }
+        ]
+    )
+
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("LOSATP should not run on a cache hit")
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fail_run)
+
+    result = build_pairwise_protein_blastp_comparisons(
+        records,
+        losatp_cache=cache,
+        protein_extraction=extraction,
+        cache_filenames=("record_a.record_b.losatp.tsv",),
+    )
+
+    assert result.comparisons[0].iloc[0]["query_protein_id"] == query_id
+    entries = cache.session_entries()
+    assert entries[0]["key"] == cache_key
+    assert entries[0]["display"] is True
+    assert entries[0]["filename"] == "record_a.record_b.losatp.tsv"
+
+
+@pytest.mark.linear
+def test_linear_cli_save_session_writes_web_losat_cache_entries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 9)]),
+        _record("record_b", features=[_cds(9, 18)]),
+    ]
+    input_a = tmp_path / "a.gb"
+    input_b = tmp_path / "b.gb"
+    input_a.write_text("LOCUS       A\n", encoding="utf-8")
+    input_b.write_text("LOCUS       B\n", encoding="utf-8")
+    output_prefix = tmp_path / "out"
+
+    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(
+        linear_cli_module,
+        "assemble_linear_diagram_from_records",
+        lambda *_args, **_kwargs: object(),
+    )
+
+    def fake_save_figure(_canvas, _formats, **_kwargs):
+        output_prefix.with_suffix(".svg").write_text("<svg></svg>", encoding="utf-8")
+
+    def fake_losatp(query_fasta: str, subject_fasta: str, **kwargs) -> pd.DataFrame:
+        query_id = query_fasta.splitlines()[0][1:].split()[0]
+        subject_id = subject_fasta.splitlines()[0][1:].split()[0]
+        raw_text = (
+            f"{query_id}\t{subject_id}\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n"
+        )
+        callback = kwargs.get("raw_output_callback")
+        if callback is not None:
+            callback(raw_text)
+        return parse_losatp_outfmt6(raw_text)
+
+    monkeypatch.setattr(linear_cli_module, "save_figure", fake_save_figure)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_losatp)
+
+    linear_cli_module.linear_main(
+        [
+            "--gbk",
+            str(input_a),
+            str(input_b),
+            "--protein_blastp_mode",
+            "pairwise",
+            "-o",
+            str(output_prefix),
+            "-f",
+            "svg",
+            "--save-session",
+        ]
+    )
+
+    payload = json.loads(output_prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+    entries = payload["losatCache"]["entries"]
+    assert len(entries) == 1
+    assert entries[0]["schema"] == 2
+    assert entries[0]["kind"] == "raw-losat"
+    assert entries[0]["display"] is True
+    assert entries[0]["filename"] == "record_a.record_b.losatp.tsv"
+    assert entries[0]["text"].strip()
+    assert entries[0]["queryCanonicalHash"]
+    assert entries[0]["subjectCanonicalHash"]
 
 
 @pytest.mark.linear

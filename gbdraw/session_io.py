@@ -325,6 +325,7 @@ def build_session_json(
     svg_results: Sequence[tuple[str, str]],
     embedded_files: Mapping[str, Any],
     generated_at: datetime,
+    losat_cache_entries: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a GUI-loadable session JSON payload from a CLI run."""
 
@@ -368,7 +369,10 @@ def build_session_json(
     ]
     payload.setdefault("features", {})
     payload.setdefault("orthogroupState", {})
-    payload.setdefault("losatCache", {})
+    if losat_cache_entries is not None:
+        payload["losatCache"] = {"entries": _json_clone(list(losat_cache_entries))}
+    else:
+        payload.setdefault("losatCache", {})
     payload["cliInvocation"] = {
         "schema": 1,
         "mode": context.mode,
@@ -520,6 +524,7 @@ def _gui_session_to_cli_args(
             session=session,
             files=files,
             ui=ui,
+            config=config,
             form=form,
             adv=adv,
             temp_dir=temp_dir,
@@ -711,6 +716,7 @@ def _append_linear_gui_args(
     session: Mapping[str, Any],
     files: Mapping[str, Any],
     ui: Mapping[str, Any],
+    config: Mapping[str, Any],
     form: Mapping[str, Any],
     adv: Mapping[str, Any],
     temp_dir: Path,
@@ -809,6 +815,13 @@ def _append_linear_gui_args(
                 slot=f"files.linearSeqs[{index}].blast",
                 temp_dir=temp_dir,
             )
+    elif _gui_linear_losat_program(adv) == "blastp":
+        _append_linear_gui_blastp_args(
+            run_args,
+            invocation_args,
+            config=config,
+            adv=adv,
+        )
     if form.get("show_depth") is True:
         depth_rows = [
             _as_list(seq.get("depth") if isinstance(seq, Mapping) else None)
@@ -832,6 +845,75 @@ def _append_linear_gui_args(
                 )
         if track_count:
             _append_flag(run_args, invocation_args, "--show_depth")
+
+
+def _gui_linear_losat_program(adv: Mapping[str, Any]) -> str:
+    blast_source = str(adv.get("blastSource") or "").strip().lower()
+    losat_program = str(adv.get("losatProgram") or "").strip().lower()
+    if blast_source != "losat":
+        return ""
+    return losat_program
+
+
+def _append_linear_gui_blastp_args(
+    run_args: list[str],
+    invocation_args: list[str],
+    *,
+    config: Mapping[str, Any],
+    adv: Mapping[str, Any],
+) -> None:
+    losat_cfg = config.get("losat")
+    if not isinstance(losat_cfg, Mapping):
+        return
+    blastp_cfg = losat_cfg.get("blastp")
+    if not isinstance(blastp_cfg, Mapping):
+        return
+    mode = str(blastp_cfg.get("mode") or "none").strip().lower()
+    if mode not in {"pairwise", "orthogroup", "collinear"}:
+        return
+    _append_pair(run_args, invocation_args, "--protein_blastp_mode", mode)
+    threads_per_job = str(losat_cfg.get("threadsPerJob") or "auto").strip().lower()
+    if threads_per_job != "auto":
+        try:
+            parsed_threads = int(threads_per_job)
+        except ValueError:
+            parsed_threads = 0
+        if parsed_threads >= 1:
+            _append_pair(run_args, invocation_args, "--losatp_threads", str(parsed_threads))
+
+    max_hits = blastp_cfg.get("maxHits")
+    if max_hits not in (None, "", False):
+        _append_pair(run_args, invocation_args, "--protein_blastp_max_hits", str(max_hits))
+        if mode == "pairwise":
+            _append_pair(run_args, invocation_args, "--protein_blastp_candidate_limit", str(max_hits))
+    candidate_limit = blastp_cfg.get("candidateLimit")
+    if mode != "pairwise" and candidate_limit not in (None, "", False):
+        _append_pair(run_args, invocation_args, "--protein_blastp_candidate_limit", str(candidate_limit))
+
+    for key, option in (
+        ("min_bitscore", "--bitscore"),
+        ("evalue", "--evalue"),
+        ("identity", "--identity"),
+        ("alignment_length", "--alignment_length"),
+    ):
+        value = adv.get(key)
+        if value not in (None, "", False):
+            _append_pair(run_args, invocation_args, option, str(value))
+
+    if mode != "collinear":
+        return
+    for key, option in (
+        ("collinearMinAnchors", "--collinear_min_anchors"),
+        ("collinearMaxGeneGap", "--collinear_max_gene_gap"),
+        ("collinearMaxDiagonalDrift", "--collinear_max_diagonal_drift"),
+        ("collinearUnitMode", "--collinear_unit_mode"),
+        ("collinearSearchScope", "--collinear_search_scope"),
+        ("collinearColorMode", "--collinear_color_mode"),
+        ("collinearMaxParalogLinksPerOrthogroup", "--collinear_max_paralog_links_per_orthogroup"),
+    ):
+        value = blastp_cfg.get(key)
+        if value not in (None, "", False):
+            _append_pair(run_args, invocation_args, option, str(value))
 
 
 def _append_depth_gui_options(
