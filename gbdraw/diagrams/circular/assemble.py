@@ -38,6 +38,7 @@ from ...core.sequence import check_feature_presence  # type: ignore[reportMissin
 from ...core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
+from ...io.colors import resolve_color_to_hex  # type: ignore[reportMissingImports]
 from ...labels.circular import (  # type: ignore[reportMissingImports]
     assign_leader_start_points,
     minimum_bbox_gap_px,
@@ -1048,6 +1049,30 @@ def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
     return cloned
 
 
+def _slot_param_text(slot, *names: str) -> str | None:
+    params = getattr(slot, "params", {}) or {}
+    for name in names:
+        value = params.get(name)
+        text = str(value).strip() if value is not None else ""
+        if text:
+            return text
+    return None
+
+
+def _slot_skew_config(
+    skew_config: GcSkewConfigurator,
+    slot,
+    dinucleotide: str,
+) -> GcSkewConfigurator:
+    cloned = copy.copy(skew_config)
+    cloned.dinucleotide = str(dinucleotide).upper()
+    if positive_color := _slot_param_text(slot, "positive_color", "high_color"):
+        cloned.high_fill_color = resolve_color_to_hex(positive_color)
+    if negative_color := _slot_param_text(slot, "negative_color", "low_color"):
+        cloned.low_fill_color = resolve_color_to_hex(negative_color)
+    return cloned
+
+
 def _slot_gc_config_with_axis_font_size(
     config: GcContentConfigurator,
     nt: str,
@@ -1206,25 +1231,26 @@ def _sync_legend_table_for_circular_slots(
         elif renderer == "dinucleotide_skew":
             nt = _slot_dinucleotide(slot, default_nt)
             label = _slot_legend_label(slot, f"{nt} skew")
-            if skew_config.high_fill_color == skew_config.low_fill_color:
+            slot_skew_config = _slot_skew_config(skew_config, slot, nt)
+            if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
                 out[_unique_legend_key(out, label)] = {
                     "type": "solid",
-                    "fill": skew_config.high_fill_color,
-                    "stroke": skew_config.stroke_color,
-                    "width": skew_config.stroke_width,
+                    "fill": slot_skew_config.high_fill_color,
+                    "stroke": slot_skew_config.stroke_color,
+                    "width": slot_skew_config.stroke_width,
                 }
             else:
                 out[_unique_legend_key(out, f"{label} (+)")] = {
                     "type": "solid",
-                    "fill": skew_config.high_fill_color,
-                    "stroke": skew_config.stroke_color,
-                    "width": skew_config.stroke_width,
+                    "fill": slot_skew_config.high_fill_color,
+                    "stroke": slot_skew_config.stroke_color,
+                    "width": slot_skew_config.stroke_width,
                 }
                 out[_unique_legend_key(out, f"{label} (-)")] = {
                     "type": "solid",
-                    "fill": skew_config.low_fill_color,
-                    "stroke": skew_config.stroke_color,
-                    "width": skew_config.stroke_width,
+                    "fill": slot_skew_config.low_fill_color,
+                    "stroke": slot_skew_config.stroke_color,
+                    "width": slot_skew_config.stroke_width,
                 }
     if conservation_tracks:
         if any(track.track_color for track in conservation_tracks):
@@ -1508,7 +1534,7 @@ def _draw_resolved_circular_slot(
             gb_record,
             slot_df,
             canvas_config,
-            _slot_config_with_dinucleotide(skew_config, nt),
+            _slot_skew_config(skew_config, resolved_slot, nt),
             config_dict,
             **skew_kwargs,
         )

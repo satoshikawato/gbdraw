@@ -10,6 +10,7 @@ import {
   isDefaultManagedDepthSlot,
   uploadedDepthFileCount
 } from './depth-track-state.js';
+import { resolveColorToHex } from './color-utils.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -144,6 +145,43 @@ const cleanToken = (value, fallback) => {
 const normalizeOptionalText = (value) => {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
+};
+
+const normalizeColorParam = (value) => {
+  const text = normalizeOptionalText(value);
+  if (text === null) return null;
+  return resolveColorToHex(text);
+};
+
+const normalizeColorInputValue = (value, fallback = '#777777') => {
+  const resolved = normalizeColorParam(value);
+  if (resolved === null) return fallback;
+  const text = String(resolved).trim();
+  const fullHex = text.match(/^#([0-9a-f]{6})$/i);
+  if (fullHex) return `#${fullHex[1].toLowerCase()}`;
+  const shortHex = text.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+  if (shortHex) {
+    return `#${shortHex[1]}${shortHex[1]}${shortHex[2]}${shortHex[2]}${shortHex[3]}${shortHex[3]}`.toLowerCase();
+  }
+  return fallback;
+};
+
+const normalizeSkewColorParams = (params) => {
+  if (normalizeOptionalText(params.positive_color) === null && normalizeOptionalText(params.high_color) !== null) {
+    params.positive_color = params.high_color;
+  }
+  if (normalizeOptionalText(params.negative_color) === null && normalizeOptionalText(params.low_color) !== null) {
+    params.negative_color = params.low_color;
+  }
+  delete params.high_color;
+  delete params.low_color;
+  const positiveColor = normalizeColorParam(params.positive_color);
+  if (positiveColor === null) delete params.positive_color;
+  else params.positive_color = positiveColor;
+  const negativeColor = normalizeColorParam(params.negative_color);
+  if (negativeColor === null) delete params.negative_color;
+  else params.negative_color = negativeColor;
+  return params;
 };
 
 const normalizePxNumberText = (value) => {
@@ -666,6 +704,9 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
       params.nt = normalizeNt(nt);
       delete params.dinucleotide;
     }
+    if (renderer === 'dinucleotide_skew') {
+      normalizeSkewColorParams(params);
+    }
   }
   if (renderer === 'ticks') {
     delete params['axis'];
@@ -793,6 +834,10 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
     const nt = normalizeOptionalText(params.nt);
     if (nt !== null && normalizeNt(nt) !== normalizeNt(defaultNt)) {
       options.push(`nt=${normalizeNt(nt)}`);
+    }
+    if (normalized.renderer === 'dinucleotide_skew') {
+      appendOption(options, 'positive_color', params.positive_color);
+      appendOption(options, 'negative_color', params.negative_color);
     }
   } else if (normalized.renderer === 'depth') {
     const trackIndex = normalizeTrackIndex(params.track_index);
@@ -1612,6 +1657,30 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     return '';
   };
 
+  const circularTrackSlotHasSkewColorOverride = (slot, key) => (
+    slot?.renderer === 'dinucleotide_skew' &&
+    normalizeOptionalText(slot?.params?.[key]) !== null
+  );
+
+  const circularTrackSlotSkewColorValue = (slot, key) => {
+    const fallback = key === 'negative_color' ? '#4575b4' : '#d73027';
+    return normalizeColorInputValue(slot?.params?.[key], fallback);
+  };
+
+  const setCircularTrackSlotSkewColor = (slot, key, value) => {
+    if (!slot || slot.renderer !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
+    slot.params = cloneParams(slot.params);
+    const color = normalizeColorParam(value);
+    if (color === null) delete slot.params[key];
+    else slot.params[key] = color;
+  };
+
+  const clearCircularTrackSlotSkewColor = (slot, key) => {
+    if (!slot || slot.renderer !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
+    slot.params = cloneParams(slot.params);
+    delete slot.params[key];
+  };
+
   const circularTrackSlots = () => (
     Array.isArray(state.adv.circular_track_slots)
       ? state.adv.circular_track_slots.map((slot, index) => ({ kind: STACK_ENTRY_SLOT, slot, index }))
@@ -1729,6 +1798,10 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackSlotDisplayLabel,
     circularTrackSlotDisplayMeta,
     circularTrackSlotColor,
+    circularTrackSlotHasSkewColorOverride,
+    circularTrackSlotSkewColorValue,
+    setCircularTrackSlotSkewColor,
+    clearCircularTrackSlotSkewColor,
     circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry
   };

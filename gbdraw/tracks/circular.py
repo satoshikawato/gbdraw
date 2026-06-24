@@ -143,6 +143,16 @@ def _normalize_renderer(raw: str) -> str:
     return _RENDERER_ALIASES.get(renderer, renderer)
 
 
+def _normalize_dinucleotide_skew_color_params(params: dict[str, Any]) -> dict[str, Any]:
+    if "positive_color" not in params and "high_color" in params:
+        params["positive_color"] = params["high_color"]
+    if "negative_color" not in params and "low_color" in params:
+        params["negative_color"] = params["low_color"]
+    params.pop("high_color", None)
+    params.pop("low_color", None)
+    return params
+
+
 def _parse_gap_px(raw: object, *, field_name: str) -> float:
     text = str(raw).strip()
     if not text:
@@ -229,6 +239,14 @@ def _parse_slot_head(head: str, original: str) -> tuple[str, str]:
     return slot_id, renderer
 
 
+def _strip_inline_comment(raw: str) -> str:
+    for marker in (" #", "\t#"):
+        index = raw.find(marker)
+        if index >= 0:
+            return raw[:index].strip()
+    return raw
+
+
 def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
     """Parse `<slot_id>:<renderer>@key=value,...` into a slot input object."""
 
@@ -236,8 +254,7 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
     s = str(raw).strip()
     if not s or s.startswith("#"):
         raise CircularTrackSlotParseError("empty/comment line", original)
-    if "#" in s:
-        s = s.split("#", 1)[0].strip()
+    s = _strip_inline_comment(s)
 
     if "@" in s:
         head, opts = s.split("@", 1)
@@ -313,6 +330,8 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
             "spacing cannot be combined with inner_gap_px or outer_gap_px",
             original,
         )
+    if renderer == "dinucleotide_skew":
+        params = _normalize_dinucleotide_skew_color_params(params)
 
     slot = CircularTrackSlot(
         id=slot_id,
@@ -342,7 +361,10 @@ def parse_circular_track_slots(specs: Sequence[str | CircularTrackSlot]) -> list
     for item in specs:
         if isinstance(item, CircularTrackSlot):
             renderer = _normalize_renderer(str(item.renderer))
-            slot = replace(item, renderer=renderer) if renderer != str(item.renderer) else item
+            params = {str(key): value for key, value in dict(item.params or {}).items()}
+            if renderer == "dinucleotide_skew":
+                params = _normalize_dinucleotide_skew_color_params(params)
+            slot = replace(item, renderer=renderer, params=params)
             try:
                 normalize_circular_track_slots([slot])
             except Exception as exc:
@@ -522,6 +544,8 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
                 raise ValueError("sequence_conservation slots cannot use side=overlay")
         elif renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+            if renderer == "dinucleotide_skew":
+                params = _normalize_dinucleotide_skew_color_params(params)
         elif renderer == "spacer":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
 

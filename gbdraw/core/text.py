@@ -3,6 +3,9 @@
 
 import functools
 import logging
+import os
+import shutil
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from importlib import resources
@@ -107,11 +110,23 @@ def _get_cached_font(font_path: str) -> Optional[TTFont]:
         return None
 
 
-def _resolve_font_path(font_family: str) -> Optional[str]:
+def _resolve_font_path(font_family: str, *, allow_system: bool = False) -> Optional[str]:
     """Resolve font family name to a font file path with caching."""
-    if font_family in _font_path_cache:
-        return _font_path_cache[font_family]
+    cache_key = f"{font_family}\0system={int(allow_system)}"
+    if cache_key in _font_path_cache:
+        return _font_path_cache[cache_key]
 
+    def normalize_candidate(value: str) -> str:
+        return value.strip().strip("\"'").strip()
+
+    def comparable(value: str) -> str:
+        return normalize_candidate(value).lower().replace(" ", "")
+
+    families = [
+        family
+        for family in (normalize_candidate(part) for part in str(font_family).split(","))
+        if family
+    ]
     target_font_path = None
     try:
         # Access the bundled fonts directory
@@ -124,11 +139,14 @@ def _resolve_font_path(font_family: str) -> Optional[str]:
 
         if available_fonts:
             # Simple matching logic
-            requested = font_family.split(",")[0].strip().lower().replace(" ", "")
+            requested_names = [comparable(family) for family in families]
 
-            for f in available_fonts:
-                if requested in f.name.lower():
-                    target_font_path = str(f)
+            for requested in requested_names:
+                for f in available_fonts:
+                    if requested in comparable(f.name):
+                        target_font_path = str(f)
+                        break
+                if target_font_path:
                     break
 
             # Fallback to the first available font
@@ -137,14 +155,36 @@ def _resolve_font_path(font_family: str) -> Optional[str]:
     except Exception as e:
         logger.debug(f"Font path resolution failed ({e}).")
 
-    _font_path_cache[font_family] = target_font_path
+    if allow_system and target_font_path is None:
+        fc_match = shutil.which("fc-match")
+        if fc_match:
+            for family in families:
+                if comparable(family) in {"sans-serif", "serif", "monospace", "cursive", "fantasy"}:
+                    continue
+                try:
+                    result = subprocess.run(
+                        [fc_match, "-f", "%{file}", family],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                    )
+                except Exception as e:
+                    logger.debug(f"Fontconfig lookup failed for {family!r}: {e}")
+                    continue
+                candidate = result.stdout.strip()
+                if result.returncode == 0 and candidate and os.path.exists(candidate):
+                    target_font_path = candidate
+                    break
+
+    _font_path_cache[cache_key] = target_font_path
     return target_font_path
 
 
 # ------------------------------------------------------------------
 #  Logic ported from find_font_files.py to remove dependency
 # ------------------------------------------------------------------
-def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
+def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: bool = False):
     """
     Directly parses the font file using fontTools to calculate text dimensions.
     This logic was originally in find_font_files.py.
@@ -246,8 +286,13 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
         rsb_previous = rsb
         previous_glyph_index = glyph_index
 
-    # Formula: pixels = (design_units * font_size * dpi) / (72 * units_per_em)
-    scale_factor = (float(font_size) * dpi) / (72 * units_per_em)
+    if svg_units:
+        # SVG font-size values are user units (CSS px in the generated SVG),
+        # not typographic points.
+        scale_factor = float(font_size) / units_per_em
+    else:
+        # Legacy layout calculations treat configured font sizes as points.
+        scale_factor = (float(font_size) * dpi) / (72 * units_per_em)
 
     text_width_pixels = total_width * scale_factor
 
@@ -350,6 +395,51 @@ def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     return len(str(text)) * f_size * 0.6, f_size
 
 
+@functools.lru_cache(maxsize=4096)
+def calculate_svg_bbox_dimensions(text, font_family, font_size, dpi):
+    """
+    Calculates text dimensions in SVG user units for width-sensitive layout.
+
+    This is separate from ``calculate_bbox_dimensions`` because older layout
+    reserves rely on its point-style sizing. Linear definition columns need the
+    actual rendered SVG width so their right edge can sit close to the record
+    axis.
+    """
+    if "pyodide" in sys.modules:
+        return _measure_text_canvas(text, font_family, float(font_size))
+
+    target_font_path = _resolve_font_path(font_family, allow_system=True)
+    if target_font_path:
+        return get_text_bbox_size_pixels(
+            target_font_path,
+            text,
+            font_size,
+            dpi,
+            svg_units=True,
+        )
+
+    try:
+        f_size = float(font_size)
+    except Exception:
+        f_size = 12.0
+
+    estimated_width = 0.0
+    for char in str(text):
+        if char.isspace():
+            estimated_width += 0.28 * f_size
+        elif char in "ilI.,:;|![]()'`":
+            estimated_width += 0.28 * f_size
+        elif char in "mwMW@#%&":
+            estimated_width += 0.82 * f_size
+        elif char.isupper():
+            estimated_width += 0.62 * f_size
+        elif char.isdigit():
+            estimated_width += 0.55 * f_size
+        else:
+            estimated_width += 0.48 * f_size
+    return estimated_width, f_size
+
+
 def create_text_element(
     text: str,
     x: float,
@@ -397,6 +487,7 @@ def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool,
 
 __all__ = [
     "calculate_bbox_dimensions",
+    "calculate_svg_bbox_dimensions",
     "create_text_element",
     "get_text_bbox_size_pixels",
     "parse_mixed_content_text",

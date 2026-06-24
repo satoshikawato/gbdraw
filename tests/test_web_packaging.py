@@ -1802,7 +1802,7 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
     source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
     module_path = tmp_path / "linear-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["depth-track-state.js"]:
+    for dependency in ["depth-track-state.js", "color-utils.js"]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -1915,6 +1915,17 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
           {{ includeSide: false }}
         );
         assert(!gcSpec.includes('side='), 'Axis-derived above/below side should be omitted from CLI spec');
+        const defaultSkewSpec = buildLinearTrackSlotSpec(
+          {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'below', params: {{ nt: 'GC' }} }},
+          {{ includeSide: false }}
+        );
+        assert(defaultSkewSpec === 'gc_skew:dinucleotide_skew@nt=GC', `Default skew slot should serialize exactly as before: ${{defaultSkewSpec}}`);
+        const coloredSkewSpec = buildLinearTrackSlotSpec(
+          {{ id: 'at_skew', renderer: 'dinucleotide_skew', side: 'below', params: {{ nt: 'AT', high_color: 'tomato', low_color: '#2a9d8f' }} }},
+          {{ includeSide: false }}
+        );
+        assert(coloredSkewSpec.includes('positive_color=#FF6347'), `Skew alias high_color was not canonicalized: ${{coloredSkewSpec}}`);
+        assert(coloredSkewSpec.includes('negative_color=#2a9d8f'), `Skew alias low_color was not canonicalized: ${{coloredSkewSpec}}`);
         const featureSpec = buildLinearTrackSlotSpec(
           {{ id: 'features', renderer: 'features', side: 'overlay', params: {{}} }},
           {{ includeSide: false }}
@@ -1929,6 +1940,7 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
             linear_track_slots: [
               {{ id: 'features', renderer: 'features', side: 'overlay', params: {{}} }},
               {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'below', params: {{ nt: 'GC' }} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'below', params: {{ nt: 'GC', positive_color: '#e76f51' }} }},
               {{ id: 'custom_gc', renderer: 'dinucleotide_content', side: 'below', height: '22px', params: {{ nt: 'GC' }} }}
             ]
           }},
@@ -1944,10 +1956,13 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
         reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
         assert(!reconcileState.adv.linear_track_slots.some((slot) => slot.id === 'gc_content'), 'Show GC off should remove only the default GC slot');
         assert(reconcileState.adv.linear_track_slots.some((slot) => slot.id === 'custom_gc'), 'Show GC off should preserve customized duplicate GC slots');
+        assert(reconcileState.adv.linear_track_slots.some((slot) => slot.id === 'gc_skew' && slot.params?.positive_color === '#e76f51'), 'Show Skew off should preserve color-overridden gc_skew as custom');
         reconcileState.form.show_gc = true;
+        reconcileState.form.show_skew = true;
         reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
         const restoredGc = reconcileState.adv.linear_track_slots.find((slot) => slot.id === 'gc_content');
         assert(restoredGc?.params?.nt === 'AT', 'Show GC on should restore default GC using the simple nt control');
+        assert(reconcileState.adv.linear_track_slots.filter((slot) => slot.id === 'gc_skew').length === 1, 'Show Skew on should not add a duplicate default over color-overridden gc_skew');
         reconcileState.form.show_depth = true;
         reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
         const depthIndexes = reconcileState.adv.linear_track_slots
@@ -2026,6 +2041,34 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         );
         if (!legacySpacingSpec.includes('inner_gap_px=5') || !legacySpacingSpec.includes('outer_gap_px=5') || legacySpacingSpec.includes('spacing=')) {{
           throw new Error(`Legacy circular spacing was not converted to physical gaps: ${{legacySpacingSpec}}`);
+        }}
+        const defaultSkewSpec = buildCircularTrackSlotSpec(
+          {{
+            id: 'gc_skew',
+            renderer: 'dinucleotide_skew',
+            side: 'inside',
+            params: {{ nt: 'GC' }}
+          }},
+          'GC',
+          'tuckin',
+          {{ includeSide: false }}
+        );
+        if (defaultSkewSpec !== 'gc_skew:dinucleotide_skew') {{
+          throw new Error(`Default circular skew slot should serialize exactly as before: ${{defaultSkewSpec}}`);
+        }}
+        const coloredSkewSpec = buildCircularTrackSlotSpec(
+          {{
+            id: 'at_skew',
+            renderer: 'dinucleotide_skew',
+            side: 'inside',
+            params: {{ nt: 'AT', high_color: 'tomato', low_color: '#2a9d8f' }}
+          }},
+          'GC',
+          'tuckin',
+          {{ includeSide: false }}
+        );
+        if (!coloredSkewSpec.includes('positive_color=#FF6347') || !coloredSkewSpec.includes('negative_color=#2a9d8f')) {{
+          throw new Error(`Circular skew alias colors were not canonicalized: ${{coloredSkewSpec}}`);
         }}
 
         const state = {{
