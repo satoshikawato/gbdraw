@@ -2200,7 +2200,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features, comparison tracks, and collinear blocks. Orientation + identity uses collinear_block_plus_min, collinear_block_plus, collinear_block_minus_min, and collinear_block_minus."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The CLI uses the selected palette directly; a -d override file is generated only for colors changed from that palette."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
@@ -4123,7 +4123,7 @@
                                 <div class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.resultCount }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
-                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reproducibility</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">CLI rerun</div>
                                 <div class="mt-1 font-semibold text-slate-700">{{ runInfoReproducibilityText(lastRunInfo) }}</div>
                             </div>
                         </div>

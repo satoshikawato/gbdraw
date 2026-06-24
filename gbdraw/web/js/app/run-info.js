@@ -1,5 +1,4 @@
 const SAFE_SHELL_TOKEN_RE = /^[A-Za-z0-9_@%+=:,./-]+$/;
-const FORMAT_FLAGS = new Set(['-f', '--format']);
 
 const normalizePath = (value) => String(value ?? '').trim();
 
@@ -43,16 +42,14 @@ const normalizeFileMetadata = (fileMetadata) => {
   return map;
 };
 
-const hasRenderFormatArg = (args) => {
-  for (let idx = 0; idx < args.length; idx += 1) {
-    const token = String(args[idx] ?? '');
-    if (FORMAT_FLAGS.has(token)) return true;
-    if (token.startsWith('--format=')) return true;
-  }
-  return false;
+const formatHelperFileList = (files) => {
+  const names = Array.from(new Set((Array.isArray(files) ? files : [])
+    .map((file) => String(file?.name || fallbackNameFromPath(file?.path)).trim())
+    .filter(Boolean)));
+  if (names.length === 0) return 'generated helper files';
+  if (names.length <= 3) return names.join(', ');
+  return `${names.slice(0, 3).join(', ')}, and ${names.length - 3} more`;
 };
-
-const withSvgFormat = (args) => (hasRenderFormatArg(args) ? [...args] : [...args, '-f', 'svg']);
 
 export const quoteShellArg = (value) => {
   const token = String(value ?? '');
@@ -76,10 +73,10 @@ export const formatElapsedMs = (elapsedMs) => {
 
 export const reproducibilityLabel = (level) => {
   const normalized = String(level || '').trim();
-  if (normalized === 'exact-uploaded-files') return 'Uploaded files';
-  if (normalized === 'requires-helper-files') return 'Helper files needed';
-  if (normalized === 'session-recommended') return 'Session recommended';
-  return 'Pseudo command';
+  if (normalized === 'exact-uploaded-files') return 'Ready to rerun';
+  if (normalized === 'requires-helper-files') return 'Raw CLI needs files';
+  if (normalized === 'session-recommended') return 'Raw CLI needs files';
+  return 'Approximate command';
 };
 
 export const isCliInvocationSessionExportable = (invocation) => {
@@ -122,7 +119,7 @@ export const buildRunInfo = ({
     return displayName;
   });
 
-  const argsWithFormat = withSvgFormat(displayArgs);
+  const argsWithFormat = [...displayArgs];
   const bindingArgIndexesByName = new Map();
   argsWithFormat.forEach((token, index) => {
     if (!bindingArgIndexesByName.has(token)) bindingArgIndexesByName.set(token, []);
@@ -166,24 +163,33 @@ export const buildRunInfo = ({
   let level = 'exact-uploaded-files';
   if (helperFiles.length > 0) {
     level = hasLosatHelpers ? 'session-recommended' : 'requires-helper-files';
-    notes.push('The displayed command assumes browser-generated helper files have been saved next to the input files.');
+    notes.push(
+      `The plain command references browser-generated file(s): ${formatHelperFileList(helperFiles)}. ` +
+      'To run that command in a terminal, save those file(s) next to the uploaded inputs first.'
+    );
+    notes.push(
+      'If you save a .gbdraw-session.json and load it back in the web app, the uploaded inputs, results, and LOSAT cache are restored from the JSON; these TSV files do not need to be saved separately for session restore.'
+    );
+  }
+  if (hasLosatHelpers) {
+    notes.push('Use "Save Raw LOSAT TSV" only when you want to rerun the plain command outside the web app without using the session JSON.');
   }
   if (hasGeneratedBindings) {
-    notes.push('Generated helper files are not embedded in exported sessions in this first pass.');
+    notes.push('The CLI session command is hidden here because the plain command contains generated helper files; use Save Session / Load Session for JSON-based restore.');
   }
   if (unresolvedFileArgs.length > 0) {
     level = 'pseudo';
-    notes.push('Some browser virtual paths could not be mapped to uploaded or generated file names.');
+    notes.push('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.');
   } else if (fixedFileBindings.length === 0 && metadata.size > 0) {
     level = 'pseudo';
   }
   if (notes.length === 0) {
-    notes.push('The command uses the uploaded file names shown here.');
+    notes.push('The command can be rerun with the uploaded file names shown here.');
   }
 
   const commandArgs = ['gbdraw', normalizedMode, ...argsWithFormat];
   const sessionCommand = isCliInvocationSessionExportable(invocation)
-    ? buildShellCommand(['gbdraw', normalizedMode, '--session', 'session.gbdraw-session.json', '-f', 'svg'])
+    ? buildShellCommand(['gbdraw', normalizedMode, '--session', 'session.gbdraw-session.json'])
     : '';
 
   return {

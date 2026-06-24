@@ -43,6 +43,19 @@ import {
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
+import {
+  buildDefaultColorOverrideTsv,
+  normalizePaletteColors
+} from './color-utils.js';
+import {
+  DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
+  DEFAULT_LINEAR_BLAST_FILTERS,
+  buildBlastFilterArgs,
+  buildFeatureShapeAssignments,
+  buildRecordSelectorArgs,
+  buildReverseComplementArgs,
+  isCliDefaultFeatureList
+} from './cli-args.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -426,12 +439,6 @@ const normalizeMultiRecordRowGapRatio = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
 };
-const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze({
-  bitscore: 50,
-  evalue: '1e-2',
-  identity: 0,
-  alignment_length: 0
-});
 const normalizeBlastThresholdNumber = (value, defaultValue, { integer = false } = {}) => {
   if (value === null || value === undefined || value === '') return defaultValue;
   const numeric = Number(value);
@@ -617,6 +624,7 @@ export const createRunAnalysis = ({
     originalLegendColors,
     selectedPalette,
     currentColors,
+    paletteDefinitions,
     appliedPaletteName,
     appliedPaletteColors,
     pendingPaletteName,
@@ -1234,8 +1242,6 @@ json.dumps({
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   };
 
-  const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
-
   const getFeatureShapeOptionSupport = () => {
     if (featureShapeSupportCache) return featureShapeSupportCache;
     const pyodide = getPyodide();
@@ -1794,14 +1800,15 @@ json.dumps({
         return true;
       };
 
-      if (form.prefix && form.prefix.trim() !== '') args.push('-o', form.prefix.trim());
+      const normalizedOutputPrefix = String(form.prefix || '').trim();
+      if (normalizedOutputPrefix && normalizedOutputPrefix !== 'out') args.push('-o', normalizedOutputPrefix);
       if (mode.value === 'circular') {
         if (form.species) args.push('--species', form.species);
         if (form.strain) args.push('--strain', form.strain);
       }
       if (form.separate_strands) args.push('--separate_strands');
 
-      if (adv.features.length) args.push('-k', adv.features.join(','));
+      if (adv.features.length && !isCliDefaultFeatureList(adv.features)) args.push('-k', adv.features.join(','));
       if (adv.window_size) args.push('--window', adv.window_size);
       if (adv.step_size) args.push('--step', adv.step_size);
       if (adv.nt && adv.nt !== 'GC') args.push('--nt', adv.nt);
@@ -1820,10 +1827,23 @@ json.dumps({
       if (adv.legend_font_size) args.push('--legend_font_size', adv.legend_font_size);
       if (adv.resolve_overlaps) args.push('--resolve_overlaps');
 
-      let dContent = '';
-      for (const [k, v] of Object.entries(activeRunColors)) dContent += `${k}\t${v}\n`;
-      stageTextFile('/combined_d.tsv', dContent);
-      args.push('-d', '/combined_d.tsv');
+      const activePaletteName = String(
+        isReflow ? appliedPaletteName.value : (selectedPalette?.value || appliedPaletteName.value || 'default')
+      ).trim() || 'default';
+      if (activePaletteName !== 'default') args.push('-p', activePaletteName);
+      const paletteBaseColors = normalizePaletteColors(
+        paletteDefinitions.value?.[activePaletteName] ||
+        paletteDefinitions.value?.default ||
+        {}
+      );
+      const dContent = buildDefaultColorOverrideTsv({
+        colors: activeRunColors,
+        paletteColors: paletteBaseColors
+      });
+      if (dContent.trim() !== '') {
+        stageTextFile('/combined_d.tsv', `${dContent}\n`);
+        args.push('-d', '/combined_d.tsv');
+      }
 
       let tContent = '';
       manualSpecificRules.forEach((r) => {
@@ -1888,16 +1908,7 @@ json.dumps({
         editableLabels.value = [];
       }
 
-      const selectedFeatureShapes = Array.isArray(adv.features)
-        ? adv.features
-            .map((featureTypeRaw) => {
-              const featureType = String(featureTypeRaw || '').trim();
-              if (!featureType) return null;
-              const shape = normalizeFeatureShape(adv.feature_shapes?.[featureType]);
-              return `${featureType}=${shape}`;
-            })
-            .filter((assignment) => typeof assignment === 'string' && assignment.length > 0)
-        : [];
+      const selectedFeatureShapes = buildFeatureShapeAssignments(adv.features, adv.feature_shapes);
       const appendDepthStyleArgs = () => {
         if (adv.depth_color) args.push('--depth_color', adv.depth_color);
         if (adv.depth_min !== null && adv.depth_min !== undefined && adv.depth_min !== '') {
@@ -2599,16 +2610,15 @@ json.dumps({
               DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
               { integer: true }
             );
-            args.push(
-              '--bitscore',
-              adv.min_bitscore,
-              '--evalue',
-              adv.evalue,
-              '--identity',
-              adv.identity,
-              '--alignment_length',
-              adv.alignment_length
-            );
+            args.push(...buildBlastFilterArgs(
+              {
+                bitscore: adv.min_bitscore,
+                evalue: adv.evalue,
+                identity: adv.identity,
+                alignment_length: adv.alignment_length
+              },
+              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS
+            ));
           };
 
           const runCircularLosatConservation = async (comparisonEntries) => {
@@ -2818,7 +2828,7 @@ json.dumps({
             args.push('--feature_shape', assignment);
           });
         }
-        args.push('--scale_style', form.scale_style);
+        if (form.scale_style && form.scale_style !== 'bar') args.push('--scale_style', form.scale_style);
         const normalizedTrackLayout =
           form.linear_track_layout === 'spreadout'
             ? 'above'
@@ -2957,16 +2967,12 @@ json.dumps({
         const orthogroupMembershipMode = losat.blastp.orthogroupMembershipMode;
         const orthogroupMemberMaxHits = Math.max(1, losat.blastp.orthogroupMemberMaxHits);
         const collinearSearchScope = losat.blastp.collinearSearchScope;
-        args.push(
-          '--bitscore',
-          adv.min_bitscore,
-          '--evalue',
-          adv.evalue,
-          '--identity',
-          adv.identity,
-          '--alignment_length',
-          adv.alignment_length
-        );
+        args.push(...buildBlastFilterArgs({
+          bitscore: adv.min_bitscore,
+          evalue: adv.evalue,
+          identity: adv.identity,
+          alignment_length: adv.alignment_length
+        }));
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
@@ -3541,12 +3547,8 @@ json.dumps({
           if (spec?.cli) args.push('--region', spec.cli);
         });
 
-        recordSelectors.forEach((selector) => {
-          args.push('--record_id', selector);
-        });
-        reverseFlags.forEach((flag) => {
-          args.push('--reverse_complement', flag ? '1' : '0');
-        });
+        args.push(...buildRecordSelectorArgs(recordSelectors));
+        args.push(...buildReverseComplementArgs(reverseFlags));
 
         if (useLosat) {
           setProcessingStatus('Preparing LOSAT jobs...');

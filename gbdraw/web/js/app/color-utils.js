@@ -285,6 +285,33 @@ export const normalizePaletteDefinitions = (palettes = {}) => {
   return normalized;
 };
 
+const normalizeComparableColor = (colorValue) => String(resolveColorToHex(String(colorValue || '').trim()) || '')
+  .trim()
+  .toLowerCase();
+
+export const buildPaletteColorOverrideRows = ({
+  colors = {},
+  paletteColors = {}
+} = {}) => {
+  const rows = [];
+  Object.entries(colors || {}).forEach(([key, color]) => {
+    const normalizedKey = String(key || '').trim();
+    const normalizedColor = String(color || '').trim();
+    if (!normalizedKey || !normalizedColor) return;
+    const paletteColor = paletteColors?.[normalizedKey];
+    if (normalizeComparableColor(normalizedColor) === normalizeComparableColor(paletteColor)) return;
+    rows.push([normalizedKey, normalizedColor]);
+  });
+  return rows;
+};
+
+export const buildDefaultColorOverrideTsv = ({
+  colors = {},
+  paletteColors = {}
+} = {}) => buildPaletteColorOverrideRows({ colors, paletteColors })
+  .map(([key, color]) => `${key}\t${color}`)
+  .join('\n');
+
 export const resolveCollinearMatchColor = ({
   blockId,
   colorMode,

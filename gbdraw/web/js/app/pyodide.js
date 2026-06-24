@@ -92,20 +92,24 @@ export const createPyodideManager = ({ state }) => {
           const resolvedColors = normalizePaletteColors(
             normalizedPalettes[resolvedPalette] || normalizedPalettes.default || {}
           );
-          const currentHasColors = hasColorEntries(currentColors.value);
+          const currentHasPaletteColors = hasPaletteColorEntries(currentColors.value);
           const appliedHasColors = hasPaletteColorEntries(appliedPaletteColors.value);
           const pendingHasColors = hasPaletteColorEntries(pendingPaletteColors.value);
 
           selectedPalette.value = resolvedPalette;
-          if (!currentHasColors) {
+          if (!currentHasPaletteColors) {
             currentColors.value = resolvedColors;
           }
           if (!appliedHasColors) {
             appliedPaletteName.value = resolvedPalette;
-            appliedPaletteColors.value = { ...(currentHasColors ? currentColors.value : resolvedColors) };
+            appliedPaletteColors.value = {
+              ...(currentHasPaletteColors ? currentColors.value : resolvedColors)
+            };
           }
           if (String(pendingPaletteName.value || '').trim() && !pendingHasColors) {
-            pendingPaletteColors.value = { ...(currentHasColors ? currentColors.value : resolvedColors) };
+            pendingPaletteColors.value = {
+              ...(currentHasPaletteColors ? currentColors.value : resolvedColors)
+            };
           }
         }
         pyodideReady.value = true;
