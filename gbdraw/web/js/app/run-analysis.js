@@ -96,6 +96,8 @@ const PROTEIN_EXTRACTION_CACHE_LIMIT = 16;
 const featureExtractionCache = new WeakMap();
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 const LOSAT_CACHE_SCHEMA = 2;
+const LOSAT_DERIVED_CACHE_SCHEMA = 1;
+const LOSAT_DERIVED_CACHE_LIMIT = 16;
 
 const isRawLosatCacheEntry = (entry) =>
   Boolean(entry) &&
@@ -173,6 +175,126 @@ const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
   if (found.key && found.key !== cacheKey) cacheMap.delete(found.key);
   cacheMap.set(cacheKey, promoted);
   return promoted;
+};
+
+const cloneJsonData = (value) => {
+  if (value === null || value === undefined) return value;
+  return JSON.parse(JSON.stringify(value));
+};
+
+const isLosatDerivedCacheEntry = (entry) =>
+  Boolean(entry) &&
+  entry.schema === LOSAT_DERIVED_CACHE_SCHEMA &&
+  entry.kind === 'derived-losatp-payload' &&
+  typeof entry.key === 'string' &&
+  entry.payload &&
+  typeof entry.payload === 'object' &&
+  !Array.isArray(entry.payload);
+
+const pruneLosatDerivedCache = (cacheMap) => {
+  if (!cacheMap || typeof cacheMap.delete !== 'function') return;
+  while (cacheMap.size > LOSAT_DERIVED_CACHE_LIMIT) {
+    const oldestKey = cacheMap.keys().next().value;
+    if (oldestKey === undefined) break;
+    cacheMap.delete(oldestKey);
+  }
+};
+
+const buildLosatDerivedPayloadCachePayload = ({
+  mode,
+  maxHits,
+  bitscore,
+  evalue,
+  identity,
+  alignmentLength,
+  collinearMinAnchors,
+  collinearMaxGeneGap,
+  collinearUnitMode,
+  collinearColorMode,
+  collinearAnchorMode,
+  collinearMaxDiagonalDrift,
+  collinearMaxConflictsInMergeGap,
+  collinearMaxParalogLinksPerOrthogroup,
+  collinearSearchScope,
+  orthogroupMembershipMode,
+  orthogroupMemberMaxHits,
+  recordPayloads,
+  pairPayloads
+}) => ({
+  cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
+  converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
+  mode: String(mode || 'pairwise'),
+  maxHits: Number(maxHits) || 5,
+  thresholds: {
+    bitscore: String(bitscore),
+    evalue: String(evalue),
+    identity: String(identity),
+    alignmentLength: String(alignmentLength)
+  },
+  orthogroup: {
+    membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
+    memberMaxHits: Number(orthogroupMemberMaxHits) || 5
+  },
+  collinear: {
+    minAnchors: String(collinearMinAnchors),
+    maxGeneGap: String(collinearMaxGeneGap),
+    unitMode: String(collinearUnitMode || 'auto'),
+    colorMode: String(collinearColorMode || 'orientation'),
+    anchorMode: String(collinearAnchorMode || 'rbh'),
+    maxDiagonalDrift: String(collinearMaxDiagonalDrift),
+    maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
+    maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
+    searchScope: String(collinearSearchScope || 'adjacent')
+  },
+  records: (Array.isArray(recordPayloads) ? recordPayloads : [])
+    .map((record) => ({
+      recordIndex: Number(record?.recordIndex),
+      proteinCacheKey: String(record?.proteinCacheKey || ''),
+      viewTransform: {
+        length: Number(record?.viewTransform?.length || 0),
+        reverse: Boolean(record?.viewTransform?.reverse)
+      }
+    }))
+    .sort((left, right) => left.recordIndex - right.recordIndex),
+  pairs: (Array.isArray(pairPayloads) ? pairPayloads : [])
+    .map((pair) => ({
+      pairIndex: Number(pair?.pairIndex),
+      queryIndex: Number(pair?.queryIndex),
+      subjectIndex: Number(pair?.subjectIndex),
+      cacheKey: String(pair?.cacheKey || '')
+    }))
+});
+
+const getLosatDerivedCacheEntry = (cacheMap, key) => {
+  if (!cacheMap || !key) return null;
+  const entry = cacheMap.get(key);
+  if (!isLosatDerivedCacheEntry(entry)) return null;
+  cacheMap.delete(key);
+  cacheMap.set(key, entry);
+  return cloneJsonData(entry.payload);
+};
+
+const stripRuntimeCacheStats = (payload) => {
+  const cloned = cloneJsonData(payload);
+  if (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) {
+    delete cloned.cache;
+  }
+  return cloned;
+};
+
+const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload }) => {
+  if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  const entry = {
+    schema: LOSAT_DERIVED_CACHE_SCHEMA,
+    kind: 'derived-losatp-payload',
+    key,
+    mode: String(mode || ''),
+    payload: stripRuntimeCacheStats(payload)
+  };
+  if (!isLosatDerivedCacheEntry(entry)) return;
+  if (cacheMap.has(key)) cacheMap.delete(key);
+  cacheMap.set(key, entry);
+  pruneLosatDerivedCache(cacheMap);
 };
 
 const makeSafeFilename = (name) => {
@@ -646,6 +768,7 @@ export const createRunAnalysis = ({
     losatCacheInfo,
     losatThreadingStatus,
     losatCache,
+    losatDerivedCache,
     circularConservation,
     orthogroups,
     featureOrthogroupIndex,
@@ -3315,6 +3438,8 @@ json.dumps({
               proteinExtractionCacheHits: 0,
               fastaJsExtractions: 0,
               fastaPyodideFallbacks: 0,
+              proteinDerivedPayloadCacheHits: 0,
+              proteinDerivedPayloadCacheMisses: 0,
               proteinConversionCacheHits: 0,
               proteinFilteredHitCacheHits: 0,
               proteinFilteredHitCacheMisses: 0,
@@ -3792,28 +3917,75 @@ json.dumps({
                 ? 'Converting LOSAT protein links to collinear ribbons...'
                 : 'Converting LOSAT protein hits...'
             );
-            const convertedPayload = JSON.parse(
-              convertProteinBlast(
-                JSON.stringify({ records: recordPayloads, pairs: pairPayloads }),
-                blastpMode,
-                Math.max(1, losat.blastp.maxHits),
-                adv.min_bitscore,
-                adv.evalue,
-                adv.identity,
-                adv.alignment_length,
-                losat.blastp.collinearMinAnchors,
-                losat.blastp.collinearMaxGeneGap,
-                'cds',
-                losat.blastp.collinearColorMode,
-                'rbh',
-                losat.blastp.collinearMaxDiagonalDrift,
-                losat.blastp.collinearMaxConflictsInMergeGap,
-                losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+            const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
+            const derivedCacheMap = losatDerivedCache.value || new Map();
+            let derivedCacheKey = '';
+            let convertedPayload = null;
+            if (useDerivedProteinPayloadCache) {
+              const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
+                mode: blastpMode,
+                maxHits: Math.max(1, losat.blastp.maxHits),
+                bitscore: adv.min_bitscore,
+                evalue: adv.evalue,
+                identity: adv.identity,
+                alignmentLength: adv.alignment_length,
+                collinearMinAnchors: losat.blastp.collinearMinAnchors,
+                collinearMaxGeneGap: losat.blastp.collinearMaxGeneGap,
+                collinearUnitMode: 'cds',
+                collinearColorMode: losat.blastp.collinearColorMode,
+                collinearAnchorMode: 'rbh',
+                collinearMaxDiagonalDrift: losat.blastp.collinearMaxDiagonalDrift,
+                collinearMaxConflictsInMergeGap: losat.blastp.collinearMaxConflictsInMergeGap,
+                collinearMaxParalogLinksPerOrthogroup: losat.blastp.collinearMaxParalogLinksPerOrthogroup,
                 collinearSearchScope,
                 orthogroupMembershipMode,
-                orthogroupMemberMaxHits
-              )
-            );
+                orthogroupMemberMaxHits,
+                recordPayloads,
+                pairPayloads
+              });
+              derivedCacheKey = await hashText(JSON.stringify(derivedCachePayload));
+              convertedPayload = getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey);
+              if (convertedPayload) {
+                convertedPayload.cache = {
+                  ...(convertedPayload.cache || {}),
+                  derivedPayloadHit: true
+                };
+                losatTiming.proteinDerivedPayloadCacheHits += 1;
+              } else {
+                losatTiming.proteinDerivedPayloadCacheMisses += 1;
+              }
+            }
+            if (!convertedPayload) {
+              convertedPayload = JSON.parse(
+                convertProteinBlast(
+                  JSON.stringify({ records: recordPayloads, pairs: pairPayloads }),
+                  blastpMode,
+                  Math.max(1, losat.blastp.maxHits),
+                  adv.min_bitscore,
+                  adv.evalue,
+                  adv.identity,
+                  adv.alignment_length,
+                  losat.blastp.collinearMinAnchors,
+                  losat.blastp.collinearMaxGeneGap,
+                  'cds',
+                  losat.blastp.collinearColorMode,
+                  'rbh',
+                  losat.blastp.collinearMaxDiagonalDrift,
+                  losat.blastp.collinearMaxConflictsInMergeGap,
+                  losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+                  collinearSearchScope,
+                  orthogroupMembershipMode,
+                  orthogroupMemberMaxHits
+                )
+              );
+              if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
+                setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
+                  mode: blastpMode,
+                  payload: convertedPayload
+                });
+              }
+            }
+            losatDerivedCache.value = derivedCacheMap;
             if (convertedPayload.error) throw new Error(convertedPayload.error);
             const conversionCache = convertedPayload.cache || {};
             if (conversionCache.convertedPayloadHit) losatTiming.proteinConversionCacheHits += 1;
@@ -3899,6 +4071,8 @@ json.dumps({
               `protein extraction cache hits=${losatTiming.proteinExtractionCacheHits}`,
               `JS FASTA=${losatTiming.fastaJsExtractions}`,
               `Pyodide FASTA=${losatTiming.fastaPyodideFallbacks}`,
+              `derived payload cache hits=${losatTiming.proteinDerivedPayloadCacheHits}`,
+              `derived payload cache misses=${losatTiming.proteinDerivedPayloadCacheMisses}`,
               `protein conversion cache hits=${losatTiming.proteinConversionCacheHits}`,
               `filtered hit cache hits=${losatTiming.proteinFilteredHitCacheHits}`,
               `filtered hit cache misses=${losatTiming.proteinFilteredHitCacheMisses}`,
@@ -4208,6 +4382,9 @@ json.dumps({
   const clearLosatCache = () => {
     if (losatCache.value) {
       losatCache.value.clear();
+    }
+    if (losatDerivedCache.value) {
+      losatDerivedCache.value.clear();
     }
     losatCacheInfo.value = [];
   };

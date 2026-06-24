@@ -552,6 +552,7 @@ const losatThreadingStatus = ref({
   message: ''
 });
 const losatCache = ref(new Map());
+const losatDerivedCache = ref(new Map());
 const orthogroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
@@ -1038,6 +1039,7 @@ export const state = {
   losatCacheInfo,
   losatThreadingStatus,
   losatCache,
+  losatDerivedCache,
   orthogroups,
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,

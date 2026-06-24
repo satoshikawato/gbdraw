@@ -21,8 +21,8 @@ from .exceptions import ValidationError
 from .io.regions import RegionSpec, parse_region_specs
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 28
-SUPPORTED_SESSION_VERSIONS = frozenset({27, CURRENT_SESSION_VERSION})
+CURRENT_SESSION_VERSION = 29
+SUPPORTED_SESSION_VERSIONS = frozenset({27, 28, CURRENT_SESSION_VERSION})
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991

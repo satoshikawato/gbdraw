@@ -363,6 +363,21 @@ def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> Non
     assert "orthogroupScopeLabel(selectedOrthogroup)" in index_html
 
 
+def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert "const losatDerivedCache = ref(new Map());" in state_js
+    assert "losatDerivedCache:" in config_js
+    assert "serializeLosatDerivedCache()" in config_js
+    assert "applyLosatDerivedCache(data.losatDerivedCache?.entries)" in config_js
+    assert "kind: 'derived-losatp-payload'" in config_js
+    assert "buildLosatDerivedPayloadCachePayload({" in run_analysis_js
+    assert "getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey)" in run_analysis_js
+    assert "setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey" in run_analysis_js
+
+
 def test_web_losatp_orthogroup_and_collinear_blastp_omit_hsp_cap() -> None:
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 

@@ -33,9 +33,11 @@ import {
 } from '../app/losat-normalization.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 
-const SESSION_VERSION = 28;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, SESSION_VERSION]);
+const SESSION_VERSION = 29;
+const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
+const LOSAT_DERIVED_CACHE_SCHEMA = 1;
+const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1;
@@ -69,6 +71,15 @@ const isRawLosatCacheEntry = (entry) =>
   entry.kind === 'raw-losat' &&
   typeof entry.text === 'string';
 
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const isLosatDerivedCacheEntry = (entry) =>
+  Boolean(entry) &&
+  entry.schema === LOSAT_DERIVED_CACHE_SCHEMA &&
+  entry.kind === 'derived-losatp-payload' &&
+  typeof entry.key === 'string' &&
+  isPlainObject(entry.payload);
+
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
 const hasColorEntries = (colors) =>
@@ -101,8 +112,6 @@ const cloneStringMap = (source) => {
   });
   return cloned;
 };
-
-const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const cloneJsonData = (value) => {
   if (value === null || value === undefined) return value;
@@ -1434,6 +1443,55 @@ const applyLosatCache = (entries) => {
   state.losatCacheInfo.value = info;
 };
 
+const pruneLosatDerivedCache = (map) => {
+  if (!map || typeof map.delete !== 'function') return;
+  while (map.size > LOSAT_DERIVED_CACHE_LIMIT) {
+    const oldestKey = map.keys().next().value;
+    if (oldestKey === undefined) break;
+    map.delete(oldestKey);
+  }
+};
+
+const serializeLosatDerivedCache = () => {
+  const cacheMap = state.losatDerivedCache?.value;
+  if (!cacheMap || cacheMap.size === 0) return [];
+  const entries = [];
+
+  cacheMap.forEach((value, key) => {
+    const entry = {
+      schema: LOSAT_DERIVED_CACHE_SCHEMA,
+      kind: 'derived-losatp-payload',
+      key: String(key || value?.key || ''),
+      mode: String(value?.mode || ''),
+      payload: cloneJsonData(value?.payload)
+    };
+    if (!isLosatDerivedCacheEntry(entry)) return;
+    entries.push(entry);
+  });
+
+  return entries.slice(-LOSAT_DERIVED_CACHE_LIMIT);
+};
+
+const applyLosatDerivedCache = (entries) => {
+  const map = new Map();
+
+  if (Array.isArray(entries)) {
+    entries.forEach((entry) => {
+      if (!isLosatDerivedCacheEntry(entry)) return;
+      map.set(entry.key, {
+        schema: LOSAT_DERIVED_CACHE_SCHEMA,
+        kind: 'derived-losatp-payload',
+        key: entry.key,
+        mode: String(entry.mode || ''),
+        payload: cloneJsonData(entry.payload)
+      });
+    });
+  }
+
+  pruneLosatDerivedCache(map);
+  state.losatDerivedCache.value = map;
+};
+
 const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
 const applyOrthogroupState = (orthogroupState = {}) => {
@@ -1689,6 +1747,7 @@ const resetSessionBaseline = () => {
   state.lastRunInfo.value = null;
   applyFiles(null);
   state.losatCache.value = new Map();
+  state.losatDerivedCache.value = new Map();
   state.losatCacheInfo.value = [];
   state.orthogroups.value = [];
   state.featureOrthogroupIndex.value = new Map();
@@ -1866,6 +1925,9 @@ export const exportSession = async (titleOverride = null) => {
     losatCache: {
       entries: losatEntries
     },
+    losatDerivedCache: {
+      entries: serializeLosatDerivedCache()
+    },
     cliInvocation: exportableCliInvocation
   };
 
@@ -1946,6 +2008,7 @@ export const importSession = async (e, options = {}) => {
     const { collapsedLinearSeqs } = applyFiles(data.files);
     reconcileDepthTrackStateAfterSessionFiles();
     applyLosatCache(data.losatCache?.entries);
+    applyLosatDerivedCache(data.losatDerivedCache?.entries);
     if (collapsedLinearSeqs) {
       state.losatCacheInfo.value = [];
     }
