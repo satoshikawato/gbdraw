@@ -523,15 +523,23 @@ def _get_args(args) -> argparse.Namespace:
         '--losatp_bin',
         hidden_aliases=('--losatp-bin',),
         dest='losatp_bin',
-        help='LOSATP executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: losat).',
+        help='Native LOSAT executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: losat).',
         type=str,
         default='losat')
+    _add_argument_with_hidden_aliases(
+        parser,
+        '--ncbi_blastp_bin',
+        hidden_aliases=('--ncbi-blastp-bin',),
+        dest='ncbi_blastp_bin',
+        help='NCBI BLAST+ blastp executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: use automatic runtime resolution).',
+        type=str,
+        default=None)
     _add_argument_with_hidden_aliases(
         parser,
         '--losatp_threads',
         hidden_aliases=('--losatp-threads',),
         dest='losatp_threads',
-        help='Threads passed to LOSATP via --num-threads for --protein_blastp_mode pairwise/orthogroup/collinear (default: LOSAT default).',
+        help='Threads passed to the selected protein blastp runtime for --protein_blastp_mode pairwise/orthogroup/collinear (default: runtime default).',
         type=int,
         default=None)
     _add_argument_with_hidden_aliases(
@@ -539,7 +547,7 @@ def _get_args(args) -> argparse.Namespace:
         '--protein_blastp_mode',
         hidden_aliases=('--protein-blastp-mode',),
         dest='protein_blastp_mode',
-        help='LOSATP blastp mode: none, pairwise adjacent ribbons, all-record Orthogroups, or Collinear blocks (default: none).',
+        help='Protein blastp comparison mode: none, pairwise adjacent ribbons, all-record Orthogroups, or Collinear blocks (default: none).',
         choices=PROTEIN_BLASTP_MODES,
         default='none')
     _add_argument_with_hidden_aliases(
@@ -547,7 +555,7 @@ def _get_args(args) -> argparse.Namespace:
         '--protein_blastp_max_hits',
         hidden_aliases=('--protein-blastp-max-hits',),
         dest='protein_blastp_max_hits',
-        help='Maximum distinct subject protein hits per query protein for pairwise LOSATP blastp display links (default: 5).',
+        help='Maximum distinct subject protein hits per query protein for pairwise protein blastp display links (default: 5).',
         type=int,
         default=5)
     _add_argument_with_hidden_aliases(
@@ -555,7 +563,7 @@ def _get_args(args) -> argparse.Namespace:
         '--protein_blastp_candidate_limit',
         hidden_aliases=('--protein-blastp-candidate-limit',),
         dest='protein_blastp_candidate_limit',
-        help="Optional LOSATP blastp candidate cap per query; use 'none' for no cap (default: none).",
+        help="Optional protein blastp candidate cap per query; use 'none' for no cap (default: none).",
         type=_parse_optional_positive_int,
         default=None)
     _add_argument_with_hidden_aliases(
@@ -563,7 +571,7 @@ def _get_args(args) -> argparse.Namespace:
         '--align_orthogroup_feature',
         hidden_aliases=('--align-orthogroup-feature',),
         dest='align_orthogroup_feature',
-        help='Align linear records by the LOSATP blastp orthogroup containing this feature SVG hash or protein ID.',
+        help='Align linear records by the protein blastp orthogroup containing this feature SVG hash or protein ID.',
         type=str,
         default="")
     _add_argument_with_hidden_aliases(
@@ -579,7 +587,7 @@ def _get_args(args) -> argparse.Namespace:
         '--collinear_search_scope',
         hidden_aliases=('--collinear-search-scope',),
         dest='collinear_search_scope',
-        help='Collinear LOSATP evidence search scope: adjacent record pairs or all record pairs (default: adjacent).',
+        help='Collinear protein blastp evidence search scope: adjacent record pairs or all record pairs (default: adjacent).',
         type=_parse_collinear_search_scope,
         choices=["adjacent", "all"],
         default='adjacent')
@@ -1417,6 +1425,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     blast_files: str = args.blast
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
     losatp_bin: str = args.losatp_bin
+    ncbi_blastp_bin: str | None = getattr(args, "ncbi_blastp_bin", None)
     losatp_threads: int | None = args.losatp_threads
     protein_blastp_max_hits: int = args.protein_blastp_max_hits
     protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
@@ -1763,6 +1772,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
             max_hits=protein_blastp_max_hits,
             candidate_limit=protein_blastp_candidate_limit,
@@ -1780,6 +1790,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
             orthogroup_membership_mode=orthogroup_membership_mode,
@@ -1799,6 +1810,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         collinearity_result = build_orthogroup_collinearity_blocks(
             records,
             losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
             orthogroup_membership_mode=orthogroup_membership_mode,
@@ -1860,6 +1872,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         orthogroups=collinearity_orthogroups,
         protein_blastp_mode="none" if collinearity_comparisons is not None else protein_blastp_mode,
         losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
         losatp_threads=losatp_threads,
         protein_blastp_max_hits=protein_blastp_max_hits,
         protein_blastp_candidate_limit=protein_blastp_candidate_limit,

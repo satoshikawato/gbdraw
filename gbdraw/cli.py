@@ -111,8 +111,8 @@ def print_help_message() -> NoReturn:
     print("  --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)")
     print("  -o, --output         Output file prefix (optional)")
     print("  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)")
-    print("  --protein_blastp_mode {none,pairwise,orthogroup,collinear}  Run LOSATP blastp protein comparison for linear diagrams")
-    print("  --losatp_threads N   Pass --num-threads N to LOSATP protein comparisons")
+    print("  --protein_blastp_mode {none,pairwise,orthogroup,collinear}  Run protein blastp comparisons for linear diagrams")
+    print("  --losatp_threads N   Pass thread count to the selected protein blastp runtime")
 
     print("")
     print("Additional Information:")

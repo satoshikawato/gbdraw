@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 
 import pandas as pd
@@ -706,6 +708,172 @@ def test_run_losatp_blastp_uses_bundled_binary_by_default(
 
 
 @pytest.mark.linear
+def test_run_losatp_blastp_uses_path_losat_before_blastp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    def fake_path_executable(name: str) -> str | None:
+        return {"losat": "/usr/local/bin/losat", "blastp": "/usr/local/bin/blastp"}.get(name)
+
+    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
+    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fake_path_executable)
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    protein_colinearity_module.run_losatp_blastp(
+        ">query\nM\n",
+        ">subject\nM\n",
+    )
+
+    command = captured["command"]
+    assert command[0:2] == ["/usr/local/bin/losat", "blastp"]
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_falls_back_to_path_ncbi_blastp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    def fake_path_executable(name: str) -> str | None:
+        return "/usr/local/bin/blastp" if name == "blastp" else None
+
+    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
+    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fake_path_executable)
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    protein_colinearity_module.run_losatp_blastp(
+        ">query\nM\n",
+        ">subject\nM\n",
+        max_hits=4,
+        max_hsps_per_subject=2,
+        threads=3,
+    )
+
+    command = captured["command"]
+    assert command[0] == "/usr/local/bin/blastp"
+    assert command[1:6:2] == ["-query", "-subject", "-outfmt"]
+    assert "-max_hsps" in command
+    assert command[command.index("-max_hsps") + 1] == "2"
+    assert "-max_target_seqs" in command
+    assert command[command.index("-max_target_seqs") + 1] == "4"
+    assert "-num_threads" in command
+    assert command[command.index("-num_threads") + 1] == "3"
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_explicit_ncbi_blastp_bypasses_losat_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fail_bundled():
+        raise AssertionError("bundled LOSAT discovery should not run")
+
+    def fail_path(_name: str):
+        raise AssertionError("PATH discovery should not run")
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", fail_bundled)
+    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fail_path)
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    protein_colinearity_module.run_losatp_blastp(
+        ">query\nM\n",
+        ">subject\nM\n",
+        ncbi_blastp_bin="/opt/ncbi/bin/blastp",
+        max_hits=2,
+    )
+
+    command = captured["command"]
+    assert command[0] == "/opt/ncbi/bin/blastp"
+    assert "blastp" not in command[1:]
+    assert "-max_target_seqs" in command
+    assert "--max-target-seqs" not in command
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_rejects_ambiguous_explicit_runtimes() -> None:
+    with pytest.raises(ValidationError, match="either --losatp_bin or --ncbi_blastp_bin"):
+        protein_colinearity_module.run_losatp_blastp(
+            ">query\nM\n",
+            ">subject\nM\n",
+            losatp_bin="custom-losat",
+            ncbi_blastp_bin="/opt/ncbi/bin/blastp",
+        )
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_explicit_losat_bypasses_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fail_bundled():
+        raise AssertionError("bundled LOSAT discovery should not run")
+
+    def fail_path(_name: str):
+        raise AssertionError("PATH discovery should not run")
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", fail_bundled)
+    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fail_path)
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    protein_colinearity_module.run_losatp_blastp(
+        ">query\nM\n",
+        ">subject\nM\n",
+        losatp_bin="custom-losat",
+    )
+
+    assert captured["command"][0:2] == ["custom-losat", "blastp"]
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_missing_runtime_error_is_actionable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
+    monkeypatch.setattr(protein_colinearity_module, "_path_executable", lambda _name: None)
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "_bundled_losatp_platform_dir",
+        lambda: "macos-arm64",
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        protein_colinearity_module.run_losatp_blastp(
+            ">query\nM\n",
+            ">subject\nM\n",
+        )
+
+    message = str(exc_info.value)
+    assert "Protein BLASTP comparison needs LOSAT or NCBI BLAST+" in message
+    assert "macos-arm64" in message
+    assert "`losat` was not found on PATH" in message
+    assert "`blastp` was not found on PATH" in message
+    assert "--ncbi_blastp_bin" in message
+
+
+@pytest.mark.linear
 def test_bundled_losatp_platform_dir_is_platform_specific(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -732,10 +900,126 @@ def test_run_losatp_blastp_omits_hsp_cap_when_requested(monkeypatch: pytest.Monk
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
         ">subject\nM\n",
+        losatp_bin="custom-losat",
         max_hsps_per_subject=None,
     )
 
     assert "--max-hsps-per-subject" not in captured["command"]
+
+
+@pytest.mark.linear
+def test_build_losat_blastp_command_uses_losat_flags() -> None:
+    command = protein_colinearity_module._build_losat_blastp_command(
+        executable="losat",
+        query_path=Path("query.faa"),
+        subject_path=Path("subject.faa"),
+        max_hits=5,
+        max_hsps_per_subject=2,
+        threads=4,
+    )
+
+    assert command[:2] == ["losat", "blastp"]
+    assert "--max-hsps-per-subject" in command
+    assert "--max-target-seqs" in command
+    assert "--num-threads" in command
+
+
+@pytest.mark.linear
+def test_build_ncbi_blastp_command_uses_ncbi_flags() -> None:
+    command = protein_colinearity_module._build_ncbi_blastp_command(
+        executable="blastp",
+        query_path=Path("query.faa"),
+        subject_path=Path("subject.faa"),
+        max_hits=5,
+        max_hsps_per_subject=2,
+        threads=4,
+    )
+
+    assert command[0] == "blastp"
+    assert command[1] == "-query"
+    assert "-max_hsps" in command
+    assert "-max_target_seqs" in command
+    assert "-num_threads" in command
+
+
+@pytest.mark.linear
+def test_build_blastp_commands_omit_hsp_cap_when_requested() -> None:
+    losat_command = protein_colinearity_module._build_losat_blastp_command(
+        executable="losat",
+        query_path=Path("query.faa"),
+        subject_path=Path("subject.faa"),
+        max_hits=None,
+        max_hsps_per_subject=None,
+        threads=None,
+    )
+    ncbi_command = protein_colinearity_module._build_ncbi_blastp_command(
+        executable="blastp",
+        query_path=Path("query.faa"),
+        subject_path=Path("subject.faa"),
+        max_hits=None,
+        max_hsps_per_subject=None,
+        threads=None,
+    )
+
+    assert "--max-hsps-per-subject" not in losat_command
+    assert "-max_hsps" not in ncbi_command
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_calls_raw_output_callback_for_ncbi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, str] = {}
+
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 0, stdout="q\ts\t100\t1\t0\t0\t1\t1\t1\t1\t0\t10\n", stderr="")
+
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    result = protein_colinearity_module.run_losatp_blastp(
+        ">query\nM\n",
+        ">subject\nM\n",
+        ncbi_blastp_bin="/opt/ncbi/bin/blastp",
+        raw_output_callback=lambda text: seen.__setitem__("text", text),
+    )
+
+    assert seen["text"].startswith("q\ts\t100")
+    assert tuple(result.columns) == COMPARISON_COLUMNS
+    assert len(result) == 1
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_ncbi_failure_includes_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 2, stdout="", stderr="bad subject")
+
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    with pytest.raises(ValidationError, match="NCBI BLAST\\+ blastp failed.*bad subject"):
+        protein_colinearity_module.run_losatp_blastp(
+            ">query\nM\n",
+            ">subject\nM\n",
+            ncbi_blastp_bin="/opt/ncbi/bin/blastp",
+        )
+
+
+@pytest.mark.linear
+def test_external_ncbi_blastp_smoke_when_enabled() -> None:
+    if os.environ.get("GBDRAW_RUN_EXTERNAL_BLASTP_SMOKE") != "1":
+        pytest.skip("Set GBDRAW_RUN_EXTERNAL_BLASTP_SMOKE=1 to run external blastp smoke test.")
+    blastp_bin = os.environ.get("GBDRAW_EXTERNAL_BLASTP_BIN") or shutil.which("blastp")
+    if not blastp_bin:
+        pytest.skip("NCBI BLAST+ blastp executable not found.")
+
+    result = protein_colinearity_module.run_losatp_blastp(
+        ">query\nMKTAYIAKQRQISFVKSHFSRQDILD\n",
+        ">subject\nMKTAYIAKQRQISFVKSHFSRQDILD\n",
+        ncbi_blastp_bin=blastp_bin,
+    )
+
+    assert tuple(result.columns) == COMPARISON_COLUMNS
 
 
 @pytest.mark.linear
@@ -971,7 +1255,8 @@ def test_pairwise_blastp_search_keeps_one_hsp_cap(monkeypatch: pytest.MonkeyPatc
     ]
     observed_caps: list[int | None] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+        assert ncbi_blastp_bin is None
         observed_caps.append(max_hsps_per_subject)
         return pd.DataFrame.from_records(
             [_hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001")],
@@ -993,7 +1278,8 @@ def test_orthogroup_blastp_search_omits_one_hsp_cap(monkeypatch: pytest.MonkeyPa
     ]
     observed_caps: list[int | None] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+        assert ncbi_blastp_bin is None
         observed_caps.append(max_hsps_per_subject)
         query_id = query_fasta.splitlines()[0][1:].split()[0]
         subject_id = subject_fasta.splitlines()[0][1:].split()[0]
@@ -2443,6 +2729,31 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
 
 
 @pytest.mark.linear
+def test_build_linear_diagram_forwards_ncbi_blastp_bin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename="dummy.svg")
+
+    monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    canvas = api_diagram_module.build_linear_diagram(
+        [_record("record_a"), _record("record_b")],
+        options=DiagramOptions(
+            protein_blastp_mode="pairwise",
+            ncbi_blastp_bin="/opt/ncbi/bin/blastp",
+        ),
+    )
+
+    assert isinstance(canvas, Drawing)
+    assert captured["protein_blastp_mode"] == "pairwise"
+    assert captured["ncbi_blastp_bin"] == "/opt/ncbi/bin/blastp"
+
+
+@pytest.mark.linear
 def test_build_linear_diagram_forwards_orthogroup_alignment_option(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2553,6 +2864,46 @@ def test_linear_cli_forwards_protein_blastp_options(
     assert captured["protein_blastp_candidate_limit"] == 123
     assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
     assert captured["align_orthogroup_feature"] is None
+
+
+@pytest.mark.linear
+def test_linear_cli_forwards_ncbi_blastp_bin(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    records = [_record("record_a"), _record("record_b")]
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    linear_cli_module.linear_main(
+        [
+            "--gbk",
+            "a.gb",
+            "b.gb",
+            "--protein_blastp_mode",
+            "pairwise",
+            "--ncbi_blastp_bin",
+            "/opt/ncbi/bin/blastp",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["protein_blastp_mode"] == "pairwise"
+    assert captured["ncbi_blastp_bin"] == "/opt/ncbi/bin/blastp"
 
 
 @pytest.mark.linear

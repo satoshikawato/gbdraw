@@ -32,6 +32,6 @@ Use [https://gbdraw.app/](https://gbdraw.app/) if you want the fastest path to a
 - Interactive SVG gallery: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
-- LOSATP protein comparisons: `--protein_blastp_mode pairwise` draws adjacent protein matches, `orthogroup` adds all-record gene-family metadata, and `collinear` summarizes orthogroup-backed anchors as gene-order-preserving blocks. See [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#4-what-orthogroups-and-collinear-blocks-mean) for the biological meaning of Orthogroups and Collinear blocks.
+- Protein blastp comparisons: `--protein_blastp_mode pairwise` draws adjacent protein matches, `orthogroup` adds all-record gene-family metadata, and `collinear` summarizes orthogroup-backed anchors as gene-order-preserving blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`; see [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#4-what-orthogroups-and-collinear-blocks-mean) for the biological meaning of Orthogroups and Collinear blocks.
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

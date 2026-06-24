@@ -18,6 +18,7 @@ import platform
 from pathlib import Path
 import re
 import stat
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -256,6 +257,15 @@ class ProteinBlastpResult:
 
     comparisons: list[DataFrame]
     orthogroups: OrthogroupResult | None = None
+
+
+@dataclass(frozen=True)
+class ProteinBlastpRuntime:
+    """Resolved executable for protein blastp searches."""
+
+    kind: Literal["losat", "ncbi-blastp"]
+    executable: str
+    source: Literal["explicit", "bundled", "path"]
 
 
 @dataclass(frozen=True)
@@ -623,6 +633,7 @@ class LosatpCacheManager:
         self,
         *,
         losatp_bin: str,
+        ncbi_blastp_bin: str | None = None,
         losatp_threads: int | None,
         candidate_limit: int | None,
         max_hsps_per_subject: int | None,
@@ -658,6 +669,7 @@ class LosatpCacheManager:
                 query_fasta,
                 subject_fasta,
                 losatp_bin=losatp_bin,
+                ncbi_blastp_bin=ncbi_blastp_bin,
                 max_hits=candidate_limit,
                 max_hsps_per_subject=max_hsps_per_subject,
                 threads=losatp_threads,
@@ -1249,22 +1261,101 @@ def _ensure_losatp_executable(path: Path) -> None:
         logger.debug("Could not mark bundled LOSATP binary executable: %s", path)
 
 
-def _resolve_losatp_bin_for_subprocess(
+def _path_executable(name: str) -> str | None:
+    return shutil.which(str(name).strip())
+
+
+def _protein_blastp_runtime_label(runtime: ProteinBlastpRuntime) -> str:
+    if runtime.kind == "ncbi-blastp":
+        return "NCBI BLAST+ blastp"
+    return "LOSAT blastp"
+
+
+def _protein_blastp_runtime_error(
+    *,
+    platform_dir: str | None,
+    bundled_losat_found: bool,
+    path_losat: str | None,
+    path_blastp: str | None,
+) -> ValidationError:
+    platform_name = platform_dir or "this platform"
+    bundled_status = (
+        "a bundled LOSAT binary was found"
+        if bundled_losat_found
+        else f"no bundled LOSAT binary was found for {platform_name}"
+    )
+    losat_status = (
+        f"`losat` was found on PATH at {path_losat}"
+        if path_losat
+        else "`losat` was not found on PATH"
+    )
+    blastp_status = (
+        f"`blastp` was found on PATH at {path_blastp}"
+        if path_blastp
+        else "`blastp` was not found on PATH"
+    )
+    platform_note = ""
+    if platform_dir and (platform_dir.startswith("macos-") or platform_dir.startswith("windows-")):
+        platform_note = (
+            " gbdraw does not currently include a LOSAT binary for this platform."
+        )
+    return ValidationError(
+        "Protein BLASTP comparison needs LOSAT or NCBI BLAST+. "
+        f"{bundled_status}, {losat_status}, and {blastp_status}. "
+        "gbdraw currently bundles LOSAT only for Linux x86_64."
+        f"{platform_note} "
+        "Install NCBI BLAST+ and make `blastp` available on PATH, or pass a "
+        "native LOSAT executable with --losatp_bin, or pass an NCBI BLAST+ "
+        "executable with --ncbi_blastp_bin."
+    )
+
+
+def _resolve_protein_blastp_runtime(
     losatp_bin: str,
+    ncbi_blastp_bin: str | None,
     stack: ExitStack,
-) -> str:
+) -> ProteinBlastpRuntime:
     requested_bin = str(losatp_bin or _DEFAULT_LOSATP_BIN).strip() or _DEFAULT_LOSATP_BIN
+    requested_ncbi_bin = str(ncbi_blastp_bin or "").strip() or None
+    if requested_bin != _DEFAULT_LOSATP_BIN and requested_ncbi_bin is not None:
+        raise ValidationError(
+            "Pass either --losatp_bin or --ncbi_blastp_bin for protein BLASTP comparisons, not both."
+        )
     if requested_bin != _DEFAULT_LOSATP_BIN:
-        return requested_bin
+        runtime = ProteinBlastpRuntime("losat", requested_bin, "explicit")
+        logger.debug("Using explicit LOSAT blastp runtime: %s", runtime.executable)
+        return runtime
+    if requested_ncbi_bin is not None:
+        runtime = ProteinBlastpRuntime("ncbi-blastp", requested_ncbi_bin, "explicit")
+        logger.debug("Using explicit NCBI BLAST+ blastp runtime: %s", runtime.executable)
+        return runtime
 
     bundled_resource = _bundled_losatp_resource()
-    if bundled_resource is None:
-        return requested_bin
+    if bundled_resource is not None:
+        bundled_path = stack.enter_context(resources.as_file(bundled_resource))
+        _ensure_losatp_executable(bundled_path)
+        runtime = ProteinBlastpRuntime("losat", str(bundled_path), "bundled")
+        logger.debug("Using bundled LOSAT blastp runtime: %s", runtime.executable)
+        return runtime
 
-    bundled_path = stack.enter_context(resources.as_file(bundled_resource))
-    _ensure_losatp_executable(bundled_path)
-    logger.debug("Using bundled LOSATP binary: %s", bundled_path)
-    return str(bundled_path)
+    path_losat = _path_executable(_DEFAULT_LOSATP_BIN)
+    if path_losat is not None:
+        runtime = ProteinBlastpRuntime("losat", path_losat, "path")
+        logger.debug("Using PATH LOSAT blastp runtime: %s", runtime.executable)
+        return runtime
+
+    path_blastp = _path_executable("blastp")
+    if path_blastp is not None:
+        runtime = ProteinBlastpRuntime("ncbi-blastp", path_blastp, "path")
+        logger.debug("Using PATH NCBI BLAST+ blastp runtime: %s", runtime.executable)
+        return runtime
+
+    raise _protein_blastp_runtime_error(
+        platform_dir=_bundled_losatp_platform_dir(),
+        bundled_losat_found=False,
+        path_losat=path_losat,
+        path_blastp=path_blastp,
+    )
 
 
 def _validate_comparison_columns(hits: DataFrame) -> None:
@@ -5355,17 +5446,115 @@ def convert_pair_protein_hits_to_genomic_links(
     return pd.DataFrame.from_records(rows, columns=LOSATP_COMPARISON_COLUMNS)
 
 
+def _build_losat_blastp_command(
+    *,
+    executable: str,
+    query_path: Path,
+    subject_path: Path,
+    max_hits: int | None,
+    max_hsps_per_subject: int | None,
+    threads: int | None,
+) -> list[str]:
+    command = [
+        str(executable),
+        "blastp",
+        "-query",
+        str(query_path),
+        "-subject",
+        str(subject_path),
+        "-outfmt",
+        "6",
+    ]
+    if max_hsps_per_subject is not None:
+        command.extend(["--max-hsps-per-subject", str(int(max_hsps_per_subject))])
+    if max_hits is not None:
+        command.extend(["--max-target-seqs", str(int(max_hits))])
+    if threads is not None:
+        command.extend(["--num-threads", str(int(threads))])
+    return command
+
+
+def _build_ncbi_blastp_command(
+    *,
+    executable: str,
+    query_path: Path,
+    subject_path: Path,
+    max_hits: int | None,
+    max_hsps_per_subject: int | None,
+    threads: int | None,
+) -> list[str]:
+    command = [
+        str(executable),
+        "-query",
+        str(query_path),
+        "-subject",
+        str(subject_path),
+        "-outfmt",
+        "6",
+    ]
+    if max_hsps_per_subject is not None:
+        command.extend(["-max_hsps", str(int(max_hsps_per_subject))])
+    if max_hits is not None:
+        command.extend(["-max_target_seqs", str(int(max_hits))])
+    if threads is not None:
+        command.extend(["-num_threads", str(int(threads))])
+    return command
+
+
+def _build_protein_blastp_command(
+    runtime: ProteinBlastpRuntime,
+    *,
+    query_path: Path,
+    subject_path: Path,
+    max_hits: int | None,
+    max_hsps_per_subject: int | None,
+    threads: int | None,
+) -> list[str]:
+    builder = (
+        _build_ncbi_blastp_command
+        if runtime.kind == "ncbi-blastp"
+        else _build_losat_blastp_command
+    )
+    return builder(
+        executable=runtime.executable,
+        query_path=query_path,
+        subject_path=subject_path,
+        max_hits=max_hits,
+        max_hsps_per_subject=max_hsps_per_subject,
+        threads=threads,
+    )
+
+
+def _run_protein_blastp_subprocess(
+    command: list[str],
+    *,
+    runtime_label: str,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise ValidationError(f"{runtime_label} executable not found: {command[0]}") from exc
+    except PermissionError as exc:
+        raise ValidationError(f"{runtime_label} executable is not executable: {command[0]}") from exc
+
+
 def run_losatp_blastp(
     query_fasta: str,
     subject_fasta: str,
     *,
     losatp_bin: str = "losat",
+    ncbi_blastp_bin: str | None = None,
     max_hits: int | None = None,
     max_hsps_per_subject: int | None = 1,
     threads: int | None = None,
     raw_output_callback: Callable[[str], None] | None = None,
 ) -> DataFrame:
-    """Run external LOSATP blastp and parse outfmt 6 output."""
+    """Run an external protein blastp runtime and parse outfmt 6 output."""
 
     if max_hits is not None:
         _validate_max_hits(max_hits, option_name="protein_blastp_candidate_limit")
@@ -5373,7 +5562,11 @@ def run_losatp_blastp(
         _validate_max_hits(max_hsps_per_subject, option_name="max_hsps_per_subject")
     _validate_losatp_threads(threads)
     with ExitStack() as stack:
-        resolved_losatp_bin = _resolve_losatp_bin_for_subprocess(losatp_bin, stack)
+        runtime = _resolve_protein_blastp_runtime(
+            losatp_bin,
+            ncbi_blastp_bin,
+            stack,
+        )
         temp_dir = stack.enter_context(tempfile.TemporaryDirectory(prefix="gbdraw_losatp_"))
         temp_path = Path(temp_dir)
         query_path = temp_path / "query.faa"
@@ -5381,39 +5574,26 @@ def run_losatp_blastp(
         query_path.write_text(query_fasta, encoding="utf-8")
         subject_path.write_text(subject_fasta, encoding="utf-8")
 
-        command = [
-            resolved_losatp_bin,
-            "blastp",
-            "-query",
-            str(query_path),
-            "-subject",
-            str(subject_path),
-            "-outfmt",
-            "6",
-        ]
-        if max_hsps_per_subject is not None:
-            command.extend(["--max-hsps-per-subject", str(int(max_hsps_per_subject))])
-        if max_hits is not None:
-            command.extend(["--max-target-seqs", str(int(max_hits))])
-        if threads is not None:
-            command.extend(["--num-threads", str(int(threads))])
-        logger.info("INFO: Running LOSATP blastp for protein colinearity.")
-        try:
-            completed = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        except FileNotFoundError as exc:
-            raise ValidationError(f"LOSATP binary not found: {losatp_bin}") from exc
-        except PermissionError as exc:
-            raise ValidationError(f"LOSATP binary is not executable: {resolved_losatp_bin}") from exc
+        command = _build_protein_blastp_command(
+            runtime,
+            query_path=query_path,
+            subject_path=subject_path,
+            max_hits=max_hits,
+            max_hsps_per_subject=max_hsps_per_subject,
+            threads=threads,
+        )
+        runtime_label = _protein_blastp_runtime_label(runtime)
+        logger.info("INFO: Running %s for protein colinearity.", runtime_label)
+        completed = _run_protein_blastp_subprocess(
+            command,
+            runtime_label=runtime_label,
+        )
 
     if completed.returncode != 0:
         stderr = completed.stderr.strip()
         detail = f": {stderr}" if stderr else ""
-        raise ValidationError(f"LOSATP blastp failed with exit code {completed.returncode}{detail}")
+        runtime_label = _protein_blastp_runtime_label(runtime)
+        raise ValidationError(f"{runtime_label} failed with exit code {completed.returncode}{detail}")
     if raw_output_callback is not None:
         raw_output_callback(completed.stdout)
     return parse_losatp_outfmt6(completed.stdout)
@@ -5443,6 +5623,7 @@ def _run_losatp_search(
     subject_fasta: str,
     *,
     losatp_bin: str,
+    ncbi_blastp_bin: str | None,
     losatp_threads: int | None,
     candidate_limit: int | None,
     max_hsps_per_subject: int | None = 1,
@@ -5454,6 +5635,7 @@ def _run_losatp_search(
         query_fasta,
         subject_fasta,
         losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
         max_hits=candidate_limit,
         max_hsps_per_subject=max_hsps_per_subject,
         threads=losatp_threads,
@@ -5478,6 +5660,7 @@ def _cache_runner_for_search(
     *,
     runner: LosatpRunner | None,
     losatp_bin: str,
+    ncbi_blastp_bin: str | None,
     losatp_threads: int | None,
     candidate_limit: int | None,
     max_hsps_per_subject: int | None,
@@ -5488,6 +5671,7 @@ def _cache_runner_for_search(
         return runner
     return losatp_cache.runner_for_search(
         losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
         losatp_threads=losatp_threads,
         candidate_limit=candidate_limit,
         max_hsps_per_subject=max_hsps_per_subject,
@@ -5994,6 +6178,7 @@ def build_pairwise_protein_blastp_comparisons(
     records: Sequence[SeqRecord],
     *,
     losatp_bin: str = "losat",
+    ncbi_blastp_bin: str | None = None,
     losatp_threads: int | None = None,
     max_hits: int = 5,
     candidate_limit: int | None = None,
@@ -6031,6 +6216,7 @@ def build_pairwise_protein_blastp_comparisons(
             query_fasta,
             subject_fasta,
             losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=candidate_limit,
             max_hsps_per_subject=1,
@@ -6038,6 +6224,7 @@ def build_pairwise_protein_blastp_comparisons(
                 losatp_cache,
                 runner=runner,
                 losatp_bin=losatp_bin,
+                ncbi_blastp_bin=ncbi_blastp_bin,
                 losatp_threads=losatp_threads,
                 candidate_limit=candidate_limit,
                 max_hsps_per_subject=1,
@@ -6071,6 +6258,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     records: Sequence[SeqRecord],
     *,
     losatp_bin: str = "losat",
+    ncbi_blastp_bin: str | None = None,
     losatp_threads: int | None = None,
     candidate_limit: int | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = ORTHOGROUP_INFERENCE_VERSION,
@@ -6116,6 +6304,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 query_fasta,
                 subject_fasta,
                 losatp_bin=losatp_bin,
+                ncbi_blastp_bin=ncbi_blastp_bin,
                 losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 max_hsps_per_subject=None,
@@ -6123,6 +6312,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                     losatp_cache,
                     runner=runner,
                     losatp_bin=losatp_bin,
+                    ncbi_blastp_bin=ncbi_blastp_bin,
                     losatp_threads=losatp_threads,
                     candidate_limit=search_candidate_limit,
                     max_hsps_per_subject=None,
@@ -6148,6 +6338,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 subject_fasta,
                 query_fasta,
                 losatp_bin=losatp_bin,
+                ncbi_blastp_bin=ncbi_blastp_bin,
                 losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 max_hsps_per_subject=None,
@@ -6155,6 +6346,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                     losatp_cache,
                     runner=runner,
                     losatp_bin=losatp_bin,
+                    ncbi_blastp_bin=ncbi_blastp_bin,
                     losatp_threads=losatp_threads,
                     candidate_limit=search_candidate_limit,
                     max_hsps_per_subject=None,
@@ -6196,6 +6388,7 @@ def build_protein_colinearity_comparisons(
     records: Sequence[SeqRecord],
     *,
     losatp_bin: str = "losat",
+    ncbi_blastp_bin: str | None = None,
     losatp_threads: int | None = None,
     max_hits: int = 5,
     candidate_limit: int | None = None,
@@ -6210,6 +6403,7 @@ def build_protein_colinearity_comparisons(
     return build_pairwise_protein_blastp_comparisons(
         records,
         losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
         losatp_threads=losatp_threads,
         max_hits=max_hits,
         candidate_limit=candidate_limit,
@@ -6245,6 +6439,7 @@ __all__ = [
     "OrthologRenderRole",
     "ProteinBlastpMode",
     "ProteinBlastpResult",
+    "ProteinBlastpRuntime",
     "ProteinExtractionResult",
     "build_pair_evidence_index",
     "build_web_losat_cache_key",
