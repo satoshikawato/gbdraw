@@ -116,6 +116,47 @@ def test_linear_definition_group_can_stay_in_left_column() -> None:
 
 
 @pytest.mark.linear
+def test_locked_linear_definition_column_uses_rendered_svg_text_width(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    canvas_config = _canvas_config(keep_definition_left_aligned=True)
+
+    def overestimated_bbox(*_args, **_kwargs):
+        return 100.0, 12.0
+
+    def rendered_svg_bbox(*_args, **_kwargs):
+        return 60.0, 12.0
+
+    monkeypatch.setattr(
+        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
+        overestimated_bbox,
+    )
+    monkeypatch.setattr(
+        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
+        rendered_svg_bbox,
+    )
+
+    definition_width = _definition_width(_record("Wide Label"), config_dict, canvas_config)
+    canvas = Drawing()
+    add_record_definition_group(
+        canvas,
+        _record("Wide Label"),
+        record_offset_y=10,
+        record_offset_x=0,
+        canvas_config=canvas_config,
+        config_dict=config_dict,
+        max_def_width=definition_width,
+    )
+
+    definition_x = _definition_translate_x(canvas)
+    gap = canvas_config.horizontal_offset - (definition_x + definition_width)
+
+    assert definition_width == pytest.approx(60.0)
+    assert gap == pytest.approx(20.0)
+
+
+@pytest.mark.linear
 def test_locked_linear_definition_column_can_shift_left_of_negative_record_offsets() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     canvas_a = Drawing()

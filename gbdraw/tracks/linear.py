@@ -106,6 +106,16 @@ def _normalize_renderer(raw: str) -> str:
     return _RENDERER_ALIASES.get(renderer, renderer)
 
 
+def _normalize_dinucleotide_skew_color_params(params: dict[str, Any]) -> dict[str, Any]:
+    if "positive_color" not in params and "high_color" in params:
+        params["positive_color"] = params["high_color"]
+    if "negative_color" not in params and "low_color" in params:
+        params["negative_color"] = params["low_color"]
+    params.pop("high_color", None)
+    params.pop("low_color", None)
+    return params
+
+
 def _normalize_side_value(raw: object, *, field_name: str = "side") -> str:
     side = str(raw).strip().lower()
     if side not in _SIDE_VALUES:
@@ -156,6 +166,14 @@ def _parse_slot_head(head: str, original: str) -> tuple[str, str]:
     return slot_id, renderer
 
 
+def _strip_inline_comment(raw: str) -> str:
+    for marker in (" #", "\t#"):
+        index = raw.find(marker)
+        if index >= 0:
+            return raw[:index].strip()
+    return raw
+
+
 def parse_linear_track_slot(raw: str) -> LinearTrackSlot:
     """Parse `<slot_id>:<renderer>@key=value,...` into a slot input object."""
 
@@ -163,8 +181,7 @@ def parse_linear_track_slot(raw: str) -> LinearTrackSlot:
     s = str(raw).strip()
     if not s or s.startswith("#"):
         raise LinearTrackSlotParseError("empty/comment line", original)
-    if "#" in s:
-        s = s.split("#", 1)[0].strip()
+    s = _strip_inline_comment(s)
 
     if "@" in s:
         head, opts = s.split("@", 1)
@@ -218,6 +235,8 @@ def parse_linear_track_slot(raw: str) -> LinearTrackSlot:
 
     if not slot_id:
         raise LinearTrackSlotParseError("missing linear track slot id", original)
+    if renderer == "dinucleotide_skew":
+        params = _normalize_dinucleotide_skew_color_params(params)
 
     slot = LinearTrackSlot(
         id=slot_id,
@@ -246,7 +265,10 @@ def parse_linear_track_slots(specs: Sequence[str | LinearTrackSlot]) -> list[Lin
     for item in specs:
         if isinstance(item, LinearTrackSlot):
             renderer = _normalize_renderer(str(item.renderer))
-            slot = replace(item, renderer=renderer) if renderer != str(item.renderer) else item
+            params = {str(key): value for key, value in dict(item.params or {}).items()}
+            if renderer == "dinucleotide_skew":
+                params = _normalize_dinucleotide_skew_color_params(params)
+            slot = replace(item, renderer=renderer, params=params)
             try:
                 normalize_linear_track_slots([slot])
             except Exception as exc:
@@ -378,6 +400,8 @@ def normalize_linear_track_slots(slots: Sequence[LinearTrackSlot]) -> list[Norma
                 params["nt"] = str(params.pop("dinucleotide")).upper()
             elif "nt" in params:
                 params["nt"] = str(params["nt"]).upper()
+            if renderer == "dinucleotide_skew":
+                params = _normalize_dinucleotide_skew_color_params(params)
         elif renderer == "depth":
             raw_track_index = params.get("track_index", 0)
             try:

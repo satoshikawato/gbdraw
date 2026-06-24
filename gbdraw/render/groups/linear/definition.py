@@ -11,7 +11,12 @@ from svgwrite.text import Text, TSpan
 
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ....core.record_metadata import infer_record_source_metadata
-from ....core.text import calculate_bbox_dimensions, create_text_element, parse_mixed_content_text
+from ....core.text import (
+    calculate_bbox_dimensions,
+    calculate_svg_bbox_dimensions,
+    create_text_element,
+    parse_mixed_content_text,
+)
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
@@ -119,16 +124,27 @@ class DefinitionGroup:
         else:
             self.length_label = "{:,} bp".format(self.record_length)
 
+    def _measure_line(self, text: str) -> tuple[float, float]:
+        """Return rendered SVG width and legacy layout height for a definition line."""
+        _, height = calculate_bbox_dimensions(
+            text,
+            self.linear_definition_font_family,
+            self.linear_definition_font_size,
+            self.dpi,
+        )
+        width, _ = calculate_svg_bbox_dimensions(
+            text,
+            self.linear_definition_font_family,
+            self.linear_definition_font_size,
+            self.dpi,
+        )
+        return width, height
+
     def _build_definition_lines(self) -> list[_DefinitionLine]:
         lines: list[_DefinitionLine] = []
 
         if self.record_name_plain:
-            width, height = calculate_bbox_dimensions(
-                self.record_name_plain,
-                self.linear_definition_font_family,
-                self.linear_definition_font_size,
-                self.dpi,
-            )
+            width, height = self._measure_line(self.record_name_plain)
             lines.append(
                 _DefinitionLine(
                     kind="mixed",
@@ -140,12 +156,7 @@ class DefinitionGroup:
             )
 
         if self.show_replicon and self.replicon_label:
-            width, height = calculate_bbox_dimensions(
-                self.replicon_label,
-                self.linear_definition_font_family,
-                self.linear_definition_font_size,
-                self.dpi,
-            )
+            width, height = self._measure_line(self.replicon_label)
             lines.append(
                 _DefinitionLine(
                     kind="plain",
@@ -156,12 +167,7 @@ class DefinitionGroup:
             )
 
         if self.show_accession and self.accession_label.strip():
-            width, height = calculate_bbox_dimensions(
-                self.accession_label,
-                self.linear_definition_font_family,
-                self.linear_definition_font_size,
-                self.dpi,
-            )
+            width, height = self._measure_line(self.accession_label)
             lines.append(
                 _DefinitionLine(
                     kind="plain",
@@ -172,12 +178,7 @@ class DefinitionGroup:
             )
 
         if self.show_length and self.length_label.strip():
-            width, height = calculate_bbox_dimensions(
-                self.length_label,
-                self.linear_definition_font_family,
-                self.linear_definition_font_size,
-                self.dpi,
-            )
+            width, height = self._measure_line(self.length_label)
             lines.append(
                 _DefinitionLine(
                     kind="plain",

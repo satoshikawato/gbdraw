@@ -34,6 +34,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
+    GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
 from ...core.text import calculate_bbox_dimensions
@@ -44,6 +45,7 @@ from ...render.groups.linear.length_bar import (
     RULER_TICK_LENGTH,
 )
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
+from ...io.colors import resolve_color_to_hex
 from ...legend.table import (  # type: ignore[reportMissingImports]
     configure_pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
@@ -162,6 +164,96 @@ def _clone_skew_config_with_dinucleotide(skew_config, dinucleotide: str):
     cloned = copy.copy(skew_config)
     cloned.dinucleotide = str(dinucleotide).upper()
     return cloned
+
+
+def _slot_param_text(slot, *names: str) -> str | None:
+    params = getattr(slot, "params", {}) or {}
+    for name in names:
+        value = params.get(name)
+        text = str(value).strip() if value is not None else ""
+        if text:
+            return text
+    return None
+
+
+def _slot_skew_config(
+    skew_config: GcSkewConfigurator,
+    slot,
+    dinucleotide: str,
+) -> GcSkewConfigurator:
+    cloned = copy.copy(skew_config)
+    cloned.dinucleotide = str(dinucleotide).upper()
+    if positive_color := _slot_param_text(slot, "positive_color", "high_color"):
+        cloned.high_fill_color = resolve_color_to_hex(positive_color)
+    if negative_color := _slot_param_text(slot, "negative_color", "low_color"):
+        cloned.low_fill_color = resolve_color_to_hex(negative_color)
+    return cloned
+
+
+def _unique_legend_key(legend_table: dict, preferred: str) -> str:
+    if preferred not in legend_table:
+        return preferred
+    suffix = 2
+    while f"{preferred} ({suffix})" in legend_table:
+        suffix += 1
+    return f"{preferred} ({suffix})"
+
+
+def _slot_legend_label(slot, fallback: str) -> str:
+    params = getattr(slot, "params", {}) or {}
+    raw_label = params.get("legend_label", params.get("label"))
+    label = str(raw_label).strip() if raw_label is not None else ""
+    return label or fallback
+
+
+def _sync_legend_table_for_linear_slots(
+    legend_table: dict,
+    *,
+    linear_track_slots: list | None,
+    skew_config: GcSkewConfigurator,
+) -> dict:
+    """Replace singleton skew legend entries with slot-aware entries."""
+    if linear_track_slots is None:
+        return legend_table
+
+    out = dict(legend_table)
+    default_nt = str(getattr(skew_config, "dinucleotide", "GC")).upper()
+    for key in (
+        f"{default_nt} skew",
+        f"{default_nt} skew (+)",
+        f"{default_nt} skew (-)",
+    ):
+        out.pop(key, None)
+
+    for slot in linear_track_slots:
+        if not getattr(slot, "enabled", True):
+            continue
+        if str(getattr(slot, "renderer", "")) != "dinucleotide_skew":
+            continue
+        nt = _slot_nt(slot, default_nt)
+        label = _slot_legend_label(slot, f"{nt} skew")
+        slot_skew_config = _slot_skew_config(skew_config, slot, nt)
+        if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
+            out[_unique_legend_key(out, label)] = {
+                "type": "solid",
+                "fill": slot_skew_config.high_fill_color,
+                "stroke": slot_skew_config.stroke_color,
+                "width": slot_skew_config.stroke_width,
+            }
+        else:
+            out[_unique_legend_key(out, f"{label} (+)")] = {
+                "type": "solid",
+                "fill": slot_skew_config.high_fill_color,
+                "stroke": slot_skew_config.stroke_color,
+                "width": slot_skew_config.stroke_width,
+            }
+            out[_unique_legend_key(out, f"{label} (-)")] = {
+                "type": "solid",
+                "fill": slot_skew_config.low_fill_color,
+                "stroke": slot_skew_config.stroke_color,
+                "width": slot_skew_config.stroke_width,
+            }
+    return out
 
 
 def _custom_record_bottom_extent(
@@ -852,6 +944,11 @@ def assemble_linear_diagram(
         if depth_enabled:
             first_depth_row = next((row for row in record_depth_data if row), [])
             legend_table = sync_depth_track_legend_entries(legend_table, first_depth_row)
+        legend_table = _sync_legend_table_for_linear_slots(
+            legend_table,
+            linear_track_slots=normalized_linear_track_slots,
+            skew_config=skew_config,
+        )
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
         required_legend_height = float(legend_group.legend_height)
@@ -1289,7 +1386,7 @@ def assemble_linear_diagram(
                         offset_y,
                         offset_x,
                         canvas_config,
-                        _clone_skew_config_with_dinucleotide(skew_config, nt),
+                        _slot_skew_config(skew_config, slot, nt),
                         config_dict,
                         cfg=record_cfg,
                         gc_df=shared_gc_df,

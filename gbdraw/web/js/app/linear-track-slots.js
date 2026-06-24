@@ -2,6 +2,7 @@ import {
   dropInvalidManagedDepthSlots,
   uploadedDepthFileCount
 } from './depth-track-state.js';
+import { resolveColorToHex } from './color-utils.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -48,6 +49,43 @@ const cloneParams = (params = {}) => {
 const normalizeOptionalText = (value) => {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
+};
+
+const normalizeColorParam = (value) => {
+  const text = normalizeOptionalText(value);
+  if (text === null) return null;
+  return resolveColorToHex(text);
+};
+
+const normalizeColorInputValue = (value, fallback = '#777777') => {
+  const resolved = normalizeColorParam(value);
+  if (resolved === null) return fallback;
+  const text = String(resolved).trim();
+  const fullHex = text.match(/^#([0-9a-f]{6})$/i);
+  if (fullHex) return `#${fullHex[1].toLowerCase()}`;
+  const shortHex = text.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+  if (shortHex) {
+    return `#${shortHex[1]}${shortHex[1]}${shortHex[2]}${shortHex[2]}${shortHex[3]}${shortHex[3]}`.toLowerCase();
+  }
+  return fallback;
+};
+
+const normalizeSkewColorParams = (params) => {
+  if (normalizeOptionalText(params.positive_color) === null && normalizeOptionalText(params.high_color) !== null) {
+    params.positive_color = params.high_color;
+  }
+  if (normalizeOptionalText(params.negative_color) === null && normalizeOptionalText(params.low_color) !== null) {
+    params.negative_color = params.low_color;
+  }
+  delete params.high_color;
+  delete params.low_color;
+  const positiveColor = normalizeColorParam(params.positive_color);
+  if (positiveColor === null) delete params.positive_color;
+  else params.positive_color = positiveColor;
+  const negativeColor = normalizeColorParam(params.negative_color);
+  if (negativeColor === null) delete params.negative_color;
+  else params.negative_color = negativeColor;
+  return params;
 };
 
 const normalizeRenderer = (value, fallback = 'features') => {
@@ -189,6 +227,9 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
       if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
         params.nt = normalizeNt(params.nt ?? params.dinucleotide, nt);
         delete params.dinucleotide;
+        if (renderer === 'dinucleotide_skew') {
+          normalizeSkewColorParams(params);
+        }
       }
       let id = String(slot.id || DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`).trim();
       if (!id) id = `slot_${index + 1}`;
@@ -312,6 +353,14 @@ export const buildLinearTrackSlotSpec = (slot, { includeEnabled = false, include
   }
   if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
     parts.push(`nt=${normalizeNt(params.nt)}`);
+    if (normalized.renderer === 'dinucleotide_skew') {
+      if (normalizeOptionalText(params.positive_color)) {
+        parts.push(`positive_color=${String(params.positive_color).trim()}`);
+      }
+      if (normalizeOptionalText(params.negative_color)) {
+        parts.push(`negative_color=${String(params.negative_color).trim()}`);
+      }
+    }
   }
   if (normalizeOptionalText(params.legend_label)) {
     parts.push(`legend_label=${String(params.legend_label).trim()}`);
@@ -684,6 +733,11 @@ export const createLinearTrackSlotEditor = ({ state }) => {
       });
       return;
     }
+    const existingCustomWithDefaultId = adv.linear_track_slots.some((slot) => (
+      normalizeRenderer(slot?.renderer) === normalizedRenderer &&
+      String(slot?.id || '').trim() === id
+    ));
+    if (existingCustomWithDefaultId) return;
     adv.linear_track_slots.push(defaultSlot(normalizedRenderer, {
       id,
       side: 'below',
@@ -902,6 +956,30 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     config.height = parsePositivePxNumber(text);
   };
 
+  const linearTrackSlotHasSkewColorOverride = (slot, key) => (
+    normalizeRenderer(slot?.renderer) === 'dinucleotide_skew' &&
+    normalizeOptionalText(slot?.params?.[key]) !== null
+  );
+
+  const linearTrackSlotSkewColorValue = (slot, key) => {
+    const fallback = key === 'negative_color' ? '#4575b4' : '#d73027';
+    return normalizeColorInputValue(slot?.params?.[key], fallback);
+  };
+
+  const setLinearTrackSlotSkewColor = (slot, key, value) => {
+    if (!slot || normalizeRenderer(slot.renderer) !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
+    slot.params = cloneParams(slot.params);
+    const color = normalizeColorParam(value);
+    if (color === null) delete slot.params[key];
+    else slot.params[key] = color;
+  };
+
+  const clearLinearTrackSlotSkewColor = (slot, key) => {
+    if (!slot || normalizeRenderer(slot.renderer) !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
+    slot.params = cloneParams(slot.params);
+    delete slot.params[key];
+  };
+
   return {
     linearTrackRenderers,
     linearTrackRendererLabel,
@@ -928,6 +1006,10 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     updateLinearTrackSlotPlacement,
     linearTrackSlotHeightValue,
     setLinearTrackSlotHeight,
+    linearTrackSlotHasSkewColorOverride,
+    linearTrackSlotSkewColorValue,
+    setLinearTrackSlotSkewColor,
+    clearLinearTrackSlotSkewColor,
     syncLinearDepthSlotHeightsFromDepthTracks,
     linearTrackSlots: () => {
       return Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : [];

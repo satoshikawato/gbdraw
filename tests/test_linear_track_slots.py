@@ -15,6 +15,8 @@ from gbdraw.api import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
+from gbdraw.exceptions import ValidationError
+from gbdraw.io.colors import load_default_colors
 from gbdraw.diagrams.linear.track_slots import LinearTrackLayout, resolve_linear_track_layout
 from gbdraw.tracks import (
     LinearTrackSlot,
@@ -96,6 +98,12 @@ def _extract_axis_baseline_y(svg_text: str, group_id: str) -> float:
     raise AssertionError(f"axis baseline line not found for {group_id}")
 
 
+def _extract_group_fragment(svg_text: str, group_id: str) -> str:
+    match = re.search(rf'<g id="{re.escape(group_id)}"[^>]*>.*?</g>', svg_text, flags=re.DOTALL)
+    assert match is not None
+    return match.group(0)
+
+
 def test_parse_linear_track_slot_with_layout_fields() -> None:
     slot = parse_linear_track_slot("depth_1:depth@track_index=0,h=35px,spacing=8,z=2,side=below")
 
@@ -118,6 +126,21 @@ def test_parse_linear_track_slot_aliases() -> None:
     assert content.params["nt"] == "AT"
     assert skew.renderer == "dinucleotide_skew"
     assert skew.params["nt"] == "GC"
+
+
+def test_parse_linear_track_slot_canonicalizes_skew_color_aliases() -> None:
+    alias = parse_linear_track_slot(
+        "at_skew:dinucleotide_skew@nt=AT,high_color=tomato,low_color=#2a9d8f"
+    )
+    canonical = parse_linear_track_slot(
+        "at_skew:dinucleotide_skew@nt=AT,positive_color=#e76f51,high_color=tomato"
+    )
+
+    assert alias.params["positive_color"] == "tomato"
+    assert alias.params["negative_color"] == "#2a9d8f"
+    assert "high_color" not in alias.params
+    assert "low_color" not in alias.params
+    assert canonical.params["positive_color"] == "#e76f51"
 
 
 def test_linear_track_slots_reject_invalid_inputs() -> None:
@@ -287,6 +310,47 @@ def test_assemble_linear_custom_slots_places_tracks_above_and_below_axis() -> No
 
     assert skew_y < axis_y
     assert content_y > axis_y
+
+
+def test_assemble_linear_dinucleotide_skew_slot_uses_custom_colors_and_legend() -> None:
+    default_colors = load_default_colors("", palette="default")
+    svg = assemble_linear_diagram_from_records(
+        [_record()],
+        legend="right",
+        default_colors=default_colors,
+        config_overrides={"show_gc": True, "show_skew": True},
+        linear_track_slots=[
+            "features:features@side=overlay",
+            "gc_skew:dinucleotide_skew@nt=GC,h=20px",
+            "at_skew:dinucleotide_skew@nt=AT,h=20px,positive_color=tomato,negative_color=#2a9d8f,legend_label=AT skew",
+        ],
+    ).tostring()
+    at_skew = _extract_group_fragment(svg, "at_skew")
+    gc_skew = _extract_group_fragment(svg, "gc_skew")
+    default_skew_high = default_colors.loc[default_colors["feature_type"] == "skew_high", "color"].iloc[0]
+    default_skew_low = default_colors.loc[default_colors["feature_type"] == "skew_low", "color"].iloc[0]
+
+    assert 'fill="#FF6347"' in at_skew
+    assert 'fill="#2a9d8f"' in at_skew
+    assert f'fill="{default_skew_high}"' in gc_skew
+    assert f'fill="{default_skew_low}"' in gc_skew
+    assert "AT skew (+)" in svg
+    assert "AT skew (-)" in svg
+    assert svg.count('fill="#FF6347"') >= 2
+    assert svg.count('fill="#2a9d8f"') >= 2
+
+
+def test_assemble_linear_dinucleotide_skew_slot_rejects_invalid_custom_color() -> None:
+    with pytest.raises(ValidationError, match="Unknown color name"):
+        assemble_linear_diagram_from_records(
+            [_record()],
+            legend="none",
+            config_overrides={"show_gc": True, "show_skew": True},
+            linear_track_slots=[
+                "features:features@side=overlay",
+                "at_skew:dinucleotide_skew@nt=AT,positive_color=not-a-color",
+            ],
+        )
 
 
 def test_assemble_linear_custom_depth_above_axis_keeps_depth_axis_clear() -> None:

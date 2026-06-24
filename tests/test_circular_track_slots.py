@@ -12,6 +12,7 @@ import gbdraw.circular as circular_cli_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
+from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import (
@@ -72,6 +73,12 @@ def _axis_circle_radius(svg_text: str) -> float:
     match = re.search(r'<g id="Axis"[^>]*>.*?<circle\b[^>]*\br="([^"]+)"', svg_text, re.S)
     assert match is not None
     return float(match.group(1))
+
+
+def _svg_group_fragment(svg_text: str, group_id: str) -> str:
+    match = re.search(rf'<g id="{re.escape(group_id)}"[^>]*>.*?</g>', svg_text, re.S)
+    assert match is not None
+    return match.group(0)
 
 
 def _capture_circular_core_geometry(
@@ -310,6 +317,21 @@ def test_parse_circular_track_slot_with_duplicate_renderer_params() -> None:
     assert slot.radius is not None
     assert slot.radius.resolve(390) == pytest.approx(163.8)
     assert slot.z == 7
+
+
+def test_parse_circular_track_slot_canonicalizes_skew_color_aliases() -> None:
+    alias = parse_circular_track_slot(
+        "at_skew:dinucleotide_skew@nt=AT,high_color=tomato,low_color=#2a9d8f"
+    )
+    canonical = parse_circular_track_slot(
+        "at_skew:dinucleotide_skew@nt=AT,positive_color=#e76f51,high_color=tomato"
+    )
+
+    assert alias.params["positive_color"] == "tomato"
+    assert alias.params["negative_color"] == "#2a9d8f"
+    assert "high_color" not in alias.params
+    assert "low_color" not in alias.params
+    assert canonical.params["positive_color"] == "#e76f51"
 
 
 def test_parse_circular_track_slots_rejects_duplicate_ids_and_unknown_renderer() -> None:
@@ -1818,6 +1840,70 @@ def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> 
     assert 'id="at_skew"' in svg_text
     assert "GC skew" in svg_text
     assert "AT skew" in svg_text
+
+
+@pytest.mark.circular
+def test_api_circular_dinucleotide_skew_slot_uses_custom_colors_and_legend() -> None:
+    record = _load_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=True,
+        show_skew=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="right",
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            "ticks:ticks",
+            "gc_skew:dinucleotide_skew@nt=GC,w=20px",
+            "at_skew:dinucleotide_skew@nt=AT,w=20px,positive_color=tomato,negative_color=#2a9d8f,legend_label=AT skew",
+        ],
+    )
+    svg_text = canvas.tostring()
+    at_skew = _svg_group_fragment(svg_text, "at_skew")
+    gc_skew = _svg_group_fragment(svg_text, "gc_skew")
+    default_skew_high = default_colors.loc[default_colors["feature_type"] == "skew_high", "color"].iloc[0]
+    default_skew_low = default_colors.loc[default_colors["feature_type"] == "skew_low", "color"].iloc[0]
+
+    assert 'fill="#FF6347"' in at_skew
+    assert 'fill="#2a9d8f"' in at_skew
+    assert f'fill="{default_skew_high}"' in gc_skew
+    assert f'fill="{default_skew_low}"' in gc_skew
+    assert "AT skew (+)" in svg_text
+    assert "AT skew (-)" in svg_text
+    assert svg_text.count('fill="#FF6347"') >= 2
+    assert svg_text.count('fill="#2a9d8f"') >= 2
+
+
+def test_api_circular_dinucleotide_skew_slot_rejects_invalid_custom_color() -> None:
+    record = _load_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=True,
+        show_skew=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+
+    with pytest.raises(ValidationError, match="Unknown color name"):
+        assemble_circular_diagram_from_record(
+            record,
+            config_dict=config_dict,
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                "at_skew:dinucleotide_skew@nt=AT,positive_color=not-a-color",
+            ],
+        )
 
 
 @pytest.mark.circular
