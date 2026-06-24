@@ -7,6 +7,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     extractedFeatures,
     legendEntries,
     legendStrokeOverrides,
+    featureStrokeOverrides,
     originalSvgStroke,
     results,
     selectedResultIndex,
@@ -174,6 +175,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     }
 
     Object.keys(legendStrokeOverrides).forEach((key) => delete legendStrokeOverrides[key]);
+    Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
 
     if (updatedCount > 0) {
       skipCaptureBaseConfig.value = true;
@@ -318,13 +320,16 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const overrideCount = Object.keys(legendStrokeOverrides).length;
-    if (overrideCount === 0) {
+    const legendOverrideCount = Object.keys(legendStrokeOverrides).length;
+    const featureOverrideCount = Object.keys(featureStrokeOverrides).length;
+    if (legendOverrideCount === 0 && featureOverrideCount === 0) {
       debugLog('No stroke overrides to reapply');
       return;
     }
 
-    console.log(`[DEBUG] Reapplying ${overrideCount} stroke overrides to new SVG`);
+    console.log(
+      `[DEBUG] Reapplying ${legendOverrideCount} legend stroke override(s) and ${featureOverrideCount} feature stroke override(s) to new SVG`
+    );
 
     let totalUpdated = 0;
 
@@ -346,6 +351,30 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
           totalUpdated++;
         });
       }
+    }
+
+    for (const [featureKey, overrides] of Object.entries(featureStrokeOverrides)) {
+      const { strokeColor, strokeWidth } = overrides || {};
+      if (!strokeColor && strokeWidth === undefined) continue;
+
+      const normalizedFeatureKey = String(featureKey || '').trim();
+      if (!normalizedFeatureKey) continue;
+      const matchingFeature = extractedFeatures.value.find(
+        (feature) =>
+          String(feature?.id || '').trim() === normalizedFeatureKey ||
+          String(feature?.svg_id || '').trim() === normalizedFeatureKey
+      );
+      const svgId = matchingFeature?.svg_id || normalizedFeatureKey;
+      const elements = getFeatureElements(svg, svgId);
+      elements.forEach((el) => {
+        if (strokeColor) {
+          el.setAttribute('stroke', strokeColor);
+        }
+        if (strokeWidth !== undefined && strokeWidth !== null) {
+          el.setAttribute('stroke-width', strokeWidth);
+        }
+        totalUpdated++;
+      });
     }
 
     if (totalUpdated > 0) {

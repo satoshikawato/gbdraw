@@ -56,6 +56,7 @@ export const setupWatchers = ({
     selectedFeatureRecordIdx,
     featureColorOverrides,
     featureVisibilityOverrides,
+    featureStrokeOverrides,
     featurePanelTab,
     labelSearch,
     orthogroups,
@@ -534,6 +535,7 @@ export const setupWatchers = ({
       selectedFeatureRecordIdx.value = 0;
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
       Object.keys(featureVisibilityOverrides).forEach((k) => delete featureVisibilityOverrides[k]);
+      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
       editableLabels.value = [];
       Object.keys(labelTextFeatureOverrides).forEach((k) => delete labelTextFeatureOverrides[k]);
       Object.keys(labelTextBulkOverrides).forEach((k) => delete labelTextBulkOverrides[k]);

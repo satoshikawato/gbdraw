@@ -1,7 +1,7 @@
 import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
-import { exportConfig, exportSession, importConfig, importSession as importSessionFromFile } from '../services/config.js';
+import { exportSession, importSession as importSessionFromFile } from '../services/config.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
   disposeDiagramGenerationWorker,
@@ -14,6 +14,7 @@ import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPyodideManager } from './pyodide.js';
 import { createRunAnalysis } from './run-analysis.js';
+import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
@@ -65,6 +66,8 @@ export const createAppSetup = () => {
     sessionTitle,
     results,
     selectedResultIndex,
+    resultPanelTab,
+    lastRunInfo,
     pairwiseMatchFactors,
     svgContent,
     zoom,
@@ -159,6 +162,7 @@ export const createAppSetup = () => {
     labelReflowLastError,
     featureColorOverrides,
     featureVisibilityOverrides,
+    featureStrokeOverrides,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
@@ -906,6 +910,45 @@ export const createAppSetup = () => {
   } = featureActions;
 
   const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
+  const runInfoCopyStatus = ref('');
+
+  const runInfoElapsedText = (info) => formatElapsedMs(info?.elapsedMs);
+  const runInfoReproducibilityText = (info) => reproducibilityLabel(info?.reproducibility?.level);
+  const copyTextFallback = (text) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+    } finally {
+      textarea.remove();
+    }
+  };
+  const copyRunCommand = async () => {
+    const command = String(lastRunInfo.value?.command || '');
+    if (!command) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(command);
+      } else {
+        copyTextFallback(command);
+      }
+      runInfoCopyStatus.value = 'Copied';
+      setTimeout(() => {
+        if (runInfoCopyStatus.value === 'Copied') runInfoCopyStatus.value = '';
+      }, 1600);
+    } catch (error) {
+      console.warn('Failed to copy run command:', error);
+      runInfoCopyStatus.value = 'Copy failed';
+      setTimeout(() => {
+        if (runInfoCopyStatus.value === 'Copy failed') runInfoCopyStatus.value = '';
+      }, 2200);
+    }
+  };
 
   const runAnalysis = async () => {
     cancelDefinitionUpdate();
@@ -1709,6 +1752,9 @@ export const createAppSetup = () => {
     sessionTitleLabel,
     results,
     selectedResultIndex,
+    resultPanelTab,
+    lastRunInfo,
+    runInfoCopyStatus,
     svgContent,
     zoom,
     isPanning,
@@ -1980,6 +2026,7 @@ export const createAppSetup = () => {
     filteredFeatures,
     featureColorOverrides,
     featureVisibilityOverrides,
+    featureStrokeOverrides,
     getFeatureColor,
     getFeatureVisibility,
     setFeatureVisibility,
@@ -2074,11 +2121,12 @@ export const createAppSetup = () => {
     downloadInteractiveSVG,
     downloadPNG,
     downloadPDF,
-    exportConfig,
+    copyRunCommand,
+    runInfoElapsedText,
+    runInfoReproducibilityText,
     resetSettings,
     saveSessionWithTitle,
     editSessionTitle,
-    importConfig,
     importSession,
     manualPriorityRules,
     newPriorityRule,

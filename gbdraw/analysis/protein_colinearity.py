@@ -7,8 +7,10 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
+import hashlib
 from importlib import resources
 from io import StringIO
+import json
 import logging
 import math
 import os
@@ -34,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_LOSATP_BIN = "losat"
 _BUNDLED_LOSATP_DIR = "bin"
+LOSAT_CACHE_SCHEMA = 2
 
 _VALID_PROTEIN_RE = re.compile(r"^[A-Z]+$")
 _VALID_FASTA_ID_RE = re.compile(r"^\S+$")
@@ -428,6 +431,284 @@ class _CdsProteinCandidate:
 
 
 LosatpRunner = Callable[[str, str], DataFrame]
+
+
+def _hash_text_sha256(text: str) -> str:
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+def _web_json_dumps(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _safe_web_protein_id_token(value: object) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"[^A-Za-z0-9_.-]+", "_", text)
+    text = text.strip("._-")
+    return text or "record"
+
+
+def _with_stable_web_protein_ids(
+    proteins: Sequence[CdsProtein],
+    record_instance_key: object,
+) -> list[CdsProtein]:
+    """Return proteins remapped to the stable IDs used by the browser LOSATP path."""
+
+    record_key = _safe_web_protein_id_token(record_instance_key)
+    remapped: list[CdsProtein] = []
+    used: set[str] = set()
+    for protein in proteins:
+        strand = protein.strand if protein.strand in {-1, 1} else 0
+        aa_hash = hashlib.sha256(str(protein.sequence or "").encode("utf-8")).hexdigest()[:12]
+        base_id = f"p_{record_key}_{int(protein.start)}_{int(protein.end)}_{strand}_{aa_hash}"
+        protein_id = base_id
+        suffix = 2
+        while protein_id in used:
+            protein_id = f"{base_id}_{suffix}"
+            suffix += 1
+        used.add(protein_id)
+        remapped.append(replace(protein, protein_id=protein_id))
+    return remapped
+
+
+def extract_web_stable_cds_proteins(
+    records: Sequence[SeqRecord],
+    *,
+    record_instance_keys: Sequence[str] | None = None,
+) -> ProteinExtractionResult:
+    """Extract CDS proteins with the same stable FASTA IDs used by the Web GUI."""
+
+    base = extract_cds_proteins(records, prefer_source_ids=False)
+    stable_by_record: list[list[CdsProtein]] = []
+    protein_map: dict[str, CdsProtein] = {}
+    keys = list(record_instance_keys or ())
+    for record_index, proteins in enumerate(base.proteins_by_record):
+        if record_index < len(keys) and str(keys[record_index]).strip():
+            key = keys[record_index]
+        else:
+            record_id = records[record_index].id if record_index < len(records) else f"seq_{record_index + 1}"
+            key = f"r{record_index + 1:04d}_{record_id}"
+        remapped = _with_stable_web_protein_ids(proteins, key)
+        stable_by_record.append(remapped)
+        for protein in remapped:
+            protein_map[protein.protein_id] = protein
+    return ProteinExtractionResult(proteins_by_record=stable_by_record, protein_map=protein_map)
+
+
+def build_web_losat_cache_key(
+    *,
+    query_fasta: str,
+    subject_fasta: str,
+    args: Sequence[str],
+    program: str = "blastp",
+    outfmt: str = "6",
+    runtime_compatibility: str = "threaded-compatible-v1",
+    threads_per_job: str | int = "auto",
+) -> tuple[str, str, str]:
+    """Build the same raw LOSAT cache key that the browser stores in sessions.
+
+    Thread/runtime options are intentionally excluded: they control execution
+    resources, not the raw LOSAT result identity.
+    """
+
+    query_hash = _hash_text_sha256(query_fasta)
+    subject_hash = _hash_text_sha256(subject_fasta)
+    payload = {
+        "cacheSchema": LOSAT_CACHE_SCHEMA,
+        "program": program,
+        "outfmt": str(outfmt),
+        "args": [str(arg) for arg in args],
+        "queryCanonicalHash": query_hash,
+        "subjectCanonicalHash": subject_hash,
+    }
+    return _hash_text_sha256(_web_json_dumps(payload)), query_hash, subject_hash
+
+
+class LosatpCacheManager:
+    """Web-session compatible raw LOSATP cache lookup and collection."""
+
+    def __init__(
+        self,
+        entries: Sequence[Mapping[str, object]] | None = None,
+        *,
+        threads_per_job: str | int = "auto",
+        runtime_compatibility: str = "threaded-compatible-v1",
+    ) -> None:
+        self.threads_per_job = threads_per_job
+        self.runtime_compatibility = runtime_compatibility
+        self._entries_by_key: dict[str, dict[str, object]] = {}
+        self._display_order: list[str] = []
+        self._display_info: dict[str, tuple[str, bool]] = {}
+        for entry in entries or ():
+            if (
+                int(entry.get("schema") or 0) != LOSAT_CACHE_SCHEMA
+                or str(entry.get("kind") or "") != "raw-losat"
+                or not isinstance(entry.get("text"), str)
+            ):
+                continue
+            key = str(entry.get("key") or "").strip()
+            if not key:
+                continue
+            normalized = {
+                "schema": LOSAT_CACHE_SCHEMA,
+                "kind": "raw-losat",
+                "key": key,
+                "filename": str(entry.get("filename") or ""),
+                "display": bool(entry.get("display")) if "display" in entry else False,
+                "text": str(entry.get("text") or ""),
+                "program": str(entry.get("program") or "blastp"),
+                "queryCanonicalHash": str(entry.get("queryCanonicalHash") or ""),
+                "subjectCanonicalHash": str(entry.get("subjectCanonicalHash") or ""),
+            }
+            if "outfmt" in entry:
+                normalized["outfmt"] = str(entry.get("outfmt") or "")
+            if "args" in entry:
+                normalized["args"] = [str(arg) for arg in entry.get("args") or ()]
+            self._entries_by_key[key] = normalized
+            if normalized["display"] is not False and key not in self._display_info:
+                self._display_order.append(key)
+                self._display_info[key] = (str(normalized["filename"] or ""), True)
+
+    @property
+    def has_entries(self) -> bool:
+        return bool(self._entries_by_key)
+
+    def _find_cached_entry(
+        self,
+        *,
+        cache_key: str,
+        program: str,
+        query_hash: str,
+        subject_hash: str,
+        outfmt: str,
+        args: Sequence[str],
+    ) -> dict[str, object] | None:
+        cached = self._entries_by_key.get(cache_key)
+        if cached is not None:
+            return cached
+
+        expected_args = tuple(str(arg) for arg in args)
+        for legacy_key, entry in list(self._entries_by_key.items()):
+            if str(entry.get("queryCanonicalHash") or "") != query_hash:
+                continue
+            if str(entry.get("subjectCanonicalHash") or "") != subject_hash:
+                continue
+            entry_program = str(entry.get("program") or program)
+            if entry_program and entry_program != program:
+                continue
+            entry_outfmt = str(entry.get("outfmt") or "")
+            if entry_outfmt and entry_outfmt != outfmt:
+                continue
+            if "args" in entry and tuple(str(arg) for arg in entry.get("args") or ()) != expected_args:
+                continue
+
+            migrated = dict(entry)
+            migrated["key"] = cache_key
+            migrated["program"] = program
+            migrated["outfmt"] = outfmt
+            migrated["args"] = list(expected_args)
+            self._entries_by_key.pop(legacy_key, None)
+            self._entries_by_key[cache_key] = migrated
+            if legacy_key in self._display_info:
+                self._display_info[cache_key] = self._display_info.pop(legacy_key)
+            self._display_order = [
+                cache_key if key == legacy_key else key
+                for key in self._display_order
+            ]
+            return migrated
+
+        return None
+
+    def runner_for_search(
+        self,
+        *,
+        losatp_bin: str,
+        losatp_threads: int | None,
+        candidate_limit: int | None,
+        max_hsps_per_subject: int | None,
+        args: Sequence[str],
+        filename: str = "",
+        display: bool = False,
+    ) -> LosatpRunner:
+        def _runner(query_fasta: str, subject_fasta: str) -> DataFrame:
+            cache_key, query_hash, subject_hash = build_web_losat_cache_key(
+                query_fasta=query_fasta,
+                subject_fasta=subject_fasta,
+                args=args,
+                program="blastp",
+                outfmt="6",
+                runtime_compatibility=self.runtime_compatibility,
+                threads_per_job=self.threads_per_job,
+            )
+            cached = self._find_cached_entry(
+                cache_key=cache_key,
+                program="blastp",
+                query_hash=query_hash,
+                subject_hash=subject_hash,
+                outfmt="6",
+                args=args,
+            )
+            if cached is not None:
+                if display:
+                    self._mark_display(cache_key, filename)
+                return parse_losatp_outfmt6(str(cached.get("text") or ""))
+
+            raw_text_holder: dict[str, str] = {}
+            result = run_losatp_blastp(
+                query_fasta,
+                subject_fasta,
+                losatp_bin=losatp_bin,
+                max_hits=candidate_limit,
+                max_hsps_per_subject=max_hsps_per_subject,
+                threads=losatp_threads,
+                raw_output_callback=lambda text: raw_text_holder.__setitem__("text", text),
+            )
+            entry = {
+                "schema": LOSAT_CACHE_SCHEMA,
+                "kind": "raw-losat",
+                "key": cache_key,
+                "filename": filename if display else "",
+                "display": bool(display),
+                "text": raw_text_holder.get("text", ""),
+                "program": "blastp",
+                "queryCanonicalHash": query_hash,
+                "subjectCanonicalHash": subject_hash,
+                "outfmt": "6",
+                "args": [str(arg) for arg in args],
+            }
+            self._entries_by_key[cache_key] = entry
+            if display:
+                self._mark_display(cache_key, filename)
+            return result
+
+        return _runner
+
+    def _mark_display(self, key: str, filename: str) -> None:
+        if key not in self._display_info:
+            self._display_order.append(key)
+        self._display_info[key] = (str(filename or ""), True)
+
+    def session_entries(self) -> tuple[dict[str, object], ...]:
+        result: list[dict[str, object]] = []
+        seen: set[str] = set()
+        for key in self._display_order:
+            entry = self._entries_by_key.get(key)
+            if entry is None:
+                continue
+            filename, display = self._display_info.get(key, ("", True))
+            rendered = dict(entry)
+            rendered["filename"] = filename
+            rendered["display"] = display
+            result.append(rendered)
+            seen.add(key)
+        for key, entry in self._entries_by_key.items():
+            if key in seen:
+                continue
+            rendered = dict(entry)
+            rendered["filename"] = ""
+            rendered["display"] = False
+            result.append(rendered)
+        return tuple(result)
 
 
 def _first_qualifier(feature: SeqFeature, key: str) -> str | None:
@@ -5082,6 +5363,7 @@ def run_losatp_blastp(
     max_hits: int | None = None,
     max_hsps_per_subject: int | None = 1,
     threads: int | None = None,
+    raw_output_callback: Callable[[str], None] | None = None,
 ) -> DataFrame:
     """Run external LOSATP blastp and parse outfmt 6 output."""
 
@@ -5132,6 +5414,8 @@ def run_losatp_blastp(
         stderr = completed.stderr.strip()
         detail = f": {stderr}" if stderr else ""
         raise ValidationError(f"LOSATP blastp failed with exit code {completed.returncode}{detail}")
+    if raw_output_callback is not None:
+        raw_output_callback(completed.stdout)
     return parse_losatp_outfmt6(completed.stdout)
 
 
@@ -5173,6 +5457,46 @@ def _run_losatp_search(
         max_hits=candidate_limit,
         max_hsps_per_subject=max_hsps_per_subject,
         threads=losatp_threads,
+    )
+
+
+def _losatp_cache_args(
+    *,
+    candidate_limit: int | None,
+    max_hsps_per_subject: int | None,
+) -> list[str]:
+    args: list[str] = []
+    if max_hsps_per_subject is not None:
+        args.extend(["--max-hsps-per-subject", str(int(max_hsps_per_subject))])
+    if candidate_limit is not None:
+        args.extend(["--max-target-seqs", str(int(candidate_limit))])
+    return args
+
+
+def _cache_runner_for_search(
+    losatp_cache: LosatpCacheManager | None,
+    *,
+    runner: LosatpRunner | None,
+    losatp_bin: str,
+    losatp_threads: int | None,
+    candidate_limit: int | None,
+    max_hsps_per_subject: int | None,
+    filename: str = "",
+    display: bool = False,
+) -> LosatpRunner | None:
+    if runner is not None or losatp_cache is None:
+        return runner
+    return losatp_cache.runner_for_search(
+        losatp_bin=losatp_bin,
+        losatp_threads=losatp_threads,
+        candidate_limit=candidate_limit,
+        max_hsps_per_subject=max_hsps_per_subject,
+        args=_losatp_cache_args(
+            candidate_limit=candidate_limit,
+            max_hsps_per_subject=max_hsps_per_subject,
+        ),
+        filename=filename,
+        display=display,
     )
 
 
@@ -5678,6 +6002,9 @@ def build_pairwise_protein_blastp_comparisons(
     identity: float = 70.0,
     alignment_length: int = 0,
     runner: LosatpRunner | None = None,
+    losatp_cache: LosatpCacheManager | None = None,
+    protein_extraction: ProteinExtractionResult | None = None,
+    cache_filenames: Sequence[str] | None = None,
 ) -> ProteinBlastpResult:
     """Generate adjacent-record LOSATP blastp display comparisons."""
 
@@ -5689,7 +6016,7 @@ def build_pairwise_protein_blastp_comparisons(
     if int(alignment_length) < 0:
         raise ValidationError("alignment_length must be >= 0")
 
-    extraction = extract_cds_proteins(records)
+    extraction = protein_extraction or extract_cds_proteins(records)
     _validate_extraction_has_proteins(
         records,
         extraction,
@@ -5707,7 +6034,20 @@ def build_pairwise_protein_blastp_comparisons(
             losatp_threads=losatp_threads,
             candidate_limit=candidate_limit,
             max_hsps_per_subject=1,
-            runner=runner,
+            runner=_cache_runner_for_search(
+                losatp_cache,
+                runner=runner,
+                losatp_bin=losatp_bin,
+                losatp_threads=losatp_threads,
+                candidate_limit=candidate_limit,
+                max_hsps_per_subject=1,
+                filename=(
+                    str(cache_filenames[record_index])
+                    if cache_filenames is not None and record_index < len(cache_filenames)
+                    else ""
+                ),
+                display=True,
+            ),
         )
         filtered_hits = filter_protein_hits_by_thresholds(
             protein_hits,
@@ -5741,6 +6081,9 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     identity: float = 70.0,
     alignment_length: int = 0,
     runner: LosatpRunner | None = None,
+    losatp_cache: LosatpCacheManager | None = None,
+    protein_extraction: ProteinExtractionResult | None = None,
+    cache_filenames: Sequence[str] | None = None,
 ) -> ProteinBlastpResult:
     """Infer all-vs-all RBH-seeded orthogroups and return adjacent display links."""
 
@@ -5755,7 +6098,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     if int(alignment_length) < 0:
         raise ValidationError("alignment_length must be >= 0")
 
-    extraction = extract_cds_proteins(records)
+    extraction = protein_extraction or extract_cds_proteins(records)
     _validate_extraction_has_proteins(
         records,
         extraction,
@@ -5776,7 +6119,20 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 max_hsps_per_subject=None,
-                runner=runner,
+                runner=_cache_runner_for_search(
+                    losatp_cache,
+                    runner=runner,
+                    losatp_bin=losatp_bin,
+                    losatp_threads=losatp_threads,
+                    candidate_limit=search_candidate_limit,
+                    max_hsps_per_subject=None,
+                    filename=(
+                        str(cache_filenames[query_index])
+                        if cache_filenames is not None and query_index < len(cache_filenames)
+                        else ""
+                    ),
+                    display=subject_index == query_index + 1,
+                ),
             )
             filtered_forward_hits = filter_protein_hits_by_thresholds(
                 forward_hits,
@@ -5795,7 +6151,15 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 max_hsps_per_subject=None,
-                runner=runner,
+                runner=_cache_runner_for_search(
+                    losatp_cache,
+                    runner=runner,
+                    losatp_bin=losatp_bin,
+                    losatp_threads=losatp_threads,
+                    candidate_limit=search_candidate_limit,
+                    max_hsps_per_subject=None,
+                    display=False,
+                ),
             )
             filtered_reverse_hits = filter_protein_hits_by_thresholds(
                 reverse_hits,
@@ -5859,8 +6223,10 @@ def build_protein_colinearity_comparisons(
 
 __all__ = [
     "CdsProtein",
+    "LOSAT_CACHE_SCHEMA",
     "LOSATP_COMPARISON_COLUMNS",
     "LOSATP_METADATA_COLUMNS",
+    "LosatpCacheManager",
     "ORTHOGROUP_INFERENCE_VERSION",
     "ORTHOGROUP_MEMBERSHIP_MODES",
     "PROTEIN_BLASTP_MODES",
@@ -5881,6 +6247,7 @@ __all__ = [
     "ProteinBlastpResult",
     "ProteinExtractionResult",
     "build_pair_evidence_index",
+    "build_web_losat_cache_key",
     "build_orthogroups_from_protein_hits",
     "build_pairwise_protein_blastp_comparisons",
     "build_protein_colinearity_comparisons",
@@ -5889,6 +6256,7 @@ __all__ = [
     "convert_pair_protein_hits_to_genomic_links",
     "convert_protein_hits_to_genomic_links",
     "extract_cds_proteins",
+    "extract_web_stable_cds_proteins",
     "filter_protein_hits_by_thresholds",
     "expand_orthogroup_membership_from_evidence",
     "normalize_orthogroup_membership_mode",

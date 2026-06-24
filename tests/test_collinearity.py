@@ -1758,13 +1758,12 @@ def test_native_tsv_parser_rejects_conflicting_block_evalues() -> None:
 
 
 @pytest.mark.linear
-def test_linear_cli_builds_and_saves_native_collinearity(
+def test_linear_cli_builds_collinearity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     records = [_record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"]})]), _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"]})])]
     captured: dict[str, object] = {}
-    save_path = tmp_path / "blocks.collinear.tsv"
 
     monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
@@ -1815,14 +1814,10 @@ def test_linear_cli_builds_and_saves_native_collinearity(
             "cds",
             "--collinear_search_scope",
             "all",
-            "--collinear_block_merge_gap",
-            "12",
-            "--collinear_singleton_merge_gap",
-            "7",
+            "--collinear_max_conflicts_in_merge_gap",
+            "3",
             "--collinear_color_mode",
             "orientation",
-            "--save_collinear_blocks",
-            str(save_path),
             "--format",
             "svg",
             "-o",
@@ -1835,6 +1830,7 @@ def test_linear_cli_builds_and_saves_native_collinearity(
     assert params.min_anchors == 1
     assert params.max_unit_gap == 0
     assert params.max_diagonal_drift == 0
+    assert params.max_conflicts == 3
     assert captured["unit_mode"] == "cds"
     assert captured["edge_mode"] == "rbh"
     assert captured["search_scope"] == "all"
@@ -1845,7 +1841,6 @@ def test_linear_cli_builds_and_saves_native_collinearity(
     comparisons = captured["protein_comparisons"]
     assert isinstance(comparisons, list)
     assert comparisons[0].iloc[0]["collinearity_color_mode"] == "orientation"
-    assert "block_0001" in save_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.linear
@@ -1864,26 +1859,99 @@ def test_linear_cli_help_omits_removed_collinearity_options(capsys: pytest.Captu
         "collinear-anchor-mode",
         "collinear_orthogroup_edge_mode",
         "collinear-orthogroup-edge-mode",
+        "collinear_blocks",
+        "collinear-blocks",
+        "save_collinear_blocks",
+        "save-collinear-blocks",
+        "collinear_block_merge_gap",
+        "collinear-block-merge-gap",
+        "collinear_singleton_merge_gap",
+        "collinear-singleton-merge-gap",
+        "collinear_gap_penalty",
+        "collinear-gap-penalty",
+        "collinear_nearby_duplicate_window",
+        "collinear-nearby-duplicate-window",
+        "collinear_score_mode",
+        "collinear-score-mode",
+        "collinear_constant_anchor_score",
+        "collinear-constant-anchor-score",
+        "collinear_min_block_score",
+        "collinear-min-block-score",
+        "collinear_block_evalue",
+        "collinear-block-evalue",
     ]
     for option_name in removed_option_names:
         assert f"--{option_name}" not in help_text
 
 
 @pytest.mark.linear
-def test_linear_cli_parses_collinear_block_evalue_none() -> None:
-    args = linear_cli_module._get_args(
-        [
-            "--gbk",
-            "a.gb",
-            "b.gb",
-            "--protein_blastp_mode",
-            "collinear",
-            "--collinear_block_evalue",
-            "none",
-        ]
-    )
+def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        linear_cli_module._get_args(["--help"])
 
-    assert args.collinear_block_evalue is None
+    assert exc_info.value.code == 0
+    help_text = capsys.readouterr().out
+    visible_option_names = [
+        "losatp_bin",
+        "losatp_threads",
+        "protein_blastp_mode",
+        "collinear_min_anchors",
+        "collinear_max_unit_gap",
+        "collinear_color_mode",
+        "keep_definition_left_aligned",
+        "pairwise_match_style",
+        "save_session",
+        "session_output",
+    ]
+    hidden_option_names = [
+        "losatp-bin",
+        "losatp-threads",
+        "protein-blastp-mode",
+        "collinear-min-anchors",
+        "collinear-max-unit-gap",
+        "collinear-color-mode",
+        "keep-definition-left-aligned",
+        "pairwise-match-style",
+        "save-session",
+        "session-output",
+    ]
+    for option_name in visible_option_names:
+        assert f"--{option_name}" in help_text
+    for option_name in hidden_option_names:
+        assert f"--{option_name}" not in help_text
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    "option_name",
+    [
+        "--collinear_blocks",
+        "--save_collinear_blocks",
+        "--collinear-blocks",
+        "--save-collinear-blocks",
+        "--collinear_block_merge_gap",
+        "--collinear_singleton_merge_gap",
+        "--collinear_gap_penalty",
+        "--collinear_nearby_duplicate_window",
+        "--collinear_score_mode",
+        "--collinear_constant_anchor_score",
+        "--collinear_min_block_score",
+        "--collinear_block_evalue",
+        "--collinear-block-merge-gap",
+        "--collinear-singleton-merge-gap",
+        "--collinear-gap-penalty",
+        "--collinear-nearby-duplicate-window",
+        "--collinear-score-mode",
+        "--collinear-constant-anchor-score",
+        "--collinear-min-block-score",
+        "--collinear-block-evalue",
+    ],
+)
+def test_linear_cli_rejects_removed_collinear_block_options(option_name: str) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        linear_cli_module._get_args(["--gbk", "a.gb", "b.gb", option_name, "blocks.tsv"])
+
+    assert exc_info.value.code == 2
 
 
 @pytest.mark.linear
@@ -1919,22 +1987,6 @@ def test_linear_cli_rejects_nonpositive_collinear_min_anchors() -> None:
     with pytest.raises(SystemExit):
         linear_cli_module._get_args(
             ["--gbk", "a.gb", "b.gb", "--collinear_min_anchors", "0"]
-        )
-
-
-@pytest.mark.linear
-def test_linear_cli_rejects_negative_collinear_block_evalue() -> None:
-    with pytest.raises(SystemExit):
-        linear_cli_module._get_args(
-            [
-                "--gbk",
-                "a.gb",
-                "b.gb",
-                "--protein_blastp_mode",
-                "collinear",
-                "--collinear_block_evalue",
-                "-1",
-            ]
         )
 
 
@@ -2025,8 +2077,6 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
         "cds",
         "orientation",
         "one_to_one",
-        50,
-        25,
         25,
         1,
         2,
@@ -2140,8 +2190,6 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode() -> No
         "cds",
         "orientation",
         "rbh",
-        50,
-        25,
         25,
         1,
         2,
@@ -2169,8 +2217,6 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode() -> No
         "cds",
         "orientation",
         "rbh",
-        50,
-        25,
         25,
         1,
         2,
@@ -2289,8 +2335,6 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
             "cds",
             "orientation",
             "one_to_one",
-            50,
-            25,
             25,
             1,
             2,

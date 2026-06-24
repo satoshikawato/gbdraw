@@ -99,6 +99,7 @@ const resetEditorDraftState = (state) => {
   const editorDefaults = createDefaultEditorDraftState();
   clearReactiveObject(state.featureColorOverrides);
   clearReactiveObject(state.featureVisibilityOverrides);
+  clearReactiveObject(state.featureStrokeOverrides);
   clearReactiveObject(state.legendColorOverrides);
   clearReactiveObject(state.legendStrokeOverrides);
   state.deletedLegendEntries.value = [];

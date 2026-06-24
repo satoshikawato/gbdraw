@@ -28,6 +28,7 @@ export const createFeatureColorActions = ({
     originalLegendOrder,
     originalLegendColors,
     originalSvgStroke,
+    featureStrokeOverrides,
     skipCaptureBaseConfig,
     skipExtractOnSvgChange,
     addedLegendCaptions
@@ -62,6 +63,56 @@ export const createFeatureColorActions = ({
   const captionsMatch = (left, right) => normalizeCaptionKey(left) === normalizeCaptionKey(right);
   const colorsMatch = (left, right) => normalizeColor(left) === normalizeColor(right);
   const SUFFIXED_CAPTION_PATTERN = /^(.*?)\s*\((\d+)\)$/;
+  const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
+
+  const normalizeStrokeWidthValue = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+  };
+
+  const findFeatureBySvgId = (svgId) => {
+    const normalizedSvgId = String(svgId || '').trim();
+    if (!normalizedSvgId) return null;
+    return extractedFeatures.value.find((feature) => String(feature?.svg_id || '').trim() === normalizedSvgId) || null;
+  };
+
+  const featureStrokeKey = (featureLike, fallbackSvgId = '') => {
+    const key = String(featureLike?.id || featureLike?.feat?.id || fallbackSvgId || '').trim();
+    return key || String(featureLike?.svg_id || featureLike?.feat?.svg_id || '').trim();
+  };
+
+  const recordFeatureStrokeOverride = (
+    featureLike,
+    { strokeColor = null, strokeWidth = null, originalStrokeColor = null, originalStrokeWidth = null } = {}
+  ) => {
+    const key = featureStrokeKey(featureLike, featureLike?.svg_id);
+    if (!key) return;
+
+    const existing = featureStrokeOverrides[key] || {};
+    const next = { ...existing };
+    if (!hasOwn(next, 'originalStrokeColor')) {
+      next.originalStrokeColor = originalStrokeColor;
+    }
+    if (!hasOwn(next, 'originalStrokeWidth')) {
+      next.originalStrokeWidth = normalizeStrokeWidthValue(originalStrokeWidth);
+    }
+    if (strokeColor !== null && strokeColor !== undefined && strokeColor !== '') {
+      next.strokeColor = strokeColor;
+    }
+    const widthVal = normalizeStrokeWidthValue(strokeWidth);
+    if (widthVal !== null) {
+      next.strokeWidth = widthVal;
+    }
+    if (hasOwn(next, 'strokeColor') || hasOwn(next, 'strokeWidth')) {
+      featureStrokeOverrides[key] = next;
+    }
+  };
+
+  const clearFeatureStrokeOverride = (featureLike, fallbackSvgId = '') => {
+    const key = featureStrokeKey(featureLike, fallbackSvgId);
+    if (key) delete featureStrokeOverrides[key];
+  };
 
   const findLegendEntryByCaption = (caption) => {
     const normalizedCaption = normalizeCaptionKey(caption);
@@ -1064,6 +1115,12 @@ export const createFeatureColorActions = ({
 
     const svgId = clickedFeature.value.svg_id;
     const elements = getFeatureElements(svg, svgId);
+    recordFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, {
+      strokeColor,
+      strokeWidth,
+      originalStrokeColor: clickedFeature.value.originalStrokeColor ?? null,
+      originalStrokeWidth: clickedFeature.value.originalStrokeWidth ?? null
+    });
 
     elements.forEach((el) => {
       if (strokeColor !== null) {
@@ -1115,6 +1172,7 @@ export const createFeatureColorActions = ({
 
     clickedFeature.value.strokeColor = originalColor || '';
     clickedFeature.value.strokeWidth = originalWidth ?? '';
+    clearFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, svgId);
 
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
@@ -1291,6 +1349,14 @@ export const createFeatureColorActions = ({
 
     for (const svgId of siblingFeatureIds) {
       const elements = getFeatureElements(svg, svgId);
+      const firstElement = elements[0] || null;
+      const siblingFeature = findFeatureBySvgId(svgId) || { id: svgId, svg_id: svgId };
+      recordFeatureStrokeOverride(siblingFeature, {
+        strokeColor: currentStrokeColor,
+        strokeWidth: currentStrokeWidth,
+        originalStrokeColor: firstElement?.getAttribute('stroke') ?? null,
+        originalStrokeWidth: firstElement?.getAttribute('stroke-width') ?? null
+      });
       elements.forEach((el) => {
         if (currentStrokeColor) {
           el.setAttribute('stroke', currentStrokeColor);

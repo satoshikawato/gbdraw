@@ -42,6 +42,7 @@ import {
   normalizeCollinearSearchScope,
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
+import { buildRunInfo } from './run-info.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -87,6 +88,78 @@ const isRawLosatCacheEntry = (entry) =>
   entry.schema === LOSAT_CACHE_SCHEMA &&
   entry.kind === 'raw-losat' &&
   typeof entry.text === 'string';
+
+const normalizeLosatArgs = (args) => Array.isArray(args)
+  ? args.map((arg) => String(arg))
+  : [];
+
+const buildLosatCachePayload = ({
+  flow,
+  program,
+  outfmt,
+  args,
+  queryCanonicalHash,
+  subjectCanonicalHash
+}) => {
+  const payload = {
+    cacheSchema: LOSAT_CACHE_SCHEMA,
+    program,
+    outfmt: String(outfmt || '6'),
+    args: normalizeLosatArgs(args),
+    queryCanonicalHash,
+    subjectCanonicalHash
+  };
+  if (flow) payload.flow = flow;
+  return payload;
+};
+
+const sameLosatArgs = (left, right) => {
+  const a = normalizeLosatArgs(left);
+  const b = normalizeLosatArgs(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+};
+
+const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata) => {
+  if (!cacheMap) return null;
+  const direct = cacheMap.get(cacheKey);
+  if (isRawLosatCacheEntry(direct)) return { key: cacheKey, entry: direct };
+
+  const expectedProgram = String(metadata?.program || '');
+  const expectedOutfmt = String(metadata?.outfmt || '6');
+  const expectedFlow = String(metadata?.flow || '');
+  const expectedQuery = String(metadata?.queryCanonicalHash || '');
+  const expectedSubject = String(metadata?.subjectCanonicalHash || '');
+
+  for (const [key, entry] of cacheMap.entries()) {
+    if (!isRawLosatCacheEntry(entry)) continue;
+    if (String(entry.queryCanonicalHash || '') !== expectedQuery) continue;
+    if (String(entry.subjectCanonicalHash || '') !== expectedSubject) continue;
+    const entryProgram = String(entry.program || expectedProgram);
+    if (entryProgram && expectedProgram && entryProgram !== expectedProgram) continue;
+    if (entry.outfmt && String(entry.outfmt) !== expectedOutfmt) continue;
+    if (entry.flow && String(entry.flow) !== expectedFlow) continue;
+    if (Array.isArray(entry.args) && !sameLosatArgs(entry.args, metadata?.args)) continue;
+    return { key, entry };
+  }
+
+  return null;
+};
+
+const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
+  if (!cacheMap || !found?.entry) return found?.entry || null;
+  const promoted = {
+    ...found.entry,
+    program: metadata.program || found.entry.program || '',
+    outfmt: String(metadata.outfmt || found.entry.outfmt || '6'),
+    args: normalizeLosatArgs(metadata.args || found.entry.args),
+    queryCanonicalHash: metadata.queryCanonicalHash || found.entry.queryCanonicalHash || '',
+    subjectCanonicalHash: metadata.subjectCanonicalHash || found.entry.subjectCanonicalHash || ''
+  };
+  if (metadata.flow) promoted.flow = metadata.flow;
+  if (found.key && found.key !== cacheKey) cacheMap.delete(found.key);
+  cacheMap.set(cacheKey, promoted);
+  return promoted;
+};
 
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
@@ -525,6 +598,8 @@ export const createRunAnalysis = ({
     generationCancelRequested,
     results,
     selectedResultIndex,
+    resultPanelTab,
+    lastRunInfo,
     errorLog,
     zoom,
     skipCaptureBaseConfig,
@@ -534,6 +609,7 @@ export const createRunAnalysis = ({
     fileLegendCaptions,
     featureColorOverrides,
     featureVisibilityOverrides,
+    featureStrokeOverrides,
     legendEntries,
     deletedLegendEntries,
     legendColorOverrides,
@@ -1514,6 +1590,7 @@ json.dumps({
           addedLegendCaptions: new Set(addedLegendCaptions.value || []),
           fileLegendCaptions: new Set(fileLegendCaptions.value || []),
           featureColorOverrides: cloneJsonSafe(featureColorOverrides, {}),
+          featureStrokeOverrides: cloneJsonSafe(featureStrokeOverrides, {}),
           legendEntries: cloneJsonSafe(legendEntries.value || [], []),
           deletedLegendEntries: cloneJsonSafe(deletedLegendEntries.value || [], []),
           legendColorOverrides: cloneJsonSafe(legendColorOverrides, {}),
@@ -1541,6 +1618,8 @@ json.dumps({
       fileLegendCaptions.value = new Set(manualCancelSnapshot.fileLegendCaptions);
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
       Object.assign(featureColorOverrides, cloneJsonSafe(manualCancelSnapshot.featureColorOverrides, {}));
+      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
+      Object.assign(featureStrokeOverrides, cloneJsonSafe(manualCancelSnapshot.featureStrokeOverrides, {}));
       legendEntries.value = cloneJsonSafe(manualCancelSnapshot.legendEntries, []);
       deletedLegendEntries.value = cloneJsonSafe(manualCancelSnapshot.deletedLegendEntries, []);
       Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
@@ -1572,6 +1651,8 @@ json.dumps({
       ])
     );
     const activeRunColors = isReflow ? appliedPaletteColors.value : currentColors.value;
+    const manualRunStartedAt = isReflow ? null : getNow();
+    const manualRunStartedAtIso = isReflow ? null : new Date().toISOString();
 
     if (isReflow) {
       labelReflowProcessing.value = true;
@@ -1594,6 +1675,8 @@ json.dumps({
       processingStatus.value = 'Preparing input files...';
       results.value = [];
       selectedResultIndex.value = 0;
+      resultPanelTab.value = 'preview';
+      lastRunInfo.value = null;
       errorLog.value = null;
       if (typeof resetPreviewViewport === 'function') {
         resetPreviewViewport({ resetZoom: true });
@@ -1608,6 +1691,7 @@ json.dumps({
       addedLegendCaptions.value = new Set();
       fileLegendCaptions.value = new Set();
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
+      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
       legendEntries.value = [];
       deletedLegendEntries.value = [];
       Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
@@ -1625,11 +1709,37 @@ json.dumps({
       let reverseFlags = [];
       let virtualBlastFiles = [];
       const generationFileMap = new Map();
+      const runInfoFileMap = new Map();
       const textEncoder = new TextEncoder();
       const textDecoder = new TextDecoder();
       const getPayloadName = (path, fallback = 'input') => {
         const name = String(path || '').split('/').filter(Boolean).pop();
         return name || fallback;
+      };
+      const generatedSlotForPath = (path) => {
+        const normalizedPath = String(path || '').trim();
+        if (normalizedPath === '/combined_d.tsv') return 'generatedFiles.combined_d';
+        if (normalizedPath === '/combined_t.tsv') return 'generatedFiles.combined_t';
+        if (normalizedPath === '/manual_wl.tsv') return 'generatedFiles.manual_wl';
+        if (normalizedPath === '/priority.tsv') return 'generatedFiles.priority';
+        if (normalizedPath === '/web_label_table.tsv') return 'generatedFiles.web_label_table';
+        if (normalizedPath === '/web_feature_table.tsv') return 'generatedFiles.web_feature_table';
+        const conservationMatch = normalizedPath.match(/^\/conservation_blast_(\d+)\.txt$/);
+        if (conservationMatch) return `generatedFiles.circular_conservation_blasts[${Number(conservationMatch[1])}]`;
+        const blastMatch = normalizedPath.match(/^\/blast_(\d+)\.txt$/);
+        if (blastMatch) return `generatedFiles.losat_blasts[${Number(blastMatch[1])}]`;
+        return normalizedPath ? `generatedFiles.${getPayloadName(normalizedPath).replace(/[^\w]+/g, '_')}` : '';
+      };
+      const registerRunInfoFile = (path, { name = '', slot = '', kind = 'uploaded' } = {}) => {
+        const normalizedPath = String(path || '').trim();
+        if (!normalizedPath) return;
+        const displayName = String(name || getPayloadName(normalizedPath)).trim() || getPayloadName(normalizedPath);
+        runInfoFileMap.set(normalizedPath, {
+          path: normalizedPath,
+          name: displayName,
+          slot: String(slot || '').trim(),
+          kind: kind === 'generated' ? 'generated' : 'uploaded'
+        });
       };
       const toTransferableBuffer = (bytes) => {
         if (bytes instanceof ArrayBuffer) return bytes;
@@ -1649,13 +1759,23 @@ json.dumps({
           bytes: toTransferableBuffer(bytes)
         });
       };
-      const stageTextFile = (path, text) => {
+      const stageTextFile = (path, text, { name = '', slot = '' } = {}) => {
         throwIfGenerationCanceled();
         const bytes = textEncoder.encode(String(text ?? ''));
         pyodide.FS.writeFile(path, bytes);
-        stageGenerationBytes(path, getPayloadName(path), bytes);
+        const displayName = name || getPayloadName(path);
+        stageGenerationBytes(path, displayName, bytes);
+        registerRunInfoFile(path, {
+          name: displayName,
+          slot: slot || generatedSlotForPath(path),
+          kind: 'generated'
+        });
       };
-      const stageUploadedFile = async (fileObj, path, { cacheText = false, textCache = null } = {}) => {
+      const stageUploadedFile = async (fileObj, path, {
+        cacheText = false,
+        textCache = null,
+        slot = ''
+      } = {}) => {
         if (!fileObj) return false;
         throwIfGenerationCanceled();
         const buffer = await fileObj.arrayBuffer();
@@ -1666,6 +1786,11 @@ json.dumps({
           textCache.set(fileObj, textDecoder.decode(bytes));
         }
         stageGenerationBytes(path, fileObj.name || getPayloadName(path), buffer);
+        registerRunInfoFile(path, {
+          name: fileObj.name || getPayloadName(path),
+          slot,
+          kind: 'uploaded'
+        });
         return true;
       };
 
@@ -2335,7 +2460,9 @@ json.dumps({
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
           for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
             const depthPath = `/depth_track_${depthIndex + 1}.tsv`;
-            await stageUploadedFile(circularDepthEntries[depthIndex].file, depthPath);
+            await stageUploadedFile(circularDepthEntries[depthIndex].file, depthPath, {
+              slot: circularDepthEntries.length === 1 ? 'files.c_depth' : `files.c_depth[${depthIndex}]`
+            });
             args.push('--depth_track', depthPath);
           }
           appendDepthTrackMetadataArgs(circularDepthEntries);
@@ -2367,12 +2494,12 @@ json.dumps({
 
         if (cInputType.value === 'gb') {
           if (!files.c_gb) throw new Error('Please upload a GenBank file.');
-          await stageUploadedFile(files.c_gb, '/input.gb');
+          await stageUploadedFile(files.c_gb, '/input.gb', { slot: 'files.c_gb' });
           args.push('--gbk', '/input.gb');
         } else {
           if (!files.c_gff || !files.c_fasta) throw new Error('GFF3 and FASTA are required.');
-          await stageUploadedFile(files.c_gff, '/input.gff');
-          await stageUploadedFile(files.c_fasta, '/input.fasta');
+          await stageUploadedFile(files.c_gff, '/input.gff', { slot: 'files.c_gff' });
+          await stageUploadedFile(files.c_fasta, '/input.fasta', { slot: 'files.c_fasta' });
           args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
         }
 
@@ -2519,9 +2646,6 @@ json.dumps({
             const losatJobs = [];
             const pendingJobKeys = new Set();
             const executionMode = getLosatExecutionMode();
-            const runtimeCompatibility = executionMode === 'serial'
-              ? 'serial-v1'
-              : 'threaded-compatible-v1';
 
             for (let index = 0; index < comparisonEntries.length; index += 1) {
               throwIfGenerationCanceled();
@@ -2535,17 +2659,15 @@ json.dumps({
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
-              const cacheKey = await hashText(JSON.stringify({
-                cacheSchema: LOSAT_CACHE_SCHEMA,
+              const cacheMetadata = {
                 flow: 'circular-conservation',
-                losatRuntimeCompatibility: runtimeCompatibility,
-                losatThreadsPerJob: 1,
                 program: circularLosatProgram,
                 outfmt: String(losat.outfmt || '6'),
                 args: extraArgs,
                 queryCanonicalHash: queryHash,
                 subjectCanonicalHash: subjectHash
-              }));
+              };
+              const cacheKey = await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
               const fallbackName = makeSafeFilename(
                 `${String(fileObj?.name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.${circularLosatSuffix}.tsv`
               );
@@ -2560,7 +2682,10 @@ json.dumps({
                 filename: fallbackName,
                 display: true
               });
-              if (!isRawLosatCacheEntry(cacheMap.get(cacheKey)) && !pendingJobKeys.has(cacheKey)) {
+              const cached = getRawLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
+              const hasCachedText = Boolean(cached);
+              if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
+              if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
                 pendingJobKeys.add(cacheKey);
                 losatJobs.push({
                   pairIndex: index,
@@ -2608,6 +2733,9 @@ json.dumps({
                   kind: 'raw-losat',
                   text: result.text,
                   program: circularLosatProgram,
+                  flow: 'circular-conservation',
+                  outfmt: String(losat.outfmt || '6'),
+                  args: job?.extraArgs || [],
                   queryCanonicalHash: job?.queryCanonicalHash || '',
                   subjectCanonicalHash: job?.subjectCanonicalHash || ''
                 });
@@ -2621,7 +2749,10 @@ json.dumps({
               const cached = cacheMap.get(pair.cacheKey);
               const blastText = isRawLosatCacheEntry(cached) ? cached.text : '';
               const blastPath = `/conservation_blast_${pair.sourceIndex}.txt`;
-              stageTextFile(blastPath, blastText);
+              stageTextFile(blastPath, blastText, {
+                name: pair.filename,
+                slot: `generatedFiles.circular_conservation_blasts[${pair.sourceIndex}]`
+              });
               paths.push(blastPath);
             }
             losatCacheInfo.value = cacheInfo;
@@ -2641,7 +2772,9 @@ json.dumps({
             conservationSeries = buildConservationSeries(blastFiles, circularConservation);
             for (let index = 0; index < conservationEntries.length; index += 1) {
               const blastPath = `/conservation_blast_${index}.txt`;
-              await stageUploadedFile(conservationEntries[index].file, blastPath);
+              await stageUploadedFile(conservationEntries[index].file, blastPath, {
+                slot: `files.c_conservation_blasts[${conservationEntries[index].sourceIndex}]`
+              });
               conservationBlastPaths.push(blastPath);
             }
             const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
@@ -2801,6 +2934,14 @@ json.dumps({
         losat.blastp.collinearMaxDiagonalDrift = Math.max(
           0,
           normalizeBlastThresholdNumber(losat.blastp?.collinearMaxDiagonalDrift, 0, { integer: true })
+        );
+        losat.blastp.collinearMaxConflictsInMergeGap = Math.max(
+          0,
+          normalizeBlastThresholdNumber(
+            losat.blastp?.collinearMaxConflictsInMergeGap,
+            1,
+            { integer: true }
+          )
         );
         losat.blastp.collinearMaxParalogLinksPerOrthogroup = Math.max(
           1,
@@ -3272,10 +3413,11 @@ json.dumps({
           return entry;
         };
 
-        const writeLinearFileToFs = async (fileObj, path, { cacheText = false } = {}) => {
+        const writeLinearFileToFs = async (fileObj, path, { cacheText = false, slot = '' } = {}) => {
           return stageUploadedFile(fileObj, path, {
             cacheText,
-            textCache: linearFileTextCache
+            textCache: linearFileTextCache,
+            slot
           });
         };
 
@@ -3306,24 +3448,20 @@ json.dumps({
           };
         };
 
-        const buildCacheKey = async (argsKey, queryIdx, subjectIdx) => {
+        const buildCacheMetadata = async (argsKey, queryIdx, subjectIdx) => {
           const queryHash = await getSeqHash(queryIdx);
           const subjectHash = await getSeqHash(subjectIdx);
-          const payload = JSON.stringify({
-            cacheSchema: LOSAT_CACHE_SCHEMA,
-            losatRuntimeCompatibility: losatExecutionMode === 'serial'
-              ? 'serial-v1'
-              : 'threaded-compatible-v1',
-            losatThreadsPerJob: losatExecutionMode === 'serial'
-              ? 1
-              : (losatRequestedThreadsPerJob || 'auto'),
+          return {
             program: losatProgram.value,
             outfmt: String(losat.outfmt || '6'),
             args: argsKey,
             queryCanonicalHash: queryHash,
             subjectCanonicalHash: subjectHash
-          });
-          return hashText(payload);
+          };
+        };
+
+        const buildCacheKey = async (metadata) => {
+          return hashText(JSON.stringify(buildLosatCachePayload(metadata)));
         };
 
         const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) =>
@@ -3376,12 +3514,20 @@ json.dumps({
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
               if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
-              await writeLinearFileToFs(seq.gb, `/seq_${i}.gb`, { cacheText: useLosat });
+              await writeLinearFileToFs(seq.gb, `/seq_${i}.gb`, {
+                cacheText: useLosat,
+                slot: `files.linearSeqs[${i}].gb`
+              });
               inputArgs.push(`/seq_${i}.gb`);
             } else {
               if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
-              await writeLinearFileToFs(seq.gff, `/seq_${i}.gff`);
-              await writeLinearFileToFs(seq.fasta, `/seq_${i}.fasta`, { cacheText: useLosat });
+              await writeLinearFileToFs(seq.gff, `/seq_${i}.gff`, {
+                slot: `files.linearSeqs[${i}].gff`
+              });
+              await writeLinearFileToFs(seq.fasta, `/seq_${i}.fasta`, {
+                cacheText: useLosat,
+                slot: `files.linearSeqs[${i}].fasta`
+              });
             }
           }
           if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
@@ -3444,7 +3590,8 @@ json.dumps({
             const subjectEntry = await getSeqEntry(spec.subjectIndex);
             throwIfGenerationCanceled();
             const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
-            const cacheKey = await buildCacheKey(losatArgs, spec.queryIndex, spec.subjectIndex);
+            const cacheMetadata = await buildCacheMetadata(losatArgs, spec.queryIndex, spec.subjectIndex);
+            const cacheKey = await buildCacheKey(cacheMetadata);
             throwIfGenerationCanceled();
             const queryCanonicalHash = await getSeqHash(spec.queryIndex);
             throwIfGenerationCanceled();
@@ -3455,8 +3602,9 @@ json.dumps({
             }
             sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
             sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
-            const cached = cacheMap.get(cacheKey);
-            const hasCachedText = isRawLosatCacheEntry(cached);
+            const cached = getRawLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
+            const hasCachedText = Boolean(cached);
+            if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
@@ -3531,6 +3679,8 @@ json.dumps({
                 kind: 'raw-losat',
                 text: result.text,
                 program: losatProgram.value,
+                outfmt: String(losat.outfmt || '6'),
+                args: job?.extraArgs || [],
                 queryCanonicalHash: job?.queryCanonicalHash || '',
                 subjectCanonicalHash: job?.subjectCanonicalHash || ''
               });
@@ -3588,10 +3738,8 @@ json.dumps({
                 'cds',
                 losat.blastp.collinearColorMode,
                 'rbh',
-                50,
-                25,
                 losat.blastp.collinearMaxDiagonalDrift,
-                0,
+                losat.blastp.collinearMaxConflictsInMergeGap,
                 losat.blastp.collinearMaxParalogLinksPerOrthogroup,
                 collinearSearchScope,
                 orthogroupMembershipMode,
@@ -3613,6 +3761,14 @@ json.dumps({
               const pairIndex = Number(converted?.pair_index);
               if (!Number.isInteger(pairIndex)) continue;
               const blastPath = `/blast_${pairIndex}.txt`;
+              const sourcePair =
+                losatPairs.find((pair) => pair.pairIndex === pairIndex && pair.displayPair) ||
+                losatPairs.find((pair) => pair.pairIndex === pairIndex);
+              registerRunInfoFile(blastPath, {
+                name: sourcePair?.filename || getPayloadName(blastPath),
+                slot: `generatedFiles.losat_blasts[${pairIndex}]`,
+                kind: 'generated'
+              });
               virtualBlastFiles.push({
                 path: blastPath,
                 text: converted.tsv || '',
@@ -3637,6 +3793,11 @@ json.dumps({
               );
               if (converted.error) throw new Error(converted.error);
               const blastPath = `/blast_${pair.pairIndex}.txt`;
+              registerRunInfoFile(blastPath, {
+                name: pair.filename || getPayloadName(blastPath),
+                slot: `generatedFiles.losat_blasts[${pair.pairIndex}]`,
+                kind: 'generated'
+              });
               virtualBlastFiles.push({
                 path: blastPath,
                 text: converted.tsv || '',
@@ -3675,7 +3836,9 @@ json.dumps({
           for (let i = 0; i < linearSeqs.length - 1; i++) {
             const seq = linearSeqs[i];
             if (seq.blast) {
-              await stageUploadedFile(seq.blast, `/blast_${i}.txt`);
+              await stageUploadedFile(seq.blast, `/blast_${i}.txt`, {
+                slot: `files.linearSeqs[${i}].blast`
+              });
               blastArgs.push(`/blast_${i}.txt`);
             }
           }
@@ -3712,7 +3875,12 @@ json.dumps({
             for (const entry of entries) {
               if (entry.file) {
                 const depthPath = `/seq_${entry.idx}.depth_${depthTrackEntries.length + 1}.tsv`;
-                await stageUploadedFile(entry.file, depthPath);
+                const rawDepthValue = linearSeqs[entry.idx]?.depth;
+                await stageUploadedFile(entry.file, depthPath, {
+                  slot: Array.isArray(rawDepthValue)
+                    ? `files.linearSeqs[${entry.idx}].depth[${depthTrackIndex}]`
+                    : `files.linearSeqs[${entry.idx}].depth`
+                });
                 depthPaths.push(depthPath);
               } else {
                 depthPaths.push('');
@@ -3799,6 +3967,17 @@ json.dumps({
           ? stripPairwiseIdentityLegendsFromResults(res)
           : res;
       });
+      if (!isReflow && manualRunStartedAt !== null) {
+        lastRunInfo.value = buildRunInfo({
+          mode: mode.value,
+          args: args.map(String),
+          fileMetadata: runInfoFileMap,
+          elapsedMs: getNow() - manualRunStartedAt,
+          resultCount: results.value.length,
+          startedAtIso: manualRunStartedAtIso
+        });
+        resultPanelTab.value = 'preview';
+      }
       logPostGbdrawTimings(postGbdrawTimingEntries);
       if (isReflow) {
         if (res.length > 0) {

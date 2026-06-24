@@ -4,6 +4,7 @@ import {
   resolveLocalDependencyWheelUrls,
   resolvePyodideIndexUrl
 } from '../services/pyodide-assets.js';
+import { COMPARISON_COLOR_KEYS } from './color-utils.js';
 import { PYTHON_HELPERS } from './python-helpers.js';
 
 export const createPyodideManager = ({ state }) => {
@@ -35,6 +36,12 @@ export const createPyodideManager = ({ state }) => {
     const paletteJson = pyodide.runPython('get_palettes_json()');
     return JSON.parse(paletteJson);
   };
+
+  const hasColorEntries = (colors) =>
+    Boolean(colors) && typeof colors === 'object' && !Array.isArray(colors) && Object.keys(colors).length > 0;
+  const comparisonColorKeys = new Set(COMPARISON_COLOR_KEYS);
+  const hasPaletteColorEntries = (colors) =>
+    hasColorEntries(colors) && Object.keys(colors).some((key) => !comparisonColorKeys.has(key));
 
   const ensureWheelAvailable = async () => {
     const wheelUrl = resolveGbdrawWheelUrl();
@@ -80,13 +87,26 @@ export const createPyodideManager = ({ state }) => {
           const normalizedPalettes = normalizePaletteDefinitions(allPalettes);
           paletteDefinitions.value = normalizedPalettes;
           paletteNames.value = Object.keys(normalizedPalettes).sort();
-          const defaultColors = normalizePaletteColors(normalizedPalettes.default || {});
-          selectedPalette.value = 'default';
-          currentColors.value = defaultColors;
-          appliedPaletteName.value = 'default';
-          appliedPaletteColors.value = { ...defaultColors };
-          pendingPaletteName.value = '';
-          pendingPaletteColors.value = {};
+          const requestedPalette = String(selectedPalette.value || 'default').trim() || 'default';
+          const resolvedPalette = normalizedPalettes[requestedPalette] ? requestedPalette : 'default';
+          const resolvedColors = normalizePaletteColors(
+            normalizedPalettes[resolvedPalette] || normalizedPalettes.default || {}
+          );
+          const currentHasColors = hasColorEntries(currentColors.value);
+          const appliedHasColors = hasPaletteColorEntries(appliedPaletteColors.value);
+          const pendingHasColors = hasPaletteColorEntries(pendingPaletteColors.value);
+
+          selectedPalette.value = resolvedPalette;
+          if (!currentHasColors) {
+            currentColors.value = resolvedColors;
+          }
+          if (!appliedHasColors) {
+            appliedPaletteName.value = resolvedPalette;
+            appliedPaletteColors.value = { ...(currentHasColors ? currentColors.value : resolvedColors) };
+          }
+          if (String(pendingPaletteName.value || '').trim() && !pendingHasColors) {
+            pendingPaletteColors.value = { ...(currentHasColors ? currentColors.value : resolvedColors) };
+          }
         }
         pyodideReady.value = true;
         return pyodide;

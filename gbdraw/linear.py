@@ -3,11 +3,15 @@
 
 
 import argparse
+import hashlib
+import json
 import logging
 import math
+import re
 import sys
 from pathlib import Path
-from typing import Optional
+from tempfile import TemporaryDirectory
+from typing import Any, Mapping, Optional, Sequence
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
 from .io.genome import load_gbks, load_gff_fasta
@@ -29,10 +33,13 @@ from .analysis.collinearity import (
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
+    LosatpCacheManager,
     ORTHOGROUP_INFERENCE_VERSION,
     PROTEIN_BLASTP_MODES,
+    build_pairwise_protein_blastp_comparisons,
+    build_rbh_orthogroup_protein_blastp_comparisons,
+    extract_web_stable_cds_proteins,
 )
-from .io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import (
@@ -57,6 +64,297 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
 )
+from .cli_utils.session import (
+    DiagramRunResult,
+    add_session_args,
+    make_rendered_svg,
+    parse_session_pre_args,
+    save_session_sidecar_if_requested,
+)
+from .session_io import load_session, session_to_cli_args
+
+
+def _add_argument_with_hidden_aliases(
+    parser: argparse.ArgumentParser,
+    *option_strings: str,
+    hidden_aliases: Sequence[str] = (),
+    **kwargs: Any,
+) -> None:
+    """Add public underscore options and hidden legacy hyphen aliases."""
+
+    parser.add_argument(*option_strings, **kwargs)
+    if not hidden_aliases:
+        return
+    alias_kwargs = dict(kwargs)
+    alias_kwargs["help"] = argparse.SUPPRESS
+    alias_kwargs["default"] = argparse.SUPPRESS
+    parser.add_argument(*hidden_aliases, **alias_kwargs)
+
+
+def _web_json_dumps(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _web_hash_text(text: str) -> str:
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+def _web_safe_filename(name: object, fallback: str = "losat") -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or ""))
+    cleaned = cleaned.strip("_")
+    return cleaned or fallback
+
+
+def _web_normalize_label(label: object, fallback: str) -> str:
+    base = str(label or "").strip() or str(fallback or "")
+    dotted = re.sub(r"\.+", ".", re.sub(r"[\s/]+", ".", base)).strip(".")
+    return _web_safe_filename(dotted, _web_safe_filename(fallback, "losat"))
+
+
+def _record_cache_label(record: object, fallback: str) -> str:
+    annotations = getattr(record, "annotations", {}) or {}
+    label = str(annotations.get("gbdraw_record_label") or "").strip()
+    if label:
+        return label
+    record_id = str(getattr(record, "id", "") or "").strip()
+    return record_id or fallback
+
+
+def _linear_losat_cache_filenames(records: Sequence[object]) -> tuple[str, ...]:
+    filenames: list[str] = []
+    for index in range(max(0, len(records) - 1)):
+        left = _web_normalize_label(
+            _record_cache_label(records[index], f"seq_{index + 1}"),
+            f"seq_{index + 1}",
+        )
+        right = _web_normalize_label(
+            _record_cache_label(records[index + 1], f"seq_{index + 2}"),
+            f"seq_{index + 2}",
+        )
+        filenames.append(f"{left}.{right}.losatp.tsv")
+    return tuple(filenames)
+
+
+def _linear_session_record_metadata(
+    records: Sequence[object],
+    input_paths: Sequence[str],
+) -> tuple[Mapping[str, object], ...]:
+    source_indices: list[int] = []
+    for record_index, record in enumerate(records):
+        source_indices.append(
+            _linear_record_source_index(
+                record,
+                input_paths,
+                fallback_index=record_index if len(records) == len(input_paths) else None,
+            )
+        )
+    source_counts: dict[int, int] = {}
+    for source_index in source_indices:
+        if source_index >= 0:
+            source_counts[source_index] = source_counts.get(source_index, 0) + 1
+    source_seen: dict[int, int] = {}
+    metadata: list[Mapping[str, object]] = []
+    for loaded_index, (record, source_index) in enumerate(zip(records, source_indices)):
+        source_loaded_index = source_seen.get(source_index, 0)
+        if source_index >= 0:
+            source_seen[source_index] = source_loaded_index + 1
+        annotations = getattr(record, "annotations", {}) or {}
+        source_file = str(
+            annotations.get("gbdraw_source_file")
+            or (input_paths[source_index] if 0 <= source_index < len(input_paths) else "")
+        )
+        source_basename = str(
+            annotations.get("gbdraw_source_basename")
+            or (Path(source_file).name if source_file else "")
+        )
+        metadata.append(
+            {
+                "loaded_index": loaded_index,
+                "source_index": source_index,
+                "source_loaded_index": source_loaded_index,
+                "source_loaded_count": source_counts.get(source_index, 0),
+                "record_id": str(getattr(record, "id", "") or ""),
+                "source_file": source_file,
+                "source_basename": source_basename,
+            }
+        )
+    return tuple(metadata)
+
+
+def _linear_record_source_index(
+    record: object,
+    input_paths: Sequence[str],
+    *,
+    fallback_index: int | None,
+) -> int:
+    annotations = getattr(record, "annotations", {}) or {}
+    source_file = str(annotations.get("gbdraw_source_file") or "")
+    source_basename = str(annotations.get("gbdraw_source_basename") or "")
+    if source_file:
+        for index, path in enumerate(input_paths):
+            if source_file == str(path):
+                return index
+        try:
+            resolved_source = str(Path(source_file).resolve())
+        except OSError:
+            resolved_source = ""
+        if resolved_source:
+            for index, path in enumerate(input_paths):
+                try:
+                    if resolved_source == str(Path(path).resolve()):
+                        return index
+                except OSError:
+                    continue
+    candidates = {source_basename, Path(source_file).name if source_file else ""}
+    basenames: dict[str, list[int]] = {}
+    for index, path in enumerate(input_paths):
+        basenames.setdefault(Path(str(path)).name, []).append(index)
+    for candidate in candidates:
+        if candidate and len(basenames.get(candidate, [])) == 1:
+            return basenames[candidate][0]
+    if fallback_index is not None and 0 <= fallback_index < len(input_paths):
+        return fallback_index
+    return -1
+
+
+def _source_session_losat_entries(source_session: Mapping[str, Any] | None) -> tuple[Mapping[str, object], ...]:
+    if not isinstance(source_session, Mapping):
+        return ()
+    losat_cache = source_session.get("losatCache")
+    if not isinstance(losat_cache, Mapping):
+        return ()
+    entries = losat_cache.get("entries")
+    if not isinstance(entries, list):
+        return ()
+    return tuple(entry for entry in entries if isinstance(entry, Mapping))
+
+
+def _source_session_losat_config(source_session: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    if not isinstance(source_session, Mapping):
+        return {}
+    config = source_session.get("config")
+    if not isinstance(config, Mapping):
+        return {}
+    losat = config.get("losat")
+    return losat if isinstance(losat, Mapping) else {}
+
+
+def _source_session_threads_per_job(source_session: Mapping[str, Any] | None) -> str | int:
+    losat = _source_session_losat_config(source_session)
+    raw = str(losat.get("threadsPerJob") or "auto").strip().lower()
+    if raw == "auto":
+        return "auto"
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return "auto"
+    return parsed if parsed >= 1 else "auto"
+
+
+def _source_session_runtime_compatibility(source_session: Mapping[str, Any] | None) -> str:
+    losat = _source_session_losat_config(source_session)
+    execution_mode = str(losat.get("executionMode") or "auto").strip().lower()
+    return "serial-v1" if execution_mode == "serial" else "threaded-compatible-v1"
+
+
+def _fingerprint_from_session_entry(entry: object) -> dict[str, object] | None:
+    if not isinstance(entry, Mapping):
+        return None
+    return {
+        "name": str(entry.get("name") or ""),
+        "size": int(entry.get("size") or 0),
+        "lastModified": int(entry.get("lastModified") or 0),
+    }
+
+
+def _fingerprint_from_path(path: object) -> dict[str, object] | None:
+    if path in (None, "", False):
+        return None
+    file_path = Path(str(path))
+    try:
+        stat = file_path.stat()
+    except OSError:
+        return {"name": file_path.name, "size": 0, "lastModified": 0}
+    return {
+        "name": file_path.name,
+        "size": int(stat.st_size),
+        "lastModified": int(stat.st_mtime * 1000),
+    }
+
+
+def _linear_session_seq_entry(
+    source_session: Mapping[str, Any] | None,
+    index: int,
+) -> Mapping[str, Any] | None:
+    if not isinstance(source_session, Mapping):
+        return None
+    files = source_session.get("files")
+    if not isinstance(files, Mapping):
+        return None
+    linear_seqs = files.get("linearSeqs")
+    if not isinstance(linear_seqs, list) or index >= len(linear_seqs):
+        return None
+    entry = linear_seqs[index]
+    return entry if isinstance(entry, Mapping) else None
+
+
+def _canonical_region_spec_from_session_seq(seq: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(seq, Mapping):
+        return None
+    start = seq.get("region_start")
+    end = seq.get("region_end")
+    if start in (None, "") or end in (None, ""):
+        return None
+    try:
+        start_int = int(start)
+        end_int = int(end)
+    except (TypeError, ValueError):
+        return None
+    return f"{min(start_int, end_int)}-{max(start_int, end_int)}"
+
+
+def _record_instance_keys_for_web_losat(
+    args: argparse.Namespace,
+    *,
+    source_session: Mapping[str, Any] | None,
+    record_count: int,
+) -> tuple[str, ...]:
+    input_format = "gb" if args.gbk else "gff"
+    primary_paths = list(args.gbk or args.gff or [])
+    paired_fasta_paths = list(args.fasta or [])
+    record_selectors = list(args.record_id or [])
+    occurrences: dict[str, int] = {}
+    keys: list[str] = []
+    for index in range(record_count):
+        session_seq = _linear_session_seq_entry(source_session, index)
+        if session_seq is not None:
+            primary_entry = session_seq.get("gb") if input_format == "gb" else session_seq.get("gff")
+            paired_entry = session_seq.get("fasta") if input_format == "gff" else None
+            primary_fingerprint = _fingerprint_from_session_entry(primary_entry)
+            paired_fingerprint = _fingerprint_from_session_entry(paired_entry)
+            record_selector = str(session_seq.get("region_record_id") or "").strip()
+            canonical_region = _canonical_region_spec_from_session_seq(session_seq)
+        else:
+            primary_fingerprint = _fingerprint_from_path(
+                primary_paths[index] if index < len(primary_paths) else None
+            )
+            paired_fingerprint = _fingerprint_from_path(
+                paired_fasta_paths[index] if input_format == "gff" and index < len(paired_fasta_paths) else None
+            )
+            record_selector = str(record_selectors[index] if index < len(record_selectors) else "").strip()
+            canonical_region = None
+        descriptor = {
+            "inputFormat": input_format,
+            "primaryFile": primary_fingerprint,
+            "pairedFastaFile": paired_fingerprint,
+            "recordSelector": record_selector,
+            "canonicalRegionSpec": canonical_region,
+        }
+        base = _web_hash_text(_web_json_dumps(descriptor))[:16]
+        occurrence = occurrences.get(base, 0) + 1
+        occurrences[base] = occurrence
+        keys.append(f"r_{base}_o{occurrence}" if occurrence > 1 else f"r_{base}")
+    return tuple(keys)
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -69,19 +367,6 @@ def _parse_optional_positive_int(value: str) -> int | None:
         raise argparse.ArgumentTypeError("must be a positive integer or 'none'") from exc
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer or 'none'")
-    return parsed
-
-
-def _parse_optional_nonnegative_float(value: str) -> float | None:
-    normalized = str(value or "").strip().lower()
-    if normalized in {"", "none", "null"}:
-        return None
-    try:
-        parsed = float(normalized)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a non-negative number or 'none'") from exc
-    if not math.isfinite(parsed) or parsed < 0:
-        raise argparse.ArgumentTypeError("must be a non-negative number or 'none'")
     return parsed
 
 
@@ -233,178 +518,121 @@ def _get_args(args) -> argparse.Namespace:
         help="input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)",
         type=str,
         nargs='*')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--losatp_bin',
-        '--losatp-bin',
+        hidden_aliases=('--losatp-bin',),
         dest='losatp_bin',
         help='LOSATP executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: losat).',
         type=str,
         default='losat')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--losatp_threads',
-        '--losatp-threads',
+        hidden_aliases=('--losatp-threads',),
         dest='losatp_threads',
         help='Threads passed to LOSATP via --num-threads for --protein_blastp_mode pairwise/orthogroup/collinear (default: LOSAT default).',
         type=int,
         default=None)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--protein_blastp_mode',
-        '--protein-blastp-mode',
+        hidden_aliases=('--protein-blastp-mode',),
         dest='protein_blastp_mode',
         help='LOSATP blastp mode: none, pairwise adjacent ribbons, all-record Orthogroups, or Collinear blocks (default: none).',
         choices=PROTEIN_BLASTP_MODES,
         default='none')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--protein_blastp_max_hits',
-        '--protein-blastp-max-hits',
+        hidden_aliases=('--protein-blastp-max-hits',),
         dest='protein_blastp_max_hits',
         help='Maximum distinct subject protein hits per query protein for pairwise LOSATP blastp display links (default: 5).',
         type=int,
         default=5)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--protein_blastp_candidate_limit',
-        '--protein-blastp-candidate-limit',
+        hidden_aliases=('--protein-blastp-candidate-limit',),
         dest='protein_blastp_candidate_limit',
         help="Optional LOSATP blastp candidate cap per query; use 'none' for no cap (default: none).",
         type=_parse_optional_positive_int,
         default=None)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--align_orthogroup_feature',
-        '--align-orthogroup-feature',
+        hidden_aliases=('--align-orthogroup-feature',),
         dest='align_orthogroup_feature',
         help='Align linear records by the LOSATP blastp orthogroup containing this feature SVG hash or protein ID.',
         type=str,
         default="")
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_unit_mode',
-        '--collinear-unit-mode',
+        hidden_aliases=('--collinear-unit-mode',),
         dest='collinear_unit_mode',
         help=argparse.SUPPRESS,
         choices=["auto", "cds", "locus"],
         default='auto')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_search_scope',
-        '--collinear-search-scope',
+        hidden_aliases=('--collinear-search-scope',),
         dest='collinear_search_scope',
         help='Collinear LOSATP evidence search scope: adjacent record pairs or all record pairs (default: adjacent).',
         type=_parse_collinear_search_scope,
         choices=["adjacent", "all"],
         default='adjacent')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_min_anchors',
-        '--collinear-min-anchors',
+        hidden_aliases=('--collinear-min-anchors',),
         dest='collinear_min_anchors',
         help='Minimum anchors/genes required for a rendered Collinear block; 1 allows singleton links (default: 1).',
         type=int,
         default=1)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_max_unit_gap',
-        '--collinear-max-unit-gap',
         '--collinear_max_gene_gap',
-        '--collinear-max-gene-gap',
+        hidden_aliases=('--collinear-max-unit-gap', '--collinear-max-gene-gap'),
         dest='collinear_max_unit_gap',
         help='Maximum unit gap between neighboring collinear anchors (default: 0).',
         type=int,
         default=0)
-    parser.add_argument(
-        '--collinear_block_merge_gap',
-        '--collinear-block-merge-gap',
-        dest='collinear_block_merge_gap',
-        help=argparse.SUPPRESS,
-        type=int,
-        default=50)
-    parser.add_argument(
-        '--collinear_singleton_merge_gap',
-        '--collinear-singleton-merge-gap',
-        dest='collinear_singleton_merge_gap',
-        help=argparse.SUPPRESS,
-        type=int,
-        default=25)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_max_diagonal_drift',
-        '--collinear-max-diagonal-drift',
+        hidden_aliases=('--collinear-max-diagonal-drift',),
         dest='collinear_max_diagonal_drift',
         help='Maximum order-space diagonal drift allowed within or between collinear runs (default: 0).',
         type=int,
         default=0)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_max_conflicts_in_merge_gap',
-        '--collinear-max-conflicts-in-merge-gap',
+        hidden_aliases=('--collinear-max-conflicts-in-merge-gap',),
         dest='collinear_max_conflicts_in_merge_gap',
         help=argparse.SUPPRESS,
         type=int,
         default=1)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_max_paralog_links_per_orthogroup',
-        '--collinear-max-paralog-links-per-orthogroup',
+        hidden_aliases=('--collinear-max-paralog-links-per-orthogroup',),
         dest='collinear_max_paralog_links_per_orthogroup',
         help=argparse.SUPPRESS,
         type=int,
         default=2)
-    parser.add_argument(
-        '--collinear_gap_penalty',
-        '--collinear-gap-penalty',
-        dest='collinear_gap_penalty',
-        help=argparse.SUPPRESS,
-        type=float,
-        default=1.0)
-    parser.add_argument(
-        '--collinear_nearby_duplicate_window',
-        '--collinear-nearby-duplicate-window',
-        dest='collinear_nearby_duplicate_window',
-        help=argparse.SUPPRESS,
-        type=int,
-        default=0)
-    parser.add_argument(
-        '--collinear_score_mode',
-        '--collinear-score-mode',
-        dest='collinear_score_mode',
-        help=argparse.SUPPRESS,
-        choices=["constant", "bitscore"],
-        default='constant')
-    parser.add_argument(
-        '--collinear_constant_anchor_score',
-        '--collinear-constant-anchor-score',
-        dest='collinear_constant_anchor_score',
-        help=argparse.SUPPRESS,
-        type=float,
-        default=50.0)
-    parser.add_argument(
-        '--collinear_min_block_score',
-        '--collinear-min-block-score',
-        dest='collinear_min_block_score',
-        help=argparse.SUPPRESS,
-        type=float,
-        default=None)
-    parser.add_argument(
-        '--collinear_block_evalue',
-        '--collinear-block-evalue',
-        dest='collinear_block_evalue',
-        help=argparse.SUPPRESS,
-        type=_parse_optional_nonnegative_float,
-        default=None)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--collinear_color_mode',
-        '--collinear-color-mode',
+        hidden_aliases=('--collinear-color-mode',),
         dest='collinear_color_mode',
         help='Collinear ribbon color mode: average_identity, orientation, or orientation_identity (default: orientation).',
         type=_parse_collinear_color_mode,
         choices=["average_identity", "orientation", "orientation_identity"],
         default='orientation')
-    parser.add_argument(
-        '--collinear_blocks',
-        '--collinear-blocks',
-        dest='collinear_blocks',
-        help='Headered native .collinear.tsv file to import instead of running LOSATP.',
-        type=str,
-        default="")
-    parser.add_argument(
-        '--save_collinear_blocks',
-        '--save-collinear-blocks',
-        dest='save_collinear_blocks',
-        help='Write accepted or validated native collinear blocks to this TSV path.',
-        type=str,
-        default="")
     parser.add_argument(
         '-t',
         '--table',
@@ -642,9 +870,10 @@ def _get_args(args) -> argparse.Namespace:
         '--align_center',
         help='Align genomes to the center (default: False). ',
         action='store_true')
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--keep_definition_left_aligned',
-        '--keep-definition-left-aligned',
+        hidden_aliases=('--keep-definition-left-aligned',),
         dest='keep_definition_left_aligned',
         help='Keep linear definition labels in the left column when records are center-aligned or aligned by orthogroup (default: False).',
         action='store_true')
@@ -668,9 +897,10 @@ def _get_args(args) -> argparse.Namespace:
         help='minimum BLAST alignment length threshold (default=0)',
         type=int,
         default=0)
-    parser.add_argument(
+    _add_argument_with_hidden_aliases(
+        parser,
         '--pairwise_match_style',
-        '--pairwise-match-style',
+        hidden_aliases=('--pairwise-match-style',),
         dest='pairwise_match_style',
         help=(
             'Pairwise comparison link style: ribbon keeps straight filled ribbons; '
@@ -961,17 +1191,13 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         action='append',
         default=[])
+    add_session_args(parser)
+
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
     if args.protein_blastp_mode != "none" and args.blast:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
-    if args.collinear_blocks and args.blast:
-        parser.error("--collinear_blocks cannot be used with -b/--blast")
-    if args.collinear_blocks and args.protein_blastp_mode != "none":
-        parser.error("--collinear_blocks imports native blocks and cannot be used with --protein_blastp_mode")
-    if args.save_collinear_blocks and not args.collinear_blocks and args.protein_blastp_mode != "collinear":
-        parser.error("--save_collinear_blocks requires --protein_blastp_mode collinear or --collinear_blocks")
     if args.protein_blastp_max_hits <= 0:
         parser.error("--protein_blastp_max_hits must be > 0")
     if args.losatp_threads is not None and args.losatp_threads <= 0:
@@ -1068,22 +1294,12 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--collinear_min_anchors must be > 0")
     if args.collinear_max_unit_gap < 0:
         parser.error("--collinear_max_unit_gap must be >= 0")
-    if args.collinear_block_merge_gap < 0:
-        parser.error("--collinear_block_merge_gap must be >= 0")
-    if args.collinear_singleton_merge_gap < 0:
-        parser.error("--collinear_singleton_merge_gap must be >= 0")
     if args.collinear_max_diagonal_drift < 0:
         parser.error("--collinear_max_diagonal_drift must be >= 0")
     if args.collinear_max_conflicts_in_merge_gap < 0:
         parser.error("--collinear_max_conflicts_in_merge_gap must be >= 0")
     if args.collinear_max_paralog_links_per_orthogroup <= 0:
         parser.error("--collinear_max_paralog_links_per_orthogroup must be > 0")
-    if args.collinear_gap_penalty < 0:
-        parser.error("--collinear_gap_penalty must be >= 0")
-    if args.collinear_nearby_duplicate_window < 0:
-        parser.error("--collinear_nearby_duplicate_window must be >= 0")
-    if args.collinear_constant_anchor_score <= 0:
-        parser.error("--collinear_constant_anchor_score must be > 0")
     return args
 
 
@@ -1140,10 +1356,63 @@ def linear_main(cmd_args) -> None:
     The final output includes linear genome diagrams in user-specified file formats,
     illustrating genomic features and optional BLAST comparison results.
     """
-    args: argparse.Namespace = _get_args(cmd_args)
+    session_request = parse_session_pre_args(cmd_args, mode="linear")
+    if session_request is not None:
+        with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
+            session = load_session(session_request.session_path)
+            run_spec = session_to_cli_args(
+                session,
+                mode="linear",
+                temp_dir=Path(temp_dir),
+                output_override=session_request.output,
+                format_override=session_request.format,
+            )
+            args = _get_args(list(run_spec.args))
+            args._gbdraw_source_session = session
+            args._gbdraw_collect_losat_cache = bool(
+                session_request.save_session
+                or session_request.session_output
+                or _source_session_losat_entries(session)
+            )
+            run_result = run_linear_from_namespace(args)
+            save_session_sidecar_if_requested(
+                save_session=session_request.save_session,
+                session_output=session_request.session_output,
+                output_prefix=args.output,
+                run_result=run_result,
+                source_session=session,
+                cli_invocation_args=run_spec.cli_invocation_args,
+                file_bindings=run_spec.file_bindings,
+            )
+        return
+
     if '-i' in cmd_args or '--input' in cmd_args:
         logger.warning(
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")
+    args: argparse.Namespace = _get_args(cmd_args)
+    run_result = run_linear_from_namespace(args)
+    save_session_sidecar_if_requested(
+        save_session=bool(args.save_session or args.session_output),
+        session_output=args.session_output,
+        output_prefix=args.output,
+        run_result=run_result,
+        cmd_args=cmd_args,
+    )
+
+
+def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
+    """Run linear rendering from an already parsed argparse namespace."""
+
+    source_session = getattr(args, "_gbdraw_source_session", None)
+    if not isinstance(source_session, Mapping):
+        source_session = None
+    source_losat_entries = _source_session_losat_entries(source_session)
+    collect_losat_cache = bool(
+        getattr(args, "_gbdraw_collect_losat_cache", False)
+        or getattr(args, "save_session", False)
+        or getattr(args, "session_output", None)
+        or source_losat_entries
+    )
     out_file_prefix: str = args.output
     blast_files: str = args.blast
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
@@ -1158,12 +1427,11 @@ def linear_main(cmd_args) -> None:
     collinear_anchor_mode: str = "rbh"
     collinear_search_scope: str = str(args.collinear_search_scope or "adjacent")
     collinear_color_mode: str = str(args.collinear_color_mode or "orientation")
-    collinear_blocks_path: str = str(args.collinear_blocks or "").strip()
-    save_collinear_blocks_path: str = str(args.save_collinear_blocks or "").strip()
     collinearity_params = LosslessCollinearityParameters(
         min_anchors=args.collinear_min_anchors,
         max_unit_gap=args.collinear_max_unit_gap,
         max_diagonal_drift=args.collinear_max_diagonal_drift,
+        max_conflicts=args.collinear_max_conflicts_in_merge_gap,
     )
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands
@@ -1243,7 +1511,7 @@ def linear_main(cmd_args) -> None:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files or protein_blastp_mode != "none" or collinear_blocks_path:
+    if blast_files or protein_blastp_mode != "none":
         load_comparison = True
     else:
         load_comparison = False
@@ -1399,8 +1667,10 @@ def linear_main(cmd_args) -> None:
         logger.error("ERROR: Invalid reverse_complement value: %s", value)
         raise ValidationError(f"Invalid reverse_complement value: {value}")
 
+    linear_source_paths: list[str]
     if args.gbk:
         file_count = len(args.gbk)
+        linear_source_paths = list(args.gbk)
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
         reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
@@ -1413,6 +1683,7 @@ def linear_main(cmd_args) -> None:
         )
     elif args.gff and args.fasta:
         file_count = len(args.gff)
+        linear_source_paths = list(args.gff)
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
         reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
@@ -1455,29 +1726,75 @@ def linear_main(cmd_args) -> None:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
             )
+    linear_record_metadata = _linear_session_record_metadata(records, linear_source_paths)
     if protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("--protein_blastp_mode requires at least two linear records.")
-    if collinear_blocks_path and len(records) < 2:
-        raise ValidationError("--collinear_blocks requires at least two linear records.")
     depth_track_files = _record_major_depth_track_files_from_cli(
         depth_track_groups,
         record_count=len(records),
     )
+    losatp_cache: LosatpCacheManager | None = None
+    losatp_cache_entries: tuple[dict[str, object], ...] | None = None
+    protein_extraction = None
+    losat_cache_filenames: tuple[str, ...] = ()
+    if protein_blastp_mode != "none" and collect_losat_cache:
+        losatp_cache = LosatpCacheManager(
+            source_losat_entries,
+            threads_per_job=(
+                losatp_threads
+                if losatp_threads is not None
+                else _source_session_threads_per_job(source_session)
+            ),
+            runtime_compatibility=_source_session_runtime_compatibility(source_session),
+        )
+        record_instance_keys = _record_instance_keys_for_web_losat(
+            args,
+            source_session=source_session,
+            record_count=len(records),
+        )
+        protein_extraction = extract_web_stable_cds_proteins(
+            records,
+            record_instance_keys=record_instance_keys,
+        )
+        losat_cache_filenames = _linear_losat_cache_filenames(records)
     collinearity_comparisons: list[DataFrame] | None = None
     collinearity_orthogroups = None
-    if collinear_blocks_path:
-        collinearity_result = parse_native_collinearity_tsv(
-            collinear_blocks_path,
+    if protein_blastp_mode == "pairwise" and losatp_cache is not None:
+        protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
-            params=collinearity_params,
-            unit_mode=collinear_unit_mode,
+            losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
+            max_hits=protein_blastp_max_hits,
+            candidate_limit=protein_blastp_candidate_limit,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
+            cache_filenames=losat_cache_filenames,
         )
-        collinearity_orthogroups = collinearity_result.orthogroups
-        collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
-            collinearity_result,
-            records=records,
-            color_mode=collinear_color_mode,
+        collinearity_comparisons = protein_blastp_result.comparisons
+        collinearity_orthogroups = protein_blastp_result.orthogroups
+    elif protein_blastp_mode == "orthogroup" and losatp_cache is not None:
+        protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons(
+            records,
+            losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
+            candidate_limit=protein_blastp_candidate_limit,
+            orthogroup_membership_mode=orthogroup_membership_mode,
+            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            max_related_edges_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
+            cache_filenames=losat_cache_filenames,
         )
+        collinearity_comparisons = protein_blastp_result.comparisons
+        collinearity_orthogroups = protein_blastp_result.orthogroups
     elif protein_blastp_mode == "collinear":
         collinearity_result = build_orthogroup_collinearity_blocks(
             records,
@@ -1495,17 +1812,15 @@ def linear_main(cmd_args) -> None:
             unit_mode=collinear_unit_mode,
             edge_mode=collinear_anchor_mode,
             search_scope=collinear_search_scope,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
+            cache_filenames=losat_cache_filenames,
         )
         collinearity_orthogroups = collinearity_result.orthogroups
         collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
             collinearity_result,
             records=records,
             color_mode=collinear_color_mode,
-        )
-    if save_collinear_blocks_path:
-        Path(save_collinear_blocks_path).write_text(
-            write_native_collinearity_tsv(collinearity_result),
-            encoding="utf-8",
         )
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)
@@ -1571,6 +1886,19 @@ def linear_main(cmd_args) -> None:
         )
     else:
         save_figure(canvas, out_formats)
+
+    if losatp_cache is not None:
+        losatp_cache_entries = losatp_cache.session_entries()
+
+    return DiagramRunResult(
+        mode="linear",
+        render_formats=tuple(out_formats),
+        outputs=(
+            make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name),
+        ),
+        losat_cache_entries=losatp_cache_entries,
+        linear_record_metadata=linear_record_metadata,
+    )
 
 
 if __name__ == "__main__":

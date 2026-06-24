@@ -24,6 +24,18 @@ const createPositiveIntegerOptions = (maxValue) =>
     };
   });
 
+const appendRequestedIntegerOption = (options, requestedValue) => {
+  const requested = parsePositiveInteger(requestedValue);
+  if (requested === null) return options;
+  const requestedOption = {
+    value: String(requested),
+    label: `${requested}`
+  };
+  return options.some((option) => option.value === requestedOption.value)
+    ? options
+    : [...options, requestedOption];
+};
+
 export const createLosatSettings = ({ state }) => {
   const {
     linearSeqs,
@@ -92,7 +104,10 @@ export const createLosatSettings = ({ state }) => {
       return [{ value: '1', label: 'Fixed (1)' }];
     }
     const maxThreads = Math.max(1, losatTotalThreadBudget.value);
-    return createPositiveIntegerOptions(maxThreads);
+    return appendRequestedIntegerOption(
+      createPositiveIntegerOptions(maxThreads),
+      losat.threadsPerJob
+    );
   });
 
   const losatMaxPairWorkers = computed(() => {
@@ -125,25 +140,6 @@ export const createLosatSettings = ({ state }) => {
 
   const losatThreadingPlanSummary = computed(() =>
     'By default, LOSAT can use up to half the number of cores available.'
-  );
-
-  watch(
-    () => [losatThreadsPerJobFixed.value, losat.threadsPerJob],
-    ([fixed, threadsPerJob]) => {
-      if (fixed && String(threadsPerJob) !== '1') losat.threadsPerJob = '1';
-    },
-    { immediate: true }
-  );
-
-  watch(
-    losatThreadOptions,
-    (options) => {
-      if (String(losat.threadsPerJob || 'auto').trim().toLowerCase() === 'auto') return;
-      const values = options.map((option) => option.value);
-      if (values.includes(String(losat.threadsPerJob))) return;
-      losat.threadsPerJob = options[options.length - 1]?.value || 'auto';
-    },
-    { immediate: true }
   );
 
   watch(

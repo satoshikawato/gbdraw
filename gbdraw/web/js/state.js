@@ -24,6 +24,8 @@ const sessionTitle = ref('');
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
+const resultPanelTab = ref('preview');
+const lastRunInfo = ref(null);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 const svgContent = computed(() => {
@@ -470,8 +472,6 @@ export const createDefaultLosat = () => ({
     orthogroupMemberMaxHits: 5,
     collinearMinAnchors: 1,
     collinearMaxGeneGap: 0,
-    collinearBlockMergeGap: 50,
-    collinearSingletonMergeGap: 25,
     collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1,
     collinearMaxParalogLinksPerOrthogroup: 2,
@@ -640,6 +640,7 @@ const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off'}
+const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const labelTextFeatureOverrides = reactive({}); // { featureId: text }
@@ -1005,6 +1006,8 @@ export const state = {
   sessionTitle,
   results,
   selectedResultIndex,
+  resultPanelTab,
+  lastRunInfo,
   pairwiseMatchFactors,
   svgContent,
   zoom,
@@ -1096,6 +1099,7 @@ export const state = {
   featureListBottomSpacerPx,
   featureColorOverrides,
   featureVisibilityOverrides,
+  featureStrokeOverrides,
   labelSearch,
   editableLabels,
   labelTextFeatureOverrides,

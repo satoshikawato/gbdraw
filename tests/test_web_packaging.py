@@ -186,6 +186,39 @@ def test_index_links_to_interactive_gallery() -> None:
     assert "Interactive Gallery" in index_html
 
 
+def test_web_run_info_tab_source_contract() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert "Preview" in index_html
+    assert "Run info" in index_html
+    assert "copyRunCommand" in index_html
+    assert "lastRunInfo" in index_html
+    assert "const resultPanelTab = ref('preview');" in state_js
+    assert "const lastRunInfo = ref(null);" in state_js
+    assert "buildRunInfo({" in run_analysis_js
+    assert "resultPanelTab.value = 'preview';" in run_analysis_js
+    assert "cliInvocation: exportableCliInvocation" in config_js
+
+
+def test_web_run_info_helper_builds_display_commands() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/run-info.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
+def test_web_losat_settings_preserve_requested_thread_count() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/losat-settings.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
@@ -213,9 +246,18 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "All hits" not in index_html
     assert "Evidence scope" in index_html
     assert "ribbons are still emitted for adjacent display pairs" in index_html
+    assert "Merge conflicts" in index_html
     assert "export const normalizeCollinearAnchorMode = (_value) => 'rbh';" in normalizer_js
     assert "delete cloned.blastp.collinearAnchorMode;" in config_js
+    assert "collinearBlockMergeGap" not in state_js
+    assert "collinearSingletonMergeGap" not in state_js
+    assert "delete state.losat.blastp.collinearBlockMergeGap;" in config_js
+    assert "delete state.losat.blastp.collinearSingletonMergeGap;" in config_js
     assert "losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode" in run_analysis_js
+    assert "losat.blastp.collinearMaxConflictsInMergeGap" in run_analysis_js
+    assert "max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1)" in helper_js
+    assert "collinear_block_merge_gap=50" not in helper_js
+    assert "collinear_singleton_merge_gap=25" not in helper_js
     assert "normalized_collinear_anchor_mode = \"rbh\"" in helper_js
     assert "normalized_collinear_anchor_mode," in helper_js
     assert "'data-group-kind'" in state_js
@@ -1235,7 +1277,9 @@ def test_web_losat_threaded_browser_wiring() -> None:
     assert 'v-model="losat.parallelWorkers"' in index_html
     assert 'v-model="losat.threadsPerJob"' in index_html
     assert "executionMode: 'auto'" in (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
-    assert "losatRuntimeCompatibility" in run_source
+    assert "buildLosatCachePayload" in run_source
+    assert "losatRuntimeCompatibility" not in run_source
+    assert "losatThreadsPerJob" not in run_source
     assert "onRuntimeStatus" in run_source
 
 
@@ -1244,8 +1288,9 @@ def test_web_losat_thread_count_options_are_contiguous() -> None:
     service_source = (WEB_ROOT / "js" / "services" / "losat.js").read_text(encoding="utf-8")
     worker_source = (WEB_ROOT / "js" / "workers" / "losat-threaded-worker.js").read_text(encoding="utf-8")
     assert "const createPositiveIntegerOptions = (maxValue) =>" in source
+    assert "const appendRequestedIntegerOption = (options, requestedValue) =>" in source
     assert "return createPositiveIntegerOptions(losatHardwareThreads.value);" in source
-    assert "return createPositiveIntegerOptions(maxThreads);" in source
+    assert "createPositiveIntegerOptions(maxThreads)," in source
     assert "const perJobSlots = losatEffectiveThreadsPerJob.value;" in source
     assert "const workersPerThreadedJob = Math.max(1, threadsPerJob);" in service_source
     assert "getChildWorkerCount(effectiveThreads)" in worker_source
@@ -2500,8 +2545,9 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
     assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
     assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
     assert "validateImportedCircularTrackSlots(data);" in config_source
+    assert "isLegacyConfigPayload(data)" in config_source
     assert "validateImportedCircularTrackSlots(data.config);" in config_source
-    assert "Failed to load config: ${message}" in config_source
+    assert "Legacy configuration loaded. Save as a session to use the current format." in config_source
     assert "Failed to load session: ${message}" in config_source
 
     for obsolete_key in [
@@ -2578,6 +2624,21 @@ def test_web_config_persists_manual_qualifier_priority_rules() -> None:
     assert "qualifierPriorityRules: cloneQualifierPriorityRules(state.manualPriorityRules)" in source
     assert "replaceQualifierPriorityRules(data.qualifierPriorityRules)" in source
     assert "replaceQualifierPriorityRules(data.priorityRules)" in source
+
+
+def test_web_session_json_is_single_visible_settings_workflow() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert "Save Config" not in index_html
+    assert "Load Config" not in index_html
+    assert 'ref="configInput"' not in index_html
+    assert "exportConfig" not in app_setup_source
+    assert "importConfig" not in app_setup_source
+    assert "editorState: buildEditorStateData()" in config_source
+    assert "applyEditorStateData(data.editorState)" in config_source
+    assert "featureStrokeOverrides" in config_source
 
 
 @pytest.mark.slow
