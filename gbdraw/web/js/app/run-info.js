@@ -157,7 +157,6 @@ export const buildRunInfo = ({
       unresolvedFileArgs.length === 0
   };
 
-  const hasGeneratedBindings = fixedFileBindings.some((binding) => !String(binding.slot).startsWith('files.'));
   const hasLosatHelpers = helperFiles.some((helper) => /losat|blast/i.test(`${helper.slot} ${helper.name}`));
   const notes = [];
   let level = 'exact-uploaded-files';
@@ -170,9 +169,6 @@ export const buildRunInfo = ({
     notes.push(
       'If you save a .gbdraw-session.json and load it back in the web app, the uploaded inputs, results, and LOSAT cache are restored from the JSON; these TSV files do not need to be saved separately for session restore.'
     );
-  }
-  if (hasGeneratedBindings) {
-    notes.push('The CLI session command is hidden here because the plain command contains generated helper files; use Save Session / Load Session for JSON-based restore.');
   }
   if (unresolvedFileArgs.length > 0) {
     level = 'pseudo';
