@@ -765,6 +765,7 @@ export const createAppSetup = () => {
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
+    downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,
@@ -914,6 +915,9 @@ export const createAppSetup = () => {
 
   const runInfoElapsedText = (info) => formatElapsedMs(info?.elapsedMs);
   const runInfoReproducibilityText = (info) => reproducibilityLabel(info?.reproducibility?.level);
+  const runInfoHasCliHelperFiles = computed(() =>
+    Array.isArray(lastRunInfo.value?.helperFiles) && lastRunInfo.value.helperFiles.length > 0
+  );
   const copyTextFallback = (text) => {
     const textarea = document.createElement('textarea');
     textarea.value = text;
@@ -2122,8 +2126,10 @@ export const createAppSetup = () => {
     downloadPNG,
     downloadPDF,
     copyRunCommand,
+    downloadCliHelperFiles,
     runInfoElapsedText,
     runInfoReproducibilityText,
+    runInfoHasCliHelperFiles,
     resetSettings,
     saveSessionWithTitle,
     editSessionTitle,

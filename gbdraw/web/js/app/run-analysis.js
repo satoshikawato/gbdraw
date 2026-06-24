@@ -56,6 +56,7 @@ import {
   buildReverseComplementArgs,
   isCliDefaultFeatureList
 } from './cli-args.js';
+import { downloadZipFile } from '../utils/zip.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -687,6 +688,53 @@ export const createRunAnalysis = ({
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let activeLosatAbortController = null;
+  let latestCliHelperFiles = [];
+  let latestCliHelperArchiveName = 'out-cli-files.zip';
+
+  const setLatestCliHelperFiles = (runInfo, generatedCliFileMap, archiveBaseName) => {
+    const helperFiles = Array.isArray(runInfo?.helperFiles) ? runInfo.helperFiles : [];
+    if (helperFiles.length === 0) {
+      latestCliHelperFiles = [];
+      latestCliHelperArchiveName = 'out-cli-files.zip';
+      return;
+    }
+
+    const bySlot = new Map();
+    generatedCliFileMap.forEach((entry) => {
+      const slot = String(entry?.slot || '').trim();
+      if (slot && !bySlot.has(slot)) bySlot.set(slot, entry);
+    });
+
+    latestCliHelperFiles = helperFiles
+      .map((helper) => {
+        const path = String(helper?.path || '').trim();
+        const slot = String(helper?.slot || '').trim();
+        const entry = generatedCliFileMap.get(path) || bySlot.get(slot);
+        if (!entry) return null;
+        return {
+          name: String(helper?.name || entry.name || 'helper.tsv'),
+          data: entry.data
+        };
+      })
+      .filter(Boolean);
+    const archiveStem = makeSafeFilename(`${archiveBaseName || form.prefix || 'out'}-cli-files`);
+    latestCliHelperArchiveName = `${archiveStem}.zip`;
+  };
+
+  const downloadCliHelperFiles = () => {
+    if (!latestCliHelperFiles.length) {
+      alert('No CLI helper files are available for the latest run.');
+      return;
+    }
+    const totalChars = latestCliHelperFiles.reduce((sum, file) => sum + String(file.data ?? '').length, 0);
+    if (totalChars > 50 * 1024 * 1024) {
+      const proceed = confirm(
+        `CLI helper file export will download about ${(totalChars / (1024 * 1024)).toFixed(1)} MB. Continue?`
+      );
+      if (!proceed) return;
+    }
+    downloadZipFile(latestCliHelperArchiveName, latestCliHelperFiles);
+  };
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
@@ -1683,6 +1731,7 @@ json.dumps({
       selectedResultIndex.value = 0;
       resultPanelTab.value = 'preview';
       lastRunInfo.value = null;
+      latestCliHelperFiles = [];
       errorLog.value = null;
       if (typeof resetPreviewViewport === 'function') {
         resetPreviewViewport({ resetZoom: true });
@@ -1716,6 +1765,7 @@ json.dumps({
       let virtualBlastFiles = [];
       const generationFileMap = new Map();
       const runInfoFileMap = new Map();
+      const generatedCliFileMap = new Map();
       const textEncoder = new TextEncoder();
       const textDecoder = new TextDecoder();
       const getPayloadName = (path, fallback = 'input') => {
@@ -1747,6 +1797,17 @@ json.dumps({
           kind: kind === 'generated' ? 'generated' : 'uploaded'
         });
       };
+      const recordGeneratedCliFile = (path, data, { name = '', slot = '' } = {}) => {
+        const normalizedPath = String(path || '').trim();
+        if (!normalizedPath) return;
+        const displayName = String(name || getPayloadName(normalizedPath)).trim() || getPayloadName(normalizedPath);
+        generatedCliFileMap.set(normalizedPath, {
+          path: normalizedPath,
+          name: displayName,
+          slot: String(slot || '').trim(),
+          data: String(data ?? '')
+        });
+      };
       const toTransferableBuffer = (bytes) => {
         if (bytes instanceof ArrayBuffer) return bytes;
         if (ArrayBuffer.isView(bytes)) {
@@ -1770,11 +1831,16 @@ json.dumps({
         const bytes = textEncoder.encode(String(text ?? ''));
         pyodide.FS.writeFile(path, bytes);
         const displayName = name || getPayloadName(path);
+        const resolvedSlot = slot || generatedSlotForPath(path);
         stageGenerationBytes(path, displayName, bytes);
         registerRunInfoFile(path, {
           name: displayName,
-          slot: slot || generatedSlotForPath(path),
+          slot: resolvedSlot,
           kind: 'generated'
+        });
+        recordGeneratedCliFile(path, text, {
+          name: displayName,
+          slot: resolvedSlot
         });
       };
       const stageUploadedFile = async (fileObj, path, {
@@ -3766,10 +3832,16 @@ json.dumps({
               const sourcePair =
                 losatPairs.find((pair) => pair.pairIndex === pairIndex && pair.displayPair) ||
                 losatPairs.find((pair) => pair.pairIndex === pairIndex);
+              const blastName = sourcePair?.filename || getPayloadName(blastPath);
+              const blastSlot = `generatedFiles.losat_blasts[${pairIndex}]`;
               registerRunInfoFile(blastPath, {
-                name: sourcePair?.filename || getPayloadName(blastPath),
-                slot: `generatedFiles.losat_blasts[${pairIndex}]`,
+                name: blastName,
+                slot: blastSlot,
                 kind: 'generated'
+              });
+              recordGeneratedCliFile(blastPath, converted.tsv || '', {
+                name: blastName,
+                slot: blastSlot
               });
               virtualBlastFiles.push({
                 path: blastPath,
@@ -3795,10 +3867,16 @@ json.dumps({
               );
               if (converted.error) throw new Error(converted.error);
               const blastPath = `/blast_${pair.pairIndex}.txt`;
+              const blastName = pair.filename || getPayloadName(blastPath);
+              const blastSlot = `generatedFiles.losat_blasts[${pair.pairIndex}]`;
               registerRunInfoFile(blastPath, {
-                name: pair.filename || getPayloadName(blastPath),
-                slot: `generatedFiles.losat_blasts[${pair.pairIndex}]`,
+                name: blastName,
+                slot: blastSlot,
                 kind: 'generated'
+              });
+              recordGeneratedCliFile(blastPath, converted.tsv || '', {
+                name: blastName,
+                slot: blastSlot
               });
               virtualBlastFiles.push({
                 path: blastPath,
@@ -3970,7 +4048,7 @@ json.dumps({
           : res;
       });
       if (!isReflow && manualRunStartedAt !== null) {
-        lastRunInfo.value = buildRunInfo({
+        const runInfo = buildRunInfo({
           mode: mode.value,
           args: args.map(String),
           fileMetadata: runInfoFileMap,
@@ -3978,6 +4056,8 @@ json.dumps({
           resultCount: results.value.length,
           startedAtIso: manualRunStartedAtIso
         });
+        lastRunInfo.value = runInfo;
+        setLatestCliHelperFiles(runInfo, generatedCliFileMap, normalizedOutputPrefix || 'out');
         resultPanelTab.value = 'preview';
       }
       logPostGbdrawTimings(postGbdrawTimingEntries);
@@ -4137,6 +4217,7 @@ json.dumps({
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
+    downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,

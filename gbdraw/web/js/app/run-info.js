@@ -165,14 +165,11 @@ export const buildRunInfo = ({
     level = hasLosatHelpers ? 'session-recommended' : 'requires-helper-files';
     notes.push(
       `The plain command references browser-generated file(s): ${formatHelperFileList(helperFiles)}. ` +
-      'To run that command in a terminal, save those file(s) next to the uploaded inputs first.'
+      'Use "Download CLI Files" to save those file(s) next to the uploaded inputs before running the command in a terminal.'
     );
     notes.push(
       'If you save a .gbdraw-session.json and load it back in the web app, the uploaded inputs, results, and LOSAT cache are restored from the JSON; these TSV files do not need to be saved separately for session restore.'
     );
-  }
-  if (hasLosatHelpers) {
-    notes.push('Use "Save Raw LOSAT TSV" only when you want to rerun the plain command outside the web app without using the session JSON.');
   }
   if (hasGeneratedBindings) {
     notes.push('The CLI session command is hidden here because the plain command contains generated helper files; use Save Session / Load Session for JSON-based restore.');

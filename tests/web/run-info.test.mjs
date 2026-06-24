@@ -89,8 +89,8 @@ assert.equal(quoteShellArg(''), "''");
 
   assert.equal(info.reproducibility.level, 'session-recommended');
   assert.equal(reproducibilityLabel(info.reproducibility.level), 'Raw CLI needs files');
-  assert.match(info.reproducibility.notes.join('\n'), /Save Raw LOSAT TSV/);
-  assert.match(info.reproducibility.notes.join('\n'), /without using the session JSON/);
+  assert.match(info.reproducibility.notes.join('\n'), /Download CLI Files/);
+  assert.match(info.reproducibility.notes.join('\n'), /session restore/);
   assert.equal(info.sessionCommand, '');
   assert.equal(isCliInvocationSessionExportable(info.invocation), false);
 }
