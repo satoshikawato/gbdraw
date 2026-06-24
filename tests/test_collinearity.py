@@ -1472,7 +1472,8 @@ def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatc
     observed_limits: list[int | None] = []
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+        assert ncbi_blastp_bin is None
         assert losatp_threads is None
         assert max_hsps_per_subject is None
         observed_limits.append(candidate_limit)
@@ -1513,7 +1514,8 @@ def test_orthogroup_collinearity_anchor_core_ignores_member_hit_depth(monkeypatc
     ]
     observed_limits: list[int | None] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+        assert ncbi_blastp_bin is None
         assert max_hsps_per_subject is None
         observed_limits.append(candidate_limit)
         return pd.DataFrame.from_records(
@@ -1544,7 +1546,8 @@ def test_orthogroup_collinearity_all_hits_keeps_uncapped_search(monkeypatch) -> 
     observed_limits: list[int | None] = []
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+        assert ncbi_blastp_bin is None
         assert losatp_threads is None
         assert max_hsps_per_subject is None
         observed_limits.append(candidate_limit)
@@ -1590,7 +1593,8 @@ def test_orthogroup_collinearity_all_scope_rbh_searches_every_direction(monkeypa
     ]
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+        assert ncbi_blastp_bin is None
         assert losatp_threads is None
         assert max_hsps_per_subject is None
         observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))

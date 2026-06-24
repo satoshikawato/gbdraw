@@ -377,6 +377,7 @@ one file to reuse it for every record, or one file per record.
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [-b [BLAST ...]] [-t TABLE]
               [--losatp_bin LOSATP_BIN]
+              [--ncbi_blastp_bin NCBI_BLASTP_BIN]
               [--losatp_threads LOSATP_THREADS]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
@@ -450,16 +451,21 @@ options:
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
   --losatp_bin LOSATP_BIN
-                        LOSATP executable for --protein_blastp_mode
+                        Native LOSAT executable for --protein_blastp_mode
                         pairwise/orthogroup/collinear (default: losat).
-  --losatp_threads LOSATP_THREADS
-                        Threads passed to LOSATP via --num-threads for
+  --ncbi_blastp_bin NCBI_BLASTP_BIN
+                        NCBI BLAST+ blastp executable for
                         --protein_blastp_mode pairwise/orthogroup/collinear
-                        (default: LOSAT default).
+                        (default: use automatic runtime resolution).
+  --losatp_threads LOSATP_THREADS
+                        Threads passed to the selected protein blastp runtime
+                        for
+                        --protein_blastp_mode pairwise/orthogroup/collinear
+                        (default: runtime default).
   --protein_blastp_mode {none,pairwise,orthogroup,collinear}
-                        LOSATP blastp mode: none, pairwise adjacent ribbons,
-                        all-record Orthogroups, or Collinear blocks (default:
-                        none).
+                        Protein blastp comparison mode: none, pairwise
+                        adjacent ribbons, all-record Orthogroups, or
+                        Collinear blocks (default: none).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block. The default 1 includes singleton
@@ -694,6 +700,15 @@ options:
                         order matches input files). Accepted values: 1/0,
                         true/false, yes/no.
 ```
+
+For `--protein_blastp_mode`, gbdraw first uses a bundled native LOSAT binary
+when one is available. The current package bundles LOSAT for Linux x86_64.
+macOS and Windows packages do not currently include bundled LOSAT binaries; if
+no native LOSAT executable is available, install NCBI BLAST+ and make `blastp`
+available on `PATH`, or pass it explicitly with `--ncbi_blastp_bin`. You can
+still force a native LOSAT executable on any platform with `--losatp_bin`.
+NCBI BLAST+ fallback produces compatible outfmt 6 protein comparisons, but its
+hit set is not guaranteed to be identical to LOSAT.
 
 ## Related Guides
 

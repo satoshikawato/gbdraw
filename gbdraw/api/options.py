@@ -111,6 +111,7 @@ class DiagramOptions:
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent"
     collinearity_color_mode: CollinearityColorMode | str = "orientation"
     losatp_bin: str = "losat"
+    ncbi_blastp_bin: str | None = None
     losatp_threads: int | None = None
     protein_blastp_max_hits: int = 5
     protein_blastp_candidate_limit: int | None = None

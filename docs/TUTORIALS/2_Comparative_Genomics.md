@@ -54,13 +54,15 @@ gbdraw linear \
 
 The default pairwise link style is `ribbon`, which draws straight filled ribbons and is best when the exact BLAST alignment span is the main signal. Use `--pairwise_match_style curve` for curved filled ribbons in dense synteny-style views; the curve style still preserves each match span from `qstart/qend` and `sstart/send`.
 
-For LOSATP collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients. Collinear blocks use RBH anchors. In the web UI, Evidence scope controls which record pairs provide collinearity evidence; Adjacent pairs produces local collinear gene groups, while All records can provide collinearity-backed global metadata. Ribbons are still drawn for adjacent display pairs.
+For collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients. Collinear blocks use RBH anchors. In the web UI, Evidence scope controls which record pairs provide collinearity evidence; Adjacent pairs produces local collinear gene groups, while All records can provide collinearity-backed global metadata. Ribbons are still drawn for adjacent display pairs.
 
 ## 4. Interpreting Orthogroups and Collinear Blocks
 
 `orthogroup` groups related CDS-derived proteins across the input records, while `collinear` groups those protein-supported matches when their genes occur in a compatible order.
 
-Both modes run LOSATP `blastp` on proteins obtained from CDS features. Files supplied with `-b/--blast` are not used to infer orthogroups or collinear blocks; they remain a separate comparison input.
+Both modes run protein `blastp` searches on proteins obtained from CDS features. gbdraw uses bundled native LOSAT when available, then a `losat` executable on `PATH`, then NCBI BLAST+ `blastp` on `PATH`. Linux x86_64 can use the bundled LOSAT binary. macOS and Windows do not currently ship bundled LOSAT binaries, so install NCBI BLAST+ and make `blastp` available on `PATH`, or pass it explicitly with `--ncbi_blastp_bin /path/to/blastp`. You can still force a native LOSAT executable on any platform with `--losatp_bin /path/to/losat`. NCBI BLAST+ fallback provides compatible outfmt 6 protein comparisons, but it is not guaranteed to produce exactly the same hit set as LOSAT.
+
+Files supplied with `-b/--blast` are not used to infer orthogroups or collinear blocks; they remain a separate comparison input.
 
 ### Orthogroups
 

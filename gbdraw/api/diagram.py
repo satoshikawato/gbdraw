@@ -1723,6 +1723,7 @@ def assemble_linear_diagram_from_records(
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent",
     collinearity_color_mode: CollinearityColorMode | str = "orientation",
     losatp_bin: str = "losat",
+    ncbi_blastp_bin: str | None = None,
     losatp_threads: int | None = None,
     protein_blastp_max_hits: int = 5,
     protein_blastp_candidate_limit: int | None = None,
@@ -1947,6 +1948,7 @@ def assemble_linear_diagram_from_records(
         protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
             max_hits=int(protein_blastp_max_hits),
             candidate_limit=protein_blastp_candidate_limit,
@@ -1960,6 +1962,7 @@ def assemble_linear_diagram_from_records(
         protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
             orthogroup_membership_mode=normalized_orthogroup_membership_mode,
@@ -1976,6 +1979,7 @@ def assemble_linear_diagram_from_records(
         collinearity_result = build_orthogroup_collinearity_blocks(
             records,
             losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
             orthogroup_membership_mode=normalized_orthogroup_membership_mode,
@@ -3545,6 +3549,7 @@ def build_linear_diagram(
         collinearity_search_scope=options.collinearity_search_scope,
         collinearity_color_mode=options.collinearity_color_mode,
         losatp_bin=options.losatp_bin,
+        ncbi_blastp_bin=options.ncbi_blastp_bin,
         losatp_threads=options.losatp_threads,
         protein_blastp_max_hits=options.protein_blastp_max_hits,
         protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,
