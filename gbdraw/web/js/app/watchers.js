@@ -719,10 +719,14 @@ export const setupWatchers = ({
   );
 
   onMounted(async () => {
+    const diagramWorkerPromise = typeof prepareDiagramGenerationWorker === 'function'
+      ? (async () => {
+          await nextTick();
+          await prepareDiagramGenerationWorker();
+        })()
+      : Promise.resolve();
+
     await pyodideManager.initPyodide();
-    await nextTick();
-    if (typeof prepareDiagramGenerationWorker === 'function') {
-      await prepareDiagramGenerationWorker();
-    }
+    await diagramWorkerPromise;
   });
 };

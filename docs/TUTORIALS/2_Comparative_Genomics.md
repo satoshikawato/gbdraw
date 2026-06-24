@@ -56,7 +56,28 @@ The default pairwise link style is `ribbon`, which draws straight filled ribbons
 
 For LOSATP collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients. Collinear blocks use RBH anchors. In the web UI, Evidence scope controls which record pairs provide collinearity evidence; Adjacent pairs produces local collinear gene groups, while All records can provide collinearity-backed global metadata. Ribbons are still drawn for adjacent display pairs.
 
-## 4. Select Records or Regions
+## 4. Interpreting Orthogroups and Collinear Blocks
+
+`orthogroup` groups related CDS-derived proteins across the input records, while `collinear` groups those protein-supported matches when their genes occur in a compatible order.
+
+Both modes run LOSATP `blastp` on proteins obtained from CDS features. Files supplied with `-b/--blast` are not used to infer orthogroups or collinear blocks; they remain a separate comparison input.
+
+### Orthogroups
+
+In evolutionary genomics, an orthogroup is a set of genes descended from a single gene in the last common ancestor of the taxa being compared. Different genomes may contribute one gene, multiple genes, or no detectable member. An orthogroup is therefore not necessarily a set of one-to-one orthologs.
+
+> [!NOTE]
+> gbdraw infers similarity-based groups for visualization. Reciprocal and near-reciprocal protein matches define the group cores, and additional proteins are assigned when the evidence supports membership in the same family. Because gbdraw does not infer gene or species trees, these groups may not necessarily reflect true phylogenetic orthology. Use a dedicated orthology workflow such as OrthoFinder when orthology inference itself is the analysis goal.
+
+### Collinear Blocks
+
+An anchor is a protein-supported gene pair associated with the same gbdraw orthogroup. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed and suggest an inversion.
+
+Multi-anchor blocks combine protein similarity with conserved local gene order. They can highlight conserved gene neighborhoods, including candidate operons or gene clusters, but they do not by themselves establish shared function or cotranscription. Genes lying between anchors are not automatically homologous or members of the same orthogroup.
+
+The default `--collinear_min_anchors 1` retains singleton links. Set it to `2` to require at least two anchors per rendered block; higher values require more anchors.
+
+## 5. Select Records or Regions
 
 Linear mode supports three selectors:
 
@@ -87,7 +108,7 @@ gbdraw linear \
 
 If you use `--region` or `--reverse_complement` together with BLAST, make sure the BLAST coordinates still match the selected inputs.
 
-## 5. Compare More Than Two Genomes
+## 6. Compare More Than Two Genomes
 
 For `A -> B -> C -> D`, provide BLAST files for `A vs B`, `B vs C`, and `C vs D`.
 
@@ -124,7 +145,7 @@ Use `--alignment_length` when you want to hide very short BLAST hits and keep on
 > [!IMPORTANT]
 > BLAST files must follow the same order as the genome list.
 
-## 6. Circular Conservation Rings
+## 7. Circular Conservation Rings
 
 Circular mode can draw BLAST HSPs as concentric conservation rings around each displayed record. This is useful when one annotated reference genome should be compared against one or more unannotated FASTA sequences.
 

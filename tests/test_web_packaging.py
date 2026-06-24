@@ -200,6 +200,9 @@ def test_web_run_info_tab_source_contract() -> None:
     assert "const lastRunInfo = ref(null);" in state_js
     assert "buildRunInfo({" in run_analysis_js
     assert "resultPanelTab.value = 'preview';" in run_analysis_js
+    assert "if (activePaletteName !== 'default') args.push('-p', activePaletteName);" in run_analysis_js
+    assert "const dContent = buildDefaultColorOverrideTsv({" in run_analysis_js
+    assert "if (dContent.trim() !== '') {" in run_analysis_js
     assert "cliInvocation: exportableCliInvocation" in config_js
 
 
@@ -209,6 +212,14 @@ def test_web_run_info_helper_builds_display_commands() -> None:
         pytest.skip("node is not available")
 
     subprocess.run([node, "tests/web/run-info.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
+def test_web_cli_arg_helpers_omit_default_values() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/cli-args.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
 def test_web_losat_settings_preserve_requested_thread_count() -> None:
@@ -350,6 +361,21 @@ def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> Non
     assert "groupMetadataScopeLabel(orthogroupScope(groupOrId))" in orthogroups_js
     assert "orthogroupScopeLabel(group)" in index_html
     assert "orthogroupScopeLabel(selectedOrthogroup)" in index_html
+
+
+def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert "const losatDerivedCache = ref(new Map());" in state_js
+    assert "losatDerivedCache:" in config_js
+    assert "serializeLosatDerivedCache()" in config_js
+    assert "applyLosatDerivedCache(data.losatDerivedCache?.entries)" in config_js
+    assert "kind: 'derived-losatp-payload'" in config_js
+    assert "buildLosatDerivedPayloadCachePayload({" in run_analysis_js
+    assert "getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey)" in run_analysis_js
+    assert "setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey" in run_analysis_js
 
 
 def test_web_losatp_orthogroup_and_collinear_blastp_omit_hsp_cap() -> None:
@@ -1671,6 +1697,8 @@ def test_web_collinear_orientation_identity_recoloring_uses_identity_factor(tmp_
     check_path.write_text(
         f"""
         import {{
+          buildDefaultColorOverrideTsv,
+          buildPaletteColorOverrideRows,
           interpolateColor,
           normalizePaletteColors,
           resolveCollinearMatchColor,
@@ -1733,6 +1761,31 @@ def test_web_collinear_orientation_identity_recoloring_uses_identity_factor(tmp_
         const aliasPalette = normalizePaletteColors({{ collinear_block_plus_max: '#123456' }});
         if (aliasPalette.collinear_block_plus !== '#123456') {{
           throw new Error(`collinear_block_plus_max should alias collinear_block_plus, got ${{aliasPalette.collinear_block_plus}}`);
+        }}
+        const paletteColors = normalizePaletteColors({{
+          CDS: '#54bcf8',
+          rRNA: '#71ee7d',
+          pairwise_match_min: '#FFE7E7',
+          pairwise_match_max: '#FF7272'
+        }});
+        const noOverrides = buildPaletteColorOverrideRows({{
+          colors: {{
+            CDS: '#54bcf8',
+            rRNA: '#71EE7D',
+            pairwise_match_min: '#ffe7e7',
+            pairwise_match_max: '#ff7272'
+          }},
+          paletteColors
+        }});
+        if (noOverrides.length !== 0) {{
+          throw new Error(`Palette-equivalent colors should not produce -d overrides, got ${{JSON.stringify(noOverrides)}}`);
+        }}
+        const overrideTsv = buildDefaultColorOverrideTsv({{
+          colors: {{ CDS: '#000000', rRNA: '#71ee7d', custom_feature: '#abcdef' }},
+          paletteColors
+        }});
+        if (overrideTsv !== 'CDS\\t#000000\\ncustom_feature\\t#abcdef') {{
+          throw new Error(`Expected only changed/default-missing color overrides, got ${{JSON.stringify(overrideTsv)}}`);
         }}
         """,
         encoding="utf-8",
@@ -2639,6 +2692,15 @@ def test_web_session_json_is_single_visible_settings_workflow() -> None:
     assert "editorState: buildEditorStateData()" in config_source
     assert "applyEditorStateData(data.editorState)" in config_source
     assert "featureStrokeOverrides" in config_source
+
+
+def test_pyodide_palette_init_treats_comparison_only_colors_as_uninitialized() -> None:
+    source = (WEB_ROOT / "js" / "app" / "pyodide.js").read_text(encoding="utf-8")
+
+    assert "const currentHasPaletteColors = hasPaletteColorEntries(currentColors.value);" in source
+    assert "if (!currentHasPaletteColors) {\n            currentColors.value = resolvedColors;" in source
+    assert "currentHasPaletteColors ? currentColors.value : resolvedColors" in source
+    assert "const currentHasColors = hasColorEntries(currentColors.value);" not in source
 
 
 @pytest.mark.slow

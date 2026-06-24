@@ -2200,7 +2200,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features, comparison tracks, and collinear blocks. Orientation + identity uses collinear_block_plus_min, collinear_block_plus, collinear_block_minus_min, and collinear_block_minus."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The CLI uses the selected palette directly; a -d override file is generated only for colors changed from that palette."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
@@ -4123,7 +4123,7 @@
                                 <div class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.resultCount }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
-                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reproducibility</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">CLI rerun</div>
                                 <div class="mt-1 font-semibold text-slate-700">{{ runInfoReproducibilityText(lastRunInfo) }}</div>
                             </div>
                         </div>
@@ -4131,13 +4131,23 @@
                         <div class="space-y-2">
                             <div class="flex items-center justify-between gap-2">
                                 <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Command</div>
-                                <button type="button"
-                                        @click="copyRunCommand"
-                                        class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
-                                        title="Copy command">
-                                    <i class="ph ph-copy"></i>
-                                    <span>{{ runInfoCopyStatus || 'Copy' }}</span>
-                                </button>
+                                <div class="flex flex-wrap items-center justify-end gap-2">
+                                    <button v-if="runInfoHasCliHelperFiles"
+                                            type="button"
+                                            @click="downloadCliHelperFiles"
+                                            class="px-3 py-1.5 rounded border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center gap-1"
+                                            title="Download browser-generated files referenced by this command">
+                                        <i class="ph ph-download-simple"></i>
+                                        <span>Download CLI Files</span>
+                                    </button>
+                                    <button type="button"
+                                            @click="copyRunCommand"
+                                            class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
+                                            title="Copy command">
+                                        <i class="ph ph-copy"></i>
+                                        <span>{{ runInfoCopyStatus || 'Copy' }}</span>
+                                    </button>
+                                </div>
                             </div>
                             <pre class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.command }}</pre>
                         </div>

@@ -43,6 +43,20 @@ import {
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
+import {
+  buildDefaultColorOverrideTsv,
+  normalizePaletteColors
+} from './color-utils.js';
+import {
+  DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
+  DEFAULT_LINEAR_BLAST_FILTERS,
+  buildBlastFilterArgs,
+  buildFeatureShapeAssignments,
+  buildRecordSelectorArgs,
+  buildReverseComplementArgs,
+  isCliDefaultFeatureList
+} from './cli-args.js';
+import { downloadZipFile } from '../utils/zip.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -82,6 +96,8 @@ const PROTEIN_EXTRACTION_CACHE_LIMIT = 16;
 const featureExtractionCache = new WeakMap();
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 const LOSAT_CACHE_SCHEMA = 2;
+const LOSAT_DERIVED_CACHE_SCHEMA = 1;
+const LOSAT_DERIVED_CACHE_LIMIT = 16;
 
 const isRawLosatCacheEntry = (entry) =>
   Boolean(entry) &&
@@ -159,6 +175,126 @@ const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
   if (found.key && found.key !== cacheKey) cacheMap.delete(found.key);
   cacheMap.set(cacheKey, promoted);
   return promoted;
+};
+
+const cloneJsonData = (value) => {
+  if (value === null || value === undefined) return value;
+  return JSON.parse(JSON.stringify(value));
+};
+
+const isLosatDerivedCacheEntry = (entry) =>
+  Boolean(entry) &&
+  entry.schema === LOSAT_DERIVED_CACHE_SCHEMA &&
+  entry.kind === 'derived-losatp-payload' &&
+  typeof entry.key === 'string' &&
+  entry.payload &&
+  typeof entry.payload === 'object' &&
+  !Array.isArray(entry.payload);
+
+const pruneLosatDerivedCache = (cacheMap) => {
+  if (!cacheMap || typeof cacheMap.delete !== 'function') return;
+  while (cacheMap.size > LOSAT_DERIVED_CACHE_LIMIT) {
+    const oldestKey = cacheMap.keys().next().value;
+    if (oldestKey === undefined) break;
+    cacheMap.delete(oldestKey);
+  }
+};
+
+const buildLosatDerivedPayloadCachePayload = ({
+  mode,
+  maxHits,
+  bitscore,
+  evalue,
+  identity,
+  alignmentLength,
+  collinearMinAnchors,
+  collinearMaxGeneGap,
+  collinearUnitMode,
+  collinearColorMode,
+  collinearAnchorMode,
+  collinearMaxDiagonalDrift,
+  collinearMaxConflictsInMergeGap,
+  collinearMaxParalogLinksPerOrthogroup,
+  collinearSearchScope,
+  orthogroupMembershipMode,
+  orthogroupMemberMaxHits,
+  recordPayloads,
+  pairPayloads
+}) => ({
+  cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
+  converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
+  mode: String(mode || 'pairwise'),
+  maxHits: Number(maxHits) || 5,
+  thresholds: {
+    bitscore: String(bitscore),
+    evalue: String(evalue),
+    identity: String(identity),
+    alignmentLength: String(alignmentLength)
+  },
+  orthogroup: {
+    membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
+    memberMaxHits: Number(orthogroupMemberMaxHits) || 5
+  },
+  collinear: {
+    minAnchors: String(collinearMinAnchors),
+    maxGeneGap: String(collinearMaxGeneGap),
+    unitMode: String(collinearUnitMode || 'auto'),
+    colorMode: String(collinearColorMode || 'orientation'),
+    anchorMode: String(collinearAnchorMode || 'rbh'),
+    maxDiagonalDrift: String(collinearMaxDiagonalDrift),
+    maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
+    maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
+    searchScope: String(collinearSearchScope || 'adjacent')
+  },
+  records: (Array.isArray(recordPayloads) ? recordPayloads : [])
+    .map((record) => ({
+      recordIndex: Number(record?.recordIndex),
+      proteinCacheKey: String(record?.proteinCacheKey || ''),
+      viewTransform: {
+        length: Number(record?.viewTransform?.length || 0),
+        reverse: Boolean(record?.viewTransform?.reverse)
+      }
+    }))
+    .sort((left, right) => left.recordIndex - right.recordIndex),
+  pairs: (Array.isArray(pairPayloads) ? pairPayloads : [])
+    .map((pair) => ({
+      pairIndex: Number(pair?.pairIndex),
+      queryIndex: Number(pair?.queryIndex),
+      subjectIndex: Number(pair?.subjectIndex),
+      cacheKey: String(pair?.cacheKey || '')
+    }))
+});
+
+const getLosatDerivedCacheEntry = (cacheMap, key) => {
+  if (!cacheMap || !key) return null;
+  const entry = cacheMap.get(key);
+  if (!isLosatDerivedCacheEntry(entry)) return null;
+  cacheMap.delete(key);
+  cacheMap.set(key, entry);
+  return cloneJsonData(entry.payload);
+};
+
+const stripRuntimeCacheStats = (payload) => {
+  const cloned = cloneJsonData(payload);
+  if (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) {
+    delete cloned.cache;
+  }
+  return cloned;
+};
+
+const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload }) => {
+  if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  const entry = {
+    schema: LOSAT_DERIVED_CACHE_SCHEMA,
+    kind: 'derived-losatp-payload',
+    key,
+    mode: String(mode || ''),
+    payload: stripRuntimeCacheStats(payload)
+  };
+  if (!isLosatDerivedCacheEntry(entry)) return;
+  if (cacheMap.has(key)) cacheMap.delete(key);
+  cacheMap.set(key, entry);
+  pruneLosatDerivedCache(cacheMap);
 };
 
 const makeSafeFilename = (name) => {
@@ -426,12 +562,6 @@ const normalizeMultiRecordRowGapRatio = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
 };
-const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze({
-  bitscore: 50,
-  evalue: '1e-2',
-  identity: 0,
-  alignment_length: 0
-});
 const normalizeBlastThresholdNumber = (value, defaultValue, { integer = false } = {}) => {
   if (value === null || value === undefined || value === '') return defaultValue;
   const numeric = Number(value);
@@ -617,6 +747,7 @@ export const createRunAnalysis = ({
     originalLegendColors,
     selectedPalette,
     currentColors,
+    paletteDefinitions,
     appliedPaletteName,
     appliedPaletteColors,
     pendingPaletteName,
@@ -637,6 +768,7 @@ export const createRunAnalysis = ({
     losatCacheInfo,
     losatThreadingStatus,
     losatCache,
+    losatDerivedCache,
     circularConservation,
     orthogroups,
     featureOrthogroupIndex,
@@ -679,6 +811,53 @@ export const createRunAnalysis = ({
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let activeLosatAbortController = null;
+  let latestCliHelperFiles = [];
+  let latestCliHelperArchiveName = 'out-cli-files.zip';
+
+  const setLatestCliHelperFiles = (runInfo, generatedCliFileMap, archiveBaseName) => {
+    const helperFiles = Array.isArray(runInfo?.helperFiles) ? runInfo.helperFiles : [];
+    if (helperFiles.length === 0) {
+      latestCliHelperFiles = [];
+      latestCliHelperArchiveName = 'out-cli-files.zip';
+      return;
+    }
+
+    const bySlot = new Map();
+    generatedCliFileMap.forEach((entry) => {
+      const slot = String(entry?.slot || '').trim();
+      if (slot && !bySlot.has(slot)) bySlot.set(slot, entry);
+    });
+
+    latestCliHelperFiles = helperFiles
+      .map((helper) => {
+        const path = String(helper?.path || '').trim();
+        const slot = String(helper?.slot || '').trim();
+        const entry = generatedCliFileMap.get(path) || bySlot.get(slot);
+        if (!entry) return null;
+        return {
+          name: String(helper?.name || entry.name || 'helper.tsv'),
+          data: entry.data
+        };
+      })
+      .filter(Boolean);
+    const archiveStem = makeSafeFilename(`${archiveBaseName || form.prefix || 'out'}-cli-files`);
+    latestCliHelperArchiveName = `${archiveStem}.zip`;
+  };
+
+  const downloadCliHelperFiles = () => {
+    if (!latestCliHelperFiles.length) {
+      alert('No CLI helper files are available for the latest run.');
+      return;
+    }
+    const totalChars = latestCliHelperFiles.reduce((sum, file) => sum + String(file.data ?? '').length, 0);
+    if (totalChars > 50 * 1024 * 1024) {
+      const proceed = confirm(
+        `CLI helper file export will download about ${(totalChars / (1024 * 1024)).toFixed(1)} MB. Continue?`
+      );
+      if (!proceed) return;
+    }
+    downloadZipFile(latestCliHelperArchiveName, latestCliHelperFiles);
+  };
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
@@ -1234,8 +1413,6 @@ json.dumps({
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   };
 
-  const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
-
   const getFeatureShapeOptionSupport = () => {
     if (featureShapeSupportCache) return featureShapeSupportCache;
     const pyodide = getPyodide();
@@ -1677,6 +1854,7 @@ json.dumps({
       selectedResultIndex.value = 0;
       resultPanelTab.value = 'preview';
       lastRunInfo.value = null;
+      latestCliHelperFiles = [];
       errorLog.value = null;
       if (typeof resetPreviewViewport === 'function') {
         resetPreviewViewport({ resetZoom: true });
@@ -1710,6 +1888,7 @@ json.dumps({
       let virtualBlastFiles = [];
       const generationFileMap = new Map();
       const runInfoFileMap = new Map();
+      const generatedCliFileMap = new Map();
       const textEncoder = new TextEncoder();
       const textDecoder = new TextDecoder();
       const getPayloadName = (path, fallback = 'input') => {
@@ -1741,6 +1920,17 @@ json.dumps({
           kind: kind === 'generated' ? 'generated' : 'uploaded'
         });
       };
+      const recordGeneratedCliFile = (path, data, { name = '', slot = '' } = {}) => {
+        const normalizedPath = String(path || '').trim();
+        if (!normalizedPath) return;
+        const displayName = String(name || getPayloadName(normalizedPath)).trim() || getPayloadName(normalizedPath);
+        generatedCliFileMap.set(normalizedPath, {
+          path: normalizedPath,
+          name: displayName,
+          slot: String(slot || '').trim(),
+          data: String(data ?? '')
+        });
+      };
       const toTransferableBuffer = (bytes) => {
         if (bytes instanceof ArrayBuffer) return bytes;
         if (ArrayBuffer.isView(bytes)) {
@@ -1764,11 +1954,16 @@ json.dumps({
         const bytes = textEncoder.encode(String(text ?? ''));
         pyodide.FS.writeFile(path, bytes);
         const displayName = name || getPayloadName(path);
+        const resolvedSlot = slot || generatedSlotForPath(path);
         stageGenerationBytes(path, displayName, bytes);
         registerRunInfoFile(path, {
           name: displayName,
-          slot: slot || generatedSlotForPath(path),
+          slot: resolvedSlot,
           kind: 'generated'
+        });
+        recordGeneratedCliFile(path, text, {
+          name: displayName,
+          slot: resolvedSlot
         });
       };
       const stageUploadedFile = async (fileObj, path, {
@@ -1794,14 +1989,15 @@ json.dumps({
         return true;
       };
 
-      if (form.prefix && form.prefix.trim() !== '') args.push('-o', form.prefix.trim());
+      const normalizedOutputPrefix = String(form.prefix || '').trim();
+      if (normalizedOutputPrefix && normalizedOutputPrefix !== 'out') args.push('-o', normalizedOutputPrefix);
       if (mode.value === 'circular') {
         if (form.species) args.push('--species', form.species);
         if (form.strain) args.push('--strain', form.strain);
       }
       if (form.separate_strands) args.push('--separate_strands');
 
-      if (adv.features.length) args.push('-k', adv.features.join(','));
+      if (adv.features.length && !isCliDefaultFeatureList(adv.features)) args.push('-k', adv.features.join(','));
       if (adv.window_size) args.push('--window', adv.window_size);
       if (adv.step_size) args.push('--step', adv.step_size);
       if (adv.nt && adv.nt !== 'GC') args.push('--nt', adv.nt);
@@ -1820,10 +2016,23 @@ json.dumps({
       if (adv.legend_font_size) args.push('--legend_font_size', adv.legend_font_size);
       if (adv.resolve_overlaps) args.push('--resolve_overlaps');
 
-      let dContent = '';
-      for (const [k, v] of Object.entries(activeRunColors)) dContent += `${k}\t${v}\n`;
-      stageTextFile('/combined_d.tsv', dContent);
-      args.push('-d', '/combined_d.tsv');
+      const activePaletteName = String(
+        isReflow ? appliedPaletteName.value : (selectedPalette?.value || appliedPaletteName.value || 'default')
+      ).trim() || 'default';
+      if (activePaletteName !== 'default') args.push('-p', activePaletteName);
+      const paletteBaseColors = normalizePaletteColors(
+        paletteDefinitions.value?.[activePaletteName] ||
+        paletteDefinitions.value?.default ||
+        {}
+      );
+      const dContent = buildDefaultColorOverrideTsv({
+        colors: activeRunColors,
+        paletteColors: paletteBaseColors
+      });
+      if (dContent.trim() !== '') {
+        stageTextFile('/combined_d.tsv', `${dContent}\n`);
+        args.push('-d', '/combined_d.tsv');
+      }
 
       let tContent = '';
       manualSpecificRules.forEach((r) => {
@@ -1888,16 +2097,7 @@ json.dumps({
         editableLabels.value = [];
       }
 
-      const selectedFeatureShapes = Array.isArray(adv.features)
-        ? adv.features
-            .map((featureTypeRaw) => {
-              const featureType = String(featureTypeRaw || '').trim();
-              if (!featureType) return null;
-              const shape = normalizeFeatureShape(adv.feature_shapes?.[featureType]);
-              return `${featureType}=${shape}`;
-            })
-            .filter((assignment) => typeof assignment === 'string' && assignment.length > 0)
-        : [];
+      const selectedFeatureShapes = buildFeatureShapeAssignments(adv.features, adv.feature_shapes);
       const appendDepthStyleArgs = () => {
         if (adv.depth_color) args.push('--depth_color', adv.depth_color);
         if (adv.depth_min !== null && adv.depth_min !== undefined && adv.depth_min !== '') {
@@ -2599,16 +2799,15 @@ json.dumps({
               DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
               { integer: true }
             );
-            args.push(
-              '--bitscore',
-              adv.min_bitscore,
-              '--evalue',
-              adv.evalue,
-              '--identity',
-              adv.identity,
-              '--alignment_length',
-              adv.alignment_length
-            );
+            args.push(...buildBlastFilterArgs(
+              {
+                bitscore: adv.min_bitscore,
+                evalue: adv.evalue,
+                identity: adv.identity,
+                alignment_length: adv.alignment_length
+              },
+              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS
+            ));
           };
 
           const runCircularLosatConservation = async (comparisonEntries) => {
@@ -2818,7 +3017,7 @@ json.dumps({
             args.push('--feature_shape', assignment);
           });
         }
-        args.push('--scale_style', form.scale_style);
+        if (form.scale_style && form.scale_style !== 'bar') args.push('--scale_style', form.scale_style);
         const normalizedTrackLayout =
           form.linear_track_layout === 'spreadout'
             ? 'above'
@@ -2957,16 +3156,12 @@ json.dumps({
         const orthogroupMembershipMode = losat.blastp.orthogroupMembershipMode;
         const orthogroupMemberMaxHits = Math.max(1, losat.blastp.orthogroupMemberMaxHits);
         const collinearSearchScope = losat.blastp.collinearSearchScope;
-        args.push(
-          '--bitscore',
-          adv.min_bitscore,
-          '--evalue',
-          adv.evalue,
-          '--identity',
-          adv.identity,
-          '--alignment_length',
-          adv.alignment_length
-        );
+        args.push(...buildBlastFilterArgs({
+          bitscore: adv.min_bitscore,
+          evalue: adv.evalue,
+          identity: adv.identity,
+          alignment_length: adv.alignment_length
+        }));
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
@@ -3243,6 +3438,8 @@ json.dumps({
               proteinExtractionCacheHits: 0,
               fastaJsExtractions: 0,
               fastaPyodideFallbacks: 0,
+              proteinDerivedPayloadCacheHits: 0,
+              proteinDerivedPayloadCacheMisses: 0,
               proteinConversionCacheHits: 0,
               proteinFilteredHitCacheHits: 0,
               proteinFilteredHitCacheMisses: 0,
@@ -3541,12 +3738,8 @@ json.dumps({
           if (spec?.cli) args.push('--region', spec.cli);
         });
 
-        recordSelectors.forEach((selector) => {
-          args.push('--record_id', selector);
-        });
-        reverseFlags.forEach((flag) => {
-          args.push('--reverse_complement', flag ? '1' : '0');
-        });
+        args.push(...buildRecordSelectorArgs(recordSelectors));
+        args.push(...buildReverseComplementArgs(reverseFlags));
 
         if (useLosat) {
           setProcessingStatus('Preparing LOSAT jobs...');
@@ -3724,28 +3917,75 @@ json.dumps({
                 ? 'Converting LOSAT protein links to collinear ribbons...'
                 : 'Converting LOSAT protein hits...'
             );
-            const convertedPayload = JSON.parse(
-              convertProteinBlast(
-                JSON.stringify({ records: recordPayloads, pairs: pairPayloads }),
-                blastpMode,
-                Math.max(1, losat.blastp.maxHits),
-                adv.min_bitscore,
-                adv.evalue,
-                adv.identity,
-                adv.alignment_length,
-                losat.blastp.collinearMinAnchors,
-                losat.blastp.collinearMaxGeneGap,
-                'cds',
-                losat.blastp.collinearColorMode,
-                'rbh',
-                losat.blastp.collinearMaxDiagonalDrift,
-                losat.blastp.collinearMaxConflictsInMergeGap,
-                losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+            const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
+            const derivedCacheMap = losatDerivedCache.value || new Map();
+            let derivedCacheKey = '';
+            let convertedPayload = null;
+            if (useDerivedProteinPayloadCache) {
+              const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
+                mode: blastpMode,
+                maxHits: Math.max(1, losat.blastp.maxHits),
+                bitscore: adv.min_bitscore,
+                evalue: adv.evalue,
+                identity: adv.identity,
+                alignmentLength: adv.alignment_length,
+                collinearMinAnchors: losat.blastp.collinearMinAnchors,
+                collinearMaxGeneGap: losat.blastp.collinearMaxGeneGap,
+                collinearUnitMode: 'cds',
+                collinearColorMode: losat.blastp.collinearColorMode,
+                collinearAnchorMode: 'rbh',
+                collinearMaxDiagonalDrift: losat.blastp.collinearMaxDiagonalDrift,
+                collinearMaxConflictsInMergeGap: losat.blastp.collinearMaxConflictsInMergeGap,
+                collinearMaxParalogLinksPerOrthogroup: losat.blastp.collinearMaxParalogLinksPerOrthogroup,
                 collinearSearchScope,
                 orthogroupMembershipMode,
-                orthogroupMemberMaxHits
-              )
-            );
+                orthogroupMemberMaxHits,
+                recordPayloads,
+                pairPayloads
+              });
+              derivedCacheKey = await hashText(JSON.stringify(derivedCachePayload));
+              convertedPayload = getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey);
+              if (convertedPayload) {
+                convertedPayload.cache = {
+                  ...(convertedPayload.cache || {}),
+                  derivedPayloadHit: true
+                };
+                losatTiming.proteinDerivedPayloadCacheHits += 1;
+              } else {
+                losatTiming.proteinDerivedPayloadCacheMisses += 1;
+              }
+            }
+            if (!convertedPayload) {
+              convertedPayload = JSON.parse(
+                convertProteinBlast(
+                  JSON.stringify({ records: recordPayloads, pairs: pairPayloads }),
+                  blastpMode,
+                  Math.max(1, losat.blastp.maxHits),
+                  adv.min_bitscore,
+                  adv.evalue,
+                  adv.identity,
+                  adv.alignment_length,
+                  losat.blastp.collinearMinAnchors,
+                  losat.blastp.collinearMaxGeneGap,
+                  'cds',
+                  losat.blastp.collinearColorMode,
+                  'rbh',
+                  losat.blastp.collinearMaxDiagonalDrift,
+                  losat.blastp.collinearMaxConflictsInMergeGap,
+                  losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+                  collinearSearchScope,
+                  orthogroupMembershipMode,
+                  orthogroupMemberMaxHits
+                )
+              );
+              if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
+                setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
+                  mode: blastpMode,
+                  payload: convertedPayload
+                });
+              }
+            }
+            losatDerivedCache.value = derivedCacheMap;
             if (convertedPayload.error) throw new Error(convertedPayload.error);
             const conversionCache = convertedPayload.cache || {};
             if (conversionCache.convertedPayloadHit) losatTiming.proteinConversionCacheHits += 1;
@@ -3764,10 +4004,16 @@ json.dumps({
               const sourcePair =
                 losatPairs.find((pair) => pair.pairIndex === pairIndex && pair.displayPair) ||
                 losatPairs.find((pair) => pair.pairIndex === pairIndex);
+              const blastName = sourcePair?.filename || getPayloadName(blastPath);
+              const blastSlot = `generatedFiles.losat_blasts[${pairIndex}]`;
               registerRunInfoFile(blastPath, {
-                name: sourcePair?.filename || getPayloadName(blastPath),
-                slot: `generatedFiles.losat_blasts[${pairIndex}]`,
+                name: blastName,
+                slot: blastSlot,
                 kind: 'generated'
+              });
+              recordGeneratedCliFile(blastPath, converted.tsv || '', {
+                name: blastName,
+                slot: blastSlot
               });
               virtualBlastFiles.push({
                 path: blastPath,
@@ -3793,10 +4039,16 @@ json.dumps({
               );
               if (converted.error) throw new Error(converted.error);
               const blastPath = `/blast_${pair.pairIndex}.txt`;
+              const blastName = pair.filename || getPayloadName(blastPath);
+              const blastSlot = `generatedFiles.losat_blasts[${pair.pairIndex}]`;
               registerRunInfoFile(blastPath, {
-                name: pair.filename || getPayloadName(blastPath),
-                slot: `generatedFiles.losat_blasts[${pair.pairIndex}]`,
+                name: blastName,
+                slot: blastSlot,
                 kind: 'generated'
+              });
+              recordGeneratedCliFile(blastPath, converted.tsv || '', {
+                name: blastName,
+                slot: blastSlot
               });
               virtualBlastFiles.push({
                 path: blastPath,
@@ -3819,6 +4071,8 @@ json.dumps({
               `protein extraction cache hits=${losatTiming.proteinExtractionCacheHits}`,
               `JS FASTA=${losatTiming.fastaJsExtractions}`,
               `Pyodide FASTA=${losatTiming.fastaPyodideFallbacks}`,
+              `derived payload cache hits=${losatTiming.proteinDerivedPayloadCacheHits}`,
+              `derived payload cache misses=${losatTiming.proteinDerivedPayloadCacheMisses}`,
               `protein conversion cache hits=${losatTiming.proteinConversionCacheHits}`,
               `filtered hit cache hits=${losatTiming.proteinFilteredHitCacheHits}`,
               `filtered hit cache misses=${losatTiming.proteinFilteredHitCacheMisses}`,
@@ -3968,7 +4222,7 @@ json.dumps({
           : res;
       });
       if (!isReflow && manualRunStartedAt !== null) {
-        lastRunInfo.value = buildRunInfo({
+        const runInfo = buildRunInfo({
           mode: mode.value,
           args: args.map(String),
           fileMetadata: runInfoFileMap,
@@ -3976,6 +4230,8 @@ json.dumps({
           resultCount: results.value.length,
           startedAtIso: manualRunStartedAtIso
         });
+        lastRunInfo.value = runInfo;
+        setLatestCliHelperFiles(runInfo, generatedCliFileMap, normalizedOutputPrefix || 'out');
         resultPanelTab.value = 'preview';
       }
       logPostGbdrawTimings(postGbdrawTimingEntries);
@@ -4127,6 +4383,9 @@ json.dumps({
     if (losatCache.value) {
       losatCache.value.clear();
     }
+    if (losatDerivedCache.value) {
+      losatDerivedCache.value.clear();
+    }
     losatCacheInfo.value = [];
   };
 
@@ -4135,6 +4394,7 @@ json.dumps({
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
+    downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,
