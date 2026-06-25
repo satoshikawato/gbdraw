@@ -1158,7 +1158,6 @@ def assemble_linear_diagram(
 
     alignment_shift_x = alignment_extents.horizontal_shift
     alignment_width_extension = alignment_extents.width_extension
-    definition_column_shift_x = alignment_shift_x
     if alignment_shift_x or alignment_width_extension:
         width_extension_px = math.ceil(alignment_width_extension)
         canvas_config.horizontal_offset += alignment_shift_x
@@ -1167,6 +1166,23 @@ def assemble_linear_diagram(
             canvas_config.legend_offset_x += width_extension_px
         elif canvas_config.legend_position in {"top", "bottom"}:
             canvas_config.legend_offset_x += 0.5 * width_extension_px
+    record_offsets_x: list[float] = []
+    for record in records:
+        if normalize_length:
+            record_offset_x = 0.0
+        elif canvas_config.align_center:
+            record_offset_x = (
+                canvas_config.alignment_width
+                * ((canvas_config.longest_genome - len(record.seq)) / canvas_config.longest_genome)
+                / 2
+            )
+        else:
+            record_offset_x = 0.0
+        record_offset_x += orthogroup_alignment_offsets.get(len(record_offsets_x), 0.0)
+        record_offsets_x.append(record_offset_x)
+    definition_column_width = max_def_width
+    if canvas_config.keep_definition_left_aligned and record_offsets_x:
+        definition_column_width = max(0.0, float(max_def_width) - min(record_offsets_x))
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     # Embed both viewBox configurations as data attributes for JavaScript repositioning
@@ -1268,15 +1284,7 @@ def assemble_linear_diagram(
     for count, record in enumerate(records, start=1):
         offset_y = record_offsets[count - 1]
 
-        if normalize_length:
-            offset_x = 0
-        else:
-            offset_x = (
-                (canvas_config.alignment_width * ((canvas_config.longest_genome - len(record.seq)) / canvas_config.longest_genome) / 2)
-                if canvas_config.align_center
-                else 0
-            )
-        offset_x += orthogroup_alignment_offsets.get(count - 1, 0.0)
+        offset_x = record_offsets_x[count - 1] if count - 1 < len(record_offsets_x) else 0.0
 
         labels_for_record = all_labels.get(record.id)
         should_show_labels = False
@@ -1420,9 +1428,8 @@ def assemble_linear_diagram(
                 offset_x,
                 canvas_config,
                 config_dict,
-                max_def_width,
+                definition_column_width,
                 cfg=record_cfg,
-                definition_column_shift_x=definition_column_shift_x,
             )
             continue
 
@@ -1445,9 +1452,8 @@ def assemble_linear_diagram(
             offset_x,
             canvas_config,
             config_dict,
-            max_def_width,
+            definition_column_width,
             cfg=record_cfg,
-            definition_column_shift_x=definition_column_shift_x,
         )
         gc_offset_y = offset_y
         if non_middle_layout:

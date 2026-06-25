@@ -9,7 +9,7 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from importlib import resources
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Mapping, Optional, Union
 
 from fontTools.ttLib import TTFont
 from svgwrite.text import Text
@@ -620,23 +620,31 @@ def create_text_element(
     text: str,
     x: float,
     y: float,
-    font_size: str,
+    font_size: str | float,
     font_weight: str,
     font_family: str,
     text_anchor: str = "middle",
     dominant_baseline: str = "middle",
+    *,
+    stroke: str = "none",
+    fill: str = "black",
+    extra_attrs: Mapping[str, str] | None = None,
 ) -> Text:
-    return Text(
+    text_el = Text(
         text,
         insert=(x, y),
-        stroke="none",
-        fill="black",
+        stroke=stroke,
+        fill=fill,
         font_size=font_size,
         font_weight=font_weight,
         font_family=font_family,
         text_anchor=text_anchor,
         dominant_baseline=dominant_baseline,
+        debug=False if extra_attrs else True,
     )
+    for key, value in (extra_attrs or {}).items():
+        text_el.attribs[str(key)] = str(value)
+    return text_el
 
 
 def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool, None]]]:

@@ -33,6 +33,15 @@ class _DefinitionLine:
     y: float = 0.0
 
 
+@dataclass(frozen=True)
+class _ResolvedDefinitionLineStyle:
+    font_size: float
+    font_weight: str
+    fill: str
+    stroke: str
+    font_family: str
+
+
 class DefinitionGroup:
     """Build the stacked linear definition block for one record."""
 
@@ -62,7 +71,8 @@ class DefinitionGroup:
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         def_cfg = cfg.objects.definition.linear
-        self.linear_definition_stroke: float = def_cfg.stroke
+        self._def_cfg = def_cfg
+        self.linear_definition_stroke: str = def_cfg.stroke
         self.linear_definition_fill: str = def_cfg.fill
         self.linear_definition_font_size: float = def_cfg.font_size.for_length_param(self.length_param)
         self.linear_definition_font_weight: str = def_cfg.font_weight
@@ -128,39 +138,39 @@ class DefinitionGroup:
         self,
         text: str,
         *,
-        font_weight: str | None = None,
+        style: _ResolvedDefinitionLineStyle,
         font_style: str = "normal",
     ) -> tuple[float, float]:
         """Return rendered SVG width and legacy layout height for styled text."""
-        resolved_weight = self.linear_definition_font_weight if font_weight is None else font_weight
         _, height = calculate_bbox_dimensions(
             text,
-            self.linear_definition_font_family,
-            self.linear_definition_font_size,
+            style.font_family,
+            style.font_size,
             self.dpi,
-            font_weight=resolved_weight,
+            font_weight=style.font_weight,
             font_style=font_style,
         )
         width, _ = calculate_svg_bbox_dimensions(
             text,
-            self.linear_definition_font_family,
-            self.linear_definition_font_size,
+            style.font_family,
+            style.font_size,
             self.dpi,
-            font_weight=resolved_weight,
+            font_weight=style.font_weight,
             font_style=font_style,
         )
         return width, height
 
-    def _measure_line(self, text: str) -> tuple[float, float]:
+    def _measure_line(self, kind: str, text: str) -> tuple[float, float]:
         """Return rendered SVG width and legacy layout height for a definition line."""
         return self._measure_text(
             text,
-            font_weight=self.linear_definition_font_weight,
+            style=self._style_for_line(kind),
             font_style="normal",
         )
 
-    def _measure_mixed_line(self, parts: list[dict[str, str | bool | None]]) -> tuple[float, float]:
+    def _measure_mixed_line(self, kind: str, parts: list[dict[str, str | bool | None]]) -> tuple[float, float]:
         """Measure mixed regular/italic definition content as rendered tspans."""
+        style = self._style_for_line(kind)
         total_width = 0.0
         max_height = 0.0
         for part in parts:
@@ -169,24 +179,46 @@ class DefinitionGroup:
                 continue
             width, height = self._measure_text(
                 str(part_text),
-                font_weight=self.linear_definition_font_weight,
+                style=style,
                 font_style="italic" if part.get("italic") else "normal",
             )
             total_width += width
             max_height = max(max_height, height)
 
         if max_height == 0.0 and self.record_name_plain:
-            _, max_height = self._measure_line(self.record_name_plain)
+            _, max_height = self._measure_line(kind, self.record_name_plain)
         return total_width, max_height
+
+    def _style_for_line(self, kind: str) -> _ResolvedDefinitionLineStyle:
+        style_cfg = getattr(self._def_cfg.line_styles, kind, None)
+        return _ResolvedDefinitionLineStyle(
+            font_size=(
+                self.linear_definition_font_size
+                if style_cfg is None or style_cfg.font_size is None
+                else style_cfg.font_size
+            ),
+            font_weight=(
+                self.linear_definition_font_weight
+                if style_cfg is None or style_cfg.font_weight is None
+                else style_cfg.font_weight
+            ),
+            fill=(
+                self.linear_definition_fill
+                if style_cfg is None or style_cfg.fill is None
+                else style_cfg.fill
+            ),
+            stroke=self.linear_definition_stroke,
+            font_family=self.linear_definition_font_family,
+        )
 
     def _build_definition_lines(self) -> list[_DefinitionLine]:
         lines: list[_DefinitionLine] = []
 
         if self.record_name_plain:
-            width, height = self._measure_mixed_line(self.record_name_parts)
+            width, height = self._measure_mixed_line("name", self.record_name_parts)
             lines.append(
                 _DefinitionLine(
-                    kind="mixed",
+                    kind="name",
                     text=self.record_name_plain,
                     width=width,
                     height=height,
@@ -195,10 +227,10 @@ class DefinitionGroup:
             )
 
         if self.show_replicon and self.replicon_label:
-            width, height = self._measure_line(self.replicon_label)
+            width, height = self._measure_line("replicon", self.replicon_label)
             lines.append(
                 _DefinitionLine(
-                    kind="plain",
+                    kind="replicon",
                     text=self.replicon_label,
                     width=width,
                     height=height,
@@ -206,10 +238,10 @@ class DefinitionGroup:
             )
 
         if self.show_accession and self.accession_label.strip():
-            width, height = self._measure_line(self.accession_label)
+            width, height = self._measure_line("accession", self.accession_label)
             lines.append(
                 _DefinitionLine(
-                    kind="plain",
+                    kind="accession",
                     text=self.accession_label,
                     width=width,
                     height=height,
@@ -217,10 +249,10 @@ class DefinitionGroup:
             )
 
         if self.show_length and self.length_label.strip():
-            width, height = self._measure_line(self.length_label)
+            width, height = self._measure_line("length", self.length_label)
             lines.append(
                 _DefinitionLine(
-                    kind="plain",
+                    kind="length",
                     text=self.length_label,
                     width=width,
                     height=height,
@@ -255,35 +287,42 @@ class DefinitionGroup:
     def add_elements_to_group(self) -> None:
         """Add all visible definition lines to the SVG group."""
         for line in self.definition_lines:
-            if line.kind == "mixed":
-                self.definition_group.add(self._create_name_text(line.parts or [], line.y))
+            if line.parts is not None:
+                self.definition_group.add(self._create_name_text(line, line.y))
             else:
+                style = self._style_for_line(line.kind)
                 self.definition_group.add(
                     create_text_element(
                         line.text,
                         self.text_x,
                         line.y,
-                        self.linear_definition_font_size,
-                        self.linear_definition_font_weight,
-                        self.linear_definition_font_family,
+                        style.font_size,
+                        style.font_weight,
+                        style.font_family,
                         text_anchor=self.linear_text_anchor,
                         dominant_baseline=self.linear_dominant_baseline,
+                        stroke=style.stroke,
+                        fill=style.fill,
+                        extra_attrs={"data-definition-line-kind": line.kind},
                     )
                 )
 
-    def _create_name_text(self, parts: list[dict[str, str | bool | None]], y_pos: float) -> Text:
+    def _create_name_text(self, line: _DefinitionLine, y_pos: float) -> Text:
+        style = self._style_for_line(line.kind)
         text_el = Text(
             "",
             insert=(self.text_x, y_pos),
-            stroke=self.linear_definition_stroke,
-            fill=self.linear_definition_fill,
-            font_size=self.linear_definition_font_size,
-            font_weight=self.linear_definition_font_weight,
-            font_family=self.linear_definition_font_family,
+            stroke=style.stroke,
+            fill=style.fill,
+            font_size=style.font_size,
+            font_weight=style.font_weight,
+            font_family=style.font_family,
             text_anchor=self.linear_text_anchor,
             dominant_baseline=self.linear_dominant_baseline,
+            debug=False,
         )
-        for part in parts:
+        text_el.attribs["data-definition-line-kind"] = line.kind
+        for part in line.parts or []:
             part_text = part.get("text")
             if part_text is None:
                 continue

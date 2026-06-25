@@ -26,6 +26,10 @@ from .web_support.orthogroup_metadata import (
     serialize_orthogroups_payload,
 )
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
+from .definition_line_styles import (
+    parse_definition_line_style_assignment,
+    parse_definition_line_style_overrides,
+)
 from .analysis.collinearity import (
     LosslessCollinearityParameters,
     build_orthogroup_collinearity_blocks,
@@ -469,6 +473,14 @@ def _parse_collinear_search_scope(value: str) -> str:
 def _parse_feature_shape_assignment_arg(value: str) -> str:
     try:
         parse_feature_shape_assignment(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
+
+
+def _parse_definition_line_style_arg(value: str) -> str:
+    try:
+        parse_definition_line_style_assignment(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
     return value
@@ -960,6 +972,21 @@ def _get_args(args) -> argparse.Namespace:
         '--definition_font_size',
         help='Definition font size (optional; float; default: 24 pt for genomes <= 50 kb, 10 pt for genomes >= 50 kb)',
         type=float)
+    _add_argument_with_hidden_aliases(
+        parser,
+        '--definition_line_style',
+        hidden_aliases=('--definition-line-style',),
+        dest='definition_line_style',
+        help=(
+            'Definition line style override (repeatable): '
+            'LINE:weight=bold,color=#000000,size=12. '
+            'Lines: name/species/record_label, replicon, accession, length/coordinates.'
+        ),
+        type=_parse_definition_line_style_arg,
+        action='append',
+        default=[],
+        metavar='LINE:KEY=VALUE',
+    )
     parser.add_argument(
         '--plot_title',
         help='Shared plot title text (optional).',
@@ -1548,6 +1575,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     block_stroke_color: Optional[str] = args.block_stroke_color
     block_stroke_width: Optional[float] = args.block_stroke_width
     definition_font_size: Optional[float] = args.definition_font_size
+    definition_line_styles = parse_definition_line_style_overrides(args.definition_line_style)
     definition_show_replicon: bool = bool(args.show_replicon)
     definition_show_accession: bool = not bool(args.hide_accession)
     definition_show_length: bool = not bool(args.hide_length)
@@ -1591,6 +1619,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         linear_axis_stroke_color=axis_stroke_color,
         linear_axis_stroke_width=axis_stroke_width,
         linear_definition_font_size=definition_font_size,
+        linear_definition_line_styles=definition_line_styles or None,
         linear_definition_show_replicon=definition_show_replicon,
         linear_definition_show_accession=definition_show_accession,
         linear_definition_show_length=definition_show_length,

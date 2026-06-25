@@ -381,6 +381,59 @@ export const createAppSetup = () => {
     sourceDepthTrackCount(seq?.depth, linearDepthTrackUiCount(seq))
   );
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
+  const definitionLineStyleRows = Object.freeze([
+    { key: 'name', label: 'Name / Species' },
+    { key: 'replicon', label: 'Replicon', visibilityKey: 'linear_show_replicon' },
+    { key: 'accession', label: 'Accession', visibilityKey: 'linear_show_accession' },
+    { key: 'length', label: 'Length / Coord.', visibilityKey: 'linear_show_length' }
+  ]);
+  const ensureDefinitionLineStyle = (kind) => {
+    const key = String(kind || '');
+    if (
+      !adv.linear_definition_line_styles ||
+      typeof adv.linear_definition_line_styles !== 'object' ||
+      Array.isArray(adv.linear_definition_line_styles)
+    ) {
+      adv.linear_definition_line_styles = {};
+    }
+    const existing = adv.linear_definition_line_styles[key];
+    if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
+      adv.linear_definition_line_styles[key] = {
+        font_size: null,
+        font_weight: null,
+        fill: null
+      };
+    }
+    return adv.linear_definition_line_styles[key];
+  };
+  const getDefinitionLineStyleSize = (kind) => ensureDefinitionLineStyle(kind).font_size ?? '';
+  const setDefinitionLineStyleSize = (kind, value) => {
+    const style = ensureDefinitionLineStyle(kind);
+    if (value === null || value === undefined || String(value).trim() === '') {
+      style.font_size = null;
+      return;
+    }
+    const numeric = Number(value);
+    style.font_size = Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  };
+  const getDefinitionLineStyleWeight = (kind) => ensureDefinitionLineStyle(kind).font_weight ?? '';
+  const setDefinitionLineStyleWeight = (kind, value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    ensureDefinitionLineStyle(kind).font_weight = normalized === 'bold' ? 'bold' : null;
+  };
+  const getDefinitionLineStyleFill = (kind) => ensureDefinitionLineStyle(kind).fill ?? '';
+  const setDefinitionLineStyleColor = (kind, value) => {
+    const normalized = String(value || '').trim();
+    ensureDefinitionLineStyle(kind).fill = normalized || null;
+  };
+  const getDefinitionLineStyleSwatchValue = (kind) => {
+    const fill = getDefinitionLineStyleFill(kind);
+    return /^#[0-9a-fA-F]{6}$/.test(fill) ? fill : '#000000';
+  };
+  const isDefinitionLineStyleMuted = (row) => {
+    const key = row?.visibilityKey;
+    return key ? adv[key] === false : false;
+  };
   const normalizeDepthSlotTrackIndex = (slot) => {
     const rawTrackIndex = Number(slot?.params?.track_index);
     return Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
@@ -2126,6 +2179,15 @@ export const createAppSetup = () => {
     canvasPadding,
     showCanvasControls,
     resetCanvasPadding,
+    definitionLineStyleRows,
+    getDefinitionLineStyleSize,
+    setDefinitionLineStyleSize,
+    getDefinitionLineStyleWeight,
+    setDefinitionLineStyleWeight,
+    getDefinitionLineStyleFill,
+    setDefinitionLineStyleColor,
+    getDefinitionLineStyleSwatchValue,
+    isDefinitionLineStyleMuted,
     downloadDpi,
     runAnalysis,
     cancelGeneration,

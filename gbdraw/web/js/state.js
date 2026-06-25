@@ -3,6 +3,7 @@ import {
   normalizePaletteColors,
   normalizePaletteDefinitions
 } from './app/color-utils.js';
+import { createDefaultLinearDefinitionLineStyles } from './app/cli-args.js';
 import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
 import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
 const { ref, reactive, computed } = window.Vue;
@@ -59,6 +60,7 @@ const svgContent = computed(() => {
         'href',
         'id',
         'class',
+        'data-definition-line-kind',
         'data-gbdraw-feature-id',
         'data-legend-key',
         'data-label-key',
@@ -389,6 +391,7 @@ export const createDefaultAdv = () => ({
   linear_show_replicon: false,
   linear_show_accession: true,
   linear_show_length: true,
+  linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(),
   gc_height: null,
   depth_height: null,
   depth_color: '#4A90E2',

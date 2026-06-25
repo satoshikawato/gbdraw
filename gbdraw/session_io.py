@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Literal, Mapping, Sequence
 
+from .definition_line_styles import DEFINITION_LINE_KINDS, parse_definition_line_style_overrides
 from .exceptions import ValidationError
 from .io.regions import RegionSpec, parse_region_specs
 
@@ -764,6 +765,7 @@ def _append_linear_gui_args(
         _append_pair(run_args, invocation_args, "--track_layout", str(form.get("linear_track_layout")))
     if form.get("linear_ruler_on_axis") is True:
         _append_flag(run_args, invocation_args, "--ruler_on_axis")
+    _append_linear_definition_line_style_args(run_args, invocation_args, adv)
 
     linear_seqs = files.get("linearSeqs")
     if not isinstance(linear_seqs, list) or not linear_seqs:
@@ -855,6 +857,34 @@ def _append_linear_gui_args(
                 )
         if track_count:
             _append_flag(run_args, invocation_args, "--show_depth")
+
+
+def _append_linear_definition_line_style_args(
+    run_args: list[str],
+    invocation_args: list[str],
+    adv: Mapping[str, Any],
+) -> None:
+    styles = adv.get("linear_definition_line_styles")
+    if not isinstance(styles, Mapping):
+        return
+    for line_kind in DEFINITION_LINE_KINDS:
+        raw_style = styles.get(line_kind)
+        if not isinstance(raw_style, Mapping):
+            continue
+        parts: list[str] = []
+        font_size = raw_style.get("font_size")
+        if font_size not in (None, "", False):
+            parts.append(f"size={font_size}")
+        font_weight = str(raw_style.get("font_weight") or "").strip()
+        if font_weight.lower() in {"auto", "none", "null", "default", "normal"}:
+            font_weight = ""
+        if font_weight:
+            parts.append(f"weight={font_weight}")
+        fill = str(raw_style.get("fill") or "").strip()
+        if fill:
+            parts.append(f"color={fill}")
+        if parts:
+            _append_pair(run_args, invocation_args, "--definition_line_style", f"{line_kind}:{','.join(parts)}")
 
 
 def _append_linear_gui_sequence_options(
@@ -1373,6 +1403,9 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
     feature_shapes = _feature_shapes_from_cli_args(args)
     if feature_shapes:
         adv["feature_shapes"] = feature_shapes
+    definition_line_styles = _definition_line_styles_from_cli_args(args)
+    if definition_line_styles:
+        adv["linear_definition_line_styles"] = definition_line_styles
     for key, option_names in {
         "nt": ("-n", "--nt"),
         "window_size": ("-w", "--window"),
@@ -2105,6 +2138,16 @@ def _feature_shapes_from_cli_args(args: Sequence[str]) -> dict[str, str]:
         if separator and feature_type and shape in {"arrow", "rectangle"}:
             shapes[feature_type] = shape
     return shapes
+
+
+def _definition_line_styles_from_cli_args(args: Sequence[str]) -> dict[str, dict[str, object]]:
+    assignments = _option_all_values(args, "--definition_line_style", "--definition-line-style")
+    if not assignments:
+        return {}
+    try:
+        return parse_definition_line_style_overrides(assignments)
+    except ValueError:
+        return {}
 
 
 def _label_filter_config_from_cli_args(args: Sequence[str]) -> tuple[str, str]:

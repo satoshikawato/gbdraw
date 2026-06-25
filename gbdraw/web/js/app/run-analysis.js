@@ -50,11 +50,13 @@ import {
 import {
   DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
   DEFAULT_LINEAR_BLAST_FILTERS,
+  buildDefinitionLineStyleAssignments,
   buildBlastFilterArgs,
   buildFeatureShapeAssignments,
   buildRecordSelectorArgs,
   buildReverseComplementArgs,
-  isCliDefaultFeatureList
+  isCliDefaultFeatureList,
+  normalizeDefinitionLineStyleState
 } from './cli-args.js';
 import { downloadZipFile } from '../utils/zip.js';
 
@@ -1338,7 +1340,8 @@ export const createRunAnalysis = ({
         hide_length: false,
         orthogroup_alignment: false,
         pairwise_match_style: false,
-        keep_definition_left_aligned: false
+        keep_definition_left_aligned: false,
+        definition_line_style: false
       };
       return linearLabelSupportCache;
     }
@@ -1367,6 +1370,7 @@ json.dumps({
   "orthogroup_alignment": "--align_orthogroup_feature" in _source,
   "pairwise_match_style": "--pairwise_match_style" in _source,
   "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
+  "definition_line_style": "--definition_line_style" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
@@ -1390,7 +1394,8 @@ json.dumps({
         hide_length: false,
         orthogroup_alignment: false,
         pairwise_match_style: false,
-        keep_definition_left_aligned: false
+        keep_definition_left_aligned: false,
+        definition_line_style: false
       };
     }
     return linearLabelSupportCache;
@@ -3179,6 +3184,10 @@ json.dumps({
         adv.linear_show_replicon = adv.linear_show_replicon === true;
         adv.linear_show_accession = adv.linear_show_accession !== false;
         adv.linear_show_length = adv.linear_show_length !== false;
+        adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(adv.linear_definition_line_styles);
+        const definitionLineStyleAssignments = buildDefinitionLineStyleAssignments(
+          adv.linear_definition_line_styles
+        );
         form.plot_title = normalizedPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
         adv.plot_title_font_size = normalizedPlotTitleFontSize;
@@ -3214,6 +3223,7 @@ json.dumps({
         const wantsShowRepliconOption = adv.linear_show_replicon === true;
         const wantsHideAccessionOption = adv.linear_show_accession === false;
         const wantsHideLengthOption = adv.linear_show_length === false;
+        const wantsDefinitionLineStyleOption = definitionLineStyleAssignments.length > 0;
         const wantsPairwiseMatchStyleOption = normalizedPairwiseMatchStyle !== 'ribbon';
         const wantsKeepDefinitionLeftAlignedOption = form.keep_definition_left_aligned === true;
         const wantsRulerOnAxisOption =
@@ -3236,6 +3246,7 @@ json.dumps({
           wantsShowRepliconOption ||
           wantsHideAccessionOption ||
           wantsHideLengthOption ||
+          wantsDefinitionLineStyleOption ||
           wantsPairwiseMatchStyleOption ||
           wantsOrthogroupAlignmentOption ||
           wantsKeepDefinitionLeftAlignedOption
@@ -3282,6 +3293,9 @@ json.dumps({
           if (wantsHideLengthOption && !linearLabelSupport.hide_length) {
             throw new Error("Current gbdraw wheel does not support --hide_length. Rebuild and redeploy the web wheel.");
           }
+          if (wantsDefinitionLineStyleOption && !linearLabelSupport.definition_line_style) {
+            console.warn("Current gbdraw wheel does not support --definition_line_style; definition line style overrides will be ignored.");
+          }
           if (wantsPairwiseMatchStyleOption && !linearLabelSupport.pairwise_match_style) {
             throw new Error("Current gbdraw wheel does not support --pairwise_match_style. Rebuild and redeploy the web wheel.");
           }
@@ -3298,6 +3312,11 @@ json.dumps({
         if (wantsShowRepliconOption) args.push('--show_replicon');
         if (wantsHideAccessionOption) args.push('--hide_accession');
         if (wantsHideLengthOption) args.push('--hide_length');
+        if (linearLabelSupport.definition_line_style) {
+          definitionLineStyleAssignments.forEach((assignment) => {
+            args.push('--definition_line_style', assignment);
+          });
+        }
         if (wantsPairwiseMatchStyleOption) args.push('--pairwise_match_style', normalizedPairwiseMatchStyle);
         if (wantsOrthogroupAlignmentOption) {
           args.push('--align_orthogroup_feature', selectedOrthogroupTarget);

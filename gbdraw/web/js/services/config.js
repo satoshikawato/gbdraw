@@ -31,6 +31,7 @@ import {
   normalizeCollinearSearchScope,
   normalizeGroupMetadataScope
 } from '../app/losat-normalization.js';
+import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 
 const SESSION_VERSION = 29;
@@ -1066,6 +1067,9 @@ const applyConfigData = (data) => {
   state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
   state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
   state.adv.linear_show_length = state.adv.linear_show_length !== false;
+  state.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(
+    state.adv.linear_definition_line_styles
+  );
   state.adv.pairwise_match_style = normalizePairwiseMatchStyle(state.adv.pairwise_match_style);
   if (data.losat) {
     safeDeepMerge(state.losat, data.losat);

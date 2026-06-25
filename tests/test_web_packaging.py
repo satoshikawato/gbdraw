@@ -233,6 +233,7 @@ def test_web_losat_settings_preserve_requested_thread_count() -> None:
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 
@@ -241,6 +242,27 @@ def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     assert "orthogroupMembershipMode: 'anchor_core_v1'" in state_js
     assert "outparalog_split: 'anchor_core_v1'" in config_js
     assert "outparalog_split: 'anchor_core_v1'" in run_analysis_js
+
+
+def test_web_linear_definition_line_styles_contract() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    cli_args_js = (WEB_ROOT / "js" / "app" / "cli-args.js").read_text(encoding="utf-8")
+
+    assert "Definition Line Styles" in index_html
+    assert "Name / Species" in app_setup_js
+    assert "Length / Coord." in app_setup_js
+    assert ">Normal</button>" in index_html
+    assert "data-definition-line-kind" in state_js
+    assert "linear_definition_line_styles: createDefaultLinearDefinitionLineStyles()" in state_js
+    assert "normalizeDefinitionLineStyleState" in config_js
+    assert "buildDefinitionLineStyleAssignments" in run_analysis_js
+    assert "definition_line_style" in run_analysis_js
+    assert "args.push('--definition_line_style', assignment);" in run_analysis_js
+    assert "color=${style.fill}" in cli_args_js
 
 
 def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
@@ -2814,6 +2836,17 @@ def test_pyodide_palette_init_treats_comparison_only_colors_as_uninitialized() -
     assert "if (!currentHasPaletteColors) {\n            currentColors.value = resolvedColors;" in source
     assert "currentHasPaletteColors ? currentColors.value : resolvedColors" in source
     assert "const currentHasColors = hasColorEntries(currentColors.value);" not in source
+
+
+def test_conda_build_prepares_browser_wheel_before_install() -> None:
+    build_sh = (REPO_ROOT / "recipe" / "build.sh").read_text(encoding="utf-8")
+    meta_yaml = (REPO_ROOT / "recipe" / "meta.yaml").read_text(encoding="utf-8")
+
+    prepare_index = build_sh.index("$PYTHON tools/prepare_browser_wheel.py")
+    install_index = build_sh.index("$PYTHON -m pip install . --no-deps --ignore-installed -vv")
+    assert prepare_index < install_index
+    assert "python-build" in meta_yaml
+    assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 
 @pytest.mark.slow

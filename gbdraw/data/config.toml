@@ -189,6 +189,18 @@ show_length = true
 long = 10
 short = 24
 
+[objects.definition.linear.line_styles.name]
+font_weight = 'normal'
+
+[objects.definition.linear.line_styles.replicon]
+font_weight = 'normal'
+
+[objects.definition.linear.line_styles.accession]
+font_weight = 'normal'
+
+[objects.definition.linear.line_styles.length]
+font_weight = 'normal'
+
 [objects.definition.circular]
 interval = 20
 font_size = 18

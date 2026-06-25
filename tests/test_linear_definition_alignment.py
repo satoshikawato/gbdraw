@@ -29,11 +29,12 @@ def _canvas_config(
     *,
     keep_definition_left_aligned: bool,
     definition_gap: float = 20,
+    horizontal_offset: float = 120,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         canvas_padding=50,
         definition_gap=definition_gap,
-        horizontal_offset=120,
+        horizontal_offset=horizontal_offset,
         keep_definition_left_aligned=keep_definition_left_aligned,
         length_param="short",
     )
@@ -72,6 +73,7 @@ def _definition_only_config(*, font_weight: str = "normal", definition_gap: floa
     config_dict["canvas"]["linear"]["definition_gap"] = definition_gap
     definition_cfg = config_dict["objects"]["definition"]["linear"]
     definition_cfg["font_weight"] = font_weight
+    definition_cfg.pop("line_styles", None)
     definition_cfg["show_replicon"] = False
     definition_cfg["show_accession"] = False
     definition_cfg["show_length"] = False
@@ -285,33 +287,61 @@ def test_locked_linear_definition_column_uses_configured_definition_gap(
 
 
 @pytest.mark.linear
-def test_locked_linear_definition_column_can_shift_left_of_negative_record_offsets() -> None:
+def test_locked_linear_definition_column_follows_global_horizontal_shift() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
+    record = _record()
+    base_config = _canvas_config(keep_definition_left_aligned=True, horizontal_offset=120)
+    shifted_config = _canvas_config(keep_definition_left_aligned=True, horizontal_offset=150)
+    definition_width = _definition_width(record, config_dict, base_config)
     canvas_a = Drawing()
     canvas_b = Drawing()
 
     add_record_definition_group(
         canvas_a,
-        _record(),
+        record,
         record_offset_y=10,
-        record_offset_x=-30,
-        canvas_config=_canvas_config(keep_definition_left_aligned=True),
+        record_offset_x=0,
+        canvas_config=base_config,
         config_dict=config_dict,
-        max_def_width=0,
-        definition_column_shift_x=0,
+        max_def_width=definition_width,
     )
     add_record_definition_group(
         canvas_b,
-        _record(),
+        record,
         record_offset_y=10,
-        record_offset_x=-30,
-        canvas_config=_canvas_config(keep_definition_left_aligned=True),
+        record_offset_x=0,
+        canvas_config=shifted_config,
         config_dict=config_dict,
-        max_def_width=0,
-        definition_column_shift_x=30,
+        max_def_width=definition_width,
     )
 
-    assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) - 30)
+    assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) + 30)
+    shifted_gap = shifted_config.horizontal_offset - (_definition_translate_x(canvas_b) + definition_width)
+    assert shifted_gap == pytest.approx(shifted_config.definition_gap)
+
+
+@pytest.mark.linear
+def test_locked_linear_definition_column_gap_uses_records_column_left() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    canvas_config = _canvas_config(keep_definition_left_aligned=True, horizontal_offset=120)
+    record = _record("A much longer definition label")
+    definition_width = _definition_width(record, config_dict, canvas_config)
+    leftmost_record_offset_x = -10.0
+    canvas = Drawing()
+
+    add_record_definition_group(
+        canvas,
+        record,
+        record_offset_y=10,
+        record_offset_x=0,
+        canvas_config=canvas_config,
+        config_dict=config_dict,
+        max_def_width=definition_width - leftmost_record_offset_x,
+    )
+
+    records_column_left = canvas_config.horizontal_offset + leftmost_record_offset_x
+    definition_right = _definition_translate_x(canvas) + definition_width
+    assert records_column_left - definition_right == pytest.approx(canvas_config.definition_gap)
 
 
 @pytest.mark.linear
