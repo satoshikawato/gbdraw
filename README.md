@@ -18,13 +18,14 @@
 
 `gbdraw` is a command-line and browser-based tool for publication-quality genome diagrams. It accepts GenBank/DDBJ flatfiles or GFF3 + FASTA pairs and produces circular or linear plots in SVG, PNG, PDF, EPS, or PS.
 
+[Interactive SVG output gallery](https://gbdraw.app/gallery/) **NEW!**
 ## Features
 
 - Circular and linear genome diagrams from annotated sequence files
 - Comparative genomics tracks from BLAST outfmt 6 or 7
 - Browser-based GUI at [gbdraw.app](https://gbdraw.app/) and local GUI via `gbdraw gui`
 - Fine-grained control over colors, labels, legends, and track layout
-- SVG-first workflow with optional CairoSVG-based export to PNG, PDF, EPS, and PS
+- Export to SVG, PNG, PDF, EPS and PS (EPS and PS require CairoSVG as dependency)
 
 ## Documentation
 
