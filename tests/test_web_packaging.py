@@ -1802,7 +1802,7 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
     source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
     module_path = tmp_path / "linear-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["depth-track-state.js", "color-utils.js"]:
+    for dependency in ["depth-track-state.js", "color-utils.js", "track-slot-colors.js"]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -1865,9 +1865,37 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
             show_gc: true,
             show_skew: true
           }},
-          linearSeqs: []
+          linearSeqs: [],
+          currentColors: {{ value: {{ skew_high: '#123456', skew_low: '#654321' }} }},
+          paletteDefinitions: {{
+            value: {{
+              default: {{ skew_high: '#6dded3', skew_low: '#ad72e3' }},
+              custom: {{ skew_high: '#abcdef', skew_low: '#fedcba' }}
+            }}
+          }},
+          selectedPalette: {{ value: 'custom' }}
         }};
         const editor = createLinearTrackSlotEditor({{ state }});
+        const stateSkewSlot = state.adv.linear_track_slots.find((slot) => slot.id === 'gc_skew');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') === '#123456', 'Linear inherited positive skew color should use currentColors.skew_high');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'negative_color') === '#654321', 'Linear inherited negative skew color should use currentColors.skew_low');
+        state.currentColors.value.skew_high = '#abc';
+        state.currentColors.value.skew_low = 'tomato';
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') === '#aabbcc', 'Linear inherited positive swatch should update with currentColors');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'negative_color') === '#ff6347', 'Linear inherited negative swatch should normalize named currentColors');
+        assert(!('positive_color' in stateSkewSlot.params) && !('negative_color' in stateSkewSlot.params), 'Inherited linear swatches should not add slot params');
+        editor.setLinearTrackSlotSkewColor(stateSkewSlot, 'positive_color', '#010203');
+        editor.setLinearTrackSlotSkewColor(stateSkewSlot, 'negative_color', '#040506');
+        assert(editor.linearTrackSlotHasSkewColorOverride(stateSkewSlot, 'positive_color'), 'Linear positive override should be detected');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') === '#010203', 'Linear explicit positive color should override inherited color');
+        const explicitLinearSpec = editor.linearTrackSlotCliSpec(stateSkewSlot);
+        assert(explicitLinearSpec.includes('positive_color=#010203') && explicitLinearSpec.includes('negative_color=#040506'), `Linear explicit skew colors were not serialized: ${{explicitLinearSpec}}`);
+        editor.clearLinearTrackSlotSkewColor(stateSkewSlot, 'positive_color');
+        editor.clearLinearTrackSlotSkewColor(stateSkewSlot, 'negative_color');
+        assert(!editor.linearTrackSlotHasSkewColorOverride(stateSkewSlot, 'positive_color'), 'Linear clear should remove positive override');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') === '#aabbcc', 'Linear clear should return positive swatch to inherited color');
+        const clearedLinearSpec = editor.linearTrackSlotCliSpec(stateSkewSlot);
+        assert(!clearedLinearSpec.includes('positive_color=') && !clearedLinearSpec.includes('negative_color='), `Linear cleared skew colors should not serialize params: ${{clearedLinearSpec}}`);
         assert(!editor.canMoveLinearTrackSlot(0, 1), 'Normal down arrow should not cross Axis');
         editor.moveLinearTrackSlot(0, 1);
         assert(state.adv.linear_track_slots.map((slot) => slot.id).join(',') === 'gc_content,features,gc_skew', 'Arrow move crossed Axis unexpectedly');
@@ -1989,7 +2017,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
     module_path = tmp_path / "circular-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["conservation-series.js", "color-utils.js", "depth-track-state.js"]:
+    for dependency in ["conservation-series.js", "color-utils.js", "depth-track-state.js", "track-slot-colors.js"]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -2086,7 +2114,15 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             show_depth: false,
             suppress_gc: false,
             suppress_skew: false
-          }}
+          }},
+          currentColors: {{ value: {{ skew_high: '#0f1e2d', skew_low: '#2d1e0f' }} }},
+          paletteDefinitions: {{
+            value: {{
+              default: {{ skew_high: '#6dded3', skew_low: '#ad72e3' }},
+              custom: {{ skew_high: '#102030', skew_low: '#405060' }}
+            }}
+          }},
+          selectedPalette: {{ value: 'custom' }}
         }};
 
         const defaultState = {{
@@ -2356,6 +2392,40 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         }}
 
         const editor = createCircularTrackSlotEditor({{ state }});
+        const stateSkewSlot = state.adv.circular_track_slots.find((slot) => slot.id === 'gc_skew');
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') !== '#0f1e2d') {{
+          throw new Error('Circular inherited positive skew color should use currentColors.skew_high');
+        }}
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'negative_color') !== '#2d1e0f') {{
+          throw new Error('Circular inherited negative skew color should use currentColors.skew_low');
+        }}
+        state.currentColors.value = {{}};
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') !== '#102030') {{
+          throw new Error('Circular inherited positive skew color should fall back to the selected palette');
+        }}
+        state.selectedPalette.value = 'missing';
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'negative_color') !== '#ad72e3') {{
+          throw new Error('Circular inherited negative skew color should fall back to the default palette');
+        }}
+        editor.setCircularTrackSlotSkewColor(stateSkewSlot, 'positive_color', '#010203');
+        if (!editor.circularTrackSlotHasSkewColorOverride(stateSkewSlot, 'positive_color')) {{
+          throw new Error('Circular positive skew override should be detected');
+        }}
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') !== '#010203') {{
+          throw new Error('Circular explicit positive color should override inherited color');
+        }}
+        const explicitCircularSpec = editor.circularTrackSlotCliSpec(stateSkewSlot);
+        if (!explicitCircularSpec.includes('positive_color=#010203')) {{
+          throw new Error(`Circular explicit skew color was not serialized: ${{explicitCircularSpec}}`);
+        }}
+        editor.clearCircularTrackSlotSkewColor(stateSkewSlot, 'positive_color');
+        if (editor.circularTrackSlotHasSkewColorOverride(stateSkewSlot, 'positive_color')) {{
+          throw new Error('Circular clear should remove positive override');
+        }}
+        const clearedCircularSpec = editor.circularTrackSlotCliSpec(stateSkewSlot);
+        if (clearedCircularSpec.includes('positive_color=') || clearedCircularSpec.includes('negative_color=')) {{
+          throw new Error(`Circular cleared skew colors should not serialize params: ${{clearedCircularSpec}}`);
+        }}
         if (editor.canMoveCircularTrackSlot(1, -1)) {{
           throw new Error('Feature up arrow should not cross Axis');
         }}
