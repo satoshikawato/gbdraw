@@ -468,8 +468,12 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
     assert 'sandbox="allow-scripts"' in gallery_html
     assert "allow-same-origin" not in gallery_html
     assert 'id="demo-frame"' in gallery_html
+    assert 'id="session-link"' in gallery_html
     assert "fetch('./examples.json'" in gallery_js
     assert "frame.src = sample.svg" in gallery_js
+    assert "sample.session" in gallery_js
+    assert "Vnig_TUMSAT-TG-2018" in gallery_js
+    assert "lambda-phage-linear" not in gallery_js
     assert "lambda-phage-linear.svg" not in gallery_html
     assert "hepatoplasmataceae-comparison.svg" not in gallery_html
     assert re.search(r"\.viewer-panel\s*>\s*\*\s*\{[^}]*min-width:\s*0;", gallery_css, re.S)
@@ -491,11 +495,10 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
 
 def test_interactive_gallery_examples_are_wired() -> None:
     expected_ids = [
-        "lambda-phage-linear",
-        "human-mtdna-compact",
-        "hepatoplasmataceae-comparison",
-        "majanivirus-comparison",
-        "tobacco-chloroplast",
+        "Vnig_TUMSAT-TG-2018",
+        "hepatoplasmataceae_collinear",
+        "hepatoplasmataceae_orthogroup",
+        "majanivirus_orthogroup",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
 
@@ -509,18 +512,31 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert entry["sourceNote"]
         assert entry["featureSources"]
         assert entry["svg"].startswith("./examples/")
+        assert entry["session"].startswith("./sessions/")
         assert entry["thumbnail"].startswith("./thumbnails/")
+        assert entry["sourceSession"].startswith("gbdraw/web/gallery/sessions/")
+        assert entry["sourceOutput"].startswith("gbdraw/web/gallery/examples/")
+        assert entry["sourceFigure"].startswith("gbdraw/web/gallery/sources/")
 
         svg_path = GALLERY_ROOT / entry["svg"].removeprefix("./")
+        session_path = GALLERY_ROOT / entry["session"].removeprefix("./")
+        source_figure_path = REPO_ROOT / entry["sourceFigure"]
         thumbnail_path = GALLERY_ROOT / entry["thumbnail"].removeprefix("./")
         assert svg_path.exists()
+        assert session_path.exists()
+        assert source_figure_path.exists()
         assert thumbnail_path.exists()
 
         svg_source = svg_path.read_text(encoding="utf-8")
+        with session_path.open(encoding="utf-8") as session_handle:
+            session_prefix = session_handle.read(128)
         thumbnail_header = thumbnail_path.read_bytes()[:16]
 
         assert svg_path.stat().st_size > 1024
+        assert session_path.stat().st_size > 1024
+        assert source_figure_path.stat().st_size > 1024
         assert thumbnail_path.stat().st_size > 1024
+        assert '"format":"gbdraw-session"' in session_prefix
         assert 'data-gbdraw-interactive-svg="true"' in svg_source
         assert "gbdraw-interactive-feature-metadata" in svg_source
         assert "gbdraw-interactive-feature-script" in svg_source
@@ -528,7 +544,10 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert "data-gbdraw-original-viewbox" in svg_source
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
-        assert "parent." not in svg_source
+        assert "window.parent" not in svg_source
+        assert "parent.postMessage" not in svg_source
+        assert "window.top" not in svg_source
+        assert "window.opener" not in svg_source
 
         payload = _gallery_svg_metadata(svg_source)
         assert payload["schema"] == "gbdraw-interactive-feature-popup-v1"

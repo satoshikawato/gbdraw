@@ -1,4 +1,4 @@
-const DEFAULT_SAMPLE_ID = 'lambda-phage-linear';
+const DEFAULT_SAMPLE_ID = 'Vnig_TUMSAT-TG-2018';
 
 const sampleList = document.querySelector('#sample-list');
 const sampleCount = document.querySelector('#sample-count');
@@ -12,6 +12,7 @@ const commandBlock = document.querySelector('#command-block code');
 const interactiveStep = document.querySelector('#interactive-step');
 const openLink = document.querySelector('#open-link');
 const downloadLink = document.querySelector('#download-link');
+const sessionLink = document.querySelector('#session-link');
 const copyLink = document.querySelector('#copy-link');
 
 let examples = [];
@@ -57,13 +58,26 @@ const updateActionLinks = (sample) => {
   openLink.href = href;
   downloadLink.href = href;
   downloadLink.setAttribute('download', sample.svg.split('/').pop() || `${sample.id}.svg`);
+
+  if (sample.session) {
+    const sessionHref = new URL(sample.session, window.location.href).href;
+    sessionLink.hidden = false;
+    sessionLink.href = sessionHref;
+    sessionLink.setAttribute(
+      'download',
+      sample.session.split('/').pop() || `${sample.id}.gbdraw-session.json`
+    );
+  } else {
+    sessionLink.hidden = true;
+    sessionLink.removeAttribute('href');
+  }
 };
 
 const updateCopyButton = (text) => {
   window.clearTimeout(copyStatusTimer);
   copyLink.textContent = text;
   copyStatusTimer = window.setTimeout(() => {
-    copyLink.textContent = 'Copy link';
+    copyLink.textContent = 'Copy';
   }, 1600);
 };
 
