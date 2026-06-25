@@ -29,7 +29,8 @@ class GcContentGroup:
         group_id: str | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
-        self.gc_group = Group(id=group_id or "gc_content")
+        self.group_id = group_id or "gc_content"
+        self.gc_group = Group(id=self.group_id)
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record
@@ -58,6 +59,7 @@ class GcContentGroup:
             self.track_width,
             self.norm_factor,
             self.dinucleotide,
+            self.group_id,
         )
 
     def get_group(self) -> Group:

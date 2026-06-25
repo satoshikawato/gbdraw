@@ -23,6 +23,7 @@ from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.depth import depth_df as build_depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
+from gbdraw.analysis.gc import circular_dinucleotide_content_df  # type: ignore[reportMissingImports]
 from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     DepthTrackData,
     DepthTrackSpec,
@@ -286,7 +287,17 @@ def _dinucleotides_from_linear_slots(
     return nts
 
 
-def _build_circular_dinucleotide_dataframes(
+def _build_circular_dinucleotide_content_dataframes(
+    record: SeqRecord,
+    *,
+    window: int,
+    step: int,
+    nts: set[str],
+) -> dict[str, DataFrame]:
+    return {nt: circular_dinucleotide_content_df(record, window, step, nt) for nt in sorted(nts)}
+
+
+def _build_circular_dinucleotide_skew_dataframes(
     record: SeqRecord,
     *,
     window: int,
@@ -565,6 +576,16 @@ def _validate_gc_content_config(gc_content_config) -> None:
         value = getattr(gc_content_config, attr, None)
         if value is not None and (not math.isfinite(float(value)) or float(value) <= 0):
             raise ValidationError(f"{label} must be > 0")
+    percent_background_opacity = getattr(gc_content_config, "percent_background_opacity", 1.0)
+    if (
+        not math.isfinite(float(percent_background_opacity))
+        or float(percent_background_opacity) < 0.0
+        or float(percent_background_opacity) > 1.0
+    ):
+        raise ValidationError("gc_content_percent_background_opacity must be between 0 and 1")
+    percent_border_width = getattr(gc_content_config, "percent_border_width", 0.8)
+    if not math.isfinite(float(percent_border_width)) or float(percent_border_width) < 0.0:
+        raise ValidationError("gc_content_percent_border_width must be >= 0")
 
 
 def _validate_positive_optional(name: str, value: int | None) -> None:
@@ -2442,13 +2463,19 @@ def assemble_circular_diagram_from_record(
         )
     else:
         requested_nts = {str(dinucleotide).upper()} if (cfg.canvas.show_gc or cfg.canvas.show_skew) else set()
-    dinucleotide_dataframes = _build_circular_dinucleotide_dataframes(
+    dinucleotide_content_dataframes = _build_circular_dinucleotide_content_dataframes(
         gb_record,
         window=int(window),
         step=int(step),
         nts=requested_nts,
     )
-    gc_df = dinucleotide_dataframes.get(str(dinucleotide).upper(), DataFrame())
+    dinucleotide_skew_dataframes = _build_circular_dinucleotide_skew_dataframes(
+        gb_record,
+        window=int(window),
+        step=int(step),
+        nts=requested_nts,
+    )
+    gc_df = dinucleotide_content_dataframes.get(str(dinucleotide).upper(), DataFrame())
     if cfg.canvas.show_depth and depth_config is not None:
         if precomputed_depth_track_list:
             resolved_depth_tracks = precomputed_depth_track_list
@@ -2532,7 +2559,8 @@ def assemble_circular_diagram_from_record(
         cfg=cfg,
         circular_track_slots=parsed_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
-        dinucleotide_dataframes=dinucleotide_dataframes,
+        dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+        dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
         center_reserved_radius=center_reserved_radius,

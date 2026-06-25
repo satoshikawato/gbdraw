@@ -40,6 +40,9 @@ def generate_circular_gc_content_path_desc(
     """
     Generates the SVG path description for circular GC content representation using vectorization.
     """
+    if gc_df.empty or record_len <= 0:
+        return ""
+
     norm_radius: float = radius * norm_factor
 
     column: str = f"{dinucleotide} content"
@@ -51,9 +54,14 @@ def generate_circular_gc_content_path_desc(
     if max_diff == 0:
         radius_of_coordinate = np.full(len(gc_df), norm_radius)
     else:
-        radius_of_coordinate = norm_radius + (0.5 * track_width * (diff / max_diff))
+        radius_of_coordinate = (norm_radius + (0.5 * track_width * (diff / max_diff))).to_numpy(dtype=float)
 
-    angles_rad = np.radians(360.0 * (gc_df.index / record_len) - 90)
+    positions = gc_df.index.to_numpy(dtype=float)
+    if len(positions) > 0 and np.isclose(positions[0], 0.0):
+        positions = np.append(positions, float(record_len))
+        radius_of_coordinate = np.append(radius_of_coordinate, radius_of_coordinate[0])
+
+    angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90)
 
     x_coords = radius_of_coordinate * np.cos(angles_rad)
     y_coords = radius_of_coordinate * np.sin(angles_rad)
@@ -118,6 +126,7 @@ def generate_circular_scalar_area_path_desc(
     *,
     value_column: str = "value_normalized",
     position_column: str = "position",
+    close_at_record_len: bool = False,
 ) -> str:
     """Return an annular filled area path for normalized scalar values."""
 
@@ -127,8 +136,11 @@ def generate_circular_scalar_area_path_desc(
     baseline_radius = max(0.0, (float(radius) * float(norm_factor)) - (0.5 * float(track_width)))
     values = scalar_df[value_column].to_numpy(dtype=float)
     values = np.clip(values, 0.0, 1.0)
-    outer_radii = baseline_radius + (float(track_width) * values)
     positions = scalar_df[position_column].to_numpy(dtype=float)
+    if close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
+        positions = np.append(positions, float(record_len))
+        values = np.append(values, values[0])
+    outer_radii = baseline_radius + (float(track_width) * values)
     angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90.0)
 
     outer_x = outer_radii * np.cos(angles_rad)

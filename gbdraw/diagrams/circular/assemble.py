@@ -1298,6 +1298,8 @@ def _draw_resolved_circular_slot(
     conservation_min_identity: float,
     cfg: GbdrawConfig,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
+    dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
+    dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     gc_content_tick_font_size_override: float | None = None,
     precomputed_feature_dict: dict | None = None,
     precalculated_labels: list[dict] | None = None,
@@ -1477,14 +1479,13 @@ def _draw_resolved_circular_slot(
 
     default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
     nt = _slot_dinucleotide(resolved_slot, default_nt)
-    slot_df = _slot_dataframe_for_nt(
-        nt=nt,
-        default_df=gc_df,
-        default_nt=default_nt,
-        dinucleotide_dataframes=dinucleotide_dataframes,
-    )
-
     if renderer == "dinucleotide_content":
+        slot_df = _slot_dataframe_for_nt(
+            nt=nt,
+            default_df=gc_df,
+            default_nt=default_nt,
+            dinucleotide_dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
+        )
         if f"{nt} content" not in slot_df.columns:
             logger.warning(
                 "Skipping circular content slot '%s' because %s data are unavailable.",
@@ -1515,6 +1516,12 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "dinucleotide_skew":
+        slot_df = _slot_dataframe_for_nt(
+            nt=nt,
+            default_df=gc_df,
+            default_nt=default_nt,
+            dinucleotide_dataframes=dinucleotide_skew_dataframes or dinucleotide_dataframes,
+        )
         if f"{nt} skew" not in slot_df.columns:
             logger.warning(
                 "Skipping circular skew slot '%s' because %s data are unavailable.",
@@ -2190,6 +2197,8 @@ def add_record_on_circular_canvas(
     circular_track_slots: list[CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
     dinucleotide_dataframes: dict[str, DataFrame] | None = None,
+    dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
+    dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
@@ -2533,6 +2542,8 @@ def add_record_on_circular_canvas(
             conservation_min_identity=conservation_min_identity,
             cfg=cfg,
             dinucleotide_dataframes=dinucleotide_dataframes,
+            dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+            dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
             gc_content_tick_font_size_override=gc_content_tick_font_size_override,
             precomputed_feature_dict=precomputed_feature_dict,
             precalculated_labels=precalculated_labels,
@@ -2626,6 +2637,8 @@ def assemble_circular_diagram(
     circular_track_slots: list[CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
     dinucleotide_dataframes: dict[str, DataFrame] | None = None,
+    dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
+    dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
@@ -2725,6 +2738,8 @@ def assemble_circular_diagram(
         circular_track_slots=effective_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
         dinucleotide_dataframes=dinucleotide_dataframes,
+        dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+        dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position=definition_position,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
@@ -2755,6 +2770,8 @@ def plot_circular_diagram(
     circular_track_slots: list[CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
     dinucleotide_dataframes: dict[str, DataFrame] | None = None,
+    dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
+    dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
@@ -2783,6 +2800,8 @@ def plot_circular_diagram(
         circular_track_slots=circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
         dinucleotide_dataframes=dinucleotide_dataframes,
+        dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+        dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position=definition_position,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,

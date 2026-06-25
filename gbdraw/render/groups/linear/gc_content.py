@@ -53,7 +53,8 @@ class GcContentGroup:
             start_x (float): Starting x-coordinate for the GC content visualization.
             start_y (float): Starting y-coordinate for the GC content visualization.
         """
-        self.gc_group = Group(id=group_id)
+        self.group_id = group_id
+        self.gc_group = Group(id=self.group_id)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len
@@ -114,6 +115,7 @@ class GcContentGroup:
             self.start_x,
             self.start_y,
             self.dinucleotide,
+            self.group_id,
         )
 
     def get_group(self) -> Group:

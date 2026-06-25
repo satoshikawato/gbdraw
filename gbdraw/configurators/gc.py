@@ -64,6 +64,10 @@ class GcContentConfigurator:
         self.tick_interval: float | None = self.large_tick_interval
         self.small_tick_interval: float | None = cfg.objects.gc_content.small_tick_interval
         self.tick_font_size: float | None = cfg.objects.gc_content.tick_font_size
+        self.percent_background_color: str = cfg.objects.gc_content.percent_background_color
+        self.percent_background_opacity: float = cfg.objects.gc_content.percent_background_opacity
+        self.percent_border_color: str = cfg.objects.gc_content.percent_border_color
+        self.percent_border_width: float = cfg.objects.gc_content.percent_border_width
         self.show_gc: bool = cfg.canvas.show_gc
 
 

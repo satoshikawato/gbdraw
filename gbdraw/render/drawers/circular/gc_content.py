@@ -49,6 +49,10 @@ class GcContentDrawer:
         self.large_tick_interval: float | None = getattr(gc_config, "large_tick_interval", 20.0)
         self.small_tick_interval: float | None = getattr(gc_config, "small_tick_interval", None)
         self.tick_font_size: float | None = getattr(gc_config, "tick_font_size", None)
+        self.percent_background_color: str = str(getattr(gc_config, "percent_background_color", "#737373"))
+        self.percent_background_opacity: float = float(getattr(gc_config, "percent_background_opacity", 1.0))
+        self.percent_border_color: str = str(getattr(gc_config, "percent_border_color", "#4b5563"))
+        self.percent_border_width: float = float(getattr(gc_config, "percent_border_width", 0.8))
         self.axis_stroke: str = "#4b5563"
         self.axis_stroke_width: float = DEPTH_AXIS_STROKE_WIDTH_PX
         self.axis_tick_size: float = DEPTH_AXIS_TICK_SIZE_PX
@@ -57,22 +61,73 @@ class GcContentDrawer:
     def _tick_font_size(self, track_width: float) -> float:
         return depth_axis_tick_font_size_px(self._gc_config, track_width)
 
+    @staticmethod
+    def _percent_radii(radius: float, track_width: float, norm_factor: float) -> tuple[float, float]:
+        baseline_radius = max(
+            0.0,
+            (float(radius) * float(norm_factor)) - (0.5 * float(track_width)),
+        )
+        return baseline_radius, baseline_radius + float(track_width)
+
+    def _add_percent_container(
+        self,
+        group: Group,
+        radius: float,
+        track_width: float,
+        norm_factor: float,
+        group_id: str,
+    ) -> Group:
+        baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)
+        middle_radius = baseline_radius + (0.5 * float(track_width))
+        group.add(
+            Circle(
+                id=f"{group_id}_percent_background",
+                center=(0, 0),
+                r=middle_radius,
+                fill="none",
+                stroke=self.percent_background_color,
+                stroke_width=float(track_width),
+                stroke_opacity=self.percent_background_opacity,
+            )
+        )
+        return group
+
+    def _add_percent_border(
+        self,
+        group: Group,
+        baseline_radius: float,
+        outer_radius: float,
+        group_id: str,
+    ) -> Group:
+        if self.percent_border_width <= 0:
+            return group
+        border_group = Group(id=f"{group_id}_percent_border")
+        for border_radius in (baseline_radius, outer_radius):
+            border_group.add(
+                Circle(
+                    center=(0, 0),
+                    r=border_radius,
+                    fill="none",
+                    stroke=self.percent_border_color,
+                    stroke_width=self.percent_border_width,
+                )
+            )
+        group.add(border_group)
+        return group
+
     def _add_percent_axis(
         self,
         group: Group,
         radius: float,
         track_width: float,
         norm_factor: float,
+        axis_group_id: str = "gc_content_axis",
     ) -> Group:
         if not self.show_axis:
             return group
 
-        baseline_radius = max(
-            0.0,
-            (float(radius) * float(norm_factor)) - (0.5 * float(track_width)),
-        )
-        outer_radius = baseline_radius + float(track_width)
-        axis_group = Group(id="gc_content_axis")
+        baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)
+        axis_group = Group(id=axis_group_id)
         axis_group.add(
             Circle(
                 center=(0, 0),
@@ -149,6 +204,7 @@ class GcContentDrawer:
         track_width: float,
         norm_factor: float,
         dinucleotide: str,
+        group_id: str = "gc_content",
     ) -> Group:
         if self.mode == "percent":
             plot_df = gc_content_percent_df(
@@ -158,7 +214,12 @@ class GcContentDrawer:
                 max_percent=self.max_percent,
             )
             gc_path_desc: str = generate_circular_scalar_area_path_desc(
-                radius, record_len, plot_df, track_width, norm_factor
+                radius,
+                record_len,
+                plot_df,
+                track_width,
+                norm_factor,
+                close_at_record_len=True,
             )
         else:
             gc_path_desc = generate_circular_gc_content_path_desc(
@@ -166,6 +227,8 @@ class GcContentDrawer:
             )
         if not gc_path_desc:
             return group
+        if self.mode == "percent":
+            self._add_percent_container(group, radius, track_width, norm_factor, group_id)
         gc_path: Path = Path(
             d=gc_path_desc,
             fill=self.gc_path_fill_color,
@@ -175,7 +238,9 @@ class GcContentDrawer:
         )
         group.add(gc_path)
         if self.mode == "percent":
-            self._add_percent_axis(group, radius, track_width, norm_factor)
+            baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)
+            self._add_percent_border(group, baseline_radius, outer_radius, group_id)
+            self._add_percent_axis(group, radius, track_width, norm_factor, f"{group_id}_axis")
         return group
 
 
