@@ -1368,7 +1368,11 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     ensure_prepared_browser_wheel()
     cloudflare_module = _load_prepare_cloudflare_pages_module()
     output_root = tmp_path / "cloudflare-pages"
-    bundle_path = cloudflare_module.build_cloudflare_pages_bundle(output_root=output_root)
+    remote_base = "https://example.com/gbdraw/web/"
+    bundle_path = cloudflare_module.build_cloudflare_pages_bundle(
+        output_root=output_root,
+        gallery_remote_base=remote_base,
+    )
 
     index_html = (bundle_path / "index.html").read_text(encoding="utf-8")
     assert "https://static.cloudflareinsights.com/beacon.min.js" in index_html
@@ -1387,12 +1391,39 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     assert "/gallery/examples/*" in headers
     assert "! Content-Security-Policy" in headers
     assert "frame-ancestors 'self'" in headers
+    remote_assets = json.loads((bundle_path / "gallery" / "remote-assets.json").read_text(encoding="utf-8"))
+    assert (
+        remote_assets["gallery/examples/Vnig_TUMSAT-TG-2018.svg"]
+        == f"{remote_base}gallery/examples/Vnig_TUMSAT-TG-2018.svg"
+    )
+    assert (
+        remote_assets["gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json"]
+        == f"{remote_base}gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json"
+    )
+    assert not (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
+    assert not (
+        bundle_path / "gallery" / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json"
+    ).exists()
+    assert (bundle_path / "gallery" / "examples" / "majanivirus_orthogroup.svg").exists()
 
 
 def test_wrangler_uses_cloudflare_bundle_directory() -> None:
     wrangler_toml = (REPO_ROOT / "wrangler.toml").read_text(encoding="utf-8")
+    assert 'main = "./gbdraw/web/cloudflare-worker.js"' in wrangler_toml
     assert 'directory = "./dist/cloudflare-pages"' in wrangler_toml
+    assert 'binding = "ASSETS"' in wrangler_toml
     assert 'not_found_handling = "single-page-application"' in wrangler_toml
+    assert '"/gallery/examples/*"' in wrangler_toml
+    assert '"/gallery/sessions/*"' in wrangler_toml
+
+
+def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
+    source = (WEB_ROOT / "cloudflare-worker.js").read_text(encoding="utf-8")
+    assert "/gallery/remote-assets.json" in source
+    assert "/gallery/examples/" in source
+    assert "/gallery/sessions/" in source
+    assert "env.ASSETS.fetch" in source
+    assert "Content-Security-Policy" in source
 
 
 def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:
