@@ -503,9 +503,16 @@ def test_interactive_gallery_examples_are_wired() -> None:
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
 
     assert [entry["id"] for entry in examples] == expected_ids
+    assert [entry["title"] for entry in examples] == [
+        "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
+        "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
+        "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
+        "Large dsDNA viruses (<i>Nimaviridae</i>)",
+    ]
     for entry in examples:
         assert entry["title"]
-        assert entry["description"]
+        assert "description" not in entry
+        assert not entry.get("interactiveStep")
         assert entry["tags"]
         assert entry["command"].startswith("gbdraw ")
         assert entry["fileSizeLabel"]
@@ -1424,6 +1431,9 @@ def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
     assert "/gallery/sessions/" in source
     assert "env.ASSETS.fetch" in source
     assert "Content-Security-Policy" in source
+    assert "Cross-Origin-Embedder-Policy" in source
+    assert "Cross-Origin-Opener-Policy" in source
+    assert "Cross-Origin-Resource-Policy" in source
 
 
 def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:

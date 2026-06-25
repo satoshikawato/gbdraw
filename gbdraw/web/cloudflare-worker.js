@@ -63,6 +63,9 @@ const fetchRemoteAsset = async (request, pathname, remoteUrl) => {
   const headers = new Headers(upstream.headers);
   headers.set('Cache-Control', REMOTE_CACHE_CONTROL);
   headers.set('Content-Type', inferContentType(pathname, upstream.headers));
+  headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  headers.set('Cross-Origin-Resource-Policy', 'same-origin');
   headers.delete('Content-Security-Policy-Report-Only');
   headers.delete('X-Frame-Options');
 
