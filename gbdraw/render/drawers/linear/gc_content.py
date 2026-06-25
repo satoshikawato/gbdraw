@@ -4,7 +4,7 @@
 from pandas import DataFrame
 from svgwrite.container import Group
 from svgwrite.path import Path
-from svgwrite.shapes import Line
+from svgwrite.shapes import Line, Rect
 from svgwrite.text import Text
 
 from ....analysis.gc import gc_content_percent_df
@@ -42,6 +42,10 @@ class GcContentDrawer:
         self.large_tick_interval: float | None = getattr(gc_config, "large_tick_interval", 20.0)
         self.small_tick_interval: float | None = getattr(gc_config, "small_tick_interval", None)
         self.tick_font_size: float | None = getattr(gc_config, "tick_font_size", None)
+        self.percent_background_color: str = str(getattr(gc_config, "percent_background_color", "#737373"))
+        self.percent_background_opacity: float = float(getattr(gc_config, "percent_background_opacity", 1.0))
+        self.percent_border_color: str = str(getattr(gc_config, "percent_border_color", "#4b5563"))
+        self.percent_border_width: float = float(getattr(gc_config, "percent_border_width", 0.8))
         self.axis_stroke: str = "#4b5563"
         self.axis_stroke_width: float = 0.8
         self.axis_tick_size: float = 3.0
@@ -49,6 +53,59 @@ class GcContentDrawer:
 
     def _tick_font_size(self, track_height: float) -> float:
         return linear_scalar_axis_tick_font_size_px(self._gc_config, track_height)
+
+    def _add_percent_container(
+        self,
+        group: Group,
+        record_len: int,
+        alignment_width: float,
+        genome_size_normalization_factor: float,
+        track_height: float,
+        start_x: float,
+        start_y: float,
+        group_id: str,
+    ) -> Group:
+        final_x = normalize_position_to_linear_track(
+            record_len,
+            record_len,
+            alignment_width,
+            genome_size_normalization_factor,
+        )
+        width = max(0.0, float(final_x) - float(start_x))
+        group.add(
+            Rect(
+                id=f"{group_id}_percent_background",
+                insert=(start_x, start_y),
+                size=(width, track_height),
+                fill=self.percent_background_color,
+                fill_opacity=self.percent_background_opacity,
+                stroke="none",
+            )
+        )
+        return group
+
+    def _add_percent_border(
+        self,
+        group: Group,
+        start_x: float,
+        start_y: float,
+        width: float,
+        track_height: float,
+        group_id: str,
+    ) -> Group:
+        if self.percent_border_width <= 0:
+            return group
+        group.add(
+            Rect(
+                id=f"{group_id}_percent_border",
+                insert=(start_x, start_y),
+                size=(width, track_height),
+                fill="none",
+                stroke=self.percent_border_color,
+                stroke_width=self.percent_border_width,
+            )
+        )
+        return group
 
     def _add_percent_axis(
         self,
@@ -59,6 +116,7 @@ class GcContentDrawer:
         track_height: float,
         start_x: float,
         start_y: float,
+        axis_group_id: str = "gc_content_axis",
     ) -> Group:
         if not self.show_axis:
             return group
@@ -70,7 +128,7 @@ class GcContentDrawer:
             alignment_width,
             genome_size_normalization_factor,
         )
-        axis_group = Group(id="gc_content_axis")
+        axis_group = Group(id=axis_group_id)
         axis_group.add(
             Line(
                 start=(start_x, baseline_y),
@@ -148,6 +206,7 @@ class GcContentDrawer:
         start_x: float,
         start_y: float,
         dinucleotide: str,
+        group_id: str = "gc_content",
     ) -> Group:
         if self.mode == "percent":
             plot_df = gc_content_percent_df(
@@ -178,6 +237,17 @@ class GcContentDrawer:
             )
         if not gc_path_desc:
             return group
+        if self.mode == "percent":
+            self._add_percent_container(
+                group,
+                record_len,
+                alignment_width,
+                genome_size_normalization_factor,
+                track_height,
+                start_x,
+                start_y,
+                group_id,
+            )
         gc_path = Path(
             d=gc_path_desc,
             fill=self.gc_path_fill_color,
@@ -187,6 +257,20 @@ class GcContentDrawer:
         )
         group.add(gc_path)
         if self.mode == "percent":
+            final_x = normalize_position_to_linear_track(
+                record_len,
+                record_len,
+                alignment_width,
+                genome_size_normalization_factor,
+            )
+            self._add_percent_border(
+                group,
+                start_x,
+                start_y,
+                max(0.0, float(final_x) - float(start_x)),
+                track_height,
+                group_id,
+            )
             self._add_percent_axis(
                 group,
                 record_len,
@@ -195,6 +279,7 @@ class GcContentDrawer:
                 track_height,
                 start_x,
                 start_y,
+                f"{group_id}_axis",
             )
         return group
 

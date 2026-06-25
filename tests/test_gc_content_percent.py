@@ -12,7 +12,8 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
-from gbdraw.analysis.gc import gc_content_percent_df
+from gbdraw.analysis.gc import circular_dinucleotide_content_df, gc_content_percent_df
+from gbdraw.analysis.skew import skew_df
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
@@ -20,6 +21,10 @@ from gbdraw.api.diagram import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
+from gbdraw.svg.circular_tracks import (
+    generate_circular_depth_path_desc,
+    generate_circular_scalar_area_path_desc,
+)
 
 
 def _make_record(record_id: str = "rec1", length: int = 160) -> SeqRecord:
@@ -66,6 +71,10 @@ def test_gc_content_config_defaults_preserve_deviation_mode() -> None:
     assert cfg.objects.gc_content.large_tick_interval == pytest.approx(20)
     assert cfg.objects.gc_content.small_tick_interval is None
     assert cfg.objects.gc_content.tick_font_size is None
+    assert cfg.objects.gc_content.percent_background_color == "#737373"
+    assert cfg.objects.gc_content.percent_background_opacity == pytest.approx(1.0)
+    assert cfg.objects.gc_content.percent_border_color == "#4b5563"
+    assert cfg.objects.gc_content.percent_border_width == pytest.approx(0.8)
 
 
 def test_gc_content_config_rejects_invalid_mode_ranges_and_ticks() -> None:
@@ -86,6 +95,34 @@ def test_gc_content_config_rejects_invalid_mode_ranges_and_ticks() -> None:
     invalid_tick["objects"]["gc_content"]["large_tick_interval"] = 0
     with pytest.raises(ValidationError, match="gc_content"):
         GbdrawConfig.from_dict(invalid_tick)
+
+    invalid_opacity = copy.deepcopy(base)
+    invalid_opacity["objects"]["gc_content"]["percent_background_opacity"] = 1.5
+    with pytest.raises(ValidationError, match="gc_content_percent_background_opacity"):
+        GbdrawConfig.from_dict(invalid_opacity)
+
+    invalid_border = copy.deepcopy(base)
+    invalid_border["objects"]["gc_content"]["percent_border_width"] = -0.1
+    with pytest.raises(ValidationError, match="gc_content_percent_border_width"):
+        GbdrawConfig.from_dict(invalid_border)
+
+
+def test_circular_dinucleotide_content_df_centers_window_at_origin() -> None:
+    record = SeqRecord(Seq("GGGGAAAA"), id="origin")
+
+    content_df = circular_dinucleotide_content_df(record, window=4, step=4, nt="GC")
+    legacy_df = skew_df(record, window=4, step=4, nt="GC")
+
+    assert content_df.loc[0, "GC content"] == pytest.approx(0.5)
+    assert legacy_df.loc[0, "GC content"] == pytest.approx(1.0)
+
+
+def test_circular_dinucleotide_content_df_handles_windows_larger_than_record() -> None:
+    record = SeqRecord(Seq("GAAA"), id="short")
+
+    content_df = circular_dinucleotide_content_df(record, window=10, step=10, nt="GC")
+
+    assert content_df.loc[0, "GC content"] == pytest.approx(0.3)
 
 
 def test_gc_content_percent_df_preserves_source_percent_and_clips_normalized_values() -> None:
@@ -116,6 +153,8 @@ def test_circular_gc_content_percent_mode_adds_percent_axis_without_depth_axis()
     ).tostring()
 
     assert 'id="gc_content_axis"' in svg
+    assert 'id="gc_content_percent_background"' in svg
+    assert 'id="gc_content_percent_border"' in svg
     assert 'id="depth_axis"' not in svg
     assert ">0%<" in svg
     assert ">50%<" in svg
@@ -140,6 +179,8 @@ def test_linear_gc_content_percent_mode_adds_percent_axis_without_depth_axis() -
     ).tostring()
 
     assert 'id="gc_content_axis"' in svg
+    assert 'id="gc_content_percent_background"' in svg
+    assert 'id="gc_content_percent_border"' in svg
     assert 'id="depth_axis"' not in svg
     assert ">0%<" in svg
     assert ">50%<" in svg
@@ -206,6 +247,66 @@ def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
 
     assert 'id="gc_content_axis"' not in circular_svg
     assert 'id="gc_content_axis"' not in linear_svg
+    assert "percent_background" not in circular_svg
+    assert "percent_border" not in circular_svg
+    assert "percent_background" not in linear_svg
+    assert "percent_border" not in linear_svg
+
+
+@pytest.mark.circular
+def test_circular_gc_content_percent_container_ids_are_slot_scoped() -> None:
+    svg = assemble_circular_diagram_from_record(
+        _make_record(),
+        legend="none",
+        circular_track_slots=[
+            "gc_content:dinucleotide_content@nt=GC,w=20px",
+            "at_content:dinucleotide_content@nt=AT,w=20px",
+        ],
+        config_overrides={
+            "gc_content_mode": "percent",
+            "gc_content_show_axis": False,
+        },
+        window=20,
+        step=20,
+    ).tostring()
+
+    assert 'id="gc_content_percent_background"' in svg
+    assert 'id="at_content_percent_background"' in svg
+    assert 'id="gc_content_percent_border"' in svg
+    assert 'id="at_content_percent_border"' in svg
+    assert svg.count("percent_background") == 2
+    assert svg.count("percent_border") == 2
+
+
+def test_circular_scalar_area_closure_is_opt_in_for_depth_paths() -> None:
+    depth_plot_df = pd.DataFrame(
+        {
+            "position": [0, 50],
+            "depth_normalized": [0.25, 0.75],
+        }
+    )
+
+    default_path = generate_circular_scalar_area_path_desc(
+        100,
+        100,
+        depth_plot_df,
+        20,
+        1.0,
+        value_column="depth_normalized",
+    )
+    depth_path = generate_circular_depth_path_desc(100, 100, depth_plot_df, 20, 1.0)
+    closed_path = generate_circular_scalar_area_path_desc(
+        100,
+        100,
+        depth_plot_df,
+        20,
+        1.0,
+        value_column="depth_normalized",
+        close_at_record_len=True,
+    )
+
+    assert depth_path == default_path
+    assert closed_path != default_path
 
 
 @pytest.mark.circular

@@ -184,11 +184,13 @@ def add_record_definition_group(
     config_dict: dict,
     max_def_width,
     cfg: GbdrawConfig | None = None,
-    definition_column_shift_x: float = 0.0,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
-    definition_gap = min(canvas_config.canvas_padding, 20)
+    try:
+        definition_gap = max(0.0, float(getattr(canvas_config, "definition_gap", 20.0)))
+    except (TypeError, ValueError):
+        definition_gap = 20.0
 
     if keep_definition_left_aligned:
         try:
@@ -208,11 +210,7 @@ def add_record_definition_group(
             text_anchor="start",
             text_x=0.0,
         )
-        positioned_definition_offset_x = (
-            definition_column_width
-            + definition_gap
-            + max(0.0, float(definition_column_shift_x))
-        )
+        positioned_definition_offset_x = definition_column_width + definition_gap
     else:
         definition_group_obj = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
         definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + definition_gap

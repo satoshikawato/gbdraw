@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.analysis.skew import _build_prefix_counts, _window_count_from_prefix  # type: ignore[reportMissingImports]
 
 
 def calculate_gc_percent(seq: object) -> float:
@@ -71,4 +73,54 @@ def gc_content_percent_df(
     )
 
 
-__all__ = ["calculate_gc_percent", "gc_content_percent_df"]
+def circular_dinucleotide_content_df(
+    record: SeqRecord,
+    window: int,
+    step: int,
+    nt: str,
+) -> DataFrame:
+    """Return centered circular dinucleotide-content data for circular tracks."""
+
+    nt_list = list(str(nt).upper())
+    nt_1 = nt_list[0]
+    nt_2 = nt_list[1]
+    seq_str = str(record.seq).upper()
+    seq_length = len(seq_str)
+    content_legend = f"{nt} content"
+
+    if seq_length == 0 or window <= 0 or step <= 0:
+        return pd.DataFrame(columns=[content_legend])
+
+    seq_bytes = seq_str.encode("ascii")
+    prefix_nt_1 = _build_prefix_counts(seq_bytes, ord(nt_1))
+    prefix_nt_2 = _build_prefix_counts(seq_bytes, ord(nt_2))
+    total_nt_1 = prefix_nt_1[-1]
+    total_nt_2 = prefix_nt_2[-1]
+    half_window = int(window) // 2
+    window_length = float(window)
+
+    starts: list[int] = []
+    content_values: list[float] = []
+    for position in range(0, seq_length, step):
+        circular_start = (int(position) - half_window) % seq_length
+        nt_1_count = _window_count_from_prefix(
+            prefix_nt_1,
+            seq_length,
+            start=circular_start,
+            window=window,
+            total_count=total_nt_1,
+        )
+        nt_2_count = _window_count_from_prefix(
+            prefix_nt_2,
+            seq_length,
+            start=circular_start,
+            window=window,
+            total_count=total_nt_2,
+        )
+        starts.append(position)
+        content_values.append((nt_1_count + nt_2_count) / window_length)
+
+    return pd.DataFrame({content_legend: content_values}, index=starts)
+
+
+__all__ = ["calculate_gc_percent", "circular_dinucleotide_content_df", "gc_content_percent_df"]

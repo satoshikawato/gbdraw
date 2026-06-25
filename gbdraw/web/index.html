@@ -2205,6 +2205,70 @@
                                 </label>
                             </div>
 
+                            <div v-if="mode === 'linear'" class="border-t border-slate-200 pt-2 space-y-1.5">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="text-[11px] font-bold text-slate-500">
+                                        Definition Line Styles
+                                        <help-tip text="Linear only. Optional line-specific size, weight, and fill overrides for the record definition stack."></help-tip>
+                                    </h4>
+                                </div>
+                                <div class="grid grid-cols-[minmax(6rem,1fr)_3.75rem_max-content_minmax(8rem,1.2fr)] gap-1.5 items-center">
+                                    <div class="text-[9px] font-bold text-slate-400 uppercase">Line</div>
+                                    <div class="text-[9px] font-bold text-slate-400 uppercase">Size</div>
+                                    <div class="text-[9px] font-bold text-slate-400 uppercase">Weight</div>
+                                    <div class="text-[9px] font-bold text-slate-400 uppercase">Color</div>
+
+                                    <template v-for="row in definitionLineStyleRows" :key="row.key">
+                                        <div :class="['text-[10px] font-semibold text-slate-600 truncate', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']" :title="row.label">
+                                            {{ row.label }}
+                                        </div>
+                                        <input
+                                            type="number"
+                                            min="0.1"
+                                            step="0.5"
+                                            :value="getDefinitionLineStyleSize(row.key)"
+                                            @input="setDefinitionLineStyleSize(row.key, $event.target.value)"
+                                            :class="['form-input form-input-compact px-1', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']"
+                                            placeholder="Default"
+                                        >
+                                        <div :class="['inline-flex items-center rounded border border-slate-200 bg-white p-0.5', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']">
+                                            <button
+                                                type="button"
+                                                @click="setDefinitionLineStyleWeight(row.key, '')"
+                                                :class="[
+                                                    'h-5 px-1.5 text-[9px] font-semibold rounded',
+                                                    getDefinitionLineStyleWeight(row.key) === '' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+                                                ]"
+                                            >Normal</button>
+                                            <button
+                                                type="button"
+                                                @click="setDefinitionLineStyleWeight(row.key, 'bold')"
+                                                :class="[
+                                                    'h-5 px-1.5 text-[9px] font-semibold rounded',
+                                                    getDefinitionLineStyleWeight(row.key) === 'bold' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+                                                ]"
+                                            >Bold</button>
+                                        </div>
+                                        <div :class="['flex items-center gap-1 min-w-0', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']">
+                                            <input
+                                                type="color"
+                                                :value="getDefinitionLineStyleSwatchValue(row.key)"
+                                                @input="setDefinitionLineStyleColor(row.key, $event.target.value)"
+                                                class="h-6 w-8 p-0 border border-slate-200 rounded cursor-pointer shrink-0 bg-white"
+                                                :title="row.label + ' color'"
+                                            >
+                                            <input
+                                                type="text"
+                                                :value="getDefinitionLineStyleFill(row.key)"
+                                                @input="setDefinitionLineStyleColor(row.key, $event.target.value)"
+                                                class="form-input form-input-compact min-w-0 px-1"
+                                                placeholder="Default"
+                                            >
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
                             <label
                                 v-if="mode === 'circular' && adv.plot_title_position !== 'none'"
                                 class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none"

@@ -3,9 +3,9 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-# --- 1. Synchronize the browser wheel bundled with the offline GUI ---
-echo "Synchronizing browser wheel..."
-$PYTHON setup.py build_py
+# --- 1. Prepare the browser wheel bundled with the offline GUI ---
+echo "Preparing browser wheel..."
+$PYTHON tools/prepare_browser_wheel.py
 
 # --- 2. Standard installation (for CLI usage) ---
 $PYTHON -m pip install . --no-deps --ignore-installed -vv

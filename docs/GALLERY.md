@@ -7,9 +7,15 @@ Interactive SVG versions of selected examples are available at [https://gbdraw.a
 For circular examples, `--track_type` names the simple-layout preset. Custom Track Slots use explicit geometry instead, and the circular axis remains fixed.
 
 
+#### <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 Complete Genome
+
+Interactive SVG session output: [https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018)
+
+This circular multi-record session uses the saved gallery session and bundled interactive SVG output.
+
 #### Majaniviruses Multi-Genome Comparison
 
-Interactive SVG version: [https://gbdraw.app/gallery/#majanivirus-comparison](https://gbdraw.app/gallery/#majanivirus-comparison)
+Interactive SVG session output: [https://gbdraw.app/gallery/#majanivirus_orthogroup](https://gbdraw.app/gallery/#majanivirus_orthogroup)
 
 <details><summary>Expand to see the script</summary>
 
@@ -63,7 +69,7 @@ gbdraw linear \
 
 #### Hepatoplasmataceae Five-Genome Comparison
 
-Interactive SVG version: [https://gbdraw.app/gallery/#hepatoplasmataceae-comparison](https://gbdraw.app/gallery/#hepatoplasmataceae-comparison)
+Interactive SVG session outputs: [collinear](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear), [orthogroup](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup)
 
 <details><summary>Expand to see the script</summary>
 
@@ -95,8 +101,6 @@ AP027132_NZ_CP006932.tblastx.out \
 
 #### Human mitochondrial genome (feature qualifier priority)
 
-Interactive SVG version: [https://gbdraw.app/gallery/#human-mtdna-compact](https://gbdraw.app/gallery/#human-mtdna-compact)
-
 <details><summary>Expand to see the script</summary>
 
 The following `qualifier_priority.tsv` designated by `--qualifier_priority` option specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
@@ -125,8 +129,6 @@ gbdraw circular \
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
 #### <i>Nicotiana tabacum</i> chloroplast genome
-
-Interactive SVG version: [https://gbdraw.app/gallery/#tobacco-chloroplast](https://gbdraw.app/gallery/#tobacco-chloroplast)
 
 <details><summary>Expand to see the script</summary>
 
@@ -162,8 +164,6 @@ gbdraw circular \
 ![NC_001879_color.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001879_color.svg)
 
 #### Lambda phage
-
-Interactive SVG version: [https://gbdraw.app/gallery/#lambda-phage-linear](https://gbdraw.app/gallery/#lambda-phage-linear)
 
 <details><summary>Expand to see the script</summary>
 

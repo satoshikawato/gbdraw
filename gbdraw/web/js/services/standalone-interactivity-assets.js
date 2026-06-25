@@ -512,18 +512,51 @@ export const STANDALONE_INTERACTIVE_STYLE = `
 .gfs {
   width: 100%;
   height: 100%;
-  padding: 7px;
+  padding: 6px;
   border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
   color: #334155;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.13);
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 11px;
+  font-size: 10.5px;
   cursor: grab;
+}
+.gfs.is-collapsed {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .gfs.is-dragging {
   cursor: grabbing;
+}
+.gfs-compact {
+  display: none;
+}
+.gfs.is-collapsed .gfs-compact {
+  display: block;
+}
+.gfs.is-collapsed .gfs-body {
+  display: none;
+}
+.gfs-compact-button {
+  height: 30px;
+  min-width: 92px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.13);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+.gfs-compact-button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 .gfs-row {
   display: flex;
@@ -536,26 +569,26 @@ export const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gfs-input,
 .gfs-select {
-  height: 26px;
+  height: 24px;
   min-width: 0;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: 5px;
   background: #ffffff;
   color: #1e293b;
   font: inherit;
 }
 .gfs-input {
-  padding: 0 7px;
+  padding: 0 6px;
 }
 .gfs-query {
-  flex: 1 1 126px;
+  flex: 1 1 150px;
 }
 .gfs-select {
-  flex: 0 0 104px;
+  flex: 0 0 92px;
   padding: 0 5px;
 }
 .gfs-qualifier {
-  flex: 1 1 104px;
+  flex: 1 1 100px;
 }
 .gfs-qualifier:disabled {
   opacity: 0.48;
@@ -568,13 +601,13 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   user-select: none;
 }
 .gfs-button {
-  height: 26px;
-  min-width: 30px;
+  height: 24px;
+  min-width: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: 5px;
   background: #f8fafc;
   color: #334155;
   cursor: pointer;
@@ -582,17 +615,22 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   font-weight: 700;
 }
 .gfs-button--clear {
-  flex: 0 0 48px;
+  flex: 0 0 42px;
 }
 .gfs-button--open {
-  flex: 0 0 44px;
+  flex: 0 0 38px;
 }
 .gfs-button--search {
-  flex: 0 0 62px;
+  flex: 0 0 54px;
   border-color: #1d4ed8;
   background: #2563eb;
   color: #ffffff;
-  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 6px 12px rgba(37, 99, 235, 0.20);
+}
+.gfs-button--collapse {
+  flex: 0 0 24px;
+  font-size: 13px;
+  line-height: 1;
 }
 .gfs-button:hover {
   background: #eff6ff;
@@ -628,13 +666,16 @@ export const STANDALONE_INTERACTIVE_STYLE = `
 .gfs-match-detail {
   display: block;
   min-width: 0;
-  margin-top: 5px;
+  margin-top: 4px;
   overflow: hidden;
   color: #64748b;
   font-size: 10px;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.gfs-match-detail:empty {
+  display: none;
 }
 .gfs input,
 .gfs select,
@@ -689,7 +730,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var activePopupResize = null;
   var activePopupDrag = null;
   var activeSearchControlsDrag = null;
+  var searchControlsExpanded = false;
   var searchControlsOffsetCss = { x: 0, y: 0 };
+  var SEARCH_CONTROLS_COMPACT_WIDTH = 92;
+  var SEARCH_CONTROLS_COMPACT_HEIGHT = 30;
+  var SEARCH_CONTROLS_EXPANDED_WIDTH = 390;
+  var SEARCH_CONTROLS_EXPANDED_HEIGHT = 84;
   var hoverPopupTimer = null;
   var hoverPopupFrame = null;
   var hoverPopupFeatureId = '';
@@ -1765,6 +1811,31 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return node;
   }
 
+  function applySearchControlsMode() {
+    if (!searchControls) return;
+    searchControls.setAttribute(
+      'width',
+      String(searchControlsExpanded ? SEARCH_CONTROLS_EXPANDED_WIDTH : SEARCH_CONTROLS_COMPACT_WIDTH)
+    );
+    searchControls.setAttribute(
+      'height',
+      String(searchControlsExpanded ? SEARCH_CONTROLS_EXPANDED_HEIGHT : SEARCH_CONTROLS_COMPACT_HEIGHT)
+    );
+    var root = searchControls.querySelector('.gfs');
+    if (root) setClassToken(root, 'is-collapsed', !searchControlsExpanded);
+    updateSearchControlsPosition();
+  }
+
+  function setSearchControlsExpanded(expanded, options) {
+    var nextExpanded = Boolean(expanded);
+    if (searchControlsExpanded === nextExpanded && searchControls) return;
+    searchControlsExpanded = nextExpanded;
+    applySearchControlsMode();
+    if (nextExpanded && options && typeof options.focus === 'function') {
+      window.setTimeout(options.focus, 0);
+    }
+  }
+
   function updateSearchControlsPosition() {
     if (!searchControls) return;
     var visibleView = getVisibleViewRect();
@@ -1778,7 +1849,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       view.height / fallbackSize.height
     );
     var margin = 12 * unit;
-    var controlWidth = Number(searchControls.getAttribute('width')) || 430;
+    var controlWidth = Number(searchControls.getAttribute('width')) || SEARCH_CONTROLS_EXPANDED_WIDTH;
     var x = Math.max(
       visibleView.x + margin,
       visibleView.x + visibleView.width - (controlWidth * unit) - margin
@@ -1846,13 +1917,22 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     searchControls.setAttribute('id', SEARCH_CONTROLS_ID);
     searchControls.setAttribute('class', 'gbdraw-feature-search-controls');
     searchControls.setAttribute('data-popup-mode', popupMode);
-    searchControls.setAttribute('width', '430');
-    searchControls.setAttribute('height', '86');
+    searchControls.setAttribute('width', String(SEARCH_CONTROLS_COMPACT_WIDTH));
+    searchControls.setAttribute('height', String(SEARCH_CONTROLS_COMPACT_HEIGHT));
 
     var root = createXhtmlNode('div', {
       xmlns: XHTML_NS,
-      className: 'gfs'
+      className: 'gfs is-collapsed'
     });
+    var compactRow = createXhtmlNode('div', { className: 'gfs-compact' });
+    var compactButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-compact-button',
+      title: 'Search features',
+      'aria-label': 'Expand feature search',
+      text: 'Search'
+    });
+    var body = createXhtmlNode('div', { className: 'gfs-body' });
     var firstRow = createXhtmlNode('div', { className: 'gfs-row' });
     var secondRow = createXhtmlNode('div', { className: 'gfs-row' });
     var queryInput = createXhtmlNode('input', {
@@ -1896,6 +1976,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       'aria-label': 'Search features',
       'data-search-apply': 'true',
       text: 'Search'
+    });
+    var collapseButton = createXhtmlNode('button', {
+      type: 'button',
+      className: 'gfs-button gfs-button--collapse',
+      title: 'Collapse search',
+      'aria-label': 'Collapse feature search',
+      text: 'x'
     });
     var qualifierInput = createXhtmlNode('input', {
       className: 'gfs-input gfs-qualifier',
@@ -1956,6 +2043,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     firstRow.appendChild(queryInput);
     firstRow.appendChild(fieldSelect);
     firstRow.appendChild(searchButton);
+    firstRow.appendChild(collapseButton);
     if (popupMode !== 'simple') {
       secondRow.appendChild(qualifierInput);
     }
@@ -1965,9 +2053,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     secondRow.appendChild(openButton);
     secondRow.appendChild(clearButton);
     secondRow.appendChild(countText);
-    root.appendChild(firstRow);
-    root.appendChild(secondRow);
-    root.appendChild(matchDetailText);
+    compactRow.appendChild(compactButton);
+    body.appendChild(firstRow);
+    body.appendChild(secondRow);
+    body.appendChild(matchDetailText);
+    root.appendChild(compactRow);
+    root.appendChild(body);
     searchControls.appendChild(root);
 
     root.addEventListener('mousedown', function (event) {
@@ -1976,6 +2067,16 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         : null;
       if (target && root.contains(target)) return;
       startSearchControlsDrag(event, root);
+    });
+    compactButton.addEventListener('click', function (event) {
+      setSearchControlsExpanded(true, { focus: function () { queryInput.focus(); } });
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    collapseButton.addEventListener('click', function (event) {
+      setSearchControlsExpanded(false);
+      event.preventDefault();
+      event.stopPropagation();
     });
 
     ['mousedown', 'mouseup', 'click', 'dblclick', 'keydown', 'keyup', 'keypress', 'wheel', 'touchstart', 'touchmove'].forEach(function (eventName) {
@@ -2019,8 +2120,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     root.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') {
-        clearSearch();
-        queryInput.focus();
+        if (searchState.query || searchState.qualifierKey || searchState.error || searchState.matches.length) {
+          clearSearch();
+          queryInput.focus();
+        } else {
+          setSearchControlsExpanded(false);
+        }
         event.preventDefault();
       } else if (event.key === 'Enter' && searchState.matches.length) {
         openActiveMatchPopup();
@@ -2031,7 +2136,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     svg.appendChild(searchControls);
     syncStandaloneOverlayOrder();
     syncSearchControls();
-    updateSearchControlsPosition();
+    applySearchControlsMode();
   }
 
   function closestSearchControls(target) {

@@ -3,6 +3,7 @@ import {
   uploadedDepthFileCount
 } from './depth-track-state.js';
 import { resolveColorToHex } from './color-utils.js';
+import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -55,19 +56,6 @@ const normalizeColorParam = (value) => {
   const text = normalizeOptionalText(value);
   if (text === null) return null;
   return resolveColorToHex(text);
-};
-
-const normalizeColorInputValue = (value, fallback = '#777777') => {
-  const resolved = normalizeColorParam(value);
-  if (resolved === null) return fallback;
-  const text = String(resolved).trim();
-  const fullHex = text.match(/^#([0-9a-f]{6})$/i);
-  if (fullHex) return `#${fullHex[1].toLowerCase()}`;
-  const shortHex = text.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
-  if (shortHex) {
-    return `#${shortHex[1]}${shortHex[1]}${shortHex[2]}${shortHex[2]}${shortHex[3]}${shortHex[3]}`.toLowerCase();
-  }
-  return fallback;
 };
 
 const normalizeSkewColorParams = (params) => {
@@ -962,8 +950,13 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   );
 
   const linearTrackSlotSkewColorValue = (slot, key) => {
-    const fallback = key === 'negative_color' ? '#4575b4' : '#d73027';
-    return normalizeColorInputValue(slot?.params?.[key], fallback);
+    return resolveTrackSlotSkewColorValue({
+      slot,
+      key,
+      currentColors: state.currentColors,
+      paletteDefinitions: state.paletteDefinitions,
+      selectedPalette: state.selectedPalette
+    });
   };
 
   const setLinearTrackSlotSkewColor = (slot, key, value) => {

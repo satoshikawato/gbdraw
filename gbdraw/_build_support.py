@@ -37,6 +37,8 @@ _WEB_APP_PACKAGE_DATA = [
     "web/gallery/*.js",
     "web/gallery/*.json",
     "web/gallery/examples/*.svg",
+    "web/gallery/sessions/*.json",
+    "web/gallery/sources/*.svg",
     "web/gallery/thumbnails/*.webp",
     "web/assets/*.ico",
     "web/assets/*.png",

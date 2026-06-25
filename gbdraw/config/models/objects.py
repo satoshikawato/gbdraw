@@ -4,6 +4,11 @@ import math
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, Optional
 
+from gbdraw.definition_line_styles import (
+    normalize_definition_line_fill,
+    normalize_definition_line_font_size,
+    normalize_definition_line_font_weight,
+)
 from gbdraw.exceptions import ValidationError
 
 from .common import ShortLongFloatConfig
@@ -58,6 +63,10 @@ class ObjectsGcContentConfig:
     large_tick_interval: float | None
     small_tick_interval: float | None
     tick_font_size: float | None
+    percent_background_color: str
+    percent_background_opacity: float
+    percent_border_color: str
+    percent_border_width: float
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsGcContentConfig":
@@ -77,6 +86,10 @@ class ObjectsGcContentConfig:
             large_tick_interval=_optional_gc_content_positive(d.get("large_tick_interval", 20)),
             small_tick_interval=_optional_gc_content_positive(d.get("small_tick_interval", None)),
             tick_font_size=_optional_gc_content_positive(d.get("tick_font_size", None)),
+            percent_background_color=str(d.get("percent_background_color", "#737373")),
+            percent_background_opacity=_gc_content_opacity(d.get("percent_background_opacity", 1.0)),
+            percent_border_color=str(d.get("percent_border_color", "#4b5563")),
+            percent_border_width=_gc_content_nonnegative_float(d.get("percent_border_width", 0.8)),
         )
 
 
@@ -142,6 +155,20 @@ def _optional_gc_content_positive(value: Any) -> float | None:
     parsed = float(value)
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValidationError("gc_content tick intervals and tick_font_size must be positive finite numbers")
+    return parsed
+
+
+def _gc_content_opacity(value: Any) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0.0 or parsed > 1.0:
+        raise ValidationError("gc_content_percent_background_opacity must be a finite number in [0.0, 1.0]")
+    return parsed
+
+
+def _gc_content_nonnegative_float(value: Any) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0.0:
+        raise ValidationError("gc_content_percent_border_width must be a finite non-negative number")
     return parsed
 
 
@@ -389,6 +416,48 @@ class ObjectsAxisConfig:
 
 
 @dataclass(frozen=True)
+class DefinitionLineStyleConfig:
+    font_size: float | None = None
+    font_weight: str | None = None
+    fill: str | None = None
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any] | None) -> "DefinitionLineStyleConfig":
+        if d is None:
+            return cls()
+        if not isinstance(d, Mapping):
+            raise ValidationError("definition line style config must be a mapping")
+        try:
+            return cls(
+                font_size=normalize_definition_line_font_size(d.get("font_size")),
+                font_weight=normalize_definition_line_font_weight(d.get("font_weight")),
+                fill=normalize_definition_line_fill(d.get("fill")),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(str(exc)) from exc
+
+
+@dataclass(frozen=True)
+class DefinitionLineStylesConfig:
+    name: DefinitionLineStyleConfig
+    replicon: DefinitionLineStyleConfig
+    accession: DefinitionLineStyleConfig
+    length: DefinitionLineStyleConfig
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any] | None) -> "DefinitionLineStylesConfig":
+        if d is not None and not isinstance(d, Mapping):
+            raise ValidationError("definition line_styles config must be a mapping")
+        source = d or {}
+        return cls(
+            name=DefinitionLineStyleConfig.from_dict(source.get("name", {})),
+            replicon=DefinitionLineStyleConfig.from_dict(source.get("replicon", {})),
+            accession=DefinitionLineStyleConfig.from_dict(source.get("accession", {})),
+            length=DefinitionLineStyleConfig.from_dict(source.get("length", {})),
+        )
+
+
+@dataclass(frozen=True)
 class ObjectsDefinitionLinearConfig:
     stroke: str
     fill: str
@@ -400,6 +469,7 @@ class ObjectsDefinitionLinearConfig:
     show_accession: bool
     show_length: bool
     font_size: ShortLongFloatConfig
+    line_styles: DefinitionLineStylesConfig
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsDefinitionLinearConfig":
@@ -414,6 +484,7 @@ class ObjectsDefinitionLinearConfig:
             show_accession=bool(d.get("show_accession", True)),
             show_length=bool(d.get("show_length", True)),
             font_size=ShortLongFloatConfig.from_dict(d["font_size"]),
+            line_styles=DefinitionLineStylesConfig.from_dict(d.get("line_styles", {})),
         )
 
 

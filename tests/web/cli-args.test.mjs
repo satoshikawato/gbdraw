@@ -12,11 +12,14 @@ await writeFile(modulePath, await readFile(sourcePath, 'utf8'), 'utf8');
 
 const {
   DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
+  buildDefinitionLineStyleAssignments,
   buildBlastFilterArgs,
   buildFeatureShapeAssignments,
   buildRecordSelectorArgs,
   buildReverseComplementArgs,
-  isCliDefaultFeatureList
+  createDefaultLinearDefinitionLineStyles,
+  isCliDefaultFeatureList,
+  normalizeDefinitionLineStyleState
 } = await import(pathToFileURL(modulePath));
 
 assert.equal(
@@ -53,6 +56,37 @@ assert.deepEqual(
     }
   ),
   ['CDS=rectangle', 'repeat_region=arrow', 'custom_feature=arrow']
+);
+
+assert.deepEqual(createDefaultLinearDefinitionLineStyles(), {
+  name: { font_size: null, font_weight: null, fill: null },
+  replicon: { font_size: null, font_weight: null, fill: null },
+  accession: { font_size: null, font_weight: null, fill: null },
+  length: { font_size: null, font_weight: null, fill: null }
+});
+
+assert.deepEqual(
+  normalizeDefinitionLineStyleState({
+    name: { font_size: '12', font_weight: 'Bold', fill: '#111111' },
+    accession: { font_size: '', font_weight: 'Default', fill: '' },
+    replicon: { font_weight: 'normal' },
+    length: { font_size: '9', font_weight: '700', fill: 'rgb(1,2,3)' }
+  }),
+  {
+    name: { font_size: 12, font_weight: 'bold', fill: '#111111' },
+    replicon: { font_size: null, font_weight: null, fill: null },
+    accession: { font_size: null, font_weight: null, fill: null },
+    length: { font_size: 9, font_weight: '700', fill: 'rgb(1,2,3)' }
+  }
+);
+
+assert.deepEqual(
+  buildDefinitionLineStyleAssignments({
+    name: { font_size: 12, font_weight: 'bold', fill: '#111111' },
+    accession: { font_weight: 'normal' },
+    length: { fill: 'rgb(1,2,3)' }
+  }),
+  ['name:size=12,weight=bold,color=#111111', 'length:color=rgb(1,2,3)']
 );
 
 assert.deepEqual(

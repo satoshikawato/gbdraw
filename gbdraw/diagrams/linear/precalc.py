@@ -9,6 +9,8 @@ final canvas sizing.
 
 from __future__ import annotations
 
+import math
+
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
@@ -48,7 +50,7 @@ def _precalculate_definition_metrics(
         definition_height = float(def_group.definition_bounding_box_height)
         definition_heights[record.id] = definition_height
         definition_half_heights[record.id] = 0.5 * definition_height
-    return max_definition_width, definition_heights, definition_half_heights
+    return math.ceil(max_definition_width), definition_heights, definition_half_heights
 
 
 def _precalculate_definition_widths(

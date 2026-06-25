@@ -233,6 +233,7 @@ def test_web_losat_settings_preserve_requested_thread_count() -> None:
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 
@@ -241,6 +242,27 @@ def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     assert "orthogroupMembershipMode: 'anchor_core_v1'" in state_js
     assert "outparalog_split: 'anchor_core_v1'" in config_js
     assert "outparalog_split: 'anchor_core_v1'" in run_analysis_js
+
+
+def test_web_linear_definition_line_styles_contract() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    cli_args_js = (WEB_ROOT / "js" / "app" / "cli-args.js").read_text(encoding="utf-8")
+
+    assert "Definition Line Styles" in index_html
+    assert "Name / Species" in app_setup_js
+    assert "Length / Coord." in app_setup_js
+    assert ">Normal</button>" in index_html
+    assert "data-definition-line-kind" in state_js
+    assert "linear_definition_line_styles: createDefaultLinearDefinitionLineStyles()" in state_js
+    assert "normalizeDefinitionLineStyleState" in config_js
+    assert "buildDefinitionLineStyleAssignments" in run_analysis_js
+    assert "definition_line_style" in run_analysis_js
+    assert "args.push('--definition_line_style', assignment);" in run_analysis_js
+    assert "color=${style.fill}" in cli_args_js
 
 
 def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
@@ -446,8 +468,12 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
     assert 'sandbox="allow-scripts"' in gallery_html
     assert "allow-same-origin" not in gallery_html
     assert 'id="demo-frame"' in gallery_html
+    assert 'id="session-link"' in gallery_html
     assert "fetch('./examples.json'" in gallery_js
     assert "frame.src = sample.svg" in gallery_js
+    assert "sample.session" in gallery_js
+    assert "Vnig_TUMSAT-TG-2018" in gallery_js
+    assert "lambda-phage-linear" not in gallery_js
     assert "lambda-phage-linear.svg" not in gallery_html
     assert "hepatoplasmataceae-comparison.svg" not in gallery_html
     assert re.search(r"\.viewer-panel\s*>\s*\*\s*\{[^}]*min-width:\s*0;", gallery_css, re.S)
@@ -469,11 +495,10 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
 
 def test_interactive_gallery_examples_are_wired() -> None:
     expected_ids = [
-        "lambda-phage-linear",
-        "human-mtdna-compact",
-        "hepatoplasmataceae-comparison",
-        "majanivirus-comparison",
-        "tobacco-chloroplast",
+        "Vnig_TUMSAT-TG-2018",
+        "hepatoplasmataceae_collinear",
+        "hepatoplasmataceae_orthogroup",
+        "majanivirus_orthogroup",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
 
@@ -487,18 +512,31 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert entry["sourceNote"]
         assert entry["featureSources"]
         assert entry["svg"].startswith("./examples/")
+        assert entry["session"].startswith("./sessions/")
         assert entry["thumbnail"].startswith("./thumbnails/")
+        assert entry["sourceSession"].startswith("gbdraw/web/gallery/sessions/")
+        assert entry["sourceOutput"].startswith("gbdraw/web/gallery/examples/")
+        assert entry["sourceFigure"].startswith("gbdraw/web/gallery/sources/")
 
         svg_path = GALLERY_ROOT / entry["svg"].removeprefix("./")
+        session_path = GALLERY_ROOT / entry["session"].removeprefix("./")
+        source_figure_path = REPO_ROOT / entry["sourceFigure"]
         thumbnail_path = GALLERY_ROOT / entry["thumbnail"].removeprefix("./")
         assert svg_path.exists()
+        assert session_path.exists()
+        assert source_figure_path.exists()
         assert thumbnail_path.exists()
 
         svg_source = svg_path.read_text(encoding="utf-8")
+        with session_path.open(encoding="utf-8") as session_handle:
+            session_prefix = session_handle.read(128)
         thumbnail_header = thumbnail_path.read_bytes()[:16]
 
         assert svg_path.stat().st_size > 1024
+        assert session_path.stat().st_size > 1024
+        assert source_figure_path.stat().st_size > 1024
         assert thumbnail_path.stat().st_size > 1024
+        assert '"format":"gbdraw-session"' in session_prefix
         assert 'data-gbdraw-interactive-svg="true"' in svg_source
         assert "gbdraw-interactive-feature-metadata" in svg_source
         assert "gbdraw-interactive-feature-script" in svg_source
@@ -506,7 +544,10 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert "data-gbdraw-original-viewbox" in svg_source
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
-        assert "parent." not in svg_source
+        assert "window.parent" not in svg_source
+        assert "parent.postMessage" not in svg_source
+        assert "window.top" not in svg_source
+        assert "window.opener" not in svg_source
 
         payload = _gallery_svg_metadata(svg_source)
         assert payload["schema"] == "gbdraw-interactive-feature-popup-v1"
@@ -1802,7 +1843,7 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
     source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
     module_path = tmp_path / "linear-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["depth-track-state.js", "color-utils.js"]:
+    for dependency in ["depth-track-state.js", "color-utils.js", "track-slot-colors.js"]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -1865,9 +1906,37 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
             show_gc: true,
             show_skew: true
           }},
-          linearSeqs: []
+          linearSeqs: [],
+          currentColors: {{ value: {{ skew_high: '#123456', skew_low: '#654321' }} }},
+          paletteDefinitions: {{
+            value: {{
+              default: {{ skew_high: '#6dded3', skew_low: '#ad72e3' }},
+              custom: {{ skew_high: '#abcdef', skew_low: '#fedcba' }}
+            }}
+          }},
+          selectedPalette: {{ value: 'custom' }}
         }};
         const editor = createLinearTrackSlotEditor({{ state }});
+        const stateSkewSlot = state.adv.linear_track_slots.find((slot) => slot.id === 'gc_skew');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') === '#123456', 'Linear inherited positive skew color should use currentColors.skew_high');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'negative_color') === '#654321', 'Linear inherited negative skew color should use currentColors.skew_low');
+        state.currentColors.value.skew_high = '#abc';
+        state.currentColors.value.skew_low = 'tomato';
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') === '#aabbcc', 'Linear inherited positive swatch should update with currentColors');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'negative_color') === '#ff6347', 'Linear inherited negative swatch should normalize named currentColors');
+        assert(!('positive_color' in stateSkewSlot.params) && !('negative_color' in stateSkewSlot.params), 'Inherited linear swatches should not add slot params');
+        editor.setLinearTrackSlotSkewColor(stateSkewSlot, 'positive_color', '#010203');
+        editor.setLinearTrackSlotSkewColor(stateSkewSlot, 'negative_color', '#040506');
+        assert(editor.linearTrackSlotHasSkewColorOverride(stateSkewSlot, 'positive_color'), 'Linear positive override should be detected');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') === '#010203', 'Linear explicit positive color should override inherited color');
+        const explicitLinearSpec = editor.linearTrackSlotCliSpec(stateSkewSlot);
+        assert(explicitLinearSpec.includes('positive_color=#010203') && explicitLinearSpec.includes('negative_color=#040506'), `Linear explicit skew colors were not serialized: ${{explicitLinearSpec}}`);
+        editor.clearLinearTrackSlotSkewColor(stateSkewSlot, 'positive_color');
+        editor.clearLinearTrackSlotSkewColor(stateSkewSlot, 'negative_color');
+        assert(!editor.linearTrackSlotHasSkewColorOverride(stateSkewSlot, 'positive_color'), 'Linear clear should remove positive override');
+        assert(editor.linearTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') === '#aabbcc', 'Linear clear should return positive swatch to inherited color');
+        const clearedLinearSpec = editor.linearTrackSlotCliSpec(stateSkewSlot);
+        assert(!clearedLinearSpec.includes('positive_color=') && !clearedLinearSpec.includes('negative_color='), `Linear cleared skew colors should not serialize params: ${{clearedLinearSpec}}`);
         assert(!editor.canMoveLinearTrackSlot(0, 1), 'Normal down arrow should not cross Axis');
         editor.moveLinearTrackSlot(0, 1);
         assert(state.adv.linear_track_slots.map((slot) => slot.id).join(',') === 'gc_content,features,gc_skew', 'Arrow move crossed Axis unexpectedly');
@@ -1989,7 +2058,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
     module_path = tmp_path / "circular-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["conservation-series.js", "color-utils.js", "depth-track-state.js"]:
+    for dependency in ["conservation-series.js", "color-utils.js", "depth-track-state.js", "track-slot-colors.js"]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -2086,7 +2155,15 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             show_depth: false,
             suppress_gc: false,
             suppress_skew: false
-          }}
+          }},
+          currentColors: {{ value: {{ skew_high: '#0f1e2d', skew_low: '#2d1e0f' }} }},
+          paletteDefinitions: {{
+            value: {{
+              default: {{ skew_high: '#6dded3', skew_low: '#ad72e3' }},
+              custom: {{ skew_high: '#102030', skew_low: '#405060' }}
+            }}
+          }},
+          selectedPalette: {{ value: 'custom' }}
         }};
 
         const defaultState = {{
@@ -2356,6 +2433,40 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         }}
 
         const editor = createCircularTrackSlotEditor({{ state }});
+        const stateSkewSlot = state.adv.circular_track_slots.find((slot) => slot.id === 'gc_skew');
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') !== '#0f1e2d') {{
+          throw new Error('Circular inherited positive skew color should use currentColors.skew_high');
+        }}
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'negative_color') !== '#2d1e0f') {{
+          throw new Error('Circular inherited negative skew color should use currentColors.skew_low');
+        }}
+        state.currentColors.value = {{}};
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') !== '#102030') {{
+          throw new Error('Circular inherited positive skew color should fall back to the selected palette');
+        }}
+        state.selectedPalette.value = 'missing';
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'negative_color') !== '#ad72e3') {{
+          throw new Error('Circular inherited negative skew color should fall back to the default palette');
+        }}
+        editor.setCircularTrackSlotSkewColor(stateSkewSlot, 'positive_color', '#010203');
+        if (!editor.circularTrackSlotHasSkewColorOverride(stateSkewSlot, 'positive_color')) {{
+          throw new Error('Circular positive skew override should be detected');
+        }}
+        if (editor.circularTrackSlotSkewColorValue(stateSkewSlot, 'positive_color') !== '#010203') {{
+          throw new Error('Circular explicit positive color should override inherited color');
+        }}
+        const explicitCircularSpec = editor.circularTrackSlotCliSpec(stateSkewSlot);
+        if (!explicitCircularSpec.includes('positive_color=#010203')) {{
+          throw new Error(`Circular explicit skew color was not serialized: ${{explicitCircularSpec}}`);
+        }}
+        editor.clearCircularTrackSlotSkewColor(stateSkewSlot, 'positive_color');
+        if (editor.circularTrackSlotHasSkewColorOverride(stateSkewSlot, 'positive_color')) {{
+          throw new Error('Circular clear should remove positive override');
+        }}
+        const clearedCircularSpec = editor.circularTrackSlotCliSpec(stateSkewSlot);
+        if (clearedCircularSpec.includes('positive_color=') || clearedCircularSpec.includes('negative_color=')) {{
+          throw new Error(`Circular cleared skew colors should not serialize params: ${{clearedCircularSpec}}`);
+        }}
         if (editor.canMoveCircularTrackSlot(1, -1)) {{
           throw new Error('Feature up arrow should not cross Axis');
         }}
@@ -2744,6 +2855,17 @@ def test_pyodide_palette_init_treats_comparison_only_colors_as_uninitialized() -
     assert "if (!currentHasPaletteColors) {\n            currentColors.value = resolvedColors;" in source
     assert "currentHasPaletteColors ? currentColors.value : resolvedColors" in source
     assert "const currentHasColors = hasColorEntries(currentColors.value);" not in source
+
+
+def test_conda_build_prepares_browser_wheel_before_install() -> None:
+    build_sh = (REPO_ROOT / "recipe" / "build.sh").read_text(encoding="utf-8")
+    meta_yaml = (REPO_ROOT / "recipe" / "meta.yaml").read_text(encoding="utf-8")
+
+    prepare_index = build_sh.index("$PYTHON tools/prepare_browser_wheel.py")
+    install_index = build_sh.index("$PYTHON -m pip install . --no-deps --ignore-installed -vv")
+    assert prepare_index < install_index
+    assert "python-build" in meta_yaml
+    assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 
 @pytest.mark.slow

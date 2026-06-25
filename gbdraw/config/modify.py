@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from typing import Mapping
+
+from gbdraw.definition_line_styles import DEFINITION_LINE_KINDS, DEFINITION_LINE_STYLE_PROPERTIES
+from gbdraw.exceptions import ValidationError
+
 from .models import GbdrawConfig  # type: ignore[reportMissingImports]
 
 def suppress_gc_content_and_skew(suppress_gc: bool, suppress_skew: bool) -> tuple[bool, bool]:
@@ -19,6 +24,29 @@ def update_config_value(config_dict, path, value):
     config_dict[keys[-1]] = value
 
 
+def update_linear_definition_line_styles(
+    config_dict,
+    line_styles: Mapping[str, Mapping[str, object]] | None,
+) -> None:
+    if line_styles is None:
+        return
+    for line_kind, style in line_styles.items():
+        if line_kind not in DEFINITION_LINE_KINDS:
+            raise ValidationError(f"unknown linear definition line style kind: {line_kind}")
+        if not isinstance(style, Mapping):
+            raise ValidationError("linear definition line style entries must be mappings")
+        for property_key, value in style.items():
+            if property_key not in DEFINITION_LINE_STYLE_PROPERTIES:
+                raise ValidationError(f"unknown linear definition line style property: {property_key}")
+            if value is None:
+                continue
+            update_config_value(
+                config_dict,
+                f"objects.definition.linear.line_styles.{line_kind}.{property_key}",
+                value,
+            )
+
+
 def modify_config_dict(
     config_dict,
     block_stroke_width=None,
@@ -31,6 +59,7 @@ def modify_config_dict(
     line_stroke_width=None,
     gc_stroke_color=None,
     linear_definition_font_size=None,
+    linear_definition_line_styles=None,
     linear_definition_show_replicon=None,
     linear_definition_show_accession=None,
     linear_definition_show_length=None,
@@ -52,6 +81,10 @@ def modify_config_dict(
     gc_content_large_tick_interval=None,
     gc_content_small_tick_interval=None,
     gc_content_tick_font_size=None,
+    gc_content_percent_background_color=None,
+    gc_content_percent_background_opacity=None,
+    gc_content_percent_border_color=None,
+    gc_content_percent_border_width=None,
     show_skew=None,
     show_depth=None,
     depth_color=None,
@@ -219,6 +252,10 @@ def modify_config_dict(
         "gc_content_large_tick_interval": "objects.gc_content.large_tick_interval",
         "gc_content_small_tick_interval": "objects.gc_content.small_tick_interval",
         "gc_content_tick_font_size": "objects.gc_content.tick_font_size",
+        "gc_content_percent_background_color": "objects.gc_content.percent_background_color",
+        "gc_content_percent_background_opacity": "objects.gc_content.percent_background_opacity",
+        "gc_content_percent_border_color": "objects.gc_content.percent_border_color",
+        "gc_content_percent_border_width": "objects.gc_content.percent_border_width",
         "show_gc": "canvas.show_gc",
         "show_skew": "canvas.show_skew",
         "show_depth": "canvas.show_depth",
@@ -319,7 +356,14 @@ def modify_config_dict(
                     continue
             update_config_value(config_dict, path, value)
 
+    update_linear_definition_line_styles(config_dict, linear_definition_line_styles)
+
     return config_dict
 
 
-__all__ = ["modify_config_dict", "suppress_gc_content_and_skew", "update_config_value"]
+__all__ = [
+    "modify_config_dict",
+    "suppress_gc_content_and_skew",
+    "update_config_value",
+    "update_linear_definition_line_styles",
+]

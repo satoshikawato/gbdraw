@@ -15,7 +15,9 @@ requirements:
   host:
     - python >=3.10
     - pip
+    - python-build
     - setuptools
+    - wheel
   run:
     - python >=3.10
     - pandas

@@ -3,7 +3,7 @@
 Guidance for automated agents working in this repository.
 
 ## Read First
-
+- コード1行増やすごとに技術負債が増えると心得よ。
 - See `CLAUDE.md` for project-wide guidance.
 - If working on the web UI, also read `gbdraw/web/CLAUDE.md`.
 
