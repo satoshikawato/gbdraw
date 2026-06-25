@@ -20,6 +20,23 @@ logger = logging.getLogger(__name__)
 _font_cache: Dict[str, TTFont] = {}
 _font_path_cache: Dict[str, Optional[str]] = {}
 
+_BUNDLED_FONT_FAMILY_ALIASES = {
+    "liberationsans": "LiberationSans",
+    "arial": "LiberationSans",
+    "helvetica": "LiberationSans",
+    "nimbussansl": "LiberationSans",
+    "sans-serif": "LiberationSans",
+    "sansserif": "LiberationSans",
+    "liberationserif": "LiberationSerif",
+    "timesnewroman": "LiberationSerif",
+    "times": "LiberationSerif",
+    "serif": "LiberationSerif",
+    "liberationmono": "LiberationMono",
+    "couriernew": "LiberationMono",
+    "courier": "LiberationMono",
+    "monospace": "LiberationMono",
+}
+
 
 # ------------------------------------------------------------------
 #  Kerning Support (CLI only - Pyodide uses Canvas API)
@@ -110,48 +127,158 @@ def _get_cached_font(font_path: str) -> Optional[TTFont]:
         return None
 
 
-def _resolve_font_path(font_family: str, *, allow_system: bool = False) -> Optional[str]:
+def _normalize_font_family_candidate(value: str) -> str:
+    return value.strip().strip("\"'").strip()
+
+
+def _comparable_font_name(value: str) -> str:
+    return _normalize_font_family_candidate(value).lower().replace(" ", "")
+
+
+def _normalize_font_weight(font_weight: str | int | float | None) -> str:
+    value = "normal" if font_weight is None else str(font_weight).strip().lower()
+    if value in {"bold", "bolder"}:
+        return "bold"
+    try:
+        return "bold" if int(float(value)) >= 600 else "normal"
+    except (TypeError, ValueError):
+        return "normal"
+
+
+def _normalize_font_style(font_style: str | None) -> str:
+    value = "normal" if font_style is None else str(font_style).strip().lower()
+    return "italic" if value in {"italic", "oblique"} else "normal"
+
+
+def _font_style_suffix(font_weight: str | int | float | None, font_style: str | None) -> str:
+    weight = _normalize_font_weight(font_weight)
+    style = _normalize_font_style(font_style)
+    if weight == "bold" and style == "italic":
+        return "BoldItalic"
+    if weight == "bold":
+        return "Bold"
+    if style == "italic":
+        return "Italic"
+    return "Regular"
+
+
+def _bundled_font_dirs():
+    data_dir = resources.files("gbdraw.data")
+    return (data_dir.joinpath("fonts"), data_dir)
+
+
+def _available_bundled_fonts():
+    available_fonts = []
+    seen = set()
+    for font_dir in _bundled_font_dirs():
+        try:
+            if not font_dir.is_dir():
+                continue
+            for font_file in font_dir.iterdir():
+                if not font_file.name.lower().endswith((".ttf", ".otf")):
+                    continue
+                font_path = str(font_file)
+                if font_path in seen:
+                    continue
+                seen.add(font_path)
+                available_fonts.append(font_file)
+        except Exception as e:
+            logger.debug(f"Bundled font directory lookup failed for {font_dir!s}: {e}")
+    return available_fonts
+
+
+def _font_family_prefix(family: str) -> str | None:
+    comparable_family = _comparable_font_name(family)
+    return _BUNDLED_FONT_FAMILY_ALIASES.get(comparable_family)
+
+
+def _select_bundled_font_variant(
+    available_fonts,
+    *,
+    prefix: str,
+    font_weight: str | int | float | None,
+    font_style: str | None,
+) -> Optional[str]:
+    desired_suffix = _font_style_suffix(font_weight, font_style)
+    desired_stem = f"{prefix}-{desired_suffix}".lower()
+    regular_stem = f"{prefix}-Regular".lower()
+
+    by_stem = {os.path.splitext(font_file.name)[0].lower(): font_file for font_file in available_fonts}
+    if desired_stem in by_stem:
+        return str(by_stem[desired_stem])
+    if regular_stem in by_stem:
+        logger.debug(
+            "Bundled font variant %s was not found; falling back to %s-Regular.",
+            desired_stem,
+            prefix,
+        )
+        return str(by_stem[regular_stem])
+    return None
+
+
+def _resolve_font_path(
+    font_family: str,
+    *,
+    allow_system: bool = False,
+    font_weight: str | int | float | None = "normal",
+    font_style: str | None = "normal",
+) -> Optional[str]:
     """Resolve font family name to a font file path with caching."""
-    cache_key = f"{font_family}\0system={int(allow_system)}"
+    cache_key = (
+        f"{font_family}\0system={int(allow_system)}"
+        f"\0weight={_normalize_font_weight(font_weight)}"
+        f"\0style={_normalize_font_style(font_style)}"
+    )
     if cache_key in _font_path_cache:
         return _font_path_cache[cache_key]
 
-    def normalize_candidate(value: str) -> str:
-        return value.strip().strip("\"'").strip()
-
-    def comparable(value: str) -> str:
-        return normalize_candidate(value).lower().replace(" ", "")
-
     families = [
         family
-        for family in (normalize_candidate(part) for part in str(font_family).split(","))
+        for family in (_normalize_font_family_candidate(part) for part in str(font_family).split(","))
         if family
     ]
     target_font_path = None
     try:
-        # Access the bundled fonts directory
-        font_dir = resources.files("gbdraw.data").joinpath("fonts")
-
-        # List available TTF/OTF files
-        available_fonts = [
-            f for f in font_dir.iterdir() if f.name.lower().endswith((".ttf", ".otf"))
-        ]
+        available_fonts = _available_bundled_fonts()
 
         if available_fonts:
-            # Simple matching logic
-            requested_names = [comparable(family) for family in families]
-
-            for requested in requested_names:
-                for f in available_fonts:
-                    if requested in comparable(f.name):
-                        target_font_path = str(f)
-                        break
+            for family in families:
+                prefix = _font_family_prefix(family)
+                if prefix is None:
+                    continue
+                target_font_path = _select_bundled_font_variant(
+                    available_fonts,
+                    prefix=prefix,
+                    font_weight=font_weight,
+                    font_style=font_style,
+                )
                 if target_font_path:
                     break
 
-            # Fallback to the first available font
+            requested_names = [_comparable_font_name(family) for family in families]
+
+            if target_font_path is None:
+                for requested in requested_names:
+                    for f in available_fonts:
+                        if requested in _comparable_font_name(f.name):
+                            prefix = os.path.splitext(f.name)[0].split("-", 1)[0]
+                            target_font_path = _select_bundled_font_variant(
+                                available_fonts,
+                                prefix=prefix,
+                                font_weight=font_weight,
+                                font_style=font_style,
+                            ) or str(f)
+                            break
+                    if target_font_path:
+                        break
+
             if not target_font_path:
-                target_font_path = str(available_fonts[0])
+                target_font_path = _select_bundled_font_variant(
+                    available_fonts,
+                    prefix="LiberationSans",
+                    font_weight=font_weight,
+                    font_style=font_style,
+                ) or str(available_fonts[0])
     except Exception as e:
         logger.debug(f"Font path resolution failed ({e}).")
 
@@ -159,7 +286,7 @@ def _resolve_font_path(font_family: str, *, allow_system: bool = False) -> Optio
         fc_match = shutil.which("fc-match")
         if fc_match:
             for family in families:
-                if comparable(family) in {"sans-serif", "serif", "monospace", "cursive", "fantasy"}:
+                if _comparable_font_name(family) in {"sans-serif", "serif", "monospace", "cursive", "fantasy"}:
                     continue
                 try:
                     result = subprocess.run(
@@ -218,6 +345,7 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
     t = cmap.getcmap(3, 1).cmap
 
     total_width = 0
+    total_advance_width = 0
     ymaxes = []
     ymins = []
 
@@ -257,12 +385,15 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
         if previous_glyph_index is not None:
             kerning_value = _get_kerning_value(font, previous_glyph_index, glyph_index)
             total_width += kerning_value
+            total_advance_width += kerning_value
 
         # Calculate horizontal advance
         try:
             advance_width, lsb = hmtx[glyph_index]
         except KeyError:
             advance_width, lsb = 1000, 0
+
+        total_advance_width += advance_width
 
         if xmax == 0:
             advance_width -= rsb_previous
@@ -294,7 +425,7 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
         # Legacy layout calculations treat configured font sizes as points.
         scale_factor = (float(font_size) * dpi) / (72 * units_per_em)
 
-    text_width_pixels = total_width * scale_factor
+    text_width_pixels = (total_advance_width if svg_units else total_width) * scale_factor
 
     if ymaxes and ymins:
         max_y = max(ymaxes)
@@ -309,7 +440,13 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
 # ------------------------------------------------------------------
 #  Browser Canvas Text Measurement (for Pyodide)
 # ------------------------------------------------------------------
-def _measure_text_canvas(text: str, font_family: str, font_size: float) -> tuple:
+def _measure_text_canvas(
+    text: str,
+    font_family: str,
+    font_size: float,
+    font_weight: str | int | float | None = "normal",
+    font_style: str | None = "normal",
+) -> tuple:
     """
     Measure text dimensions using browser's Canvas API.
     This is much faster than fontTools in Pyodide because it uses
@@ -343,7 +480,11 @@ def _measure_text_canvas(text: str, font_family: str, font_size: float) -> tuple
             elif "mono" in font_lower:
                 web_font = "Courier New, monospace"
 
-        ctx.font = f"{font_size}px {web_font}"
+        ctx.font = (
+            f"{_normalize_font_style(font_style)} "
+            f"{_normalize_font_weight(font_weight)} "
+            f"{font_size}px {web_font}"
+        )
         metrics = ctx.measureText(str(text))
 
         # Width from measureText
@@ -370,7 +511,14 @@ def _measure_text_canvas(text: str, font_family: str, font_size: float) -> tuple
 #  Main BBox Calculation Function
 # ------------------------------------------------------------------
 @functools.lru_cache(maxsize=4096)
-def calculate_bbox_dimensions(text, font_family, font_size, dpi):
+def calculate_bbox_dimensions(
+    text,
+    font_family,
+    font_size,
+    dpi,
+    font_weight: str | int | float | None = "normal",
+    font_style: str | None = "normal",
+):
     """
     Calculates bounding box dimensions using bundled font files in gbdraw package.
     In Pyodide/browser environments, uses the native Canvas API for fast measurement.
@@ -378,10 +526,20 @@ def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     """
     # Use browser's Canvas API in Pyodide (much faster, uses native text engine)
     if "pyodide" in sys.modules:
-        return _measure_text_canvas(text, font_family, float(font_size))
+        return _measure_text_canvas(
+            text,
+            font_family,
+            float(font_size),
+            font_weight=font_weight,
+            font_style=font_style,
+        )
 
     # Native Python: Use fontTools with kerning support
-    target_font_path = _resolve_font_path(font_family)
+    target_font_path = _resolve_font_path(
+        font_family,
+        font_weight=font_weight,
+        font_style=font_style,
+    )
 
     if target_font_path:
         # Calculate using fontTools (font object is cached internally)
@@ -396,7 +554,14 @@ def calculate_bbox_dimensions(text, font_family, font_size, dpi):
 
 
 @functools.lru_cache(maxsize=4096)
-def calculate_svg_bbox_dimensions(text, font_family, font_size, dpi):
+def calculate_svg_bbox_dimensions(
+    text,
+    font_family,
+    font_size,
+    dpi,
+    font_weight: str | int | float | None = "normal",
+    font_style: str | None = "normal",
+):
     """
     Calculates text dimensions in SVG user units for width-sensitive layout.
 
@@ -406,9 +571,20 @@ def calculate_svg_bbox_dimensions(text, font_family, font_size, dpi):
     axis.
     """
     if "pyodide" in sys.modules:
-        return _measure_text_canvas(text, font_family, float(font_size))
+        return _measure_text_canvas(
+            text,
+            font_family,
+            float(font_size),
+            font_weight=font_weight,
+            font_style=font_style,
+        )
 
-    target_font_path = _resolve_font_path(font_family, allow_system=True)
+    target_font_path = _resolve_font_path(
+        font_family,
+        allow_system=True,
+        font_weight=font_weight,
+        font_style=font_style,
+    )
     if target_font_path:
         return get_text_bbox_size_pixels(
             target_font_path,

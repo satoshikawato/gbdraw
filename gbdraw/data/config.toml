@@ -36,6 +36,7 @@ horizontal_offset = 120
 vertical_padding = 8
 comparison_height = 60
 canvas_padding = 50
+definition_gap = 20
 default_gc_height = 20
 depth_height = 10
 depth_padding = 8

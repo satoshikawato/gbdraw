@@ -955,7 +955,11 @@ def assemble_linear_diagram(
         canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
     else:
         canvas_config.alignment_width = canvas_config.fig_width
-        canvas_config.horizontal_offset = 2 * canvas_config.canvas_padding + max_def_width
+        canvas_config.horizontal_offset = (
+            2 * canvas_config.canvas_padding
+            + max_def_width
+            + canvas_config.definition_gap
+        )
         canvas_config.total_width = (
             canvas_config.horizontal_offset
             + canvas_config.alignment_width

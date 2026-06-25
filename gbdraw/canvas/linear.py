@@ -93,6 +93,7 @@ class LinearCanvasConfigurator:
     vertical_padding (float): Vertical padding between elements.
     comparison_height (float): Height for comparison tracks.
     canvas_padding (float): Padding around the canvas.
+    definition_gap (float): Minimum gap between definition text and record axis.
     default_cds_height (float): Default height for coding sequences.
     default_gc_height (float): Default height for GC content.
     show_gc (bool): Flag to display GC content.
@@ -154,6 +155,7 @@ class LinearCanvasConfigurator:
         # based on feature track heights
         self.comparison_height: float = cfg.canvas.linear.comparison_height if has_comparisons else 0
         self.canvas_padding: float = cfg.canvas.linear.canvas_padding
+        self.definition_gap: float = cfg.canvas.linear.definition_gap
         self.length_threshold = cfg.labels.length_threshold.linear
         self.length_param = determine_length_parameter(self.longest_genome, self.length_threshold)
         self.default_cds_height: float = getattr(cfg.canvas.linear.default_cds_height, self.length_param)
@@ -397,9 +399,10 @@ class LinearCanvasConfigurator:
 
         padding = self.canvas_padding
         legend_width = legend_group.legend_width
+        definition_reserve_width = max_definition_width + self.definition_gap
 
         if self.legend_position == "right":
-            self.horizontal_offset = 2 * padding + max_definition_width
+            self.horizontal_offset = 2 * padding + definition_reserve_width
             self.total_width = (
                 self.horizontal_offset
                 + self.alignment_width
@@ -411,13 +414,13 @@ class LinearCanvasConfigurator:
             self.legend_offset_y = calculate_optimal_legend_y()
 
         elif self.legend_position == "left":
-            self.horizontal_offset = 1 * padding + legend_width + 2 * padding + max_definition_width
+            self.horizontal_offset = 1 * padding + legend_width + 2 * padding + definition_reserve_width
             self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = padding
             self.legend_offset_y = calculate_optimal_legend_y()
 
         elif self.legend_position in ["top", "bottom"]:
-            self.horizontal_offset = 2 * padding + max_definition_width
+            self.horizontal_offset = 2 * padding + definition_reserve_width
             self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = (self.total_width - legend_group.legend_width) / 2
             if self.legend_position == "top":
@@ -426,7 +429,7 @@ class LinearCanvasConfigurator:
                 self.legend_offset_y = self.total_height - self.original_vertical_offset - legend_group.legend_height
 
         else:
-            self.horizontal_offset = 2 * padding + max_definition_width
+            self.horizontal_offset = 2 * padding + definition_reserve_width
             self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = 0
             self.legend_offset_y = 0

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -7,8 +9,13 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
+from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
+from gbdraw.core import text as text_module
+from gbdraw.diagrams.linear import precalc as linear_precalc
 from gbdraw.diagrams.linear.builders import add_record_definition_group
+from gbdraw.render.export import save_figure
 from gbdraw.render.groups.linear import DefinitionGroup
 
 
@@ -18,9 +25,14 @@ def _record(label: str = "Record A", record_id: str = "record_a") -> SeqRecord:
     return record
 
 
-def _canvas_config(*, keep_definition_left_aligned: bool) -> SimpleNamespace:
+def _canvas_config(
+    *,
+    keep_definition_left_aligned: bool,
+    definition_gap: float = 20,
+) -> SimpleNamespace:
     return SimpleNamespace(
         canvas_padding=50,
+        definition_gap=definition_gap,
         horizontal_offset=120,
         keep_definition_left_aligned=keep_definition_left_aligned,
         length_param="short",
@@ -48,6 +60,85 @@ def _definition_text_anchors(canvas: Drawing) -> set[str]:
 
 def _definition_width(record: SeqRecord, config_dict: dict, canvas_config: SimpleNamespace) -> float:
     return DefinitionGroup(record, config_dict, canvas_config).definition_bounding_box_width
+
+
+def _definition_only_config(*, font_weight: str = "normal", definition_gap: float = 20) -> dict:
+    config_dict = copy.deepcopy(load_config_toml("gbdraw.data", "config.toml"))
+    config_dict["canvas"]["show_gc"] = False
+    config_dict["canvas"]["show_skew"] = False
+    config_dict["canvas"]["show_depth"] = False
+    config_dict["canvas"]["show_labels"] = False
+    config_dict["canvas"]["linear"]["keep_definition_left_aligned"] = True
+    config_dict["canvas"]["linear"]["definition_gap"] = definition_gap
+    definition_cfg = config_dict["objects"]["definition"]["linear"]
+    definition_cfg["font_weight"] = font_weight
+    definition_cfg["show_replicon"] = False
+    definition_cfg["show_accession"] = False
+    definition_cfg["show_length"] = False
+    return config_dict
+
+
+def _bbox_in_svg_space_script() -> str:
+    return """
+    async ({ definitionId, recordId }) => {
+      await document.fonts.ready;
+      const svg = document.querySelector('svg');
+      const definition = document.getElementById(definitionId);
+      const record = document.getElementById(recordId);
+      if (!svg || !definition || !record) {
+        throw new Error('Expected SVG, definition group, and record group to exist');
+      }
+      function bboxInSvgSpace(element) {
+        const bbox = element.getBBox();
+        const matrix = element.getCTM();
+        const point = svg.createSVGPoint();
+        const corners = [
+          [bbox.x, bbox.y],
+          [bbox.x + bbox.width, bbox.y],
+          [bbox.x, bbox.y + bbox.height],
+          [bbox.x + bbox.width, bbox.y + bbox.height],
+        ].map(([x, y]) => {
+          point.x = x;
+          point.y = y;
+          const transformed = point.matrixTransform(matrix);
+          return { x: transformed.x, y: transformed.y };
+        });
+        return {
+          left: Math.min(...corners.map((point) => point.x)),
+          right: Math.max(...corners.map((point) => point.x)),
+          top: Math.min(...corners.map((point) => point.y)),
+          bottom: Math.max(...corners.map((point) => point.y)),
+        };
+      }
+      const definitionBox = bboxInSvgSpace(definition);
+      const recordBox = bboxInSvgSpace(record);
+      return {
+        gap: recordBox.left - definitionBox.right,
+        definitionRight: definitionBox.right,
+        recordLeft: recordBox.left,
+      };
+    }
+    """
+
+
+def _linear_definition_canvas(
+    label: str,
+    *,
+    font_weight: str = "normal",
+    definition_gap: float = 20,
+    output_prefix: str = "linear_definition_gap",
+) -> Drawing:
+    record = _record(label, record_id="record_a")
+    return assemble_linear_diagram_from_records(
+        [record],
+        config_dict=_definition_only_config(
+            font_weight=font_weight,
+            definition_gap=definition_gap,
+        ),
+        selected_features_set=[],
+        output_prefix=output_prefix,
+        legend="none",
+    )
 
 
 @pytest.mark.linear
@@ -153,7 +244,44 @@ def test_locked_linear_definition_column_uses_rendered_svg_text_width(
     gap = canvas_config.horizontal_offset - (definition_x + definition_width)
 
     assert definition_width == pytest.approx(60.0)
-    assert gap == pytest.approx(20.0)
+    assert gap == pytest.approx(canvas_config.definition_gap)
+
+
+@pytest.mark.linear
+def test_locked_linear_definition_column_uses_configured_definition_gap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    canvas_config = _canvas_config(
+        keep_definition_left_aligned=True,
+        definition_gap=32,
+    )
+
+    monkeypatch.setattr(
+        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
+        lambda *_args, **_kwargs: (64.0, 12.0),
+    )
+    monkeypatch.setattr(
+        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
+        lambda *_args, **_kwargs: (64.0, 12.0),
+    )
+
+    definition_width = _definition_width(_record("Wide Label"), config_dict, canvas_config)
+    canvas = Drawing()
+    add_record_definition_group(
+        canvas,
+        _record("Wide Label"),
+        record_offset_y=10,
+        record_offset_x=0,
+        canvas_config=canvas_config,
+        config_dict=config_dict,
+        max_def_width=definition_width,
+    )
+
+    definition_x = _definition_translate_x(canvas)
+    gap = canvas_config.horizontal_offset - (definition_x + definition_width)
+
+    assert gap == pytest.approx(32.0)
 
 
 @pytest.mark.linear
@@ -184,3 +312,185 @@ def test_locked_linear_definition_column_can_shift_left_of_negative_record_offse
     )
 
     assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) - 30)
+
+
+@pytest.mark.linear
+def test_precalculated_max_definition_width_is_ceiled(monkeypatch: pytest.MonkeyPatch) -> None:
+    records = [_record("A", "record_a"), _record("B", "record_b")]
+    widths = {"record_a": 12.01, "record_b": 7.5}
+
+    class FakeDefinitionGroup:
+        def __init__(self, record, *_args, **_kwargs):
+            self.definition_bounding_box_width = widths[record.id]
+            self.definition_bounding_box_height = 10.0
+
+    monkeypatch.setattr(linear_precalc, "DefinitionGroup", FakeDefinitionGroup)
+
+    max_width, heights, half_heights = linear_precalc._precalculate_definition_metrics(
+        records,
+        load_config_toml("gbdraw.data", "config.toml"),
+        _canvas_config(keep_definition_left_aligned=True),
+    )
+
+    assert max_width == 13
+    assert heights == {"record_a": 10.0, "record_b": 10.0}
+    assert half_heights == {"record_a": 5.0, "record_b": 5.0}
+
+
+@pytest.mark.linear
+def test_linear_definition_gap_defaults_to_twenty_for_legacy_config() -> None:
+    config_dict = copy.deepcopy(load_config_toml("gbdraw.data", "config.toml"))
+    del config_dict["canvas"]["linear"]["definition_gap"]
+
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    assert cfg.canvas.linear.definition_gap == pytest.approx(20.0)
+
+
+@pytest.mark.linear
+def test_linear_definition_gap_reads_explicit_config_value() -> None:
+    config_dict = copy.deepcopy(load_config_toml("gbdraw.data", "config.toml"))
+    config_dict["canvas"]["linear"]["definition_gap"] = 34
+
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    assert cfg.canvas.linear.definition_gap == pytest.approx(34.0)
+
+
+@pytest.mark.linear
+def test_liberation_sans_bundled_fonts_preferred_over_system_fontconfig(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    text_module._font_path_cache.clear()
+    monkeypatch.setattr(
+        text_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("fc-match should not be used for bundled Liberation Sans"),
+    )
+
+    cases = [
+        ("normal", "normal", "LiberationSans-Regular.ttf"),
+        ("bold", "normal", "LiberationSans-Bold.ttf"),
+        ("normal", "italic", "LiberationSans-Italic.ttf"),
+        ("bold", "italic", "LiberationSans-BoldItalic.ttf"),
+    ]
+    for font_weight, font_style, expected_name in cases:
+        font_path = text_module._resolve_font_path(
+            "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
+            allow_system=True,
+            font_weight=font_weight,
+            font_style=font_style,
+        )
+
+        assert font_path is not None
+        assert Path(font_path).name == expected_name
+
+
+@pytest.mark.linear
+def test_definition_plain_lines_use_definition_font_weight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dict = _definition_only_config(font_weight="bold")
+    config_dict["objects"]["definition"]["linear"]["show_accession"] = True
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_bbox(text, _font_family, _font_size, _dpi, *, font_weight="normal", font_style="normal"):
+        calls.append((str(text), str(font_weight), str(font_style)))
+        return 10.0, 12.0
+
+    monkeypatch.setattr(
+        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
+        fake_bbox,
+    )
+    monkeypatch.setattr(
+        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
+        fake_bbox,
+    )
+
+    DefinitionGroup(_record("", "record_a"), config_dict, _canvas_config(keep_definition_left_aligned=True))
+
+    assert ("record_a", "bold", "normal") in calls
+
+
+@pytest.mark.linear
+def test_definition_mixed_content_width_sums_style_aware_parts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dict = _definition_only_config(font_weight="bold")
+    widths = {
+        ("Alpha ", "bold", "normal"): 10.0,
+        ("Beta", "bold", "italic"): 22.0,
+        (" Gamma", "bold", "normal"): 30.0,
+    }
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_bbox(text, _font_family, _font_size, _dpi, *, font_weight="normal", font_style="normal"):
+        key = (str(text), str(font_weight), str(font_style))
+        calls.append(key)
+        return widths.get(key, 1.0), 12.0
+
+    monkeypatch.setattr(
+        "gbdraw.render.groups.linear.definition.calculate_bbox_dimensions",
+        fake_bbox,
+    )
+    monkeypatch.setattr(
+        "gbdraw.render.groups.linear.definition.calculate_svg_bbox_dimensions",
+        fake_bbox,
+    )
+
+    definition_group = DefinitionGroup(
+        _record("Alpha <i>Beta</i> Gamma"),
+        config_dict,
+        _canvas_config(keep_definition_left_aligned=True),
+    )
+
+    assert definition_group.definition_bounding_box_width == pytest.approx(62.0)
+    assert ("Alpha ", "bold", "normal") in calls
+    assert ("Beta", "bold", "italic") in calls
+    assert (" Gamma", "bold", "normal") in calls
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("label", "font_weight"),
+    [
+        ("Plain definition", "normal"),
+        ("Plain <i>italic definition</i> tail", "normal"),
+        ("Bold definition", "bold"),
+    ],
+)
+def test_browser_rendered_definition_gap_is_at_least_configured_gap(
+    label: str,
+    font_weight: str,
+) -> None:
+    from playwright.sync_api import sync_playwright
+
+    canvas = _linear_definition_canvas(label, font_weight=font_weight)
+    svg_source = canvas.tostring()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1800, "height": 600})
+        page.set_content(svg_source)
+        result = page.evaluate(
+            _bbox_in_svg_space_script(),
+            {"definitionId": "record_a_definition", "recordId": "record_a"},
+        )
+        browser.close()
+
+    assert result["gap"] >= 20.0
+
+
+@pytest.mark.linear
+def test_linear_definition_gap_svg_converts_with_cairosvg(tmp_path: Path) -> None:
+    canvas = _linear_definition_canvas(
+        "Plain <i>italic definition</i> tail",
+        output_prefix=str(tmp_path / "linear_definition_gap"),
+    )
+
+    save_figure(canvas, ["svg", "png", "pdf", "eps", "ps"])
+
+    for suffix in (".svg", ".png", ".pdf", ".eps", ".ps"):
+        output_path = tmp_path / f"linear_definition_gap{suffix}"
+        assert output_path.exists()
+        assert output_path.stat().st_size > 0

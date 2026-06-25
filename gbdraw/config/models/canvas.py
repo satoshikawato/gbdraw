@@ -79,6 +79,7 @@ class LinearCanvasConfig:
     vertical_padding: float
     comparison_height: float
     canvas_padding: float
+    definition_gap: float
     default_gc_height: float
     depth_height: float
     depth_padding: float
@@ -127,6 +128,7 @@ class LinearCanvasConfig:
             vertical_padding=float(d["vertical_padding"]),
             comparison_height=float(d["comparison_height"]),
             canvas_padding=float(d["canvas_padding"]),
+            definition_gap=max(0.0, float(d.get("definition_gap", 20))),
             default_gc_height=float(d["default_gc_height"]),
             depth_height=float(d.get("depth_height", d.get("default_gc_height", 20))),
             depth_padding=float(d.get("depth_padding", d.get("vertical_padding", 8))),

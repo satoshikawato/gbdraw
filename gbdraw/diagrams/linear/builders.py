@@ -188,7 +188,10 @@ def add_record_definition_group(
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
-    definition_gap = min(canvas_config.canvas_padding, 20)
+    try:
+        definition_gap = max(0.0, float(getattr(canvas_config, "definition_gap", 20.0)))
+    except (TypeError, ValueError):
+        definition_gap = 20.0
 
     if keep_definition_left_aligned:
         try:

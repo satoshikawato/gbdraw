@@ -124,27 +124,66 @@ class DefinitionGroup:
         else:
             self.length_label = "{:,} bp".format(self.record_length)
 
-    def _measure_line(self, text: str) -> tuple[float, float]:
-        """Return rendered SVG width and legacy layout height for a definition line."""
+    def _measure_text(
+        self,
+        text: str,
+        *,
+        font_weight: str | None = None,
+        font_style: str = "normal",
+    ) -> tuple[float, float]:
+        """Return rendered SVG width and legacy layout height for styled text."""
+        resolved_weight = self.linear_definition_font_weight if font_weight is None else font_weight
         _, height = calculate_bbox_dimensions(
             text,
             self.linear_definition_font_family,
             self.linear_definition_font_size,
             self.dpi,
+            font_weight=resolved_weight,
+            font_style=font_style,
         )
         width, _ = calculate_svg_bbox_dimensions(
             text,
             self.linear_definition_font_family,
             self.linear_definition_font_size,
             self.dpi,
+            font_weight=resolved_weight,
+            font_style=font_style,
         )
         return width, height
+
+    def _measure_line(self, text: str) -> tuple[float, float]:
+        """Return rendered SVG width and legacy layout height for a definition line."""
+        return self._measure_text(
+            text,
+            font_weight=self.linear_definition_font_weight,
+            font_style="normal",
+        )
+
+    def _measure_mixed_line(self, parts: list[dict[str, str | bool | None]]) -> tuple[float, float]:
+        """Measure mixed regular/italic definition content as rendered tspans."""
+        total_width = 0.0
+        max_height = 0.0
+        for part in parts:
+            part_text = part.get("text")
+            if part_text is None:
+                continue
+            width, height = self._measure_text(
+                str(part_text),
+                font_weight=self.linear_definition_font_weight,
+                font_style="italic" if part.get("italic") else "normal",
+            )
+            total_width += width
+            max_height = max(max_height, height)
+
+        if max_height == 0.0 and self.record_name_plain:
+            _, max_height = self._measure_line(self.record_name_plain)
+        return total_width, max_height
 
     def _build_definition_lines(self) -> list[_DefinitionLine]:
         lines: list[_DefinitionLine] = []
 
         if self.record_name_plain:
-            width, height = self._measure_line(self.record_name_plain)
+            width, height = self._measure_mixed_line(self.record_name_parts)
             lines.append(
                 _DefinitionLine(
                     kind="mixed",
