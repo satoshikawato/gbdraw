@@ -43,6 +43,20 @@ const appendText = (parent, tagName, className, text) => {
   return element;
 };
 
+const appendHtml = (parent, tagName, className, html) => {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.innerHTML = html;
+  parent.appendChild(element);
+  return element;
+};
+
+const plainTitle = (sample) => {
+  const template = document.createElement('template');
+  template.innerHTML = sample.title || '';
+  return template.content.textContent || sample.title || sample.id;
+};
+
 const renderTags = (parent, tags) => {
   clearChildren(parent);
   tags.forEach((tag) => appendText(parent, 'span', 'tag', tag));
@@ -50,7 +64,7 @@ const renderTags = (parent, tags) => {
 
 const setLoading = (sample) => {
   frameLoading.hidden = false;
-  frame.title = `Interactive gbdraw SVG demo: ${sample.title}`;
+  frame.title = `Interactive gbdraw SVG demo: ${plainTitle(sample)}`;
 };
 
 const updateActionLinks = (sample) => {
@@ -116,8 +130,10 @@ const renderSampleList = () => {
 
     const body = document.createElement('span');
     body.className = 'sample-card__body';
-    appendText(body, 'span', 'sample-card__title', sample.title);
-    appendText(body, 'span', 'sample-card__description', sample.description);
+    appendHtml(body, 'span', 'sample-card__title', sample.title);
+    if (sample.description) {
+      appendText(body, 'span', 'sample-card__description', sample.description);
+    }
     const tagRow = document.createElement('span');
     tagRow.className = 'tag-row';
     renderTags(tagRow, sample.tags);
@@ -141,12 +157,14 @@ const selectSample = (id, { updateHash = true } = {}) => {
   if (!sample) return;
 
   selectedId = sample.id;
-  selectedTitle.textContent = sample.title;
-  selectedDescription.textContent = sample.description;
+  selectedTitle.innerHTML = sample.title;
+  selectedDescription.textContent = sample.description || '';
+  selectedDescription.hidden = !sample.description;
   renderTags(selectedTags, sample.tags);
   fileSize.textContent = sample.fileSizeLabel;
   commandBlock.textContent = sample.command;
   interactiveStep.textContent = sample.interactiveStep || '';
+  interactiveStep.hidden = !sample.interactiveStep;
   updateActionLinks(sample);
   updatePressedState();
   setLoading(sample);
@@ -163,6 +181,7 @@ const selectSample = (id, { updateHash = true } = {}) => {
 const showError = (message) => {
   selectedTitle.textContent = 'Gallery unavailable';
   selectedDescription.textContent = message;
+  selectedDescription.hidden = false;
   frameLoading.textContent = message;
 };
 

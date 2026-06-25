@@ -1,13 +1,12 @@
 [
   {
     "id": "Vnig_TUMSAT-TG-2018",
-    "title": "Vibrio nigripulchritudo TUMSAT-TG-2018 complete genome",
+    "title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
     "tags": [
       "Circular",
       "Multi-record",
       "Session"
     ],
-    "description": "A multi-replicon Vibrio nigripulchritudo TUMSAT-TG-2018 circular genome diagram generated from a saved session.",
     "svg": "./examples/Vnig_TUMSAT-TG-2018.svg",
     "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "thumbnail": "./thumbnails/Vnig_TUMSAT-TG-2018.webp",
@@ -19,18 +18,16 @@
       "GCF_015097735.1_ASM1509773v1_genomic.gbff"
     ],
     "fileSizeLabel": "30.6 MB",
-    "command": "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left --plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' --plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto --multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 --multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' --multi_record_position '#2@1' --multi_record_position '#3@2' --multi_record_position '#4@2' --multi_record_position '#5@2' --multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff -f interactive_svg",
-    "interactiveStep": "Loaded from the saved interactive SVG output paired with this session JSON."
+    "command": "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left --plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' --plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto --multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 --multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' --multi_record_position '#2@1' --multi_record_position '#3@2' --multi_record_position '#4@2' --multi_record_position '#5@2' --multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff -f interactive_svg"
   },
   {
     "id": "hepatoplasmataceae_collinear",
-    "title": "Hepatoplasmataceae collinear session output",
+    "title": "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
     "tags": [
       "Linear",
       "LOSAT",
       "Collinear"
     ],
-    "description": "A five-genome Hepatoplasmataceae comparison generated from a saved collinear BLASTP session.",
     "svg": "./examples/hepatoplasmataceae_collinear.svg",
     "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
     "thumbnail": "./thumbnails/hepatoplasmataceae_collinear.webp",
@@ -46,18 +43,16 @@
       "NZ_CP006932.gb"
     ],
     "fileSizeLabel": "33.2 MB",
-    "command": "gbdraw linear --losatp_threads 32 --protein_blastp_mode collinear --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai --collinear_color_mode orientation_identity -o hepatoplasmataceae_collinear",
-    "interactiveStep": "Loaded from the saved interactive SVG output paired with this session JSON."
+    "command": "gbdraw linear --losatp_threads 32 --protein_blastp_mode collinear --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai --collinear_color_mode orientation_identity -o hepatoplasmataceae_collinear"
   },
   {
     "id": "hepatoplasmataceae_orthogroup",
-    "title": "Hepatoplasmataceae orthogroup session output",
+    "title": "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
     "tags": [
       "Linear",
       "LOSAT",
       "Orthogroup"
     ],
-    "description": "A five-genome Hepatoplasmataceae comparison generated from a saved orthogroup BLASTP session.",
     "svg": "./examples/hepatoplasmataceae_orthogroup.svg",
     "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "thumbnail": "./thumbnails/hepatoplasmataceae_orthogroup.webp",
@@ -73,19 +68,17 @@
       "NZ_CP006932.gb"
     ],
     "fileSizeLabel": "26.6 MB",
-    "command": "gbdraw linear --protein_blastp_mode orthogroup --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai -o hepatoplasmataceae_orthogroup",
-    "interactiveStep": "Loaded from the saved interactive SVG output paired with this session JSON."
+    "command": "gbdraw linear --protein_blastp_mode orthogroup --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai -o hepatoplasmataceae_orthogroup"
   },
   {
     "id": "majanivirus_orthogroup",
-    "title": "Majanivirus orthogroup session output",
+    "title": "Large dsDNA viruses (<i>Nimaviridae</i>)",
     "tags": [
       "Linear",
       "LOSAT",
       "Orthogroup",
       "Large"
     ],
-    "description": "A nine-genome majanivirus comparison generated from a saved orthogroup BLASTP session.",
     "svg": "./examples/majanivirus_orthogroup.svg",
     "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
     "thumbnail": "./thumbnails/majanivirus_orthogroup.webp",
@@ -105,7 +98,6 @@
       "MejoMJNV.gb"
     ],
     "fileSizeLabel": "11.9 MB",
-    "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup",
-    "interactiveStep": "Loaded from the saved interactive SVG output paired with this session JSON."
+    "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup"
   }
 ]
