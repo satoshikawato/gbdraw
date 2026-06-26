@@ -1,5 +1,5 @@
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption } from '../feature-utils.js';
+import { getFeatureCaption, ruleMatchesFeature } from '../feature-utils.js';
 
 export const createFeatureColorActions = ({
   state,
@@ -62,6 +62,7 @@ export const createFeatureColorActions = ({
   const normalizeColor = (value) => String(value || '').trim().toLowerCase();
   const captionsMatch = (left, right) => normalizeCaptionKey(left) === normalizeCaptionKey(right);
   const colorsMatch = (left, right) => normalizeColor(left) === normalizeColor(right);
+  const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
   const SUFFIXED_CAPTION_PATTERN = /^(.*?)\s*\((\d+)\)$/;
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 
@@ -851,6 +852,60 @@ export const createFeatureColorActions = ({
     extractLegendEntries();
   };
 
+  const applyColorToLegendSpecificRules = async (targetCaption, color, captionFeatures = []) => {
+    const normalizedTargetCaption = normalizeCaption(targetCaption);
+    if (!normalizedTargetCaption) return false;
+
+    const specificRules = manualSpecificRules.filter(
+      (rule) => !isHashSpecificRule(rule) && captionsMatch(rule.cap, normalizedTargetCaption)
+    );
+    if (specificRules.length === 0) return false;
+
+    const existingLegendEntry = findLegendEntryByCaption(normalizedTargetCaption);
+    const finalCaption = existingLegendEntry?.caption || normalizeCaption(specificRules[0].cap) || normalizedTargetCaption;
+
+    for (const rule of specificRules) {
+      rule.color = color;
+      rule.cap = finalCaption;
+    }
+    updateLegendEntryColorByCaption(finalCaption, color);
+
+    const coveredFeatures = extractedFeatures.value.filter((feature) =>
+      specificRules.some((rule) => ruleMatchesFeature(feature, rule))
+    );
+    const coveredFeatureIds = new Set(
+      coveredFeatures.map((feature) => String(feature?.svg_id || '').trim()).filter(Boolean)
+    );
+
+    for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
+      const rule = manualSpecificRules[i];
+      if (!isHashSpecificRule(rule) || !captionsMatch(rule.cap, finalCaption)) continue;
+      if (coveredFeatureIds.has(String(rule.val || '').trim())) {
+        manualSpecificRules.splice(i, 1);
+      } else {
+        rule.color = color;
+        rule.cap = finalCaption;
+      }
+    }
+
+    const affectedFeatures = new Map();
+    [...captionFeatures, ...coveredFeatures].forEach((feature) => {
+      const key = String(feature?.svg_id || feature?.id || '').trim();
+      if (key) affectedFeatures.set(key, feature);
+    });
+    affectedFeatures.forEach((feature) => {
+      if (!feature?.id) return;
+      featureColorOverrides[feature.id] = { color, caption: finalCaption };
+      updateClickedFeatureLegendState(feature, finalCaption, color);
+    });
+
+    applySpecificRulesToSvg();
+    await nextTick();
+    extractLegendEntries();
+    refreshLegendEntryFeatureIds([finalCaption]);
+    return true;
+  };
+
   const requestFeatureColorChange = async (feat, color, requestedLegendName = null, options = {}) => {
     if (!feat) return;
     const requestedCaption = normalizeCaption(requestedLegendName);
@@ -1045,7 +1100,9 @@ export const createFeatureColorActions = ({
       }
       const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
       const allFeatures = [feat, ...siblings];
-      await applyColorToFeatureGroup(allFeatures, targetLegendName, color);
+      if (!(await applyColorToLegendSpecificRules(targetLegendName, color, allFeatures))) {
+        await applyColorToFeatureGroup(allFeatures, targetLegendName, color);
+      }
     } else if (choice === 'displayLabel') {
       const displayLabel =
         normalizeCaption(colorScopeDialog.displayLabel) || normalizeCaption(getDisplayedFeatureLabel(feat));

@@ -238,6 +238,14 @@ def test_web_file_import_helpers_preserve_specific_rule_order() -> None:
     subprocess.run([node, "tests/web/file-imports.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_feature_color_caption_scope_updates_specific_rule() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/feature-color-actions.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
