@@ -1,5 +1,5 @@
 {
-  "base_commit": "0228e6fe896768c6dc58513945d935e96578f5d0",
+  "base_commit": "5dd1b69fe066bc0b39cff7e072bec003c6e654ae",
   "capture_source": "current_worktree",
   "cases": [
     {
@@ -70,10 +70,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 327.05000000000007,
-            "inner_px": 312.85,
+            "center_px": 324.9251627604167,
+            "inner_px": 308.6003255208334,
             "outer_px": 341.25000000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -152,10 +152,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 327.05000000000007,
-            "inner_px": 312.85,
+            "center_px": 324.9251627604167,
+            "inner_px": 308.6003255208334,
             "outer_px": 341.25000000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -163,22 +163,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -117.0,
-          "anchor_radius_px": 273.0,
+          "anchor_offset_px": -118.44967447916662,
+          "anchor_radius_px": 271.5503255208334,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 273.0,
-            "inner_px": 235.95,
-            "outer_px": 310.05,
+            "center_px": 271.5503255208334,
+            "inner_px": 234.50032552083337,
+            "outer_px": 308.6003255208334,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_content",
           "packing_band_px": {
-            "center_px": 273.0,
-            "inner_px": 235.95,
-            "outer_px": 310.05,
+            "center_px": 271.5503255208334,
+            "inner_px": 234.50032552083337,
+            "outer_px": 308.6003255208334,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -187,9 +187,9 @@
           "renderer": "dinucleotide_content",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 273.0,
-            "inner_px": 235.95,
-            "outer_px": 310.05,
+            "center_px": 271.5503255208334,
+            "inner_px": 234.50032552083337,
+            "outer_px": 308.6003255208334,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -198,22 +198,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -195.0,
-          "anchor_radius_px": 195.0,
+          "anchor_offset_px": -196.44967447916662,
+          "anchor_radius_px": 193.55032552083338,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 195.0,
-            "inner_px": 157.95,
-            "outer_px": 232.05,
+            "center_px": 193.55032552083338,
+            "inner_px": 156.50032552083337,
+            "outer_px": 230.6003255208334,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_skew",
           "packing_band_px": {
-            "center_px": 195.0,
-            "inner_px": 157.95,
-            "outer_px": 232.05,
+            "center_px": 193.55032552083338,
+            "inner_px": 156.50032552083337,
+            "outer_px": 230.6003255208334,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -222,9 +222,9 @@
           "renderer": "dinucleotide_skew",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 195.0,
-            "inner_px": 157.95,
-            "outer_px": 232.05,
+            "center_px": 193.55032552083338,
+            "inner_px": 156.50032552083337,
+            "outer_px": 230.6003255208334,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -304,10 +304,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 327.05000000000007,
-            "inner_px": 312.85,
+            "center_px": 324.9251627604167,
+            "inner_px": 308.6003255208334,
             "outer_px": 341.25000000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -489,10 +489,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.475,
-            "inner_px": 335.27500000000003,
+            "center_px": 347.35016276041677,
+            "inner_px": 331.0253255208334,
             "outer_px": 363.67500000000007,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -571,10 +571,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.475,
-            "inner_px": 335.27500000000003,
+            "center_px": 347.35016276041677,
+            "inner_px": 331.0253255208334,
             "outer_px": 363.67500000000007,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -723,10 +723,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.475,
-            "inner_px": 335.27500000000003,
+            "center_px": 347.35016276041677,
+            "inner_px": 331.0253255208334,
             "outer_px": 363.67500000000007,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -908,10 +908,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 351.42500000000007,
-            "inner_px": 337.225,
+            "center_px": 349.3001627604167,
+            "inner_px": 332.9753255208334,
             "outer_px": 365.62500000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -990,10 +990,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 351.42500000000007,
-            "inner_px": 337.225,
+            "center_px": 349.3001627604167,
+            "inner_px": 332.9753255208334,
             "outer_px": 365.62500000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1142,10 +1142,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 351.42500000000007,
-            "inner_px": 337.225,
+            "center_px": 349.3001627604167,
+            "inner_px": 332.9753255208334,
             "outer_px": 365.62500000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1327,10 +1327,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 362.63750000000005,
-            "inner_px": 348.4375,
+            "center_px": 360.5126627604167,
+            "inner_px": 344.18782552083337,
             "outer_px": 376.83750000000003,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1409,10 +1409,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 362.63750000000005,
-            "inner_px": 348.4375,
+            "center_px": 360.5126627604167,
+            "inner_px": 344.18782552083337,
             "outer_px": 376.83750000000003,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1561,10 +1561,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 362.63750000000005,
-            "inner_px": 348.4375,
+            "center_px": 360.5126627604167,
+            "inner_px": 344.18782552083337,
             "outer_px": 376.83750000000003,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1746,10 +1746,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1828,10 +1828,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1980,10 +1980,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2165,10 +2165,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2247,10 +2247,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2399,10 +2399,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2584,10 +2584,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 327.05000000000007,
-            "inner_px": 312.85,
+            "center_px": 324.9251627604167,
+            "inner_px": 308.6003255208334,
             "outer_px": 341.25000000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2666,10 +2666,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 327.05000000000007,
-            "inner_px": 312.85,
+            "center_px": 324.9251627604167,
+            "inner_px": 308.6003255208334,
             "outer_px": 341.25000000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2677,22 +2677,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -117.0,
-          "anchor_radius_px": 273.0,
+          "anchor_offset_px": -118.44967447916662,
+          "anchor_radius_px": 271.5503255208334,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 273.0,
-            "inner_px": 235.95,
-            "outer_px": 310.05,
+            "center_px": 271.5503255208334,
+            "inner_px": 234.50032552083337,
+            "outer_px": 308.6003255208334,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_content",
           "packing_band_px": {
-            "center_px": 273.0,
-            "inner_px": 235.95,
-            "outer_px": 310.05,
+            "center_px": 271.5503255208334,
+            "inner_px": 234.50032552083337,
+            "outer_px": 308.6003255208334,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -2701,9 +2701,9 @@
           "renderer": "dinucleotide_content",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 273.0,
-            "inner_px": 235.95,
-            "outer_px": 310.05,
+            "center_px": 271.5503255208334,
+            "inner_px": 234.50032552083337,
+            "outer_px": 308.6003255208334,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -2712,22 +2712,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -195.0,
-          "anchor_radius_px": 195.0,
+          "anchor_offset_px": -196.44967447916662,
+          "anchor_radius_px": 193.55032552083338,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 195.0,
-            "inner_px": 157.95,
-            "outer_px": 232.05,
+            "center_px": 193.55032552083338,
+            "inner_px": 156.50032552083337,
+            "outer_px": 230.6003255208334,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_skew",
           "packing_band_px": {
-            "center_px": 195.0,
-            "inner_px": 157.95,
-            "outer_px": 232.05,
+            "center_px": 193.55032552083338,
+            "inner_px": 156.50032552083337,
+            "outer_px": 230.6003255208334,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -2736,9 +2736,9 @@
           "renderer": "dinucleotide_skew",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 195.0,
-            "inner_px": 157.95,
-            "outer_px": 232.05,
+            "center_px": 193.55032552083338,
+            "inner_px": 156.50032552083337,
+            "outer_px": 230.6003255208334,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -2818,10 +2818,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 327.05000000000007,
-            "inner_px": 312.85,
+            "center_px": 324.9251627604167,
+            "inner_px": 308.6003255208334,
             "outer_px": 341.25000000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3003,10 +3003,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.475,
-            "inner_px": 335.27500000000003,
+            "center_px": 347.35016276041677,
+            "inner_px": 331.0253255208334,
             "outer_px": 363.67500000000007,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3085,10 +3085,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.475,
-            "inner_px": 335.27500000000003,
+            "center_px": 347.35016276041677,
+            "inner_px": 331.0253255208334,
             "outer_px": 363.67500000000007,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3237,10 +3237,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.475,
-            "inner_px": 335.27500000000003,
+            "center_px": 347.35016276041677,
+            "inner_px": 331.0253255208334,
             "outer_px": 363.67500000000007,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3422,10 +3422,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 351.42500000000007,
-            "inner_px": 337.225,
+            "center_px": 349.3001627604167,
+            "inner_px": 332.9753255208334,
             "outer_px": 365.62500000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3504,10 +3504,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 351.42500000000007,
-            "inner_px": 337.225,
+            "center_px": 349.3001627604167,
+            "inner_px": 332.9753255208334,
             "outer_px": 365.62500000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3656,10 +3656,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 351.42500000000007,
-            "inner_px": 337.225,
+            "center_px": 349.3001627604167,
+            "inner_px": 332.9753255208334,
             "outer_px": 365.62500000000006,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3841,10 +3841,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 362.63750000000005,
-            "inner_px": 348.4375,
+            "center_px": 360.5126627604167,
+            "inner_px": 344.18782552083337,
             "outer_px": 376.83750000000003,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3923,10 +3923,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 362.63750000000005,
-            "inner_px": 348.4375,
+            "center_px": 360.5126627604167,
+            "inner_px": 344.18782552083337,
             "outer_px": 376.83750000000003,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4075,10 +4075,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 362.63750000000005,
-            "inner_px": 348.4375,
+            "center_px": 360.5126627604167,
+            "inner_px": 344.18782552083337,
             "outer_px": 376.83750000000003,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4260,10 +4260,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4342,10 +4342,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4494,10 +4494,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4679,10 +4679,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4761,10 +4761,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4913,10 +4913,10 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 371.9,
-            "inner_px": 357.7,
+            "center_px": 369.7751627604167,
+            "inner_px": 353.45032552083336,
             "outer_px": 386.1,
-            "width_px": 28.400000000000034
+            "width_px": 32.64967447916666
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",

@@ -9,7 +9,7 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ORACLE_COMMIT = "0228e6fe896768c6dc58513945d935e96578f5d0"
+ORACLE_COMMIT = "5dd1b69fe066bc0b39cff7e072bec003c6e654ae"
 ORACLE_PATH = REPO_ROOT / "tests" / "fixtures" / "circular_preset_oracle" / f"{ORACLE_COMMIT}.json"
 
 

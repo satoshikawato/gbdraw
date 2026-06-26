@@ -980,7 +980,13 @@
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Color</label>
-                                            <input type="color" v-model="track.config.color" class="h-8 w-full p-0 border rounded">
+                                            <input
+                                                type="color"
+                                                :value="getDepthTrackColor(track.index)"
+                                                @input="setDepthTrackColor(track.index, $event.target.value)"
+                                                @change="setDepthTrackColor(track.index, $event.target.value)"
+                                                class="h-8 w-full p-0 border rounded"
+                                            >
                                         </div>
                                     </div>
                                     <div class="space-y-1 pt-1 border-t border-slate-200 border-dashed">
@@ -1301,7 +1307,13 @@
                                                 </div>
                                                 <div>
                                                     <label class="input-label text-[10px]">Color</label>
-                                                    <input type="color" v-model="track.config.color" class="h-8 w-full p-0 border rounded">
+                                                    <input
+                                                        type="color"
+                                                        :value="getDepthTrackColor(track.index)"
+                                                        @input="setDepthTrackColor(track.index, $event.target.value)"
+                                                        @change="setDepthTrackColor(track.index, $event.target.value)"
+                                                        class="h-8 w-full p-0 border rounded"
+                                                    >
                                                 </div>
                                             </div>
                                             <div class="space-y-1 pt-1 border-t border-slate-200 border-dashed">

@@ -447,6 +447,17 @@ export const createAppSetup = () => {
     const config = depthTrackConfigForIndex(index);
     return String(config?.label ?? '');
   };
+  const getDepthTrackColor = (index) => {
+    const idx = Math.max(0, Number(index) || 0);
+    const config = depthTrackConfigForIndex(idx);
+    return String(config?.color || depthTrackFallbackColor(idx));
+  };
+  const setDepthTrackColor = (index, value) => {
+    const idx = Math.max(0, Number(index) || 0);
+    const color = String(value ?? '').trim();
+    const config = depthTrackConfigForIndex(idx);
+    config.color = color || depthTrackFallbackColor(idx);
+  };
   const depthTrackSlotCollections = () => [
     Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : [],
     Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : []
@@ -1847,6 +1858,8 @@ export const createAppSetup = () => {
     depthTrackCountLabel,
     getDepthTrackLabel,
     setDepthTrackLabel,
+    getDepthTrackColor,
+    setDepthTrackColor,
     getDepthTrackLegendLabelForSlot,
     setDepthTrackLegendLabelForSlot,
     syncDepthTrackSlotLabel,
