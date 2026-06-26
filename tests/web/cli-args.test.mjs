@@ -60,6 +60,7 @@ assert.deepEqual(
 
 assert.deepEqual(createDefaultLinearDefinitionLineStyles(), {
   name: { font_size: null, font_weight: null, fill: null },
+  subtitle: { font_size: null, font_weight: null, fill: null },
   replicon: { font_size: null, font_weight: null, fill: null },
   accession: { font_size: null, font_weight: null, fill: null },
   length: { font_size: null, font_weight: null, fill: null }
@@ -74,6 +75,7 @@ assert.deepEqual(
   }),
   {
     name: { font_size: 12, font_weight: 'bold', fill: '#111111' },
+    subtitle: { font_size: null, font_weight: null, fill: null },
     replicon: { font_size: null, font_weight: null, fill: null },
     accession: { font_size: null, font_weight: null, fill: null },
     length: { font_size: 9, font_weight: '700', fill: 'rgb(1,2,3)' }
