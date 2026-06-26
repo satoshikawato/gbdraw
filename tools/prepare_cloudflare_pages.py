@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 from importlib.util import module_from_spec, spec_from_file_location
@@ -12,6 +13,17 @@ WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "dist" / "cloudflare-pages"
 DEFAULT_ANALYTICS_TOKEN = "e4dc2e66d09549868f5a5ac7d7a6e633"
 ANALYTICS_TOKEN_ENV = "CLOUDFLARE_WEB_ANALYTICS_TOKEN"
+GALLERY_REMOTE_REF_ENV = "GBDRAW_GALLERY_REMOTE_REF"
+GALLERY_REMOTE_BASE_ENV = "GBDRAW_GALLERY_REMOTE_BASE"
+DEFAULT_GALLERY_REMOTE_REF = "main"
+DEFAULT_GALLERY_REMOTE_REPOSITORY = "satoshikawato/gbdraw"
+GALLERY_REMOTE_MANIFEST = "gallery/remote-assets.json"
+GALLERY_REMOTE_ASSET_LIMIT_BYTES = 25 * 1024 * 1024
+GALLERY_REMOTE_ASSET_PATTERNS = (
+    "gallery/examples/*.svg",
+    "gallery/sessions/*.gbdraw-session.json",
+    "gallery/sources/*.svg",
+)
 SCRIPT_MARKER = "<!-- CLOUDFLARE_WEB_ANALYTICS_SCRIPT -->"
 NOTICE_MARKER = "<!-- CLOUDFLARE_WEB_ANALYTICS_NOTICE -->"
 ISOLATION_HEADERS = """/*
@@ -57,10 +69,43 @@ def _render_analytics_notice() -> str:
                             </div>"""
 
 
+def _default_gallery_remote_base() -> str:
+    explicit_base = os.environ.get(GALLERY_REMOTE_BASE_ENV)
+    if explicit_base:
+        return explicit_base.rstrip("/") + "/"
+    ref = (
+        os.environ.get(GALLERY_REMOTE_REF_ENV)
+        or os.environ.get("CF_PAGES_COMMIT_SHA")
+        or os.environ.get("GITHUB_SHA")
+        or DEFAULT_GALLERY_REMOTE_REF
+    )
+    return f"https://raw.githubusercontent.com/{DEFAULT_GALLERY_REMOTE_REPOSITORY}/{ref}/gbdraw/web/"
+
+
+def _write_remote_gallery_manifest(output_root: Path, remote_base: str) -> dict[str, str]:
+    remote_assets: dict[str, str] = {}
+    for pattern in GALLERY_REMOTE_ASSET_PATTERNS:
+        for path in sorted(output_root.glob(pattern)):
+            if not path.is_file() or path.stat().st_size <= GALLERY_REMOTE_ASSET_LIMIT_BYTES:
+                continue
+            relative_path = path.relative_to(output_root).as_posix()
+            remote_assets[relative_path] = f"{remote_base}{relative_path}"
+            path.unlink()
+
+    manifest_path = output_root / GALLERY_REMOTE_MANIFEST
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(remote_assets, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return remote_assets
+
+
 def build_cloudflare_pages_bundle(
     *,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
     analytics_token: str = DEFAULT_ANALYTICS_TOKEN,
+    gallery_remote_base: str | None = None,
 ) -> Path:
     if output_root.exists():
         shutil.rmtree(output_root)
@@ -82,6 +127,10 @@ def build_cloudflare_pages_bundle(
     )
     index_path.write_text(index_html, encoding="utf-8")
     (output_root / "_headers").write_text(ISOLATION_HEADERS, encoding="utf-8")
+    _write_remote_gallery_manifest(
+        output_root=output_root,
+        remote_base=gallery_remote_base or _default_gallery_remote_base(),
+    )
     return output_root
 
 
