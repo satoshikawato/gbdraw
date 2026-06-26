@@ -21,6 +21,7 @@ from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
+    _rotated_label_rects_intersect,
     calculate_label_bounds,
     find_lowest_available_track,
     prepare_label_list_linear,
@@ -188,11 +189,14 @@ def _label_bounds_overlap(label1: dict, label2: dict, min_gap_px: float = 0.0) -
     )
 
 
-def _assert_no_label_bounds_overlap(labels: list[dict]) -> None:
+def _assert_no_label_bounds_overlap(labels: list[dict], min_gap_px: float = 0.0) -> None:
     placed = []
     for label in sorted(labels, key=lambda item: float(item["feature_anchor_x"])):
         for other in placed:
-            assert not _label_bounds_overlap(label, other)
+            if min_gap_px:
+                assert not _label_bounds_overlap(label, other, min_gap_px=min_gap_px)
+            else:
+                assert not _rotated_label_rects_intersect(label, other)
         placed.append(label)
 
 
@@ -322,6 +326,7 @@ def test_linear_above_feature_bgc0000708_gene_labels_do_not_overlap() -> None:
     labels = _prepare_linear_labels(
         label_placement="above_feature",
         label_rotation=45.0,
+        label_font_size=18.0,
         input_filename="BGC0000708.gbk",
         qualifier_priority=("CDS", "gene"),
     )
@@ -330,6 +335,11 @@ def test_linear_above_feature_bgc0000708_gene_labels_do_not_overlap() -> None:
     assert any(not label.get("leader_line") for label in labels)
     _assert_no_label_bounds_overlap(labels)
 
+    for label_text in ("livP", "livF"):
+        label = next(label for label in labels if label["label_text"] == label_text)
+        assert float(label["middle_y"]) == pytest.approx(_feature_adjacent_label_y(label))
+        assert label["leader_line"] is False
+
 
 @pytest.mark.linear
 def test_linear_above_feature_bgc_multi_record_gene_labels_compact_without_overlap() -> None:
@@ -337,18 +347,21 @@ def test_linear_above_feature_bgc_multi_record_gene_labels_compact_without_overl
         input_filenames=(
             "BGC0000708.gbk",
             "BGC0000709.gbk",
+            "BGC0000711.gbk",
             "BGC0000712.gbk",
             "BGC0000713.gbk",
         ),
         show_labels="first",
         label_placement="above_feature",
         label_rotation=45.0,
+        label_font_size=18.0,
         qualifier_priority=("CDS", "gene"),
     )
     assert labels
-    _assert_no_label_bounds_overlap(labels)
 
     collision_gap = max(1.0, max(float(label["height_px"]) for label in labels) * 0.05)
+    _assert_no_label_bounds_overlap(labels)
+
     rotated_heights = [
         calculate_label_bounds(label)[3] - calculate_label_bounds(label)[2]
         for label in labels
@@ -363,10 +376,18 @@ def test_linear_above_feature_bgc_multi_record_gene_labels_compact_without_overl
     assert livx_shift > 0.0
     assert livx_shift < old_global_step
 
+    livf = next(label for label in labels if label["label_text"] == "livF")
+    assert float(livf["middle_y"]) == pytest.approx(_feature_adjacent_label_y(livf))
+    assert livf["leader_line"] is False
+
     livy = next(label for label in labels if label["label_text"] == "livY")
     assert float(livy["middle_y"]) == pytest.approx(_feature_adjacent_label_y(livy))
     for neighbor in [label for label in labels if label["label_text"] in {"livW", "livZ"}]:
-        assert not _label_bounds_overlap(livy, neighbor)
+        assert not _rotated_label_rects_intersect(livy, neighbor)
+
+    livp = next(label for label in labels if label["label_text"] == "livP")
+    assert float(livp["middle_y"]) == pytest.approx(_feature_adjacent_label_y(livp))
+    assert livp["leader_line"] is False
 
 
 @pytest.mark.linear

@@ -59,6 +59,19 @@ def _record(
     return record
 
 
+def _orthogroup_alignment_canvas_config() -> object:
+    return type(
+        "CanvasConfig",
+        (),
+        {
+            "normalize_length": False,
+            "align_center": False,
+            "alignment_width": 1000.0,
+            "longest_genome": 1000,
+        },
+    )()
+
+
 def _cds(
     start: int,
     end: int,
@@ -2518,16 +2531,7 @@ def test_orthogroup_alignment_offsets_align_selected_member_to_representatives()
             }
         ]
     )
-    canvas_config = type(
-        "CanvasConfig",
-        (),
-        {
-            "normalize_length": False,
-            "align_center": False,
-            "alignment_width": 1000.0,
-            "longest_genome": 1000,
-        },
-    )()
+    canvas_config = _orthogroup_alignment_canvas_config()
 
     offsets = calculate_orthogroup_alignment_offsets(
         records,
@@ -2546,16 +2550,7 @@ def test_orthogroup_alignment_canvas_adjustment_fits_negative_record_offsets() -
         _record("record_a", sequence="A" * 1000),
         _record("record_b", sequence="A" * 1000),
     ]
-    canvas_config = type(
-        "CanvasConfig",
-        (),
-        {
-            "normalize_length": False,
-            "align_center": False,
-            "alignment_width": 1000.0,
-            "longest_genome": 1000,
-        },
-    )()
+    canvas_config = _orthogroup_alignment_canvas_config()
 
     shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
         records,
@@ -2581,16 +2576,7 @@ def test_orthogroup_alignment_canvas_adjustment_extends_positive_record_offsets(
         _record("record_a", sequence="A" * 1000),
         _record("record_b", sequence="A" * 1000),
     ]
-    canvas_config = type(
-        "CanvasConfig",
-        (),
-        {
-            "normalize_length": False,
-            "align_center": False,
-            "alignment_width": 1000.0,
-            "longest_genome": 1000,
-        },
-    )()
+    canvas_config = _orthogroup_alignment_canvas_config()
 
     shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
         records,
@@ -2611,6 +2597,47 @@ def test_orthogroup_alignment_canvas_adjustment_extends_positive_record_offsets(
 
 
 @pytest.mark.linear
+def test_orthogroup_alignment_canvas_extents_use_shifted_record_bounds_for_ruler() -> None:
+    records = [
+        _record("record_a", sequence="A" * 1000),
+        _record("record_b", sequence="A" * 1000),
+    ]
+    canvas_config = _orthogroup_alignment_canvas_config()
+
+    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
+        records,
+        canvas_config,
+        {0: 250.0, 1: 250.0},
+    )
+    extents = calculate_orthogroup_alignment_canvas_extents(
+        records,
+        canvas_config,
+        {0: 250.0, 1: 250.0},
+    )
+
+    assert shift_x == pytest.approx(0.0)
+    assert width_extension == pytest.approx(250.0)
+    assert extents.ruler_offset_x == pytest.approx(250.0)
+    assert extents.ruler_width == pytest.approx(1000.0)
+
+    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
+        records,
+        canvas_config,
+        {0: -300.0, 1: -300.0},
+    )
+    extents = calculate_orthogroup_alignment_canvas_extents(
+        records,
+        canvas_config,
+        {0: -300.0, 1: -300.0},
+    )
+
+    assert shift_x == pytest.approx(300.0)
+    assert width_extension == pytest.approx(0.0)
+    assert extents.ruler_offset_x == pytest.approx(-300.0)
+    assert extents.ruler_width == pytest.approx(1000.0)
+
+
+@pytest.mark.linear
 def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> None:
     records = [
         _record("record_a", sequence="A" * 1000),
@@ -2627,16 +2654,7 @@ def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> Non
             }
         ]
     )
-    canvas_config = type(
-        "CanvasConfig",
-        (),
-        {
-            "normalize_length": False,
-            "align_center": False,
-            "longest_genome": 1000,
-            "alignment_width": 1000.0,
-        },
-    )()
+    canvas_config = _orthogroup_alignment_canvas_config()
     blast_config = type(
         "BlastConfig",
         (),
