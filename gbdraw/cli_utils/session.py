@@ -511,6 +511,7 @@ def _ensure_linear_seq(files: dict[str, Any], index: int) -> None:
                 "losat_gencode": 1,
                 "losat_filename": "",
                 "definition": "",
+                "record_subtitle": "",
                 "region_record_id": "",
                 "region_start": None,
                 "region_end": None,

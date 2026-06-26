@@ -1339,6 +1339,7 @@ export const createRunAnalysis = ({
         show_replicon: false,
         hide_accession: false,
         hide_length: false,
+        record_subtitle: false,
         orthogroup_alignment: false,
         pairwise_match_style: false,
         keep_definition_left_aligned: false,
@@ -1368,6 +1369,7 @@ json.dumps({
   "show_replicon": "--show_replicon" in _source,
   "hide_accession": "--hide_accession" in _source,
   "hide_length": "--hide_length" in _source,
+  "record_subtitle": "--record_subtitle" in _source,
   "orthogroup_alignment": "--align_orthogroup_feature" in _source,
   "pairwise_match_style": "--pairwise_match_style" in _source,
   "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
@@ -1393,6 +1395,7 @@ json.dumps({
         show_replicon: false,
         hide_accession: false,
         hide_length: false,
+        record_subtitle: false,
         orthogroup_alignment: false,
         pairwise_match_style: false,
         keep_definition_left_aligned: false,
@@ -3222,6 +3225,8 @@ json.dumps({
         const wantsHideAccessionOption = adv.linear_show_accession === false;
         const wantsHideLengthOption = adv.linear_show_length === false;
         const wantsDefinitionLineStyleOption = definitionLineStyleAssignments.length > 0;
+        const recordSubtitles = linearSeqs.map((seq) => (seq.record_subtitle ?? '').toString());
+        const wantsRecordSubtitleOption = recordSubtitles.some((subtitle) => subtitle.trim() !== '');
         const wantsPairwiseMatchStyleOption = normalizedPairwiseMatchStyle !== 'ribbon';
         const wantsKeepDefinitionLeftAlignedOption = form.keep_definition_left_aligned === true;
         const wantsRulerOnAxisOption =
@@ -3290,6 +3295,9 @@ json.dumps({
           }
           if (wantsHideLengthOption && !linearLabelSupport.hide_length) {
             throw new Error("Current gbdraw wheel does not support --hide_length. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsRecordSubtitleOption && !linearLabelSupport.record_subtitle) {
+            throw new Error("Current gbdraw wheel does not support --record_subtitle. Rebuild and redeploy the web wheel.");
           }
           if (wantsDefinitionLineStyleOption && !linearLabelSupport.definition_line_style) {
             console.warn("Current gbdraw wheel does not support --definition_line_style; definition line style overrides will be ignored.");
@@ -3377,6 +3385,11 @@ json.dumps({
         if (hasRecordLabels) {
           recordLabels.forEach((label) => {
             args.push('--record_label', label);
+          });
+        }
+        if (wantsRecordSubtitleOption) {
+          recordSubtitles.forEach((subtitle) => {
+            args.push('--record_subtitle', subtitle);
           });
         }
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from typing import Iterable, Mapping
 
-DEFINITION_LINE_KINDS: tuple[str, ...] = ("name", "replicon", "accession", "length")
+DEFINITION_LINE_KINDS: tuple[str, ...] = ("name", "subtitle", "replicon", "accession", "length")
 DEFINITION_LINE_STYLE_PROPERTIES: tuple[str, ...] = ("font_size", "font_weight", "fill")
 
 _LINE_KEY_ALIASES = {
@@ -16,6 +16,9 @@ _LINE_KEY_ALIASES = {
     "species": "name",
     "record_label": "name",
     "record-label": "name",
+    "subtitle": "subtitle",
+    "record_subtitle": "subtitle",
+    "record-subtitle": "subtitle",
     "replicon": "replicon",
     "accession": "accession",
     "length": "length",

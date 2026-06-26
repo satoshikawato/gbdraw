@@ -17,7 +17,7 @@ const DEFAULT_DIRECTIONAL_FEATURE_TYPES = new Set([
   'misc_RNA'
 ]);
 
-export const DEFINITION_LINE_STYLE_KINDS = Object.freeze(['name', 'replicon', 'accession', 'length']);
+export const DEFINITION_LINE_STYLE_KINDS = Object.freeze(['name', 'subtitle', 'replicon', 'accession', 'length']);
 
 export const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze({
   bitscore: 50,

@@ -269,15 +269,22 @@ def test_web_linear_definition_line_styles_contract() -> None:
     cli_args_js = (WEB_ROOT / "js" / "app" / "cli-args.js").read_text(encoding="utf-8")
 
     assert "Definition Line Styles" in index_html
+    assert "Subtitle / title (optional)" in index_html
+    assert "v-model=\"seq.record_subtitle\"" in index_html
     assert "Name / Species" in app_setup_js
+    assert "Subtitle" in app_setup_js
     assert "Length / Coord." in app_setup_js
     assert ">Normal</button>" in index_html
     assert "data-definition-line-kind" in state_js
+    assert "record_subtitle: String(source.record_subtitle ?? '')" in state_js
     assert "linear_definition_line_styles: createDefaultLinearDefinitionLineStyles()" in state_js
+    assert "record_subtitle: seq.record_subtitle ?? ''" in config_js
     assert "normalizeDefinitionLineStyleState" in config_js
     assert "buildDefinitionLineStyleAssignments" in run_analysis_js
+    assert "args.push('--record_subtitle', subtitle);" in run_analysis_js
     assert "definition_line_style" in run_analysis_js
     assert "args.push('--definition_line_style', assignment);" in run_analysis_js
+    assert "'subtitle'" in cli_args_js
     assert "color=${style.fill}" in cli_args_js
 
 

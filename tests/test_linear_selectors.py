@@ -423,6 +423,75 @@ def test_linear_record_label_adds_top_line_without_hiding_accession(
 
 
 @pytest.mark.linear
+def test_linear_record_subtitle_renders_between_label_and_accession(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_definition_subtitle.gbk"
+    lengths = _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_definition_record_subtitle_stack",
+        temp_output_dir,
+        extra_args=[
+            "--record_id",
+            "RecB",
+            "--record_label",
+            "CustomLabel",
+            "--record_subtitle",
+            "Neomycin biosynthetic gene cluster",
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
+    assert _extract_group_texts(root, "RecB_definition") == [
+        "CustomLabel",
+        "Neomycin biosynthetic gene cluster",
+        "RecB",
+        f"{lengths['RecB']:,} bp",
+    ]
+
+
+@pytest.mark.linear
+def test_linear_record_subtitle_preserves_mixed_content_italics(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_definition_subtitle_italic.gbk"
+    lengths = _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_definition_record_subtitle_italic",
+        temp_output_dir,
+        extra_args=[
+            "--record_id",
+            "RecA",
+            "--record_label",
+            "Top Label",
+            "--record_subtitle",
+            "A <i>neo</i> cluster",
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
+    assert _extract_group_texts(root, "RecA_definition") == [
+        "Top Label",
+        "A neo cluster",
+        "RecA",
+        f"{lengths['RecA']:,} bp",
+    ]
+    assert _extract_group_italic_tspan_texts(root, "RecA_definition") == ["neo"]
+
+
+@pytest.mark.linear
 def test_linear_definition_replicon_hidden_by_default_and_shown_on_request(
     temp_output_dir: Path,
     gbdraw_runner,

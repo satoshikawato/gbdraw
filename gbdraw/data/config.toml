@@ -192,6 +192,9 @@ short = 24
 [objects.definition.linear.line_styles.name]
 font_weight = 'normal'
 
+[objects.definition.linear.line_styles.subtitle]
+font_weight = 'normal'
+
 [objects.definition.linear.line_styles.replicon]
 font_weight = 'normal'
 

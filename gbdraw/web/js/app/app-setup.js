@@ -384,6 +384,7 @@ export const createAppSetup = () => {
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
   const definitionLineStyleRows = Object.freeze([
     { key: 'name', label: 'Name / Species' },
+    { key: 'subtitle', label: 'Subtitle' },
     { key: 'replicon', label: 'Replicon', visibilityKey: 'linear_show_replicon' },
     { key: 'accession', label: 'Accession', visibilityKey: 'linear_show_accession' },
     { key: 'length', label: 'Length / Coord.', visibilityKey: 'linear_show_length' }
