@@ -73,6 +73,7 @@ class SeqRecordGroup:
         self.scale_stroke_width = scale_cfg.stroke_width
         self.scale_font_size = scale_cfg.font_size.for_length_param(self.length_param)
         self.ruler_label_font_size = scale_cfg.ruler_label_font_size.for_length_param(self.length_param)
+        self.label_font_size = cfg.labels.font_size.linear.for_length_param(self.length_param)
         self.scale_font_weight = scale_cfg.font_weight
         self.scale_font_family = cfg.objects.text.font_family
         self.scale_interval = scale_cfg.interval
@@ -352,6 +353,7 @@ class SeqRecordGroup:
                     self.canvas_config.track_axis_gap,
                     self.config_dict,
                     cfg=self._cfg,
+                    label_font_size=self.label_font_size,
                 )
 
         record_group: Group = self.draw_record(

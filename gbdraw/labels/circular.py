@@ -4569,6 +4569,7 @@ def prepare_label_list(
     feature_layout: CircularFeatureLayout | None = None,
     track_preset: str | None = None,
     feature_lane_direction: str | None = None,
+    label_font_size: float | None = None,
 ):
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
     embedded_labels = []
@@ -4595,7 +4596,11 @@ def prepare_label_list(
     inner_radius_factor = cfg.labels.inner_radius_factor[track_type][strands][length_param]
 
     font_family = cfg.objects.text.font_family
-    font_size: float = cfg.labels.font_size.for_length_param(length_param)
+    font_size: float = (
+        float(label_font_size)
+        if label_font_size is not None
+        else cfg.labels.font_size.for_length_param(length_param)
+    )
     interval = cfg.canvas.dpi
     label_spacing_px = float(cfg.labels.spacing.circular)
 
@@ -5045,5 +5050,4 @@ __all__ = [
     "x_overlap",
     "y_overlap",
 ]
-
 

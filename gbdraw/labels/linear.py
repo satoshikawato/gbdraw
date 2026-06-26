@@ -371,6 +371,7 @@ def prepare_label_list_linear(
     track_axis_gap,
     config_dict,
     cfg: GbdrawConfig | None = None,
+    label_font_size: float | None = None,
 ):
     """
     Prepares a list of labels for linear genome visualization with proper track organization.
@@ -390,10 +391,14 @@ def prepare_label_list_linear(
 
     # Get configuration values
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    length_threshold = cfg.labels.length_threshold.circular
+    length_threshold = cfg.labels.length_threshold.linear
     length_param = determine_length_parameter(genome_length, length_threshold)
     font_family = cfg.objects.text.font_family
-    font_size = cfg.labels.font_size.linear.for_length_param(length_param)
+    font_size = (
+        float(label_font_size)
+        if label_font_size is not None
+        else cfg.labels.font_size.linear.for_length_param(length_param)
+    )
     linear_label_cfg = cfg.labels.linear
     label_rendering = normalize_label_rendering(cfg.labels.rendering)
     label_spacing_px = float(cfg.labels.spacing.linear)

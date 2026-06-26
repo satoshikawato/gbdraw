@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 from Bio import SeqIO
+from svgwrite.container import Group
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.labels.circular as circular_labels_module
@@ -34,6 +35,7 @@ from gbdraw.labels.circular import (
     y_overlap,
 )
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
+from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
 from gbdraw.svg.arrows import calculate_circular_arrow_length
 
 
@@ -73,6 +75,34 @@ def _count_overlaps_with_min_gap(labels: list[dict], total_length: int) -> int:
             if y_overlap(labels[i], labels[j], total_length, min_gap_px) and x_overlap(labels[i], labels[j], min_gap_px):
                 overlaps += 1
     return overlaps
+
+
+@pytest.mark.circular
+def test_circular_label_drawer_uses_label_entry_font_size() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    label = {
+        "label_text": "drawer_font_size_label",
+        "middle": 250,
+        "start_x": 100.0,
+        "start_y": 0.0,
+        "is_embedded": False,
+        "is_inner": False,
+        "font_size": 31.0,
+        "font_family": "Courier New",
+    }
+
+    group = CircularLabelDrawer(config_dict, cfg=cfg).draw(
+        label,
+        Group(id="test"),
+        int(cfg.labels.length_threshold.circular) - 1,
+        float(cfg.canvas.circular.radius),
+        float(cfg.canvas.circular.track_ratio),
+    )
+    text = group.elements[-1]
+
+    assert float(text.attribs["font-size"]) == pytest.approx(31.0)
+    assert text.attribs["font-family"] == "Courier New"
 
 
 def test_circular_label_overlap_count_index_matches_full_scan() -> None:

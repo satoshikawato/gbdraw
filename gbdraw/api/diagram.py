@@ -1688,13 +1688,21 @@ def _harmonize_multi_record_circular_style_cfg(
         features=harmonized_features,
         axis=harmonized_axis,
     )
+    harmonized_label_font_size = replace(
+        cfg.labels.font_size,
+        short=float(cfg.labels.font_size.long),
+    )
+    harmonized_labels = replace(
+        cfg.labels,
+        font_size=harmonized_label_font_size,
+    )
     harmonized_circular = replace(
         circular_cfg,
         track_ratio_factors=harmonized_track_ratio_factors,
         track_dict=harmonized_track_dict,
     )
     harmonized_canvas = replace(cfg.canvas, circular=harmonized_circular)
-    return replace(cfg, canvas=harmonized_canvas, objects=harmonized_objects)
+    return replace(cfg, canvas=harmonized_canvas, objects=harmonized_objects, labels=harmonized_labels)
 
 
 def _resolve_multi_record_tick_track_channel_override(

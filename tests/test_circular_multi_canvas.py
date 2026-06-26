@@ -54,6 +54,8 @@ def _build_distinct_circular_style_config_dict() -> dict[str, Any]:
     config_dict["objects"]["features"]["line_stroke_width"]["long"] = 2.0
     config_dict["objects"]["axis"]["circular"]["stroke_width"]["short"] = 7.0
     config_dict["objects"]["axis"]["circular"]["stroke_width"]["long"] = 3.0
+    config_dict["labels"]["font_size"]["short"] = 17.0
+    config_dict["labels"]["font_size"]["long"] = 9.0
     return config_dict
 
 
@@ -211,6 +213,22 @@ def _extract_group_font_sizes(root: ET.Element, group_id: str) -> list[float]:
         font_size = text.attrib.get("font-size")
         assert font_size is not None
         sizes.append(float(font_size))
+    return sizes
+
+
+def _extract_label_font_sizes_by_text(root: ET.Element, label_texts: set[str]) -> dict[str, float]:
+    sizes: dict[str, float] = {}
+    for element in root.iter():
+        tag = str(element.tag).rsplit("}", 1)[-1]
+        if tag not in {"text", "textPath"}:
+            continue
+        text = "".join(element.itertext()).strip()
+        if text not in label_texts:
+            continue
+        font_size = element.attrib.get("font-size")
+        if font_size is None:
+            continue
+        sizes[text] = float(str(font_size).replace("px", "").replace("pt", ""))
     return sizes
 
 
@@ -707,6 +725,7 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
             "block_stroke_width": float(cfg.objects.features.block_stroke_width.for_length_param(length_param)),
             "line_stroke_width": float(cfg.objects.features.line_stroke_width.for_length_param(length_param)),
             "axis_stroke_width": float(cfg.objects.axis.circular.stroke_width.for_length_param(length_param)),
+            "label_font_size": float(cfg.labels.font_size.for_length_param(length_param)),
             "gc_center_ratio": float(cfg.canvas.circular.track_dict[length_param][track_type]["2"]),
             "skew_center_ratio": float(cfg.canvas.circular.track_dict[length_param][track_type]["3"]),
         }
@@ -740,8 +759,40 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
     assert captured_styles["short_len"]["block_stroke_width"] == pytest.approx(1.0, rel=1e-9)
     assert captured_styles["short_len"]["line_stroke_width"] == pytest.approx(2.0, rel=1e-9)
     assert captured_styles["short_len"]["axis_stroke_width"] == pytest.approx(3.0, rel=1e-9)
+    assert captured_styles["short_len"]["label_font_size"] == pytest.approx(9.0, rel=1e-9)
     assert captured_styles["short_len"]["gc_center_ratio"] == pytest.approx(0.74, rel=1e-9)
     assert captured_styles["short_len"]["skew_center_ratio"] == pytest.approx(0.59, rel=1e-9)
+
+
+@pytest.mark.circular
+def test_multi_record_mixed_lengths_unify_feature_label_font_sizes() -> None:
+    records = [
+        _build_record("long_label", 30, length=120_000),
+        _build_record("short_label", 60, length=20_000),
+    ]
+    root = ET.fromstring(
+        assemble_circular_diagram_from_records(
+            records,
+            selected_features_set=["CDS"],
+            legend="none",
+            config_overrides={
+                "show_labels": True,
+                "show_gc": False,
+                "show_skew": False,
+            },
+        ).tostring()
+    )
+    font_sizes = _extract_label_font_sizes_by_text(
+        root,
+        {"protein_long_label", "protein_short_label"},
+    )
+    cfg = diagram_api_module.GbdrawConfig.from_dict(
+        diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+    )
+
+    assert set(font_sizes) == {"protein_long_label", "protein_short_label"}
+    assert all(size == pytest.approx(cfg.labels.font_size.long) for size in font_sizes.values())
+    assert len(set(font_sizes.values())) == 1
 
 
 @pytest.mark.circular
@@ -769,6 +820,7 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
             "block_stroke_width": float(cfg.objects.features.block_stroke_width.for_length_param(length_param)),
             "line_stroke_width": float(cfg.objects.features.line_stroke_width.for_length_param(length_param)),
             "axis_stroke_width": float(cfg.objects.axis.circular.stroke_width.for_length_param(length_param)),
+            "label_font_size": float(cfg.labels.font_size.for_length_param(length_param)),
             "gc_center_ratio": float(cfg.canvas.circular.track_dict[length_param][track_type]["2"]),
             "skew_center_ratio": float(cfg.canvas.circular.track_dict[length_param][track_type]["3"]),
         }
@@ -801,6 +853,7 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
         assert style["block_stroke_width"] == pytest.approx(9.0, rel=1e-9)
         assert style["line_stroke_width"] == pytest.approx(8.0, rel=1e-9)
         assert style["axis_stroke_width"] == pytest.approx(7.0, rel=1e-9)
+        assert style["label_font_size"] == pytest.approx(17.0, rel=1e-9)
         assert style["gc_center_ratio"] == pytest.approx(0.24, rel=1e-9)
         assert style["skew_center_ratio"] == pytest.approx(0.19, rel=1e-9)
     assert captured_tick_channels == {"short_a": None, "short_b": None}

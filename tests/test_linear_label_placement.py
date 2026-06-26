@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import math
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite.container import Group
 
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
@@ -27,6 +32,35 @@ from gbdraw.labels.linear import (
     prepare_label_list_linear,
 )
 from gbdraw.render.drawers.linear.labels import LabelDrawer
+
+
+def _synthetic_label_record(record_id: str, length: int, label: str) -> SeqRecord:
+    record = SeqRecord(Seq("A" * length), id=record_id, name=record_id, description=record_id)
+    record.features = [
+        SeqFeature(
+            FeatureLocation(100, 300, strand=1),
+            type="CDS",
+            qualifiers={"product": [label]},
+        )
+    ]
+    return record
+
+
+def _extract_label_font_sizes(svg_content: str, label_texts: set[str]) -> dict[str, float]:
+    root = ET.fromstring(svg_content)
+    sizes: dict[str, float] = {}
+    for element in root.iter():
+        tag = str(element.tag).rsplit("}", 1)[-1]
+        if tag not in {"text", "textPath"}:
+            continue
+        text = "".join(element.itertext()).strip()
+        if text not in label_texts:
+            continue
+        font_size = element.attrib.get("font-size")
+        if font_size is None:
+            continue
+        sizes[text] = float(str(font_size).replace("px", "").replace("pt", ""))
+    return sizes
 
 
 def _prepare_linear_labels(
@@ -198,6 +232,44 @@ def _assert_no_label_bounds_overlap(labels: list[dict], min_gap_px: float = 0.0)
             else:
                 assert not _rotated_label_rects_intersect(label, other)
         placed.append(label)
+
+
+@pytest.mark.linear
+def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels="all",
+        label_blacklist="",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    threshold = int(cfg.labels.length_threshold.linear)
+    records = [
+        _synthetic_label_record("short_record", threshold - 1, "linear_short_auto_label"),
+        _synthetic_label_record("long_record", threshold + 1, "linear_long_auto_label"),
+    ]
+
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=len(records),
+        longest_genome=max(len(record.seq) for record in records),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    expected_font_size = cfg.labels.font_size.linear.for_length_param(canvas_config.length_param)
+    svg_content = assemble_linear_diagram_from_records(
+        records,
+        config_dict=config_dict,
+        selected_features_set=["CDS"],
+        legend="none",
+    ).tostring()
+
+    font_sizes = _extract_label_font_sizes(
+        svg_content,
+        {"linear_short_auto_label", "linear_long_auto_label"},
+    )
+    assert set(font_sizes) == {"linear_short_auto_label", "linear_long_auto_label"}
+    assert all(size == pytest.approx(expected_font_size) for size in font_sizes.values())
+    assert len(set(font_sizes.values())) == 1
 
 
 @pytest.mark.linear

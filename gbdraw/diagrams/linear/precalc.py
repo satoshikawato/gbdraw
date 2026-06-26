@@ -125,6 +125,7 @@ def _precalculate_label_dimensions(
     if show_labels_mode == "none":
         return 0, {}, {}
 
+    label_font_size = cfg.labels.font_size.linear.for_length_param(canvas_config.length_param)
     max_required_height = 0
     all_labels_by_record = {}
     record_label_heights = {}  # Store height required for labels per record
@@ -175,6 +176,7 @@ def _precalculate_label_dimensions(
             canvas_config.track_axis_gap,
             config_dict,
             cfg=cfg,
+            label_font_size=label_font_size,
         )
         all_labels_by_record[record.id] = label_list
 
