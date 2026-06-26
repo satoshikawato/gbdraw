@@ -246,6 +246,7 @@ export const createAppSetup = () => {
     watch,
     nextTick,
     computed,
+    reactive,
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
   });
 
@@ -2078,6 +2079,8 @@ export const createAppSetup = () => {
     previewFeatureSearchCanSearch: previewFeatureSearch.previewFeatureSearchCanSearch,
     previewFeatureSearchStatusText: previewFeatureSearch.previewFeatureSearchStatusText,
     previewFeatureSearchActiveDetail: previewFeatureSearch.previewFeatureSearchActiveDetail,
+    previewFeatureSearchStyle: previewFeatureSearch.previewFeatureSearchStyle,
+    startPreviewFeatureSearchDrag: previewFeatureSearch.startDrag,
     applyPreviewFeatureSearch: previewFeatureSearch.applySearch,
     goToNextPreviewFeatureSearchMatch: previewFeatureSearch.goToNext,
     goToPreviousPreviewFeatureSearchMatch: previewFeatureSearch.goToPrevious,
