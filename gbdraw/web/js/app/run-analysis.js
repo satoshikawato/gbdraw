@@ -47,6 +47,7 @@ import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
 } from './color-utils.js';
+import { serializeSpecificRules } from './file-imports.js';
 import {
   DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
   DEFAULT_LINEAR_BLAST_FILTERS,
@@ -2039,10 +2040,7 @@ json.dumps({
         args.push('-d', '/combined_d.tsv');
       }
 
-      let tContent = '';
-      manualSpecificRules.forEach((r) => {
-        tContent += `${r.feat}\t${r.qual}\t${r.val}\t${r.color}\t${r.cap}\n`;
-      });
+      const tContent = serializeSpecificRules(manualSpecificRules);
       if (tContent.trim() !== '') {
         stageTextFile('/combined_t.tsv', tContent);
         args.push('-t', '/combined_t.tsv');
