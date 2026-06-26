@@ -16,6 +16,7 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
+from ...core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ...features.objects import FeatureObject  # type: ignore[reportMissingImports]
@@ -25,6 +26,28 @@ from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
 
 
 FeatureDict = dict[str, FeatureObject]
+
+
+def _resolve_linear_diagram_label_font_size(
+    records: list[SeqRecord],
+    *,
+    show_labels_mode: str,
+    canvas_config: LinearCanvasConfigurator,
+    cfg: GbdrawConfig,
+) -> float:
+    """Resolve one readable auto label size for all labels drawn in a linear diagram."""
+
+    label_font_sizes: list[float] = []
+    threshold = int(cfg.labels.length_threshold.linear)
+    for index, record in enumerate(records):
+        if show_labels_mode == "first" and index > 0:
+            continue
+        length_param = determine_length_parameter(len(record.seq), threshold)
+        label_font_sizes.append(cfg.labels.font_size.linear.for_length_param(length_param))
+
+    if label_font_sizes:
+        return max(label_font_sizes)
+    return cfg.labels.font_size.linear.for_length_param(canvas_config.length_param)
 
 
 def _precalculate_definition_metrics(
@@ -125,7 +148,12 @@ def _precalculate_label_dimensions(
     if show_labels_mode == "none":
         return 0, {}, {}
 
-    label_font_size = cfg.labels.font_size.linear.for_length_param(canvas_config.length_param)
+    label_font_size = _resolve_linear_diagram_label_font_size(
+        records,
+        show_labels_mode=show_labels_mode,
+        canvas_config=canvas_config,
+        cfg=cfg,
+    )
     max_required_height = 0
     all_labels_by_record = {}
     record_label_heights = {}  # Store height required for labels per record
@@ -207,6 +235,7 @@ __all__ = [
     "_precalculate_definition_widths",
     "_precalculate_feature_dicts",
     "_precalculate_label_dimensions",
+    "_resolve_linear_diagram_label_font_size",
 ]
 
 

@@ -75,6 +75,7 @@ from .precalc import (
     _precalculate_definition_metrics,
     _precalculate_feature_dicts,
     _precalculate_label_dimensions,
+    _resolve_linear_diagram_label_font_size,
 )
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
@@ -1301,6 +1302,12 @@ def assemble_linear_diagram(
 
     raw_show_labels = cfg.canvas.show_labels
     show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
+    label_font_size = _resolve_linear_diagram_label_font_size(
+        records,
+        show_labels_mode=show_labels_mode,
+        canvas_config=canvas_config,
+        cfg=cfg,
+    )
     cfg_labels_on = replace(cfg, canvas=replace(cfg.canvas, show_labels=True))
     cfg_labels_off = replace(cfg, canvas=replace(cfg.canvas, show_labels=False))
 
@@ -1340,6 +1347,7 @@ def assemble_linear_diagram(
                         cfg=record_cfg,
                         precomputed_feature_dict=record_feature_dicts[count - 1],
                         feature_track_layout=slot_feature_layout,
+                        label_font_size=label_font_size,
                     )
                     feature_rendered = True
                     continue
@@ -1443,6 +1451,7 @@ def assemble_linear_diagram(
                     cfg=record_cfg,
                     precomputed_feature_dict=record_feature_dicts[count - 1],
                     draw_features=False,
+                    label_font_size=label_font_size,
                 )
             add_record_definition_group(
                 canvas,
@@ -1467,6 +1476,7 @@ def assemble_linear_diagram(
             precalculated_labels=labels_for_record,
             cfg=record_cfg,
             precomputed_feature_dict=record_feature_dicts[count - 1],
+            label_font_size=label_font_size,
         )
         add_record_definition_group(
             canvas,

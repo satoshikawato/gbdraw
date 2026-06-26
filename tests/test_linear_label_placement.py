@@ -255,7 +255,10 @@ def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
         legend="none",
         cfg=cfg,
     )
-    expected_font_size = cfg.labels.font_size.linear.for_length_param(canvas_config.length_param)
+    short_font_size = cfg.labels.font_size.linear.for_length_param("short")
+    long_font_size = cfg.labels.font_size.linear.for_length_param("long")
+    expected_font_size = max(short_font_size, long_font_size)
+    assert canvas_config.length_param == "long"
     svg_content = assemble_linear_diagram_from_records(
         records,
         config_dict=config_dict,
@@ -270,6 +273,7 @@ def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
     assert set(font_sizes) == {"linear_short_auto_label", "linear_long_auto_label"}
     assert all(size == pytest.approx(expected_font_size) for size in font_sizes.values())
     assert len(set(font_sizes.values())) == 1
+    assert all(size > long_font_size for size in font_sizes.values())
 
 
 @pytest.mark.linear

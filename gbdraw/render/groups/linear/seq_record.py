@@ -44,6 +44,7 @@ class SeqRecordGroup:
         precomputed_feature_dict: FeatureDict | None = None,
         feature_track_layout: str | None = None,
         draw_features: bool = True,
+        label_font_size: float | None = None,
     ) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
@@ -73,7 +74,11 @@ class SeqRecordGroup:
         self.scale_stroke_width = scale_cfg.stroke_width
         self.scale_font_size = scale_cfg.font_size.for_length_param(self.length_param)
         self.ruler_label_font_size = scale_cfg.ruler_label_font_size.for_length_param(self.length_param)
-        self.label_font_size = cfg.labels.font_size.linear.for_length_param(self.length_param)
+        self.label_font_size = (
+            float(label_font_size)
+            if label_font_size is not None
+            else cfg.labels.font_size.linear.for_length_param(self.length_param)
+        )
         self.scale_font_weight = scale_cfg.font_weight
         self.scale_font_family = cfg.objects.text.font_family
         self.scale_interval = scale_cfg.interval

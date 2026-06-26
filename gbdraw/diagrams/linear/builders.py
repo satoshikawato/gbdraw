@@ -52,6 +52,7 @@ def add_record_group(
     precomputed_feature_dict: FeatureDict | None = None,
     feature_track_layout: str | None = None,
     draw_features: bool = True,
+    label_font_size: float | None = None,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
     record_group: Group = SeqRecordGroup(
@@ -64,6 +65,7 @@ def add_record_group(
         precomputed_feature_dict=precomputed_feature_dict,
         feature_track_layout=feature_track_layout,
         draw_features=draw_features,
+        label_font_size=label_font_size,
     ).get_group()
     position_record_group(record_group, offset_y, offset_x, canvas_config)
     canvas.add(record_group)
