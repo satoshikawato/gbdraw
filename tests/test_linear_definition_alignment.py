@@ -493,12 +493,15 @@ def test_browser_rendered_definition_gap_is_at_least_configured_gap(
     label: str,
     font_weight: str,
 ) -> None:
-    from playwright.sync_api import sync_playwright
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
 
     canvas = _linear_definition_canvas(label, font_weight=font_weight)
     svg_source = canvas.tostring()
 
-    with sync_playwright() as playwright:
+    with playwright_sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": 1800, "height": 600})
         page.set_content(svg_source)

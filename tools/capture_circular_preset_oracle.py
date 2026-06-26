@@ -28,7 +28,7 @@ from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
 
 
-BASE_COMMIT = "0228e6fe896768c6dc58513945d935e96578f5d0"
+BASE_COMMIT = "5dd1b69fe066bc0b39cff7e072bec003c6e654ae"
 DEFAULT_INPUTS = (
     "tests/test_inputs/MG1655.gbk",
     "tests/test_inputs/AP027280.gb",
