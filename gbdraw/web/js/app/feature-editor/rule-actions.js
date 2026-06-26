@@ -1,5 +1,5 @@
 import { resolveColorToHex } from '../color-utils.js';
-import { parseSpecificRules } from '../file-imports.js';
+import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
 import { ruleMatchesFeature } from '../feature-utils.js';
 
 export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
@@ -33,6 +33,60 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
   const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
   const captionMatches = (value, target) => normalizeCaptionKey(value) === normalizeCaptionKey(target);
+  const specificRuleFields = new Set(['feat', 'qual', 'val', 'color', 'cap']);
+
+  const downloadTextFile = (filename, text) => {
+    const blob = new Blob([text], { type: 'text/tab-separated-values;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.addEventListener('click', (event) => event.stopPropagation(), { once: true });
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const setSpecificRuleField = (index, field, value) => {
+    if (!specificRuleFields.has(field)) return;
+    const current = manualSpecificRules[index];
+    if (!current) return;
+    const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
+
+    if (field === 'val') {
+      try {
+        new RegExp(nextValue);
+      } catch (e) {
+        alert('Invalid Regular Expression: ' + e.message);
+        return;
+      }
+    }
+
+    const nextRule = { ...current, [field]: nextValue };
+    delete nextRule.fromFile;
+    manualSpecificRules.splice(index, 1, nextRule);
+  };
+
+  const moveSpecificRule = (index, offset) => {
+    const target = index + offset;
+    if (target < 0 || target >= manualSpecificRules.length) return;
+    const [rule] = manualSpecificRules.splice(index, 1);
+    manualSpecificRules.splice(target, 0, rule);
+  };
+
+  const removeSpecificRule = (index) => {
+    const rule = manualSpecificRules[index];
+    if (rule?.cap) fileLegendCaptions.value.delete(rule.cap);
+    manualSpecificRules.splice(index, 1);
+  };
+
+  const downloadSpecificRulesTsv = () => {
+    const text = serializeSpecificRules(manualSpecificRules);
+    if (!text.trim()) {
+      alert('No specific rules to export.');
+      return;
+    }
+    downloadTextFile('gbdraw_specific_rules.tsv', text);
+  };
 
   const getIndividualFeatureLabel = (feat) => {
     return feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
@@ -383,6 +437,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     canEditFeatureColor,
     clearAllSpecificRules,
     countFeaturesMatchingRule,
+    downloadSpecificRulesTsv,
     findExistingColorForCaption,
     findFeaturesWithSameCaption: findFeaturesWithSameLegendItem,
     findFeaturesWithSameDisplayedLabel,
@@ -394,6 +449,10 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,
-    refreshFeatureOverrides
+    moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
+    moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
+    refreshFeatureOverrides,
+    removeSpecificRule,
+    setSpecificRuleField
   };
 };

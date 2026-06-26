@@ -228,12 +228,14 @@ def test_gui_only_linear_session_restores_row_options(tmp_path: Path) -> None:
                 {
                     "gb": _file_entry("a.gb", b"LOCUS       A\n"),
                     "definition": "Alpha",
+                    "record_subtitle": "Alpha subtitle",
                     "region_record_id": "RecA",
                     "region_reverse": True,
                 },
                 {
                     "gb": _file_entry("b.gb", b"LOCUS       B\n"),
                     "definition": "Beta",
+                    "record_subtitle": "Beta subtitle",
                     "region_record_id": "RecB",
                     "region_start": 10,
                     "region_end": 20,
@@ -257,6 +259,11 @@ def test_gui_only_linear_session_restores_row_options(tmp_path: Path) -> None:
     assert spec.args[first_label + 1] == "Alpha"
     second_label = spec.args.index("--record_label", first_label + 2)
     assert spec.args[second_label + 1] == "Beta"
+    assert spec.args.count("--record_subtitle") == 2
+    first_subtitle = spec.args.index("--record_subtitle")
+    assert spec.args[first_subtitle + 1] == "Alpha subtitle"
+    second_subtitle = spec.args.index("--record_subtitle", first_subtitle + 2)
+    assert spec.args[second_subtitle + 1] == "Beta subtitle"
     assert spec.args.count("--record_id") == 2
     first_selector = spec.args.index("--record_id")
     assert spec.args[first_selector + 1] == "RecA"
@@ -412,6 +419,10 @@ def test_cli_session_config_populates_safe_linear_row_fields() -> None:
         "Alpha",
         "--record_label",
         "Beta",
+        "--record_subtitle",
+        "Alpha subtitle",
+        "--record_subtitle",
+        "Beta subtitle",
         "--region",
         "RecB:10-20:rc",
         "--protein_blastp_mode",
@@ -458,9 +469,11 @@ def test_cli_session_config_populates_safe_linear_row_fields() -> None:
 
     seqs = payload["files"]["linearSeqs"]
     assert seqs[0]["definition"] == "Alpha"
+    assert seqs[0]["record_subtitle"] == "Alpha subtitle"
     assert seqs[0]["region_record_id"] == "RecA"
     assert seqs[0]["region_reverse"] is True
     assert seqs[1]["definition"] == "Beta"
+    assert seqs[1]["record_subtitle"] == "Beta subtitle"
     assert seqs[1]["region_record_id"] == "RecB"
     assert seqs[1]["region_start"] == 10
     assert seqs[1]["region_end"] == 20

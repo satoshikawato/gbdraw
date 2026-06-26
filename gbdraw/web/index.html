@@ -425,6 +425,7 @@
             box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
             font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
+            cursor: grab;
             pointer-events: auto;
         }
         .preview-feature-search * {
@@ -1350,6 +1351,10 @@
                             <div class="mt-2">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">Organism / strain (optional)</div>
                                 <input type="text" v-model="seq.definition" placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai" class="form-input px-1 py-0.5 text-xs">
+                            </div>
+                            <div class="mt-2">
+                                <div class="text-[10px] text-slate-500 font-bold mb-1">Subtitle / title (optional)</div>
+                                <input type="text" v-model="seq.record_subtitle" placeholder="e.g., Neomycin biosynthetic gene cluster" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
@@ -2399,16 +2404,30 @@
                             <div>
                                 <div class="flex items-center justify-between mb-2">
                                     <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported)."></help-tip></h4>
-                                    <button v-if="manualSpecificRules.length > 0" @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
+                                    <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
+                                        <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple"></i> TSV</button>
+                                        <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
+                                    </div>
                                 </div>
 
                                 <div class="space-y-1 mb-3">
-                                    <div v-for="(rule, i) in manualSpecificRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
-                                        <span class="w-12 font-bold truncate" :title="rule.feat">{{rule.feat}}</span>
-                                        <span class="w-12 text-slate-500 truncate" :title="rule.qual">{{rule.qual}}</span>
-                                        <span class="flex-grow text-blue-600 truncate font-mono" :title="rule.val">/{{rule.val}}/</span>
-                                        <div class="w-4 h-4 rounded border" :style="{backgroundColor: rule.color}"></div>
-                                        <button @click="manualSpecificRules.splice(i,1)" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash"></i></button>
+                                    <div v-for="(rule, i) in manualSpecificRules" :key="i" class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
+                                        <div class="grid grid-cols-12 gap-1 items-center">
+                                            <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value)" class="form-input form-input-compact col-span-4">
+                                                <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                                            </select>
+                                            <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value)" placeholder="Qualifier" class="form-input form-input-compact col-span-4">
+                                            <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value)" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1">
+                                            <div class="col-span-3 flex items-center justify-end gap-0.5">
+                                                <button @click="moveSpecificRuleUp(i)" :disabled="i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
+                                                <button @click="moveSpecificRuleDown(i)" :disabled="i === manualSpecificRules.length - 1" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
+                                                <button @click="removeSpecificRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule"><i class="ph ph-trash"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-12 gap-1">
+                                            <input :value="rule.val" @change="setSpecificRuleField(i, 'val', $event.target.value)" placeholder="Regex" class="form-input form-input-compact col-span-7 font-mono">
+                                            <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value)" placeholder="Legend Caption" class="form-input form-input-compact col-span-5">
+                                        </div>
                                     </div>
                                     <div v-if="manualSpecificRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No rules added</div>
                                 </div>
@@ -3098,7 +3117,9 @@
 
                     <div v-if="svgContent"
                          :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
+                         :style="previewFeatureSearchStyle"
                          @click.stop
+                         @pointerdown.stop="startPreviewFeatureSearchDrag"
                          @mousedown.stop
                          @mousemove.stop
                          @mouseup.stop

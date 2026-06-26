@@ -75,6 +75,7 @@ from .precalc import (
     _precalculate_definition_metrics,
     _precalculate_feature_dicts,
     _precalculate_label_dimensions,
+    _resolve_linear_diagram_label_font_size,
 )
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
@@ -1136,21 +1137,38 @@ def assemble_linear_diagram(
             final_definition_height_below,
         )
 
-    final_height = (
-        current_y
-        + final_record_height_below
-        + length_bar_height
-        + 4 * canvas_config.vertical_padding
-        + canvas_config.original_vertical_offset
-        + plot_title_bottom_reserve
-    )
     canvas_config.height_below_final_record = (
         current_y
         + final_record_height_below
         + 4 * canvas_config.vertical_padding
     )
-    if canvas_config.legend_position in ["top", "bottom"]:
-        final_height += int(required_legend_height)
+    bottom_title_stack = (
+        plot_title_obj is not None
+        and normalized_plot_title_position == "bottom"
+        and canvas_config.legend_position == "bottom"
+        and legend_group is not None
+        and length_bar_group is not None
+    )
+    bottom_stack_gap = float(canvas_config.vertical_padding)
+    if bottom_title_stack:
+        final_height = (
+            canvas_config.height_below_final_record
+            + length_bar_height
+            + bottom_stack_gap
+            + required_legend_height
+            + bottom_stack_gap
+            + float(plot_title_obj.text_bbox_height)
+            + plot_title_edge_margin
+        )
+    else:
+        final_height = (
+            canvas_config.height_below_final_record
+            + length_bar_height
+            + canvas_config.original_vertical_offset
+            + plot_title_bottom_reserve
+        )
+        if canvas_config.legend_position in ["top", "bottom"]:
+            final_height += int(required_legend_height)
     canvas_config.total_height = max(final_height, canvas_config.total_height)
 
     if legend_group is not None:
@@ -1208,6 +1226,12 @@ def assemble_linear_diagram(
 
     if canvas_config.legend_position == "top" and plot_title_top_reserve > 0:
         canvas_config.legend_offset_y += plot_title_top_reserve
+    if bottom_title_stack:
+        canvas_config.legend_offset_y = (
+            canvas_config.height_below_final_record
+            + length_bar_height
+            + bottom_stack_gap
+        )
 
     if canvas_config.legend_position != "none":
         canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_group, legend_table)
@@ -1278,6 +1302,12 @@ def assemble_linear_diagram(
 
     raw_show_labels = cfg.canvas.show_labels
     show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
+    label_font_size = _resolve_linear_diagram_label_font_size(
+        records,
+        show_labels_mode=show_labels_mode,
+        canvas_config=canvas_config,
+        cfg=cfg,
+    )
     cfg_labels_on = replace(cfg, canvas=replace(cfg.canvas, show_labels=True))
     cfg_labels_off = replace(cfg, canvas=replace(cfg.canvas, show_labels=False))
 
@@ -1317,6 +1347,7 @@ def assemble_linear_diagram(
                         cfg=record_cfg,
                         precomputed_feature_dict=record_feature_dicts[count - 1],
                         feature_track_layout=slot_feature_layout,
+                        label_font_size=label_font_size,
                     )
                     feature_rendered = True
                     continue
@@ -1420,6 +1451,7 @@ def assemble_linear_diagram(
                     cfg=record_cfg,
                     precomputed_feature_dict=record_feature_dicts[count - 1],
                     draw_features=False,
+                    label_font_size=label_font_size,
                 )
             add_record_definition_group(
                 canvas,
@@ -1444,6 +1476,7 @@ def assemble_linear_diagram(
             precalculated_labels=labels_for_record,
             cfg=record_cfg,
             precomputed_feature_dict=record_feature_dicts[count - 1],
+            label_font_size=label_font_size,
         )
         add_record_definition_group(
             canvas,
@@ -1520,7 +1553,15 @@ def assemble_linear_diagram(
         if normalized_plot_title_position == "top":
             title_y = plot_title_edge_margin + (0.5 * title_height)
         elif normalized_plot_title_position == "bottom":
-            title_y = float(canvas_config.total_height) - plot_title_edge_margin - (0.5 * title_height)
+            if bottom_title_stack:
+                title_y = (
+                    canvas_config.legend_offset_y
+                    + required_legend_height
+                    + bottom_stack_gap
+                    + (0.5 * title_height)
+                )
+            else:
+                title_y = float(canvas_config.total_height) - plot_title_edge_margin - (0.5 * title_height)
         title_group.translate(0.5 * float(canvas_config.total_width), title_y)
         canvas.add(title_group)
 

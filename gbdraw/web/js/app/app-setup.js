@@ -246,6 +246,7 @@ export const createAppSetup = () => {
     watch,
     nextTick,
     computed,
+    reactive,
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
   });
 
@@ -383,6 +384,7 @@ export const createAppSetup = () => {
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
   const definitionLineStyleRows = Object.freeze([
     { key: 'name', label: 'Name / Species' },
+    { key: 'subtitle', label: 'Subtitle' },
     { key: 'replicon', label: 'Replicon', visibilityKey: 'linear_show_replicon' },
     { key: 'accession', label: 'Accession', visibilityKey: 'linear_show_accession' },
     { key: 'length', label: 'Length / Coord.', visibilityKey: 'linear_show_length' }
@@ -943,6 +945,11 @@ export const createAppSetup = () => {
     addSpecificRule,
     applySpecificRulePreset,
     clearAllSpecificRules,
+    downloadSpecificRulesTsv,
+    moveSpecificRuleDown,
+    moveSpecificRuleUp,
+    removeSpecificRule,
+    setSpecificRuleField,
     getFeatureColor,
     canEditFeatureColor,
     getFeatureVisibility,
@@ -2050,6 +2057,11 @@ export const createAppSetup = () => {
     addSpecificRule,
     applySpecificRulePreset,
     clearAllSpecificRules,
+    downloadSpecificRulesTsv,
+    moveSpecificRuleDown,
+    moveSpecificRuleUp,
+    removeSpecificRule,
+    setSpecificRuleField,
     extractedFeatures,
     featureEditorStatus,
     featureEditorStatusText,
@@ -2078,6 +2090,8 @@ export const createAppSetup = () => {
     previewFeatureSearchCanSearch: previewFeatureSearch.previewFeatureSearchCanSearch,
     previewFeatureSearchStatusText: previewFeatureSearch.previewFeatureSearchStatusText,
     previewFeatureSearchActiveDetail: previewFeatureSearch.previewFeatureSearchActiveDetail,
+    previewFeatureSearchStyle: previewFeatureSearch.previewFeatureSearchStyle,
+    startPreviewFeatureSearchDrag: previewFeatureSearch.startDrag,
     applyPreviewFeatureSearch: previewFeatureSearch.applySearch,
     goToNextPreviewFeatureSearchMatch: previewFeatureSearch.goToNext,
     goToPreviousPreviewFeatureSearchMatch: previewFeatureSearch.goToPrevious,

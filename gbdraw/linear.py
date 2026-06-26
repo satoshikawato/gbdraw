@@ -980,7 +980,7 @@ def _get_args(args) -> argparse.Namespace:
         help=(
             'Definition line style override (repeatable): '
             'LINE:weight=bold,color=#000000,size=12. '
-            'Lines: name/species/record_label, replicon, accession, length/coordinates.'
+            'Lines: name/species/record_label, subtitle/record_subtitle, replicon, accession, length/coordinates.'
         ),
         type=_parse_definition_line_style_arg,
         action='append',
@@ -1005,6 +1005,15 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '--record_label',
         help='Optional top definition line (for example organism/strain; repeatable; order matches input records)',
+        type=str,
+        action='append',
+        default=[])
+    _add_argument_with_hidden_aliases(
+        parser,
+        '--record_subtitle',
+        hidden_aliases=('--record-subtitle',),
+        dest='record_subtitle',
+        help='Optional second definition line (repeatable; order matches input records)',
         type=str,
         action='append',
         default=[])
@@ -1753,6 +1762,21 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             if getattr(records[idx], "annotations", None) is None:
                 records[idx].annotations = {}
             records[idx].annotations["gbdraw_record_label"] = label
+    record_subtitles = args.record_subtitle or []
+    if record_subtitles:
+        if len(record_subtitles) > len(records):
+            logger.warning(
+                "WARNING: More --record_subtitle values were provided than records loaded; extra subtitles will be ignored."
+            )
+        for idx, subtitle in enumerate(record_subtitles[: len(records)]):
+            if subtitle is None:
+                continue
+            subtitle = str(subtitle).strip()
+            if not subtitle:
+                continue
+            if getattr(records[idx], "annotations", None) is None:
+                records[idx].annotations = {}
+            records[idx].annotations["gbdraw_record_subtitle"] = subtitle
     region_specs = parse_region_specs(args.region)
     if region_specs:
         try:

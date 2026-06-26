@@ -124,6 +124,15 @@ class DefinitionGroup:
         self.record_name_parts = parse_mixed_content_text(self.record_name)
         self.record_name_plain = "".join(part.get("text") or "" for part in self.record_name_parts).strip()
 
+        subtitle = None
+        if getattr(self.record, "annotations", None):
+            subtitle = self.record.annotations.get("gbdraw_record_subtitle")
+        self.record_subtitle: str = str(subtitle).strip() if subtitle is not None else ""
+        self.record_subtitle_parts = parse_mixed_content_text(self.record_subtitle)
+        self.record_subtitle_plain = "".join(
+            part.get("text") or "" for part in self.record_subtitle_parts
+        ).strip()
+
         metadata = infer_record_source_metadata(self.record)
         self.replicon_label = str(metadata.replicon or "").strip()
         self.accession_label = self.track_id
@@ -168,7 +177,12 @@ class DefinitionGroup:
             font_style="normal",
         )
 
-    def _measure_mixed_line(self, kind: str, parts: list[dict[str, str | bool | None]]) -> tuple[float, float]:
+    def _measure_mixed_line(
+        self,
+        kind: str,
+        parts: list[dict[str, str | bool | None]],
+        plain_text: str,
+    ) -> tuple[float, float]:
         """Measure mixed regular/italic definition content as rendered tspans."""
         style = self._style_for_line(kind)
         total_width = 0.0
@@ -185,8 +199,8 @@ class DefinitionGroup:
             total_width += width
             max_height = max(max_height, height)
 
-        if max_height == 0.0 and self.record_name_plain:
-            _, max_height = self._measure_line(kind, self.record_name_plain)
+        if max_height == 0.0 and plain_text:
+            _, max_height = self._measure_line(kind, plain_text)
         return total_width, max_height
 
     def _style_for_line(self, kind: str) -> _ResolvedDefinitionLineStyle:
@@ -215,7 +229,11 @@ class DefinitionGroup:
         lines: list[_DefinitionLine] = []
 
         if self.record_name_plain:
-            width, height = self._measure_mixed_line("name", self.record_name_parts)
+            width, height = self._measure_mixed_line(
+                "name",
+                self.record_name_parts,
+                self.record_name_plain,
+            )
             lines.append(
                 _DefinitionLine(
                     kind="name",
@@ -223,6 +241,22 @@ class DefinitionGroup:
                     width=width,
                     height=height,
                     parts=self.record_name_parts,
+                )
+            )
+
+        if self.record_subtitle_plain:
+            width, height = self._measure_mixed_line(
+                "subtitle",
+                self.record_subtitle_parts,
+                self.record_subtitle_plain,
+            )
+            lines.append(
+                _DefinitionLine(
+                    kind="subtitle",
+                    text=self.record_subtitle_plain,
+                    width=width,
+                    height=height,
+                    parts=self.record_subtitle_parts,
                 )
             )
 

@@ -296,19 +296,28 @@ def calculate_orthogroup_alignment_canvas_extents(
             max_right=alignment_width,
         )
 
-    min_left = 0.0
-    max_right = alignment_width
+    bounds: list[tuple[float, float]] = []
     for record_index, record in enumerate(records):
         local_left = (
             _base_record_offset_x(record, canvas_config)
             + float(record_offsets_x.get(record_index, 0.0))
         )
         local_right = local_left + _rendered_record_width(record, canvas_config)
-        min_left = min(min_left, local_left)
-        max_right = max(max_right, local_right)
+        bounds.append((local_left, local_right))
+
+    if not bounds:
+        return OrthogroupAlignmentCanvasExtents(
+            horizontal_shift=0.0,
+            width_extension=0.0,
+            min_left=0.0,
+            max_right=alignment_width,
+        )
+
+    min_left = min(left for left, _ in bounds)
+    max_right = max(right for _, right in bounds)
 
     horizontal_shift = max(0.0, -min_left)
-    width_extension = max(0.0, (max_right - min_left) - alignment_width)
+    width_extension = max(0.0, max_right + horizontal_shift - alignment_width)
     return OrthogroupAlignmentCanvasExtents(
         horizontal_shift=horizontal_shift,
         width_extension=width_extension,

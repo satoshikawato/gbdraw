@@ -239,6 +239,7 @@ export const createLinearSeq = (overrides = {}) => {
     losat_gencode: Number.isFinite(rawLosatGencode) && rawLosatGencode > 0 ? rawLosatGencode : 1,
     losat_filename: String(source.losat_filename ?? ''),
     definition: String(source.definition ?? ''),
+    record_subtitle: String(source.record_subtitle ?? ''),
     region_record_id: String(source.region_record_id ?? ''),
     region_start: normalizeLinearSeqNumber(source.region_start),
     region_end: normalizeLinearSeqNumber(source.region_end),

@@ -440,6 +440,7 @@ class DefinitionLineStyleConfig:
 @dataclass(frozen=True)
 class DefinitionLineStylesConfig:
     name: DefinitionLineStyleConfig
+    subtitle: DefinitionLineStyleConfig
     replicon: DefinitionLineStyleConfig
     accession: DefinitionLineStyleConfig
     length: DefinitionLineStyleConfig
@@ -451,6 +452,7 @@ class DefinitionLineStylesConfig:
         source = d or {}
         return cls(
             name=DefinitionLineStyleConfig.from_dict(source.get("name", {})),
+            subtitle=DefinitionLineStyleConfig.from_dict(source.get("subtitle", {})),
             replicon=DefinitionLineStyleConfig.from_dict(source.get("replicon", {})),
             accession=DefinitionLineStyleConfig.from_dict(source.get("accession", {})),
             length=DefinitionLineStyleConfig.from_dict(source.get("length", {})),

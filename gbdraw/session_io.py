@@ -901,6 +901,14 @@ def _append_linear_gui_sequence_options(
         for label in labels:
             _append_pair(run_args, invocation_args, "--record_label", label)
 
+    subtitles = [
+        str(seq.get("record_subtitle") or "") if isinstance(seq, Mapping) else ""
+        for seq in linear_seqs
+    ]
+    if any(subtitle.strip() for subtitle in subtitles):
+        for subtitle in subtitles:
+            _append_pair(run_args, invocation_args, "--record_subtitle", subtitle)
+
     record_selectors: list[str] = []
     reverse_flags: list[bool] = []
     region_specs: list[str] = []
@@ -1480,6 +1488,11 @@ def _populate_linear_session_fields_from_cli_context(
         if 0 <= source_index < len(linear_seqs) and isinstance(linear_seqs[source_index], dict):
             linear_seqs[source_index]["definition"] = label
 
+    subtitles = _linear_record_subtitles_from_cli_args(args, metadata)
+    for source_index, subtitle in subtitles.items():
+        if 0 <= source_index < len(linear_seqs) and isinstance(linear_seqs[source_index], dict):
+            linear_seqs[source_index]["record_subtitle"] = subtitle
+
     region_fields = _linear_region_metadata_from_cli_args(args, metadata)
     region_sources = set(region_fields)
     for source_index, fields in region_fields.items():
@@ -1560,7 +1573,32 @@ def _linear_record_labels_from_cli_args(
     args: Sequence[str],
     record_metadata: Sequence[Mapping[str, Any]],
 ) -> dict[int, str]:
-    labels = _option_all_values(args, "--record_label", "--record-label")
+    return _linear_record_text_values_from_cli_args(
+        args,
+        record_metadata,
+        "--record_label",
+        "--record-label",
+    )
+
+
+def _linear_record_subtitles_from_cli_args(
+    args: Sequence[str],
+    record_metadata: Sequence[Mapping[str, Any]],
+) -> dict[int, str]:
+    return _linear_record_text_values_from_cli_args(
+        args,
+        record_metadata,
+        "--record_subtitle",
+        "--record-subtitle",
+    )
+
+
+def _linear_record_text_values_from_cli_args(
+    args: Sequence[str],
+    record_metadata: Sequence[Mapping[str, Any]],
+    *options: str,
+) -> dict[int, str]:
+    labels = _option_all_values(args, *options)
     mapped: dict[int, str] = {}
     if not labels or not record_metadata:
         return mapped

@@ -59,6 +59,7 @@ def test_parse_definition_line_style_overrides_valid_and_last_wins() -> None:
         [
             "species:weight=normal,color=red,size=12",
             "record_label:font_weight=bold,fill=rgb(1,2,3)",
+            "record_subtitle:font_weight=bold,fill=#123456",
             "coordinates:weight=700,color=rgba(1,2,3,0.5)",
         ]
     )
@@ -68,6 +69,10 @@ def test_parse_definition_line_style_overrides_valid_and_last_wins() -> None:
             "font_weight": "bold",
             "fill": "rgb(1,2,3)",
             "font_size": 12.0,
+        },
+        "subtitle": {
+            "font_weight": "bold",
+            "fill": "#123456",
         },
         "length": {
             "font_weight": "700",
@@ -165,6 +170,7 @@ def test_definition_line_style_config_defaults_and_legacy_inheritance() -> None:
     default_styles = default_cfg.objects.definition.linear.line_styles
 
     assert default_styles.name.font_weight == "normal"
+    assert default_styles.subtitle.font_weight == "normal"
     assert default_styles.replicon.font_weight == "normal"
     assert default_styles.accession.font_weight == "normal"
     assert default_styles.length.font_weight == "normal"
@@ -175,6 +181,7 @@ def test_definition_line_style_config_defaults_and_legacy_inheritance() -> None:
     legacy["objects"]["definition"]["linear"].pop("line_styles", None)
     legacy_cfg = GbdrawConfig.from_dict(legacy)
     assert legacy_cfg.objects.definition.linear.line_styles.name.font_weight is None
+    assert legacy_cfg.objects.definition.linear.line_styles.subtitle.font_weight is None
 
 
 def test_definition_line_style_config_validation() -> None:
@@ -222,6 +229,7 @@ def test_session_io_definition_line_styles_parse_cli_and_emit_gui_args() -> None
         {
             "linear_definition_line_styles": {
                 "name": {"font_weight": "bold", "fill": "#111111"},
+                "subtitle": {"fill": "#222222"},
                 "accession": {"font_weight": "normal"},
                 "length": {"font_size": 9},
             }
@@ -235,6 +243,8 @@ def test_session_io_definition_line_styles_parse_cli_and_emit_gui_args() -> None
     assert run_args == [
         "--definition_line_style",
         "name:weight=bold,color=#111111",
+        "--definition_line_style",
+        "subtitle:color=#222222",
         "--definition_line_style",
         "length:size=9",
     ]
@@ -266,23 +276,30 @@ def test_definition_group_emits_line_specific_styles_and_data_attrs() -> None:
     config_dict = _linear_definition_config()
     line_styles = config_dict["objects"]["definition"]["linear"]["line_styles"]
     line_styles["name"] = {"font_weight": "bold", "fill": "#111111"}
+    line_styles["subtitle"] = {"font_weight": "bold", "fill": "#334455"}
     line_styles["accession"] = {"fill": "rgb(1,2,3)"}
     line_styles["length"] = {"font_size": 8}
+    record = _record("Alpha <i>Beta</i>", "AC123")
+    record.annotations["gbdraw_record_subtitle"] = "A <i>neo</i> cluster"
 
     definition_group = DefinitionGroup(
-        _record("Alpha <i>Beta</i>", "AC123"),
+        record,
         config_dict,
         _canvas_config(),
     )
     svg = definition_group.get_group().tostring()
 
     name_text = _text_with_kind(svg, "name")
+    subtitle_text = _text_with_kind(svg, "subtitle")
     accession_text = _text_with_kind(svg, "accession")
     length_text = _text_with_kind(svg, "length")
 
     assert 'font-weight="bold"' in name_text
     assert 'fill="#111111"' in name_text
     assert 'font-style="italic"' in name_text
+    assert 'font-weight="bold"' in subtitle_text
+    assert 'fill="#334455"' in subtitle_text
+    assert 'font-style="italic"' in subtitle_text
     assert 'fill="rgb(1,2,3)"' in accession_text
     assert 'font-size="8"' in length_text or 'font-size="8.0"' in length_text
 

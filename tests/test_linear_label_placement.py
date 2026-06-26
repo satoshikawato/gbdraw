@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import math
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite.container import Group
 
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
@@ -21,11 +26,41 @@ from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
+    _rotated_label_rects_intersect,
     calculate_label_bounds,
     find_lowest_available_track,
     prepare_label_list_linear,
 )
 from gbdraw.render.drawers.linear.labels import LabelDrawer
+
+
+def _synthetic_label_record(record_id: str, length: int, label: str) -> SeqRecord:
+    record = SeqRecord(Seq("A" * length), id=record_id, name=record_id, description=record_id)
+    record.features = [
+        SeqFeature(
+            FeatureLocation(100, 300, strand=1),
+            type="CDS",
+            qualifiers={"product": [label]},
+        )
+    ]
+    return record
+
+
+def _extract_label_font_sizes(svg_content: str, label_texts: set[str]) -> dict[str, float]:
+    root = ET.fromstring(svg_content)
+    sizes: dict[str, float] = {}
+    for element in root.iter():
+        tag = str(element.tag).rsplit("}", 1)[-1]
+        if tag not in {"text", "textPath"}:
+            continue
+        text = "".join(element.itertext()).strip()
+        if text not in label_texts:
+            continue
+        font_size = element.attrib.get("font-size")
+        if font_size is None:
+            continue
+        sizes[text] = float(str(font_size).replace("px", "").replace("pt", ""))
+    return sizes
 
 
 def _prepare_linear_labels(
@@ -188,12 +223,57 @@ def _label_bounds_overlap(label1: dict, label2: dict, min_gap_px: float = 0.0) -
     )
 
 
-def _assert_no_label_bounds_overlap(labels: list[dict]) -> None:
+def _assert_no_label_bounds_overlap(labels: list[dict], min_gap_px: float = 0.0) -> None:
     placed = []
     for label in sorted(labels, key=lambda item: float(item["feature_anchor_x"])):
         for other in placed:
-            assert not _label_bounds_overlap(label, other)
+            if min_gap_px:
+                assert not _label_bounds_overlap(label, other, min_gap_px=min_gap_px)
+            else:
+                assert not _rotated_label_rects_intersect(label, other)
         placed.append(label)
+
+
+@pytest.mark.linear
+def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels="all",
+        label_blacklist="",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    threshold = int(cfg.labels.length_threshold.linear)
+    records = [
+        _synthetic_label_record("short_record", threshold - 1, "linear_short_auto_label"),
+        _synthetic_label_record("long_record", threshold + 1, "linear_long_auto_label"),
+    ]
+
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=len(records),
+        longest_genome=max(len(record.seq) for record in records),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    short_font_size = cfg.labels.font_size.linear.for_length_param("short")
+    long_font_size = cfg.labels.font_size.linear.for_length_param("long")
+    expected_font_size = max(short_font_size, long_font_size)
+    assert canvas_config.length_param == "long"
+    svg_content = assemble_linear_diagram_from_records(
+        records,
+        config_dict=config_dict,
+        selected_features_set=["CDS"],
+        legend="none",
+    ).tostring()
+
+    font_sizes = _extract_label_font_sizes(
+        svg_content,
+        {"linear_short_auto_label", "linear_long_auto_label"},
+    )
+    assert set(font_sizes) == {"linear_short_auto_label", "linear_long_auto_label"}
+    assert all(size == pytest.approx(expected_font_size) for size in font_sizes.values())
+    assert len(set(font_sizes.values())) == 1
+    assert all(size > long_font_size for size in font_sizes.values())
 
 
 @pytest.mark.linear
@@ -322,6 +402,7 @@ def test_linear_above_feature_bgc0000708_gene_labels_do_not_overlap() -> None:
     labels = _prepare_linear_labels(
         label_placement="above_feature",
         label_rotation=45.0,
+        label_font_size=18.0,
         input_filename="BGC0000708.gbk",
         qualifier_priority=("CDS", "gene"),
     )
@@ -330,6 +411,11 @@ def test_linear_above_feature_bgc0000708_gene_labels_do_not_overlap() -> None:
     assert any(not label.get("leader_line") for label in labels)
     _assert_no_label_bounds_overlap(labels)
 
+    for label_text in ("livP", "livF"):
+        label = next(label for label in labels if label["label_text"] == label_text)
+        assert float(label["middle_y"]) == pytest.approx(_feature_adjacent_label_y(label))
+        assert label["leader_line"] is False
+
 
 @pytest.mark.linear
 def test_linear_above_feature_bgc_multi_record_gene_labels_compact_without_overlap() -> None:
@@ -337,18 +423,21 @@ def test_linear_above_feature_bgc_multi_record_gene_labels_compact_without_overl
         input_filenames=(
             "BGC0000708.gbk",
             "BGC0000709.gbk",
+            "BGC0000711.gbk",
             "BGC0000712.gbk",
             "BGC0000713.gbk",
         ),
         show_labels="first",
         label_placement="above_feature",
         label_rotation=45.0,
+        label_font_size=18.0,
         qualifier_priority=("CDS", "gene"),
     )
     assert labels
-    _assert_no_label_bounds_overlap(labels)
 
     collision_gap = max(1.0, max(float(label["height_px"]) for label in labels) * 0.05)
+    _assert_no_label_bounds_overlap(labels)
+
     rotated_heights = [
         calculate_label_bounds(label)[3] - calculate_label_bounds(label)[2]
         for label in labels
@@ -363,10 +452,18 @@ def test_linear_above_feature_bgc_multi_record_gene_labels_compact_without_overl
     assert livx_shift > 0.0
     assert livx_shift < old_global_step
 
+    livf = next(label for label in labels if label["label_text"] == "livF")
+    assert float(livf["middle_y"]) == pytest.approx(_feature_adjacent_label_y(livf))
+    assert livf["leader_line"] is False
+
     livy = next(label for label in labels if label["label_text"] == "livY")
     assert float(livy["middle_y"]) == pytest.approx(_feature_adjacent_label_y(livy))
     for neighbor in [label for label in labels if label["label_text"] in {"livW", "livZ"}]:
-        assert not _label_bounds_overlap(livy, neighbor)
+        assert not _rotated_label_rects_intersect(livy, neighbor)
+
+    livp = next(label for label in labels if label["label_text"] == "livP")
+    assert float(livp["middle_y"]) == pytest.approx(_feature_adjacent_label_y(livp))
+    assert livp["leader_line"] is False
 
 
 @pytest.mark.linear

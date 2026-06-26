@@ -45,6 +45,23 @@ export const parseSpecificRules = (text) => {
   return { rules, rulesWithCaptions, count: rules.length };
 };
 
+const normalizeTsvCell = (value) => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
+
+export const serializeSpecificRules = (rules) => {
+  const rows = (Array.isArray(rules) ? rules : [])
+    .map((rule) => [
+      normalizeTsvCell(rule?.feat),
+      normalizeTsvCell(rule?.qual),
+      normalizeTsvCell(rule?.val),
+      normalizeTsvCell(rule?.color),
+      normalizeTsvCell(rule?.cap)
+    ])
+    .filter((fields) => fields.slice(0, 4).every(Boolean))
+    .map((fields) => fields.join('\t'));
+
+  return rows.length > 0 ? `${rows.join('\n')}\n` : '';
+};
+
 export const parsePriorityRules = (text) => {
   const rules = [];
   const lines = text.split(/\r?\n/);

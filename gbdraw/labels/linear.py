@@ -197,6 +197,47 @@ def calculate_label_y_bounds(label: dict) -> tuple[float, float]:
     return top_y, bottom_y
 
 
+def _label_corners(label: dict, shift_y: float = 0.0) -> list[tuple[float, float]]:
+    middle_x = float(label["middle_x"])
+    middle_y = float(label["middle_y"]) + shift_y
+    return [
+        (middle_x + x_offset, middle_y + y_offset)
+        for x_offset, y_offset in _rotated_corner_offsets(
+            float(label["width_px"]),
+            float(label["height_px"]),
+            float(label.get("rotation_deg", 0.0)),
+            str(label.get("text_anchor", "middle")),
+        )
+    ]
+
+
+def _project_polygon(points: list[tuple[float, float]], axis_x: float, axis_y: float) -> tuple[float, float]:
+    projections = [(x * axis_x) + (y * axis_y) for x, y in points]
+    return min(projections), max(projections)
+
+
+def _rotated_label_rects_intersect(label1: dict, label2: dict, label1_shift_y: float = 0.0) -> bool:
+    rect1 = _label_corners(label1, shift_y=label1_shift_y)
+    rect2 = _label_corners(label2)
+    for points in (rect1, rect2):
+        for idx, point in enumerate(points):
+            next_point = points[(idx + 1) % len(points)]
+            edge_x = next_point[0] - point[0]
+            edge_y = next_point[1] - point[1]
+            axis_x = -edge_y
+            axis_y = edge_x
+            axis_len = math.hypot(axis_x, axis_y)
+            if axis_len == 0.0:
+                continue
+            axis_x /= axis_len
+            axis_y /= axis_len
+            min1, max1 = _project_polygon(rect1, axis_x, axis_y)
+            min2, max2 = _project_polygon(rect2, axis_x, axis_y)
+            if max1 <= min2 or max2 <= min1:
+                return False
+    return True
+
+
 def _label_bounds_overlap(label1: dict, label2: dict, min_gap_px: float) -> bool:
     left1, right1, top1, bottom1 = calculate_label_bounds(label1)
     left2, right2, top2, bottom2 = calculate_label_bounds(label2)
@@ -208,11 +249,39 @@ def _label_bounds_overlap(label1: dict, label2: dict, min_gap_px: float) -> bool
     )
 
 
+def _label_bounds_intersect(label1: dict, label2: dict) -> bool:
+    return _rotated_label_rects_intersect(label1, label2)
+
+
 def _update_linear_label_leader_end(label: dict) -> None:
     contact_x_offset = float(label.get("label_contact_x_offset", 0.0))
     contact_y_offset = float(label.get("label_contact_y_offset", 0.0))
     label["leader_end_x"] = float(label["middle_x"]) + contact_x_offset
     label["leader_end_y"] = float(label["middle_y"]) + contact_y_offset
+
+
+def _vertical_label_shift_to_clear(
+    label: dict,
+    other: dict,
+    direction: float,
+    fallback_shift: float,
+    min_gap_px: float,
+) -> float:
+    shift_sign = -1.0 if direction < 0.0 else 1.0
+    high = max(abs(float(fallback_shift)), float(min_gap_px), 1.0)
+    while _rotated_label_rects_intersect(label, other, shift_sign * high):
+        high *= 2.0
+        if high > max(abs(float(fallback_shift)) * 8.0, 1024.0):
+            return fallback_shift
+
+    low = 0.0
+    for _ in range(20):
+        mid = (low + high) / 2.0
+        if _rotated_label_rects_intersect(label, other, shift_sign * mid):
+            low = mid
+        else:
+            high = mid
+    return shift_sign * (high + float(min_gap_px))
 
 
 def _place_linear_label_without_overlap(
@@ -238,15 +307,17 @@ def _place_linear_label_without_overlap(
             ]
 
         for other in candidates:
-            if not _label_bounds_overlap(label, other, min_gap_px):
+            if not _label_bounds_intersect(label, other):
                 continue
 
             _, _, placed_top, placed_bottom = calculate_label_bounds(other)
             if direction < 0.0:
-                shift = (placed_top - float(min_gap_px)) - candidate_bottom
+                fallback_shift = (placed_top - float(min_gap_px)) - candidate_bottom
+                shift = _vertical_label_shift_to_clear(label, other, direction, fallback_shift, min_gap_px)
                 required_shift = min(required_shift, shift)
             else:
-                shift = (placed_bottom + float(min_gap_px)) - candidate_top
+                fallback_shift = (placed_bottom + float(min_gap_px)) - candidate_top
+                shift = _vertical_label_shift_to_clear(label, other, direction, fallback_shift, min_gap_px)
                 required_shift = max(required_shift, shift)
 
         if required_shift == 0.0:
@@ -300,6 +371,7 @@ def prepare_label_list_linear(
     track_axis_gap,
     config_dict,
     cfg: GbdrawConfig | None = None,
+    label_font_size: float | None = None,
 ):
     """
     Prepares a list of labels for linear genome visualization with proper track organization.
@@ -319,10 +391,14 @@ def prepare_label_list_linear(
 
     # Get configuration values
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    length_threshold = cfg.labels.length_threshold.circular
+    length_threshold = cfg.labels.length_threshold.linear
     length_param = determine_length_parameter(genome_length, length_threshold)
     font_family = cfg.objects.text.font_family
-    font_size = cfg.labels.font_size.linear.for_length_param(length_param)
+    font_size = (
+        float(label_font_size)
+        if label_font_size is not None
+        else cfg.labels.font_size.linear.for_length_param(length_param)
+    )
     linear_label_cfg = cfg.labels.linear
     label_rendering = normalize_label_rendering(cfg.labels.rendering)
     label_spacing_px = float(cfg.labels.spacing.linear)
@@ -579,5 +655,3 @@ __all__ = [
     "find_lowest_available_track",
     "prepare_label_list_linear",
 ]
-
-
