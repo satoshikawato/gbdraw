@@ -9,8 +9,12 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
 
+from gbdraw.api import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
@@ -951,6 +955,52 @@ def test_linear_bottom_ruler_can_extend_beyond_alignment_width() -> None:
 
     assert f'x2="{ruler_width}"' in ruler_fragment
     assert ">500 bp</text>" in ruler_fragment
+
+
+@pytest.mark.linear
+def test_linear_bottom_ruler_legend_title_spacing_is_even() -> None:
+    record = SeqRecord(Seq("A" * 60_000), id="rec1", name="rec1", description="rec1")
+    record.features = [SeqFeature(FeatureLocation(100, 900, strand=1), type="CDS")]
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        scale_style="ruler",
+        scale_interval=10_000,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    svg_content = assemble_linear_diagram_from_records(
+        [record],
+        config_dict=config_dict,
+        selected_features_set=["CDS"],
+        legend="bottom",
+        plot_title="Synthetic title",
+    ).tostring()
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        config_dict=config_dict,
+        legend="bottom",
+        cfg=cfg,
+    )
+    length_bar_height = LengthBarGroup(
+        canvas_config.fig_width,
+        canvas_config.alignment_width,
+        len(record.seq),
+        config_dict,
+        canvas_config,
+        cfg=cfg,
+    ).scale_group_height
+    legend_height = (24 / 14) * cfg.objects.legends.color_rect_size.for_length_param(canvas_config.length_param)
+    title_y = _extract_group_translate_y(svg_content, "plot_title")
+    title_bottom = _extract_viewbox_bottom(svg_content) - 24.0
+    title_top = (2 * title_y) - title_bottom
+
+    ruler_legend_gap = _extract_legend_translate_y(svg_content) - (
+        _extract_group_translate_y(svg_content, "length_bar") + length_bar_height
+    )
+    legend_title_gap = title_top - (_extract_legend_translate_y(svg_content) + legend_height)
+
+    assert ruler_legend_gap == pytest.approx(cfg.canvas.linear.vertical_padding)
+    assert legend_title_gap == pytest.approx(cfg.canvas.linear.vertical_padding)
 
 
 @pytest.mark.linear
