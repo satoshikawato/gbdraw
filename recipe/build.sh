@@ -14,8 +14,12 @@ $PYTHON -m pip install . --no-deps --ignore-installed -vv
 mkdir -p $PREFIX/fonts
 cp gbdraw/data/*.ttf $PREFIX/fonts/
 
-# --- 4. Force copy the web directory to site-packages ---
-# Ensure the web directory (including index.html and the wheel) is copied to the installation path
-echo "Copying web directory to site-packages..."
+# --- 4. Force copy local web runtime assets to site-packages ---
+echo "Copying local web runtime assets to site-packages..."
 mkdir -p $SP_DIR/gbdraw/web
-cp -r gbdraw/web/* $SP_DIR/gbdraw/web/
+cp gbdraw/web/index.html $SP_DIR/gbdraw/web/
+cp gbdraw/web/open-source-notices.html $SP_DIR/gbdraw/web/
+cp gbdraw/web/gbdraw-*.whl $SP_DIR/gbdraw/web/
+for web_asset_dir in assets js presets vendor wasm; do
+    cp -r gbdraw/web/$web_asset_dir $SP_DIR/gbdraw/web/
+done
