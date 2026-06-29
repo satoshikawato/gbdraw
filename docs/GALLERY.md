@@ -4,6 +4,8 @@ This gallery showcases representative `gbdraw` outputs and the commands used to 
 
 Interactive SVG versions of selected examples are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub previews static SVG images, so use the public gallery when you want to inspect JavaScript-enabled standalone SVG output.
 
+The interactive Gallery assets are hosted online and are not bundled with local `gbdraw` installs. Running `gbdraw gui` locally still keeps genome analysis on your own machine.
+
 For circular examples, `--track_type` names the simple-layout preset. Custom Track Slots use explicit geometry instead, and the circular axis remains fixed.
 
 
@@ -11,7 +13,7 @@ For circular examples, `--track_type` names the simple-layout preset. Custom Tra
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018)
 
-This circular multi-record session uses the saved gallery session and bundled interactive SVG output.
+This circular multi-record session uses a saved hosted Gallery session and interactive SVG output.
 
 #### Majaniviruses Multi-Genome Comparison
 

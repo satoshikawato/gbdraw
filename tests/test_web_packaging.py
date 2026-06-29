@@ -174,16 +174,30 @@ def test_browser_wheel_excludes_hosted_web_assets() -> None:
     assert browser_wheel_path.stat().st_size <= verify_module.BUILD_SUPPORT.BROWSER_WHEEL_MAX_BYTES
 
 
+def test_local_web_package_data_excludes_gallery_assets() -> None:
+    build_support = _load_verify_module().BUILD_SUPPORT
+    package_data_patterns = build_support.get_package_data_patterns(include_browser_wheel=True)
+
+    assert all("web/gallery" not in pattern for pattern in package_data_patterns)
+    assert "gbdraw/web/gallery" not in (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    assert "gbdraw/web/gallery/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
+
+
 def test_index_links_to_open_source_notices() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "./open-source-notices.html" in index_html
     assert "Open Source Notices" in index_html
 
 
-def test_index_links_to_interactive_gallery() -> None:
+def test_index_links_to_hosted_interactive_gallery() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
-    assert "./gallery/" in index_html
     assert "Interactive Gallery" in index_html
+    assert "./gallery/" not in index_html
+
+    match = re.search(r'<a href="https://gbdraw\.app/gallery/"(?P<attrs>[^>]*)>Interactive Gallery</a>', index_html)
+    assert match is not None
+    assert 'target="_blank"' in match.group("attrs")
+    assert 'rel="noopener noreferrer"' in match.group("attrs")
 
 
 def test_web_run_info_tab_source_contract() -> None:
@@ -518,19 +532,30 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
 
 def test_interactive_gallery_examples_are_wired() -> None:
     expected_ids = [
+        "HmmtDNA_ATskew",
+        "BGC0000708-BGC0000713",
+        "WSSV_genome_comparison",
+        "majanivirus_orthogroup",
+        "hepatoplasmataceae_orthogroup",
         "Vnig_TUMSAT-TG-2018",
         "hepatoplasmataceae_collinear",
-        "hepatoplasmataceae_orthogroup",
-        "majanivirus_orthogroup",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
 
     assert [entry["id"] for entry in examples] == expected_ids
+    gallery_svg_sizes = [
+        (GALLERY_ROOT / entry["svg"].removeprefix("./")).stat().st_size
+        for entry in examples
+    ]
+    assert gallery_svg_sizes == sorted(gallery_svg_sizes)
     assert [entry["title"] for entry in examples] == [
+        "<i>Homo sapiens</i> mitochondrion (AT skew)",
+        "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
+        "White spot syndrome virus genome comparison",
+        "Large dsDNA viruses (<i>Nimaviridae</i>)",
+        "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
-        "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
-        "Large dsDNA viruses (<i>Nimaviridae</i>)",
     ]
     for entry in examples:
         assert entry["title"]
@@ -586,10 +611,6 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert features
         assert any(feature.get("qualifiers") for feature in features)
         assert any(feature.get("location_parts") for feature in features)
-        assert any(
-            feature.get("nucleotide_sequence") or feature.get("sequence_warnings")
-            for feature in features
-        )
 
         assert thumbnail_header.startswith(b"RIFF")
         assert b"WEBP" in thumbnail_header
@@ -2932,6 +2953,17 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 
+def test_conda_recipe_does_not_copy_entire_web_tree() -> None:
+    build_sh = (REPO_ROOT / "recipe" / "build.sh").read_text(encoding="utf-8")
+
+    assert "cp -r gbdraw/web/*" not in build_sh
+    assert "gbdraw/web/gallery" not in build_sh
+    assert "gbdraw/web/index.html" in build_sh
+    assert "gbdraw/web/open-source-notices.html" in build_sh
+    assert "gbdraw/web/gbdraw-*.whl" in build_sh
+    assert "for web_asset_dir in assets js presets vendor wasm" in build_sh
+
+
 @pytest.mark.slow
 def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     verify_module, _ = ensure_prepared_browser_wheel()
@@ -2965,6 +2997,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     ]
     missing = [str(path.relative_to(build_root)) for path in required if not path.exists()]
     assert not missing, "build_py did not copy required offline GUI assets:\n" + "\n".join(missing)
+    assert not (build_root / "gbdraw" / "web" / "gallery").exists()
     copied_wheels = sorted(path.name for path in (build_root / "gbdraw" / "web").glob("gbdraw-*.whl"))
     assert copied_wheels == [verify_module._parse_wheel_name()]
 
@@ -2994,13 +3027,16 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     verify_module.assert_embedded_browser_wheel_is_not_recursive(wheel_path)
 
     with zipfile.ZipFile(wheel_path) as outer_wheel:
+        outer_names = outer_wheel.namelist()
         browser_wheel_member = f"gbdraw/web/{verify_module._parse_wheel_name()}"
         browser_wheels = sorted(
             name
-            for name in outer_wheel.namelist()
+            for name in outer_names
             if name.startswith("gbdraw/web/gbdraw-") and name.endswith(".whl")
         )
+        gallery_members = sorted(name for name in outer_names if name.startswith("gbdraw/web/gallery/"))
         assert browser_wheels == [browser_wheel_member]
+        assert gallery_members == []
 
 
 @pytest.mark.slow

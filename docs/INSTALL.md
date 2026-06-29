@@ -34,6 +34,8 @@ The same UI can also be launched locally after installation with:
 gbdraw gui
 ```
 
+Local `gbdraw gui` analysis runs on your machine. The interactive Gallery examples are hosted separately at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/) and are not bundled into local installs.
+
 ## 2. Bioconda Installation
 
 Bioconda is the recommended local installation path for normal use.

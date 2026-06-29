@@ -1,11 +1,130 @@
 [
   {
+    "id": "HmmtDNA_ATskew",
+    "title": "<i>Homo sapiens</i> mitochondrion (AT skew)",
+    "tags": [
+      "Circular",
+      "Mitochondrion"
+    ],
+    "svg": "./examples/HmmtDNA_ATskew.svg",
+    "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+    "thumbnail": "./thumbnails/HmmtDNA_ATskew.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/HmmtDNA_ATskew.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/HmmtDNA_ATskew.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "HmmtDNA.gbk"
+    ],
+    "fileSizeLabel": "317 KB",
+    "command": "gbdraw circular --session session.gbdraw-session.json"
+  },
+  {
+    "id": "BGC0000708-BGC0000713",
+    "title": "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
+    "tags": [
+      "Linear",
+      "LOSAT",
+      "Orthogroup"
+    ],
+    "svg": "./examples/BGC0000708-BGC0000713.svg",
+    "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+    "thumbnail": "./thumbnails/BGC0000708-BGC0000713.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/BGC0000708-BGC0000713.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/BGC0000708-BGC0000713.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "BGC0000708.gbk",
+      "BGC0000709.gbk",
+      "BGC0000711.gbk",
+      "BGC0000712.gbk",
+      "BGC0000713.gbk"
+    ],
+    "fileSizeLabel": "906 KB",
+    "command": "gbdraw linear --session session.gbdraw-session.json"
+  },
+  {
+    "id": "WSSV_genome_comparison",
+    "title": "White spot syndrome virus genome comparison",
+    "tags": [
+      "Circular",
+      "Conservation",
+      "LOSAT"
+    ],
+    "svg": "./examples/WSSV_genome_comparison.svg",
+    "session": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
+    "thumbnail": "./thumbnails/WSSV_genome_comparison.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/WSSV_genome_comparison.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/WSSV_genome_comparison.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/WSSV_genome_comparison.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "AP027280.gb"
+    ],
+    "fileSizeLabel": "3.6 MB",
+    "command": "gbdraw circular --session session.gbdraw-session.json"
+  },
+  {
+    "id": "majanivirus_orthogroup",
+    "title": "Large dsDNA viruses (<i>Nimaviridae</i>)",
+    "tags": [
+      "Linear",
+      "LOSAT",
+      "Orthogroup"
+    ],
+    "svg": "./examples/majanivirus_orthogroup.svg",
+    "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+    "thumbnail": "./thumbnails/majanivirus_orthogroup.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/majanivirus_orthogroup.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/majanivirus_orthogroup.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "MjeNMV.gb",
+      "MelaMJNV.gb",
+      "PemoMJNVA.gb",
+      "PeseMJNV.gb",
+      "PemoMJNVB.gb",
+      "LvMJNV.gb",
+      "TrcuMJNV.gb",
+      "MeenMJNV.gb",
+      "MejoMJNV.gb"
+    ],
+    "fileSizeLabel": "11.9 MB",
+    "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup"
+  },
+  {
+    "id": "hepatoplasmataceae_orthogroup",
+    "title": "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
+    "tags": [
+      "Linear",
+      "LOSAT",
+      "Orthogroup"
+    ],
+    "svg": "./examples/hepatoplasmataceae_orthogroup.svg",
+    "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+    "thumbnail": "./thumbnails/hepatoplasmataceae_orthogroup.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/hepatoplasmataceae_orthogroup.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/hepatoplasmataceae_orthogroup.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "AP027078.gb",
+      "AP027131.gb",
+      "AP027133.gb",
+      "AP027132.gb",
+      "NZ_CP006932.gb"
+    ],
+    "fileSizeLabel": "26.6 MB",
+    "command": "gbdraw linear --protein_blastp_mode orthogroup --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai -o hepatoplasmataceae_orthogroup"
+  },
+  {
     "id": "Vnig_TUMSAT-TG-2018",
     "title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
     "tags": [
       "Circular",
-      "Multi-record",
-      "Session"
+      "Multi-record"
     ],
     "svg": "./examples/Vnig_TUMSAT-TG-2018.svg",
     "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
@@ -44,60 +163,5 @@
     ],
     "fileSizeLabel": "33.2 MB",
     "command": "gbdraw linear --losatp_threads 32 --protein_blastp_mode collinear --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai --collinear_color_mode orientation_identity -o hepatoplasmataceae_collinear"
-  },
-  {
-    "id": "hepatoplasmataceae_orthogroup",
-    "title": "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
-    "tags": [
-      "Linear",
-      "LOSAT",
-      "Orthogroup"
-    ],
-    "svg": "./examples/hepatoplasmataceae_orthogroup.svg",
-    "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
-    "thumbnail": "./thumbnails/hepatoplasmataceae_orthogroup.webp",
-    "sourceSession": "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
-    "sourceOutput": "gbdraw/web/gallery/examples/hepatoplasmataceae_orthogroup.svg",
-    "sourceFigure": "gbdraw/web/gallery/sources/hepatoplasmataceae_orthogroup.svg",
-    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
-    "featureSources": [
-      "AP027078.gb",
-      "AP027131.gb",
-      "AP027133.gb",
-      "AP027132.gb",
-      "NZ_CP006932.gb"
-    ],
-    "fileSizeLabel": "26.6 MB",
-    "command": "gbdraw linear --protein_blastp_mode orthogroup --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai -o hepatoplasmataceae_orthogroup"
-  },
-  {
-    "id": "majanivirus_orthogroup",
-    "title": "Large dsDNA viruses (<i>Nimaviridae</i>)",
-    "tags": [
-      "Linear",
-      "LOSAT",
-      "Orthogroup",
-      "Large"
-    ],
-    "svg": "./examples/majanivirus_orthogroup.svg",
-    "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
-    "thumbnail": "./thumbnails/majanivirus_orthogroup.webp",
-    "sourceSession": "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json",
-    "sourceOutput": "gbdraw/web/gallery/examples/majanivirus_orthogroup.svg",
-    "sourceFigure": "gbdraw/web/gallery/sources/majanivirus_orthogroup.svg",
-    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
-    "featureSources": [
-      "MjeNMV.gb",
-      "MelaMJNV.gb",
-      "PemoMJNVA.gb",
-      "PeseMJNV.gb",
-      "PemoMJNVB.gb",
-      "LvMJNV.gb",
-      "TrcuMJNV.gb",
-      "MeenMJNV.gb",
-      "MejoMJNV.gb"
-    ],
-    "fileSizeLabel": "11.9 MB",
-    "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup"
   }
 ]

@@ -212,7 +212,7 @@ fetch('./examples.json', { cache: 'no-cache' })
   .then((data) => {
     examples = Array.isArray(data) ? data : [];
     if (!examples.length) throw new Error('No gallery examples are configured.');
-    const initialId = normalizeHash() || DEFAULT_SAMPLE_ID;
+    const initialId = normalizeHash() || examples[0]?.id || DEFAULT_SAMPLE_ID;
     selectedId = initialId;
     renderSampleList();
     selectSample(initialId);

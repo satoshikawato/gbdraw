@@ -22,14 +22,14 @@ Use [https://gbdraw.app/](https://gbdraw.app/) if you want the fastest path to a
 
 - [CLI Reference](./CLI_Reference.md): current command help for `gbdraw`, `gbdraw circular`, and `gbdraw linear`.
 - [Gallery](./GALLERY.md): example plots and the commands used to generate them.
-- [Interactive SVG Gallery](https://gbdraw.app/gallery/): JavaScript-enabled SVG examples embedded in sandboxed iframes.
+- [Interactive SVG Gallery](https://gbdraw.app/gallery/): hosted JavaScript-enabled SVG examples embedded in sandboxed iframes.
 - [FAQ](./FAQ.md): common questions, limitations, and workarounds.
 - [About](./ABOUT.md): citation information and project background.
 
 ## Interface Guide
 
 - Hosted web app: [https://gbdraw.app/](https://gbdraw.app/)
-- Interactive SVG gallery: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
+- Hosted interactive SVG gallery: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
 - Protein blastp comparisons: `--protein_blastp_mode pairwise` draws adjacent protein matches, `orthogroup` adds all-record gene-family metadata, and `collinear` summarizes orthogroup-backed anchors as gene-order-preserving blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`; see [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#4-what-orthogroups-and-collinear-blocks-mean) for the biological meaning of Orthogroups and Collinear blocks.
