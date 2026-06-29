@@ -34,6 +34,7 @@ class GallerySessionExample:
     interactive_step: str = ""
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
     generate_output_from_session: bool = False
+    command: str = ""
 
     @property
     def session_path(self) -> Path:
@@ -68,6 +69,70 @@ class GallerySessionExample:
         return f"./thumbnails/{self.id}.webp"
 
 
+HMMTDNA_ATSKEW_COMMAND = (
+    "gbdraw circular -o HmmtDNA_ATskew --species '<i>Homo sapiens</i>' "
+    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p ajisai --window 500 --step 50 "
+    "--definition_font_size 28 --label_font_size 20 --track_type middle -l left --labels "
+    "--qualifier_priority HmmtDNA_qualifier_priority.tsv --circular_track_axis_index 0 "
+    "--circular_track_slot features:features@lane_direction=split "
+    "--circular_track_slot gc_content:dinucleotide_content@w=0.1 "
+    "--circular_track_slot gc_skew:dinucleotide_skew@w=0.1 "
+    "--circular_track_slot "
+    "'a_skew_2:dinucleotide_skew@w=0.1,nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew' "
+    "--circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out "
+    "--gbk HmmtDNA.gbk -f interactive_svg"
+)
+
+BGC_COMMAND = (
+    "gbdraw linear --protein_blastp_mode orthogroup -f interactive_svg "
+    "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
+    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
+    "-d BGC0000708-BGC0000713_default_colors.tsv "
+    "-t BGC0000708-BGC0000713_specific_colors.tsv "
+    "--qualifier_priority BGC0000708-BGC0000713_qualifier_priority.tsv "
+    "--show_labels first --label_placement above_feature --label_rotation 45 "
+    "--pairwise_match_style curve --scale_style ruler "
+    "--plot_title 'Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.' "
+    "--keep_definition_left_aligned --identity 30 --block_stroke_width 2 "
+    "--block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 "
+    "--legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 "
+    "--ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold "
+    "--definition_line_style subtitle:size=20 "
+    "--definition_line_style 'accession:size=20,color=#7b7c7d' "
+    "--definition_line_style 'length:size=20,color=#7b7c7d' "
+    "-l bottom -o BGC0000708-BGC0000713"
+)
+
+WSSV_CONSERVATION_LABELS = (
+    "CN01 WSSV-TW WSSV-CN WSSV-TH JP01A JP01B Pc2020 E1 0722-1 CN03 "
+    "CN04 WSSV-AU EU129 GCF7 MES-753 Shantou2019 POMZ1 POMZ4 "
+    "MG18PR-0187-N40S Angostura2013"
+)
+WSSV_CONSERVATION_BLASTS = " ".join(
+    f"{label}.circular_conservation.losatn.tsv" for label in WSSV_CONSERVATION_LABELS.split()
+)
+WSSV_CONSERVATION_COLORS = (
+    "'#6e91b7' '#f4a251' '#77b26f' '#e67577' '#8fc4c0' '#f0d369' '#be92b2' "
+    "'#ffafb7' '#ae8e7c' '#c6bebb' '#6e91b7' '#f4a251' '#e67577' '#8fc4c0' "
+    "'#bcb4ca' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb'"
+)
+WSSV_COMMAND = (
+    "gbdraw circular -o WSSV_genome_comparison --separate_strands "
+    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p royal_gala "
+    "--qualifier_priority WSSV_qualifier_priority.tsv --block_stroke_width 1 "
+    "--line_stroke_width 2 --legend_box_size 12 --legend_font_size 12 "
+    "--suppress_gc --suppress_skew --track_type spreadout -l left --feature_width 10 "
+    "--outer_label_x_radius_offset 1 --outer_label_y_radius_offset 1 "
+    f"--conservation_blast {WSSV_CONSERVATION_BLASTS} "
+    "--conservation_reference subject "
+    f"--conservation_labels {WSSV_CONSERVATION_LABELS} "
+    f"--conservation_colors {WSSV_CONSERVATION_COLORS} "
+    "--conservation_ring_width 5 --conservation_ring_gap 2 --bitscore 100 "
+    "--evalue 1e-30 --identity 90 --alignment_length 100 --gbk AP027280.gb "
+    "-f interactive_svg"
+)
+
+
 EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",
@@ -94,18 +159,21 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         title="Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         tags=("Linear", "LOSAT", "Orthogroup"),
         generate_output_from_session=True,
+        command=BGC_COMMAND,
     ),
     GallerySessionExample(
         id="HmmtDNA_ATskew",
         title="<i>Homo sapiens</i> mitochondrion (AT skew)",
         tags=("Circular", "Mitochondrion"),
         generate_output_from_session=True,
+        command=HMMTDNA_ATSKEW_COMMAND,
     ),
     GallerySessionExample(
         id="WSSV_genome_comparison",
         title="White spot syndrome virus genome comparison",
         tags=("Circular", "Conservation", "LOSAT"),
         generate_output_from_session=True,
+        command=WSSV_COMMAND,
     ),
 )
 
@@ -162,6 +230,12 @@ def _session_command(session: dict[str, Any]) -> str:
     if raw_args:
         return shlex.join(["gbdraw", mode, *raw_args])
     return shlex.join(["gbdraw", mode, "--session", "session.gbdraw-session.json"])
+
+
+def _example_command(example: GallerySessionExample, session: dict[str, Any]) -> str:
+    if example.command:
+        return example.command
+    return _session_command(session)
 
 
 def _session_feature_sources(session: dict[str, Any]) -> list[str]:
@@ -334,7 +408,7 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
             "sourceNote": example.source_note,
             "featureSources": _session_feature_sources(session),
             "fileSizeLabel": _format_size(example.gallery_svg_path.stat().st_size),
-            "command": _session_command(session),
+            "command": _example_command(example, session),
         }
         if example.description:
             entry["description"] = example.description
