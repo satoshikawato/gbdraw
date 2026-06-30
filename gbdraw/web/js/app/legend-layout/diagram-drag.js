@@ -1,7 +1,9 @@
 import { parseTransform } from './transform-utils.js';
 
-export const createDiagramDragActions = ({ state }) => {
+export const createDiagramDragActions = ({ state, debugLog = () => {}, history = null }) => {
   const {
+    results,
+    selectedResultIndex,
     svgContainer,
     diagramElements,
     diagramElementIds,
@@ -19,7 +21,8 @@ export const createDiagramDragActions = ({ state }) => {
     plotTitleUserOffset,
     layoutRepositionMode,
     zoom,
-    generatedLegendPosition
+    generatedLegendPosition,
+    skipCaptureBaseConfig
   } = state;
 
   const LEGEND_GROUP_IDS = new Set([
@@ -37,6 +40,7 @@ export const createDiagramDragActions = ({ state }) => {
   let activePlotTitleOffsetStart = { x: 0, y: 0 };
   let diagramDragFrameId = null;
   let pendingDiagramPointer = null;
+  let diagramDragTxPromise = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
@@ -54,6 +58,21 @@ export const createDiagramDragActions = ({ state }) => {
       cancelAnimationFrame(diagramDragFrameId);
       diagramDragFrameId = null;
     }
+  };
+
+  const beginDragTransaction = (label) => {
+    diagramDragTxPromise = history?.begin
+      ? history.begin(label, { source: 'diagram-drag' })
+      : null;
+  };
+
+  const persistCurrentSvg = () => {
+    const svg = svgContainer.value?.querySelector?.('svg');
+    const idx = selectedResultIndex.value;
+    if (!svg || idx < 0 || results.value.length <= idx) return;
+    skipCaptureBaseConfig.value = true;
+    const serializer = new XMLSerializer();
+    results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
   };
 
   const isMultiRecordCanvasSvg = (svg) => {
@@ -347,6 +366,7 @@ export const createDiagramDragActions = ({ state }) => {
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
+    beginDragTransaction('Move length bar');
     lengthBarElement.value = group;
     diagramDragging.value = true;
     plotTitleDragging.value = false;
@@ -370,6 +390,7 @@ export const createDiagramDragActions = ({ state }) => {
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
+    beginDragTransaction('Move plot title');
     assignPlotTitleElement(group);
     diagramDragging.value = true;
     plotTitleDragging.value = true;
@@ -437,6 +458,7 @@ export const createDiagramDragActions = ({ state }) => {
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
+    beginDragTransaction(activeDragMode === 'record' ? 'Move record' : 'Move diagram');
     diagramDragging.value = true;
     plotTitleDragging.value = false;
     diagramDragStart.x = e.clientX;
@@ -509,7 +531,7 @@ export const createDiagramDragActions = ({ state }) => {
     });
   };
 
-  const endDiagramDrag = (e) => {
+  const endDiagramDrag = async (e) => {
     if (!diagramDragging.value) return;
 
     const dragStart = getActiveDragStart();
@@ -542,18 +564,22 @@ export const createDiagramDragActions = ({ state }) => {
     activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
     pendingDiagramPointer = null;
+    persistCurrentSvg();
+    const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
+    diagramDragTxPromise = null;
+    if (tx && history?.commit) await history.commit(tx);
   };
 
   const resetDiagramPosition = () => {
     diagramOffset.x = 0;
     diagramOffset.y = 0;
 
-    console.log('[DEBUG] resetDiagramPosition called');
-    console.log('[DEBUG] diagramElements count:', diagramElements.value.length);
-    console.log('[DEBUG] originalTransforms size:', diagramElementOriginalTransforms.value.size);
-    console.log('[DEBUG] All originalTransforms entries:');
+    debugLog('resetDiagramPosition called');
+    debugLog('diagramElements count:', diagramElements.value.length);
+    debugLog('originalTransforms size:', diagramElementOriginalTransforms.value.size);
+    debugLog('All originalTransforms entries:');
     diagramElementOriginalTransforms.value.forEach((transform, mapEl) => {
-      console.log(`[DEBUG]   Map entry: ${mapEl.id} -> (${transform.x}, ${transform.y})`);
+      debugLog(`Map entry: ${mapEl.id} -> (${transform.x}, ${transform.y})`);
     });
 
     diagramElements.value.forEach((el, idx) => {
@@ -563,8 +589,8 @@ export const createDiagramDragActions = ({ state }) => {
       diagramElementOriginalTransforms.value.forEach((_, mapEl) => {
         if (mapEl === el) foundInMap = true;
       });
-      console.log(
-        `[DEBUG] Reset element ${idx} (${el.id}): current="${currentTransform}", foundInMap=${foundInMap}, original=`,
+      debugLog(
+        `Reset element ${idx} (${el.id}): current="${currentTransform}", foundInMap=${foundInMap}, original=`,
         original
       );
       if (original && (original.x !== 0 || original.y !== 0)) {
@@ -615,9 +641,9 @@ export const createDiagramDragActions = ({ state }) => {
 
     const remapCounters = new Map();
     const originalTransforms = new Map();
-    console.log(`[DEBUG] ========== setupDiagramDrag CALL #${setupDiagramDragCallCount} ==========`);
-    console.log(
-      `[DEBUG] setupDiagramDrag: preserveOffset=${preserveOffset}, offset=(${diagramOffset.x}, ${diagramOffset.y}), generatedLegendPosition=${generatedLegendPosition.value}, isMultiRecordCanvas=${isMultiRecordCanvas}`
+    debugLog(`setupDiagramDrag call #${setupDiagramDragCallCount}`);
+    debugLog(
+      `setupDiagramDrag: preserveOffset=${preserveOffset}, offset=(${diagramOffset.x}, ${diagramOffset.y}), generatedLegendPosition=${generatedLegendPosition.value}, isMultiRecordCanvas=${isMultiRecordCanvas}`
     );
     foundElements.forEach((el, idx) => {
       if (preserveOffset && isMultiRecordCanvas) {
@@ -629,8 +655,8 @@ export const createDiagramDragActions = ({ state }) => {
             const preservedTransform = preserved[preservedIdx];
             remapCounters.set(id, preservedIdx + 1);
             originalTransforms.set(el, preservedTransform);
-            console.log(
-              `[DEBUG] setupDiagramDrag element ${idx} (${id}): remapped preserved original=(${preservedTransform.x}, ${preservedTransform.y})`
+            debugLog(
+              `setupDiagramDrag element ${idx} (${id}): remapped preserved original=(${preservedTransform.x}, ${preservedTransform.y})`
             );
             return;
           }
@@ -638,22 +664,22 @@ export const createDiagramDragActions = ({ state }) => {
       }
 
       const transform = parseTransform(el.getAttribute('transform'));
-      console.log(`[DEBUG] setupDiagramDrag element ${idx} (${el.id}): DOM transform=(${transform.x}, ${transform.y})`);
+      debugLog(`setupDiagramDrag element ${idx} (${el.id}): DOM transform=(${transform.x}, ${transform.y})`);
       if (!isMultiRecordCanvas && preserveOffset && (diagramOffset.x !== 0 || diagramOffset.y !== 0)) {
         const adjusted = {
           x: transform.x - diagramOffset.x,
           y: transform.y - diagramOffset.y
         };
-        console.log(`[DEBUG] setupDiagramDrag element ${idx}: adjusted to (${adjusted.x}, ${adjusted.y})`);
+        debugLog(`setupDiagramDrag element ${idx}: adjusted to (${adjusted.x}, ${adjusted.y})`);
         originalTransforms.set(el, adjusted);
       } else {
         originalTransforms.set(el, transform);
       }
     });
     diagramElementOriginalTransforms.value = originalTransforms;
-    console.log(`[DEBUG] setupDiagramDrag FINISHED: Set ${originalTransforms.size} original transforms`);
+    debugLog(`setupDiagramDrag finished: set ${originalTransforms.size} original transforms`);
     originalTransforms.forEach((transform, el) => {
-      console.log(`[DEBUG]   -> ${el.id}: (${transform.x}, ${transform.y})`);
+      debugLog(`${el.id}: (${transform.x}, ${transform.y})`);
     });
 
     refreshDiagramDragAffordances();

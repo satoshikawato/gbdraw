@@ -851,6 +851,14 @@
             </div>
             
                 <div class="app-toolbar flex items-center gap-2 min-w-0">
+                <div class="app-history-actions flex gap-0.5">
+                    <button @click="undoHistory" :disabled="!canUndoHistory" data-history-ignore class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1.5 py-0.5 rounded border border-slate-200 bg-white flex items-center disabled:opacity-40 disabled:cursor-not-allowed" :title="undoHistoryTitle" aria-label="Undo">
+                        <i class="ph ph-arrow-u-up-left"></i>
+                    </button>
+                    <button @click="redoHistory" :disabled="!canRedoHistory" data-history-ignore class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1.5 py-0.5 rounded border border-slate-200 bg-white flex items-center disabled:opacity-40 disabled:cursor-not-allowed" :title="redoHistoryTitle" aria-label="Redo">
+                        <i class="ph ph-arrow-u-up-right"></i>
+                    </button>
+                </div>
                 <div class="app-file-actions flex gap-0.5">
                     <button @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
                         <i class="ph ph-arrow-clockwise"></i> Reset Settings
@@ -3128,11 +3136,13 @@
                         <div class="gfs-row">
                             <input type="search"
                                    v-model="previewFeatureSearchInput"
+                                   data-history-ignore
                                    @keydown.enter.prevent="applyPreviewFeatureSearch"
                                    class="gfs-input gfs-query"
                                    placeholder="Search features"
                                    aria-label="Search features">
                             <select v-model="previewFeatureSearchField"
+                                    data-history-ignore
                                     class="gfs-select"
                                     aria-label="Search field">
                                 <option v-for="field in previewFeatureSearchFieldOptions" :key="field.id" :value="field.id">
@@ -3152,23 +3162,26 @@
                             <input v-if="adv.rich_feature_popup !== false"
                                    type="text"
                                    v-model="previewFeatureSearchQualifierKey"
+                                   data-history-ignore
                                    @keydown.enter.prevent="applyPreviewFeatureSearch"
                                    :disabled="!previewFeatureSearchQualifierEnabled"
                                    class="gfs-input gfs-qualifier"
                                    placeholder="Qualifier key"
                                    aria-label="Qualifier key">
                             <label class="gfs-toggle">
-                                <input type="checkbox" v-model="previewFeatureSearchUseRegex">
+                                <input type="checkbox" v-model="previewFeatureSearchUseRegex" data-history-ignore>
                                 <span>Regex</span>
                             </label>
                             <button type="button"
                                     @click.stop="goToPreviousPreviewFeatureSearchMatch"
+                                    data-history-ignore
                                     :disabled="!previewFeatureSearchHasMatches"
                                     class="gfs-button"
                                     title="Previous match"
                                     aria-label="Previous match">&lt;</button>
                             <button type="button"
                                     @click.stop="goToNextPreviewFeatureSearchMatch"
+                                    data-history-ignore
                                     :disabled="!previewFeatureSearchHasMatches"
                                     class="gfs-button"
                                     title="Next match"
@@ -4474,7 +4487,7 @@
                             </select>
                         </div>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0">
-                            <input v-model="featureSearchInput" placeholder="Search by feature or annotation..." class="form-input text-xs w-full">
+                            <input v-model="featureSearchInput" data-history-ignore placeholder="Search by feature or annotation..." class="form-input text-xs w-full">
                         </div>
                         <div ref="featureListScrollRef" class="flex-grow overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
                             <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
@@ -4537,8 +4550,8 @@
                                 </span>
                             </div>
                             <div class="grid grid-cols-[1fr_120px] gap-2">
-                                <input v-model="orthogroupSearch" placeholder="Search orthogroups..." class="form-input text-xs w-full">
-                                <select v-model="orthogroupSortMode" class="form-select text-xs w-full">
+                                <input v-model="orthogroupSearch" data-history-ignore placeholder="Search orthogroups..." class="form-input text-xs w-full">
+                                <select v-model="orthogroupSortMode" data-history-ignore class="form-select text-xs w-full">
                                     <option value="id">ID</option>
                                     <option value="name">Name</option>
                                     <option value="member_count">Members</option>

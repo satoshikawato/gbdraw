@@ -1,4 +1,4 @@
-const { ref, reactive, computed } = window.Vue;
+const { ref, reactive, computed, nextTick } = window.Vue;
 
 export const HelpTip = {
   template: '#help-tip-template',
@@ -70,15 +70,34 @@ export const FileUploader = {
     });
     const handleFile = (e) => {
       const nextFiles = Array.from(e.target.files || []);
-      if (props.multiple) {
-        emit('update:modelValue', nextFiles);
-      } else if (nextFiles[0]) {
-        emit('update:modelValue', nextFiles[0]);
+      const update = () => {
+        if (props.multiple) {
+          emit('update:modelValue', nextFiles);
+        } else if (nextFiles[0]) {
+          emit('update:modelValue', nextFiles[0]);
+        }
+      };
+      const history = window.__GBDRAW_HISTORY__;
+      if (history?.runUndoable) {
+        void history.runUndoable('Change uploaded file', async () => {
+          update();
+          await nextTick();
+        });
+      } else {
+        update();
       }
       e.target.value = '';
     };
     const clearFile = () => {
-      emit('update:modelValue', props.multiple ? [] : null);
+      const history = window.__GBDRAW_HISTORY__;
+      if (history?.runUndoable) {
+        void history.runUndoable('Change uploaded file', async () => {
+          emit('update:modelValue', props.multiple ? [] : null);
+          await nextTick();
+        });
+      } else {
+        emit('update:modelValue', props.multiple ? [] : null);
+      }
     };
     return { input, handleFile, clearFile, hasSelection, selectedLabel };
   }

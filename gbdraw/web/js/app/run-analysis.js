@@ -1227,7 +1227,7 @@ export const createRunAnalysis = ({
     }
   };
 
-  const scheduleFeatureExtraction = (context) => {
+  const extractGeneratedDiagramFeatures = async (context) => {
     featureExtractionPending.value = true;
     featureExtractionError.value = null;
     setFeatureEditorStatus({
@@ -1236,12 +1236,7 @@ export const createRunAnalysis = ({
       error: null,
       summaryCount: 0
     });
-    const run = () => extractFeaturesForColorEditor(context);
-    if (typeof globalThis.requestIdleCallback === 'function') {
-      globalThis.requestIdleCallback(run, { timeout: 500 });
-    } else {
-      setTimeout(run, 0);
-    }
+    await extractFeaturesForColorEditor(context);
   };
 
   const getSeqLabel = (seq, fallback) => {
@@ -4290,7 +4285,8 @@ json.dumps({
           (mode.value === 'linear' && lInputType.value === 'gb' && linearSeqs.length > 0);
 
         if (shouldExtractFeatures) {
-          scheduleFeatureExtraction({
+          setProcessingStatus('Indexing features...');
+          await extractGeneratedDiagramFeatures({
             requestId: featureExtractionRequestId,
             mode: mode.value,
             cInputType: cInputType.value,
@@ -4301,6 +4297,9 @@ json.dumps({
             recordSelectors: [...recordSelectors],
             reverseFlags: [...reverseFlags]
           });
+          if (generationToken !== latestGenerationToken) {
+            return { status: 'stale' };
+          }
         } else {
           featureExtractionPending.value = false;
           featureExtractionError.value = null;

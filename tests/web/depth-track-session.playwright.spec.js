@@ -5,6 +5,7 @@ const { extname, join, normalize, resolve, sep } = require('node:path');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionPath = join(repoRoot, 'tests/test_inputs/2026-06-16_wssv.gbdraw-session.json');
+const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -60,7 +61,7 @@ test('WSSV depth session removes stale circular depth metadata and slots', async
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
-  await page.locator('input[accept=".json"]').nth(1).setInputFiles(sessionPath);
+  await page.locator('input[accept=".json"]').first().setInputFiles(sessionPath);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return Array.isArray(app?.files?.c_depth) && app.files.c_depth.length === 2;
@@ -119,4 +120,74 @@ test('WSSV depth session removes stale circular depth metadata and slots', async
   expect(afterRemoval.slots.filter((slot) => slot.enabled).map((slot) => slot.trackIndex)).toEqual([0]);
   expect(afterRemoval.slots.some((slot) => Number(slot.trackIndex) >= 1)).toBe(false);
   expect(afterRemoval.slots.some((slot) => String(slot.legendLabel || '').includes('SRR14027712'))).toBe(false);
+});
+
+test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.pyodideReady = true;
+  });
+
+  await page.locator('input[accept=".json"]').first().setInputFiles(bgcSessionPath);
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+  await page.waitForTimeout(250);
+
+  const summary = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const svg =
+      document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement ||
+      document.querySelector('svg');
+    const renderedIds = Array.from(
+      svg?.querySelectorAll('[data-gbdraw-feature-id], path[id^="f"], polygon[id^="f"], rect[id^="f"]') || []
+    )
+      .map((el) => el.getAttribute('data-gbdraw-feature-id') || el.id || '')
+      .filter(Boolean);
+    const uniqueRenderedIds = Array.from(new Set(renderedIds));
+    const featureIds = new Set(
+      (Array.isArray(app.extractedFeatures) ? app.extractedFeatures : [])
+        .map((feature) => String(feature?.svg_id || '').trim())
+        .filter(Boolean)
+    );
+    return {
+      extractedCount: Array.isArray(app.extractedFeatures) ? app.extractedFeatures.length : 0,
+      uniqueRenderedCount: uniqueRenderedIds.length,
+      matchedCount: uniqueRenderedIds.filter((id) => featureIds.has(id)).length
+    };
+  });
+
+  expect(summary.extractedCount).toBeGreaterThan(0);
+  expect(summary.uniqueRenderedCount).toBeGreaterThan(0);
+  expect(summary.matchedCount).toBe(summary.uniqueRenderedCount);
+
+  const target = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const svg =
+      document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement ||
+      document.querySelector('svg');
+    const featureIds = new Set(
+      (Array.isArray(app.extractedFeatures) ? app.extractedFeatures : [])
+        .map((feature) => String(feature?.svg_id || '').trim())
+        .filter(Boolean)
+    );
+    const element = Array.from(
+      svg.querySelectorAll('[data-gbdraw-feature-id], path[id^="f"], polygon[id^="f"], rect[id^="f"]')
+    ).find((candidate) => featureIds.has(candidate.getAttribute('data-gbdraw-feature-id') || candidate.id || ''));
+    element.scrollIntoView({ block: 'center', inline: 'center' });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const rect = element.getBoundingClientRect();
+    return {
+      id: element.getAttribute('data-gbdraw-feature-id') || element.id || '',
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  });
+
+  await page.mouse.click(target.x, target.y);
+  await page.waitForFunction(
+    (featureId) => window.__GBDRAW_APP__?.clickedFeature?.svg_id === featureId,
+    target.id
+  );
+  await expect(page.locator('.feature-popup')).toBeVisible();
 });

@@ -395,7 +395,7 @@ export const setupWatchers = ({
         if (svg) {
           const tickEl = svg.getElementById('tick');
           if (tickEl) {
-            console.log(`[DEBUG] After DOM update - tick transform: ${tickEl.getAttribute('transform')}`);
+            debugLog(`After DOM update - tick transform: ${tickEl.getAttribute('transform')}`);
           }
         }
       }
