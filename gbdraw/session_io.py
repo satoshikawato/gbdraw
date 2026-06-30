@@ -743,6 +743,8 @@ def _append_linear_gui_args(
         _append_flag(run_args, invocation_args, "--show_labels")
     elif labels_mode == "first":
         _append_pair(run_args, invocation_args, "--show_labels", "first")
+    elif labels_mode == "orthogroup_top":
+        _append_pair(run_args, invocation_args, "--show_labels", "orthogroup_top")
     for key, option in (
         ("feature_height", "--feature_height"),
         ("gc_height", "--gc_height"),
@@ -1397,7 +1399,7 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
                 "show_labels_linear": _optional_choice_option_value(
                     args,
                     "--show_labels",
-                    choices=("all", "first", "none"),
+                    choices=("all", "first", "orthogroup_top", "none"),
                     default_when_present="all",
                     default_when_absent="none",
                 ),

@@ -327,8 +327,8 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       return;
     }
 
-    console.log(
-      `[DEBUG] Reapplying ${legendOverrideCount} legend stroke override(s) and ${featureOverrideCount} feature stroke override(s) to new SVG`
+    debugLog(
+      `Reapplying ${legendOverrideCount} legend stroke override(s) and ${featureOverrideCount} feature stroke override(s) to new SVG`
     );
 
     let totalUpdated = 0;
@@ -384,7 +384,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
         const serializer = new XMLSerializer();
         results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
       }
-      console.log(`[DEBUG] Reapplied stroke overrides to ${totalUpdated} elements`);
+      debugLog(`Reapplied stroke overrides to ${totalUpdated} elements`);
     }
   };
 

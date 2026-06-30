@@ -1,7 +1,27 @@
-import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js';
+import { state, createLinearSeq, normalizeLinearSeqList, reconcileLinearSeqPairData } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
-import { exportSession, importSession as importSessionFromFile } from '../services/config.js';
+import {
+  applyConfigData,
+  applyEditorStateData,
+  applyFeatureStateData,
+  applyOrthogroupStateData,
+  applyResultsData,
+  applyRunStateData,
+  applyUiStateData,
+  buildConfigData,
+  buildEditorStateData,
+  buildFeatureStateData,
+  buildOrthogroupStateData,
+  buildRunStateData,
+  buildUiStateData,
+  exportSession,
+  importSession as importSessionFromFile,
+  serializeResults
+} from '../services/config.js';
+import { createHistoryManager } from '../services/history.js';
+import { createHistoryFileStore } from '../services/history-files.js';
+import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
   disposeDiagramGenerationWorker,
@@ -18,6 +38,8 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
+import { setupHistoryInputs } from './history-inputs.js';
+import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createOrthogroupEditor } from './orthogroups.js';
 import {
   createCircularTrackSlotEditor,
@@ -71,6 +93,7 @@ export const createAppSetup = () => {
     pairwiseMatchFactors,
     svgContent,
     zoom,
+    layoutRepositionMode,
     isPanning,
     panStart,
     canvasPan,
@@ -230,10 +253,60 @@ export const createAppSetup = () => {
   const pyodideManager = createPyodideManager({ state });
   const getPyodide = pyodideManager.getPyodide;
 
+  const historyFileStore = createHistoryFileStore();
+  const historySnapshots = createHistorySnapshotService({
+    state,
+    fileStore: historyFileStore,
+    nextTick,
+    normalizeLinearSeqList,
+    buildConfigData,
+    applyConfigData,
+    buildUiStateData,
+    applyUiStateData,
+    buildFeatureStateData,
+    applyFeatureStateData,
+    buildEditorStateData,
+    applyEditorStateData,
+    buildOrthogroupStateData,
+    applyOrthogroupStateData,
+    serializeResults,
+    applyResultsData,
+    buildRunStateData,
+    applyRunStateData
+  });
+  const history = createHistoryManager({
+    buildSnapshot: historySnapshots.buildHistorySnapshot,
+    applySnapshot: historySnapshots.applyHistorySnapshot,
+    snapshotSignature: historySnapshots.snapshotSignature,
+    fileStore: historyFileStore,
+    makeRef: ref
+  });
+  window.__GBDRAW_HISTORY__ = history;
+  const canUndoHistory = computed(() => {
+    void history.revision.value;
+    return history.canUndo();
+  });
+  const canRedoHistory = computed(() => {
+    void history.revision.value;
+    return history.canRedo();
+  });
+  const undoHistoryTitle = computed(() => {
+    void history.revision.value;
+    const label = history.undoLabel();
+    return label ? `Undo ${label}` : 'Undo';
+  });
+  const redoHistoryTitle = computed(() => {
+    void history.revision.value;
+    const label = history.redoLabel();
+    return label ? `Redo ${label}` : 'Redo';
+  });
+  const undoHistory = () => history.undo();
+  const redoHistory = () => history.redo();
+
   const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
-  const legendActions = createLegendManager({ state, getPyodide, debugLog });
+  const legendActions = createLegendManager({ state, getPyodide, debugLog, history });
   const svgActions = createSvgStyles({ state, watch, legendActions });
   const featureActions = createFeatureEditor({
     state,
@@ -279,9 +352,21 @@ export const createAppSetup = () => {
     resetFeatureListScroll
   );
 
+  let disposeHistoryInputs = null;
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
+  setupHistoryShortcuts({ history, onMounted, onUnmounted });
+  onMounted(async () => {
+    disposeHistoryInputs = setupHistoryInputs({
+      root: document.getElementById('app'),
+      history,
+      nextTick
+    });
+    await history.captureBaseline('Initial state');
+  });
   onUnmounted(() => {
     if (featureSearchDebounceId !== null) clearTimeout(featureSearchDebounceId);
+    if (typeof disposeHistoryInputs === 'function') disposeHistoryInputs();
+    if (window.__GBDRAW_HISTORY__ === history) delete window.__GBDRAW_HISTORY__;
     previewFeatureSearch.dispose();
     disposeDiagramGenerationWorker();
   });
@@ -825,7 +910,7 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
+  const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions, history });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
     cancelRunAnalysis,
@@ -915,8 +1000,14 @@ export const createAppSetup = () => {
     }
   };
 
-  const importSession = async (event) =>
-    importSessionFromFile(event, { afterLoad: refreshLoadedSessionSvgLayout });
+  const importSession = async (event) => {
+    const result = await importSessionFromFile(event, { afterLoad: refreshLoadedSessionSvgLayout });
+    if (result?.status === 'ok' || result?.status === 'legacy') {
+      await nextTick();
+      await history.captureBaseline('Loaded session');
+    }
+    return result;
+  };
 
   const {
     addNewLegendEntry,
@@ -982,6 +1073,33 @@ export const createAppSetup = () => {
   } = featureActions;
 
   const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
+  const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
+  const setFeatureVisibilityWithHistory = undoableAction('Change feature visibility', setFeatureVisibility);
+  const updateClickedFeatureVisibilityWithHistory = undoableAction(
+    'Change feature visibility',
+    updateClickedFeatureVisibility
+  );
+  const requestFeatureColorChangeWithHistory = undoableAction('Change feature color', requestFeatureColorChange);
+  const updateClickedFeatureColorWithHistory = undoableAction('Change feature color', updateClickedFeatureColor);
+  const handleColorScopeChoiceWithHistory = undoableAction('Change feature color', handleColorScopeChoice);
+  const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
+  const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
+  const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
+  const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
+  const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
+  const resetClickedFeatureStrokeWithHistory = undoableAction('Reset feature stroke', resetClickedFeatureStroke);
+  const applyStrokeToAllSiblingsWithHistory = undoableAction('Change feature stroke', applyStrokeToAllSiblings);
+  const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
+  const updateClickedFeatureLabelTextWithHistory = undoableAction('Change label text', updateClickedFeatureLabelText);
+  const handleLabelTextScopeChoiceWithHistory = undoableAction('Change label text', handleLabelTextScopeChoice);
+  const handleGlobalLabelModeChoiceWithHistory = undoableAction('Change label visibility', handleGlobalLabelModeChoice);
+  const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
+    'Change label text',
+    requestLabelTextChangeByFeatureId
+  );
+  const requestLabelTextChangeByKeyWithHistory = undoableAction('Change label text', requestLabelTextChangeByKey);
+  const resetAllLabelTextOverridesWithHistory = undoableAction('Reset label edits', resetAllLabelTextOverrides);
+  const loadLabelOverrideTableWithHistory = undoableAction('Load label edits', loadLabelOverrideTable);
   const runInfoCopyStatus = ref('');
 
   const runInfoElapsedText = (info) => formatElapsedMs(info?.elapsedMs);
@@ -1025,7 +1143,7 @@ export const createAppSetup = () => {
     }
   };
 
-  const runAnalysis = async () => {
+  const runAnalysis = async () => history.runUndoable('Generate diagram', async () => {
     cancelDefinitionUpdate();
     if (!pyodideReady.value) {
       if (processing.value) return { status: 'skipped' };
@@ -1055,7 +1173,7 @@ export const createAppSetup = () => {
       diagramGenerationWorkerError.value = null;
     }
     return result;
-  };
+  });
 
   const cancelGeneration = () => {
     cancelRunAnalysis();
@@ -1832,6 +1950,7 @@ export const createAppSetup = () => {
     runInfoCopyStatus,
     svgContent,
     zoom,
+    layoutRepositionMode,
     isPanning,
     handleWheel,
     canvasPan,
@@ -2121,9 +2240,9 @@ export const createAppSetup = () => {
     featureStrokeOverrides,
     getFeatureColor,
     getFeatureVisibility,
-    setFeatureVisibility,
-    requestFeatureColorChange,
-    setFeatureColor,
+    setFeatureVisibility: setFeatureVisibilityWithHistory,
+    requestFeatureColorChange: requestFeatureColorChangeWithHistory,
+    setFeatureColor: setFeatureColorWithHistory,
     canEditFeatureColor,
     getEditableLabelByFeatureId,
     svgContainer,
@@ -2156,30 +2275,30 @@ export const createAppSetup = () => {
     resetOrthogroupAlignment,
     openClickedOrthogroupInEditor,
     specificRuleLegendOptions,
-    updateClickedFeatureColor,
-    updateClickedFeatureVisibility,
-    handleLegendNameCommit,
+    updateClickedFeatureColor: updateClickedFeatureColorWithHistory,
+    updateClickedFeatureVisibility: updateClickedFeatureVisibilityWithHistory,
+    handleLegendNameCommit: handleLegendNameCommitWithHistory,
     selectLegendNameOption,
-    resetClickedFeatureFillColor,
-    updateClickedFeatureStroke,
-    resetClickedFeatureStroke,
-    applyStrokeToAllSiblings,
+    resetClickedFeatureFillColor: resetClickedFeatureFillColorWithHistory,
+    updateClickedFeatureStroke: updateClickedFeatureStrokeWithHistory,
+    resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
+    applyStrokeToAllSiblings: applyStrokeToAllSiblingsWithHistory,
     colorScopeDialog,
-    handleColorScopeChoice,
+    handleColorScopeChoice: handleColorScopeChoiceWithHistory,
     legendRenameDialog,
-    handleLegendRenameChoice,
+    handleLegendRenameChoice: handleLegendRenameChoiceWithHistory,
     resetColorDialog,
-    handleResetColorChoice,
+    handleResetColorChoice: handleResetColorChoiceWithHistory,
     labelTextScopeDialog,
     globalLabelModeDialog,
-    updateClickedFeatureLabelText,
-    handleLabelTextScopeChoice,
-    handleGlobalLabelModeChoice,
-    requestLabelTextChangeByFeatureId,
-    requestLabelTextChangeByKey,
-    resetAllLabelTextOverrides,
+    updateClickedFeatureLabelText: updateClickedFeatureLabelTextWithHistory,
+    handleLabelTextScopeChoice: handleLabelTextScopeChoiceWithHistory,
+    handleGlobalLabelModeChoice: handleGlobalLabelModeChoiceWithHistory,
+    requestLabelTextChangeByFeatureId: requestLabelTextChangeByFeatureIdWithHistory,
+    requestLabelTextChangeByKey: requestLabelTextChangeByKeyWithHistory,
+    resetAllLabelTextOverrides: resetAllLabelTextOverridesWithHistory,
     downloadLabelOverrideTable,
-    loadLabelOverrideTable,
+    loadLabelOverrideTable: loadLabelOverrideTableWithHistory,
     syncLabelEditor,
     openFeatureEditorFromList,
     showLegendPanel,
@@ -2231,6 +2350,12 @@ export const createAppSetup = () => {
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
+    canUndoHistory,
+    canRedoHistory,
+    undoHistoryTitle,
+    redoHistoryTitle,
+    undoHistory,
+    redoHistory,
     manualPriorityRules,
     newPriorityRule,
     addPriorityRule

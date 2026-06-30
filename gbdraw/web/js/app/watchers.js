@@ -27,6 +27,7 @@ export const setupWatchers = ({
     manualSpecificRules,
     extractedFeatures,
     addedLegendCaptions,
+    layoutRepositionMode,
     editableLabels,
     svgContent,
     form,
@@ -103,6 +104,7 @@ export const setupWatchers = ({
     addLegendEntry,
     extractLegendEntries,
     setupLegendDrag,
+    refreshLegendDragAffordances,
     reapplyStrokeOverrides
   } = legendActions;
 
@@ -118,6 +120,7 @@ export const setupWatchers = ({
     captureBaseConfig,
     captureOriginalStroke,
     repositionForLegendChange,
+    refreshDiagramDragAffordances,
     setupDiagramDrag
   } = legendLayout;
   const {
@@ -301,6 +304,16 @@ export const setupWatchers = ({
   );
 
   watch(
+    () => layoutRepositionMode.value,
+    () => {
+      nextTick(() => {
+        refreshLegendDragAffordances();
+        refreshDiagramDragAffordances();
+      });
+    }
+  );
+
+  watch(
     () => form.legend,
     (newPos, oldPos) => {
       if (mode.value === 'circular') {
@@ -382,7 +395,7 @@ export const setupWatchers = ({
         if (svg) {
           const tickEl = svg.getElementById('tick');
           if (tickEl) {
-            console.log(`[DEBUG] After DOM update - tick transform: ${tickEl.getAttribute('transform')}`);
+            debugLog(`After DOM update - tick transform: ${tickEl.getAttribute('transform')}`);
           }
         }
       }

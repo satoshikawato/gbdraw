@@ -104,11 +104,11 @@ export const createLegendRepositionActions = ({
       viewBoxHeight,
       resolvedLegendBounds
     );
-    console.log(
-      `[DEBUG] getCircularAbsoluteConfig called with position="${position}" (type: ${typeof position}, length: ${position.length})`
+    debugLog(
+      `getCircularAbsoluteConfig called with position="${position}" (type: ${typeof position}, length: ${position.length})`
     );
-    console.log(`[DEBUG] position === 'left': ${position === 'left'}, position === 'right': ${position === 'right'}`);
-    console.log(`[DEBUG] viewBoxWidth=${viewBoxWidth}, genVbW=${genVbW}`);
+    debugLog(`position === 'left': ${position === 'left'}, position === 'right': ${position === 'right'}`);
+    debugLog(`viewBoxWidth=${viewBoxWidth}, genVbW=${genVbW}`);
 
     switch (position) {
       case 'left':
@@ -190,7 +190,7 @@ export const createLegendRepositionActions = ({
         };
       case 'none':
       default:
-        console.log(`[DEBUG] Matched case: default (position was "${position}")`);
+        debugLog(`Matched case: default (position was "${position}")`);
         return {
           vbWidth: genVbW,
           vbHeight: genVbH,
@@ -267,13 +267,13 @@ export const createLegendRepositionActions = ({
       const origLegendWidth = circularBaseConfig.value.legendWidth || 0;
       const origLegendHeight = circularBaseConfig.value.legendHeight || 0;
       if (Math.abs(legendWidth - origLegendWidth) > 1 || Math.abs(legendHeight - origLegendHeight) > 1) {
-        console.log(
-          `[DEBUG] WARN Legend size CHANGED: ${origLegendWidth.toFixed(1)}x${origLegendHeight.toFixed(
+        debugLog(
+          `WARN Legend size CHANGED: ${origLegendWidth.toFixed(1)}x${origLegendHeight.toFixed(
             1
           )} -> ${legendWidth.toFixed(1)}x${legendHeight.toFixed(1)}`
         );
-        console.log(
-          `[DEBUG] WARN Shift calculation affected: old=${(origLegendWidth * 0.55).toFixed(1)}, new=${(
+        debugLog(
+          `WARN Shift calculation affected: old=${(origLegendWidth * 0.55).toFixed(1)}, new=${(
             legendWidth * 0.55
           ).toFixed(1)}`
         );
@@ -297,7 +297,7 @@ export const createLegendRepositionActions = ({
 
       debugLog('Base transforms at reposition start:');
       for (const [el, transform] of diagramElementBaseTransforms.value) {
-        console.log(`  ${el.id}: {x:${transform.x}, y:${transform.y}}`);
+        debugLog(`${el.id}: {x:${transform.x}, y:${transform.y}}`);
       }
 
       if (diagramElements.value.length > 0) {
@@ -307,19 +307,19 @@ export const createLegendRepositionActions = ({
           const foundInMap = diagramElementBaseTransforms.value.has(el);
           const newX = baseTransform.x + config.diagramShiftX;
           const newY = baseTransform.y + config.diagramShiftY;
-          console.log(
-            `[DEBUG] Element ${idx} (${el.id}): currentTransform="${currentTransform}", foundInMap=${foundInMap}, baseTransform={x:${
+          debugLog(
+            `Element ${idx} (${el.id}): currentTransform="${currentTransform}", foundInMap=${foundInMap}, baseTransform={x:${
               baseTransform.x
             }, y:${baseTransform.y}}, newTransform={x:${newX}, y:${newY}}`
           );
           el.setAttribute('transform', `translate(${newX}, ${newY})`);
 
           diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
-          console.log(`[DEBUG] repositionForLegendChange UPDATED originalTransforms for ${el.id}: (${newX}, ${newY})`);
+          debugLog(`repositionForLegendChange updated originalTransforms for ${el.id}: (${newX}, ${newY})`);
         });
         diagramOffset.x = 0;
         diagramOffset.y = 0;
-        console.log(`[DEBUG] repositionForLegendChange FINISHED updating ${diagramElements.value.length} elements`);
+        debugLog(`repositionForLegendChange finished updating ${diagramElements.value.length} elements`);
       }
 
       const viewBox = svg.getAttribute('viewBox');
@@ -541,8 +541,8 @@ export const createLegendRepositionActions = ({
                 const pairwiseLegend = legend.querySelector('#pairwise_legend');
                 if (pairwiseLegend) {
                   if (updatePairwiseLegendGradientStops(pairwiseLegend, appliedPaletteColors.value)) {
-                    console.log(
-                      `[DEBUG] Updated ${idx === 0 ? 'horizontal' : 'vertical'} pairwise gradient`
+                    debugLog(
+                      `Updated ${idx === 0 ? 'horizontal' : 'vertical'} pairwise gradient`
                     );
                   }
                 }
@@ -749,7 +749,7 @@ export const createLegendRepositionActions = ({
         diagramElements.value.forEach((el, idx) => {
           const baseTransform = diagramElementBaseTransforms.value.get(el) || { x: 0, y: 0 };
           const foundInMap = diagramElementBaseTransforms.value.has(el);
-          console.log(`[DEBUG] Linear Element ${idx} (${el.id}): foundInMap=${foundInMap}, baseTransform=`, baseTransform);
+          debugLog(`Linear Element ${idx} (${el.id}): foundInMap=${foundInMap}, baseTransform=`, baseTransform);
           const newX = baseTransform.x + shiftX;
           const newY = baseTransform.y + shiftY;
           el.setAttribute('transform', `translate(${newX}, ${newY})`);
@@ -950,8 +950,8 @@ export const createLegendRepositionActions = ({
         const domTransform = firstEl.getAttribute('transform');
         const transformMatch = serialized.match(new RegExp(`id="${firstEl.id}"[^>]*transform="([^"]+)"`));
         const serializedTransform = transformMatch ? transformMatch[1] : 'NOT FOUND';
-        console.log(`[DEBUG] Before save - DOM transform: ${domTransform}`);
-        console.log(`[DEBUG] Before save - Serialized transform: ${serializedTransform}`);
+        debugLog(`Before save - DOM transform: ${domTransform}`);
+        debugLog(`Before save - Serialized transform: ${serializedTransform}`);
       }
 
       results.value[idx] = { ...results.value[idx], content: serialized };

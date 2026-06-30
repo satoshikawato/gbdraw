@@ -149,7 +149,7 @@ def _assert_white_gallery_thumbnail(path: Path) -> None:
 
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
-    expected_wheel_name = "gbdraw-0.12.0-py3-none-any.whl"
+    expected_wheel_name = "gbdraw-0.13.0-py3-none-any.whl"
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
@@ -263,7 +263,6 @@ def test_web_feature_color_caption_scope_updates_specific_rule() -> None:
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
-    app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 
@@ -420,6 +419,20 @@ def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> Non
     assert "groupMetadataScopeLabel(orthogroupScope(groupOrId))" in orthogroups_js
     assert "orthogroupScopeLabel(group)" in index_html
     assert "orthogroupScopeLabel(selectedOrthogroup)" in index_html
+
+
+def test_web_run_analysis_orthogroup_top_label_mode_is_wired() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert '<option value="orthogroup_top"' in index_html
+    assert "Top Orthogroup Record" in index_html
+    assert "losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear'" in index_html
+    assert "if (form.show_labels_linear === 'orthogroup_top') args.push('orthogroup_top');" in run_analysis_js
+    assert "show_labels_linear: 'none'" in state_js
+    assert "form: state.form" in config_js
 
 
 def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:
@@ -1374,6 +1387,32 @@ def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:
     assert "import { enrichSvgWithStandaloneInteractivity, stripEditorOnlyCursorStyles } from './standalone-interactivity.js';" in export_source
     assert "  } else {\n    stripEditorOnlyCursorStyles(clone);\n  }\n  return new XMLSerializer().serializeToString(clone);" in export_source
     assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
+
+
+def test_layout_reposition_mode_gates_preview_dragging() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    watcher_source = (WEB_ROOT / "js" / "app" / "watchers.js").read_text(encoding="utf-8")
+    diagram_drag_source = (WEB_ROOT / "js" / "app" / "legend-layout" / "diagram-drag.js").read_text(
+        encoding="utf-8"
+    )
+    legend_drag_source = (WEB_ROOT / "js" / "app" / "legend" / "drag-actions.js").read_text(
+        encoding="utf-8"
+    )
+    ui_source = (WEB_ROOT / "js" / "app" / "ui.js").read_text(encoding="utf-8")
+
+    assert "const layoutRepositionMode = ref(false);" in state_source
+    assert "layoutRepositionMode," in state_source
+    assert '@click="layoutRepositionMode = !layoutRepositionMode"' in index_html
+    assert 'v-if="svgContent && layoutRepositionMode"' in index_html
+    assert "if (!isLayoutRepositionModeEnabled()) return;" in diagram_drag_source
+    assert "const refreshDiagramDragAffordances = () => {" in diagram_drag_source
+    assert "const refreshLegendDragAffordances = () => {" in legend_drag_source
+    assert "() => layoutRepositionMode.value" in watcher_source
+    assert "refreshLegendDragAffordances();" in watcher_source
+    assert "refreshDiagramDragAffordances();" in watcher_source
+    assert "isSvgEditingTarget(target)" in ui_source
+    assert "isLayoutRepositionModeEnabled() && target.closest('svg')" in ui_source
 
 
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
@@ -3018,7 +3057,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
-    assert wheel_path.name == "gbdraw-0.12.0-py3-none-any.whl"
+    assert wheel_path.name == "gbdraw-0.13.0-py3-none-any.whl"
     subprocess.run(
         [sys.executable, "tools/verify_gui_offline.py", "inspect-wheel", str(wheel_path)],
         cwd=REPO_ROOT,

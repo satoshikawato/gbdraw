@@ -45,6 +45,8 @@ class SeqRecordGroup:
         feature_track_layout: str | None = None,
         draw_features: bool = True,
         label_font_size: float | None = None,
+        orthogroup_label_member_ids: set[str] | None = None,
+        orthogroup_label_top_member_ids: set[str] | None = None,
     ) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
@@ -54,6 +56,8 @@ class SeqRecordGroup:
         self.precalculated_labels = precalculated_labels
         self.precomputed_feature_dict = precomputed_feature_dict
         self.draw_features_enabled = bool(draw_features)
+        self.orthogroup_label_member_ids = orthogroup_label_member_ids
+        self.orthogroup_label_top_member_ids = orthogroup_label_top_member_ids
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -359,6 +363,8 @@ class SeqRecordGroup:
                     self.config_dict,
                     cfg=self._cfg,
                     label_font_size=self.label_font_size,
+                    orthogroup_label_member_ids=self.orthogroup_label_member_ids,
+                    orthogroup_label_top_member_ids=self.orthogroup_label_top_member_ids,
                 )
 
         record_group: Group = self.draw_record(

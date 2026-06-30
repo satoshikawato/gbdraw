@@ -151,7 +151,7 @@ class CanvasConfig:
     show_depth: bool
     # - bool: typical config.toml / circular CLI usage
     # - str: linear CLI supports mode strings ("all"/"first"/"none")
-    show_labels: bool | Literal["all", "first", "none"]
+    show_labels: bool | Literal["all", "first", "orthogroup_top", "none"]
     strandedness: bool
     resolve_overlaps: bool
     circular: CircularCanvasConfig
@@ -161,7 +161,7 @@ class CanvasConfig:
     def from_dict(cls, d: Mapping[str, Any]) -> "CanvasConfig":
         raw_show_labels = d.get("show_labels", False)
         if raw_show_labels is None:
-            show_labels: bool | Literal["all", "first", "none"] = False
+            show_labels: bool | Literal["all", "first", "orthogroup_top", "none"] = False
         elif isinstance(raw_show_labels, str):
             show_labels = raw_show_labels
         else:

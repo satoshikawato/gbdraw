@@ -2,8 +2,8 @@ import { createLegendCanvasActions } from './legend-layout/canvas-actions.js';
 import { createDiagramDragActions } from './legend-layout/diagram-drag.js';
 import { createLegendRepositionActions } from './legend-layout/reposition-actions.js';
 
-export const createLegendLayout = ({ state, debugLog, legendActions, svgActions }) => {
-  const diagramActions = createDiagramDragActions({ state });
+export const createLegendLayout = ({ state, debugLog, legendActions, svgActions, history = null }) => {
+  const diagramActions = createDiagramDragActions({ state, debugLog, history });
   const canvasActions = createLegendCanvasActions({ state });
   const repositionActions = createLegendRepositionActions({
     state,
@@ -23,6 +23,7 @@ export const createLegendLayout = ({ state, debugLog, legendActions, svgActions 
     ...canvasActions,
     ...repositionActions,
     clearPlotTitleState: diagramActions.clearPlotTitleState,
+    refreshDiagramDragAffordances: diagramActions.refreshDiagramDragAffordances,
     resetAllPositions,
     resetPlotTitlePosition: diagramActions.resetPlotTitlePosition,
     setPlotTitleAutoTransform: diagramActions.setPlotTitleAutoTransform,

@@ -15,6 +15,7 @@ from .filtering import get_label_text  # type: ignore[reportMissingImports]
 from .policy import normalize_label_rendering
 from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ..features.coordinates import get_strand  # type: ignore[reportMissingImports]
+from ..features.ids import compute_feature_object_hash
 from ..core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ..layout.linear_coords import normalize_position_to_linear_track  # type: ignore[reportMissingImports]
@@ -360,6 +361,19 @@ def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float)
             placed.append(label)
 
 
+def _passes_orthogroup_label_eligibility(
+    feature_object,
+    member_ids: set[str] | None,
+    top_member_ids: set[str] | None,
+) -> bool:
+    if member_ids is None:
+        return True
+    feature_svg_id = compute_feature_object_hash(feature_object)
+    if feature_svg_id not in member_ids:
+        return True
+    return top_member_ids is not None and feature_svg_id in top_member_ids
+
+
 def prepare_label_list_linear(
     feature_dict,
     genome_length,
@@ -372,6 +386,8 @@ def prepare_label_list_linear(
     config_dict,
     cfg: GbdrawConfig | None = None,
     label_font_size: float | None = None,
+    orthogroup_label_member_ids: set[str] | None = None,
+    orthogroup_label_top_member_ids: set[str] | None = None,
 ):
     """
     Prepares a list of labels for linear genome visualization with proper track organization.
@@ -451,6 +467,12 @@ def prepare_label_list_linear(
     # Second pass: Process labels
     max_bbox_height = 0
     for feature_id, feature_object in reversed(list(feature_dict.items())):
+        if not _passes_orthogroup_label_eligibility(
+            feature_object,
+            orthogroup_label_member_ids,
+            orthogroup_label_top_member_ids,
+        ):
+            continue
         feature_label_text = get_label_text(feature_object, label_filtering)
         feature_track_id = feature_object.feature_track_id
         if not feature_label_text:

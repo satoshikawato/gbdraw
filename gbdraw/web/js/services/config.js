@@ -34,6 +34,8 @@ import {
 import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 
+const { nextTick } = window.Vue;
+
 const SESSION_VERSION = 29;
 const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
@@ -114,7 +116,7 @@ const cloneStringMap = (source) => {
   return cloned;
 };
 
-const cloneJsonData = (value) => {
+export const cloneJsonData = (value) => {
   if (value === null || value === undefined) return value;
   return JSON.parse(JSON.stringify(value));
 };
@@ -577,7 +579,7 @@ const cloneLosatForConfig = () => {
   return cloned;
 };
 
-const buildConfigData = () => ({
+export const buildConfigData = () => ({
   form: state.form,
   adv: state.adv,
   losat: cloneLosatForConfig(),
@@ -618,7 +620,7 @@ const defaultEditorStateData = () => ({
   }
 });
 
-const buildEditorStateData = () => ({
+export const buildEditorStateData = () => ({
   legend: {
     entries: cloneJsonArray(state.legendEntries.value),
     deletedEntries: cloneJsonArray(state.deletedLegendEntries.value),
@@ -677,7 +679,7 @@ const replacePlainObject = (target, source) => {
   });
 };
 
-const applyEditorStateData = (editorState = {}) => {
+export const applyEditorStateData = (editorState = {}) => {
   const normalized = normalizeEditorStateData(editorState);
 
   state.legendEntries.value = normalized.legend.entries;
@@ -851,7 +853,7 @@ const restoreSessionCircularLayoutCaches = (ui = {}) => {
   state.circularPlotTitlePosition.value = activeLayout.plotTitlePosition;
 };
 
-const applyConfigData = (data) => {
+export const applyConfigData = (data) => {
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
   state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
@@ -1347,7 +1349,7 @@ const deserializeFile = (entry) => {
   });
 };
 
-const serializeResults = () => {
+export const serializeResults = () => {
   const currentSvg = (() => {
     if (!state.svgContainer.value) return null;
     const svg = state.svgContainer.value.querySelector('svg');
@@ -1498,7 +1500,7 @@ const applyLosatDerivedCache = (entries) => {
 
 const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
-const applyOrthogroupState = (orthogroupState = {}) => {
+export const applyOrthogroupStateData = (orthogroupState = {}) => {
   const groups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
   const groupIds = groups
     .map((group) => String(group?.id || '').trim())
@@ -1551,7 +1553,7 @@ const applyOrthogroupState = (orthogroupState = {}) => {
   });
 };
 
-const serializeFiles = async () => {
+export const serializeFiles = async () => {
   const normalizedLinearSeqs = normalizeLinearSeqList(state.linearSeqs);
   const linearSeqs = await Promise.all(
     normalizedLinearSeqs.map(async (seq) => ({
@@ -1781,6 +1783,259 @@ const resetSessionBaseline = () => {
   state.showLegendPanel.value = false;
 };
 
+export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
+  const currentLegend = state.form.legend;
+  const isLinear = state.mode.value === 'linear';
+  const currentPlotTitlePosition = state.adv.plot_title_position;
+  const activeCircularLegend = isLinear
+    ? normalizeLegendPosition(state.circularLegendPosition.value, 'left')
+    : normalizeLegendPosition(currentLegend, 'left');
+  const activeCircularPlotTitlePosition = isLinear
+    ? normalizeCircularPlotTitlePosition(state.circularPlotTitlePosition.value)
+    : normalizeCircularPlotTitlePosition(currentPlotTitlePosition);
+  const savedCircularSingleRecordLegendPosition =
+    !isLinear && !state.form.multi_record_canvas
+      ? activeCircularLegend
+      : normalizeLegendPosition(state.circularSingleRecordLegendPosition.value, activeCircularLegend);
+  const savedCircularSingleRecordPlotTitlePosition =
+    !isLinear && !state.form.multi_record_canvas
+      ? activeCircularPlotTitlePosition
+      : normalizeCircularPlotTitlePosition(state.circularSingleRecordPlotTitlePosition.value);
+  const savedCircularMultiRecordLegendPosition =
+    !isLinear && state.form.multi_record_canvas
+      ? activeCircularLegend
+      : hasStoredLayoutValue(state.circularMultiRecordLegendPosition.value)
+        ? normalizeLegendPosition(state.circularMultiRecordLegendPosition.value, savedCircularSingleRecordLegendPosition)
+        : savedCircularSingleRecordLegendPosition;
+  const savedCircularMultiRecordPlotTitlePosition =
+    !isLinear && state.form.multi_record_canvas
+      ? activeCircularPlotTitlePosition
+      : hasStoredLayoutValue(state.circularMultiRecordPlotTitlePosition.value)
+        ? normalizeCircularPlotTitlePosition(state.circularMultiRecordPlotTitlePosition.value)
+        : savedCircularSingleRecordPlotTitlePosition;
+
+  const ui = {
+    title: String(state.sessionTitle.value || ''),
+    mode: state.mode.value,
+    canvasPadding: { ...state.canvasPadding },
+    selectedResultIndex: state.selectedResultIndex.value,
+    generatedLegendPosition: state.generatedLegendPosition.value,
+    generatedMode: state.generatedMode.value,
+    generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
+    generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
+      state.generatedCircularPlotTitlePosition.value
+    ),
+    legend: currentLegend,
+    circularLegendPosition: activeCircularLegend,
+    linearLegendPosition: isLinear
+      ? normalizeLegendPosition(currentLegend, 'bottom')
+      : normalizeLegendPosition(state.linearLegendPosition.value, 'bottom'),
+    circularPlotTitlePosition: activeCircularPlotTitlePosition,
+    linearPlotTitlePosition: isLinear
+      ? normalizeLinearPlotTitlePosition(currentPlotTitlePosition)
+      : normalizeLinearPlotTitlePosition(state.linearPlotTitlePosition.value),
+    circularSingleRecordLegendPosition: savedCircularSingleRecordLegendPosition,
+    circularSingleRecordPlotTitlePosition: savedCircularSingleRecordPlotTitlePosition,
+    circularMultiRecordLegendPosition: savedCircularMultiRecordLegendPosition,
+    circularMultiRecordPlotTitlePosition: savedCircularMultiRecordPlotTitlePosition,
+    featurePanelTab: state.featurePanelTab.value,
+    cInputType: state.cInputType.value,
+    lInputType: state.lInputType.value,
+    blastSource: state.blastSource.value,
+    losatProgram: state.losatProgram.value,
+    downloadDpi: state.downloadDpi.value,
+    autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+    paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
+    appliedPaletteName: state.appliedPaletteName.value,
+    appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
+    pendingPaletteName: state.pendingPaletteName.value,
+    pendingPaletteColors: cloneColors(state.pendingPaletteColors.value),
+    circularBaseConfig: cloneJsonData(state.circularBaseConfig.value),
+    linearBaseConfig: {
+      ...cloneJsonData(state.linearBaseConfig.value),
+      diagramBaseTransforms: []
+    },
+    legendCurrentOffset: { ...state.legendCurrentOffset },
+    diagramOffset: { ...state.diagramOffset },
+    lengthBarUserOffset: { ...state.lengthBarUserOffset },
+    plotTitleUserOffset: { ...state.plotTitleUserOffset }
+  };
+
+  if (includePreviewNavigation) {
+    ui.zoom = state.zoom.value;
+    ui.canvasPan = { x: state.canvasPan.x, y: state.canvasPan.y };
+  }
+
+  return ui;
+};
+
+export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = {}) => {
+  if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
+  if (ui.mode) state.mode.value = ui.mode === 'linear' ? 'linear' : 'circular';
+  if (ui.cInputType) state.cInputType.value = ui.cInputType;
+  if (ui.lInputType) state.lInputType.value = ui.lInputType;
+  if (ui.blastSource) state.blastSource.value = String(ui.blastSource);
+  if (ui.losatProgram) {
+    const program = String(ui.losatProgram);
+    state.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
+  }
+  if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
+  state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
+  state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
+  if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
+    state.featurePanelTab.value = ui.featurePanelTab;
+  }
+
+  if (ui.generatedMode) state.generatedMode.value = ui.generatedMode === 'linear' ? 'linear' : 'circular';
+  if (ui.generatedLegendPosition) {
+    state.generatedLegendPosition.value = normalizeLegendPosition(
+      ui.generatedLegendPosition,
+      state.generatedMode.value === 'linear' ? 'bottom' : 'left'
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(ui, 'generatedMultiRecordCanvas')) {
+    state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
+  }
+  if (ui.generatedCircularPlotTitlePosition || ui.circularPlotTitlePosition) {
+    state.generatedCircularPlotTitlePosition.value = hasStoredLayoutValue(ui.generatedCircularPlotTitlePosition)
+      ? normalizeCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition)
+      : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
+  }
+
+  restorePaletteStateFromSession(ui);
+  restoreSessionCircularLayoutCaches(ui);
+  restoreSessionPlotTitlePositions(ui);
+
+  if (ui.circularBaseConfig && typeof ui.circularBaseConfig === 'object') {
+    state.circularBaseConfig.value = cloneJsonData(ui.circularBaseConfig);
+  }
+  if (ui.linearBaseConfig && typeof ui.linearBaseConfig === 'object') {
+    state.linearBaseConfig.value = {
+      ...cloneJsonData(ui.linearBaseConfig),
+      diagramBaseTransforms: new Map()
+    };
+  }
+  if (ui.legendCurrentOffset) {
+    state.legendCurrentOffset.x = Number(ui.legendCurrentOffset.x) || 0;
+    state.legendCurrentOffset.y = Number(ui.legendCurrentOffset.y) || 0;
+  }
+  if (ui.diagramOffset) {
+    state.diagramOffset.x = Number(ui.diagramOffset.x) || 0;
+    state.diagramOffset.y = Number(ui.diagramOffset.y) || 0;
+  }
+  if (ui.lengthBarUserOffset) {
+    state.lengthBarUserOffset.x = Number(ui.lengthBarUserOffset.x) || 0;
+    state.lengthBarUserOffset.y = Number(ui.lengthBarUserOffset.y) || 0;
+  }
+  if (ui.plotTitleUserOffset) {
+    state.plotTitleUserOffset.x = Number(ui.plotTitleUserOffset.x) || 0;
+    state.plotTitleUserOffset.y = Number(ui.plotTitleUserOffset.y) || 0;
+  }
+
+  if (ui.canvasPadding) {
+    state.canvasPadding.top = Number(ui.canvasPadding.top) || 0;
+    state.canvasPadding.right = Number(ui.canvasPadding.right) || 0;
+    state.canvasPadding.bottom = Number(ui.canvasPadding.bottom) || 0;
+    state.canvasPadding.left = Number(ui.canvasPadding.left) || 0;
+  }
+  if (restorePreviewNavigation) {
+    if (ui.canvasPan) {
+      state.canvasPan.x = Number(ui.canvasPan.x) || 0;
+      state.canvasPan.y = Number(ui.canvasPan.y) || 0;
+    }
+    if (typeof ui.zoom === 'number') state.zoom.value = ui.zoom;
+  }
+
+  if (state.mode.value === 'linear') {
+    const nextLinearLegend = hasStoredLayoutValue(ui.linearLegendPosition)
+      ? normalizeLegendPosition(ui.linearLegendPosition, 'bottom')
+      : hasStoredLayoutValue(ui.legend)
+        ? normalizeLegendPosition(ui.legend, 'bottom')
+        : normalizeLegendPosition(state.form.legend, 'bottom');
+    state.form.legend = nextLinearLegend;
+    state.linearLegendPosition.value = nextLinearLegend;
+    state.adv.plot_title_position = state.linearPlotTitlePosition.value;
+  } else {
+    const activeCircularLayout = resolveActiveCircularLayout();
+    state.form.legend = activeCircularLayout.legend;
+    state.adv.plot_title_position = activeCircularLayout.plotTitlePosition;
+    state.circularLegendPosition.value = activeCircularLayout.legend;
+    state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
+  }
+};
+
+export const applyResultsData = (resultsData = [], ui = {}) => {
+  if (Array.isArray(resultsData)) {
+    state.results.value = resultsData.map((res, idx) => ({
+      name: res.name || `Result ${idx + 1}`,
+      content: res.content || ''
+    }));
+  } else {
+    state.results.value = [];
+  }
+
+  const resultCount = state.results.value.length;
+  if (resultCount > 0) {
+    const desiredIndex =
+      Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
+        ? ui.selectedResultIndex
+        : 0;
+    state.selectedResultIndex.value = Math.min(desiredIndex, resultCount - 1);
+  } else {
+    state.selectedResultIndex.value = 0;
+  }
+};
+
+export const buildFeatureStateData = () => ({
+  extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+  featureRecordIds: cloneJsonData(state.featureRecordIds.value),
+  selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
+  featureColorOverrides: cloneJsonData(state.featureColorOverrides),
+  featureVisibilityOverrides: cloneJsonData(state.featureVisibilityOverrides),
+  labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
+  labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
+  labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
+  labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides),
+  labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
+});
+
+export const applyFeatureStateData = (features = {}) => {
+  state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
+    ? features.extractedFeatures
+    : [];
+  state.featureRecordIds.value = Array.isArray(features.featureRecordIds)
+    ? features.featureRecordIds
+    : [];
+  state.selectedFeatureRecordIdx.value = Number.isInteger(features.selectedFeatureRecordIdx)
+    ? features.selectedFeatureRecordIdx
+    : 0;
+  replacePlainObject(state.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
+  replacePlainObject(state.featureVisibilityOverrides, cloneJsonObject(features.featureVisibilityOverrides));
+  replacePlainObject(state.labelTextFeatureOverrides, cloneStringMap(features.labelTextFeatureOverrides));
+  replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
+  replacePlainObject(state.labelTextFeatureOverrideSources, cloneStringMap(features.labelTextFeatureOverrideSources));
+  replacePlainObject(state.labelVisibilityOverrides, cloneJsonObject(features.labelVisibilityOverrides));
+  state.labelOverrideContextKey.value = String(features.labelOverrideContextKey || '');
+};
+
+export const buildOrthogroupStateData = () => ({
+  groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(state.orthogroups.value) : [],
+  selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
+  selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || ''),
+  orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
+  orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+});
+
+export const buildRunStateData = () => ({
+  lastRunInfo: cloneJsonData(state.lastRunInfo.value),
+  pairwiseMatchFactors: cloneJsonObject(state.pairwiseMatchFactors.value)
+});
+
+export const applyRunStateData = (runState = {}) => {
+  state.lastRunInfo.value = runState.lastRunInfo ? cloneJsonData(runState.lastRunInfo) : null;
+  state.pairwiseMatchFactors.value = cloneJsonObject(runState.pairwiseMatchFactors);
+};
+
 export const exportSession = async (titleOverride = null) => {
   const losatEntries = serializeLosatCache();
   const losatBytes = losatEntries.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
@@ -1947,11 +2202,11 @@ export const exportSession = async (titleOverride = null) => {
 
 export const importSession = async (e, options = {}) => {
   const file = e.target.files[0];
-  if (!file) return;
+  if (!file) return { status: 'skipped' };
 
   if (file.size > 200 * 1024 * 1024) {
     alert('Session file is too large.');
-    return;
+    return { status: 'error' };
   }
 
   try {
@@ -1966,7 +2221,7 @@ export const importSession = async (e, options = {}) => {
     if (isLegacyConfigPayload(data)) {
       applyLegacyConfigPayload(data);
       alert('Legacy configuration loaded. Save as a session to use the current format.');
-      return;
+      return { status: 'legacy' };
     }
 
     data = normalizeSessionData(data);
@@ -1978,6 +2233,9 @@ export const importSession = async (e, options = {}) => {
     if (ui.cInputType) state.cInputType.value = ui.cInputType;
     if (ui.lInputType) state.lInputType.value = ui.lInputType;
     if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
+    // The mode watcher clears feature/editor state. Let that reset finish before
+    // restoring session-owned metadata such as extractedFeatures.
+    await nextTick();
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
     state.labelOverrideBuildWarning.value = '';
@@ -2103,7 +2361,7 @@ export const importSession = async (e, options = {}) => {
     }
     state.labelOverrideContextKey.value = String(features.labelOverrideContextKey || '');
 
-    applyOrthogroupState(
+    applyOrthogroupStateData(
       data.orthogroupState && typeof data.orthogroupState === 'object'
         ? data.orthogroupState
         : {
@@ -2174,11 +2432,13 @@ export const importSession = async (e, options = {}) => {
     applyEditorStateData(data.editorState);
 
     alert('Session loaded successfully!');
+    return { status: 'ok', data };
   } catch (err) {
     console.error(err);
     state.suppressCircularMultiRecordDefaults.value = false;
     const message = err?.message || 'Invalid JSON structure.';
     alert(`Failed to load session: ${message}`);
+    return { status: 'error', error: err };
   } finally {
     e.target.value = '';
   }

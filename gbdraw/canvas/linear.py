@@ -179,7 +179,7 @@ class LinearCanvasConfigurator:
         self.normalize_length: bool = cfg.canvas.linear.normalize_length
         _label_setting = cfg.canvas.show_labels
         if isinstance(_label_setting, str):
-            self.show_labels = _label_setting in ["all", "first"]
+            self.show_labels = _label_setting in ["all", "first", "orthogroup_top"]
         else:
             self.show_labels = bool(_label_setting)
         self.legend_position = legend

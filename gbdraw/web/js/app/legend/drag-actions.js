@@ -1,6 +1,6 @@
 import { parseTransform } from './utils.js';
 
-export const createLegendDragActions = ({ state, extractLegendEntries }) => {
+export const createLegendDragActions = ({ state, extractLegendEntries, history = null }) => {
   const {
     results,
     selectedResultIndex,
@@ -10,11 +10,24 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
     legendOriginalTransform,
     legendInitialTransform,
     legendCurrentOffset,
+    layoutRepositionMode,
     zoom,
     skipCaptureBaseConfig
   } = state;
   let legendDragFrameId = null;
   let pendingLegendPointer = null;
+  let legendDragTxPromise = null;
+
+  const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
+
+  const setElementCursor = (element, cursor) => {
+    if (!element?.style) return;
+    if (cursor) {
+      element.style.cursor = cursor;
+    } else {
+      element.style.removeProperty('cursor');
+    }
+  };
 
   const cancelLegendDragFrame = () => {
     if (legendDragFrameId !== null) {
@@ -44,6 +57,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
   };
 
   const startLegendDrag = (e) => {
+    if (!isLayoutRepositionModeEnabled()) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -55,6 +69,9 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
 
     cancelLegendDragFrame();
     pendingLegendPointer = null;
+    legendDragTxPromise = history?.begin
+      ? history.begin('Move legend', { source: 'legend-drag' })
+      : null;
     legendDragging.value = true;
     legendDragStart.x = e.clientX;
     legendDragStart.y = e.clientY;
@@ -75,7 +92,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
     });
   };
 
-  const endLegendDrag = (e) => {
+  const endLegendDrag = async (e) => {
     if (!legendDragging.value) return;
     const finalPointer =
       typeof e?.clientX === 'number' && typeof e?.clientY === 'number'
@@ -96,6 +113,30 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
 
     pendingLegendPointer = null;
     legendDragging.value = false;
+
+    if (svgContainer.value) {
+      const svg = svgContainer.value.querySelector('svg');
+      const idx = selectedResultIndex.value;
+      if (svg && idx >= 0 && results.value.length > idx) {
+        skipCaptureBaseConfig.value = true;
+        const serializer = new XMLSerializer();
+        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+      }
+    }
+
+    const tx = legendDragTxPromise ? await legendDragTxPromise : null;
+    legendDragTxPromise = null;
+    if (tx && history?.commit) await history.commit(tx);
+  };
+
+  const refreshLegendDragAffordances = () => {
+    if (!svgContainer.value) return;
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return;
+    const legendGroup = svg.getElementById('legend');
+    if (!legendGroup) return;
+
+    setElementCursor(legendGroup, isLayoutRepositionModeEnabled() ? 'grab' : '');
   };
 
   const resetLegendPositionOnly = () => {
@@ -133,8 +174,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
     const initialTransform = parseTransform(legendGroup.getAttribute('transform'));
     legendInitialTransform.value = { ...initialTransform };
 
-    legendGroup.style.cursor = 'move';
     legendGroup.onmousedown = startLegendDrag;
+    refreshLegendDragAffordances();
 
     svg.onmousemove = onLegendDrag;
     svg.onmouseup = endLegendDrag;
@@ -144,6 +185,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
   return {
     endLegendDrag,
     onLegendDrag,
+    refreshLegendDragAffordances,
     resetLegendPosition,
     resetLegendPositionOnly,
     setupLegendDrag,
