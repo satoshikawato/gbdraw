@@ -9,6 +9,7 @@ import pytest
 
 import gbdraw.circular as circular_cli_module
 from gbdraw.circular import circular_main
+from gbdraw.linear import _get_args as get_linear_args
 from gbdraw.cli_utils.session import (
     make_rendered_svg,
     parse_session_pre_args,
@@ -186,6 +187,7 @@ def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> 
         "identity": 55,
         "alignment_length": 30,
     }
+    session["config"]["form"]["show_labels_linear"] = "orthogroup_top"
     session["config"]["losat"] = {
         "executionMode": "auto",
         "threadsPerJob": "2",
@@ -219,6 +221,13 @@ def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> 
     assert spec.args[spec.args.index("--collinear_max_conflicts_in_merge_gap") + 1] == "6"
     assert spec.args[spec.args.index("--collinear_search_scope") + 1] == "all"
     assert spec.args[spec.args.index("--collinear_color_mode") + 1] == "orientation_identity"
+    assert spec.args[spec.args.index("--show_labels") + 1] == "orthogroup_top"
+
+
+def test_linear_cli_accepts_orthogroup_top_show_labels() -> None:
+    args = get_linear_args(["--gbk", "a.gb", "b.gb", "--show_labels", "orthogroup_top"])
+
+    assert args.show_labels == "orthogroup_top"
 
 
 def test_gui_only_linear_session_restores_row_options(tmp_path: Path) -> None:
@@ -364,6 +373,8 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
         "ajisai",
         "--show_gc",
         "--show_skew",
+        "--show_labels",
+        "orthogroup_top",
     )
 
     payload = build_session_json(
@@ -385,6 +396,7 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
     assert config["form"]["scale_style"] == "ruler"
     assert config["form"]["show_gc"] is True
     assert config["form"]["show_skew"] is True
+    assert config["form"]["show_labels_linear"] == "orthogroup_top"
     assert config["adv"]["pairwise_match_style"] == "curve"
     assert config["palette"] == "ajisai"
     assert config["blastSource"] == "losat"

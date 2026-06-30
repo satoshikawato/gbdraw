@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+import logging
 import math
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -67,8 +68,10 @@ from .builders import (
     add_record_group,
 )
 from .orthogroup_alignment import (
+    build_orthogroup_label_eligibility,
     calculate_orthogroup_alignment_canvas_extents,
     calculate_orthogroup_alignment_offsets,
+    orthogroup_label_sets_for_record,
 )
 from .precalc import (
     FeatureDict,
@@ -80,6 +83,9 @@ from .precalc import (
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from .track_slots import LinearResolvedTrack, LinearTrackLayout, resolve_linear_track_layout
+
+
+logger = logging.getLogger(__name__)
 
 
 def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> bool:
@@ -775,12 +781,38 @@ def assemble_linear_diagram(
         elif normalized_plot_title_position == "bottom":
             plot_title_bottom_reserve = reserve
 
+    comparisons = _load_linear_comparison_dataframes(
+        blast_files,
+        comparison_dataframes,
+        blast_config,
+    )
+
+    raw_show_labels = cfg.canvas.show_labels
+    show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
+    orthogroup_label_eligibility = None
+    if show_labels_mode == "orthogroup_top":
+        orthogroup_label_eligibility = build_orthogroup_label_eligibility(
+            orthogroups=orthogroups,
+            comparisons=comparisons,
+        )
+    if (
+        show_labels_mode == "orthogroup_top"
+        and (
+            orthogroup_label_eligibility is None
+            or not orthogroup_label_eligibility.member_ids_by_record
+        )
+    ):
+        logger.warning(
+            "WARNING: --show_labels orthogroup_top requires orthogroup metadata; no orthogroup-specific label suppression was applied."
+        )
+
     record_feature_dicts = _precalculate_feature_dicts(
         records,
         feature_config,
         canvas_config,
         config_dict,
         cfg=cfg,
+        orthogroup_label_eligibility=orthogroup_label_eligibility,
     )
     required_label_height, all_labels, record_label_heights_above = _precalculate_label_dimensions(
         records,
@@ -789,6 +821,7 @@ def assemble_linear_diagram(
         config_dict,
         cfg=cfg,
         precomputed_feature_dicts=record_feature_dicts,
+        orthogroup_label_eligibility=orthogroup_label_eligibility,
     )
     record_label_heights_below = _precalculate_label_heights_below(all_labels)
     max_def_width, _definition_heights, definition_half_heights = _precalculate_definition_metrics(
@@ -911,11 +944,6 @@ def assemble_linear_diagram(
 
     # Prepare legend group
     has_blast = bool(blast_files or comparison_dataframes)
-    comparisons = _load_linear_comparison_dataframes(
-        blast_files,
-        comparison_dataframes,
-        blast_config,
-    )
     configure_pairwise_identity_legend_from_comparisons(blast_config, comparisons)
     legend_table: dict = {}
     legend_group: LegendGroup | None = None
@@ -1300,8 +1328,6 @@ def assemble_linear_diagram(
             orthogroup_alignment_offsets,
         )
 
-    raw_show_labels = cfg.canvas.show_labels
-    show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
     label_font_size = _resolve_linear_diagram_label_font_size(
         records,
         show_labels_mode=show_labels_mode,
@@ -1322,7 +1348,13 @@ def assemble_linear_diagram(
             should_show_labels = True
         elif show_labels_mode == "first" and count == 1:
             should_show_labels = True
+        elif show_labels_mode == "orthogroup_top":
+            should_show_labels = True
         record_cfg = cfg_labels_on if should_show_labels else cfg_labels_off
+        orthogroup_label_member_ids, orthogroup_label_top_member_ids = orthogroup_label_sets_for_record(
+            orthogroup_label_eligibility if show_labels_mode == "orthogroup_top" else None,
+            count - 1,
+        )
 
         if linear_track_layout is not None:
             shared_depth_tracks = record_depth_data[count - 1] if (count - 1) < len(record_depth_data) else []
@@ -1348,6 +1380,8 @@ def assemble_linear_diagram(
                         precomputed_feature_dict=record_feature_dicts[count - 1],
                         feature_track_layout=slot_feature_layout,
                         label_font_size=label_font_size,
+                        orthogroup_label_member_ids=orthogroup_label_member_ids,
+                        orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
                     )
                     feature_rendered = True
                     continue
@@ -1452,6 +1486,8 @@ def assemble_linear_diagram(
                     precomputed_feature_dict=record_feature_dicts[count - 1],
                     draw_features=False,
                     label_font_size=label_font_size,
+                    orthogroup_label_member_ids=orthogroup_label_member_ids,
+                    orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
                 )
             add_record_definition_group(
                 canvas,
@@ -1477,6 +1513,8 @@ def assemble_linear_diagram(
             cfg=record_cfg,
             precomputed_feature_dict=record_feature_dicts[count - 1],
             label_font_size=label_font_size,
+            orthogroup_label_member_ids=orthogroup_label_member_ids,
+            orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
         )
         add_record_definition_group(
             canvas,

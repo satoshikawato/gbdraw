@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from Bio import SeqIO
@@ -18,9 +19,15 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import FeatureDrawingConfigurator
+from gbdraw.diagrams.linear.orthogroup_alignment import (
+    OrthogroupLabelEligibility,
+    build_orthogroup_label_eligibility,
+)
 from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
+from gbdraw.features.ids import compute_feature_hash
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.labels.linear import (
@@ -34,7 +41,7 @@ from gbdraw.labels.linear import (
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 
 
-def _synthetic_label_record(record_id: str, length: int, label: str) -> SeqRecord:
+def _synthetic_label_record(record_id: str, length: int, label: str, extra_label: str | None = None) -> SeqRecord:
     record = SeqRecord(Seq("A" * length), id=record_id, name=record_id, description=record_id)
     record.features = [
         SeqFeature(
@@ -43,7 +50,43 @@ def _synthetic_label_record(record_id: str, length: int, label: str) -> SeqRecor
             qualifiers={"product": [label]},
         )
     ]
+    if extra_label is not None:
+        record.features.append(
+            SeqFeature(
+                FeatureLocation(500, 700, strand=1),
+                type="CDS",
+                qualifiers={"product": [extra_label]},
+            )
+        )
     return record
+
+
+def _orthogroup_member(record_index: int, feature_svg_id: str | None) -> SimpleNamespace:
+    return SimpleNamespace(
+        record_index=record_index,
+        feature_svg_id=feature_svg_id,
+        start=0,
+        end=1,
+        protein_id=str(feature_svg_id or ""),
+        source_protein_id=str(feature_svg_id or ""),
+        representative=False,
+    )
+
+
+def _comparison_row(**metadata: object) -> dict[str, object]:
+    row = dict.fromkeys(COMPARISON_COLUMNS, 0)
+    row.update(
+        {
+            "query": "query",
+            "subject": "subject",
+            "identity": 100.0,
+            "alignment_length": 100,
+            "evalue": 0.0,
+            "bitscore": 100.0,
+        }
+    )
+    row.update(metadata)
+    return row
 
 
 def _extract_label_font_sizes(svg_content: str, label_texts: set[str]) -> dict[str, float]:
@@ -232,6 +275,118 @@ def _assert_no_label_bounds_overlap(labels: list[dict], min_gap_px: float = 0.0)
             else:
                 assert not _rotated_label_rects_intersect(label, other)
         placed.append(label)
+
+
+@pytest.mark.linear
+def test_orthogroup_label_eligibility_tracks_members_and_top_record() -> None:
+    orthogroups = SimpleNamespace(
+        orthogroups={
+            "og_1": [
+                _orthogroup_member(1, "feature_r1"),
+                _orthogroup_member(0, "feature_r0"),
+            ],
+            "og_2": [
+                _orthogroup_member(2, "feature_r2"),
+                _orthogroup_member(1, "feature_r1_a"),
+                _orthogroup_member(1, "feature_r1_b"),
+            ],
+            "og_3": [
+                _orthogroup_member(0, None),
+                _orthogroup_member(1, ""),
+            ],
+        }
+    )
+
+    assert build_orthogroup_label_eligibility(None) == OrthogroupLabelEligibility({}, {})
+    eligibility = build_orthogroup_label_eligibility(orthogroups)
+    assert eligibility.member_ids_by_record == {
+        0: {"feature_r0"},
+        1: {"feature_r1", "feature_r1_a", "feature_r1_b"},
+        2: {"feature_r2"},
+    }
+    assert eligibility.top_member_ids_by_record == {
+        0: {"feature_r0"},
+        1: {"feature_r1_a", "feature_r1_b"},
+    }
+    comparisons = [
+        DataFrame(
+            [
+                _comparison_row(
+                    orthogroup_id="og_1",
+                    query_record_index=1,
+                    query_feature_svg_id="feature_r1",
+                    subject_record_index=0,
+                    subject_feature_svg_id="feature_r0",
+                ),
+                _comparison_row(
+                    orthogroup_id="og_2",
+                    query_record_index=2,
+                    query_feature_svg_id="feature_r2",
+                    subject_record_index=1,
+                    subject_feature_svg_id="feature_r1_a",
+                ),
+                _comparison_row(
+                    orthogroup_id="og_2",
+                    query_record_index=1,
+                    query_feature_svg_id="feature_r1_b",
+                    subject_record_index=2,
+                    subject_feature_svg_id="feature_r2_b",
+                ),
+            ]
+        )
+    ]
+
+    comparison_eligibility = build_orthogroup_label_eligibility(comparisons=comparisons)
+    assert comparison_eligibility.member_ids_by_record == {
+        0: {"feature_r0"},
+        1: {"feature_r1", "feature_r1_a", "feature_r1_b"},
+        2: {"feature_r2", "feature_r2_b"},
+    }
+    assert comparison_eligibility.top_member_ids_by_record == {
+        0: {"feature_r0"},
+        1: {"feature_r1_a", "feature_r1_b"},
+    }
+
+
+@pytest.mark.linear
+def test_linear_orthogroup_top_labels_suppress_only_lower_orthogroup_members() -> None:
+    records = [
+        _synthetic_label_record("record_0", 1000, "top_orthogroup_label", "top_non_orthogroup_label"),
+        _synthetic_label_record("record_1", 1000, "lower_orthogroup_label", "lower_non_orthogroup_label"),
+    ]
+    top_feature_id = compute_feature_hash(records[0].features[0], record_id=records[0].id)
+    lower_feature_id = compute_feature_hash(records[1].features[0], record_id=records[1].id)
+    comparisons = [
+        DataFrame(
+            [
+                _comparison_row(
+                    orthogroup_id="og_1",
+                    query_record_index=1,
+                    query_feature_svg_id=lower_feature_id,
+                    subject_record_index=0,
+                    subject_feature_svg_id=top_feature_id,
+                )
+            ]
+        )
+    ]
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels="orthogroup_top",
+        label_blacklist="",
+    )
+
+    svg_content = assemble_linear_diagram_from_records(
+        records,
+        protein_comparisons=comparisons,
+        config_dict=config_dict,
+        selected_features_set=["CDS"],
+        legend="none",
+    ).tostring()
+
+    assert "top_orthogroup_label" in svg_content
+    assert "lower_orthogroup_label" not in svg_content
+    assert "top_non_orthogroup_label" in svg_content
+    assert "lower_non_orthogroup_label" in svg_content
 
 
 @pytest.mark.linear

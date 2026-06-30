@@ -3196,6 +3196,7 @@ json.dumps({
         if (form.show_labels_linear !== 'none') {
           args.push('--show_labels');
           if (form.show_labels_linear === 'first') args.push('first');
+          if (form.show_labels_linear === 'orthogroup_top') args.push('orthogroup_top');
         }
         const normalizedLabelPlacement = adv.label_placement === 'on_feature' ? 'above_feature' : adv.label_placement;
         let normalizedLabelRendering = form.show_labels_linear === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);

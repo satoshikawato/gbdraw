@@ -12,7 +12,6 @@ from __future__ import annotations
 import math
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
@@ -23,6 +22,7 @@ from ...features.objects import FeatureObject  # type: ignore[reportMissingImpor
 from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
+from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
 
 
 FeatureDict = dict[str, FeatureObject]
@@ -97,6 +97,7 @@ def _precalculate_feature_dicts(
     canvas_config: LinearCanvasConfigurator,
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
+    orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
 ) -> list[FeatureDict]:
     """Build feature objects once per record for the linear assembly pipeline."""
 
@@ -114,6 +115,7 @@ def _precalculate_feature_dicts(
         compute_label_text = (
             show_labels_mode == "all"
             or (show_labels_mode == "first" and i == 0)
+            or show_labels_mode == "orthogroup_top"
         )
         feature_dict, _ = create_feature_dict(
             record,
@@ -138,6 +140,7 @@ def _precalculate_label_dimensions(
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
     precomputed_feature_dicts: list[FeatureDict] | None = None,
+    orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
 ) -> tuple[float, dict, dict]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
 
@@ -170,6 +173,10 @@ def _precalculate_label_dimensions(
             all_labels_by_record[record.id] = []
             record_label_heights[record.id] = 0
             continue
+        member_ids, top_member_ids = orthogroup_label_sets_for_record(
+            orthogroup_label_eligibility if show_labels_mode == "orthogroup_top" else None,
+            i,
+        )
 
         if precomputed_feature_dicts is not None:
             feature_dict = precomputed_feature_dicts[i]
@@ -205,6 +212,8 @@ def _precalculate_label_dimensions(
             config_dict,
             cfg=cfg,
             label_font_size=label_font_size,
+            orthogroup_label_member_ids=member_ids,
+            orthogroup_label_top_member_ids=top_member_ids,
         )
         all_labels_by_record[record.id] = label_list
 

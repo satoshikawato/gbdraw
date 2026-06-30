@@ -2551,11 +2551,12 @@
                         <summary><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
-                                <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track."></help-tip></label>
+                                <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Orthogroup Record' requires LOSATP orthogroup or collinear mode."></help-tip></label>
                                 <select v-model="form.show_labels_linear" class="form-input text-xs py-1">
                                     <option value="none">None</option>
                                     <option value="all">All Records</option>
                                     <option value="first">First Record Only</option>
+                                    <option value="orthogroup_top" :disabled="!(blastSource === 'losat' && losatProgram === 'blastp' && (losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear')) && form.show_labels_linear !== 'orthogroup_top'">Top Orthogroup Record</option>
                                 </select>
                             </div>
                             <div v-else>

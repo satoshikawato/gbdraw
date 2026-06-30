@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import NamedTuple, Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -44,6 +44,11 @@ class OrthogroupAlignmentCanvasExtents:
     @property
     def ruler_width(self) -> float:
         return max(0.0, self.max_right - self.min_left)
+
+
+class OrthogroupLabelEligibility(NamedTuple):
+    member_ids_by_record: dict[int, set[str]]
+    top_member_ids_by_record: dict[int, set[str]]
 
 
 def _row_value(row: object, column: str, default: object = "") -> object:
@@ -194,6 +199,44 @@ def _collect_alignment_members_from_orthogroups(
             key=lambda item: (item.record_index, item.center, item.protein_id, item.feature_svg_id),
         )
     return members_by_orthogroup
+
+
+def build_orthogroup_label_eligibility(
+    orthogroups: OrthogroupResult | None = None,
+    comparisons: Sequence[DataFrame] | None = None,
+) -> OrthogroupLabelEligibility:
+    """Return all orthogroup feature IDs and the top-record IDs eligible for labels."""
+
+    members_by_orthogroup = (
+        _collect_alignment_members_from_orthogroups(orthogroups)
+        if orthogroups is not None
+        else _collect_alignment_members(comparisons or [])
+    )
+    member_ids_by_record: dict[int, set[str]] = {}
+    top_member_ids_by_record: dict[int, set[str]] = {}
+    for members in members_by_orthogroup.values():
+        members_with_ids = [member for member in members if member.feature_svg_id]
+        if not members_with_ids:
+            continue
+        for member in members_with_ids:
+            member_ids_by_record.setdefault(member.record_index, set()).add(member.feature_svg_id)
+        top_record_index = min(member.record_index for member in members_with_ids)
+        for member in members_with_ids:
+            if member.record_index == top_record_index:
+                top_member_ids_by_record.setdefault(member.record_index, set()).add(member.feature_svg_id)
+    return OrthogroupLabelEligibility(member_ids_by_record, top_member_ids_by_record)
+
+
+def orthogroup_label_sets_for_record(
+    eligibility: OrthogroupLabelEligibility | None,
+    record_index: int,
+) -> tuple[set[str] | None, set[str] | None]:
+    if eligibility is None:
+        return None, None
+    return (
+        eligibility.member_ids_by_record.get(record_index, set()),
+        eligibility.top_member_ids_by_record.get(record_index, set()),
+    )
 
 
 def _target_matches(member: OrthogroupAlignmentMember, target: str) -> bool:
@@ -382,7 +425,10 @@ def calculate_orthogroup_alignment_offsets(
 __all__ = [
     "OrthogroupAlignmentCanvasExtents",
     "OrthogroupAlignmentMember",
+    "OrthogroupLabelEligibility",
+    "build_orthogroup_label_eligibility",
     "calculate_orthogroup_alignment_canvas_adjustment",
     "calculate_orthogroup_alignment_canvas_extents",
     "calculate_orthogroup_alignment_offsets",
+    "orthogroup_label_sets_for_record",
 ]

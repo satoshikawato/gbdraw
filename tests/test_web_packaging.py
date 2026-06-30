@@ -263,7 +263,6 @@ def test_web_feature_color_caption_scope_updates_specific_rule() -> None:
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
-    app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 
@@ -420,6 +419,20 @@ def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> Non
     assert "groupMetadataScopeLabel(orthogroupScope(groupOrId))" in orthogroups_js
     assert "orthogroupScopeLabel(group)" in index_html
     assert "orthogroupScopeLabel(selectedOrthogroup)" in index_html
+
+
+def test_web_run_analysis_orthogroup_top_label_mode_is_wired() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert '<option value="orthogroup_top"' in index_html
+    assert "Top Orthogroup Record" in index_html
+    assert "losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear'" in index_html
+    assert "if (form.show_labels_linear === 'orthogroup_top') args.push('orthogroup_top');" in run_analysis_js
+    assert "show_labels_linear: 'none'" in state_js
+    assert "form: state.form" in config_js
 
 
 def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:

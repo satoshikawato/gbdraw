@@ -1116,11 +1116,11 @@ def _get_args(args) -> argparse.Namespace:
         default="right")
     parser.add_argument(
             "--show_labels",
-            help="Show labels: no argument or 'all' (all records), 'first' (first record only), 'none' (no labels). Default: 'none'",
+            help="Show labels: no argument or 'all' (all records), 'first' (first record only), 'orthogroup_top' (topmost record containing each orthogroup), 'none' (no labels). Default: 'none'",
             nargs='?',
             const="all",
             default="none",
-            choices=["all", "first", "none"],
+            choices=["all", "first", "orthogroup_top", "none"],
             type=str
         )
     parser.add_argument(
