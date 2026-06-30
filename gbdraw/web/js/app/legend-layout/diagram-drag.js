@@ -3,7 +3,6 @@ import { parseTransform } from './transform-utils.js';
 export const createDiagramDragActions = ({ state }) => {
   const {
     svgContainer,
-    mode,
     diagramElements,
     diagramElementIds,
     diagramElementOriginalTransforms,
@@ -81,6 +80,7 @@ export const createDiagramDragActions = ({ state }) => {
   };
 
   const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
+  const isPlotTitleGroup = (group) => (group?.id || '') === 'plot_title';
 
   const getDiagramGroupsForSingleRecordOrLinear = (svg) => {
     const knownIds = ['tick', 'labels', 'Axis', 'gc_content', 'skew', 'gc_skew'];
@@ -152,6 +152,12 @@ export const createDiagramDragActions = ({ state }) => {
     };
   };
 
+  const transformsApproximatelyEqual = (a, b) => {
+    const left = normalizeTransform(a);
+    const right = normalizeTransform(b);
+    return Math.abs(left.x - right.x) < 0.001 && Math.abs(left.y - right.y) < 0.001;
+  };
+
   const assignPlotTitleElement = (group) => {
     if (plotTitleElement.value && plotTitleElement.value !== group) {
       plotTitleElement.value.style.opacity = '1';
@@ -165,7 +171,7 @@ export const createDiagramDragActions = ({ state }) => {
   };
 
   const applyPlotTitleTransform = (group = plotTitleElement.value) => {
-    if (mode.value !== 'circular' || !group) return;
+    if (!group) return;
     const autoTransform = normalizeTransform(plotTitleAutoTransform.value);
     const nextX = autoTransform.x + plotTitleUserOffset.x;
     const nextY = autoTransform.y + plotTitleUserOffset.y;
@@ -246,7 +252,7 @@ export const createDiagramDragActions = ({ state }) => {
   };
 
   const setPlotTitleAutoTransform = (group, nextAutoTransform, { preserveUserOffset = true } = {}) => {
-    if (mode.value !== 'circular' || !group) {
+    if (!group) {
       clearPlotTitleState();
       return;
     }
@@ -270,11 +276,6 @@ export const createDiagramDragActions = ({ state }) => {
   };
 
   const syncPlotTitleElement = (svg, preserveOffset = false) => {
-    if (mode.value !== 'circular') {
-      clearPlotTitleState();
-      return;
-    }
-
     const nextPlotTitleGroup = svg?.getElementById('plot_title');
     if (!nextPlotTitleGroup) {
       clearPlotTitleState();
@@ -282,13 +283,23 @@ export const createDiagramDragActions = ({ state }) => {
     }
 
     const hadPlotTitleState = !!plotTitleElement.value;
+    const generatedTransform = parseTransform(nextPlotTitleGroup.getAttribute('transform'));
     assignPlotTitleElement(nextPlotTitleGroup);
     if (!preserveOffset) {
-      plotTitleAutoTransform.value = parseTransform(nextPlotTitleGroup.getAttribute('transform'));
+      plotTitleAutoTransform.value = generatedTransform;
       plotTitleUserOffset.x = 0;
       plotTitleUserOffset.y = 0;
     } else if (!hadPlotTitleState) {
-      plotTitleAutoTransform.value = parseTransform(nextPlotTitleGroup.getAttribute('transform'));
+      plotTitleAutoTransform.value = generatedTransform;
+    } else {
+      const autoTransform = normalizeTransform(plotTitleAutoTransform.value);
+      const currentTransform = {
+        x: autoTransform.x + plotTitleUserOffset.x,
+        y: autoTransform.y + plotTitleUserOffset.y
+      };
+      if (!transformsApproximatelyEqual(generatedTransform, currentTransform)) {
+        plotTitleAutoTransform.value = generatedTransform;
+      }
     }
     applyPlotTitleTransform(nextPlotTitleGroup);
   };
@@ -394,12 +405,10 @@ export const createDiagramDragActions = ({ state }) => {
       return;
     }
 
-    if (mode.value === 'circular') {
-      const clickedPlotTitle = e.target.closest('#plot_title');
-      if (clickedPlotTitle) {
-        startPlotTitleDrag(e, clickedPlotTitle);
-        return;
-      }
+    const clickedPlotTitle = e.target.closest('#plot_title');
+    if (clickedPlotTitle) {
+      startPlotTitleDrag(e, clickedPlotTitle);
+      return;
     }
 
     const isMultiRecordCanvas = isMultiRecordCanvasSvg(svg);
@@ -418,6 +427,7 @@ export const createDiagramDragActions = ({ state }) => {
       const clickedId = clickedGroup.id;
       if (LEGEND_GROUP_IDS.has(clickedId)) return;
       if (isLengthBarGroup(clickedGroup)) return;
+      if (isPlotTitleGroup(clickedGroup)) return;
 
       dragTargets = diagramElements.value;
       if (dragTargets.length === 0) return;
@@ -583,9 +593,8 @@ export const createDiagramDragActions = ({ state }) => {
     const selectedGroups = isMultiRecordCanvas
       ? getTopLevelDiagramGroupsForMultiRecord(svg)
       : getDiagramGroupsForSingleRecordOrLinear(svg);
-    const separatePlotTitle = mode.value === 'circular';
-    const foundElements = selectedGroups.groups.filter((el) => !(separatePlotTitle && (el.id || '') === 'plot_title'));
-    const foundIds = selectedGroups.ids.filter((id) => !(separatePlotTitle && id === 'plot_title'));
+    const foundElements = selectedGroups.groups.filter((el) => !isPlotTitleGroup(el));
+    const foundIds = selectedGroups.ids.filter((id) => id !== 'plot_title');
 
     diagramElements.value = foundElements;
     diagramElementIds.value = foundIds;

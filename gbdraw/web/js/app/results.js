@@ -492,11 +492,12 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
           } else if (safeTitlePosition === 'bottom') {
             titleY = canvasSize.height - edgeMargin - (0.5 * titleHeight);
           }
-          const nextTransform = `translate(${0.5 * canvasSize.width},${titleY})`;
-          if (plotTitleGroup.getAttribute('transform') !== nextTransform) {
-            plotTitleGroup.setAttribute('transform', nextTransform);
-            updated = true;
-          }
+          setPlotTitleAutoTransform(
+            plotTitleGroup,
+            { x: 0.5 * canvasSize.width, y: titleY },
+            { preserveUserOffset: true }
+          );
+          updated = true;
         }
       }
 
