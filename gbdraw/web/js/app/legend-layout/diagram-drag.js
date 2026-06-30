@@ -18,6 +18,7 @@ export const createDiagramDragActions = ({ state }) => {
     plotTitleDragStart,
     plotTitleAutoTransform,
     plotTitleUserOffset,
+    layoutRepositionMode,
     zoom,
     generatedLegendPosition
   } = state;
@@ -37,6 +38,17 @@ export const createDiagramDragActions = ({ state }) => {
   let activePlotTitleOffsetStart = { x: 0, y: 0 };
   let diagramDragFrameId = null;
   let pendingDiagramPointer = null;
+
+  const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
+
+  const setElementCursor = (element, cursor) => {
+    if (!element?.style) return;
+    if (cursor) {
+      element.style.cursor = cursor;
+    } else {
+      element.style.removeProperty('cursor');
+    }
+  };
 
   const cancelDiagramDragFrame = () => {
     if (diagramDragFrameId !== null) {
@@ -143,12 +155,12 @@ export const createDiagramDragActions = ({ state }) => {
   const assignPlotTitleElement = (group) => {
     if (plotTitleElement.value && plotTitleElement.value !== group) {
       plotTitleElement.value.style.opacity = '1';
-      plotTitleElement.value.style.cursor = '';
+      setElementCursor(plotTitleElement.value, '');
     }
     plotTitleElement.value = group || null;
     if (plotTitleElement.value) {
       plotTitleElement.value.style.opacity = '1';
-      plotTitleElement.value.style.cursor = 'grab';
+      setElementCursor(plotTitleElement.value, isLayoutRepositionModeEnabled() ? 'grab' : '');
     }
   };
 
@@ -192,7 +204,7 @@ export const createDiagramDragActions = ({ state }) => {
   const clearLengthBarState = () => {
     if (lengthBarElement.value) {
       lengthBarElement.value.style.opacity = '1';
-      lengthBarElement.value.style.cursor = '';
+      setElementCursor(lengthBarElement.value, '');
     }
     lengthBarElement.value = null;
     lengthBarOriginalTransform.value = { x: 0, y: 0 };
@@ -211,7 +223,7 @@ export const createDiagramDragActions = ({ state }) => {
     const hadLengthBarState = !!lengthBarElement.value;
     lengthBarElement.value = nextLengthBar;
     lengthBarElement.value.style.opacity = '1';
-    lengthBarElement.value.style.cursor = 'grab';
+    setElementCursor(lengthBarElement.value, isLayoutRepositionModeEnabled() ? 'grab' : '');
 
     if (!preserveOffset || !hadLengthBarState) {
       lengthBarOriginalTransform.value = parseTransform(nextLengthBar.getAttribute('transform'));
@@ -296,7 +308,29 @@ export const createDiagramDragActions = ({ state }) => {
     diagramOffset.y = 0;
   };
 
+  const refreshDiagramDragAffordances = () => {
+    const enabled = isLayoutRepositionModeEnabled();
+    const elements = Array.isArray(diagramElements.value) ? diagramElements.value : [];
+    const hasRecordGroups = elements.some((el) => (el?.id || '').startsWith('record_'));
+
+    elements.forEach((el) => {
+      if (!enabled) {
+        setElementCursor(el, '');
+        return;
+      }
+      if (hasRecordGroups) {
+        setElementCursor(el, (el?.id || '').startsWith('record_') ? 'grab' : '');
+      } else {
+        setElementCursor(el, 'grab');
+      }
+    });
+
+    setElementCursor(lengthBarElement.value, enabled ? 'grab' : '');
+    setElementCursor(plotTitleElement.value, enabled ? 'grab' : '');
+  };
+
   const startLengthBarDrag = (e, group) => {
+    if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
 
     e.preventDefault();
@@ -319,6 +353,7 @@ export const createDiagramDragActions = ({ state }) => {
   };
 
   const startPlotTitleDrag = (e, group) => {
+    if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
 
     e.preventDefault();
@@ -341,6 +376,7 @@ export const createDiagramDragActions = ({ state }) => {
   };
 
   const startDiagramDrag = (e) => {
+    if (!isLayoutRepositionModeEnabled()) return;
     if (
       e.target.closest('#legend') ||
       e.target.closest('text[data-label-editable="true"]') ||
@@ -611,16 +647,7 @@ export const createDiagramDragActions = ({ state }) => {
       console.log(`[DEBUG]   -> ${el.id}: (${transform.x}, ${transform.y})`);
     });
 
-    foundElements.forEach((el) => {
-      if (isMultiRecordCanvas) {
-        el.style.cursor = (el.id || '').startsWith('record_') ? 'grab' : '';
-      } else {
-        el.style.cursor = 'grab';
-      }
-    });
-    if (lengthBarElement.value) {
-      lengthBarElement.value.style.cursor = 'grab';
-    }
+    refreshDiagramDragAffordances();
 
     svg.removeEventListener('mousedown', startDiagramDrag);
     svg.addEventListener('mousedown', startDiagramDrag);
@@ -632,6 +659,7 @@ export const createDiagramDragActions = ({ state }) => {
     clearPlotTitleState,
     endDiagramDrag,
     onDiagramDrag,
+    refreshDiagramDragAffordances,
     resetDiagramPosition,
     resetLengthBarPosition,
     resetPlotTitlePosition,

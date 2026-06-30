@@ -10,11 +10,23 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
     legendOriginalTransform,
     legendInitialTransform,
     legendCurrentOffset,
+    layoutRepositionMode,
     zoom,
     skipCaptureBaseConfig
   } = state;
   let legendDragFrameId = null;
   let pendingLegendPointer = null;
+
+  const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
+
+  const setElementCursor = (element, cursor) => {
+    if (!element?.style) return;
+    if (cursor) {
+      element.style.cursor = cursor;
+    } else {
+      element.style.removeProperty('cursor');
+    }
+  };
 
   const cancelLegendDragFrame = () => {
     if (legendDragFrameId !== null) {
@@ -44,6 +56,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
   };
 
   const startLegendDrag = (e) => {
+    if (!isLayoutRepositionModeEnabled()) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -98,6 +111,16 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
     legendDragging.value = false;
   };
 
+  const refreshLegendDragAffordances = () => {
+    if (!svgContainer.value) return;
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return;
+    const legendGroup = svg.getElementById('legend');
+    if (!legendGroup) return;
+
+    setElementCursor(legendGroup, isLayoutRepositionModeEnabled() ? 'grab' : '');
+  };
+
   const resetLegendPositionOnly = () => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
@@ -133,8 +156,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
     const initialTransform = parseTransform(legendGroup.getAttribute('transform'));
     legendInitialTransform.value = { ...initialTransform };
 
-    legendGroup.style.cursor = 'move';
     legendGroup.onmousedown = startLegendDrag;
+    refreshLegendDragAffordances();
 
     svg.onmousemove = onLegendDrag;
     svg.onmouseup = endLegendDrag;
@@ -144,6 +167,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
   return {
     endLegendDrag,
     onLegendDrag,
+    refreshLegendDragAffordances,
     resetLegendPosition,
     resetLegendPositionOnly,
     setupLegendDrag,

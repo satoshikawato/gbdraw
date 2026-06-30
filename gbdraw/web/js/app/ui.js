@@ -1,7 +1,30 @@
 export const createPanZoom = (state) => {
-  const { zoom, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer } = state;
+  const { zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer } = state;
   let panFrameId = null;
   let pendingPanPointer = null;
+
+  const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
+
+  const isFormControlTarget = (target) =>
+    Boolean(target?.closest?.('button, input, textarea, select, a, [role="button"]'));
+
+  const isSvgEditingTarget = (target) =>
+    Boolean(
+      target?.closest?.(
+        [
+          'text[data-label-editable="true"]',
+          '[data-gbdraw-feature-id]',
+          'path[id^="f"]',
+          'polygon[id^="f"]',
+          'rect[id^="f"]',
+          '[data-gbdraw-pairwise-match-id]',
+          '[data-match-kind]',
+          '[data-pairwise-match-style]',
+          '[data-collinearity-block-id]',
+          '[data-collinear-group-scope]'
+        ].join(', ')
+      )
+    );
 
   const cancelPanFrame = () => {
     if (panFrameId !== null) {
@@ -67,23 +90,17 @@ export const createPanZoom = (state) => {
     if (!container) return;
 
     const target = event.target;
+    if (isFormControlTarget(target) || isSvgEditingTarget(target)) return;
+
     const closestGroup = target.closest?.('g[id]');
     if (closestGroup) {
       const groupId = closestGroup.id;
-      if (
-        groupId === 'legend' ||
-        groupId === 'feature_legend' ||
-        groupId === 'pairwise_legend' ||
-        groupId === 'horizontal_legend' ||
-        groupId === 'vertical_legend' ||
-        groupId.startsWith('comparison') ||
-        groupId.startsWith('f') ||
-        target.closest('svg')
-      ) {
+      if (groupId.startsWith('f')) {
         return;
       }
+      if (isLayoutRepositionModeEnabled() && target.closest('svg')) return;
     }
-    if (target.tagName === 'path' && target.closest('svg')) {
+    if (isLayoutRepositionModeEnabled() && target.tagName === 'path' && target.closest('svg')) {
       return;
     }
 

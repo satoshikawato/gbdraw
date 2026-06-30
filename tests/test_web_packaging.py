@@ -1376,6 +1376,32 @@ def test_plain_svg_export_strips_editor_only_cursor_affordances() -> None:
     assert "export const downloadInteractiveSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
 
 
+def test_layout_reposition_mode_gates_preview_dragging() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    watcher_source = (WEB_ROOT / "js" / "app" / "watchers.js").read_text(encoding="utf-8")
+    diagram_drag_source = (WEB_ROOT / "js" / "app" / "legend-layout" / "diagram-drag.js").read_text(
+        encoding="utf-8"
+    )
+    legend_drag_source = (WEB_ROOT / "js" / "app" / "legend" / "drag-actions.js").read_text(
+        encoding="utf-8"
+    )
+    ui_source = (WEB_ROOT / "js" / "app" / "ui.js").read_text(encoding="utf-8")
+
+    assert "const layoutRepositionMode = ref(false);" in state_source
+    assert "layoutRepositionMode," in state_source
+    assert '@click="layoutRepositionMode = !layoutRepositionMode"' in index_html
+    assert 'v-if="svgContent && layoutRepositionMode"' in index_html
+    assert "if (!isLayoutRepositionModeEnabled()) return;" in diagram_drag_source
+    assert "const refreshDiagramDragAffordances = () => {" in diagram_drag_source
+    assert "const refreshLegendDragAffordances = () => {" in legend_drag_source
+    assert "() => layoutRepositionMode.value" in watcher_source
+    assert "refreshLegendDragAffordances();" in watcher_source
+    assert "refreshDiagramDragAffordances();" in watcher_source
+    assert "isSvgEditingTarget(target)" in ui_source
+    assert "isLayoutRepositionModeEnabled() && target.closest('svg')" in ui_source
+
+
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "static.cloudflareinsights.com" not in index_html

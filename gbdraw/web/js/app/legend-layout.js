@@ -23,6 +23,7 @@ export const createLegendLayout = ({ state, debugLog, legendActions, svgActions 
     ...canvasActions,
     ...repositionActions,
     clearPlotTitleState: diagramActions.clearPlotTitleState,
+    refreshDiagramDragAffordances: diagramActions.refreshDiagramDragAffordances,
     resetAllPositions,
     resetPlotTitlePosition: diagramActions.resetPlotTitlePosition,
     setPlotTitleAutoTransform: diagramActions.setPlotTitleAutoTransform,

@@ -173,6 +173,7 @@ const svgContent = computed(() => {
 });
 
 const zoom = ref(1.0);
+const layoutRepositionMode = ref(false);
 
 // Pan (drag) functionality
 const isPanning = ref(false);
@@ -1016,6 +1017,7 @@ export const state = {
   pairwiseMatchFactors,
   svgContent,
   zoom,
+  layoutRepositionMode,
   isPanning,
   panStart,
   canvasPan,
