@@ -2506,7 +2506,7 @@
 
                             <div>
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <label class="input-label adv-section-title mb-0">Feature Visibility <help-tip text="Rules are written as the CLI feature visibility table. The row order is the matching priority."></help-tip></label>
+                                    <label class="input-label adv-section-title mb-0">Feature Visibility <help-tip text="Rules are written as the CLI feature visibility table. The row order is the matching priority. Off hides and removes a feature from protein comparison inputs; Exclude from matching only removes it from protein comparison inputs."></help-tip></label>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -2559,8 +2559,8 @@
                                             <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-3">
                                             <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" class="form-input form-input-compact col-span-3">
                                                 <option value="show">Show</option>
-                                                <option value="hide">Hide</option>
-                                                <option value="suppress">Suppress</option>
+                                                <option value="off">Off</option>
+                                                <option value="exclude_matching">Exclude from matching</option>
                                             </select>
                                         </div>
                                         <div>
@@ -3671,11 +3671,11 @@
                                     class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                                 <option value="default">Default (follow feature filters)</option>
                                 <option value="on">On (force show)</option>
-                                <option value="off">Off (force hide)</option>
-                                <option value="suppress">Suppress (hide and exclude from protein comparisons)</option>
+                                <option value="off">Off (hide and exclude from matching)</option>
+                                <option value="exclude_matching">Exclude from matching (leave visibility unchanged)</option>
                             </select>
                             <p class="text-[10px] text-slate-400 mt-1">
-                                Applies to this feature only (hash ID rule).
+                                Choose a scope when orthogroup, product, or protein ID rules are available.
                             </p>
                         </div>
                         </div>
@@ -4122,6 +4122,33 @@
                                 title="Drag to resize"
                                 aria-label="Resize popup"
                                 data-nodrag="true"></button>
+                    </div>
+
+                    <!-- Feature Visibility Scope Dialog -->
+                    <div v-if="featureVisibilityScopeDialog.show"
+                         class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
+                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Feature Visibility Scope</h3>
+                            <p class="text-sm text-slate-600 mb-4">
+                                Choose how to apply this visibility mode.
+                            </p>
+                            <div class="flex flex-col gap-2">
+                                <button v-for="scope in featureVisibilityScopeDialog.scopes"
+                                        :key="`feature-visibility-scope-${scope.id}`"
+                                        @click="handleFeatureVisibilityScopeChoice(scope.id)"
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-start gap-2">
+                                    <i class="ph ph-funnel text-lg mt-0.5"></i>
+                                    <span class="min-w-0">
+                                        <span class="block truncate">{{ scope.label }}</span>
+                                        <span class="block text-[11px] font-normal text-slate-500">{{ scope.description }}</span>
+                                    </span>
+                                </button>
+                            </div>
+                            <button @click="handleFeatureVisibilityScopeChoice('cancel')"
+                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
+                                Cancel
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Label Text Scope Dialog -->

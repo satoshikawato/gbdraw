@@ -51,6 +51,7 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     featureVisibilityQualifierSuggestions: visibilityActions.featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail: visibilityActions.featureVisibilityRuleDetail,
     getFeatureVisibility: visibilityActions.getFeatureVisibility,
+    handleFeatureVisibilityScopeChoice: visibilityActions.handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: visibilityActions.moveFeatureVisibilityRuleDown,
     moveFeatureVisibilityRuleUp: visibilityActions.moveFeatureVisibilityRuleUp,
     removeFeatureVisibilityRule: visibilityActions.removeFeatureVisibilityRule,

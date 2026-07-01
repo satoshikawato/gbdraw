@@ -8,7 +8,11 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 
 from gbdraw.features.ids import compute_feature_hash
-from gbdraw.features.visibility import should_render_feature
+from gbdraw.features.visibility import (
+    compile_feature_visibility_rules,
+    read_feature_visibility_file,
+    should_render_feature,
+)
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
@@ -21,6 +25,15 @@ def _normalize_record_selector(record_selector: object | None) -> str | None:
     if selector_raw.lower() in _NULLISH_TEXT:
         return None
     return selector_raw
+
+
+def _normalize_optional_path(path: object | None) -> str | None:
+    if path is None:
+        return None
+    normalized = str(path).strip()
+    if normalized.lower() in _NULLISH_TEXT:
+        return None
+    return normalized
 
 
 def _normalize_selected_feature_set(selected_features: object | None) -> set[str] | None:
@@ -312,14 +325,22 @@ def extract_features_from_genbank_json(
     record_selector: object | None = None,
     reverse_flag: object | None = None,
     selected_features: object | None = None,
+    feature_visibility_table_path: object | None = None,
 ) -> str:
     try:
+        feature_visibility_rules = None
+        normalized_visibility_path = _normalize_optional_path(feature_visibility_table_path)
+        if normalized_visibility_path:
+            feature_visibility_rules = compile_feature_visibility_rules(
+                read_feature_visibility_file(normalized_visibility_path)
+            )
         payload = extract_features_from_genbank_payload(
             gb_path,
             region_spec=region_spec,
             record_selector=record_selector,
             reverse_flag=reverse_flag,
             selected_features=selected_features,
+            feature_visibility_rules=feature_visibility_rules,
         )
     except Exception as exc:
         return json.dumps({"error": str(exc)})

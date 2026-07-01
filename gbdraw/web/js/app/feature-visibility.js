@@ -1,8 +1,8 @@
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
 const COMMON_QUALIFIERS = ['product', 'gene', 'locus_tag', 'hash', 'location', 'record_location'];
-const SHOW_ACTIONS = new Set(['show', 'on', 'display', 'include', 'true', '1']);
+const SHOW_ACTIONS = new Set(['show', 'on']);
 const HIDE_ACTIONS = new Set(['hide', 'off', 'false', '0']);
-const SUPPRESS_ACTIONS = new Set(['suppress', 'exclude']);
+const EXCLUDE_MATCHING_ACTIONS = new Set(['exclude_matching', 'suppress']);
 
 let generatedRuleId = 0;
 
@@ -15,27 +15,29 @@ const normalizeSource = (value) => {
 export const featureVisibilityQualifierSuggestions = COMMON_QUALIFIERS;
 
 export const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export const exactRegexValue = (value) => `^${escapeRegexLiteral(value)}$`;
 
 export const normalizeFeatureVisibilityAction = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
   if (SHOW_ACTIONS.has(normalized)) return 'show';
-  if (HIDE_ACTIONS.has(normalized)) return 'hide';
-  if (SUPPRESS_ACTIONS.has(normalized)) return 'suppress';
+  if (HIDE_ACTIONS.has(normalized)) return 'off';
+  if (EXCLUDE_MATCHING_ACTIONS.has(normalized)) return 'exclude_matching';
   return '';
 };
 
 export const featureVisibilityActionToMode = (value) => {
   const action = normalizeFeatureVisibilityAction(value);
   if (action === 'show') return 'on';
-  if (action === 'hide') return 'off';
-  if (action === 'suppress') return 'suppress';
+  if (action === 'off') return 'off';
+  if (action === 'exclude_matching') return 'exclude_matching';
   return 'default';
 };
 
 export const featureVisibilityModeToAction = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
   if (normalized === 'on') return 'show';
-  if (normalized === 'off') return 'hide';
+  if (normalized === 'off') return 'off';
+  if (normalized === 'exclude_matching' || normalized === 'suppress') return 'exclude_matching';
   if (normalized === 'default') return '';
   return normalizeFeatureVisibilityAction(normalized);
 };
@@ -67,12 +69,12 @@ export const createDefaultFeatureVisibilityRule = () => ({
   featureType: '*',
   qualifier: 'product',
   value: '',
-  action: 'hide'
+  action: 'off'
 });
 
 export const normalizeFeatureVisibilityRule = (raw = {}) => {
   const source = normalizeSource(raw.source);
-  const action = normalizeFeatureVisibilityAction(raw.action) || 'hide';
+  const action = normalizeFeatureVisibilityAction(raw.action) || 'off';
   return {
     id: normalizeCell(raw.id) || nextRuleId(source === 'file' ? 'feature-visibility-file-rule' : 'feature-visibility-rule'),
     source,
@@ -190,7 +192,86 @@ const isExactEditorHashRule = (rule, featureId) => {
     normalized.recordId === '*' &&
     normalized.featureType === '*' &&
     normalized.qualifier.toLowerCase() === 'hash' &&
-    normalized.value === `^${escapeRegexLiteral(expectedFeatureId)}$`;
+    normalized.value === exactRegexValue(expectedFeatureId);
+};
+
+const isEditorExactHashRule = (rule) => {
+  const normalized = normalizeFeatureVisibilityRule(rule);
+  return normalized.source === 'editor' &&
+    normalized.recordId === '*' &&
+    normalized.featureType === '*' &&
+    normalized.qualifier.toLowerCase() === 'hash' &&
+    normalized.featureId &&
+    normalized.value === exactRegexValue(normalized.featureId);
+};
+
+const isEditorExactQualifierRule = (rule) => {
+  const normalized = normalizeFeatureVisibilityRule(rule);
+  const qualifier = normalized.qualifier.toLowerCase();
+  return normalized.source === 'editor' &&
+    normalized.recordId === '*' &&
+    normalized.featureType &&
+    normalized.featureType !== '*' &&
+    ['product', 'protein_id'].includes(qualifier) &&
+    normalized.value.startsWith('^') &&
+    normalized.value.endsWith('$');
+};
+
+const reorderEditorVisibilityRules = (rules) => {
+  if (!Array.isArray(rules)) return;
+  const hashRules = [];
+  const qualifierRules = [];
+  const otherRules = [];
+  rules.forEach((rule) => {
+    if (isEditorExactHashRule(rule)) {
+      hashRules.push(rule);
+    } else if (isEditorExactQualifierRule(rule)) {
+      qualifierRules.push(rule);
+    } else {
+      otherRules.push(rule);
+    }
+  });
+  rules.splice(0, rules.length, ...hashRules, ...qualifierRules, ...otherRules);
+};
+
+export const buildExactHashFeatureVisibilityRule = (feat, actionRaw) => {
+  const featureId = normalizeCell(feat?.svg_id ?? feat?.svgId ?? feat?.id);
+  const action = featureVisibilityModeToAction(actionRaw);
+  if (!featureId || !action) return null;
+  return normalizeFeatureVisibilityRule({
+    source: 'editor',
+    featureId,
+    label: featureLabel(feat),
+    recordId: '*',
+    featureType: '*',
+    qualifier: 'hash',
+    value: exactRegexValue(featureId),
+    action
+  });
+};
+
+export const buildExactQualifierFeatureVisibilityRule = ({
+  featureType,
+  qualifier,
+  value,
+  action: actionRaw,
+  label = ''
+} = {}) => {
+  const normalizedFeatureType = normalizeCell(featureType);
+  const normalizedQualifier = normalizeCell(qualifier).toLowerCase();
+  const normalizedValue = normalizeCell(value);
+  const action = featureVisibilityModeToAction(actionRaw);
+  if (!normalizedFeatureType || !normalizedQualifier || !normalizedValue || !action) return null;
+  return normalizeFeatureVisibilityRule({
+    source: 'editor',
+    featureId: '',
+    label: normalizeCell(label) || `${normalizedQualifier}: ${normalizedValue}`,
+    recordId: '*',
+    featureType: normalizedFeatureType,
+    qualifier: normalizedQualifier,
+    value: exactRegexValue(normalizedValue),
+    action
+  });
 };
 
 export const upsertEditorFeatureVisibilityRule = (rules, feat, actionRaw) => {
@@ -203,16 +284,7 @@ export const upsertEditorFeatureVisibilityRule = (rules, feat, actionRaw) => {
     return null;
   }
 
-  const nextRule = normalizeFeatureVisibilityRule({
-    source: 'editor',
-    featureId,
-    label: featureLabel(feat),
-    recordId: '*',
-    featureType: '*',
-    qualifier: 'hash',
-    value: `^${escapeRegexLiteral(featureId)}$`,
-    action
-  });
+  const nextRule = buildExactHashFeatureVisibilityRule(feat, action);
   const existingIndex = rules.findIndex((rule) => normalizeFeatureVisibilityRule(rule).source === 'editor' &&
     normalizeFeatureVisibilityRule(rule).featureId === featureId);
 
@@ -222,6 +294,33 @@ export const upsertEditorFeatureVisibilityRule = (rules, feat, actionRaw) => {
   } else {
     rules.unshift(nextRule);
   }
+  reorderEditorVisibilityRules(rules);
+  return nextRule;
+};
+
+export const upsertEditorQualifierFeatureVisibilityRule = (rules, ruleInput, actionRaw) => {
+  if (!Array.isArray(rules)) return null;
+  const nextRule = buildExactQualifierFeatureVisibilityRule({ ...ruleInput, action: actionRaw });
+  if (!nextRule) {
+    removeEditorQualifierFeatureVisibilityRule(rules, ruleInput);
+    return null;
+  }
+  const existingIndex = rules.findIndex((rule) => {
+    const normalized = normalizeFeatureVisibilityRule(rule);
+    return normalized.source === 'editor' &&
+      normalized.recordId === nextRule.recordId &&
+      normalized.featureType === nextRule.featureType &&
+      normalized.qualifier.toLowerCase() === nextRule.qualifier.toLowerCase() &&
+      normalized.value === nextRule.value;
+  });
+
+  if (existingIndex >= 0) {
+    nextRule.id = normalizeFeatureVisibilityRule(rules[existingIndex]).id;
+    rules.splice(existingIndex, 1, nextRule);
+  } else {
+    rules.unshift(nextRule);
+  }
+  reorderEditorVisibilityRules(rules);
   return nextRule;
 };
 
@@ -233,6 +332,27 @@ export const removeEditorFeatureVisibilityRule = (rules, featureIdRaw) => {
   for (let index = rules.length - 1; index >= 0; index -= 1) {
     const rule = normalizeFeatureVisibilityRule(rules[index]);
     if (rule.source !== 'editor' || rule.featureId !== featureId) continue;
+    rules.splice(index, 1);
+    removed += 1;
+  }
+  return removed;
+};
+
+export const removeEditorQualifierFeatureVisibilityRule = (rules, ruleInput = {}) => {
+  if (!Array.isArray(rules)) return 0;
+  const featureType = normalizeCell(ruleInput.featureType);
+  const qualifier = normalizeCell(ruleInput.qualifier).toLowerCase();
+  const value = normalizeCell(ruleInput.value);
+  if (!featureType || !qualifier || !value) return 0;
+  const expectedValue = exactRegexValue(value);
+  let removed = 0;
+  for (let index = rules.length - 1; index >= 0; index -= 1) {
+    const rule = normalizeFeatureVisibilityRule(rules[index]);
+    if (rule.source !== 'editor') continue;
+    if (rule.recordId !== '*') continue;
+    if (rule.featureType !== featureType) continue;
+    if (rule.qualifier.toLowerCase() !== qualifier) continue;
+    if (rule.value !== expectedValue) continue;
     rules.splice(index, 1);
     removed += 1;
   }
@@ -275,7 +395,7 @@ export const featureVisibilityRulesFromOverrideCache = (overrides) => {
       recordId: '*',
       featureType: '*',
       qualifier: 'hash',
-      value: `^${escapeRegexLiteral(featureId)}$`,
+      value: exactRegexValue(featureId),
       action
     }));
   });

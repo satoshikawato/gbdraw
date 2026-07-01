@@ -948,12 +948,13 @@ export const createRunAnalysis = ({
     });
   };
 
-  const buildFeatureExtractionCacheKey = ({ regionSpec, recordSelector, reverseFlag, selectedFeatures }) =>
+  const buildFeatureExtractionCacheKey = ({ regionSpec, recordSelector, reverseFlag, selectedFeatures, featureVisibility }) =>
     JSON.stringify({
       regionSpec: String(regionSpec || ''),
       recordSelector: normalizeRecordSelectorText(recordSelector),
       reverseFlag: reverseFlag ? '1' : '0',
-      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : 'all'
+      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : 'all',
+      featureVisibility: String(featureVisibility || '')
     });
 
   const readFeatureExtractionData = async ({
@@ -963,10 +964,18 @@ export const createRunAnalysis = ({
     recordSelector,
     reverseFlag,
     selectedFeatures = null,
+    featureVisibilityTablePath = null,
+    featureVisibilityTsv = '',
     timingEntries,
     timingLabel
   }) => {
-    const cacheKey = buildFeatureExtractionCacheKey({ regionSpec, recordSelector, reverseFlag, selectedFeatures });
+    const cacheKey = buildFeatureExtractionCacheKey({
+      regionSpec,
+      recordSelector,
+      reverseFlag,
+      selectedFeatures,
+      featureVisibility: featureVisibilityTsv
+    });
     const cached = getCachedFeatureExtraction(file, cacheKey);
     if (cached) {
       timingEntries.push({ label: timingLabel, ms: 0, details: 'cache hit' });
@@ -979,17 +988,26 @@ export const createRunAnalysis = ({
 
     const startedAt = getNow();
     const buffer = await file.arrayBuffer();
+    const requestFiles = [{
+      path,
+      name: file.name || path.split('/').pop() || 'input.gb',
+      bytes: buffer
+    }];
+    if (featureVisibilityTablePath && featureVisibilityTsv) {
+      requestFiles.push({
+        path: featureVisibilityTablePath,
+        name: featureVisibilityTablePath.split('/').pop() || 'feature_visibility.tsv',
+        bytes: new TextEncoder().encode(featureVisibilityTsv).buffer
+      });
+    }
     const { result: featData } = await runFeatureExtraction({
       path,
-      files: [{
-        path,
-        name: file.name || path.split('/').pop() || 'input.gb',
-        bytes: buffer
-      }],
+      files: requestFiles,
       regionSpec: regionSpec || null,
       recordSelector: recordSelector || null,
       reverseFlag: Boolean(reverseFlag),
-      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : null
+      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : null,
+      featureVisibilityTablePath: featureVisibilityTablePath || null
     });
     timingEntries.push({ label: timingLabel, ms: getNow() - startedAt, details: 'worker' });
     setCachedFeatureExtraction(file, cacheKey, featData);
@@ -1116,6 +1134,8 @@ export const createRunAnalysis = ({
           regionSpec: null,
           recordSelector: null,
           reverseFlag: false,
+          featureVisibilityTablePath: context.featureVisibilityTablePath,
+          featureVisibilityTsv: context.featureVisibilityTsv,
           timingEntries,
           timingLabel: 'feature extraction circular input'
         });
@@ -1168,6 +1188,8 @@ export const createRunAnalysis = ({
             regionSpec,
             recordSelector,
             reverseFlag,
+            featureVisibilityTablePath: context.featureVisibilityTablePath,
+            featureVisibilityTsv: context.featureVisibilityTsv,
             timingEntries,
             timingLabel: `feature extraction linear input #${i + 1}`
           });
@@ -4289,7 +4311,9 @@ json.dumps({
             linearSeqs: linearSeqs.map((seq) => ({ gb: seq.gb || null })),
             regionSpecs: regionSpecs.map((spec) => ({ file: spec?.displayFile || spec?.file || null })),
             recordSelectors: [...recordSelectors],
-            reverseFlags: [...reverseFlags]
+            reverseFlags: [...reverseFlags],
+            featureVisibilityTablePath,
+            featureVisibilityTsv: featureVisibilityCacheKey
           });
           if (generationToken !== latestGenerationToken) {
             return { status: 'stale' };

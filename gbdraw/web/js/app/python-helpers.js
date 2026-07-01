@@ -1445,7 +1445,7 @@ def regenerate_definition_svg(
         }
     )
 
-def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None):
+def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None):
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
         gb_path,
@@ -1453,6 +1453,7 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
         record_selector=record_selector,
         reverse_flag=reverse_flag,
         selected_features=selected_features,
+        feature_visibility_table_path=feature_visibility_table_path,
     )
 
 `;

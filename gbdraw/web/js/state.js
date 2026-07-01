@@ -646,7 +646,7 @@ const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityRules = reactive([]);
-const featureVisibilityOverrides = reactive({}); // Derived compatibility cache: {svg_id: 'on' | 'off' | 'suppress'}
+const featureVisibilityOverrides = reactive({}); // Derived compatibility cache: {svg_id: 'on' | 'off' | 'exclude_matching'}
 const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
@@ -742,6 +742,14 @@ const labelTextScopeDialog = reactive({
   sourceText: '',
   featureId: '',
   matchingCount: 0
+});
+
+const featureVisibilityScopeDialog = reactive({
+  show: false,
+  feat: null,
+  mode: 'default',
+  previousMode: 'default',
+  scopes: []
 });
 
 const globalLabelModeDialog = reactive({
@@ -1145,6 +1153,7 @@ export const state = {
   resetColorDialog,
   legendRenameDialog,
   labelTextScopeDialog,
+  featureVisibilityScopeDialog,
   globalLabelModeDialog,
   sidebarWidth,
   isResizing,

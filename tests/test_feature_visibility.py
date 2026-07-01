@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
 import pytest
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
@@ -29,6 +31,7 @@ from gbdraw.analysis.protein_colinearity import extract_cds_proteins
 from gbdraw.io.colors import load_default_colors
 from gbdraw.legend.table import prepare_legend_table
 from gbdraw.labels.filtering import preprocess_label_filtering
+from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json
 
 
 def _visibility_df(rows: list[list[str]]) -> pd.DataFrame:
@@ -138,7 +141,7 @@ def test_read_feature_visibility_file_ok(tmp_path: Path) -> None:
     table = tmp_path / "feature_visibility.tsv"
     table.write_text(
         "# record_id\tfeature_type\tqualifier\tvalue\taction\n"
-        "rec1\tCDS\tgene\t^geneA$\thide\n"
+        "rec1\tCDS\tgene\t^geneA$\toff\n"
         "*\tmisc_feature\tnote\ttransposase\tshow\n",
         encoding="utf-8",
     )
@@ -160,7 +163,7 @@ def test_read_feature_visibility_file_missing_columns_raises_validation_error(tm
 
 def test_read_feature_visibility_file_extra_columns_raises_parse_error(tmp_path: Path) -> None:
     table = tmp_path / "feature_visibility_extra.tsv"
-    table.write_text("rec1\tCDS\tgene\t^geneA$\thide\textra\n", encoding="utf-8")
+    table.write_text("rec1\tCDS\tgene\t^geneA$\toff\textra\n", encoding="utf-8")
     with pytest.raises(ParseError):
         read_feature_visibility_file(str(table))
 
@@ -175,14 +178,26 @@ def test_compile_feature_visibility_rules_skips_header_and_normalizes_actions() 
         [
             ["record_id", "feature_type", "qualifier", "value", "action"],
             ["*", "*", "gene", "^geneA$", "ON"],
-            ["*", "*", "note", "transposase", "suppress"],
+            ["*", "*", "note", "transposase", "hide"],
+            ["*", "*", "product", "^enzyme alpha$", "exclude_matching"],
         ]
     )
     rules = compile_feature_visibility_rules(df)
     assert rules is not None
-    assert len(rules) == 2
+    assert len(rules) == 3
     assert rules[0]["action"] == "show"
-    assert rules[1]["action"] == "suppress"
+    assert rules[1]["action"] == "off"
+    assert rules[2]["action"] == "exclude_matching"
+
+
+def test_compile_feature_visibility_rules_warns_for_deprecated_suppress() -> None:
+    df = _visibility_df([["*", "*", "note", "transposase", "suppress"]])
+
+    with pytest.warns(DeprecationWarning, match="suppress.*deprecated"):
+        rules = compile_feature_visibility_rules(df)
+
+    assert rules is not None
+    assert rules[0]["action"] == "exclude_matching"
 
 
 def test_compile_feature_visibility_rules_invalid_regex_raises_parse_error() -> None:
@@ -193,6 +208,12 @@ def test_compile_feature_visibility_rules_invalid_regex_raises_parse_error() -> 
 
 def test_compile_feature_visibility_rules_invalid_action_raises_validation_error() -> None:
     df = _visibility_df([["*", "*", "gene", "^geneA$", "maybe"]])
+    with pytest.raises(ValidationError):
+        compile_feature_visibility_rules(df)
+
+
+def test_compile_feature_visibility_rules_rejects_bare_exclude() -> None:
+    df = _visibility_df([["*", "*", "gene", "^geneA$", "exclude"]])
     with pytest.raises(ValidationError):
         compile_feature_visibility_rules(df)
 
@@ -215,7 +236,7 @@ def test_should_render_feature_matches_supported_qualifiers(
         feature_hash = compute_feature_hash(feature, record_id=record.id)
         value_pattern = f"^{feature_hash}$"
     rules = compile_feature_visibility_rules(
-        _visibility_df([["*", "*", qualifier, value_pattern, "hide"]])
+        _visibility_df([["*", "*", qualifier, value_pattern, "off"]])
     )
 
     assert (
@@ -232,10 +253,10 @@ def test_should_render_feature_matches_supported_qualifiers(
 def test_should_render_feature_first_match_wins() -> None:
     record = _make_record()
     feature = record.features[0]
-    rules_hide_first = compile_feature_visibility_rules(
+    rules_off_first = compile_feature_visibility_rules(
         _visibility_df(
             [
-                ["*", "CDS", "gene", "^geneA$", "hide"],
+                ["*", "CDS", "gene", "^geneA$", "off"],
                 ["*", "CDS", "gene", "^geneA$", "show"],
             ]
         )
@@ -244,7 +265,7 @@ def test_should_render_feature_first_match_wins() -> None:
         _visibility_df(
             [
                 ["*", "CDS", "gene", "^geneA$", "show"],
-                ["*", "CDS", "gene", "^geneA$", "hide"],
+                ["*", "CDS", "gene", "^geneA$", "off"],
             ]
         )
     )
@@ -253,7 +274,7 @@ def test_should_render_feature_first_match_wins() -> None:
         should_render_feature(
             feature,
             selected_features_set=["CDS"],
-            feature_visibility_rules=rules_hide_first,
+            feature_visibility_rules=rules_off_first,
             record_id=record.id,
         )
         is False
@@ -269,24 +290,91 @@ def test_should_render_feature_first_match_wins() -> None:
     )
 
 
-def test_should_include_feature_in_analysis_only_suppress_excludes() -> None:
+def test_should_render_feature_exclude_matching_preserves_base_drawing_decision() -> None:
     record = _make_record()
     feature = record.features[0]
-    hide_rules = compile_feature_visibility_rules(
-        _visibility_df([["*", "CDS", "gene", "^geneA$", "hide"]])
+    rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "exclude_matching"]])
     )
-    suppress_rules = compile_feature_visibility_rules(
-        _visibility_df([["*", "CDS", "gene", "^geneA$", "suppress"]])
+
+    assert (
+        should_render_feature(
+            feature,
+            selected_features_set=["CDS"],
+            feature_visibility_rules=rules,
+            record_id=record.id,
+        )
+        is True
+    )
+    assert (
+        should_render_feature(
+            feature,
+            selected_features_set=["tRNA"],
+            feature_visibility_rules=rules,
+            record_id=record.id,
+        )
+        is False
+    )
+
+
+def test_should_include_feature_in_analysis_off_and_exclude_matching_exclude() -> None:
+    record = _make_record()
+    feature = record.features[0]
+    show_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "show"]])
+    )
+    off_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "off"]])
+    )
+    exclude_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "exclude_matching"]])
     )
 
     assert should_include_feature_in_analysis(
         feature,
-        hide_rules,
+        show_rules,
         record_id=record.id,
     )
     assert not should_include_feature_in_analysis(
         feature,
-        suppress_rules,
+        off_rules,
+        record_id=record.id,
+    )
+    assert not should_include_feature_in_analysis(
+        feature,
+        exclude_rules,
+        record_id=record.id,
+    )
+
+
+def test_should_include_feature_in_analysis_first_match_wins() -> None:
+    record = _make_record()
+    feature = record.features[0]
+    rules_off_first = compile_feature_visibility_rules(
+        _visibility_df(
+            [
+                ["*", "CDS", "gene", "^geneA$", "off"],
+                ["*", "CDS", "gene", "^geneA$", "show"],
+            ]
+        )
+    )
+    rules_show_first = compile_feature_visibility_rules(
+        _visibility_df(
+            [
+                ["*", "CDS", "gene", "^geneA$", "show"],
+                ["*", "CDS", "gene", "^geneA$", "off"],
+            ]
+        )
+    )
+
+    assert not should_include_feature_in_analysis(
+        feature,
+        rules_off_first,
+        record_id=record.id,
+    )
+    assert should_include_feature_in_analysis(
+        feature,
+        rules_show_first,
         record_id=record.id,
     )
 
@@ -295,7 +383,7 @@ def test_should_render_feature_feature_object_origin_spanning_hash_rule_matches(
     feature_object = _make_origin_spanning_feature_object(record_id="rec1")
     feature_hash = compute_feature_hash(_make_origin_spanning_seq_feature(), record_id="rec1")
     rules = compile_feature_visibility_rules(
-        _visibility_df([["*", "*", "hash", f"^{feature_hash}$", "hide"]])
+        _visibility_df([["*", "*", "hash", f"^{feature_hash}$", "off"]])
     )
 
     assert (
@@ -326,7 +414,7 @@ def test_should_render_feature_feature_object_origin_spanning_record_location_ru
     )
 
 
-def test_create_feature_dict_applies_show_and_hide_overrides() -> None:
+def test_create_feature_dict_applies_show_and_off_overrides() -> None:
     record = _make_record()
     default_colors_df = load_default_colors("", "default")
     color_table, default_colors = preprocess_color_tables(None, default_colors_df)
@@ -334,7 +422,7 @@ def test_create_feature_dict_applies_show_and_hide_overrides() -> None:
     rules = compile_feature_visibility_rules(
         _visibility_df(
             [
-                ["*", "CDS", "gene", "^geneA$", "hide"],
+                ["*", "CDS", "gene", "^geneA$", "off"],
                 ["*", "misc_feature", "note", "transposase", "show"],
             ]
         )
@@ -362,7 +450,7 @@ def test_legend_presence_and_color_usage_follow_visibility_rules() -> None:
     rules = compile_feature_visibility_rules(
         _visibility_df(
             [
-                ["*", "CDS", "gene", "^geneA$", "hide"],
+                ["*", "CDS", "gene", "^geneA$", "off"],
                 ["*", "misc_feature", "note", "transposase", "show"],
             ]
         )
@@ -413,20 +501,55 @@ def test_specific_color_rule_draws_matching_feature_outside_selected_types() -> 
     assert used_rules == {("Insertion", "#ff00aa")}
 
 
-def test_extract_cds_proteins_hide_keeps_cds_and_suppress_removes_it() -> None:
+def test_extract_cds_proteins_off_and_exclude_matching_remove_cds() -> None:
     record = _make_record()
-    hide_rules = compile_feature_visibility_rules(
-        _visibility_df([["*", "CDS", "gene", "^geneA$", "hide"]])
+    off_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "off"]])
     )
-    suppress_rules = compile_feature_visibility_rules(
-        _visibility_df([["*", "CDS", "gene", "^geneA$", "suppress"]])
+    exclude_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "exclude_matching"]])
     )
 
-    hidden = extract_cds_proteins([record], feature_visibility_rules=hide_rules)
-    suppressed = extract_cds_proteins([record], feature_visibility_rules=suppress_rules)
+    hidden = extract_cds_proteins([record], feature_visibility_rules=off_rules)
+    excluded = extract_cds_proteins([record], feature_visibility_rules=exclude_rules)
 
-    assert len(hidden.proteins_by_record[0]) == 1
-    assert suppressed.proteins_by_record[0] == []
+    assert hidden.proteins_by_record[0] == []
+    assert excluded.proteins_by_record[0] == []
+
+
+def test_extract_features_from_genbank_json_applies_visibility_table(
+    tmp_path: Path,
+) -> None:
+    record = _make_record()
+    record.annotations["molecule_type"] = "DNA"
+    gb_path = tmp_path / "input.gb"
+    SeqIO.write(record, gb_path, "genbank")
+
+    off_table = tmp_path / "off.tsv"
+    off_table.write_text("*\tCDS\tgene\t^geneA$\toff\n", encoding="utf-8")
+    exclude_table = tmp_path / "exclude.tsv"
+    exclude_table.write_text(
+        "*\tCDS\tgene\t^geneA$\texclude_matching\n",
+        encoding="utf-8",
+    )
+
+    hidden = json.loads(
+        extract_features_from_genbank_json(
+            gb_path,
+            selected_features=["CDS"],
+            feature_visibility_table_path=off_table,
+        )
+    )
+    excluded = json.loads(
+        extract_features_from_genbank_json(
+            gb_path,
+            selected_features=["CDS"],
+            feature_visibility_table_path=exclude_table,
+        )
+    )
+
+    assert hidden["features"] == []
+    assert [feature["gene"] for feature in excluded["features"]] == ["geneA"]
 
 
 def test_resolve_candidate_feature_types_uses_concrete_table_types() -> None:
@@ -523,7 +646,7 @@ def test_circular_cli_feature_table_is_forwarded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
-    feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "hide"]])
+    feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "off"]])
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
@@ -562,7 +685,7 @@ def test_linear_cli_feature_table_is_forwarded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
-    feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "hide"]])
+    feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "off"]])
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
@@ -615,7 +738,7 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
     monkeypatch.setattr(
         circular_cli_module,
         "read_feature_visibility_file",
-        lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "hide"]]),
+        lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "off"]]),
     )
     monkeypatch.setattr(
         circular_cli_module,
@@ -661,7 +784,7 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
     monkeypatch.setattr(
         linear_cli_module,
         "read_feature_visibility_file",
-        lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "hide"]]),
+        lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "off"]]),
     )
     monkeypatch.setattr(
         linear_cli_module,

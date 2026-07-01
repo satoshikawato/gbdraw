@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import re
+import warnings
 from typing import Any, Optional, Sequence
 
 import pandas as pd
@@ -31,9 +32,9 @@ _FEATURE_VISIBILITY_HEADER = (
     "action",
 )
 
-_SHOW_ACTION_TOKENS = {"show", "on", "display", "include", "true", "1"}
+_SHOW_ACTION_TOKENS = {"show", "on"}
 _HIDE_ACTION_TOKENS = {"hide", "off", "false", "0"}
-_SUPPRESS_ACTION_TOKENS = {"suppress", "exclude"}
+_EXCLUDE_MATCHING_ACTION_TOKENS = {"exclude_matching"}
 
 
 def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
@@ -377,15 +378,24 @@ def _normalize_visibility_action(action: str, row_idx: int) -> str:
     if normalized in _SHOW_ACTION_TOKENS:
         return "show"
     if normalized in _HIDE_ACTION_TOKENS:
-        return "hide"
-    if normalized in _SUPPRESS_ACTION_TOKENS:
-        return "suppress"
+        return "off"
+    if normalized in _EXCLUDE_MATCHING_ACTION_TOKENS:
+        return "exclude_matching"
+    if normalized == "suppress":
+        message = (
+            "The feature visibility action 'suppress' is deprecated; "
+            "use 'exclude_matching' instead."
+        )
+        warnings.warn(message, DeprecationWarning, stacklevel=2)
+        logger.warning("WARNING: %s", message)
+        return "exclude_matching"
     logger.error(
         "ERROR: Invalid action in feature visibility table at row %s: '%s'", row_idx, action
     )
     raise ValidationError(
         f"Invalid action in feature visibility table at row {row_idx}: '{action}'. "
-        f"Use show/on/display/include/true/1, hide/off/false/0, or suppress/exclude."
+        "Use show, off, or exclude_matching. Accepted aliases are on, hide, "
+        "false, and 0; suppress is deprecated and maps to exclude_matching."
     )
 
 
@@ -576,7 +586,11 @@ def should_render_feature(
         record_id=record_id,
     )
     if rule is not None:
-        return str(rule["action"]) == "show"
+        action = str(rule["action"])
+        if action == "show":
+            return True
+        if action == "off":
+            return False
 
     return base_visible
 
@@ -591,7 +605,7 @@ def should_include_feature_in_analysis(
         feature_visibility_rules,
         record_id=record_id,
     )
-    return not (rule is not None and str(rule["action"]) == "suppress")
+    return not (rule is not None and str(rule["action"]) in {"off", "exclude_matching"})
 
 
 __all__ = [

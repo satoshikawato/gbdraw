@@ -126,7 +126,8 @@ const runFeatureExtraction = async ({
   regionSpec = null,
   recordSelector = null,
   reverseFlag = false,
-  selectedFeatures = null
+  selectedFeatures = null,
+  featureVisibilityTablePath = null
 } = {}) => {
   if (!runtime?.pyodide) {
     throw new Error('Diagram generation worker has not been initialized.');
@@ -146,7 +147,8 @@ const runFeatureExtraction = async ({
       regionSpec || null,
       recordSelector || null,
       reverseFlag ? '1' : '0',
-      Array.isArray(selectedFeatures) && selectedFeatures.length ? JSON.stringify(selectedFeatures) : null
+      Array.isArray(selectedFeatures) && selectedFeatures.length ? JSON.stringify(selectedFeatures) : null,
+      featureVisibilityTablePath || null
     );
     return JSON.parse(String(resultJson || 'null'));
   } finally {

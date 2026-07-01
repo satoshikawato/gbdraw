@@ -203,6 +203,7 @@ export const createAppSetup = () => {
     clickedLabel,
     clickedLabelPos,
     colorScopeDialog,
+    featureVisibilityScopeDialog,
     legendRenameDialog,
     resetColorDialog,
     labelTextScopeDialog,
@@ -1049,6 +1050,7 @@ export const createAppSetup = () => {
     getFeatureColor,
     canEditFeatureColor,
     getFeatureVisibility,
+    handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown,
     moveFeatureVisibilityRuleUp,
     removeFeatureVisibilityRule,
@@ -1095,6 +1097,10 @@ export const createAppSetup = () => {
   const updateClickedFeatureVisibilityWithHistory = undoableAction(
     'Change feature visibility',
     updateClickedFeatureVisibility
+  );
+  const handleFeatureVisibilityScopeChoiceWithHistory = undoableAction(
+    'Change feature visibility',
+    handleFeatureVisibilityScopeChoice
   );
   const requestFeatureColorChangeWithHistory = undoableAction('Change feature color', requestFeatureColorChange);
   const updateClickedFeatureColorWithHistory = undoableAction('Change feature color', updateClickedFeatureColor);
@@ -2313,6 +2319,7 @@ export const createAppSetup = () => {
     specificRuleLegendOptions,
     updateClickedFeatureColor: updateClickedFeatureColorWithHistory,
     updateClickedFeatureVisibility: updateClickedFeatureVisibilityWithHistory,
+    handleFeatureVisibilityScopeChoice: handleFeatureVisibilityScopeChoiceWithHistory,
     handleLegendNameCommit: handleLegendNameCommitWithHistory,
     selectLegendNameOption,
     resetClickedFeatureFillColor: resetClickedFeatureFillColorWithHistory,
@@ -2320,6 +2327,7 @@ export const createAppSetup = () => {
     resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
     applyStrokeToAllSiblings: applyStrokeToAllSiblingsWithHistory,
     colorScopeDialog,
+    featureVisibilityScopeDialog,
     handleColorScopeChoice: handleColorScopeChoiceWithHistory,
     legendRenameDialog,
     handleLegendRenameChoice: handleLegendRenameChoiceWithHistory,
