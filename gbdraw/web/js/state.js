@@ -897,6 +897,7 @@ const featureKeys = [
   'stem_loop',
   'telomere',
   'tmRNA',
+  'transcript',
   'transit_peptide',
   'tRNA',
   'unsure',

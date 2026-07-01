@@ -275,6 +275,9 @@ def test_web_feature_visibility_table_preserves_suppress_mode() -> None:
     helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
 
     assert '<option value="suppress">Suppress' in index_html
+    assert "featureVisibilityFeatureSuggestions" in index_html
+    assert "feature-visibility-feature-type-options" not in index_html
+    assert "'transcript'" in state_js
     assert "{svg_id: 'on' | 'off' | 'suppress'}" in state_js
     assert "/web_feature_visibility_table.tsv" in run_analysis_js
     assert "args.push('--feature_visibility_table', featureVisibilityTablePath);" in run_analysis_js

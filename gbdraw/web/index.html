@@ -2522,9 +2522,6 @@
                                         </button>
                                     </div>
                                 </div>
-                                <datalist id="feature-visibility-feature-type-options">
-                                    <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value"></option>
-                                </datalist>
                                 <datalist id="feature-visibility-qualifier-options">
                                     <option v-for="value in featureVisibilityQualifierSuggestions" :key="`fv-qual-${value}`" :value="value"></option>
                                 </datalist>
@@ -2547,9 +2544,18 @@
                                                 <button type="button" @click="removeFeatureVisibilityRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule"><i class="ph ph-trash"></i></button>
                                             </div>
                                         </div>
+                                        <div class="grid grid-cols-12 gap-1 px-1 text-[9px] font-semibold uppercase text-slate-500">
+                                            <span class="col-span-3">Record ID</span>
+                                            <span class="col-span-3">Feature Type</span>
+                                            <span class="col-span-3">Qualifier</span>
+                                            <span class="col-span-3">Action</span>
+                                        </div>
                                         <div class="grid grid-cols-12 gap-1">
                                             <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" placeholder="record_id" class="form-input form-input-compact col-span-3 font-mono">
-                                            <input :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" list="feature-visibility-feature-type-options" placeholder="feature_type" class="form-input form-input-compact col-span-3">
+                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" class="form-input form-input-compact col-span-3">
+                                                <option v-if="rule.featureType && !featureVisibilityFeatureSuggestions.includes(rule.featureType)" :value="rule.featureType">{{ rule.featureType }}</option>
+                                                <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value">{{ value }}</option>
+                                            </select>
                                             <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-3">
                                             <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" class="form-input form-input-compact col-span-3">
                                                 <option value="show">Show</option>
@@ -2557,7 +2563,10 @@
                                                 <option value="suppress">Suppress</option>
                                             </select>
                                         </div>
-                                        <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" placeholder="value regex" class="form-input form-input-compact w-full font-mono">
+                                        <div>
+                                            <label class="block px-1 text-[9px] font-semibold uppercase text-slate-500">Value regex</label>
+                                            <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" placeholder="value regex" class="form-input form-input-compact w-full font-mono">
+                                        </div>
                                     </div>
                                     <div v-if="featureVisibilityRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No visibility rules</div>
                                 </div>
