@@ -21,8 +21,11 @@ from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
+    resolve_candidate_feature_types,
+    should_include_feature_in_analysis,
     should_render_feature,
 )
+from gbdraw.analysis.protein_colinearity import extract_cds_proteins
 from gbdraw.io.colors import load_default_colors
 from gbdraw.legend.table import prepare_legend_table
 from gbdraw.labels.filtering import preprocess_label_filtering
@@ -45,6 +48,7 @@ def _make_record() -> SeqRecord:
                 "gene": ["geneA"],
                 "product": ["enzyme alpha"],
                 "note": ["core enzyme"],
+                "translation": ["MKK"],
             },
         ),
         SeqFeature(
@@ -178,7 +182,7 @@ def test_compile_feature_visibility_rules_skips_header_and_normalizes_actions() 
     assert rules is not None
     assert len(rules) == 2
     assert rules[0]["action"] == "show"
-    assert rules[1]["action"] == "hide"
+    assert rules[1]["action"] == "suppress"
 
 
 def test_compile_feature_visibility_rules_invalid_regex_raises_parse_error() -> None:
@@ -262,6 +266,28 @@ def test_should_render_feature_first_match_wins() -> None:
             record_id=record.id,
         )
         is True
+    )
+
+
+def test_should_include_feature_in_analysis_only_suppress_excludes() -> None:
+    record = _make_record()
+    feature = record.features[0]
+    hide_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "hide"]])
+    )
+    suppress_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "suppress"]])
+    )
+
+    assert should_include_feature_in_analysis(
+        feature,
+        hide_rules,
+        record_id=record.id,
+    )
+    assert not should_include_feature_in_analysis(
+        feature,
+        suppress_rules,
+        record_id=record.id,
     )
 
 
@@ -362,6 +388,79 @@ def test_legend_presence_and_color_usage_follow_visibility_rules() -> None:
     assert used_rules == set()
 
 
+def test_specific_color_rule_draws_matching_feature_outside_selected_types() -> None:
+    record = _make_record()
+    default_colors_df = load_default_colors("", "default")
+    color_table_df = pd.DataFrame(
+        [["misc_feature", "note", "transposase", "#ff00aa", "Insertion"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    color_map, default_color_map = preprocess_color_tables(color_table_df, default_colors_df)
+    label_filtering = preprocess_label_filtering(_base_label_filtering())
+
+    feature_dict, used_rules = create_feature_dict(
+        record,
+        color_map,
+        ["tRNA"],
+        default_color_map,
+        separate_strands=False,
+        resolve_overlaps=False,
+        label_filtering=label_filtering,
+    )
+
+    rendered_types = {obj.feature_type for obj in feature_dict.values()}
+    assert rendered_types == {"misc_feature"}
+    assert used_rules == {("Insertion", "#ff00aa")}
+
+
+def test_extract_cds_proteins_hide_keeps_cds_and_suppress_removes_it() -> None:
+    record = _make_record()
+    hide_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "hide"]])
+    )
+    suppress_rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "CDS", "gene", "^geneA$", "suppress"]])
+    )
+
+    hidden = extract_cds_proteins([record], feature_visibility_rules=hide_rules)
+    suppressed = extract_cds_proteins([record], feature_visibility_rules=suppress_rules)
+
+    assert len(hidden.proteins_by_record[0]) == 1
+    assert suppressed.proteins_by_record[0] == []
+
+
+def test_resolve_candidate_feature_types_uses_concrete_table_types() -> None:
+    color_table_df = pd.DataFrame(
+        [["misc_feature", "note", "transposase", "#ff00aa", "Insertion"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    feature_table_df = _visibility_df([["*", "repeat_region", "note", "repeat", "show"]])
+
+    candidate_types, keep_all = resolve_candidate_feature_types(
+        ["CDS"],
+        color_table=color_table_df,
+        feature_visibility_table=feature_table_df,
+    )
+
+    assert keep_all is False
+    assert candidate_types == {"CDS", "misc_feature", "repeat_region"}
+
+
+def test_resolve_candidate_feature_types_wildcard_requests_all_features() -> None:
+    color_table_df = pd.DataFrame(
+        [["*", "note", "transposase", "#ff00aa", "Insertion"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+
+    candidate_types, keep_all = resolve_candidate_feature_types(
+        ["CDS"],
+        color_table=color_table_df,
+    )
+
+    assert keep_all is True
+    assert candidate_types == {"CDS"}
+
+
 def test_prepare_legend_table_falls_back_to_default_color_for_gene_other_entry() -> None:
     default_colors = pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"])
     color_table = pd.DataFrame(
@@ -447,7 +546,7 @@ def test_circular_cli_feature_table_is_forwarded(
         [
             "--gbk",
             "dummy.gb",
-            "--feature_table",
+            "--feature_visibility_table",
             "feature_table.tsv",
             "--format",
             "svg",
@@ -486,7 +585,7 @@ def test_linear_cli_feature_table_is_forwarded(
         [
             "--gbk",
             "dummy.gb",
-            "--feature_table",
+            "--feature_visibility_table",
             "feature_table.tsv",
             "--format",
             "svg",
@@ -498,13 +597,14 @@ def test_linear_cli_feature_table_is_forwarded(
     assert captured["feature_table"] is feature_table_df
 
 
-def test_circular_gff_loader_uses_keep_all_features_when_feature_table_given(
+def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_table_given(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
     captured: dict[str, Any] = {}
 
-    def fake_load_gff_fasta(*_args, **kwargs):
+    def fake_load_gff_fasta(*args, **kwargs):
+        captured["selected_features_set"] = set(args[3])
         captured["keep_all_features"] = kwargs.get("keep_all_features")
         return [record]
 
@@ -515,7 +615,7 @@ def test_circular_gff_loader_uses_keep_all_features_when_feature_table_given(
     monkeypatch.setattr(
         circular_cli_module,
         "read_feature_visibility_file",
-        lambda _path: _visibility_df([["*", "*", "gene", "^geneA$", "hide"]]),
+        lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "hide"]]),
     )
     monkeypatch.setattr(
         circular_cli_module,
@@ -529,7 +629,7 @@ def test_circular_gff_loader_uses_keep_all_features_when_feature_table_given(
             "dummy.gff",
             "--fasta",
             "dummy.fasta",
-            "--feature_table",
+            "--feature_visibility_table",
             "feature_table.tsv",
             "--format",
             "svg",
@@ -538,16 +638,19 @@ def test_circular_gff_loader_uses_keep_all_features_when_feature_table_given(
         ]
     )
 
-    assert captured["keep_all_features"] is True
+    assert captured["keep_all_features"] is False
+    assert "CDS" in captured["selected_features_set"]
+    assert "misc_feature" in captured["selected_features_set"]
 
 
-def test_linear_gff_loader_uses_keep_all_features_when_feature_table_given(
+def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table_given(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
     captured: dict[str, Any] = {}
 
-    def fake_load_gff_fasta(*_args, **kwargs):
+    def fake_load_gff_fasta(*args, **kwargs):
+        captured["selected_features_set"] = set(args[3])
         captured["keep_all_features"] = kwargs.get("keep_all_features")
         return [record]
 
@@ -558,7 +661,7 @@ def test_linear_gff_loader_uses_keep_all_features_when_feature_table_given(
     monkeypatch.setattr(
         linear_cli_module,
         "read_feature_visibility_file",
-        lambda _path: _visibility_df([["*", "*", "gene", "^geneA$", "hide"]]),
+        lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "hide"]]),
     )
     monkeypatch.setattr(
         linear_cli_module,
@@ -572,7 +675,7 @@ def test_linear_gff_loader_uses_keep_all_features_when_feature_table_given(
             "dummy.gff",
             "--fasta",
             "dummy.fasta",
-            "--feature_table",
+            "--feature_visibility_table",
             "feature_table.tsv",
             "--format",
             "svg",
@@ -581,4 +684,6 @@ def test_linear_gff_loader_uses_keep_all_features_when_feature_table_given(
         ]
     )
 
-    assert captured["keep_all_features"] is True
+    assert captured["keep_all_features"] is False
+    assert "CDS" in captured["selected_features_set"]
+    assert "misc_feature" in captured["selected_features_set"]

@@ -75,7 +75,7 @@ from gbdraw.config.modify import modify_config_dict  # type: ignore[reportMissin
 from gbdraw.config.toml import load_config_toml  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
 from gbdraw.io.record_select import parse_record_selector  # type: ignore[reportMissingImports]
-from gbdraw.features.visibility import read_feature_visibility_file  # type: ignore[reportMissingImports]
+from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file  # type: ignore[reportMissingImports]
 from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     BlastMatchConfigurator,
     DepthConfigurator,
@@ -145,6 +145,29 @@ _SVG_NUMBER_PATTERN = re.compile(r"[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?")
 _SVG_TRANSLATE_PATTERN = re.compile(
     r"translate\(\s*([-+0-9.eE]+)(?:[\s,]+([-+0-9.eE]+))?\s*\)"
 )
+
+
+def _resolve_feature_visibility_table_inputs(
+    *,
+    feature_table: DataFrame | None = None,
+    feature_table_file: str | None = None,
+    feature_visibility_table: DataFrame | None = None,
+    feature_visibility_table_file: str | None = None,
+) -> tuple[DataFrame | None, str | None]:
+    if feature_table is not None and feature_visibility_table is not None:
+        raise ValidationError(
+            "Pass either feature_visibility_table or feature_table, not both."
+        )
+    if feature_table_file is not None and feature_visibility_table_file is not None:
+        raise ValidationError(
+            "Pass either feature_visibility_table_file or feature_table_file, not both."
+        )
+    return (
+        feature_visibility_table if feature_visibility_table is not None else feature_table,
+        feature_visibility_table_file
+        if feature_visibility_table_file is not None
+        else feature_table_file,
+    )
 
 
 def _parse_circular_track_slot_inputs(
@@ -1770,6 +1793,8 @@ def assemble_linear_diagram_from_records(
     selected_features_set: Sequence[str] | None = None,
     feature_table: DataFrame | None = None,
     feature_table_file: str | None = None,
+    feature_visibility_table: DataFrame | None = None,
+    feature_visibility_table_file: str | None = None,
     feature_shapes: Mapping[str, str] | None = None,
     output_prefix: str = "out",
     legend: str = "right",
@@ -1855,10 +1880,17 @@ def assemble_linear_diagram_from_records(
         )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
+    feature_table, feature_table_file = _resolve_feature_visibility_table_inputs(
+        feature_table=feature_table,
+        feature_table_file=feature_table_file,
+        feature_visibility_table=feature_visibility_table,
+        feature_visibility_table_file=feature_visibility_table_file,
+    )
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
         feature_table = read_feature_visibility_file(feature_table_file)
+    feature_visibility_rules = compile_feature_visibility_rules(feature_table)
 
     if default_colors is None:
         has_comparisons = bool(
@@ -1985,6 +2017,7 @@ def assemble_linear_diagram_from_records(
             bitscore=bitscore,
             identity=identity,
             alignment_length=alignment_length,
+            feature_visibility_rules=feature_visibility_rules,
         )
         resolved_protein_comparisons = protein_blastp_result.comparisons
     elif normalized_protein_blastp_mode == "orthogroup":
@@ -2001,6 +2034,7 @@ def assemble_linear_diagram_from_records(
             bitscore=bitscore,
             identity=identity,
             alignment_length=alignment_length,
+            feature_visibility_rules=feature_visibility_rules,
         )
         resolved_protein_comparisons = protein_blastp_result.comparisons
         resolved_orthogroups = protein_blastp_result.orthogroups
@@ -2022,6 +2056,7 @@ def assemble_linear_diagram_from_records(
             unit_mode=collinearity_unit_mode,
             edge_mode=normalized_collinearity_anchor_mode,
             search_scope=normalized_collinearity_search_scope,
+            feature_visibility_rules=feature_visibility_rules,
         )
         resolved_orthogroups = collinearity_result.orthogroups
         resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
@@ -2189,6 +2224,8 @@ def assemble_circular_diagram_from_record(
     selected_features_set: Sequence[str] | None = None,
     feature_table: DataFrame | None = None,
     feature_table_file: str | None = None,
+    feature_visibility_table: DataFrame | None = None,
+    feature_visibility_table_file: str | None = None,
     feature_shapes: Mapping[str, str] | None = None,
     output_prefix: str = "out",
     legend: str = "right",
@@ -2240,6 +2277,12 @@ def assemble_circular_diagram_from_record(
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
     _validate_positive_float_optional("conservation_ring_gap", conservation_ring_gap)
     _validate_nonnegative_float_optional("center_reserved_radius", center_reserved_radius)
+    feature_table, feature_table_file = _resolve_feature_visibility_table_inputs(
+        feature_table=feature_table,
+        feature_table_file=feature_table_file,
+        feature_visibility_table=feature_visibility_table,
+        feature_visibility_table_file=feature_visibility_table_file,
+    )
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
@@ -2615,6 +2658,8 @@ def assemble_circular_diagram_from_records(
     selected_features_set: Sequence[str] | None = None,
     feature_table: DataFrame | None = None,
     feature_table_file: str | None = None,
+    feature_visibility_table: DataFrame | None = None,
+    feature_visibility_table_file: str | None = None,
     feature_shapes: Mapping[str, str] | None = None,
     output_prefix: str = "out",
     legend: str = "right",
@@ -2679,6 +2724,12 @@ def assemble_circular_diagram_from_records(
         str(plot_title_position)
     )
     normalized_plot_title = _normalize_plot_title(plot_title)
+    feature_table, feature_table_file = _resolve_feature_visibility_table_inputs(
+        feature_table=feature_table,
+        feature_table_file=feature_table_file,
+        feature_visibility_table=feature_visibility_table,
+        feature_visibility_table_file=feature_visibility_table_file,
+    )
 
     if len(records) == 1:
         if (depth_table is not None or depth_file is not None) and (
@@ -3258,14 +3309,15 @@ def assemble_circular_diagram_from_records(
             canvas_config=legend_canvas_config,
             cfg=cfg,
         )
+        color_map, default_color_map = preprocess_color_tables(
+            feature_config.color_table,
+            feature_config.default_colors,
+        )
         features_present = check_feature_presence(
             list(records),
             list(selected_features_set),
             feature_visibility_rules=feature_config.feature_visibility_rules,
-        )
-        color_map, default_color_map = preprocess_color_tables(
-            feature_config.color_table,
-            feature_config.default_colors,
+            specific_color_rules=color_map,
         )
         used_color_rules, default_used_features = precompute_used_color_rules(
             list(records),
@@ -3494,6 +3546,8 @@ def build_circular_diagram(
         selected_features_set=options.selected_features_set,
         feature_table=options.feature_table,
         feature_table_file=options.feature_table_file,
+        feature_visibility_table=options.feature_visibility_table,
+        feature_visibility_table_file=options.feature_visibility_table_file,
         feature_shapes=options.feature_shapes,
         output_prefix=output.output_prefix if output else "out",
         legend=output.legend if output else "right",
@@ -3603,6 +3657,8 @@ def build_linear_diagram(
         selected_features_set=options.selected_features_set,
         feature_table=options.feature_table,
         feature_table_file=options.feature_table_file,
+        feature_visibility_table=options.feature_visibility_table,
+        feature_visibility_table_file=options.feature_visibility_table_file,
         feature_shapes=options.feature_shapes,
         output_prefix=output.output_prefix if output else "out",
         legend=output.legend if output else "right",

@@ -2670,14 +2670,14 @@ def assemble_circular_diagram(
 
     legend_table: dict = {}
     if canvas_config.legend_position != "none":
+        color_map, default_color_map = preprocess_color_tables(
+            feature_config.color_table, feature_config.default_colors
+        )
         features_present = check_feature_presence(
             gb_record,
             feature_config.selected_features_set,
             feature_visibility_rules=feature_config.feature_visibility_rules,
-        )
-
-        color_map, default_color_map = preprocess_color_tables(
-            feature_config.color_table, feature_config.default_colors
+            specific_color_rules=color_map,
         )
         used_color_rules, default_used_features = precompute_used_color_rules(
             gb_record,

@@ -12,8 +12,7 @@ from Bio.SeqFeature import SeqFeature
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
-from .colors import compute_feature_hash
-from .ids import compute_feature_hash_from_parts
+from .ids import compute_feature_hash, compute_feature_hash_from_parts
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,8 @@ _FEATURE_VISIBILITY_HEADER = (
 )
 
 _SHOW_ACTION_TOKENS = {"show", "on", "display", "include", "true", "1"}
-_HIDE_ACTION_TOKENS = {"hide", "off", "suppress", "exclude", "false", "0"}
+_HIDE_ACTION_TOKENS = {"hide", "off", "false", "0"}
+_SUPPRESS_ACTION_TOKENS = {"suppress", "exclude"}
 
 
 def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
@@ -378,12 +378,14 @@ def _normalize_visibility_action(action: str, row_idx: int) -> str:
         return "show"
     if normalized in _HIDE_ACTION_TOKENS:
         return "hide"
+    if normalized in _SUPPRESS_ACTION_TOKENS:
+        return "suppress"
     logger.error(
         "ERROR: Invalid action in feature visibility table at row %s: '%s'", row_idx, action
     )
     raise ValidationError(
         f"Invalid action in feature visibility table at row {row_idx}: '{action}'. "
-        f"Use show/on/display/include/true/1 or hide/off/suppress/exclude/false/0."
+        f"Use show/on/display/include/true/1, hide/off/false/0, or suppress/exclude."
     )
 
 
@@ -494,24 +496,15 @@ def _rule_matches_feature(feature: Any, rule: dict[str, Any], record_id: Optiona
     return any(pattern.search(value) for value in values)
 
 
-def should_render_feature(
+def _first_matching_visibility_rule(
     feature: Any,
-    selected_features_set: Sequence[str] | set[str] | None,
-    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    feature_visibility_rules: Optional[list[dict[str, Any]]],
     record_id: Optional[str] = None,
-) -> bool:
-    feature_type = _get_feature_type(feature)
-    selected_set = {str(feature_name) for feature_name in (selected_features_set or [])}
-
-    # Keep legacy behavior when no feature filter is provided.
-    if not selected_set:
-        base_visible = True
-    else:
-        base_visible = feature_type in selected_set
-
+) -> Optional[dict[str, Any]]:
     if not feature_visibility_rules:
-        return base_visible
+        return None
 
+    feature_type = _get_feature_type(feature)
     resolved_record_id = _get_feature_record_id(feature, record_id)
 
     for rule in feature_visibility_rules:
@@ -521,13 +514,90 @@ def should_render_feature(
             continue
         if not _rule_matches_feature(feature, rule, record_id=resolved_record_id):
             continue
+        return rule
+    return None
+
+
+def resolve_candidate_feature_types(
+    selected_features_set: Sequence[str] | set[str] | None,
+    *,
+    color_table: Optional[DataFrame] = None,
+    feature_visibility_table: Optional[DataFrame] = None,
+) -> tuple[set[str], bool]:
+    """Return GFF3 candidate feature types and whether all types are required."""
+
+    candidate_types = {
+        str(feature_type).strip()
+        for feature_type in (selected_features_set or [])
+        if str(feature_type).strip()
+    }
+
+    for table in (color_table, feature_visibility_table):
+        if table is None or table.empty or "feature_type" not in table.columns:
+            continue
+        for raw_feature_type in table["feature_type"]:
+            feature_type = str(raw_feature_type or "").strip()
+            if not feature_type or feature_type.lower() == "feature_type":
+                continue
+            if feature_type == "*":
+                return candidate_types, True
+            candidate_types.add(feature_type)
+
+    return candidate_types, False
+
+
+def should_render_feature(
+    feature: Any,
+    selected_features_set: Sequence[str] | set[str] | None,
+    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    record_id: Optional[str] = None,
+    specific_color_rules: Optional[dict] = None,
+) -> bool:
+    feature_type = _get_feature_type(feature)
+    selected_set = {str(feature_name) for feature_name in (selected_features_set or [])}
+
+    # Keep legacy behavior when no feature filter is provided.
+    if not selected_set:
+        base_visible = True
+    else:
+        base_visible = feature_type in selected_set
+        if not base_visible and specific_color_rules:
+            from .colors import feature_matches_specific_color_rule
+
+            base_visible = feature_matches_specific_color_rule(
+                feature,
+                specific_color_rules,
+                record_id=record_id,
+            )
+
+    rule = _first_matching_visibility_rule(
+        feature,
+        feature_visibility_rules,
+        record_id=record_id,
+    )
+    if rule is not None:
         return str(rule["action"]) == "show"
 
     return base_visible
 
 
+def should_include_feature_in_analysis(
+    feature: Any,
+    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    record_id: Optional[str] = None,
+) -> bool:
+    rule = _first_matching_visibility_rule(
+        feature,
+        feature_visibility_rules,
+        record_id=record_id,
+    )
+    return not (rule is not None and str(rule["action"]) == "suppress")
+
+
 __all__ = [
     "compile_feature_visibility_rules",
     "read_feature_visibility_file",
+    "resolve_candidate_feature_types",
+    "should_include_feature_in_analysis",
     "should_render_feature",
 ]

@@ -31,6 +31,8 @@ from .shapes import (
 from .visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
+    resolve_candidate_feature_types,
+    should_include_feature_in_analysis,
     should_render_feature,
 )
 
@@ -64,6 +66,8 @@ __all__ = [
     # visibility
     "compile_feature_visibility_rules",
     "read_feature_visibility_file",
+    "resolve_candidate_feature_types",
+    "should_include_feature_in_analysis",
     "should_render_feature",
 ]
 

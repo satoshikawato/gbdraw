@@ -10,7 +10,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
 
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
-    return normalized === 'on' || normalized === 'off' ? normalized : 'default';
+    return ['on', 'off', 'suppress'].includes(normalized) ? normalized : 'default';
   };
 
   const queueFeatureVisibilityReflow = (reason = 'feature-visibility-apply') => {

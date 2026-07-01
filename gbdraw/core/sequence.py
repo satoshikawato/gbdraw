@@ -31,6 +31,7 @@ def check_feature_presence(
     records: Union[List[SeqRecord], SeqRecord],
     features_list: List[str],
     feature_visibility_rules=None,
+    specific_color_rules=None,
 ) -> list[str]:
     if isinstance(records, SeqRecord):
         records = [records]
@@ -45,6 +46,7 @@ def check_feature_presence(
                 features_list,
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=record.id,
+                specific_color_rules=specific_color_rules,
             ):
                 continue
             if feature.type in seen_feature_types:

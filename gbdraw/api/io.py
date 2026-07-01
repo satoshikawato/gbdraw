@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.features.visibility import resolve_candidate_feature_types  # type: ignore[reportMissingImports]
 from gbdraw.io.genome import (  # type: ignore[reportMissingImports]
     load_gbks as _load_gbks,
     load_gff_fasta as _load_gff_fasta,
@@ -54,16 +56,28 @@ def load_gff_fasta(
     load_comparison: bool = False,
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
+    color_table: DataFrame | None = None,
+    feature_visibility_table: DataFrame | None = None,
 ) -> list[SeqRecord]:
     """Load paired GFF3 + FASTA files with consistent API exceptions."""
 
     try:
+        candidate_features = selected_features_set
+        resolved_keep_all_features = keep_all_features
+        if not keep_all_features and (color_table is not None or feature_visibility_table is not None):
+            candidate_types, table_requires_all = resolve_candidate_feature_types(
+                selected_features_set,
+                color_table=color_table,
+                feature_visibility_table=feature_visibility_table,
+            )
+            candidate_features = candidate_types
+            resolved_keep_all_features = table_requires_all
         return _load_gff_fasta(
             list(gff_list),
             list(fasta_list),
             mode=mode,
-            selected_features_set=selected_features_set,
-            keep_all_features=keep_all_features,
+            selected_features_set=candidate_features,
+            keep_all_features=resolved_keep_all_features,
             load_comparison=load_comparison,
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,

@@ -2317,7 +2317,7 @@ export const importSession = async (e, options = {}) => {
       Object.keys(state.featureVisibilityOverrides).forEach((k) => delete state.featureVisibilityOverrides[k]);
       Object.entries(features.featureVisibilityOverrides).forEach(([key, value]) => {
         const mode = String(value || '').trim().toLowerCase();
-        if (mode !== 'on' && mode !== 'off') return;
+        if (!['on', 'off', 'suppress'].includes(mode)) return;
         state.featureVisibilityOverrides[String(key || '')] = mode;
       });
     } else {

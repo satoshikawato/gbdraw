@@ -69,6 +69,8 @@ class DiagramOptions:
     selected_features_set: Sequence[str] | None = None
     feature_table: DataFrame | None = None
     feature_table_file: str | None = None
+    feature_visibility_table: DataFrame | None = None
+    feature_visibility_table_file: str | None = None
     feature_shapes: Mapping[str, str] | None = None
     dinucleotide: str = "GC"
     window: int | None = None

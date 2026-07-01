@@ -260,6 +260,22 @@ def test_web_feature_color_caption_scope_updates_specific_rule() -> None:
     subprocess.run([node, "tests/web/feature-color-actions.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_feature_visibility_table_preserves_suppress_mode() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+
+    assert '<option value="suppress">Suppress' in index_html
+    assert "{svg_id: 'on' | 'off' | 'suppress'}" in state_js
+    assert "/web_feature_visibility_table.tsv" in run_analysis_js
+    assert "args.push('--feature_visibility_table', featureVisibilityTablePath);" in run_analysis_js
+    assert "mode === 'suppress' ? 'suppress' : 'hide'" in run_analysis_js
+    assert "featureVisibility: featureVisibilityCacheKey" in run_analysis_js
+    assert "feature_visibility_table_path=None" in helper_js
+    assert "feature_visibility_rules=feature_visibility_rules" in helper_js
+
+
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")

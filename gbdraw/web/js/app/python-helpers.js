@@ -487,10 +487,11 @@ def _with_stable_web_protein_ids(proteins, record_instance_key):
         remapped.append(replace(protein, protein_id=protein_id))
     return remapped
 
-def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None):
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None):
     """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
     try:
         from gbdraw.analysis.protein_colinearity import extract_cds_proteins, proteins_to_fasta
+        from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file
 
         record = _load_single_linear_record_for_proteins(
             path,
@@ -500,11 +501,17 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             record_selector=record_selector,
             reverse_flag=reverse_flag,
         )
+        feature_visibility_rules = None
+        if not _is_blank_or_js_nullish(feature_visibility_table_path):
+            feature_visibility_rules = compile_feature_visibility_rules(
+                read_feature_visibility_file(feature_visibility_table_path)
+            )
         record_index_offset = int(record_index) if record_index is not None else 0
         result = extract_cds_proteins(
             [record],
             record_index_offset=record_index_offset,
             prefer_source_ids=False,
+            feature_visibility_rules=feature_visibility_rules,
         )
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
         if not proteins:

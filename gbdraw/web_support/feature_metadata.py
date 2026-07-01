@@ -8,6 +8,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 
 from gbdraw.features.ids import compute_feature_hash
+from gbdraw.features.visibility import should_render_feature
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
@@ -194,6 +195,8 @@ def extract_features_from_records_payload(
     records: Any,
     *,
     selected_features: object | None = None,
+    feature_visibility_rules: list[dict[str, Any]] | None = None,
+    specific_color_rules: dict | None = None,
 ) -> dict[str, object]:
     """Extract the Rich Feature Popup payload shape from processed records."""
 
@@ -209,7 +212,13 @@ def extract_features_from_records_payload(
         organism = _get_record_organism(record)
         record_ids.append(record_id)
         for feat in record.features:
-            if selected_feature_set is not None and feat.type not in selected_feature_set:
+            if not should_render_feature(
+                feat,
+                selected_feature_set,
+                feature_visibility_rules=feature_visibility_rules,
+                record_id=hash_record_id,
+                specific_color_rules=specific_color_rules,
+            ):
                 continue
 
             start = int(feat.location.start)
@@ -274,6 +283,8 @@ def extract_features_from_genbank_payload(
     record_selector: object | None = None,
     reverse_flag: object | None = None,
     selected_features: object | None = None,
+    feature_visibility_rules: list[dict[str, Any]] | None = None,
+    specific_color_rules: dict | None = None,
 ) -> dict[str, object]:
     """Extract the Rich Feature Popup payload shape from a GenBank file."""
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
@@ -287,7 +298,12 @@ def extract_features_from_genbank_payload(
         from gbdraw.io.regions import apply_region_specs, parse_region_specs
 
         records = apply_region_specs(records, parse_region_specs([str(region_spec)]))
-    return extract_features_from_records_payload(records, selected_features=selected_features)
+    return extract_features_from_records_payload(
+        records,
+        selected_features=selected_features,
+        feature_visibility_rules=feature_visibility_rules,
+        specific_color_rules=specific_color_rules,
+    )
 
 
 def extract_features_from_genbank_json(

@@ -31,6 +31,7 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.colors import compute_feature_hash
+from gbdraw.features.visibility import should_include_feature_in_analysis
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
 logger = logging.getLogger(__name__)
@@ -485,10 +486,15 @@ def extract_web_stable_cds_proteins(
     records: Sequence[SeqRecord],
     *,
     record_instance_keys: Sequence[str] | None = None,
+    feature_visibility_rules: list[dict[str, object]] | None = None,
 ) -> ProteinExtractionResult:
     """Extract CDS proteins with the same stable FASTA IDs used by the Web GUI."""
 
-    base = extract_cds_proteins(records, prefer_source_ids=False)
+    base = extract_cds_proteins(
+        records,
+        prefer_source_ids=False,
+        feature_visibility_rules=feature_visibility_rules,
+    )
     stable_by_record: list[list[CdsProtein]] = []
     protein_map: dict[str, CdsProtein] = {}
     keys = list(record_instance_keys or ())
@@ -939,6 +945,7 @@ def extract_cds_proteins(
     *,
     record_index_offset: int = 0,
     prefer_source_ids: bool = True,
+    feature_visibility_rules: list[dict[str, object]] | None = None,
 ) -> ProteinExtractionResult:
     """Extract CDS proteins using protein IDs where possible and genomic spans.
 
@@ -960,6 +967,12 @@ def extract_cds_proteins(
         parent_graph = _build_parent_graph(feature_items)
         for feature_index, feature, ancestors in feature_items:
             if feature.type != "CDS":
+                continue
+            if not should_include_feature_in_analysis(
+                feature,
+                feature_visibility_rules,
+                record_id=record.id,
+            ):
                 continue
 
             span = _cds_span(feature)
@@ -6189,6 +6202,7 @@ def build_pairwise_protein_blastp_comparisons(
     runner: LosatpRunner | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
+    feature_visibility_rules: list[dict[str, object]] | None = None,
     cache_filenames: Sequence[str] | None = None,
 ) -> ProteinBlastpResult:
     """Generate adjacent-record LOSATP blastp display comparisons."""
@@ -6201,7 +6215,10 @@ def build_pairwise_protein_blastp_comparisons(
     if int(alignment_length) < 0:
         raise ValidationError("alignment_length must be >= 0")
 
-    extraction = protein_extraction or extract_cds_proteins(records)
+    extraction = protein_extraction or extract_cds_proteins(
+        records,
+        feature_visibility_rules=feature_visibility_rules,
+    )
     _validate_extraction_has_proteins(
         records,
         extraction,
@@ -6271,6 +6288,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     runner: LosatpRunner | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
+    feature_visibility_rules: list[dict[str, object]] | None = None,
     cache_filenames: Sequence[str] | None = None,
 ) -> ProteinBlastpResult:
     """Infer all-vs-all RBH-seeded orthogroups and return adjacent display links."""
@@ -6286,7 +6304,10 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     if int(alignment_length) < 0:
         raise ValidationError("alignment_length must be >= 0")
 
-    extraction = protein_extraction or extract_cds_proteins(records)
+    extraction = protein_extraction or extract_cds_proteins(
+        records,
+        feature_visibility_rules=feature_visibility_rules,
+    )
     _validate_extraction_has_proteins(
         records,
         extraction,

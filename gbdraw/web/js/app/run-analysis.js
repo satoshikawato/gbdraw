@@ -546,7 +546,7 @@ const buildConservationSeries = (sourceFiles, circularConservation) => {
 };
 const normalizeFeatureVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'on' || normalized === 'off' ? normalized : 'default';
+  return ['on', 'off', 'suppress'].includes(normalized) ? normalized : 'default';
 };
 const normalizeMultiRecordSizeMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -1906,7 +1906,8 @@ json.dumps({
         if (normalizedPath === '/manual_wl.tsv') return 'generatedFiles.manual_wl';
         if (normalizedPath === '/priority.tsv') return 'generatedFiles.priority';
         if (normalizedPath === '/web_label_table.tsv') return 'generatedFiles.web_label_table';
-        if (normalizedPath === '/web_feature_table.tsv') return 'generatedFiles.web_feature_table';
+        if (normalizedPath === '/web_feature_visibility_table.tsv') return 'generatedFiles.web_feature_visibility_table';
+        if (normalizedPath === '/web_feature_table.tsv') return 'generatedFiles.web_feature_visibility_table';
         const conservationMatch = normalizedPath.match(/^\/conservation_blast_(\d+)\.txt$/);
         if (conservationMatch) return `generatedFiles.circular_conservation_blasts[${Number(conservationMatch[1])}]`;
         const blastMatch = normalizedPath.match(/^\/blast_(\d+)\.txt$/);
@@ -2081,18 +2082,22 @@ json.dumps({
         stageTextFile('/web_label_table.tsv', labelOverride.tsv);
         args.push('--label_table', '/web_label_table.tsv');
       }
+      let featureVisibilityTablePath = null;
+      let featureVisibilityCacheKey = '';
       const featureVisibilityRows = [];
       Object.entries(featureVisibilityOverrides || {}).forEach(([featureIdRaw, modeRaw]) => {
         const featureId = String(featureIdRaw || '').trim();
         if (!featureId) return;
         const mode = normalizeFeatureVisibilityMode(modeRaw);
         if (mode === 'default') return;
-        const action = mode === 'on' ? 'show' : 'hide';
+        const action = mode === 'on' ? 'show' : (mode === 'suppress' ? 'suppress' : 'hide');
         featureVisibilityRows.push(`*\t*\thash\t^${escapeRegexLiteral(featureId)}$\t${action}`);
       });
       if (featureVisibilityRows.length > 0) {
-        stageTextFile('/web_feature_table.tsv', `${featureVisibilityRows.join('\n')}\n`);
-        args.push('--feature_table', '/web_feature_table.tsv');
+        featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
+        featureVisibilityCacheKey = `${featureVisibilityRows.join('\n')}\n`;
+        stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey);
+        args.push('--feature_visibility_table', featureVisibilityTablePath);
       }
       if (!isReflow) {
         editableLabels.value = [];
@@ -3560,7 +3565,8 @@ json.dumps({
                 regionSpec,
                 recordSelector,
                 recordInstanceKey,
-                recordIndex: idx
+                recordIndex: idx,
+                featureVisibility: featureVisibilityCacheKey
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
           const usePersistentFastaCache = !useProteinBlastp;
@@ -3581,7 +3587,7 @@ json.dumps({
           } else {
             if (useProteinBlastp) {
               const res = JSON.parse(
-                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx, recordInstanceKey)
+                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx, recordInstanceKey, featureVisibilityTablePath)
               );
               if (res.error) throw new Error(res.error);
               const fastaHash = await hashText(res.fasta || '');

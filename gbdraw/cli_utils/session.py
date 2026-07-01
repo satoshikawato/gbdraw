@@ -349,6 +349,7 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "--label_blacklist": "files.blacklist",
     "--qualifier_priority": "files.qualifier_priority",
     "--label_table": "files.cliInputs[]",
+    "--feature_visibility_table": "files.cliInputs[]",
     "--feature_table": "files.cliInputs[]",
 }
 

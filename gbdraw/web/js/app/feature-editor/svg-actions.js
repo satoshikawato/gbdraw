@@ -119,7 +119,7 @@ export const createFeatureSvgActions = ({
 
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
-    return normalized === 'on' || normalized === 'off' ? normalized : 'default';
+    return ['on', 'off', 'suppress'].includes(normalized) ? normalized : 'default';
   };
 
   const getPopupPosition = (eventLike, popupWidth = 720, popupHeight = 520) => {
@@ -663,7 +663,7 @@ export const createFeatureSvgActions = ({
         return false;
       }
       elements.forEach((el) => {
-        if (mode === 'off') {
+        if (mode === 'off' || mode === 'suppress') {
           el.setAttribute('display', 'none');
         } else {
           el.removeAttribute('display');
