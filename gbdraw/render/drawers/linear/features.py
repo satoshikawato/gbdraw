@@ -7,7 +7,7 @@ from svgwrite.container import Group
 from svgwrite.path import Path
 
 from ....configurators import FeatureDrawingConfigurator
-from ....features.ids import compute_feature_object_hash
+from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
 from ....svg.linear_features import (
     create_arrowhead_path_linear,
     create_intron_path_linear,
@@ -40,6 +40,9 @@ class FeatureDrawer:
         stroke_width_specified: Optional[float] = None,
         feature_data_id: Optional[str] = None,
         dom_element_id: Optional[str] = None,
+        stable_feature_id: Optional[str] = None,
+        record_id: Optional[str] = None,
+        record_index: int | None = None,
     ) -> None:
         stroke_color: str = (
             stroke_color_specified if stroke_color_specified is not None else self.default_stroke_color
@@ -59,6 +62,12 @@ class FeatureDrawer:
         if feature_data_id:
             path.attribs["data-gbdraw-feature-id"] = feature_data_id
             path.attribs["id"] = dom_element_id or feature_data_id
+            if stable_feature_id:
+                path.attribs["data-gbdraw-stable-feature-id"] = stable_feature_id
+            if record_id:
+                path.attribs["data-gbdraw-record-id"] = record_id
+            if record_index is not None:
+                path.attribs["data-gbdraw-record-index"] = str(int(record_index))
         group.add(path)
 
     def draw(
@@ -74,6 +83,8 @@ class FeatureDrawer:
         arrow_length: float,
         track_layout: str = "middle",
         track_axis_gap: float | None = None,
+        record_index: int = 0,
+        record_count: int = 1,
     ) -> Group:
         path_generator = FeaturePathGenerator(
             genome_length=genome_length,
@@ -90,7 +101,12 @@ class FeatureDrawer:
         gene_paths = path_generator.generate_linear_gene_path(feature_object)
 
         # Get feature identifier for instant preview support
-        feature_data_id = self.get_feature_data_id(feature_object)
+        stable_feature_id = self.get_feature_data_id(feature_object)
+        feature_data_id = make_linear_rendered_feature_id(
+            record_index=record_index,
+            stable_feature_id=stable_feature_id,
+            record_count=record_count,
+        )
         block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
         block_index = 0
 
@@ -111,6 +127,9 @@ class FeatureDrawer:
                     fill_color=feature_object.color,
                     feature_data_id=feature_data_id,
                     dom_element_id=dom_element_id,
+                    stable_feature_id=stable_feature_id,
+                    record_id=getattr(feature_object, "record_id", None),
+                    record_index=record_index,
                 )
             elif path_type == "line":
                 self.draw_path(

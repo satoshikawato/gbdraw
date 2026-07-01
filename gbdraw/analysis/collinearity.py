@@ -2229,6 +2229,7 @@ def build_orthogroup_collinearity_blocks(
     runner: LosatpRunner | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
+    feature_visibility_rules: list[dict[str, object]] | None = None,
     cache_filenames: Sequence[str] | None = None,
 ) -> CollinearityResult:
     """Run scoped LOSATP blastp evidence searches, infer orthogroups, and call blocks."""
@@ -2251,7 +2252,10 @@ def build_orthogroup_collinearity_blocks(
         resolved_max_paralog_links = int(params.max_paralog_links_per_orthogroup)
     if resolved_max_paralog_links <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
-    extraction = protein_extraction or extract_cds_proteins(records)
+    extraction = protein_extraction or extract_cds_proteins(
+        records,
+        feature_visibility_rules=feature_visibility_rules,
+    )
     _validate_collinearity_extraction(records, extraction)
 
     search_candidate_limit = candidate_limit

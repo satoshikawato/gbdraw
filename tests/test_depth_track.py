@@ -894,8 +894,10 @@ def test_linear_depth_track_partial_record_rows_are_not_shared() -> None:
         depth_step=10,
     ).tostring()
 
-    assert svg.count('id="depth"') == 2
-    assert svg.count('id="depth_axis"') == 2
+    assert svg.count('id="depth_record_1"') == 1
+    assert svg.count('id="depth_record_2"') == 1
+    assert svg.count('id="depth_record_1_axis"') == 1
+    assert svg.count('id="depth_record_2_axis"') == 1
 
 
 @pytest.mark.linear

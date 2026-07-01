@@ -98,6 +98,7 @@ const resetRuleDraftState = (state) => {
 const resetEditorDraftState = (state) => {
   const editorDefaults = createDefaultEditorDraftState();
   clearReactiveObject(state.featureColorOverrides);
+  replaceReactiveArray(state.featureVisibilityRules);
   clearReactiveObject(state.featureVisibilityOverrides);
   clearReactiveObject(state.featureStrokeOverrides);
   clearReactiveObject(state.legendColorOverrides);

@@ -48,6 +48,7 @@ import {
   normalizePaletteColors
 } from './color-utils.js';
 import { serializeSpecificRules } from './file-imports.js';
+import { serializeFeatureVisibilityRules } from './feature-visibility.js';
 import {
   DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
   DEFAULT_LINEAR_BLAST_FILTERS,
@@ -463,22 +464,24 @@ const setCachedProteinExtraction = (file, key, value) => {
   if (byKey.size >= PROTEIN_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
   byKey.set(key, value);
 };
+const cloneJsonValue = (value, fallback) => {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_err) {
+    return fallback;
+  }
+};
 const cloneFeatureExtractionData = (data) => ({
   features: Array.isArray(data?.features)
-    ? data.features.map((feature) => ({
-        ...feature,
-        qualifiers:
-          feature?.qualifiers && typeof feature.qualifiers === 'object'
-            ? Object.fromEntries(
-                Object.entries(feature.qualifiers).map(([key, value]) => [
-                  key,
-                  Array.isArray(value) ? [...value] : value
-                ])
-              )
-            : feature?.qualifiers
-      }))
+    ? data.features.map((feature) => cloneJsonValue(
+        feature,
+        feature && typeof feature === 'object' ? { ...feature } : feature
+      ))
     : [],
-  record_ids: Array.isArray(data?.record_ids) ? [...data.record_ids] : []
+  record_ids: Array.isArray(data?.record_ids) ? [...data.record_ids] : [],
+  selector_safety_scope: Array.isArray(data?.selector_safety_scope)
+    ? cloneJsonValue(data.selector_safety_scope, [])
+    : []
 });
 const getCachedFeatureExtraction = (file, key) => {
   if (!file) return null;
@@ -537,16 +540,11 @@ const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
     canonicalLength: records.reduce((sum, record) => sum + String(record.sequence || '').length, 0)
   };
 };
-const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const buildConservationSeries = (sourceFiles, circularConservation) => {
   return orderedConservationSources(sourceFiles, circularConservation).map((entry) => ({
     label: entry.label,
     color: entry.color
   }));
-};
-const normalizeFeatureVisibilityMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'on' || normalized === 'off' ? normalized : 'default';
 };
 const normalizeMultiRecordSizeMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -741,7 +739,7 @@ export const createRunAnalysis = ({
     addedLegendCaptions,
     fileLegendCaptions,
     featureColorOverrides,
-    featureVisibilityOverrides,
+    featureVisibilityRules,
     featureStrokeOverrides,
     legendEntries,
     deletedLegendEntries,
@@ -788,6 +786,7 @@ export const createRunAnalysis = ({
     generatedCircularPlotTitlePosition,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
+    featureSelectorSafetyScope,
     featureEditorStatus,
     featureExtractionPending,
     featureExtractionError,
@@ -952,12 +951,13 @@ export const createRunAnalysis = ({
     });
   };
 
-  const buildFeatureExtractionCacheKey = ({ regionSpec, recordSelector, reverseFlag, selectedFeatures }) =>
+  const buildFeatureExtractionCacheKey = ({ regionSpec, recordSelector, reverseFlag, selectedFeatures, featureVisibility }) =>
     JSON.stringify({
       regionSpec: String(regionSpec || ''),
       recordSelector: normalizeRecordSelectorText(recordSelector),
       reverseFlag: reverseFlag ? '1' : '0',
-      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : 'all'
+      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : 'all',
+      featureVisibility: String(featureVisibility || '')
     });
 
   const readFeatureExtractionData = async ({
@@ -967,10 +967,18 @@ export const createRunAnalysis = ({
     recordSelector,
     reverseFlag,
     selectedFeatures = null,
+    featureVisibilityTablePath = null,
+    featureVisibilityTsv = '',
     timingEntries,
     timingLabel
   }) => {
-    const cacheKey = buildFeatureExtractionCacheKey({ regionSpec, recordSelector, reverseFlag, selectedFeatures });
+    const cacheKey = buildFeatureExtractionCacheKey({
+      regionSpec,
+      recordSelector,
+      reverseFlag,
+      selectedFeatures,
+      featureVisibility: featureVisibilityTsv
+    });
     const cached = getCachedFeatureExtraction(file, cacheKey);
     if (cached) {
       timingEntries.push({ label: timingLabel, ms: 0, details: 'cache hit' });
@@ -983,17 +991,26 @@ export const createRunAnalysis = ({
 
     const startedAt = getNow();
     const buffer = await file.arrayBuffer();
+    const requestFiles = [{
+      path,
+      name: file.name || path.split('/').pop() || 'input.gb',
+      bytes: buffer
+    }];
+    if (featureVisibilityTablePath && featureVisibilityTsv) {
+      requestFiles.push({
+        path: featureVisibilityTablePath,
+        name: featureVisibilityTablePath.split('/').pop() || 'feature_visibility.tsv',
+        bytes: new TextEncoder().encode(featureVisibilityTsv).buffer
+      });
+    }
     const { result: featData } = await runFeatureExtraction({
       path,
-      files: [{
-        path,
-        name: file.name || path.split('/').pop() || 'input.gb',
-        bytes: buffer
-      }],
+      files: requestFiles,
       regionSpec: regionSpec || null,
       recordSelector: recordSelector || null,
       reverseFlag: Boolean(reverseFlag),
-      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : null
+      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : null,
+      featureVisibilityTablePath: featureVisibilityTablePath || null
     });
     timingEntries.push({ label: timingLabel, ms: getNow() - startedAt, details: 'worker' });
     setCachedFeatureExtraction(file, cacheKey, featData);
@@ -1120,6 +1137,8 @@ export const createRunAnalysis = ({
           regionSpec: null,
           recordSelector: null,
           reverseFlag: false,
+          featureVisibilityTablePath: context.featureVisibilityTablePath,
+          featureVisibilityTsv: context.featureVisibilityTsv,
           timingEntries,
           timingLabel: 'feature extraction circular input'
         });
@@ -1135,6 +1154,9 @@ export const createRunAnalysis = ({
           });
         } else if (Array.isArray(featData?.features)) {
           extractedFeatures.value = featData.features;
+          featureSelectorSafetyScope.value = Array.isArray(featData.selector_safety_scope)
+            ? featData.selector_safety_scope
+            : [];
           featureRecordIds.value = featData.record_ids || [];
           selectedFeatureRecordIdx.value = 0;
           refreshFeatureOverrides(featData.features);
@@ -1158,6 +1180,7 @@ export const createRunAnalysis = ({
         }
       } else if (context.mode === 'linear' && context.lInputType === 'gb' && context.linearSeqs.length > 0) {
         let allFeatures = [];
+        let allSelectorSafetyScope = [];
         const allRecordLabels = [];
 
         for (let i = 0; i < context.linearSeqs.length; i++) {
@@ -1172,6 +1195,8 @@ export const createRunAnalysis = ({
             regionSpec,
             recordSelector,
             reverseFlag,
+            featureVisibilityTablePath: context.featureVisibilityTablePath,
+            featureVisibilityTsv: context.featureVisibilityTsv,
             timingEntries,
             timingLabel: `feature extraction linear input #${i + 1}`
           });
@@ -1185,6 +1210,11 @@ export const createRunAnalysis = ({
               id: `file${i}_${feature.id}`
             }));
             allFeatures = allFeatures.concat(features);
+            if (Array.isArray(featData.selector_safety_scope)) {
+              allSelectorSafetyScope = allSelectorSafetyScope.concat(
+                featData.selector_safety_scope.map((entry) => ({ ...entry, fileIdx: i }))
+              );
+            }
             (featData.record_ids || []).forEach((rid, ridx) => {
               allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
             });
@@ -1195,6 +1225,7 @@ export const createRunAnalysis = ({
 
         if (!isCurrentFeatureExtractionContext(context)) return;
         extractedFeatures.value = allFeatures;
+        featureSelectorSafetyScope.value = allSelectorSafetyScope;
         featureRecordIds.value = allRecordLabels.map((r) => r.label);
         selectedFeatureRecordIdx.value = 0;
         refreshFeatureOverrides(allFeatures);
@@ -1778,6 +1809,7 @@ json.dumps({
           originalLegendOrder: cloneJsonSafe(originalLegendOrder.value || [], []),
           originalLegendColors: cloneJsonSafe(originalLegendColors.value || {}, {}),
           extractedFeatures: cloneJsonSafe(extractedFeatures.value || [], []),
+          featureSelectorSafetyScope: cloneJsonSafe(featureSelectorSafetyScope.value || [], []),
           editableLabels: cloneJsonSafe(editableLabels.value || [], []),
           featureEditorStatus: cloneJsonSafe(featureEditorStatus || {}, {}),
           featureExtractionPending: featureExtractionPending.value,
@@ -1808,6 +1840,7 @@ json.dumps({
       originalLegendOrder.value = cloneJsonSafe(manualCancelSnapshot.originalLegendOrder, []);
       originalLegendColors.value = cloneJsonSafe(manualCancelSnapshot.originalLegendColors, {});
       extractedFeatures.value = cloneJsonSafe(manualCancelSnapshot.extractedFeatures, []);
+      featureSelectorSafetyScope.value = cloneJsonSafe(manualCancelSnapshot.featureSelectorSafetyScope, []);
       editableLabels.value = cloneJsonSafe(manualCancelSnapshot.editableLabels, []);
       setFeatureEditorStatus(cloneJsonSafe(manualCancelSnapshot.featureEditorStatus, {}));
       featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
@@ -1906,7 +1939,8 @@ json.dumps({
         if (normalizedPath === '/manual_wl.tsv') return 'generatedFiles.manual_wl';
         if (normalizedPath === '/priority.tsv') return 'generatedFiles.priority';
         if (normalizedPath === '/web_label_table.tsv') return 'generatedFiles.web_label_table';
-        if (normalizedPath === '/web_feature_table.tsv') return 'generatedFiles.web_feature_table';
+        if (normalizedPath === '/web_feature_visibility_table.tsv') return 'generatedFiles.web_feature_visibility_table';
+        if (normalizedPath === '/web_feature_table.tsv') return 'generatedFiles.web_feature_visibility_table';
         const conservationMatch = normalizedPath.match(/^\/conservation_blast_(\d+)\.txt$/);
         if (conservationMatch) return `generatedFiles.circular_conservation_blasts[${Number(conservationMatch[1])}]`;
         const blastMatch = normalizedPath.match(/^\/blast_(\d+)\.txt$/);
@@ -2081,18 +2115,14 @@ json.dumps({
         stageTextFile('/web_label_table.tsv', labelOverride.tsv);
         args.push('--label_table', '/web_label_table.tsv');
       }
-      const featureVisibilityRows = [];
-      Object.entries(featureVisibilityOverrides || {}).forEach(([featureIdRaw, modeRaw]) => {
-        const featureId = String(featureIdRaw || '').trim();
-        if (!featureId) return;
-        const mode = normalizeFeatureVisibilityMode(modeRaw);
-        if (mode === 'default') return;
-        const action = mode === 'on' ? 'show' : 'hide';
-        featureVisibilityRows.push(`*\t*\thash\t^${escapeRegexLiteral(featureId)}$\t${action}`);
-      });
-      if (featureVisibilityRows.length > 0) {
-        stageTextFile('/web_feature_table.tsv', `${featureVisibilityRows.join('\n')}\n`);
-        args.push('--feature_table', '/web_feature_table.tsv');
+      let featureVisibilityTablePath = null;
+      let featureVisibilityCacheKey = '';
+      const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules);
+      if (featureVisibilityTsv.trim()) {
+        featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
+        featureVisibilityCacheKey = featureVisibilityTsv;
+        stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey);
+        args.push('--feature_visibility_table', featureVisibilityTablePath);
       }
       if (!isReflow) {
         editableLabels.value = [];
@@ -3560,7 +3590,8 @@ json.dumps({
                 regionSpec,
                 recordSelector,
                 recordInstanceKey,
-                recordIndex: idx
+                recordIndex: idx,
+                featureVisibility: featureVisibilityCacheKey
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
           const usePersistentFastaCache = !useProteinBlastp;
@@ -3581,7 +3612,7 @@ json.dumps({
           } else {
             if (useProteinBlastp) {
               const res = JSON.parse(
-                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx, recordInstanceKey)
+                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx, recordInstanceKey, featureVisibilityTablePath)
               );
               if (res.error) throw new Error(res.error);
               const fastaHash = await hashText(res.fasta || '');
@@ -4277,6 +4308,7 @@ json.dumps({
 
       if (!isReflow) {
         extractedFeatures.value = [];
+        featureSelectorSafetyScope.value = [];
         featureRecordIds.value = [];
         selectedFeatureRecordIdx.value = 0;
 
@@ -4295,7 +4327,9 @@ json.dumps({
             linearSeqs: linearSeqs.map((seq) => ({ gb: seq.gb || null })),
             regionSpecs: regionSpecs.map((spec) => ({ file: spec?.displayFile || spec?.file || null })),
             recordSelectors: [...recordSelectors],
-            reverseFlags: [...reverseFlags]
+            reverseFlags: [...reverseFlags],
+            featureVisibilityTablePath,
+            featureVisibilityTsv: featureVisibilityCacheKey
           });
           if (generationToken !== latestGenerationToken) {
             return { status: 'stale' };

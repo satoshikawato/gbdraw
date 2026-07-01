@@ -5,15 +5,22 @@ from __future__ import annotations
 
 import logging
 import re
+import warnings
 from typing import Any, Optional, Sequence
 
 import pandas as pd
-from Bio.SeqFeature import SeqFeature
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
-from .colors import compute_feature_hash
-from .ids import compute_feature_hash_from_parts
+from .selector_values import (
+    get_feature_hash,
+    get_feature_location_str,
+    get_feature_qualifiers,
+    get_feature_record_id,
+    get_feature_record_location_str,
+    get_feature_type,
+    get_qualifier_values,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +39,9 @@ _FEATURE_VISIBILITY_HEADER = (
     "action",
 )
 
-_SHOW_ACTION_TOKENS = {"show", "on", "display", "include", "true", "1"}
-_HIDE_ACTION_TOKENS = {"hide", "off", "suppress", "exclude", "false", "0"}
+_SHOW_ACTION_TOKENS = {"show", "on"}
+_HIDE_ACTION_TOKENS = {"hide", "off", "false", "0"}
+_EXCLUDE_MATCHING_ACTION_TOKENS = {"exclude_matching"}
 
 
 def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
@@ -99,253 +107,6 @@ def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
     return df
 
 
-def _normalize_qualifier_values(raw_values: Any) -> list[str]:
-    if raw_values is None:
-        return []
-    if isinstance(raw_values, (list, tuple, set)):
-        return [str(value) for value in raw_values if value is not None]
-    return [str(raw_values)]
-
-
-def _get_feature_type(feature: Any) -> str:
-    feature_type = getattr(feature, "type", None)
-    if feature_type is None:
-        feature_type = getattr(feature, "feature_type", "")
-    return str(feature_type or "")
-
-
-def _get_feature_qualifiers(feature: Any) -> dict:
-    qualifiers = getattr(feature, "qualifiers", {})
-    if qualifiers is None:
-        return {}
-    if isinstance(qualifiers, dict):
-        return qualifiers
-    try:
-        return dict(qualifiers)
-    except Exception:
-        return {}
-
-
-def _get_feature_record_id(feature: Any, record_id: Optional[str]) -> Optional[str]:
-    if record_id is not None and str(record_id).strip() != "":
-        return str(record_id)
-    feature_record_id = getattr(feature, "record_id", None)
-    if feature_record_id is None or str(feature_record_id).strip() == "":
-        return None
-    return str(feature_record_id)
-
-
-def _iter_feature_coordinates(feature: Any) -> list[Any]:
-    coordinates = getattr(feature, "coordinates", None)
-    if coordinates is None:
-        return []
-    try:
-        return list(coordinates)
-    except Exception:
-        return []
-
-
-def _extract_first_coordinate_part(feature: Any) -> Optional[tuple[int, int, Any]]:
-    for part in _iter_feature_coordinates(feature):
-        try:
-            start = int(getattr(part, "start"))
-            end = int(getattr(part, "end"))
-            strand = getattr(part, "strand", None)
-        except Exception:
-            continue
-        return start, end, strand
-    return None
-
-
-def _extract_coordinate_bounds(feature: Any) -> Optional[tuple[int, int]]:
-    starts: list[int] = []
-    ends: list[int] = []
-    for part in _iter_feature_coordinates(feature):
-        try:
-            starts.append(int(getattr(part, "start")))
-            ends.append(int(getattr(part, "end")))
-        except Exception:
-            continue
-    if not starts or not ends:
-        return None
-    return min(starts), max(ends)
-
-
-def _extract_first_location_part(feature: Any) -> Optional[tuple[int, int, Any]]:
-    if isinstance(feature, SeqFeature):
-        loc = feature.location
-        if hasattr(loc, "parts") and loc.parts:
-            part = loc.parts[0]
-            return int(part.start), int(part.end), part.strand
-        return int(loc.start), int(loc.end), loc.strand
-
-    coordinate_part = _extract_first_coordinate_part(feature)
-    if coordinate_part is not None:
-        return coordinate_part
-
-    location = getattr(feature, "location", None)
-    if not location:
-        return None
-
-    selected = None
-    for part in location:
-        kind = getattr(part, "kind", None)
-        if kind is None and isinstance(part, tuple) and len(part) >= 1:
-            kind = part[0]
-        if kind == "block":
-            selected = part
-            break
-    if selected is None:
-        selected = location[0]
-
-    try:
-        start = getattr(selected, "start", selected[3])
-        end = getattr(selected, "end", selected[4])
-        strand = getattr(selected, "strand", selected[2])
-    except Exception:
-        return None
-    try:
-        return int(start), int(end), strand
-    except Exception:
-        return None
-
-
-def _normalize_strand_for_hash(strand: Any) -> Any:
-    if strand in (None, "", "none", "None", "undefined"):
-        return None
-    if isinstance(strand, str):
-        normalized = strand.strip().lower()
-        if normalized in {"positive", "plus", "+", "forward", "1"}:
-            return 1
-        if normalized in {"negative", "minus", "-", "reverse", "-1"}:
-            return -1
-        if normalized in {"undefined", "none", ""}:
-            return None
-        try:
-            return int(normalized)
-        except ValueError:
-            return strand
-    if isinstance(strand, (int, float)):
-        try:
-            return int(strand)
-        except Exception:
-            return strand
-    return strand
-
-
-def _normalize_strand_token(strand: Any) -> str:
-    if strand in (None, "", "none", "None", "undefined"):
-        return "undefined"
-    if isinstance(strand, str):
-        normalized = strand.strip().lower()
-        if normalized in {"positive", "plus", "+", "forward", "1"}:
-            return "+"
-        if normalized in {"negative", "minus", "-", "reverse", "-1"}:
-            return "-"
-        if normalized in {"undefined", "none", ""}:
-            return "undefined"
-        return "undefined"
-    if isinstance(strand, (int, float)):
-        try:
-            numeric = int(strand)
-        except Exception:
-            return "undefined"
-        if numeric == 1:
-            return "+"
-        if numeric == -1:
-            return "-"
-        return "undefined"
-    return "undefined"
-
-
-def _get_feature_hash(feature: Any, record_id: Optional[str]) -> Optional[str]:
-    resolved_record_id = _get_feature_record_id(feature, record_id)
-    if isinstance(feature, SeqFeature):
-        return compute_feature_hash(feature, record_id=resolved_record_id)
-
-    first_part = _extract_first_location_part(feature)
-    feature_type = _get_feature_type(feature)
-    if not first_part or not feature_type:
-        return None
-    start, end, strand = first_part
-    normalized_strand = _normalize_strand_for_hash(strand)
-    return compute_feature_hash_from_parts(
-        feature_type,
-        start,
-        end,
-        normalized_strand,
-        record_id=resolved_record_id,
-    )
-
-
-def _get_feature_location_str(feature: Any) -> Optional[str]:
-    if isinstance(feature, SeqFeature):
-        try:
-            return f"{int(feature.location.start)}..{int(feature.location.end)}"
-        except Exception:
-            return None
-
-    coordinate_bounds = _extract_coordinate_bounds(feature)
-    if coordinate_bounds is not None:
-        return f"{coordinate_bounds[0]}..{coordinate_bounds[1]}"
-
-    location = getattr(feature, "location", None)
-    if not location:
-        return None
-
-    starts: list[int] = []
-    ends: list[int] = []
-    for part in location:
-        kind = getattr(part, "kind", None)
-        if kind is None and isinstance(part, tuple) and len(part) >= 1:
-            kind = part[0]
-        if kind not in {"block", None}:
-            continue
-        try:
-            start = int(getattr(part, "start", part[3]))
-            end = int(getattr(part, "end", part[4]))
-        except Exception:
-            continue
-        starts.append(start)
-        ends.append(end)
-    if not starts or not ends:
-        return None
-    return f"{min(starts)}..{max(ends)}"
-
-
-def _get_feature_position_str(feature: Any) -> Optional[str]:
-    location = _get_feature_location_str(feature)
-    if not location:
-        return None
-
-    strand_source = None
-    first_part = _extract_first_location_part(feature)
-    if first_part is not None:
-        strand_source = first_part[2]
-    strand = _normalize_strand_token(strand_source)
-    return f"{location}:{strand}"
-
-
-def _get_feature_record_location_str(feature: Any, record_id: Optional[str]) -> Optional[str]:
-    resolved_record_id = _get_feature_record_id(feature, record_id)
-    if not resolved_record_id:
-        return None
-
-    position = _get_feature_position_str(feature)
-    if not position:
-        return None
-
-    return f"{resolved_record_id}:{position}"
-
-
-def _get_qualifier_values(qualifiers: dict, qualifier_key: str) -> list[str]:
-    for key, values in qualifiers.items():
-        if str(key).lower() != str(qualifier_key).lower():
-            continue
-        return _normalize_qualifier_values(values)
-    return []
-
-
 def _is_feature_visibility_header_row(
     record_id: str,
     feature_type: str,
@@ -377,13 +138,24 @@ def _normalize_visibility_action(action: str, row_idx: int) -> str:
     if normalized in _SHOW_ACTION_TOKENS:
         return "show"
     if normalized in _HIDE_ACTION_TOKENS:
-        return "hide"
+        return "off"
+    if normalized in _EXCLUDE_MATCHING_ACTION_TOKENS:
+        return "exclude_matching"
+    if normalized == "suppress":
+        message = (
+            "The feature visibility action 'suppress' is deprecated; "
+            "use 'exclude_matching' instead."
+        )
+        warnings.warn(message, DeprecationWarning, stacklevel=2)
+        logger.warning("WARNING: %s", message)
+        return "exclude_matching"
     logger.error(
         "ERROR: Invalid action in feature visibility table at row %s: '%s'", row_idx, action
     )
     raise ValidationError(
         f"Invalid action in feature visibility table at row {row_idx}: '{action}'. "
-        f"Use show/on/display/include/true/1 or hide/off/suppress/exclude/false/0."
+        "Use show, off, or exclude_matching. Accepted aliases are on, hide, "
+        "false, and 0; suppress is deprecated and maps to exclude_matching."
     )
 
 
@@ -478,41 +250,32 @@ def _rule_matches_feature(feature: Any, rule: dict[str, Any], record_id: Optiona
     pattern = rule["pattern"]
 
     if qualifier_key == "record_location":
-        feature_record_location = _get_feature_record_location_str(feature, record_id)
+        feature_record_location = get_feature_record_location_str(feature, record_id)
         return bool(feature_record_location and pattern.search(feature_record_location))
 
     if qualifier_key == "hash":
-        feature_hash = _get_feature_hash(feature, record_id)
+        feature_hash = get_feature_hash(feature, record_id)
         return bool(feature_hash and pattern.search(feature_hash))
 
     if qualifier_key == "location":
-        feature_location = _get_feature_location_str(feature)
+        feature_location = get_feature_location_str(feature)
         return bool(feature_location and pattern.search(feature_location))
 
-    qualifiers = _get_feature_qualifiers(feature)
-    values = _get_qualifier_values(qualifiers, str(rule["qualifier"]))
+    qualifiers = get_feature_qualifiers(feature)
+    values = get_qualifier_values(qualifiers, str(rule["qualifier"]))
     return any(pattern.search(value) for value in values)
 
 
-def should_render_feature(
+def _first_matching_visibility_rule(
     feature: Any,
-    selected_features_set: Sequence[str] | set[str] | None,
-    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    feature_visibility_rules: Optional[list[dict[str, Any]]],
     record_id: Optional[str] = None,
-) -> bool:
-    feature_type = _get_feature_type(feature)
-    selected_set = {str(feature_name) for feature_name in (selected_features_set or [])}
-
-    # Keep legacy behavior when no feature filter is provided.
-    if not selected_set:
-        base_visible = True
-    else:
-        base_visible = feature_type in selected_set
-
+) -> Optional[dict[str, Any]]:
     if not feature_visibility_rules:
-        return base_visible
+        return None
 
-    resolved_record_id = _get_feature_record_id(feature, record_id)
+    feature_type = get_feature_type(feature)
+    resolved_record_id = get_feature_record_id(feature, record_id)
 
     for rule in feature_visibility_rules:
         if not _matches_constraint(str(rule["record_id"]), resolved_record_id):
@@ -521,13 +284,94 @@ def should_render_feature(
             continue
         if not _rule_matches_feature(feature, rule, record_id=resolved_record_id):
             continue
-        return str(rule["action"]) == "show"
+        return rule
+    return None
+
+
+def resolve_candidate_feature_types(
+    selected_features_set: Sequence[str] | set[str] | None,
+    *,
+    color_table: Optional[DataFrame] = None,
+    feature_visibility_table: Optional[DataFrame] = None,
+) -> tuple[set[str], bool]:
+    """Return GFF3 candidate feature types and whether all types are required."""
+
+    candidate_types = {
+        str(feature_type).strip()
+        for feature_type in (selected_features_set or [])
+        if str(feature_type).strip()
+    }
+
+    for table in (color_table, feature_visibility_table):
+        if table is None or table.empty or "feature_type" not in table.columns:
+            continue
+        for raw_feature_type in table["feature_type"]:
+            feature_type = str(raw_feature_type or "").strip()
+            if not feature_type or feature_type.lower() == "feature_type":
+                continue
+            if feature_type == "*":
+                return candidate_types, True
+            candidate_types.add(feature_type)
+
+    return candidate_types, False
+
+
+def should_render_feature(
+    feature: Any,
+    selected_features_set: Sequence[str] | set[str] | None,
+    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    record_id: Optional[str] = None,
+    specific_color_rules: Optional[dict] = None,
+) -> bool:
+    feature_type = get_feature_type(feature)
+    selected_set = {str(feature_name) for feature_name in (selected_features_set or [])}
+
+    # Keep legacy behavior when no feature filter is provided.
+    if not selected_set:
+        base_visible = True
+    else:
+        base_visible = feature_type in selected_set
+        if not base_visible and specific_color_rules:
+            from .colors import feature_matches_specific_color_rule
+
+            base_visible = feature_matches_specific_color_rule(
+                feature,
+                specific_color_rules,
+                record_id=record_id,
+            )
+
+    rule = _first_matching_visibility_rule(
+        feature,
+        feature_visibility_rules,
+        record_id=record_id,
+    )
+    if rule is not None:
+        action = str(rule["action"])
+        if action == "show":
+            return True
+        if action == "off":
+            return False
 
     return base_visible
+
+
+def should_include_feature_in_analysis(
+    feature: Any,
+    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    record_id: Optional[str] = None,
+) -> bool:
+    rule = _first_matching_visibility_rule(
+        feature,
+        feature_visibility_rules,
+        record_id=record_id,
+    )
+    return not (rule is not None and str(rule["action"]) in {"off", "exclude_matching"})
 
 
 __all__ = [
     "compile_feature_visibility_rules",
     "read_feature_visibility_file",
+    "resolve_candidate_feature_types",
+    "should_include_feature_in_analysis",
     "should_render_feature",
 ]

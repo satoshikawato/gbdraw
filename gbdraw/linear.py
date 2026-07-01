@@ -51,8 +51,14 @@ from .labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
+from .features.colors import preprocess_color_tables
+from .features.ids import make_linear_rendered_feature_id
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
-from .features.visibility import read_feature_visibility_file
+from .features.visibility import (
+    compile_feature_visibility_rules,
+    read_feature_visibility_file,
+    resolve_candidate_feature_types,
+)
 from .exceptions import ValidationError
 from .tracks import (
     linear_track_slots_from_order,
@@ -383,13 +389,34 @@ def _build_interactive_svg_context(
     records,
     selected_features,
     orthogroups=None,
+    *,
+    feature_visibility_rules=None,
+    color_table=None,
+    default_colors=None,
 ) -> InteractiveSvgContext:
     try:
+        specific_color_rules = None
+        if color_table is not None and default_colors is not None:
+            specific_color_rules, _ = preprocess_color_tables(color_table, default_colors)
         payload = extract_features_from_records_payload(
             records,
             selected_features=selected_features,
+            feature_visibility_rules=feature_visibility_rules,
+            specific_color_rules=specific_color_rules,
+            linear_rendered_feature_ids=True,
         )
-        orthogroup_payload = serialize_orthogroups_payload(orthogroups)
+        record_count = len(records)
+        orthogroup_payload = serialize_orthogroups_payload(
+            orthogroups,
+            feature_id_mapper=lambda record_index, stable_feature_id: (
+                make_linear_rendered_feature_id(
+                    record_index=record_index,
+                    stable_feature_id=stable_feature_id,
+                    record_count=record_count,
+                )
+                or stable_feature_id
+            ),
+        )
         features = payload.get("features", [])
         if orthogroup_payload:
             features = enrich_features_with_orthogroups(features, orthogroup_payload)
@@ -1149,10 +1176,17 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="")
     parser.add_argument(
-        '--feature_table',
+        '--feature_visibility_table',
+        dest='feature_table',
         help='Path to a TSV file defining per-feature visibility overrides (optional)',
         type=str,
         default="")
+    parser.add_argument(
+        '--feature_table',
+        dest='feature_table',
+        help=argparse.SUPPRESS,
+        type=str,
+        default=argparse.SUPPRESS)
     parser.add_argument(
         '--feature_height',
         help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb)',
@@ -1565,6 +1599,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         user_defined_default_colors, palette, load_comparison)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
+    feature_visibility_rules = compile_feature_visibility_rules(feature_table)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
@@ -1734,12 +1769,17 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
         reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
+        candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
+            selected_features_set,
+            color_table=color_table,
+            feature_visibility_table=feature_table,
+        )
         records = load_gff_fasta(
             args.gff,
             args.fasta,
             "linear",
-            selected_features_set,
-            keep_all_features=bool(feature_table_path),
+            candidate_feature_types,
+            keep_all_features=keep_all_features,
             load_comparison=load_comparison,
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,
@@ -1817,6 +1857,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         protein_extraction = extract_web_stable_cds_proteins(
             records,
             record_instance_keys=record_instance_keys,
+            feature_visibility_rules=feature_visibility_rules,
         )
         losat_cache_filenames = _linear_losat_cache_filenames(records)
     collinearity_comparisons: list[DataFrame] | None = None
@@ -1835,6 +1876,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             alignment_length=alignment_length,
             losatp_cache=losatp_cache,
             protein_extraction=protein_extraction,
+            feature_visibility_rules=feature_visibility_rules,
             cache_filenames=losat_cache_filenames,
         )
         collinearity_comparisons = protein_blastp_result.comparisons
@@ -1855,6 +1897,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             alignment_length=alignment_length,
             losatp_cache=losatp_cache,
             protein_extraction=protein_extraction,
+            feature_visibility_rules=feature_visibility_rules,
             cache_filenames=losat_cache_filenames,
         )
         collinearity_comparisons = protein_blastp_result.comparisons
@@ -1879,6 +1922,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             search_scope=collinear_search_scope,
             losatp_cache=losatp_cache,
             protein_extraction=protein_extraction,
+            feature_visibility_rules=feature_visibility_rules,
             cache_filenames=losat_cache_filenames,
         )
         collinearity_orthogroups = collinearity_result.orthogroups
@@ -1948,6 +1992,9 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 records,
                 selected_features_set,
                 getattr(canvas, "_gbdraw_orthogroups", None) or collinearity_orthogroups,
+                feature_visibility_rules=feature_visibility_rules,
+                color_table=color_table,
+                default_colors=default_colors,
             ),
         )
     else:

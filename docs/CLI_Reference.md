@@ -86,7 +86,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
-              [--label_table LABEL_TABLE] [--feature_table FEATURE_TABLE]
+              [--label_table LABEL_TABLE]
+              [--feature_visibility_table FEATURE_VISIBILITY_TABLE]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
@@ -265,7 +266,7 @@ options:
   --label_table LABEL_TABLE
                         Path to a TSV file defining post-filter label text
                         overrides (optional)
-  --feature_table FEATURE_TABLE
+  --feature_visibility_table FEATURE_VISIBILITY_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
   --outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET
@@ -423,7 +424,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
-              [--label_table LABEL_TABLE] [--feature_table FEATURE_TABLE]
+              [--label_table LABEL_TABLE]
+              [--feature_visibility_table FEATURE_VISIBILITY_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
               [--comparison_height COMPARISON_HEIGHT]
               [--scale_style {bar,ruler}]
@@ -623,7 +625,7 @@ options:
   --label_table LABEL_TABLE
                         Path to a TSV file defining post-filter label text
                         overrides (optional)
-  --feature_table FEATURE_TABLE
+  --feature_visibility_table FEATURE_VISIBILITY_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
   --feature_height FEATURE_HEIGHT

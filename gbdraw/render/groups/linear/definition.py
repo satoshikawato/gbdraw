@@ -57,6 +57,7 @@ class DefinitionGroup:
         cfg: GbdrawConfig | None = None,
         text_anchor: str | None = None,
         text_x: float = 0.0,
+        group_id: str | None = None,
     ) -> None:
         self.record: SeqRecord = record
         self.title_start_x: float = title_start_x
@@ -68,6 +69,7 @@ class DefinitionGroup:
         self.canvas_config = canvas_config
         self.length_param = self.canvas_config.length_param
         self.text_x = float(text_x)
+        self._explicit_group_id = str(group_id) if group_id else None
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         def_cfg = cfg.objects.definition.linear
@@ -112,7 +114,7 @@ class DefinitionGroup:
     def get_definition_details(self) -> None:
         """Resolve all labels that may participate in the stacked definition."""
         self.track_id = str(self.record.id)
-        self.definition_group_id = f"{self.track_id.replace(' ', '_')}_definition"
+        self.definition_group_id = self._explicit_group_id or f"{self.track_id.replace(' ', '_')}_definition"
 
         override = None
         if getattr(self.record, "annotations", None):

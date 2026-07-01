@@ -175,6 +175,7 @@ def create_feature_dict(
             selected_features_set,
             feature_visibility_rules=feature_visibility_rules,
             record_id=gb_record.id,
+            specific_color_rules=color_table,
         ):
             continue
 

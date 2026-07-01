@@ -1,3 +1,9 @@
+import {
+  buildFeatureVisibilityOverrideCache,
+  featureVisibilityRulesFromOverrideCache,
+  normalizeFeatureVisibilityRule
+} from '../app/feature-visibility.js';
+
 const cloneJsonData = (value) => {
   if (value === null || value === undefined) return value;
   return JSON.parse(JSON.stringify(value));
@@ -14,6 +20,18 @@ const replacePlainObject = (target, source) => {
   Object.entries(source || {}).forEach(([key, value]) => {
     target[key] = value;
   });
+};
+
+const cloneFeatureVisibilityRules = (rules) => (
+  Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
+);
+
+const replaceFeatureVisibilityRules = (state, rules) => {
+  const normalizedRules = cloneFeatureVisibilityRules(rules);
+  if (Array.isArray(state.featureVisibilityRules)) {
+    state.featureVisibilityRules.splice(0, state.featureVisibilityRules.length, ...normalizedRules);
+  }
+  replacePlainObject(state.featureVisibilityOverrides, buildFeatureVisibilityOverrideCache(normalizedRules));
 };
 
 const setRef = (target, value) => {
@@ -44,6 +62,7 @@ const closeTransientState = (state) => {
   if (state.resetColorDialog) state.resetColorDialog.show = false;
   if (state.legendRenameDialog) state.legendRenameDialog.show = false;
   if (state.labelTextScopeDialog) state.labelTextScopeDialog.show = false;
+  if (state.featureVisibilityScopeDialog) state.featureVisibilityScopeDialog.show = false;
   if (state.globalLabelModeDialog) state.globalLabelModeDialog.show = false;
   if (state.featurePopupDrag) state.featurePopupDrag.active = false;
   if (state.featurePopupResize) state.featurePopupResize.active = false;
@@ -165,10 +184,11 @@ const applyFallbackUiStateData = (state, ui = {}) => {
 
 const buildFallbackFeatureStateData = (state) => ({
   extractedFeatures: cloneJsonData(getRef(state.extractedFeatures, [])) || [],
+  featureSelectorSafetyScope: cloneJsonData(getRef(state.featureSelectorSafetyScope, [])) || [],
   featureRecordIds: cloneJsonData(getRef(state.featureRecordIds, [])) || [],
   selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
   featureColorOverrides: clonePlainObject(state.featureColorOverrides),
-  featureVisibilityOverrides: clonePlainObject(state.featureVisibilityOverrides),
+  featureVisibilityRules: cloneFeatureVisibilityRules(state.featureVisibilityRules),
   labelTextFeatureOverrides: clonePlainObject(state.labelTextFeatureOverrides),
   labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: clonePlainObject(state.labelTextFeatureOverrideSources),
@@ -178,13 +198,19 @@ const buildFallbackFeatureStateData = (state) => ({
 
 const applyFallbackFeatureStateData = (state, features = {}) => {
   setRef(state.extractedFeatures, cloneJsonData(features.extractedFeatures) || []);
+  setRef(state.featureSelectorSafetyScope, cloneJsonData(features.featureSelectorSafetyScope) || []);
   setRef(state.featureRecordIds, cloneJsonData(features.featureRecordIds) || []);
   setRef(
     state.selectedFeatureRecordIdx,
     Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
   );
   replacePlainObject(state.featureColorOverrides, clonePlainObject(features.featureColorOverrides));
-  replacePlainObject(state.featureVisibilityOverrides, clonePlainObject(features.featureVisibilityOverrides));
+  replaceFeatureVisibilityRules(
+    state,
+    Array.isArray(features.featureVisibilityRules)
+      ? features.featureVisibilityRules
+      : featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides)
+  );
   replacePlainObject(state.labelTextFeatureOverrides, clonePlainObject(features.labelTextFeatureOverrides));
   replacePlainObject(state.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
   replacePlainObject(

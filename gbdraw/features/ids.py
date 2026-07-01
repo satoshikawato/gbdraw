@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any
+
+_SAFE_SVG_ID_FRAGMENT_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 def _first_location_coordinates(location: Any) -> tuple[int, int, object]:
@@ -80,8 +83,54 @@ def compute_feature_hash_from_parts(
     )
 
 
+def make_svg_safe_id_fragment(value: object, fallback: str = "item") -> str:
+    """Return a compact SVG-id-safe fragment without changing already-safe ids."""
+
+    text = str(value or "").strip()
+    safe = _SAFE_SVG_ID_FRAGMENT_RE.sub("_", text).strip("_")
+    return safe or fallback
+
+
+def make_linear_dom_id(
+    base_id: object,
+    *,
+    record_index: int,
+    record_count: int,
+    suffix: str | None = None,
+) -> str:
+    """Return a linear SVG DOM id, preserving single-record legacy ids when possible."""
+
+    base = make_svg_safe_id_fragment(base_id, "record")
+    if suffix:
+        base = f"{base}_{make_svg_safe_id_fragment(suffix, 'group')}"
+    if int(record_count) <= 1:
+        return base
+    return f"{base}_record_{int(record_index) + 1}"
+
+
+def make_linear_rendered_feature_id(
+    *,
+    record_index: int,
+    stable_feature_id: str | None,
+    record_count: int,
+) -> str | None:
+    """Return the rendered linear feature id for one displayed record instance."""
+
+    if not stable_feature_id:
+        return None
+    stable_id = make_svg_safe_id_fragment(stable_feature_id, "")
+    if not stable_id:
+        return None
+    if int(record_count) <= 1:
+        return stable_id
+    return f"{stable_id}_record_{int(record_index) + 1}"
+
+
 __all__ = [
     "compute_feature_hash",
     "compute_feature_hash_from_parts",
     "compute_feature_object_hash",
+    "make_linear_dom_id",
+    "make_linear_rendered_feature_id",
+    "make_svg_safe_id_fragment",
 ]

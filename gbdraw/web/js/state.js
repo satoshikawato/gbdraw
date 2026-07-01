@@ -609,6 +609,7 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
+const featureSelectorSafetyScope = ref([]); // Python selector scope before feature visibility filtering
 const featuresBySvgId = computed(() => {
   const indexed = new Map();
   const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
@@ -645,7 +646,8 @@ const previewFeatureSearchActiveIndex = ref(-1);
 const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
-const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off'}
+const featureVisibilityRules = reactive([]);
+const featureVisibilityOverrides = reactive({}); // Derived compatibility cache: {svg_id: 'on' | 'off' | 'exclude_matching'}
 const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
@@ -741,6 +743,14 @@ const labelTextScopeDialog = reactive({
   sourceText: '',
   featureId: '',
   matchingCount: 0
+});
+
+const featureVisibilityScopeDialog = reactive({
+  show: false,
+  feat: null,
+  mode: 'default',
+  previousMode: 'default',
+  scopes: []
 });
 
 const globalLabelModeDialog = reactive({
@@ -896,6 +906,7 @@ const featureKeys = [
   'stem_loop',
   'telomere',
   'tmRNA',
+  'transcript',
   'transit_peptide',
   'tRNA',
   'unsure',
@@ -1078,6 +1089,7 @@ export const state = {
   specificRulePresetLoading,
   downloadDpi,
   extractedFeatures,
+  featureSelectorSafetyScope,
   featuresBySvgId,
   featureEditorStatus,
   featureEditorStatusText,
@@ -1106,6 +1118,7 @@ export const state = {
   featureListTopSpacerPx,
   featureListBottomSpacerPx,
   featureColorOverrides,
+  featureVisibilityRules,
   featureVisibilityOverrides,
   featureStrokeOverrides,
   labelSearch,
@@ -1142,6 +1155,7 @@ export const state = {
   resetColorDialog,
   legendRenameDialog,
   labelTextScopeDialog,
+  featureVisibilityScopeDialog,
   globalLabelModeDialog,
   sidebarWidth,
   isResizing,

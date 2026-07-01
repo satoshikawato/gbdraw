@@ -119,7 +119,8 @@ export const createFeatureSvgActions = ({
 
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
-    return normalized === 'on' || normalized === 'off' ? normalized : 'default';
+    if (normalized === 'suppress') return 'exclude_matching';
+    return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
   };
 
   const getPopupPosition = (eventLike, popupWidth = 720, popupHeight = 520) => {

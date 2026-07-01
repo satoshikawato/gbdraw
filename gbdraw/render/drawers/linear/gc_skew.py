@@ -33,12 +33,13 @@ class SkewDrawer:
         start_x: float,
         start_y: float,
         dinucleotide: str,
+        group_id: str = "gc_skew",
     ) -> Group:
         skew_desc: str = calculate_gc_skew_path_desc(
             start_x, start_y, gc_df, record_len, alignment_width, genome_size_normalization_factor, track_height
         )
 
-        clip_id = f"clipper_line_{abs(hash(skew_desc))}"
+        clip_id = f"{group_id}_clipper_line_{abs(hash(skew_desc))}"
         clip_path = ClipPath(id=clip_id)
         clip_path.add(
             Path(

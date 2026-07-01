@@ -7,7 +7,13 @@ from typing import Any
 from Bio import SeqIO
 from Bio.Seq import Seq
 
-from gbdraw.features.ids import compute_feature_hash
+from gbdraw.features.selector_values import build_feature_selector_values
+from gbdraw.features.ids import make_linear_rendered_feature_id
+from gbdraw.features.visibility import (
+    compile_feature_visibility_rules,
+    read_feature_visibility_file,
+    should_render_feature,
+)
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
@@ -20,6 +26,15 @@ def _normalize_record_selector(record_selector: object | None) -> str | None:
     if selector_raw.lower() in _NULLISH_TEXT:
         return None
     return selector_raw
+
+
+def _normalize_optional_path(path: object | None) -> str | None:
+    if path is None:
+        return None
+    normalized = str(path).strip()
+    if normalized.lower() in _NULLISH_TEXT:
+        return None
+    return normalized
 
 
 def _normalize_selected_feature_set(selected_features: object | None) -> set[str] | None:
@@ -42,10 +57,6 @@ def _normalize_selected_feature_set(selected_features: object | None) -> set[str
         if not parsed_features:
             parsed_features = [part.strip() for part in selected_raw.split(",") if part.strip()]
     return set(parsed_features) if parsed_features else None
-
-
-def _compute_svg_feature_hash(feature: Any, record_id: str | None = None) -> str:
-    return compute_feature_hash(feature, record_id=record_id)
 
 
 def _normalize_qualifier_values(value: object | None) -> list[str]:
@@ -190,10 +201,33 @@ def _extract_amino_acid_sequence(feature: Any, nucleotide_sequence: str) -> tupl
         return "", warnings
 
 
+def _build_selector_safety_scope(records: list[Any]) -> list[dict[str, object]]:
+    scope: list[dict[str, object]] = []
+    for rec_idx, record in enumerate(records):
+        record_id = record.id or f"Record_{rec_idx}"
+        hash_record_id = record.id
+        for feat in getattr(record, "features", []) or []:
+            scope.append(
+                {
+                    "record_id": record_id,
+                    "record_idx": rec_idx,
+                    "feature_type": str(getattr(feat, "type", "") or ""),
+                    "selector": build_feature_selector_values(
+                        feat,
+                        record_id=hash_record_id,
+                    ),
+                }
+            )
+    return scope
+
+
 def extract_features_from_records_payload(
     records: Any,
     *,
     selected_features: object | None = None,
+    feature_visibility_rules: list[dict[str, Any]] | None = None,
+    specific_color_rules: dict | None = None,
+    linear_rendered_feature_ids: bool = False,
 ) -> dict[str, object]:
     """Extract the Rich Feature Popup payload shape from processed records."""
 
@@ -202,6 +236,7 @@ def extract_features_from_records_payload(
 
     features: list[dict[str, object]] = []
     record_ids: list[str] = []
+    selector_safety_scope = _build_selector_safety_scope(records)
     idx = 0
     for rec_idx, record in enumerate(records):
         record_id = record.id or f"Record_{rec_idx}"
@@ -209,7 +244,13 @@ def extract_features_from_records_payload(
         organism = _get_record_organism(record)
         record_ids.append(record_id)
         for feat in record.features:
-            if selected_feature_set is not None and feat.type not in selected_feature_set:
+            if not should_render_feature(
+                feat,
+                selected_feature_set,
+                feature_visibility_rules=feature_visibility_rules,
+                record_id=hash_record_id,
+                specific_color_rules=specific_color_rules,
+            ):
                 continue
 
             start = int(feat.location.start)
@@ -223,12 +264,23 @@ def extract_features_from_records_payload(
             )
             sequence_warnings.extend(translation_warnings)
 
-            try:
-                svg_id = _compute_svg_feature_hash(feat, record_id=hash_record_id)
-            except Exception:
-                svg_id = ""
+            selector = build_feature_selector_values(feat, record_id=hash_record_id)
+            svg_id = str(selector.get("hash") or "")
             if not svg_id:
-                svg_id = _compute_svg_feature_hash(feat)
+                fallback_selector = build_feature_selector_values(feat)
+                svg_id = str(fallback_selector.get("hash") or "")
+                if svg_id:
+                    selector["hash"] = svg_id
+            stable_svg_id = svg_id
+            if linear_rendered_feature_ids:
+                svg_id = (
+                    make_linear_rendered_feature_id(
+                        record_index=rec_idx,
+                        stable_feature_id=stable_svg_id,
+                        record_count=len(records),
+                    )
+                    or stable_svg_id
+                )
 
             qualifiers = {}
             for q_key, q_vals in feat.qualifiers.items():
@@ -241,6 +293,8 @@ def extract_features_from_records_payload(
                 {
                     "id": f"f{idx}",
                     "svg_id": svg_id,
+                    "stable_svg_id": stable_svg_id,
+                    "stable_feature_id": stable_svg_id,
                     "record_id": record_id,
                     "record_idx": rec_idx,
                     "organism": organism,
@@ -257,6 +311,7 @@ def extract_features_from_records_payload(
                     "product": _first_qualifier_value(feat.qualifiers, "product"),
                     "note": _first_qualifier_value(feat.qualifiers, "note")[:50],
                     "qualifiers": qualifiers,
+                    "selector": selector,
                     "location_parts": location_parts,
                     "nucleotide_sequence": nucleotide_sequence,
                     "amino_acid_sequence": amino_acid_sequence,
@@ -265,7 +320,11 @@ def extract_features_from_records_payload(
             )
             idx += 1
 
-    return {"features": features, "record_ids": record_ids}
+    return {
+        "features": features,
+        "record_ids": record_ids,
+        "selector_safety_scope": selector_safety_scope,
+    }
 
 
 def extract_features_from_genbank_payload(
@@ -274,6 +333,8 @@ def extract_features_from_genbank_payload(
     record_selector: object | None = None,
     reverse_flag: object | None = None,
     selected_features: object | None = None,
+    feature_visibility_rules: list[dict[str, Any]] | None = None,
+    specific_color_rules: dict | None = None,
 ) -> dict[str, object]:
     """Extract the Rich Feature Popup payload shape from a GenBank file."""
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
@@ -287,7 +348,12 @@ def extract_features_from_genbank_payload(
         from gbdraw.io.regions import apply_region_specs, parse_region_specs
 
         records = apply_region_specs(records, parse_region_specs([str(region_spec)]))
-    return extract_features_from_records_payload(records, selected_features=selected_features)
+    return extract_features_from_records_payload(
+        records,
+        selected_features=selected_features,
+        feature_visibility_rules=feature_visibility_rules,
+        specific_color_rules=specific_color_rules,
+    )
 
 
 def extract_features_from_genbank_json(
@@ -296,14 +362,22 @@ def extract_features_from_genbank_json(
     record_selector: object | None = None,
     reverse_flag: object | None = None,
     selected_features: object | None = None,
+    feature_visibility_table_path: object | None = None,
 ) -> str:
     try:
+        feature_visibility_rules = None
+        normalized_visibility_path = _normalize_optional_path(feature_visibility_table_path)
+        if normalized_visibility_path:
+            feature_visibility_rules = compile_feature_visibility_rules(
+                read_feature_visibility_file(normalized_visibility_path)
+            )
         payload = extract_features_from_genbank_payload(
             gb_path,
             region_spec=region_spec,
             record_selector=record_selector,
             reverse_flag=reverse_flag,
             selected_features=selected_features,
+            feature_visibility_rules=feature_visibility_rules,
         )
     except Exception as exc:
         return json.dumps({"error": str(exc)})

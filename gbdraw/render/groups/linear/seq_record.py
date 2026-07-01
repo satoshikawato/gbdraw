@@ -47,6 +47,9 @@ class SeqRecordGroup:
         label_font_size: float | None = None,
         orthogroup_label_member_ids: set[str] | None = None,
         orthogroup_label_top_member_ids: set[str] | None = None,
+        record_index: int = 0,
+        record_count: int = 1,
+        group_id: str | None = None,
     ) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
@@ -58,6 +61,9 @@ class SeqRecordGroup:
         self.draw_features_enabled = bool(draw_features)
         self.orthogroup_label_member_ids = orthogroup_label_member_ids
         self.orthogroup_label_top_member_ids = orthogroup_label_top_member_ids
+        self.record_index = int(record_index)
+        self.record_count = int(record_count)
+        self.record_group_id = str(group_id) if group_id else str(gb_record.id)
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -284,6 +290,8 @@ class SeqRecordGroup:
                     arrow_length=arrow_length,
                     track_layout=self.track_layout,
                     track_axis_gap=self.canvas_config.track_axis_gap,
+                    record_index=self.record_index,
+                    record_count=self.record_count,
                 )
 
         # Add labels
@@ -309,10 +317,7 @@ class SeqRecordGroup:
         separate_strands = self.canvas_config.strandedness
         resolve_overlaps = self.canvas_config.resolve_overlaps
         label_filtering = self.label_filtering  # type: ignore
-        track_id = self.gb_record.id
-
-        record_group: Group = Group(id=track_id)
-        record_group = Group(id=track_id)
+        record_group: Group = Group(id=self.record_group_id)
 
         record_length: int = len(self.gb_record.seq)
 

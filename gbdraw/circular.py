@@ -30,9 +30,14 @@ from .labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
+from .features.colors import preprocess_color_tables
 from .io.record_select import parse_record_selector
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
-from .features.visibility import read_feature_visibility_file
+from .features.visibility import (
+    compile_feature_visibility_rules,
+    read_feature_visibility_file,
+    resolve_candidate_feature_types,
+)
 from .exceptions import ValidationError
 from .tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
@@ -63,11 +68,23 @@ logger = logging.getLogger()
 setup_logging()
 
 
-def _build_interactive_svg_context(records, selected_features) -> InteractiveSvgContext:
+def _build_interactive_svg_context(
+    records,
+    selected_features,
+    *,
+    feature_table=None,
+    color_table=None,
+    default_colors=None,
+) -> InteractiveSvgContext:
     try:
+        specific_color_rules = None
+        if color_table is not None and default_colors is not None:
+            specific_color_rules, _ = preprocess_color_tables(color_table, default_colors)
         payload = extract_features_from_records_payload(
             records,
             selected_features=selected_features,
+            feature_visibility_rules=compile_feature_visibility_rules(feature_table),
+            specific_color_rules=specific_color_rules,
         )
     except Exception as exc:
         logger.warning(
@@ -552,10 +569,17 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="")
     parser.add_argument(
-        '--feature_table',
+        '--feature_visibility_table',
+        dest='feature_table',
         help='Path to a TSV file defining per-feature visibility overrides (optional)',
         type=str,
         default="")
+    parser.add_argument(
+        '--feature_table',
+        dest='feature_table',
+        help=argparse.SUPPRESS,
+        type=str,
+        default=argparse.SUPPRESS)
     parser.add_argument(
         '--outer_label_x_radius_offset',
         help='Outer label x-radius offset factor (float; default from config)',
@@ -961,6 +985,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     qualifier_priority_path: str = args.qualifier_priority
     label_table_path: str = args.label_table
     feature_table_path: str = args.feature_table
+    color_table: Optional[DataFrame] = read_color_table(color_table_path)
+    feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     scale_interval: Optional[int] = args.scale_interval
     tick_label_font_size: Optional[float] = args.tick_label_font_size
     circular_label_spacing: Optional[float] = args.circular_label_spacing
@@ -988,12 +1014,17 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     if args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
+        candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
+            selected_features_set,
+            color_table=color_table,
+            feature_visibility_table=feature_table,
+        )
         gb_records = load_gff_fasta(
             args.gff,
             args.fasta,
             "circular",
-            selected_features_set,
-            keep_all_features=bool(feature_table_path),
+            candidate_feature_types,
+            keep_all_features=keep_all_features,
         )
     else:
         # This case should not be reached due to arg validation
@@ -1058,8 +1089,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
 
-    color_table: Optional[DataFrame] = read_color_table(color_table_path)
-    feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
 
@@ -1245,6 +1274,9 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 interactive_context=_build_interactive_svg_context(
                     gb_records,
                     selected_features_set,
+                    feature_table=feature_table,
+                    color_table=color_table,
+                    default_colors=default_colors,
                 ),
             )
         else:
@@ -1313,6 +1345,9 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                     interactive_context=_build_interactive_svg_context(
                         [gb_record],
                         selected_features_set,
+                        feature_table=feature_table,
+                        color_table=color_table,
+                        default_colors=default_colors,
                     ),
                 )
             else:

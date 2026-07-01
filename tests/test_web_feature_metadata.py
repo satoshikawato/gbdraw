@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -10,6 +12,7 @@ from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
+from gbdraw.features.visibility import compile_feature_visibility_rules, should_render_feature
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -91,6 +94,10 @@ def test_web_feature_extraction_includes_qualifiers_locations_and_translation(
     assert feature["end"] == 9
     assert feature["strand"] == "+"
     assert feature["qualifiers"]["note"] == ["first note", "second note"]
+    assert feature["selector"]["hash"] == feature["svg_id"]
+    assert feature["selector"]["location"] == "0..9"
+    assert feature["selector"]["record_location"] == "NC_000001:0..9:+"
+    assert feature["selector"]["qualifiers"]["locus_tag"] == ["ABC_0001"]
     assert feature["location_parts"] == [{"start": 0, "end": 9, "strand": "+", "display": "1..9"}]
     assert feature["nucleotide_sequence"] == "ATGAAATAA"
     assert feature["amino_acid_sequence"] == "MK"
@@ -160,3 +167,72 @@ def test_web_feature_extraction_adds_compound_location_parts(
         {"start": 6, "end": 9, "strand": "+", "display": "7..9"},
     ]
     assert feature["nucleotide_sequence"] == "AAAGGG"
+
+
+def test_web_feature_selector_record_location_matches_visibility_rule(
+    tmp_path: Path,
+) -> None:
+    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000005", name="SelectorRule")
+    feature = SeqFeature(
+        FeatureLocation(0, 9, strand=1),
+        type="CDS",
+        qualifiers={"locus_tag": ["ABC_0005"], "translation": ["MK"]},
+    )
+    record.features.append(feature)
+
+    payload = extract_features_from_genbank_payload(_write_genbank(tmp_path, record))
+    extracted = payload["features"][0]
+    record_location = extracted["selector"]["record_location"]
+    rules = compile_feature_visibility_rules(
+        pd.DataFrame(
+            [["NC_000005", "CDS", "record_location", f"^{re.escape(record_location)}$", "off"]],
+            columns=["record_id", "feature_type", "qualifier", "value", "action"],
+        )
+    )
+
+    assert (
+        should_render_feature(
+            feature,
+            selected_features_set=["CDS"],
+            feature_visibility_rules=rules,
+            record_id=record.id,
+        )
+        is False
+    )
+
+
+def test_web_feature_selector_safety_scope_precedes_visibility_filtering(
+    tmp_path: Path,
+) -> None:
+    record = SeqRecord(Seq("A" * 120), id="NC_000006", name="SafetyScope")
+    record.features.extend(
+        [
+            SeqFeature(
+                FeatureLocation(0, 30, strand=1),
+                type="CDS",
+                qualifiers={"locus_tag": ["HIDDEN_0006"], "translation": ["M"]},
+            ),
+            SeqFeature(
+                FeatureLocation(60, 90, strand=-1),
+                type="misc_feature",
+                qualifiers={"note": ["outside selected type"]},
+            ),
+        ]
+    )
+    rules = compile_feature_visibility_rules(
+        pd.DataFrame(
+            [["NC_000006", "CDS", "locus_tag", "^HIDDEN_0006$", "off"]],
+            columns=["record_id", "feature_type", "qualifier", "value", "action"],
+        )
+    )
+
+    payload = extract_features_from_genbank_payload(
+        _write_genbank(tmp_path, record),
+        selected_features=["CDS"],
+        feature_visibility_rules=rules,
+    )
+
+    assert payload["features"] == []
+    scope_types = [entry["feature_type"] for entry in payload["selector_safety_scope"]]
+    assert scope_types == ["CDS", "misc_feature"]
+    assert payload["selector_safety_scope"][0]["selector"]["qualifiers"]["locus_tag"] == ["HIDDEN_0006"]

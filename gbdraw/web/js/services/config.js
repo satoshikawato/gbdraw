@@ -33,6 +33,11 @@ import {
 } from '../app/losat-normalization.js';
 import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
+import {
+  buildFeatureVisibilityOverrideCache,
+  featureVisibilityRulesFromOverrideCache,
+  normalizeFeatureVisibilityRule
+} from '../app/feature-visibility.js';
 
 const { nextTick } = window.Vue;
 
@@ -119,6 +124,24 @@ const cloneStringMap = (source) => {
 export const cloneJsonData = (value) => {
   if (value === null || value === undefined) return value;
   return JSON.parse(JSON.stringify(value));
+};
+
+const normalizeFeatureVisibilityRulesForSession = (rules) => (
+  Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
+);
+
+const rebuildFeatureVisibilityOverrideCache = () => {
+  const cache = buildFeatureVisibilityOverrideCache(state.featureVisibilityRules);
+  replacePlainObject(state.featureVisibilityOverrides, cache);
+};
+
+const replaceFeatureVisibilityRules = (rules) => {
+  state.featureVisibilityRules.splice(
+    0,
+    state.featureVisibilityRules.length,
+    ...normalizeFeatureVisibilityRulesForSession(rules)
+  );
+  rebuildFeatureVisibilityOverrideCache();
 };
 
 const sanitizeExtractedFeatureForSession = (feature) => {
@@ -1764,9 +1787,11 @@ const resetSessionBaseline = () => {
   clearObject(state.orthogroupNameOverrides);
   clearObject(state.orthogroupDescriptionOverrides);
   state.extractedFeatures.value = [];
+  state.featureSelectorSafetyScope.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
   clearObject(state.featureColorOverrides);
+  state.featureVisibilityRules.splice(0);
   clearObject(state.featureVisibilityOverrides);
   clearObject(state.featureStrokeOverrides);
   clearObject(state.labelTextFeatureOverrides);
@@ -1988,10 +2013,11 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 
 export const buildFeatureStateData = () => ({
   extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+  featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(state.featureColorOverrides),
-  featureVisibilityOverrides: cloneJsonData(state.featureVisibilityOverrides),
+  featureVisibilityRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityRules),
   labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
   labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
@@ -2003,6 +2029,9 @@ export const applyFeatureStateData = (features = {}) => {
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
     ? features.extractedFeatures
     : [];
+  state.featureSelectorSafetyScope.value = Array.isArray(features.featureSelectorSafetyScope)
+    ? features.featureSelectorSafetyScope
+    : [];
   state.featureRecordIds.value = Array.isArray(features.featureRecordIds)
     ? features.featureRecordIds
     : [];
@@ -2010,7 +2039,11 @@ export const applyFeatureStateData = (features = {}) => {
     ? features.selectedFeatureRecordIdx
     : 0;
   replacePlainObject(state.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
-  replacePlainObject(state.featureVisibilityOverrides, cloneJsonObject(features.featureVisibilityOverrides));
+  if (Array.isArray(features.featureVisibilityRules)) {
+    replaceFeatureVisibilityRules(features.featureVisibilityRules);
+  } else {
+    replaceFeatureVisibilityRules(featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides));
+  }
   replacePlainObject(state.labelTextFeatureOverrides, cloneStringMap(features.labelTextFeatureOverrides));
   replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
   replacePlainObject(state.labelTextFeatureOverrideSources, cloneStringMap(features.labelTextFeatureOverrideSources));
@@ -2165,10 +2198,11 @@ export const exportSession = async (titleOverride = null) => {
     results: serializeResults(),
     features: {
       extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+      featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),
-      featureVisibilityOverrides: JSON.parse(JSON.stringify(state.featureVisibilityOverrides)),
+      featureVisibilityRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityRules),
       labelTextFeatureOverrides: JSON.parse(JSON.stringify(state.labelTextFeatureOverrides)),
       labelTextBulkOverrides: JSON.parse(JSON.stringify(state.labelTextBulkOverrides)),
       labelTextFeatureOverrideSources: JSON.parse(JSON.stringify(state.labelTextFeatureOverrideSources)),
@@ -2295,6 +2329,11 @@ export const importSession = async (e, options = {}) => {
     } else {
       state.extractedFeatures.value = [];
     }
+    if (Array.isArray(features.featureSelectorSafetyScope)) {
+      state.featureSelectorSafetyScope.value = features.featureSelectorSafetyScope;
+    } else {
+      state.featureSelectorSafetyScope.value = [];
+    }
     if (Array.isArray(features.featureRecordIds)) {
       state.featureRecordIds.value = features.featureRecordIds;
     } else {
@@ -2313,15 +2352,12 @@ export const importSession = async (e, options = {}) => {
     } else {
       Object.keys(state.featureColorOverrides).forEach((k) => delete state.featureColorOverrides[k]);
     }
-    if (features.featureVisibilityOverrides && typeof features.featureVisibilityOverrides === 'object') {
-      Object.keys(state.featureVisibilityOverrides).forEach((k) => delete state.featureVisibilityOverrides[k]);
-      Object.entries(features.featureVisibilityOverrides).forEach(([key, value]) => {
-        const mode = String(value || '').trim().toLowerCase();
-        if (mode !== 'on' && mode !== 'off') return;
-        state.featureVisibilityOverrides[String(key || '')] = mode;
-      });
+    if (Array.isArray(features.featureVisibilityRules)) {
+      replaceFeatureVisibilityRules(features.featureVisibilityRules);
+    } else if (features.featureVisibilityOverrides && typeof features.featureVisibilityOverrides === 'object') {
+      replaceFeatureVisibilityRules(featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides));
     } else {
-      Object.keys(state.featureVisibilityOverrides).forEach((k) => delete state.featureVisibilityOverrides[k]);
+      replaceFeatureVisibilityRules([]);
     }
 
     if (features.labelTextFeatureOverrides && typeof features.labelTextFeatureOverrides === 'object') {

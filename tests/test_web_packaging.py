@@ -260,6 +260,50 @@ def test_web_feature_color_caption_scope_updates_specific_rule() -> None:
     subprocess.run([node, "tests/web/feature-color-actions.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_feature_visibility_helpers() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/feature-visibility.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
+def test_web_feature_selector_helpers() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/feature-selector.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
+def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    worker_js = (WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js").read_text(encoding="utf-8")
+    svg_actions_js = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
+
+    assert '<option value="exclude_matching">Exclude from matching' in index_html
+    assert '<option value="suppress">Suppress' not in index_html
+    assert "featureVisibilityFeatureSuggestions" in index_html
+    assert "Feature Visibility Scope" in index_html
+    assert "feature-visibility-feature-type-options" not in index_html
+    assert "'transcript'" in state_js
+    assert "{svg_id: 'on' | 'off' | 'exclude_matching'}" in state_js
+    assert "/web_feature_visibility_table.tsv" in run_analysis_js
+    assert "args.push('--feature_visibility_table', featureVisibilityTablePath);" in run_analysis_js
+    assert "serializeFeatureVisibilityRules(featureVisibilityRules)" in run_analysis_js
+    assert "featureVisibility: featureVisibilityCacheKey" in run_analysis_js
+    assert "featureVisibilityTsv: featureVisibilityCacheKey" in run_analysis_js
+    assert "featureVisibilityTablePath || null" in worker_js
+    assert "feature_visibility_table_path=None" in helper_js
+    assert "extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None)" in helper_js
+    assert "feature_visibility_rules=feature_visibility_rules" in helper_js
+    assert "if (mode === 'off')" in svg_actions_js
+    assert "mode === 'off' || mode === 'suppress'" not in svg_actions_js
+
+
 def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")

@@ -55,6 +55,9 @@ def add_record_group(
     label_font_size: float | None = None,
     orthogroup_label_member_ids: set[str] | None = None,
     orthogroup_label_top_member_ids: set[str] | None = None,
+    record_index: int = 0,
+    record_count: int = 1,
+    group_id: str | None = None,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
     record_group: Group = SeqRecordGroup(
@@ -70,6 +73,9 @@ def add_record_group(
         label_font_size=label_font_size,
         orthogroup_label_member_ids=orthogroup_label_member_ids,
         orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
+        record_index=record_index,
+        record_count=record_count,
+        group_id=group_id,
     ).get_group()
     position_record_group(record_group, offset_y, offset_x, canvas_config)
     canvas.add(record_group)
@@ -190,6 +196,7 @@ def add_record_definition_group(
     config_dict: dict,
     max_def_width,
     cfg: GbdrawConfig | None = None,
+    group_id: str | None = None,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
@@ -205,7 +212,13 @@ def add_record_definition_group(
             definition_column_width = 0.0
 
         if definition_column_width == 0.0:
-            provisional_group_obj = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
+            provisional_group_obj = DefinitionGroup(
+                record,
+                config_dict,
+                canvas_config,
+                cfg=cfg,
+                group_id=group_id,
+            )
             definition_column_width = provisional_group_obj.definition_bounding_box_width
 
         definition_group_obj = DefinitionGroup(
@@ -215,10 +228,17 @@ def add_record_definition_group(
             cfg=cfg,
             text_anchor="start",
             text_x=0.0,
+            group_id=group_id,
         )
         positioned_definition_offset_x = definition_column_width + definition_gap
     else:
-        definition_group_obj = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
+        definition_group_obj = DefinitionGroup(
+            record,
+            config_dict,
+            canvas_config,
+            cfg=cfg,
+            group_id=group_id,
+        )
         definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + definition_gap
         positioned_definition_offset_x = definition_offset_x - record_offset_x
 

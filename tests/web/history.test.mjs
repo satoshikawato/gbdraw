@@ -6,13 +6,22 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
+const appSourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'app'), { recursive: true });
 for (const filename of ['history.js', 'history-files.js', 'history-snapshot.js']) {
   await writeFile(
     join(tempDir, 'services', filename),
     await readFile(join(sourceDir, filename), 'utf8'),
+    'utf8'
+  );
+}
+for (const filename of ['feature-selector.js', 'feature-visibility.js']) {
+  await writeFile(
+    join(tempDir, 'app', filename),
+    await readFile(join(appSourceDir, filename), 'utf8'),
     'utf8'
   );
 }
@@ -197,6 +206,7 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
     featureRecordIds: ref([]),
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: { f1: { color: '#111111', caption: 'A' } },
+    featureVisibilityRules: [],
     featureVisibilityOverrides: {},
     featureStrokeOverrides: {},
     labelTextFeatureOverrides: {},
@@ -239,6 +249,7 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
   assert.equal(state.files.c_gb.name, 'restore.gb');
   assert.equal(state.results.value[0].name, 'r1');
   assert.equal(state.featureColorOverrides.f1.color, '#111111');
+  assert.deepEqual(state.featureVisibilityRules, []);
   assert.equal(state.canvasPadding.top, 1);
 }
 
@@ -283,6 +294,7 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
     featureRecordIds: ref([]),
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: {},
+    featureVisibilityRules: [],
     featureVisibilityOverrides: {},
     featureStrokeOverrides: {},
     labelTextFeatureOverrides: {},
