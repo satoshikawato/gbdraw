@@ -3,6 +3,7 @@ import {
   featureVisibilityRulesFromOverrideCache,
   normalizeFeatureVisibilityRule
 } from '../app/feature-visibility.js';
+import { serializeCleanSvg } from './svg-serialization.js';
 
 const cloneJsonData = (value) => {
   if (value === null || value === undefined) return value;
@@ -241,7 +242,7 @@ const buildFallbackResultsData = (state) => {
   const currentSvg = (() => {
     const svg = state.svgContainer?.value?.querySelector?.('svg');
     if (!svg || typeof XMLSerializer === 'undefined') return null;
-    return new XMLSerializer().serializeToString(svg);
+    return serializeCleanSvg(svg);
   })();
   const selected = getRef(state.selectedResultIndex, 0);
   return (getRef(state.results, []) || []).map((result, index) => ({

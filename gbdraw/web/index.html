@@ -583,6 +583,63 @@
             stroke-opacity: 1 !important;
             stroke-width: 3px !important;
         }
+        .gbdraw-feature-selected {
+            opacity: 1 !important;
+            stroke: #2563eb !important;
+            stroke-opacity: 1 !important;
+            stroke-width: 2.5px !important;
+            paint-order: stroke fill markers;
+            filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.38));
+        }
+        .gbdraw-feature-selection-anchor {
+            stroke: #7c3aed !important;
+            stroke-width: 3.5px !important;
+            filter: drop-shadow(0 0 5px rgba(124, 58, 237, 0.42));
+        }
+        .gbdraw-feature-selection-candidate {
+            stroke: #0ea5e9 !important;
+            stroke-dasharray: 4 3;
+        }
+        .feature-selection-marquee {
+            position: fixed;
+            z-index: 35;
+            pointer-events: none;
+            border: 1px dashed #2563eb;
+            background: rgba(37, 99, 235, 0.12);
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+        }
+        .feature-selection-toolbar {
+            position: absolute;
+            top: 8.5rem;
+            left: 1rem;
+            z-index: 24;
+            width: min(680px, calc(100% - 2rem));
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+            padding: 0.55rem;
+        }
+        .feature-selection-toolbar input,
+        .feature-selection-toolbar select,
+        .feature-selection-toolbar button {
+            font-size: 11px;
+        }
+        .feature-selection-status {
+            position: absolute;
+            top: 6.25rem;
+            left: 1rem;
+            z-index: 23;
+            max-width: min(420px, calc(100% - 2rem));
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            background: rgba(239, 246, 255, 0.97);
+            color: #1e40af;
+            box-shadow: 0 8px 20px rgba(30, 64, 175, 0.12);
+            padding: 0.45rem 0.65rem;
+            font-size: 11px;
+            font-weight: 700;
+        }
         @media (max-width: 760px) {
             .feature-popup-grid {
                 grid-template-columns: minmax(0, 1fr);
@@ -3272,6 +3329,112 @@
                             {{ previewFeatureSearchActiveDetail }}
                         </div>
                     </div>
+
+                    <div v-if="featureSelectionStatus"
+                         class="feature-selection-status"
+                         role="status"
+                         @click.stop
+                         @pointerdown.stop>
+                        {{ featureSelectionStatus }}
+                    </div>
+
+                    <div v-if="hasFeatureSelection"
+                         class="feature-selection-toolbar"
+                         @click.stop
+                         @pointerdown.stop
+                         @mousedown.stop
+                         @mousemove.stop
+                         @mouseup.stop
+                         @wheel.stop>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700">
+                                <i class="ph ph-selection"></i>
+                                {{ selectedFeatureCount }} selected
+                            </span>
+                            <button type="button"
+                                    class="btn btn-secondary btn-sm"
+                                    @click="clearFeatureSelection({ clearStatus: true })"
+                                    title="Clear selected features"
+                                    aria-label="Clear selected features">
+                                <i class="ph ph-x"></i> Clear
+                            </button>
+                            <button type="button"
+                                    class="btn btn-secondary btn-sm"
+                                    @click="openFirstSelectedFeature($event)"
+                                    title="Open the first selected feature"
+                                    aria-label="Open first selected feature">
+                                <i class="ph ph-cursor-click"></i> Open
+                            </button>
+                        </div>
+                        <div class="mt-2 grid grid-cols-1 lg:grid-cols-3 gap-2">
+                            <div class="flex items-center gap-1 min-w-0">
+                                <input type="color"
+                                       v-model="selectedFeatureBulkColor"
+                                       data-history-ignore
+                                       class="w-8 h-8 border border-slate-200 rounded cursor-pointer"
+                                       aria-label="Selected feature color">
+                                <input type="text"
+                                       v-model="selectedFeatureBulkCaption"
+                                       data-history-ignore
+                                       class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
+                                       placeholder="Legend caption"
+                                       aria-label="Selected feature legend caption">
+                                <button type="button"
+                                        class="btn btn-primary btn-sm shrink-0"
+                                        @click="applySelectedFeatureColor"
+                                        title="Apply color and caption to selected features"
+                                        aria-label="Apply color and caption to selected features">
+                                    <i class="ph ph-palette"></i>
+                                    <span>Apply</span>
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-1 min-w-0">
+                                <select v-model="selectedFeatureBulkVisibility"
+                                        data-history-ignore
+                                        class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
+                                        aria-label="Selected feature visibility">
+                                    <option value="default">Default</option>
+                                    <option value="on">Show</option>
+                                    <option value="off">Hide</option>
+                                    <option value="exclude_matching">Suppress</option>
+                                </select>
+                                <button type="button"
+                                        class="btn btn-secondary btn-sm shrink-0"
+                                        @click="applySelectedFeatureVisibility"
+                                        title="Apply visibility to selected features"
+                                        aria-label="Apply visibility to selected features">
+                                    <i class="ph ph-eye"></i>
+                                    <span>Apply</span>
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-1 min-w-0">
+                                <input type="color"
+                                       v-model="selectedFeatureBulkStrokeColor"
+                                       data-history-ignore
+                                       class="w-8 h-8 border border-slate-200 rounded cursor-pointer"
+                                       aria-label="Selected feature stroke color">
+                                <input type="number"
+                                       v-model.number="selectedFeatureBulkStrokeWidth"
+                                       data-history-ignore
+                                       min="0"
+                                       step="0.1"
+                                       class="w-20 border border-slate-200 rounded px-2 py-1 text-xs"
+                                       aria-label="Selected feature stroke width">
+                                <button type="button"
+                                        class="btn btn-secondary btn-sm shrink-0"
+                                        @click="applySelectedFeatureStroke"
+                                        title="Apply stroke to selected features"
+                                        aria-label="Apply stroke to selected features">
+                                    <i class="ph ph-line-segment"></i>
+                                    <span>Apply</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="featureSelectionDrag.active"
+                         class="feature-selection-marquee"
+                         :style="featureSelectionMarqueeStyle"></div>
 
                     <!-- Zoom and Canvas controls -->
                     <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">

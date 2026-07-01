@@ -620,6 +620,38 @@ const featuresBySvgId = computed(() => {
   }
   return indexed;
 });
+const selectedFeatureIds = ref(new Set());
+const selectedFeatureAnchorId = ref('');
+const featureSelectionStatus = ref('');
+const featureSelectionSuppressNextClick = ref(false);
+const featureSelectionDrag = reactive({
+  active: false,
+  committed: false,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+  additive: false
+});
+const selectedFeatureCount = computed(() => selectedFeatureIds.value.size);
+const selectedFeatures = computed(() => {
+  const ids = Array.from(selectedFeatureIds.value || [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (ids.length === 0) return [];
+
+  const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
+  const fallback = new Map();
+  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
+    const svgId = String(feature?.svg_id || '').trim();
+    if (svgId && !fallback.has(svgId)) fallback.set(svgId, feature);
+  });
+
+  return ids
+    .map((id) => bySvgId.get(id) || fallback.get(id) || null)
+    .filter(Boolean);
+});
+const hasFeatureSelection = computed(() => selectedFeatureCount.value > 0);
 const featureEditorStatus = reactive({
   status: 'idle',
   generationId: 0,
@@ -1091,6 +1123,14 @@ export const state = {
   extractedFeatures,
   featureSelectorSafetyScope,
   featuresBySvgId,
+  selectedFeatureIds,
+  selectedFeatureAnchorId,
+  featureSelectionStatus,
+  featureSelectionSuppressNextClick,
+  featureSelectionDrag,
+  selectedFeatureCount,
+  selectedFeatures,
+  hasFeatureSelection,
   featureEditorStatus,
   featureEditorStatusText,
   featureExtractionPending,

@@ -1,6 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
+import { serializeCleanSvg } from './svg-serialization.js';
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
@@ -1377,8 +1378,7 @@ export const serializeResults = () => {
     if (!state.svgContainer.value) return null;
     const svg = state.svgContainer.value.querySelector('svg');
     if (!svg) return null;
-    const serializer = new XMLSerializer();
-    return serializer.serializeToString(svg);
+    return serializeCleanSvg(svg);
   })();
 
   return state.results.value.map((res, idx) => ({

@@ -86,6 +86,7 @@ export const createPanZoom = (state) => {
 
   const startPan = (event) => {
     if (event.button !== 0) return;
+    if (event.shiftKey && svgContainer.value?.querySelector?.('svg')) return;
     const container = canvasContainerRef.value;
     if (!container) return;
 

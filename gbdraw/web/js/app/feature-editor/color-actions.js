@@ -1,6 +1,54 @@
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, ruleMatchesFeature } from '../feature-utils.js';
 
+const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
+  'gbdraw-preview-feature-search-match',
+  'gbdraw-preview-feature-search-active-match',
+  'gbdraw-preview-feature-search-dimmed',
+  'gbdraw-feature-selected',
+  'gbdraw-feature-selection-anchor',
+  'gbdraw-feature-selection-candidate',
+  'feature-selection-marquee',
+  'feature-selection-status'
+]);
+
+const removeClassToken = (element, token) => {
+  if (!element) return;
+  if (element.classList?.remove) {
+    element.classList.remove(token);
+    if (element.classList.length === 0) element.removeAttribute('class');
+    return;
+  }
+  const tokens = String(element.getAttribute('class') || '').split(/\s+/).filter((entry) => entry && entry !== token);
+  if (tokens.length) {
+    element.setAttribute('class', tokens.join(' '));
+  } else {
+    element.removeAttribute('class');
+  }
+};
+
+const stripTransientPreviewState = (svg) => {
+  if (!svg) return;
+  TRANSIENT_PREVIEW_CLASSES.forEach((className) => {
+    svg.querySelectorAll(`.${className}`).forEach((element) => removeClassToken(element, className));
+  });
+  svg.querySelectorAll('[style]').forEach((element) => {
+    const style = element.getAttribute('style');
+    if (!style || !/\bcursor\s*:/i.test(style)) return;
+    element.style.removeProperty('cursor');
+    if (!element.getAttribute('style')?.trim()) element.removeAttribute('style');
+  });
+};
+
+const serializeCleanSvg = (svg) => {
+  if (!svg) return '';
+  const clone = svg.cloneNode(true);
+  stripTransientPreviewState(clone);
+  if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  if (!clone.getAttribute('xmlns:xlink')) clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+  return new XMLSerializer().serializeToString(clone);
+};
+
 export const createFeatureColorActions = ({
   state,
   nextTick,
@@ -173,8 +221,7 @@ export const createFeatureColorActions = ({
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const serializer = new XMLSerializer();
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
     }
   };
 
@@ -1196,8 +1243,7 @@ export const createFeatureColorActions = ({
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const serializer = new XMLSerializer();
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
     }
   };
 
@@ -1234,8 +1280,7 @@ export const createFeatureColorActions = ({
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const serializer = new XMLSerializer();
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
     }
   };
 
@@ -1352,8 +1397,7 @@ export const createFeatureColorActions = ({
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const serializer = new XMLSerializer();
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
     }
 
     clickedFeature.value = null;
@@ -1493,13 +1537,73 @@ export const createFeatureColorActions = ({
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const serializer = new XMLSerializer();
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
     }
 
     console.log(
       `Applied stroke (color: ${currentStrokeColor}, width: ${currentStrokeWidth}) to ${siblingFeatureIds.length} features`
     );
+  };
+
+  const uniqueFeaturesBySvgId = (features) => {
+    const seen = new Set();
+    return (Array.isArray(features) ? features : []).filter((feature) => {
+      const svgId = String(feature?.svg_id || '').trim();
+      if (!svgId || seen.has(svgId)) return false;
+      seen.add(svgId);
+      return true;
+    });
+  };
+
+  const applyColorToSelectedFeatures = async (features, color, caption) => {
+    const targetFeatures = uniqueFeaturesBySvgId(features);
+    const targetColor = resolveColorToHex(color) || String(color || '').trim();
+    const targetCaption = normalizeCaption(caption);
+    if (targetFeatures.length === 0 || !targetColor || !targetCaption) return false;
+    await applyColorToFeatureGroup(targetFeatures, targetCaption, targetColor);
+    return true;
+  };
+
+  const applyStrokeToSelectedFeatures = (features, strokeColor, strokeWidth) => {
+    const targetFeatures = uniqueFeaturesBySvgId(features);
+    if (targetFeatures.length === 0 || !svgContainer.value) return false;
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return false;
+
+    const normalizedStrokeColor = String(strokeColor || '').trim();
+    const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
+    if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
+
+    let updatedCount = 0;
+    targetFeatures.forEach((feature) => {
+      const elements = getFeatureElements(svg, feature.svg_id);
+      if (elements.length === 0) return;
+      const firstElement = elements[0] || null;
+      recordFeatureStrokeOverride(feature, {
+        strokeColor: normalizedStrokeColor || null,
+        strokeWidth: normalizedStrokeWidth,
+        originalStrokeColor: firstElement?.getAttribute('stroke') ?? null,
+        originalStrokeWidth: firstElement?.getAttribute('stroke-width') ?? null
+      });
+      elements.forEach((element) => {
+        if (normalizedStrokeColor) {
+          element.setAttribute('stroke', normalizedStrokeColor);
+        }
+        if (normalizedStrokeWidth !== null) {
+          element.setAttribute('stroke-width', normalizedStrokeWidth);
+        }
+        updatedCount += 1;
+      });
+      if (clickedFeature.value?.svg_id === feature.svg_id) {
+        if (normalizedStrokeColor) clickedFeature.value.strokeColor = normalizedStrokeColor;
+        if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
+      }
+    });
+
+    if (updatedCount > 0) {
+      persistCurrentSvg(svg);
+    }
+    return updatedCount > 0;
   };
 
   const setFeatureColor = async (feat, color, customCaption = null) => {
@@ -1605,6 +1709,8 @@ export const createFeatureColorActions = ({
     requestFeatureColorChange,
     selectLegendNameOption,
     handleResetColorChoice,
+    applyColorToSelectedFeatures,
+    applyStrokeToSelectedFeatures,
     resetClickedFeatureFillColor,
     resetClickedFeatureStroke,
     setFeatureColor,

@@ -1019,6 +1019,12 @@ export const createRunAnalysis = ({
 
   const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
+  const makeLinearRenderedFeatureId = (stableSvgId, recordIndex, recordCount) => {
+    const svgId = String(stableSvgId || '').trim();
+    if (!svgId || Number(recordCount) <= 1) return svgId;
+    return `${svgId}_record_${Number(recordIndex) + 1}`;
+  };
+
   const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
     const validIds = new Set(Array.isArray(groupIds) ? groupIds.map((id) => String(id || '').trim()).filter(Boolean) : []);
     const pruneMap = (overrideMap) => {
@@ -1203,8 +1209,11 @@ export const createRunAnalysis = ({
           if (featData?.error) {
             console.warn(`Feature extraction failed for linear input #${i + 1}:`, featData.error);
           } else if (Array.isArray(featData?.features)) {
+            const recordCount = context.linearSeqs.length;
             const features = featData.features.map((feature) => ({
               ...enrichFeatureWithOrthogroup(feature, i),
+              stable_svg_id: feature.svg_id,
+              svg_id: makeLinearRenderedFeatureId(feature.svg_id, i, recordCount),
               fileIdx: i,
               displayRecordId: `File ${i + 1}: ${feature.record_id}`,
               id: `file${i}_${feature.id}`

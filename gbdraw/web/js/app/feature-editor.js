@@ -4,14 +4,15 @@ import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
 import { createFeatureSvgActions } from './feature-editor/svg-actions.js';
 import { createFeatureVisibilityActions } from './feature-editor/visibility-actions.js';
 
-export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions }) => {
+export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions, featureSelection = null }) => {
   const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions });
   const labelActions = createFeatureLabelActions({ state });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
-    onFeaturePopupOpened: labelActions.syncLabelEditor
+    onFeaturePopupOpened: labelActions.syncLabelEditor,
+    featureSelection
   });
   const colorActions = createFeatureColorActions({
     state,
@@ -56,6 +57,7 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     moveFeatureVisibilityRuleUp: visibilityActions.moveFeatureVisibilityRuleUp,
     removeFeatureVisibilityRule: visibilityActions.removeFeatureVisibilityRule,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
+    setSelectedFeaturesVisibility: visibilityActions.setSelectedFeaturesVisibility,
     setFeatureVisibilityRuleField: visibilityActions.setFeatureVisibilityRuleField,
     updateClickedFeatureVisibility: visibilityActions.updateClickedFeatureVisibility,
     requestFeatureColorChange: colorActions.requestFeatureColorChange,
@@ -70,6 +72,8 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     updateClickedFeatureStroke: colorActions.updateClickedFeatureStroke,
     resetClickedFeatureStroke: colorActions.resetClickedFeatureStroke,
     applyStrokeToAllSiblings: colorActions.applyStrokeToAllSiblings,
+    applyColorToSelectedFeatures: colorActions.applyColorToSelectedFeatures,
+    applyStrokeToSelectedFeatures: colorActions.applyStrokeToSelectedFeatures,
     setFeatureColor: colorActions.setFeatureColor,
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     openFeatureEditorForFeature,

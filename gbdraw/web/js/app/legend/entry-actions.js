@@ -4,6 +4,7 @@ import {
   getVisibleFeatureLegendGroup,
   parseTransformXY
 } from './utils.js';
+import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) => {
   const {
@@ -338,8 +339,7 @@ json.dumps({"width": width})
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        const serializer = new XMLSerializer();
-        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
       }
 
       return caption;
@@ -379,8 +379,7 @@ json.dumps({"width": width})
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        const serializer = new XMLSerializer();
-        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
       }
       console.log(`Updated legend entry color: "${caption}" to ${color}`);
     }
@@ -429,8 +428,7 @@ json.dumps({"width": width})
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        const serializer = new XMLSerializer();
-        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
       }
       console.log(`Removed legend entry: "${caption}"`);
     }
@@ -504,8 +502,7 @@ json.dumps({"width": width})
         skipCaptureBaseConfig.value = true;
         const resultIdx = selectedResultIndex.value;
         if (resultIdx >= 0 && results.value.length > resultIdx) {
-          const serializer = new XMLSerializer();
-          results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+          results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
         }
         entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
       }
@@ -613,8 +610,7 @@ json.dumps({"width": width})
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const serializer = new XMLSerializer();
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
     }
   };
 
@@ -673,8 +669,7 @@ json.dumps({"width": width})
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const serializer = new XMLSerializer();
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
     }
   };
 

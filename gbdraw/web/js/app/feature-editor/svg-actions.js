@@ -6,6 +6,7 @@ import {
   buildPairwiseMatchPayload
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
+import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 export const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
 export const FEATURE_SELECTOR = [
@@ -75,7 +76,8 @@ export const createFeatureSvgActions = ({
   state,
   getFeatureColor,
   getEffectiveLegendCaption,
-  onFeaturePopupOpened = null
+  onFeaturePopupOpened = null,
+  featureSelection = null
 }) => {
   const {
     results,
@@ -94,6 +96,7 @@ export const createFeatureSvgActions = ({
     clickedPairwiseMatch,
     clickedPairwiseMatchPos,
     featurePopupSize,
+    featureSelectionDrag,
     skipCaptureBaseConfig,
     adv
   } = state;
@@ -318,6 +321,32 @@ export const createFeatureSvgActions = ({
 
   const getPairwiseMatchClickTarget = (eventLike, svg) =>
     getTopmostSvgTarget(eventLike, svg, PAIRWISE_MATCH_SELECTOR) || getPairwiseMatchTarget(eventLike?.target, svg);
+
+  const isBackgroundPreviewClick = (target, svg) => {
+    if (!target || !svg?.contains?.(target)) return false;
+    if (target === svg) return true;
+    if (
+      target.closest?.(
+        [
+          FEATURE_SELECTOR,
+          PAIRWISE_MATCH_SELECTOR,
+          'text[data-label-editable="true"]',
+          '[data-label-key]',
+          '[data-label-feature-id]',
+          '#legend',
+          '#feature_legend',
+          '#pairwise_legend',
+          '#horizontal_legend',
+          '#vertical_legend',
+          '[data-legend-key]'
+        ].join(', ')
+      )
+    ) {
+      return false;
+    }
+    if (state.layoutRepositionMode?.value && target.closest?.('g[id]')) return false;
+    return true;
+  };
 
   const cleanupDelegatedFeatureHandlers = () => {
     if (!delegatedFeatureHandlers?.cleanup) return;
@@ -615,8 +644,7 @@ export const createFeatureSvgActions = ({
       }
 
       if (updated) {
-        const serializer = new XMLSerializer();
-        const newContent = serializer.serializeToString(svg);
+        const newContent = serializeCleanSvg(svg);
         skipCaptureBaseConfig.value = true;
         const idx = selectedResultIndex.value;
         if (idx >= 0 && results.value.length > idx) {
@@ -671,8 +699,7 @@ export const createFeatureSvgActions = ({
         }
       });
 
-      const serializer = new XMLSerializer();
-      const newContent = serializer.serializeToString(svg);
+      const newContent = serializeCleanSvg(svg);
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
@@ -882,7 +909,12 @@ export const createFeatureSvgActions = ({
       };
 
       const handleMouseMove = (e) => {
-        if (clickedFeature.value || clickedPairwiseMatch?.value || isPanning?.value) {
+        if (
+          clickedFeature.value ||
+          clickedPairwiseMatch?.value ||
+          isPanning?.value ||
+          featureSelectionDrag?.active
+        ) {
           hideHoverSummary();
           return;
         }
@@ -911,12 +943,39 @@ export const createFeatureSvgActions = ({
       };
 
       const handleClick = (e) => {
+        if (featureSelection?.consumeSuppressNextClick?.()) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        const selectableFeatureEl = featureSelection?.getSelectableFeatureTarget?.(e, svg) || null;
+        const modifierSelection = Boolean(e.ctrlKey || e.metaKey);
+        if (modifierSelection || e.shiftKey) {
+          if (selectableFeatureEl) {
+            const selectionId = normalizeFeatureIdentity(
+              selectableFeatureEl.getAttribute(FEATURE_ID_ATTRIBUTE)
+            );
+            e.preventDefault();
+            e.stopPropagation();
+            hideHoverSummary();
+            if (modifierSelection && !e.shiftKey) {
+              featureSelection?.toggleFeatureSelection?.(selectionId);
+            } else {
+              featureSelection?.selectFeatureRange?.(selectionId, { additive: modifierSelection });
+            }
+          } else if (isBackgroundPreviewClick(e.target, svg)) {
+            featureSelection?.clearFeatureSelection?.({ clearStatus: true });
+          }
+          return;
+        }
+
         const featureEl = getFeatureClickTarget(e, svg);
         if (featureEl) {
           const svgId = getFeatureIdentity(featureEl);
           if (!svgId) return;
           e.stopPropagation();
           hideHoverSummary();
+          featureSelection?.markPlainFeatureClick?.(featureEl.getAttribute(FEATURE_ID_ATTRIBUTE) || svgId);
           const feat = handlerState.featureLookup.get(svgId);
           if (feat) {
             openFeatureEditorForFeature(feat, e);
@@ -930,18 +989,55 @@ export const createFeatureSvgActions = ({
           e.stopPropagation();
           e.preventDefault();
           openPairwiseMatchPopup(matchEl, e, handlerState.featureLookup);
+          return;
         }
+        if (isBackgroundPreviewClick(e.target, svg)) {
+          featureSelection?.clearFeatureSelection?.({ clearStatus: true });
+          if (clickedFeature.value) clickedFeature.value = null;
+          if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
+        }
+      };
+
+      const handlePointerDown = (e) => {
+        if (!featureSelection?.startMarqueePointer?.(e, svg)) return;
+        e.stopPropagation();
+      };
+
+      const handlePointerMove = (e) => {
+        if (!featureSelection?.moveMarqueePointer?.(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        hideHoverSummary();
+      };
+
+      const handlePointerUp = (e) => {
+        if (!featureSelection?.commitMarqueePointer?.(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        hideHoverSummary();
+      };
+
+      const handlePointerCancel = () => {
+        featureSelection?.cancelMarqueePointer?.();
       };
 
       svg.addEventListener('mouseover', handleMouseOver);
       svg.addEventListener('mousemove', handleMouseMove);
       svg.addEventListener('mouseout', handleMouseOut);
       svg.addEventListener('click', handleClick);
+      svg.addEventListener('pointerdown', handlePointerDown, true);
+      svg.addEventListener('pointermove', handlePointerMove, true);
+      svg.addEventListener('pointerup', handlePointerUp, true);
+      svg.addEventListener('pointercancel', handlePointerCancel, true);
       handlerState.cleanup = () => {
         svg.removeEventListener('mouseover', handleMouseOver);
         svg.removeEventListener('mousemove', handleMouseMove);
         svg.removeEventListener('mouseout', handleMouseOut);
         svg.removeEventListener('click', handleClick);
+        svg.removeEventListener('pointerdown', handlePointerDown, true);
+        svg.removeEventListener('pointermove', handlePointerMove, true);
+        svg.removeEventListener('pointerup', handlePointerUp, true);
+        svg.removeEventListener('pointercancel', handlePointerCancel, true);
         clearActiveFeatureHover();
         clearActiveMatchHover();
         hideHoverSummary();
@@ -954,6 +1050,7 @@ export const createFeatureSvgActions = ({
       delegatedFeatureHandlers.comparisonElementsByOrthogroupId = comparisonElementsByOrthogroupId;
       delegatedFeatureHandlers.pairwiseMatchElements = pairwiseMatchElements;
       delegatedFeatureHandlers.comparisonElementsByCollinearityBlockId = comparisonElementsByCollinearityBlockId;
+      featureSelection?.syncFeatureSelectionClasses?.(svg);
     }
 
     console.groupCollapsed('post-gbdraw timing');

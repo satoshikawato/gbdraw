@@ -22,6 +22,7 @@ import {
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
+import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
   disposeDiagramGenerationWorker,
@@ -29,6 +30,7 @@ import {
 } from '../services/diagram-generation.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
+import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
@@ -145,6 +147,13 @@ export const createAppSetup = () => {
     specificRulePresetLoading,
     downloadDpi,
     extractedFeatures,
+    selectedFeatureIds,
+    selectedFeatureAnchorId,
+    featureSelectionStatus,
+    featureSelectionDrag,
+    selectedFeatureCount,
+    selectedFeatures,
+    hasFeatureSelection,
     featureEditorStatus,
     featureEditorStatusText,
     featureExtractionPending,
@@ -310,11 +319,13 @@ export const createAppSetup = () => {
 
   const legendActions = createLegendManager({ state, getPyodide, debugLog, history });
   const svgActions = createSvgStyles({ state, watch, legendActions });
+  const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
     state,
     nextTick,
     legendActions,
-    svgActions
+    svgActions,
+    featureSelection
   });
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
@@ -323,6 +334,18 @@ export const createAppSetup = () => {
     computed,
     reactive,
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
+  });
+
+  watch(selectedResultIndex, () => {
+    featureSelection.clearFeatureSelection({ clearStatus: true });
+  });
+  watch(mode, () => {
+    featureSelection.clearFeatureSelection({ clearStatus: true });
+  });
+  watch(svgContent, () => {
+    if (!skipCaptureBaseConfig.value) {
+      featureSelection.clearFeatureSelection({ clearStatus: true });
+    }
   });
 
   let featureSearchDebounceId = null;
@@ -997,8 +1020,7 @@ export const createAppSetup = () => {
 
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
-      const serializer = new XMLSerializer();
-      results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
     }
   };
 
@@ -1069,6 +1091,9 @@ export const createAppSetup = () => {
     updateClickedFeatureStroke,
     resetClickedFeatureStroke,
     applyStrokeToAllSiblings,
+    applyColorToSelectedFeatures,
+    applyStrokeToSelectedFeatures,
+    setSelectedFeaturesVisibility,
     setFeatureColor,
     openFeatureEditorForFeature,
     getEditableLabelByFeatureId,
@@ -1113,6 +1138,39 @@ export const createAppSetup = () => {
   const resetClickedFeatureStrokeWithHistory = undoableAction('Reset feature stroke', resetClickedFeatureStroke);
   const applyStrokeToAllSiblingsWithHistory = undoableAction('Change feature stroke', applyStrokeToAllSiblings);
   const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
+  const selectedFeatureBulkColor = ref('#2563eb');
+  const selectedFeatureBulkCaption = ref('Selected features');
+  const selectedFeatureBulkVisibility = ref('off');
+  const selectedFeatureBulkStrokeColor = ref('#1f2937');
+  const selectedFeatureBulkStrokeWidth = ref(1.5);
+  const applySelectedFeatureColor = () => history.runUndoable('Change selected feature color', async () => {
+    const changed = await applyColorToSelectedFeatures(
+      selectedFeatures.value,
+      selectedFeatureBulkColor.value,
+      selectedFeatureBulkCaption.value
+    );
+    if (changed) featureSelection.syncFeatureSelectionClasses();
+    return changed;
+  });
+  const applySelectedFeatureVisibility = () => history.runUndoable('Change selected feature visibility', async () => {
+    const changed = setSelectedFeaturesVisibility(selectedFeatures.value, selectedFeatureBulkVisibility.value);
+    if (changed) featureSelection.clearFeatureSelection({ clearStatus: true });
+    return changed;
+  });
+  const applySelectedFeatureStroke = () => history.runUndoable('Change selected feature stroke', async () => {
+    const changed = applyStrokeToSelectedFeatures(
+      selectedFeatures.value,
+      selectedFeatureBulkStrokeColor.value,
+      selectedFeatureBulkStrokeWidth.value
+    );
+    if (changed) featureSelection.syncFeatureSelectionClasses();
+    return changed;
+  });
+  const openFirstSelectedFeature = (event = null) => {
+    const first = selectedFeatures.value[0] || null;
+    if (!first) return null;
+    return openFeatureEditorForFeature(first, event);
+  };
   const updateClickedFeatureLabelTextWithHistory = undoableAction('Change label text', updateClickedFeatureLabelText);
   const handleLabelTextScopeChoiceWithHistory = undoableAction('Change label text', handleLabelTextScopeChoice);
   const handleGlobalLabelModeChoiceWithHistory = undoableAction('Change label visibility', handleGlobalLabelModeChoice);
@@ -1189,7 +1247,9 @@ export const createAppSetup = () => {
       diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
     }
 
+    featureSelection.clearFeatureSelection({ clearStatus: true });
     const result = await runGeneratedDiagramAnalysis();
+    featureSelection.clearFeatureSelection({ clearStatus: true });
     if (result?.status === 'ok' && !diagramGenerationWorkerReady.value) {
       diagramGenerationWorkerReady.value = true;
       diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
@@ -2248,6 +2308,24 @@ export const createAppSetup = () => {
     goToPreviousPreviewFeatureSearchMatch: previewFeatureSearch.goToPrevious,
     clearPreviewFeatureSearch: previewFeatureSearch.clearSearch,
     openPreviewFeatureSearchActiveMatch: previewFeatureSearch.openActiveMatch,
+    selectedFeatureIds,
+    selectedFeatureAnchorId,
+    featureSelectionStatus,
+    featureSelectionDrag,
+    selectedFeatureCount,
+    selectedFeatures,
+    hasFeatureSelection,
+    featureSelectionMarqueeStyle: featureSelection.featureSelectionMarqueeStyle,
+    clearFeatureSelection: featureSelection.clearFeatureSelection,
+    openFirstSelectedFeature,
+    selectedFeatureBulkColor,
+    selectedFeatureBulkCaption,
+    selectedFeatureBulkVisibility,
+    selectedFeatureBulkStrokeColor,
+    selectedFeatureBulkStrokeWidth,
+    applySelectedFeatureColor,
+    applySelectedFeatureVisibility,
+    applySelectedFeatureStroke,
     visibleFeatureRows,
     featureListTopSpacerPx,
     featureListBottomSpacerPx,

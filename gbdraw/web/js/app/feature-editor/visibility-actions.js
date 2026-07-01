@@ -301,6 +301,21 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
     return previousMode !== nextMode;
   };
 
+  const setSelectedFeaturesVisibility = (features, modeRaw) => {
+    const seen = new Set();
+    let changed = false;
+    (Array.isArray(features) ? features : []).forEach((feature) => {
+      const svgId = normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id);
+      if (!svgId || seen.has(svgId)) return;
+      seen.add(svgId);
+      if (setFeatureVisibility(feature, modeRaw, { triggerReflow: false, scope: { id: 'feature' } })) {
+        changed = true;
+      }
+    });
+    if (changed) queueFeatureVisibilityReflow('bulk-feature-visibility-apply');
+    return changed;
+  };
+
   const updateClickedFeatureVisibility = (modeRaw) => {
     if (!clickedFeature.value?.feat) return false;
     const feat = clickedFeature.value.feat;
@@ -414,6 +429,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
     moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),
     removeFeatureVisibilityRule,
     setFeatureVisibility,
+    setSelectedFeaturesVisibility,
     setFeatureVisibilityRuleField,
     updateClickedFeatureVisibility
   };
