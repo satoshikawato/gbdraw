@@ -1,35 +1,21 @@
+import {
+  buildFeatureMetadataMap,
+  buildFeatureSelectorUniquenessIndex,
+  buildFeatureSelectorUniquenessIndexFromMetadata,
+  escapeRegexLiteral,
+  normalizeFeatureIdKey,
+  selectFeatureSelector
+} from '../feature-selector.js';
+
 const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
 const LEGACY_HEADER = ['record', 'feature_type', 'qualifier_key', 'qualifier_value_regex', 'label_text'];
 const STABLE_FEATURE_KEY_QUALIFIERS = ['locus_tag', 'gene'];
 const DEFAULT_LABEL_QUALIFIER_PRIORITY = ['product', 'gene', 'locus_tag', 'protein_id', 'old_locus_tag', 'note'];
 
-const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeTsvCell = (value) => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
 const toSortedKeys = (obj) =>
   Object.keys(obj || {}).sort((a, b) => String(a || '').localeCompare(String(b || '')));
-const normalizeFeatureIdKey = (value) => String(value ?? '').trim().toLowerCase();
-
-const normalizeStrandToken = (value) => {
-  const token = String(value ?? '').trim().toLowerCase();
-  if (token === '+' || token === 'positive' || token === 'forward' || token === '1') return '+';
-  if (token === '-' || token === 'negative' || token === 'reverse' || token === '-1') return '-';
-  return 'undefined';
-};
-
-const normalizeQualifierMap = (qualifiers) => {
-  const normalized = {};
-  if (!qualifiers || typeof qualifiers !== 'object') return normalized;
-  Object.entries(qualifiers).forEach(([keyRaw, valuesRaw]) => {
-    const key = String(keyRaw || '').trim().toLowerCase();
-    if (!key) return;
-    const values = Array.isArray(valuesRaw) ? valuesRaw : [valuesRaw];
-    normalized[key] = values
-      .filter((value) => value !== null && value !== undefined)
-      .map((value) => String(value));
-  });
-  return normalized;
-};
 
 const isHeaderRow = (parts) => {
   if (!Array.isArray(parts) || parts.length !== LABEL_OVERRIDE_COLUMN_COUNT) return false;
@@ -39,34 +25,7 @@ const isHeaderRow = (parts) => {
   return LEGACY_HEADER.every((value, idx) => normalized[idx] === value);
 };
 
-export const buildFeatureMetadataMap = (features) => {
-  const metadataByFeatureId = new Map();
-  if (!Array.isArray(features)) return metadataByFeatureId;
-
-  features.forEach((feature) => {
-    const featureId = String(feature?.svg_id || '').trim();
-    const key = normalizeFeatureIdKey(featureId);
-    if (!key || metadataByFeatureId.has(key)) return;
-
-    const start = String(feature?.start ?? '').trim();
-    const end = String(feature?.end ?? '').trim();
-    const location = start && end ? `${start}..${end}` : '';
-    const position = location ? `${location}:${normalizeStrandToken(feature?.strand)}` : '';
-    const record = String(feature?.record_id || '').trim();
-    const featureType = String(feature?.type || '').trim();
-
-    metadataByFeatureId.set(key, {
-      featureId,
-      record,
-      location,
-      position,
-      featureType,
-      qualifiers: normalizeQualifierMap(feature?.qualifiers)
-    });
-  });
-
-  return metadataByFeatureId;
-};
+export { buildFeatureMetadataMap };
 
 const buildEditableLabelByFeatureId = (editableLabels) => {
   const labelsByFeatureId = new Map();
@@ -138,93 +97,17 @@ const buildFeatureIdsBySourceText = (editableLabels) => {
   return featureIdsBySourceText;
 };
 
-const makeUniquenessKey = (record, featureType, qualifier, value) =>
-  `${String(record || '').trim()}\u0000${String(featureType || '').trim()}\u0000` +
-  `${String(qualifier || '').trim().toLowerCase()}\u0000${String(value || '').trim()}`;
-
-const getRecordLocationFromMeta = (metadata) => {
-  const record = String(metadata?.record || '').trim();
-  const position = String(metadata?.position || '').trim();
-  if (!record || !position) return '';
-  return `${record}:${position}`;
-};
-
-const buildFeatureUniquenessIndexFromMetadata = (metadataByFeatureId) => {
-  const counts = new Map();
-  if (!(metadataByFeatureId instanceof Map)) return counts;
-
-  metadataByFeatureId.forEach((metadata) => {
-    const record = String(metadata?.record || '').trim();
-    const featureType = String(metadata?.featureType || '').trim();
-    if (!record || !featureType) return;
-
-    STABLE_FEATURE_KEY_QUALIFIERS.forEach((qualifier) => {
-      const values = Array.isArray(metadata?.qualifiers?.[qualifier]) ? metadata.qualifiers[qualifier] : [];
-      values.forEach((valueRaw) => {
-        const value = String(valueRaw || '').trim();
-        if (!value) return;
-        const key = makeUniquenessKey(record, featureType, qualifier, value);
-        counts.set(key, (counts.get(key) || 0) + 1);
-      });
-    });
-
-    const recordLocation = getRecordLocationFromMeta(metadata);
-    if (recordLocation) {
-      const key = makeUniquenessKey(record, featureType, 'record_location', recordLocation);
-      counts.set(key, (counts.get(key) || 0) + 1);
-    }
-  });
-
-  return counts;
-};
+const buildFeatureUniquenessIndexFromMetadata = buildFeatureSelectorUniquenessIndexFromMetadata;
 
 export const buildFeatureUniquenessIndex = (features) => {
-  const metadataByFeatureId = buildFeatureMetadataMap(features);
-  return buildFeatureUniquenessIndexFromMetadata(metadataByFeatureId);
+  return buildFeatureSelectorUniquenessIndex(features);
 };
 
-export const selectStableFeatureKey = (featureMeta, uniquenessIndex) => {
-  const featureId = String(featureMeta?.featureId || '').trim();
-  const record = String(featureMeta?.record || '').trim();
-  const featureType = String(featureMeta?.featureType || '').trim();
-  const fallback = {
-    qualifier: 'hash',
-    value: featureId,
-    isFallbackHash: true
-  };
-
-  if (!record || !featureType) return fallback;
-
-  for (const qualifier of STABLE_FEATURE_KEY_QUALIFIERS) {
-    const values = Array.isArray(featureMeta?.qualifiers?.[qualifier]) ? featureMeta.qualifiers[qualifier] : [];
-    for (const valueRaw of values) {
-      const value = String(valueRaw || '').trim();
-      if (!value) continue;
-      const key = makeUniquenessKey(record, featureType, qualifier, value);
-      if ((uniquenessIndex?.get(key) || 0) === 1) {
-        return {
-          qualifier,
-          value,
-          isFallbackHash: false
-        };
-      }
-    }
-  }
-
-  const recordLocation = getRecordLocationFromMeta(featureMeta);
-  if (recordLocation) {
-    const key = makeUniquenessKey(record, featureType, 'record_location', recordLocation);
-    if ((uniquenessIndex?.get(key) || 0) === 1) {
-      return {
-        qualifier: 'record_location',
-        value: recordLocation,
-        isFallbackHash: false
-      };
-    }
-  }
-
-  return fallback;
-};
+export const selectStableFeatureKey = (featureMeta, uniquenessIndex) => selectFeatureSelector(
+  featureMeta,
+  uniquenessIndex,
+  { priority: STABLE_FEATURE_KEY_QUALIFIERS, preferSelector: false }
+);
 
 export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options = {}) => {
   const rows = [];

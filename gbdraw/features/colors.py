@@ -7,7 +7,14 @@ from typing import Any, Optional, Tuple
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
 
-from .ids import compute_feature_hash
+from .ids import compute_feature_hash as compute_feature_hash
+from .selector_values import (
+    get_feature_hash,
+    get_feature_location_str,
+    get_feature_qualifiers,
+    get_feature_record_location_str,
+    get_qualifier_values,
+)
 
 
 def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:
@@ -61,14 +68,6 @@ def find_specific_color_rule(
 ) -> Tuple[str, Optional[str]] | None:
     """Return the first matching specific color rule, if any."""
 
-    from .visibility import (
-        _get_feature_hash,
-        _get_feature_location_str,
-        _get_feature_qualifiers,
-        _get_feature_record_location_str,
-        _get_qualifier_values,
-    )
-
     feature_type = str(
         getattr(feature, "type", None)
         or getattr(feature, "feature_type", "")
@@ -77,35 +76,35 @@ def find_specific_color_rule(
     for rules_for_feature_type in _iter_color_rule_sets(color_map, feature_type):
         # First, check hash pseudo-qualifier (highest priority for individual targeting)
         if 'hash' in rules_for_feature_type:
-            feature_hash = _get_feature_hash(feature, record_id=record_id)
+            feature_hash = get_feature_hash(feature, record_id=record_id)
             for rule in rules_for_feature_type['hash']:
                 pattern, color, caption = _unpack_color_rule(rule)
                 if feature_hash and pattern.search(feature_hash):
                     return color, caption
 
         if 'record_location' in rules_for_feature_type:
-            record_location = _get_feature_record_location_str(feature, record_id)
+            record_location = get_feature_record_location_str(feature, record_id)
             for rule in rules_for_feature_type['record_location']:
                 pattern, color, caption = _unpack_color_rule(rule)
                 if record_location and pattern.search(record_location):
                     return color, caption
 
         # Then, check regular qualifiers
-        qualifiers = _get_feature_qualifiers(feature)
+        qualifiers = get_feature_qualifiers(feature)
         for qualifier_key in qualifiers:
             if qualifier_key in rules_for_feature_type:
                 # Check each pattern for this qualifier
                 for rule in rules_for_feature_type[qualifier_key]:
                     # Support both old (pattern, color) and new (pattern, color, caption) formats
                     pattern, color, caption = _unpack_color_rule(rule)
-                    for value in _get_qualifier_values(qualifiers, qualifier_key):
+                    for value in get_qualifier_values(qualifiers, qualifier_key):
                         if pattern.search(value):
                             return color, caption
 
         # Then, check location pseudo-qualifier (for features without unique qualifiers)
         if 'location' in rules_for_feature_type:
             # Create location string: "start..end" (GenBank format)
-            location_str = _get_feature_location_str(feature)
+            location_str = get_feature_location_str(feature)
             for rule in rules_for_feature_type['location']:
                 pattern, color, caption = _unpack_color_rule(rule)
                 if location_str and pattern.search(location_str):
@@ -215,4 +214,3 @@ __all__ = [
     "precompute_used_color_rules",
     "preprocess_color_tables",
 ]
-

@@ -15,6 +15,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
   const {
     clickedFeature,
     extractedFeatures,
+    featureSelectorSafetyScope,
     orthogroups,
     featureVisibilityRules,
     featureVisibilityOverrides,
@@ -151,14 +152,14 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
     const scopes = [{
       id: 'feature',
       label: 'This feature',
-      description: 'Exact hash rule for only this feature.'
+      description: 'One rule for only this feature.'
     }];
     const orthogroupMembers = getOrthogroupMemberFeatures(feat);
     if (orthogroupMembers.length > 1) {
       scopes.push({
         id: 'orthogroup',
         label: `Current orthogroup members (${orthogroupMembers.length})`,
-        description: 'Exact hash rules for current orthogroup members.',
+        description: 'One rule per current orthogroup member.',
         features: orthogroupMembers
       });
     }
@@ -248,13 +249,16 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
         upsertEditorQualifierFeatureVisibilityRule(featureVisibilityRules, ruleInput, nextMode);
       }
     } else {
+      const selectorContext = {
+        selectorSafetyScope: featureSelectorSafetyScope?.value
+      };
       targetFeatures.forEach((targetFeat) => {
         const svgId = normalizeText(targetFeat?.svg_id ?? targetFeat?.svgId ?? targetFeat?.id);
         if (!svgId) return;
         if (nextMode === 'default') {
           removeEditorFeatureVisibilityRule(featureVisibilityRules, svgId);
         } else {
-          upsertEditorFeatureVisibilityRule(featureVisibilityRules, targetFeat, nextMode);
+          upsertEditorFeatureVisibilityRule(featureVisibilityRules, targetFeat, nextMode, selectorContext);
         }
       });
     }
@@ -390,7 +394,10 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
   const featureVisibilityRuleDetail = (rule) => {
     const normalized = normalizeFeatureVisibilityRule(rule);
     if (normalized.source === 'editor' && normalized.featureId) {
-      return normalized.label ? `${normalized.label} (${normalized.featureId})` : normalized.featureId;
+      const qualifier = normalized.qualifier.toLowerCase() === 'hash'
+        ? 'hash fallback'
+        : normalized.qualifier.toLowerCase();
+      return normalized.label ? `${normalized.label} (${qualifier})` : `${normalized.featureId} (${qualifier})`;
     }
     if (normalized.qualifier.toLowerCase() === 'hash') return normalized.value;
     return '';

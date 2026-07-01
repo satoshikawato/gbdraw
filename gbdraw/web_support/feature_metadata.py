@@ -7,7 +7,7 @@ from typing import Any
 from Bio import SeqIO
 from Bio.Seq import Seq
 
-from gbdraw.features.ids import compute_feature_hash
+from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
@@ -56,10 +56,6 @@ def _normalize_selected_feature_set(selected_features: object | None) -> set[str
         if not parsed_features:
             parsed_features = [part.strip() for part in selected_raw.split(",") if part.strip()]
     return set(parsed_features) if parsed_features else None
-
-
-def _compute_svg_feature_hash(feature: Any, record_id: str | None = None) -> str:
-    return compute_feature_hash(feature, record_id=record_id)
 
 
 def _normalize_qualifier_values(value: object | None) -> list[str]:
@@ -204,6 +200,26 @@ def _extract_amino_acid_sequence(feature: Any, nucleotide_sequence: str) -> tupl
         return "", warnings
 
 
+def _build_selector_safety_scope(records: list[Any]) -> list[dict[str, object]]:
+    scope: list[dict[str, object]] = []
+    for rec_idx, record in enumerate(records):
+        record_id = record.id or f"Record_{rec_idx}"
+        hash_record_id = record.id
+        for feat in getattr(record, "features", []) or []:
+            scope.append(
+                {
+                    "record_id": record_id,
+                    "record_idx": rec_idx,
+                    "feature_type": str(getattr(feat, "type", "") or ""),
+                    "selector": build_feature_selector_values(
+                        feat,
+                        record_id=hash_record_id,
+                    ),
+                }
+            )
+    return scope
+
+
 def extract_features_from_records_payload(
     records: Any,
     *,
@@ -218,6 +234,7 @@ def extract_features_from_records_payload(
 
     features: list[dict[str, object]] = []
     record_ids: list[str] = []
+    selector_safety_scope = _build_selector_safety_scope(records)
     idx = 0
     for rec_idx, record in enumerate(records):
         record_id = record.id or f"Record_{rec_idx}"
@@ -245,12 +262,13 @@ def extract_features_from_records_payload(
             )
             sequence_warnings.extend(translation_warnings)
 
-            try:
-                svg_id = _compute_svg_feature_hash(feat, record_id=hash_record_id)
-            except Exception:
-                svg_id = ""
+            selector = build_feature_selector_values(feat, record_id=hash_record_id)
+            svg_id = str(selector.get("hash") or "")
             if not svg_id:
-                svg_id = _compute_svg_feature_hash(feat)
+                fallback_selector = build_feature_selector_values(feat)
+                svg_id = str(fallback_selector.get("hash") or "")
+                if svg_id:
+                    selector["hash"] = svg_id
 
             qualifiers = {}
             for q_key, q_vals in feat.qualifiers.items():
@@ -279,6 +297,7 @@ def extract_features_from_records_payload(
                     "product": _first_qualifier_value(feat.qualifiers, "product"),
                     "note": _first_qualifier_value(feat.qualifiers, "note")[:50],
                     "qualifiers": qualifiers,
+                    "selector": selector,
                     "location_parts": location_parts,
                     "nucleotide_sequence": nucleotide_sequence,
                     "amino_acid_sequence": amino_acid_sequence,
@@ -287,7 +306,11 @@ def extract_features_from_records_payload(
             )
             idx += 1
 
-    return {"features": features, "record_ids": record_ids}
+    return {
+        "features": features,
+        "record_ids": record_ids,
+        "selector_safety_scope": selector_safety_scope,
+    }
 
 
 def extract_features_from_genbank_payload(

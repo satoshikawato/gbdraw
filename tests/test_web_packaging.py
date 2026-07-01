@@ -268,6 +268,14 @@ def test_web_feature_visibility_helpers() -> None:
     subprocess.run([node, "tests/web/feature-visibility.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_feature_selector_helpers() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/feature-selector.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")

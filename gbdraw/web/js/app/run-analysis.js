@@ -464,22 +464,24 @@ const setCachedProteinExtraction = (file, key, value) => {
   if (byKey.size >= PROTEIN_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
   byKey.set(key, value);
 };
+const cloneJsonValue = (value, fallback) => {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_err) {
+    return fallback;
+  }
+};
 const cloneFeatureExtractionData = (data) => ({
   features: Array.isArray(data?.features)
-    ? data.features.map((feature) => ({
-        ...feature,
-        qualifiers:
-          feature?.qualifiers && typeof feature.qualifiers === 'object'
-            ? Object.fromEntries(
-                Object.entries(feature.qualifiers).map(([key, value]) => [
-                  key,
-                  Array.isArray(value) ? [...value] : value
-                ])
-              )
-            : feature?.qualifiers
-      }))
+    ? data.features.map((feature) => cloneJsonValue(
+        feature,
+        feature && typeof feature === 'object' ? { ...feature } : feature
+      ))
     : [],
-  record_ids: Array.isArray(data?.record_ids) ? [...data.record_ids] : []
+  record_ids: Array.isArray(data?.record_ids) ? [...data.record_ids] : [],
+  selector_safety_scope: Array.isArray(data?.selector_safety_scope)
+    ? cloneJsonValue(data.selector_safety_scope, [])
+    : []
 });
 const getCachedFeatureExtraction = (file, key) => {
   if (!file) return null;
@@ -784,6 +786,7 @@ export const createRunAnalysis = ({
     generatedCircularPlotTitlePosition,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
+    featureSelectorSafetyScope,
     featureEditorStatus,
     featureExtractionPending,
     featureExtractionError,
@@ -1151,6 +1154,9 @@ export const createRunAnalysis = ({
           });
         } else if (Array.isArray(featData?.features)) {
           extractedFeatures.value = featData.features;
+          featureSelectorSafetyScope.value = Array.isArray(featData.selector_safety_scope)
+            ? featData.selector_safety_scope
+            : [];
           featureRecordIds.value = featData.record_ids || [];
           selectedFeatureRecordIdx.value = 0;
           refreshFeatureOverrides(featData.features);
@@ -1174,6 +1180,7 @@ export const createRunAnalysis = ({
         }
       } else if (context.mode === 'linear' && context.lInputType === 'gb' && context.linearSeqs.length > 0) {
         let allFeatures = [];
+        let allSelectorSafetyScope = [];
         const allRecordLabels = [];
 
         for (let i = 0; i < context.linearSeqs.length; i++) {
@@ -1203,6 +1210,11 @@ export const createRunAnalysis = ({
               id: `file${i}_${feature.id}`
             }));
             allFeatures = allFeatures.concat(features);
+            if (Array.isArray(featData.selector_safety_scope)) {
+              allSelectorSafetyScope = allSelectorSafetyScope.concat(
+                featData.selector_safety_scope.map((entry) => ({ ...entry, fileIdx: i }))
+              );
+            }
             (featData.record_ids || []).forEach((rid, ridx) => {
               allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
             });
@@ -1213,6 +1225,7 @@ export const createRunAnalysis = ({
 
         if (!isCurrentFeatureExtractionContext(context)) return;
         extractedFeatures.value = allFeatures;
+        featureSelectorSafetyScope.value = allSelectorSafetyScope;
         featureRecordIds.value = allRecordLabels.map((r) => r.label);
         selectedFeatureRecordIdx.value = 0;
         refreshFeatureOverrides(allFeatures);
@@ -1796,6 +1809,7 @@ json.dumps({
           originalLegendOrder: cloneJsonSafe(originalLegendOrder.value || [], []),
           originalLegendColors: cloneJsonSafe(originalLegendColors.value || {}, {}),
           extractedFeatures: cloneJsonSafe(extractedFeatures.value || [], []),
+          featureSelectorSafetyScope: cloneJsonSafe(featureSelectorSafetyScope.value || [], []),
           editableLabels: cloneJsonSafe(editableLabels.value || [], []),
           featureEditorStatus: cloneJsonSafe(featureEditorStatus || {}, {}),
           featureExtractionPending: featureExtractionPending.value,
@@ -1826,6 +1840,7 @@ json.dumps({
       originalLegendOrder.value = cloneJsonSafe(manualCancelSnapshot.originalLegendOrder, []);
       originalLegendColors.value = cloneJsonSafe(manualCancelSnapshot.originalLegendColors, {});
       extractedFeatures.value = cloneJsonSafe(manualCancelSnapshot.extractedFeatures, []);
+      featureSelectorSafetyScope.value = cloneJsonSafe(manualCancelSnapshot.featureSelectorSafetyScope, []);
       editableLabels.value = cloneJsonSafe(manualCancelSnapshot.editableLabels, []);
       setFeatureEditorStatus(cloneJsonSafe(manualCancelSnapshot.featureEditorStatus, {}));
       featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
@@ -4293,6 +4308,7 @@ json.dumps({
 
       if (!isReflow) {
         extractedFeatures.value = [];
+        featureSelectorSafetyScope.value = [];
         featureRecordIds.value = [];
         selectedFeatureRecordIdx.value = 0;
 

@@ -1,5 +1,13 @@
+import {
+  buildSelectorSafetyUniquenessIndex,
+  exactRegexValue,
+  selectFeatureSelector
+} from './feature-selector.js';
+export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
+
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
-const COMMON_QUALIFIERS = ['product', 'gene', 'locus_tag', 'hash', 'location', 'record_location'];
+const COMMON_QUALIFIERS = ['product', 'gene', 'protein_id', 'locus_tag', 'hash', 'location', 'record_location'];
+const EDITOR_FEATURE_SELECTOR_PRIORITY = ['protein_id', 'locus_tag', 'gene_id', 'old_locus_tag'];
 const SHOW_ACTIONS = new Set(['show', 'on']);
 const HIDE_ACTIONS = new Set(['hide', 'off', 'false', '0']);
 const EXCLUDE_MATCHING_ACTIONS = new Set(['exclude_matching', 'suppress']);
@@ -13,9 +21,6 @@ const normalizeSource = (value) => {
 };
 
 export const featureVisibilityQualifierSuggestions = COMMON_QUALIFIERS;
-
-export const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-export const exactRegexValue = (value) => `^${escapeRegexLiteral(value)}$`;
 
 export const normalizeFeatureVisibilityAction = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
@@ -183,26 +188,22 @@ const featureLabel = (feat = {}) => {
   );
 };
 
-const isExactEditorHashRule = (rule, featureId) => {
+const getFeatureId = (feat = {}) => normalizeCell(feat?.svg_id ?? feat?.svgId ?? feat?.featureId ?? feat?.feature_id ?? feat?.id);
+
+const getFeatureRecordId = (feat = {}) => normalizeCell(feat?.record_id ?? feat?.recordId ?? feat?.record) || '*';
+
+const getFeatureType = (feat = {}) => normalizeCell(feat?.type ?? feat?.featureType ?? feat?.feature_type) || '*';
+
+const isEditorRuleForFeatureId = (rule, featureId) => {
   const normalized = normalizeFeatureVisibilityRule(rule);
   const expectedFeatureId = normalizeCell(featureId || normalized.featureId);
   if (!expectedFeatureId) return false;
-  return normalized.source === 'editor' &&
-    normalized.featureId === expectedFeatureId &&
-    normalized.recordId === '*' &&
-    normalized.featureType === '*' &&
-    normalized.qualifier.toLowerCase() === 'hash' &&
-    normalized.value === exactRegexValue(expectedFeatureId);
+  return normalized.source === 'editor' && normalized.featureId === expectedFeatureId;
 };
 
-const isEditorExactHashRule = (rule) => {
+const isEditorFeatureRule = (rule) => {
   const normalized = normalizeFeatureVisibilityRule(rule);
-  return normalized.source === 'editor' &&
-    normalized.recordId === '*' &&
-    normalized.featureType === '*' &&
-    normalized.qualifier.toLowerCase() === 'hash' &&
-    normalized.featureId &&
-    normalized.value === exactRegexValue(normalized.featureId);
+  return normalized.source === 'editor' && Boolean(normalized.featureId);
 };
 
 const isEditorExactQualifierRule = (rule) => {
@@ -219,23 +220,23 @@ const isEditorExactQualifierRule = (rule) => {
 
 const reorderEditorVisibilityRules = (rules) => {
   if (!Array.isArray(rules)) return;
-  const hashRules = [];
+  const featureRules = [];
   const qualifierRules = [];
   const otherRules = [];
   rules.forEach((rule) => {
-    if (isEditorExactHashRule(rule)) {
-      hashRules.push(rule);
+    if (isEditorFeatureRule(rule)) {
+      featureRules.push(rule);
     } else if (isEditorExactQualifierRule(rule)) {
       qualifierRules.push(rule);
     } else {
       otherRules.push(rule);
     }
   });
-  rules.splice(0, rules.length, ...hashRules, ...qualifierRules, ...otherRules);
+  rules.splice(0, rules.length, ...featureRules, ...qualifierRules, ...otherRules);
 };
 
 export const buildExactHashFeatureVisibilityRule = (feat, actionRaw) => {
-  const featureId = normalizeCell(feat?.svg_id ?? feat?.svgId ?? feat?.id);
+  const featureId = getFeatureId(feat);
   const action = featureVisibilityModeToAction(actionRaw);
   if (!featureId || !action) return null;
   return normalizeFeatureVisibilityRule({
@@ -246,6 +247,42 @@ export const buildExactHashFeatureVisibilityRule = (feat, actionRaw) => {
     featureType: '*',
     qualifier: 'hash',
     value: exactRegexValue(featureId),
+    action
+  });
+};
+
+const resolveSelectorUniquenessIndex = (selectorContext = {}) => {
+  if (selectorContext?.selectorUniquenessIndex instanceof Map) {
+    return selectorContext.selectorUniquenessIndex;
+  }
+  return buildSelectorSafetyUniquenessIndex(selectorContext?.selectorSafetyScope);
+};
+
+export const buildEditorFeatureVisibilityRule = (feat, selectorContext = {}, mode) => {
+  const featureId = getFeatureId(feat);
+  const action = featureVisibilityModeToAction(mode);
+  if (!featureId || !action) return null;
+
+  const selector = selectFeatureSelector(
+    feat,
+    resolveSelectorUniquenessIndex(selectorContext),
+    {
+      priority: EDITOR_FEATURE_SELECTOR_PRIORITY,
+      requireSelector: true,
+      requireSafetyScope: true
+    }
+  );
+  const selectedValue = normalizeCell(selector?.value || featureId);
+  if (!selectedValue) return null;
+
+  return normalizeFeatureVisibilityRule({
+    source: 'editor',
+    featureId,
+    label: featureLabel(feat),
+    recordId: getFeatureRecordId(feat),
+    featureType: getFeatureType(feat),
+    qualifier: normalizeCell(selector?.qualifier || 'hash').toLowerCase() || 'hash',
+    value: exactRegexValue(selectedValue),
     action
   });
 };
@@ -274,9 +311,9 @@ export const buildExactQualifierFeatureVisibilityRule = ({
   });
 };
 
-export const upsertEditorFeatureVisibilityRule = (rules, feat, actionRaw) => {
+export const upsertEditorFeatureVisibilityRule = (rules, feat, actionRaw, selectorContext = {}) => {
   if (!Array.isArray(rules)) return null;
-  const featureId = normalizeCell(feat?.svg_id ?? feat?.svgId ?? feat?.id);
+  const featureId = getFeatureId(feat);
   if (!featureId) return null;
   const action = featureVisibilityModeToAction(actionRaw);
   if (!action) {
@@ -284,7 +321,8 @@ export const upsertEditorFeatureVisibilityRule = (rules, feat, actionRaw) => {
     return null;
   }
 
-  const nextRule = buildExactHashFeatureVisibilityRule(feat, action);
+  const nextRule = buildEditorFeatureVisibilityRule(feat, selectorContext, action);
+  if (!nextRule) return null;
   const existingIndex = rules.findIndex((rule) => normalizeFeatureVisibilityRule(rule).source === 'editor' &&
     normalizeFeatureVisibilityRule(rule).featureId === featureId);
 
@@ -363,7 +401,7 @@ export const getEditorFeatureVisibilityMode = (rules, featureIdRaw) => {
   const featureId = normalizeCell(featureIdRaw);
   if (!featureId) return 'default';
   for (const rule of Array.isArray(rules) ? rules : []) {
-    if (!isExactEditorHashRule(rule, featureId)) continue;
+    if (!isEditorRuleForFeatureId(rule, featureId)) continue;
     return featureVisibilityActionToMode(rule.action);
   }
   return 'default';
@@ -373,7 +411,7 @@ export const buildFeatureVisibilityOverrideCache = (rules) => {
   const cache = {};
   for (const rule of Array.isArray(rules) ? rules : []) {
     const normalized = normalizeFeatureVisibilityRule(rule);
-    if (!isExactEditorHashRule(normalized, normalized.featureId)) continue;
+    if (!isEditorRuleForFeatureId(normalized, normalized.featureId)) continue;
     const mode = featureVisibilityActionToMode(normalized.action);
     if (mode === 'default') continue;
     cache[normalized.featureId] = mode;

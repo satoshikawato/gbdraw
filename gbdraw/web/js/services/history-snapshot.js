@@ -184,6 +184,7 @@ const applyFallbackUiStateData = (state, ui = {}) => {
 
 const buildFallbackFeatureStateData = (state) => ({
   extractedFeatures: cloneJsonData(getRef(state.extractedFeatures, [])) || [],
+  featureSelectorSafetyScope: cloneJsonData(getRef(state.featureSelectorSafetyScope, [])) || [],
   featureRecordIds: cloneJsonData(getRef(state.featureRecordIds, [])) || [],
   selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
   featureColorOverrides: clonePlainObject(state.featureColorOverrides),
@@ -197,6 +198,7 @@ const buildFallbackFeatureStateData = (state) => ({
 
 const applyFallbackFeatureStateData = (state, features = {}) => {
   setRef(state.extractedFeatures, cloneJsonData(features.extractedFeatures) || []);
+  setRef(state.featureSelectorSafetyScope, cloneJsonData(features.featureSelectorSafetyScope) || []);
   setRef(state.featureRecordIds, cloneJsonData(features.featureRecordIds) || []);
   setRef(
     state.selectedFeatureRecordIdx,

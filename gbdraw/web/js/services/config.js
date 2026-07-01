@@ -1787,6 +1787,7 @@ const resetSessionBaseline = () => {
   clearObject(state.orthogroupNameOverrides);
   clearObject(state.orthogroupDescriptionOverrides);
   state.extractedFeatures.value = [];
+  state.featureSelectorSafetyScope.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
   clearObject(state.featureColorOverrides);
@@ -2012,6 +2013,7 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 
 export const buildFeatureStateData = () => ({
   extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+  featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(state.featureColorOverrides),
@@ -2026,6 +2028,9 @@ export const buildFeatureStateData = () => ({
 export const applyFeatureStateData = (features = {}) => {
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
     ? features.extractedFeatures
+    : [];
+  state.featureSelectorSafetyScope.value = Array.isArray(features.featureSelectorSafetyScope)
+    ? features.featureSelectorSafetyScope
     : [];
   state.featureRecordIds.value = Array.isArray(features.featureRecordIds)
     ? features.featureRecordIds
@@ -2193,6 +2198,7 @@ export const exportSession = async (titleOverride = null) => {
     results: serializeResults(),
     features: {
       extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+      featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),
@@ -2322,6 +2328,11 @@ export const importSession = async (e, options = {}) => {
       state.extractedFeatures.value = features.extractedFeatures;
     } else {
       state.extractedFeatures.value = [];
+    }
+    if (Array.isArray(features.featureSelectorSafetyScope)) {
+      state.featureSelectorSafetyScope.value = features.featureSelectorSafetyScope;
+    } else {
+      state.featureSelectorSafetyScope.value = [];
     }
     if (Array.isArray(features.featureRecordIds)) {
       state.featureRecordIds.value = features.featureRecordIds;

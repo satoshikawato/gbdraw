@@ -26,6 +26,7 @@ export const setupWatchers = ({
   const {
     manualSpecificRules,
     extractedFeatures,
+    featureSelectorSafetyScope,
     addedLegendCaptions,
     layoutRepositionMode,
     editableLabels,
@@ -545,6 +546,7 @@ export const setupWatchers = ({
       }
 
       extractedFeatures.value = [];
+      featureSelectorSafetyScope.value = [];
       featureRecordIds.value = [];
       selectedFeatureRecordIdx.value = 0;
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);

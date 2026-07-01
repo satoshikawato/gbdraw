@@ -609,6 +609,7 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
+const featureSelectorSafetyScope = ref([]); // Python selector scope before feature visibility filtering
 const featuresBySvgId = computed(() => {
   const indexed = new Map();
   const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
@@ -1088,6 +1089,7 @@ export const state = {
   specificRulePresetLoading,
   downloadDpi,
   extractedFeatures,
+  featureSelectorSafetyScope,
   featuresBySvgId,
   featureEditorStatus,
   featureEditorStatusText,

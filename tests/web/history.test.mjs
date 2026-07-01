@@ -18,11 +18,13 @@ for (const filename of ['history.js', 'history-files.js', 'history-snapshot.js']
     'utf8'
   );
 }
-await writeFile(
-  join(tempDir, 'app', 'feature-visibility.js'),
-  await readFile(join(appSourceDir, 'feature-visibility.js'), 'utf8'),
-  'utf8'
-);
+for (const filename of ['feature-selector.js', 'feature-visibility.js']) {
+  await writeFile(
+    join(tempDir, 'app', filename),
+    await readFile(join(appSourceDir, filename), 'utf8'),
+    'utf8'
+  );
+}
 
 const { createHistoryManager } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
 const { createHistoryFileStore } = await import(pathToFileURL(join(tempDir, 'services', 'history-files.js')));

@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-visibility.js');
+const selectorSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-selector.js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-visibility-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
@@ -13,8 +14,14 @@ await writeFile(
   await readFile(sourcePath, 'utf8'),
   'utf8'
 );
+await writeFile(
+  join(tempDir, 'feature-selector.js'),
+  await readFile(selectorSourcePath, 'utf8'),
+  'utf8'
+);
 
 const {
+  buildEditorFeatureVisibilityRule,
   buildExactHashFeatureVisibilityRule,
   buildExactQualifierFeatureVisibilityRule,
   buildFeatureVisibilityOverrideCache,
@@ -110,6 +117,56 @@ assert.equal(exactRegexValue('YP_009725295.1'), '^YP_009725295\\.1$');
 }
 
 {
+  const feat = {
+    svg_id: 'f.1',
+    label: 'Gene A',
+    record_id: 'rec1',
+    type: 'CDS',
+    selector: {
+      hash: 'f.1',
+      record_location: 'rec1:10..20:+',
+      qualifiers: {
+        protein_id: ['P1'],
+        locus_tag: ['L1']
+      }
+    }
+  };
+  const rule = buildEditorFeatureVisibilityRule(
+    feat,
+    {
+      selectorSafetyScope: [
+        { record_id: 'rec1', feature_type: 'CDS', selector: feat.selector }
+      ]
+    },
+    'exclude_matching'
+  );
+  assert.equal(rule.source, 'editor');
+  assert.equal(rule.featureId, 'f.1');
+  assert.equal(rule.recordId, 'rec1');
+  assert.equal(rule.featureType, 'CDS');
+  assert.equal(rule.qualifier, 'protein_id');
+  assert.equal(rule.value, '^P1$');
+  assert.equal(rule.action, 'exclude_matching');
+}
+
+{
+  const feat = {
+    svg_id: 'f.1',
+    label: 'Gene A',
+    record_id: 'rec1',
+    type: 'CDS',
+    selector: {
+      hash: 'f.1',
+      record_location: 'rec1:10..20:+',
+      qualifiers: { protein_id: ['P1'] }
+    }
+  };
+  const rule = buildEditorFeatureVisibilityRule(feat, {}, 'off');
+  assert.equal(rule.qualifier, 'hash');
+  assert.equal(rule.value, '^f\\.1$');
+}
+
+{
   const rules = [
     { source: 'manual', recordId: '*', featureType: 'CDS', qualifier: 'product', value: '.*', action: 'off' }
   ];
@@ -137,6 +194,23 @@ assert.equal(exactRegexValue('YP_009725295.1'), '^YP_009725295\\.1$');
   removeEditorFeatureVisibilityRule(rules, 'f.1');
   assert.equal(rules.length, 2);
   assert.equal(getEditorFeatureVisibilityMode(rules, 'f.1'), 'default');
+}
+
+{
+  const rules = [{
+    source: 'editor',
+    featureId: 'f.1',
+    label: 'Gene A',
+    recordId: 'rec1',
+    featureType: 'CDS',
+    qualifier: 'locus_tag',
+    value: '^L1$',
+    action: 'off'
+  }];
+  assert.equal(getEditorFeatureVisibilityMode(rules, 'f.1'), 'off');
+  assert.deepEqual(buildFeatureVisibilityOverrideCache(rules), { 'f.1': 'off' });
+  removeEditorFeatureVisibilityRule(rules, 'f.1');
+  assert.equal(rules.length, 0);
 }
 
 assert.deepEqual(
