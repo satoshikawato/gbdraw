@@ -55,13 +55,13 @@ def _precalculate_definition_metrics(
     config_dict: dict,
     canvas_config,
     cfg: GbdrawConfig | None = None,
-) -> tuple[float, dict[str, float], dict[str, float]]:
+) -> tuple[float, list[float], list[float]]:
     """
     Pre-calculate definition widths and heights for all records.
     """
     max_definition_width = 0
-    definition_heights: dict[str, float] = {}
-    definition_half_heights: dict[str, float] = {}
+    definition_heights: list[float] = []
+    definition_half_heights: list[float] = []
     if not records:
         return 0.0, definition_heights, definition_half_heights
 
@@ -71,8 +71,8 @@ def _precalculate_definition_metrics(
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width
         definition_height = float(def_group.definition_bounding_box_height)
-        definition_heights[record.id] = definition_height
-        definition_half_heights[record.id] = 0.5 * definition_height
+        definition_heights.append(definition_height)
+        definition_half_heights.append(0.5 * definition_height)
     return math.ceil(max_definition_width), definition_heights, definition_half_heights
 
 
@@ -141,7 +141,7 @@ def _precalculate_label_dimensions(
     cfg: GbdrawConfig | None = None,
     precomputed_feature_dicts: list[FeatureDict] | None = None,
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
-) -> tuple[float, dict, dict]:
+) -> tuple[float, list[list[dict]], list[float]]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
 
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
@@ -149,7 +149,7 @@ def _precalculate_label_dimensions(
     show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
 
     if show_labels_mode == "none":
-        return 0, {}, {}
+        return 0, [[] for _ in records], [0.0 for _ in records]
 
     label_font_size = _resolve_linear_diagram_label_font_size(
         records,
@@ -158,8 +158,8 @@ def _precalculate_label_dimensions(
         cfg=cfg,
     )
     max_required_height = 0
-    all_labels_by_record = {}
-    record_label_heights = {}  # Store height required for labels per record
+    all_labels_by_record: list[list[dict]] = []
+    record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length
     if precomputed_feature_dicts is None:
         color_table, default_colors = preprocess_color_tables(
@@ -170,8 +170,8 @@ def _precalculate_label_dimensions(
 
     for i, record in enumerate(records):
         if show_labels_mode == "first" and i > 0:
-            all_labels_by_record[record.id] = []
-            record_label_heights[record.id] = 0
+            all_labels_by_record.append([])
+            record_label_heights.append(0.0)
             continue
         member_ids, top_member_ids = orthogroup_label_sets_for_record(
             orthogroup_label_eligibility if show_labels_mode == "orthogroup_top" else None,
@@ -215,7 +215,7 @@ def _precalculate_label_dimensions(
             orthogroup_label_member_ids=member_ids,
             orthogroup_label_top_member_ids=top_member_ids,
         )
-        all_labels_by_record[record.id] = label_list
+        all_labels_by_record.append(label_list)
 
         min_y_coord_record = 0.0
         for label in label_list:
@@ -230,7 +230,7 @@ def _precalculate_label_dimensions(
                 min_y_coord_record = label_top_y
 
         record_height = abs(min_y_coord_record)
-        record_label_heights[record.id] = record_height
+        record_label_heights.append(record_height)
 
         if record_height > max_required_height:
             max_required_height = record_height

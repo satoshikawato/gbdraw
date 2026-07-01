@@ -39,6 +39,7 @@ class GcSkewGroup:
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len
         self.skew_config: GcSkewConfigurator = skew_config
+        self.group_id = group_id
         self.gb_record: SeqRecord = gb_record
         self.window: int = self.skew_config.window
         self.step: int = self.skew_config.step
@@ -82,6 +83,7 @@ class GcSkewGroup:
             self.start_x,
             self.start_y,
             self.dinucleotide,
+            self.group_id,
         )
 
     def get_group(self) -> Group:

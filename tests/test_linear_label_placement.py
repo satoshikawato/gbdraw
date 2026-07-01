@@ -228,7 +228,7 @@ def _prepare_linear_labels_for_records(
         config_dict,
         cfg=cfg,
     )
-    return all_labels_by_record[records[0].id]
+    return all_labels_by_record[0]
 
 
 def _rotated_y_bounds_from_anchor(label: dict) -> tuple[float, float]:
@@ -677,7 +677,7 @@ def test_linear_precalc_includes_above_feature_rotated_embedded_labels() -> None
 
     assert required_label_height > 0
     assert required_label_height > canvas_cfg.original_vertical_offset
-    assert record_label_heights[record.id] == pytest.approx(required_label_height)
+    assert record_label_heights[0] == pytest.approx(required_label_height)
 
 
 @pytest.mark.linear
@@ -741,7 +741,7 @@ def test_linear_precalculated_labels_match_final_alignment_width_positions() -> 
             float(label["feature_end_x"]),
             float(label["middle_x"]),
         )
-        for label in all_labels.get(record.id, [])
+        for label in all_labels[0]
         if label["label_text"] == "tRNA-Phe"
     )
 

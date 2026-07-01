@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 
 def _get_value(source: Any, key: str, default: Any = None) -> Any:
@@ -76,16 +76,31 @@ def _serialize_ortholog_path(path: Any) -> dict[str, object]:
     }
 
 
-def _serialize_member(member: Any) -> dict[str, object]:
+FeatureIdMapper = Callable[[int, str], str]
+
+
+def _serialize_member(
+    member: Any,
+    feature_id_mapper: FeatureIdMapper | None = None,
+) -> dict[str, object]:
+    record_index = _int_value(_get_value(member, "record_index"))
+    stable_feature_svg_id = _text(_get_value(member, "feature_svg_id"))
+    feature_svg_id = (
+        feature_id_mapper(record_index, stable_feature_svg_id)
+        if feature_id_mapper is not None and stable_feature_svg_id
+        else stable_feature_svg_id
+    )
     return {
         "orthogroupId": _text(_get_value(member, "orthogroup_id")),
         "proteinId": _text(_get_value(member, "protein_id")),
         "sourceProteinId": _get_value(member, "source_protein_id"),
-        "recordIndex": _int_value(_get_value(member, "record_index")),
+        "recordIndex": record_index,
         "recordId": _text(_get_value(member, "record_id")),
         "featureIndex": _int_value(_get_value(member, "feature_index")),
         "label": _text(_get_value(member, "label")),
-        "featureSvgId": _text(_get_value(member, "feature_svg_id")),
+        "featureSvgId": feature_svg_id,
+        "stableFeatureSvgId": stable_feature_svg_id,
+        "stable_feature_svg_id": stable_feature_svg_id,
         "start": _int_value(_get_value(member, "start")),
         "end": _int_value(_get_value(member, "end")),
         "strand": _get_value(member, "strand"),
@@ -107,7 +122,11 @@ def _serialize_member(member: Any) -> dict[str, object]:
     }
 
 
-def serialize_orthogroups_payload(orthogroups: Any) -> list[dict[str, object]]:
+def serialize_orthogroups_payload(
+    orthogroups: Any,
+    *,
+    feature_id_mapper: FeatureIdMapper | None = None,
+) -> list[dict[str, object]]:
     """Serialize OrthogroupResult to the web interactive SVG payload shape."""
 
     if orthogroups is None:
@@ -175,7 +194,10 @@ def serialize_orthogroups_payload(orthogroups: Any) -> list[dict[str, object]]:
                     _serialize_ortholog_edge(edge)
                     for edge in (related_edges_by_id.get(orthogroup_id, []) or [])
                 ],
-                "members": [_serialize_member(member) for member in members],
+                "members": [
+                    _serialize_member(member, feature_id_mapper=feature_id_mapper)
+                    for member in members
+                ],
             }
         )
     return payload
@@ -216,25 +238,38 @@ def enrich_features_with_orthogroups(
             if not isinstance(member, Mapping):
                 continue
             feature_svg_id = _text(member.get("featureSvgId")).strip()
+            stable_feature_svg_id = _text(
+                member.get("stableFeatureSvgId") or member.get("stable_feature_svg_id")
+            ).strip()
             record_index = _int_or_none(member.get("recordIndex"))
             if not feature_svg_id or record_index is None:
                 continue
             entry = _build_feature_index_entry(group, member)
             feature_index[(record_index, feature_svg_id)] = entry
             feature_index_by_svg_id.setdefault(feature_svg_id, entry)
+            if stable_feature_svg_id:
+                feature_index.setdefault((record_index, stable_feature_svg_id), entry)
+                feature_index_by_svg_id.setdefault(stable_feature_svg_id, entry)
 
     enriched: list[dict[str, object]] = []
     for feature in features:
         next_feature = dict(feature)
         svg_id = _text(next_feature.get("svg_id")).strip()
+        stable_svg_id = _text(
+            next_feature.get("stable_svg_id") or next_feature.get("stableFeatureSvgId")
+        ).strip()
         record_index = _int_or_none(
             next_feature.get("record_idx", next_feature.get("recordIndex"))
         )
         entry = None
         if svg_id and record_index is not None:
             entry = feature_index.get((record_index, svg_id))
+        if entry is None and stable_svg_id and record_index is not None:
+            entry = feature_index.get((record_index, stable_svg_id))
         if entry is None and svg_id:
             entry = feature_index_by_svg_id.get(svg_id)
+        if entry is None and stable_svg_id:
+            entry = feature_index_by_svg_id.get(stable_svg_id)
         if entry is not None:
             next_feature.update(entry)
         enriched.append(next_feature)

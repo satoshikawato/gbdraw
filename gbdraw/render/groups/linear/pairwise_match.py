@@ -15,6 +15,7 @@ from ....core.color import (
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
     interpolate_color,
 )
+from ....features.ids import make_linear_rendered_feature_id
 
 
 def _row_value(row: object, name: str, default: object = "") -> object:
@@ -203,6 +204,22 @@ class PairWiseMatchGroup:
             match_index = self._pairwise_match_counter
         track_id = _attribute_text(getattr(self, "track_id", "")) or f"comparison{self.comparison_count}"
         return f"{track_id}_match{int(match_index)}"
+
+    def _rendered_feature_svg_id_values(self, value: object, *, record_index: int) -> str:
+        stable_ids = [
+            part.strip()
+            for part in _attribute_text(value).split(";")
+            if part.strip()
+        ]
+        rendered_ids = [
+            make_linear_rendered_feature_id(
+                record_index=record_index,
+                stable_feature_id=stable_id,
+                record_count=len(self.records),
+            )
+            for stable_id in stable_ids
+        ]
+        return ";".join(rendered_id for rendered_id in rendered_ids if rendered_id)
 
     def generate_linear_match_path(self, row: DataFrame, match_index: int | None = None) -> Path:
         """
@@ -398,10 +415,25 @@ class PairWiseMatchGroup:
             "query_display_name": "data-query-display-name",
             "subject_display_name": "data-subject-display-name",
         }
+        query_record_index = int(getattr(self, "comparison_count", 1)) - 1
+        subject_record_index = int(getattr(self, "comparison_count", 1))
         for column, attribute in metadata_columns.items():
             text = _attribute_text(_row_value(row, column, ""))
             if text:
-                path.attribs[attribute] = text
+                if column == "query_feature_svg_id":
+                    path.attribs["data-query-stable-feature-svg-id"] = text
+                    path.attribs[attribute] = self._rendered_feature_svg_id_values(
+                        text,
+                        record_index=query_record_index,
+                    )
+                elif column == "subject_feature_svg_id":
+                    path.attribs["data-subject-stable-feature-svg-id"] = text
+                    path.attribs[attribute] = self._rendered_feature_svg_id_values(
+                        text,
+                        record_index=subject_record_index,
+                    )
+                else:
+                    path.attribs[attribute] = text
 
     def calculate_offsets(self, row: DataFrame) -> tuple[float, float, float, float]:
         """

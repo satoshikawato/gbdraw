@@ -66,7 +66,7 @@ def _run_linear(tmp_path: Path, extra_args: list[str]) -> tuple[int, str, str, P
 
 def _extract_axis_group_y(svg_content: str, record_id: str) -> float:
     match = re.search(
-        rf'<g id="{re.escape(record_id)}" transform="translate\([^,]+,([0-9.]+)\)"><line[^>]*y1="0" y2="0"',
+        rf'<g id="{re.escape(record_id)}(?:_record_\d+)?" transform="translate\([^,]+,([0-9.]+)\)"><line[^>]*y1="0" y2="0"',
         svg_content,
     )
     assert match is not None
@@ -81,7 +81,7 @@ def _extract_comparison_group_y(svg_content: str) -> float:
 
 def _extract_group_translate_y(svg_content: str, group_id: str) -> float:
     match = re.search(
-        rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([\-0-9.]+)\)">',
+        rf'<g id="{re.escape(group_id)}(?:_record_\d+)?" transform="translate\([^,]+,([\-0-9.]+)\)">',
         svg_content,
     )
     assert match is not None
@@ -246,7 +246,7 @@ def _expected_middle_rotated_label_bottom_relative_y() -> float:
         config_dict,
         cfg=cfg,
     )
-    labels = all_labels.get(record.id, [])
+    labels = all_labels[0]
     assert labels
     return max(calculate_label_y_bounds(label)[1] for label in labels)
 
@@ -851,7 +851,7 @@ def test_linear_ruler_on_axis_uses_shared_auto_interval_across_records(tmp_path:
     )
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     svg_content = output_svg.read_text(encoding="utf-8")
-    group_matches = re.findall(r'<g id="NC_000913\.3"[^>]*>(.*?)</g>', svg_content)
+    group_matches = re.findall(r'<g id="NC_000913\.3(?:_record_\d+)?"[^>]*>(.*?)</g>', svg_content)
     axis_groups = [g for g in group_matches if _count_ruler_ticks(g) > 0]
     assert len(axis_groups) == 3
     tick_counts = [_count_ruler_ticks(g) for g in axis_groups]

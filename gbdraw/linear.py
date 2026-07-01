@@ -52,6 +52,7 @@ from .labels.filtering import (
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
 from .features.colors import preprocess_color_tables
+from .features.ids import make_linear_rendered_feature_id
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .features.visibility import (
     compile_feature_visibility_rules,
@@ -402,8 +403,20 @@ def _build_interactive_svg_context(
             selected_features=selected_features,
             feature_visibility_rules=feature_visibility_rules,
             specific_color_rules=specific_color_rules,
+            linear_rendered_feature_ids=True,
         )
-        orthogroup_payload = serialize_orthogroups_payload(orthogroups)
+        record_count = len(records)
+        orthogroup_payload = serialize_orthogroups_payload(
+            orthogroups,
+            feature_id_mapper=lambda record_index, stable_feature_id: (
+                make_linear_rendered_feature_id(
+                    record_index=record_index,
+                    stable_feature_id=stable_feature_id,
+                    record_count=record_count,
+                )
+                or stable_feature_id
+            ),
+        )
         features = payload.get("features", [])
         if orthogroup_payload:
             features = enrich_features_with_orthogroups(features, orthogroup_payload)

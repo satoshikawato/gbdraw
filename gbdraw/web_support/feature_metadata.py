@@ -8,6 +8,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 
 from gbdraw.features.selector_values import build_feature_selector_values
+from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
@@ -226,6 +227,7 @@ def extract_features_from_records_payload(
     selected_features: object | None = None,
     feature_visibility_rules: list[dict[str, Any]] | None = None,
     specific_color_rules: dict | None = None,
+    linear_rendered_feature_ids: bool = False,
 ) -> dict[str, object]:
     """Extract the Rich Feature Popup payload shape from processed records."""
 
@@ -269,6 +271,16 @@ def extract_features_from_records_payload(
                 svg_id = str(fallback_selector.get("hash") or "")
                 if svg_id:
                     selector["hash"] = svg_id
+            stable_svg_id = svg_id
+            if linear_rendered_feature_ids:
+                svg_id = (
+                    make_linear_rendered_feature_id(
+                        record_index=rec_idx,
+                        stable_feature_id=stable_svg_id,
+                        record_count=len(records),
+                    )
+                    or stable_svg_id
+                )
 
             qualifiers = {}
             for q_key, q_vals in feat.qualifiers.items():
@@ -281,6 +293,8 @@ def extract_features_from_records_payload(
                 {
                     "id": f"f{idx}",
                     "svg_id": svg_id,
+                    "stable_svg_id": stable_svg_id,
+                    "stable_feature_id": stable_svg_id,
                     "record_id": record_id,
                     "record_idx": rec_idx,
                     "organism": organism,

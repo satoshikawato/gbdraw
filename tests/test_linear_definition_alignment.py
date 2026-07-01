@@ -363,8 +363,8 @@ def test_precalculated_max_definition_width_is_ceiled(monkeypatch: pytest.Monkey
     )
 
     assert max_width == 13
-    assert heights == {"record_a": 10.0, "record_b": 10.0}
-    assert half_heights == {"record_a": 5.0, "record_b": 5.0}
+    assert heights == [10.0, 10.0]
+    assert half_heights == [5.0, 5.0]
 
 
 @pytest.mark.linear

@@ -553,6 +553,7 @@ def _orthogroup_payloads(
 
 def _fallback_feature_payload(svg_id: str, entry: _RenderedFeatureEntry) -> dict[str, object]:
     fill_color = entry.fill
+    stable_svg_id = _first_text(entry.element.get("data-gbdraw-stable-feature-id"), svg_id)
     label = _first_text(entry.element.get("data-label"), entry.element.get("id"), svg_id)
     search_labels = []
     for value in (label, svg_id):
@@ -560,6 +561,8 @@ def _fallback_feature_payload(svg_id: str, entry: _RenderedFeatureEntry) -> dict
             search_labels.append(value)
     return {
         "svg_id": svg_id,
+        "stable_svg_id": stable_svg_id,
+        "stable_feature_id": stable_svg_id,
         "label": label,
         "display_label": label,
         "search_labels": search_labels,
@@ -620,6 +623,13 @@ def _feature_payloads(
         sequence_fastas = _build_feature_sequence_fastas(feature)
         payload = {
             "svg_id": svg_id,
+            "stable_svg_id": _first_text(
+                feature.get("stable_svg_id"),
+                feature.get("stableFeatureSvgId"),
+                feature.get("stable_feature_id"),
+                rendered[svg_id].element.get("data-gbdraw-stable-feature-id"),
+                svg_id,
+            ),
             "label": fallback_label,
             "display_label": display_label,
             "search_labels": _get_search_labels(feature, fallback_label, display_label),
