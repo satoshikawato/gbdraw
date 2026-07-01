@@ -48,6 +48,7 @@ import {
   normalizePaletteColors
 } from './color-utils.js';
 import { serializeSpecificRules } from './file-imports.js';
+import { serializeFeatureVisibilityRules } from './feature-visibility.js';
 import {
   DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
   DEFAULT_LINEAR_BLAST_FILTERS,
@@ -537,16 +538,11 @@ const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
     canonicalLength: records.reduce((sum, record) => sum + String(record.sequence || '').length, 0)
   };
 };
-const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const buildConservationSeries = (sourceFiles, circularConservation) => {
   return orderedConservationSources(sourceFiles, circularConservation).map((entry) => ({
     label: entry.label,
     color: entry.color
   }));
-};
-const normalizeFeatureVisibilityMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['on', 'off', 'suppress'].includes(normalized) ? normalized : 'default';
 };
 const normalizeMultiRecordSizeMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -741,7 +737,7 @@ export const createRunAnalysis = ({
     addedLegendCaptions,
     fileLegendCaptions,
     featureColorOverrides,
-    featureVisibilityOverrides,
+    featureVisibilityRules,
     featureStrokeOverrides,
     legendEntries,
     deletedLegendEntries,
@@ -2084,18 +2080,10 @@ json.dumps({
       }
       let featureVisibilityTablePath = null;
       let featureVisibilityCacheKey = '';
-      const featureVisibilityRows = [];
-      Object.entries(featureVisibilityOverrides || {}).forEach(([featureIdRaw, modeRaw]) => {
-        const featureId = String(featureIdRaw || '').trim();
-        if (!featureId) return;
-        const mode = normalizeFeatureVisibilityMode(modeRaw);
-        if (mode === 'default') return;
-        const action = mode === 'on' ? 'show' : (mode === 'suppress' ? 'suppress' : 'hide');
-        featureVisibilityRows.push(`*\t*\thash\t^${escapeRegexLiteral(featureId)}$\t${action}`);
-      });
-      if (featureVisibilityRows.length > 0) {
+      const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules);
+      if (featureVisibilityTsv.trim()) {
         featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
-        featureVisibilityCacheKey = `${featureVisibilityRows.join('\n')}\n`;
+        featureVisibilityCacheKey = featureVisibilityTsv;
         stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey);
         args.push('--feature_visibility_table', featureVisibilityTablePath);
       }

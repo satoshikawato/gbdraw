@@ -1,3 +1,9 @@
+import {
+  buildFeatureVisibilityOverrideCache,
+  featureVisibilityRulesFromOverrideCache,
+  normalizeFeatureVisibilityRule
+} from '../app/feature-visibility.js';
+
 const cloneJsonData = (value) => {
   if (value === null || value === undefined) return value;
   return JSON.parse(JSON.stringify(value));
@@ -14,6 +20,18 @@ const replacePlainObject = (target, source) => {
   Object.entries(source || {}).forEach(([key, value]) => {
     target[key] = value;
   });
+};
+
+const cloneFeatureVisibilityRules = (rules) => (
+  Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
+);
+
+const replaceFeatureVisibilityRules = (state, rules) => {
+  const normalizedRules = cloneFeatureVisibilityRules(rules);
+  if (Array.isArray(state.featureVisibilityRules)) {
+    state.featureVisibilityRules.splice(0, state.featureVisibilityRules.length, ...normalizedRules);
+  }
+  replacePlainObject(state.featureVisibilityOverrides, buildFeatureVisibilityOverrideCache(normalizedRules));
 };
 
 const setRef = (target, value) => {
@@ -168,7 +186,7 @@ const buildFallbackFeatureStateData = (state) => ({
   featureRecordIds: cloneJsonData(getRef(state.featureRecordIds, [])) || [],
   selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
   featureColorOverrides: clonePlainObject(state.featureColorOverrides),
-  featureVisibilityOverrides: clonePlainObject(state.featureVisibilityOverrides),
+  featureVisibilityRules: cloneFeatureVisibilityRules(state.featureVisibilityRules),
   labelTextFeatureOverrides: clonePlainObject(state.labelTextFeatureOverrides),
   labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: clonePlainObject(state.labelTextFeatureOverrideSources),
@@ -184,7 +202,12 @@ const applyFallbackFeatureStateData = (state, features = {}) => {
     Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
   );
   replacePlainObject(state.featureColorOverrides, clonePlainObject(features.featureColorOverrides));
-  replacePlainObject(state.featureVisibilityOverrides, clonePlainObject(features.featureVisibilityOverrides));
+  replaceFeatureVisibilityRules(
+    state,
+    Array.isArray(features.featureVisibilityRules)
+      ? features.featureVisibilityRules
+      : featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides)
+  );
   replacePlainObject(state.labelTextFeatureOverrides, clonePlainObject(features.labelTextFeatureOverrides));
   replacePlainObject(state.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
   replacePlainObject(

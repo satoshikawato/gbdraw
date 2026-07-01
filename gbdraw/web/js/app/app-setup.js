@@ -184,6 +184,7 @@ export const createAppSetup = () => {
     labelReflowProcessing,
     labelReflowLastError,
     featureColorOverrides,
+    featureVisibilityRules,
     featureVisibilityOverrides,
     featureStrokeOverrides,
     svgContainer,
@@ -1041,10 +1042,18 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    addFeatureVisibilityRule,
+    downloadFeatureVisibilityRulesTsv,
+    featureVisibilityQualifierSuggestions,
+    featureVisibilityRuleDetail,
     getFeatureColor,
     canEditFeatureColor,
     getFeatureVisibility,
+    moveFeatureVisibilityRuleDown,
+    moveFeatureVisibilityRuleUp,
+    removeFeatureVisibilityRule,
     setFeatureVisibility,
+    setFeatureVisibilityRuleField,
     updateClickedFeatureVisibility,
     requestFeatureColorChange,
     updateClickedFeatureColor,
@@ -1074,6 +1083,14 @@ export const createAppSetup = () => {
 
   const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
+  const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
+  const moveFeatureVisibilityRuleDownWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleDown);
+  const moveFeatureVisibilityRuleUpWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleUp);
+  const removeFeatureVisibilityRuleWithHistory = undoableAction('Remove feature visibility rule', removeFeatureVisibilityRule);
+  const setFeatureVisibilityRuleFieldWithHistory = undoableAction(
+    'Edit feature visibility rule',
+    setFeatureVisibilityRuleField
+  );
   const setFeatureVisibilityWithHistory = undoableAction('Change feature visibility', setFeatureVisibility);
   const updateClickedFeatureVisibilityWithHistory = undoableAction(
     'Change feature visibility',
@@ -1702,6 +1719,15 @@ export const createAppSetup = () => {
       .map(({ caption, color }) => ({ caption, color }));
   });
 
+  const featureVisibilityFeatureSuggestions = computed(() => {
+    const values = new Set(['*', ...featureKeys]);
+    for (const feat of Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []) {
+      const type = String(feat?.type || '').trim();
+      if (type) values.add(type);
+    }
+    return Array.from(values);
+  });
+
   const editSessionTitle = () => {
     const current = normalizeSessionTitle(sessionTitle.value);
     const input = prompt('Session title', current);
@@ -2236,11 +2262,21 @@ export const createAppSetup = () => {
     labelReflowLastError,
     filteredFeatures,
     featureColorOverrides,
+    featureVisibilityRules,
     featureVisibilityOverrides,
     featureStrokeOverrides,
+    addFeatureVisibilityRule: addFeatureVisibilityRuleWithHistory,
+    downloadFeatureVisibilityRulesTsv,
+    featureVisibilityFeatureSuggestions,
+    featureVisibilityQualifierSuggestions,
+    featureVisibilityRuleDetail,
     getFeatureColor,
     getFeatureVisibility,
+    moveFeatureVisibilityRuleDown: moveFeatureVisibilityRuleDownWithHistory,
+    moveFeatureVisibilityRuleUp: moveFeatureVisibilityRuleUpWithHistory,
+    removeFeatureVisibilityRule: removeFeatureVisibilityRuleWithHistory,
     setFeatureVisibility: setFeatureVisibilityWithHistory,
+    setFeatureVisibilityRuleField: setFeatureVisibilityRuleFieldWithHistory,
     requestFeatureColorChange: requestFeatureColorChangeWithHistory,
     setFeatureColor: setFeatureColorWithHistory,
     canEditFeatureColor,

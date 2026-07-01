@@ -645,7 +645,8 @@ const previewFeatureSearchActiveIndex = ref(-1);
 const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
-const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off' | 'suppress'}
+const featureVisibilityRules = reactive([]);
+const featureVisibilityOverrides = reactive({}); // Derived compatibility cache: {svg_id: 'on' | 'off' | 'suppress'}
 const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
@@ -1106,6 +1107,7 @@ export const state = {
   featureListTopSpacerPx,
   featureListBottomSpacerPx,
   featureColorOverrides,
+  featureVisibilityRules,
   featureVisibilityOverrides,
   featureStrokeOverrides,
   labelSearch,

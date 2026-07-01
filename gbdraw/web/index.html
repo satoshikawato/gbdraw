@@ -2505,6 +2505,65 @@
                             </div>
 
                             <div>
+                                <div class="flex items-center justify-between gap-2 mb-1.5">
+                                    <label class="input-label adv-section-title mb-0">Feature Visibility <help-tip text="Rules are written as the CLI feature visibility table. The row order is the matching priority."></help-tip></label>
+                                    <div class="flex items-center gap-2">
+                                        <button
+                                            v-if="featureVisibilityRules.length > 0"
+                                            type="button"
+                                            @click="downloadFeatureVisibilityRulesTsv"
+                                            class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"
+                                            title="Download TSV"
+                                        >
+                                            <i class="ph ph-download-simple"></i> TSV
+                                        </button>
+                                        <button type="button" @click="addFeatureVisibilityRule" class="btn btn-secondary text-xs h-7 px-2">
+                                            <i class="ph ph-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <datalist id="feature-visibility-feature-type-options">
+                                    <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value"></option>
+                                </datalist>
+                                <datalist id="feature-visibility-qualifier-options">
+                                    <option v-for="value in featureVisibilityQualifierSuggestions" :key="`fv-qual-${value}`" :value="value"></option>
+                                </datalist>
+                                <div class="space-y-1.5">
+                                    <div
+                                        v-for="(rule, i) in featureVisibilityRules"
+                                        :key="rule.id || `feature-visibility-rule-${i}`"
+                                        class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1"
+                                    >
+                                        <div class="flex items-center justify-between gap-1">
+                                            <div class="min-w-0 flex items-center gap-1 text-[9px] font-semibold text-slate-500">
+                                                <span class="shrink-0">#{{ i + 1 }}</span>
+                                                <span v-if="featureVisibilityRuleDetail(rule)" class="truncate text-slate-400" :title="featureVisibilityRuleDetail(rule)">
+                                                    {{ featureVisibilityRuleDetail(rule) }}
+                                                </span>
+                                            </div>
+                                            <div class="flex items-center justify-end gap-0.5">
+                                                <button type="button" @click="moveFeatureVisibilityRuleUp(i)" :disabled="i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
+                                                <button type="button" @click="moveFeatureVisibilityRuleDown(i)" :disabled="i === featureVisibilityRules.length - 1" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
+                                                <button type="button" @click="removeFeatureVisibilityRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule"><i class="ph ph-trash"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-12 gap-1">
+                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" placeholder="record_id" class="form-input form-input-compact col-span-3 font-mono">
+                                            <input :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" list="feature-visibility-feature-type-options" placeholder="feature_type" class="form-input form-input-compact col-span-3">
+                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-3">
+                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" class="form-input form-input-compact col-span-3">
+                                                <option value="show">Show</option>
+                                                <option value="hide">Hide</option>
+                                                <option value="suppress">Suppress</option>
+                                            </select>
+                                        </div>
+                                        <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" placeholder="value regex" class="form-input form-input-compact w-full font-mono">
+                                    </div>
+                                    <div v-if="featureVisibilityRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No visibility rules</div>
+                                </div>
+                            </div>
+
+                            <div>
                                 <label class="input-label adv-section-title">Feature Appearance <help-tip text="Adjust feature dimensions and the stroke color and width for feature blocks and intron lines."></help-tip></label>
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div v-if="mode === 'linear'" class="grid grid-cols-2 gap-1.5">
