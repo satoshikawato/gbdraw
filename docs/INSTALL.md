@@ -25,8 +25,9 @@ Pyodide and the main browser-side assets used by the hosted app are vendored and
 self-hosted from the repository, so the web UI does not need to fetch those runtime
 dependencies from third-party CDNs.
 
-Uploaded genomic data is processed locally in the browser. The hosted deployment also
-uses Cloudflare Web Analytics for aggregate page-visit and performance metrics.
+Uploaded genomic data is processed locally in the browser. The hosted deployment uses
+Google Analytics 4 for aggregate page-usage metrics; gbdraw does not send uploaded
+genome files or generated diagrams to Google Analytics.
 
 The same UI can also be launched locally after installation with:
 

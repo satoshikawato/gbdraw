@@ -51,6 +51,8 @@ jobs:
           cp dist/*.whl public/
           # Create CNAME file for custom domain
           echo "gbdraw.app" > public/CNAME
+          # Stamp the hosted app with the package version and commit SHA
+          python tools/stamp_web_build.py public
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

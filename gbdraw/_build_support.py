@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import zipfile
 from datetime import datetime
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 
@@ -157,6 +159,18 @@ def update_browser_wheel_config(*, wheel_name: str, cache_bust: str | None = Non
             raise RuntimeError(f"Could not update GBDRAW_WHEEL_CACHE_BUST in {CONFIG_PATH}")
     if updated_text != config_text:
         CONFIG_PATH.write_text(updated_text, encoding="utf-8")
+
+
+def refresh_open_source_notices() -> None:
+    generator_path = REPO_ROOT / "tools" / "generate_open_source_notices.py"
+    spec = spec_from_file_location("gbdraw_generate_open_source_notices", generator_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load open source notices generator from {generator_path}")
+
+    module = module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    module.write_open_source_notices()
 
 
 def inspect_browser_wheel_payload(path: Path) -> None:

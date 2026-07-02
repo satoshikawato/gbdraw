@@ -11,8 +11,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "dist" / "cloudflare-pages"
-DEFAULT_ANALYTICS_TOKEN = "e4dc2e66d09549868f5a5ac7d7a6e633"
-ANALYTICS_TOKEN_ENV = "CLOUDFLARE_WEB_ANALYTICS_TOKEN"
+DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID = "G-GG6JMKM02Y"
+GOOGLE_ANALYTICS_MEASUREMENT_ID_ENV = "GBDRAW_GOOGLE_ANALYTICS_MEASUREMENT_ID"
 GALLERY_REMOTE_REF_ENV = "GBDRAW_GALLERY_REMOTE_REF"
 GALLERY_REMOTE_BASE_ENV = "GBDRAW_GALLERY_REMOTE_BASE"
 DEFAULT_GALLERY_REMOTE_REF = "main"
@@ -24,8 +24,8 @@ GALLERY_REMOTE_ASSET_PATTERNS = (
     "gallery/sessions/*.gbdraw-session.json",
     "gallery/sources/*.svg",
 )
-SCRIPT_MARKER = "<!-- CLOUDFLARE_WEB_ANALYTICS_SCRIPT -->"
-NOTICE_MARKER = "<!-- CLOUDFLARE_WEB_ANALYTICS_NOTICE -->"
+SCRIPT_MARKER = "<!-- GOOGLE_ANALYTICS_SCRIPT -->"
+NOTICE_MARKER = "<!-- GOOGLE_ANALYTICS_NOTICE -->"
 ISOLATION_HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
@@ -48,11 +48,31 @@ def _load_prepare_browser_wheel_module():
     return module
 
 
+def _load_build_support_module():
+    module_path = REPO_ROOT / "gbdraw" / "_build_support.py"
+    spec = spec_from_file_location("gbdraw_build_support", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load build support module from {module_path}")
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _load_refresh_gallery_sessions_module():
     module_path = REPO_ROOT / "tools" / "refresh_gallery_sessions.py"
     spec = spec_from_file_location("refresh_gallery_sessions", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load gallery session refresh module from {module_path}")
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_stamp_web_build_module():
+    module_path = REPO_ROOT / "tools" / "stamp_web_build.py"
+    spec = spec_from_file_location("stamp_web_build", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load hosted build stamping module from {module_path}")
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -64,18 +84,21 @@ def _replace_once(source: str, old: str, new: str) -> str:
     return source.replace(old, new, 1)
 
 
-def _render_analytics_script(token: str) -> str:
-    return (
-        "    <!-- Cloudflare Web Analytics --><script defer "
-        "src=\"https://static.cloudflareinsights.com/beacon.min.js\" "
-        f"data-cf-beacon='{{\"token\": \"{token}\"}}'></script><!-- End Cloudflare Web Analytics -->"
-    )
+def _render_google_analytics_script(measurement_id: str) -> str:
+    return f"""    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id={measurement_id}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){{dataLayer.push(arguments);}}
+      gtag('js', new Date());
+      gtag('config', '{measurement_id}');
+    </script>"""
 
 
-def _render_analytics_notice() -> str:
+def _render_google_analytics_notice() -> str:
     return """                            <div class="bg-amber-50 text-amber-900 p-2.5 rounded-lg border border-amber-200 leading-relaxed">
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-chart-line"></i> Hosted Site Analytics</strong>
-                                The hosted <strong>gbdraw.app</strong> deployment uses Cloudflare Web Analytics for aggregate page-visit and performance metrics. Uploaded genome files are still processed locally in your browser and are not sent to Cloudflare by gbdraw itself.
+                                The hosted <strong>gbdraw.app</strong> deployment uses Google Analytics 4 for aggregate page-usage metrics. Uploaded genome files and generated diagrams are still processed locally in your browser and are not sent to Google Analytics by gbdraw.
                             </div>"""
 
 
@@ -114,8 +137,9 @@ def _write_remote_gallery_manifest(output_root: Path, remote_base: str) -> dict[
 def build_cloudflare_pages_bundle(
     *,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
-    analytics_token: str = DEFAULT_ANALYTICS_TOKEN,
+    google_analytics_measurement_id: str = DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID,
     gallery_remote_base: str | None = None,
+    commit_sha: str | None = None,
 ) -> Path:
     if output_root.exists():
         shutil.rmtree(output_root)
@@ -123,19 +147,29 @@ def build_cloudflare_pages_bundle(
 
     index_path = output_root / "index.html"
     index_html = index_path.read_text(encoding="utf-8")
-    index_html = _replace_once(index_html, SCRIPT_MARKER, _render_analytics_script(analytics_token))
-    index_html = _replace_once(index_html, NOTICE_MARKER, _render_analytics_notice())
+    index_html = _replace_once(
+        index_html,
+        SCRIPT_MARKER,
+        _render_google_analytics_script(google_analytics_measurement_id),
+    )
+    index_html = _replace_once(index_html, NOTICE_MARKER, _render_google_analytics_notice())
     index_html = _replace_once(
         index_html,
         "script-src 'self' 'unsafe-inline' 'unsafe-eval';",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com;",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com;",
+    )
+    index_html = _replace_once(
+        index_html,
+        "img-src 'self' data: blob:;",
+        "img-src 'self' data: blob: https://*.google-analytics.com https://*.googletagmanager.com;",
     )
     index_html = _replace_once(
         index_html,
         "connect-src 'self';",
-        "connect-src 'self' https://cloudflareinsights.com;",
+        "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com;",
     )
     index_path.write_text(index_html, encoding="utf-8")
+    _load_stamp_web_build_module().stamp_web_build(output_root, commit_sha=commit_sha)
     (output_root / "_headers").write_text(ISOLATION_HEADERS, encoding="utf-8")
     _write_remote_gallery_manifest(
         output_root=output_root,
@@ -148,7 +182,7 @@ def prepare_cloudflare_pages(
     *,
     refresh_cache_bust: bool = False,
     refresh_gallery_sessions: bool = False,
-    analytics_token: str | None = None,
+    google_analytics_measurement_id: str | None = None,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
 ) -> Path:
     if refresh_gallery_sessions:
@@ -157,15 +191,24 @@ def prepare_cloudflare_pages(
         refresh_gallery_sessions_module.prepare_gallery_assets()
     prepare_browser_wheel_module = _load_prepare_browser_wheel_module()
     prepare_browser_wheel_module.prepare_browser_wheel(refresh_cache_bust=refresh_cache_bust)
-    token = analytics_token or os.environ.get(ANALYTICS_TOKEN_ENV) or DEFAULT_ANALYTICS_TOKEN
-    return build_cloudflare_pages_bundle(output_root=output_root, analytics_token=token)
+    build_support = _load_build_support_module()
+    build_support.refresh_open_source_notices()
+    measurement_id = (
+        google_analytics_measurement_id
+        or os.environ.get(GOOGLE_ANALYTICS_MEASUREMENT_ID_ENV)
+        or DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID
+    )
+    return build_cloudflare_pages_bundle(
+        output_root=output_root,
+        google_analytics_measurement_id=measurement_id,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Prepare the Cloudflare Pages bundle in dist/cloudflare-pages with the browser wheel, "
-            "Cloudflare Web Analytics snippet, and hosted-site privacy notice."
+            "Google Analytics 4 tag, hosted-site privacy notice, and build label."
         )
     )
     parser.add_argument(
@@ -174,10 +217,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Refresh GBDRAW_WHEEL_CACHE_BUST while preparing the browser wheel.",
     )
     parser.add_argument(
-        "--analytics-token",
+        "--google-analytics-id",
         help=(
-            "Cloudflare Web Analytics token. Defaults to the value of "
-            f"{ANALYTICS_TOKEN_ENV} or the repository default."
+            "Google Analytics measurement ID. Defaults to the value of "
+            f"{GOOGLE_ANALYTICS_MEASUREMENT_ID_ENV} or the repository default."
         ),
     )
     parser.add_argument(
@@ -192,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
     output_root = prepare_cloudflare_pages(
         refresh_cache_bust=args.refresh_cache_bust,
         refresh_gallery_sessions=args.refresh_gallery,
-        analytics_token=args.analytics_token,
+        google_analytics_measurement_id=args.google_analytics_id,
     )
     print(f"Prepared Cloudflare Pages bundle: {output_root.relative_to(REPO_ROOT)}")
     return 0

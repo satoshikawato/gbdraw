@@ -30,6 +30,7 @@ def _load_build_support_module():
 def prepare_browser_wheel(*, refresh_cache_bust: bool = False) -> int:
     build_support = _load_build_support_module()
     expected_name = build_support.expected_browser_wheel_name()
+    build_support.refresh_open_source_notices()
 
     with tempfile.TemporaryDirectory(prefix="gbdraw-browser-wheel-") as tmpdir:
         outdir = Path(tmpdir) / "dist"

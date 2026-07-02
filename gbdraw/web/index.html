@@ -25,7 +25,7 @@
     <script src="./vendor/jspdf/jspdf.umd.min.js"></script>
     <script src="./vendor/svg2pdf.js/svg2pdf.umd.min.js"></script>
     <script src="./vendor/dompurify/purify.min.js"></script>
-    <!-- CLOUDFLARE_WEB_ANALYTICS_SCRIPT -->
+    <!-- GOOGLE_ANALYTICS_SCRIPT -->
     <style>
         @font-face {
             font-family: 'Inter';
@@ -661,6 +661,9 @@
             padding: 0.45rem 0.65rem;
             font-size: 11px;
             font-weight: 700;
+        }
+        .hosted-build-label {
+            white-space: nowrap;
         }
         @media (max-width: 760px) {
             .feature-popup-grid {
@@ -3129,7 +3132,7 @@
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key"></i> Privacy & Security</strong>
                                 This tool runs <strong>entirely in your browser</strong> using WebAssembly (Pyodide). Uploaded genomic data is processed locally and never leaves your device.
                             </div>
-                            <!-- CLOUDFLARE_WEB_ANALYTICS_NOTICE -->
+                            <!-- GOOGLE_ANALYTICS_NOTICE -->
 
                             <div>
                                 <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes"></i> How to cite</strong>
@@ -5131,6 +5134,7 @@
             <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">MIT on GitHub</a> |
             Author: <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">Satoshi Kawato</a>
         </span>
+        <!-- GBDRAW_HOSTED_BUILD_LABEL -->
     </footer>
 </div>
 
