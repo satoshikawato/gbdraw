@@ -3,10 +3,6 @@ import {
   extractFeatureMetadataForPreview
 } from './feature-metadata-extraction.js';
 
-const READY_SMALL_RENDERED_COUNT = 20;
-const READY_MATCH_RATIO = 0.98;
-const READY_MAX_MISSING_COUNT = 20;
-
 const MISSING_INPUTS_WARNING =
   'Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.';
 const UNSUPPORTED_INPUT_WARNING =
@@ -19,6 +15,14 @@ const MIGRATION_SKIPPED_WARNING =
 export const normalizeRenderedFeatureId = (value) =>
   String(value || '').trim().replace(/__part\d+$/, '');
 
+const normalizeKey = (value) => String(value || '').trim();
+
+export const normalizeRecordIndex = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
+};
+
 const addNormalizedId = (ids, value) => {
   const normalized = normalizeRenderedFeatureId(value);
   if (normalized) ids.add(normalized);
@@ -26,46 +30,162 @@ const addNormalizedId = (ids, value) => {
 
 const renderedFeatureIdRegex = () => /data-gbdraw-feature-id\s*=\s*["']([^"']+)["']/g;
 
-export const collectRenderedFeatureIdsFromSvg = (svgText) => {
-  const ids = new Set();
+const createRenderedIdentityCollection = () => ({
+  byRenderedId: new Map(),
+  renderedIds: new Set(),
+  byStableId: new Map(),
+  byStableRecordKey: new Map(),
+  totalRenderedCount: 0
+});
+
+export const stableRecordKey = (stableId, recordIndex) => {
+  const normalizedStableId = normalizeRenderedFeatureId(stableId);
+  const normalizedRecordIndex = normalizeRecordIndex(recordIndex);
+  return normalizedStableId && normalizedRecordIndex !== null
+    ? `${normalizedStableId}\u001f${normalizedRecordIndex}`
+    : '';
+};
+
+const addToIdentityListMap = (target, key, identity) => {
+  if (!key) return;
+  const items = target.get(key) || [];
+  items.push(identity);
+  target.set(key, items);
+};
+
+const addRenderedIdentity = (collection, identity) => {
+  const renderedId = normalizeRenderedFeatureId(identity?.renderedId);
+  if (!renderedId || collection.byRenderedId.has(renderedId)) return;
+  const stableId = normalizeRenderedFeatureId(identity?.stableId) || renderedId;
+  const recordIndex = normalizeRecordIndex(identity?.recordIndex);
+  const normalized = {
+    renderedId,
+    stableId,
+    recordIndex,
+    recordId: normalizeKey(identity?.recordId),
+    elementId: normalizeKey(identity?.elementId) || renderedId
+  };
+  collection.byRenderedId.set(renderedId, normalized);
+  collection.renderedIds.add(renderedId);
+  addToIdentityListMap(collection.byStableId, stableId, normalized);
+  addToIdentityListMap(collection.byStableRecordKey, stableRecordKey(stableId, recordIndex), normalized);
+  collection.totalRenderedCount = collection.renderedIds.size;
+};
+
+const elementRenderedId = (element) =>
+  normalizeRenderedFeatureId(element?.getAttribute?.('data-gbdraw-feature-id')) ||
+  normalizeRenderedFeatureId(element?.getAttribute?.('id'));
+
+const elementStableId = (element, renderedId) =>
+  normalizeRenderedFeatureId(element?.getAttribute?.('data-gbdraw-stable-feature-id')) ||
+  renderedId;
+
+const collectRenderedFeatureElements = (doc) => {
+  const selector = [
+    '[data-gbdraw-feature-id]',
+    'path[id^="f"]',
+    'polygon[id^="f"]',
+    'rect[id^="f"]'
+  ].join(', ');
+  return Array.from(doc.querySelectorAll(selector) || []);
+};
+
+export const collectRenderedFeatureIdentitiesFromSvg = (svgText) => {
+  const collection = createRenderedIdentityCollection();
   const text = String(svgText || '');
-  if (!text) return ids;
+  if (!text) return collection;
 
   if (typeof DOMParser !== 'undefined') {
     try {
       const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
       if (doc.querySelector('parsererror')) throw new Error('SVG parse error');
-      doc.querySelectorAll('[data-gbdraw-feature-id]').forEach((element) => {
-        addNormalizedId(ids, element.getAttribute('data-gbdraw-feature-id'));
+      collectRenderedFeatureElements(doc).forEach((element) => {
+        const renderedId = elementRenderedId(element);
+        if (!renderedId) return;
+        addRenderedIdentity(collection, {
+          renderedId,
+          stableId: elementStableId(element, renderedId),
+          recordIndex: element.getAttribute('data-gbdraw-record-index'),
+          recordId: element.getAttribute('data-gbdraw-record-id'),
+          elementId: element.getAttribute('id') || renderedId
+        });
       });
-      return ids;
+      return collection;
     } catch (_err) {
-      // Fall back to the same attribute pattern when DOMParser rejects malformed SVG.
+      // Regex compatibility is intentionally ID-only for malformed SVG.
     }
   }
 
   for (const match of text.matchAll(renderedFeatureIdRegex())) {
-    addNormalizedId(ids, match[1]);
+    const renderedId = normalizeRenderedFeatureId(match[1]);
+    addRenderedIdentity(collection, {
+      renderedId,
+      stableId: renderedId,
+      recordIndex: null,
+      recordId: '',
+      elementId: renderedId
+    });
   }
-  return ids;
+  return collection;
+};
+
+export const collectRenderedFeatureIdsFromSvg = (svgText) => {
+  const identities = collectRenderedFeatureIdentitiesFromSvg(svgText);
+  return identities.renderedIds;
 };
 
 export const collectRenderedFeatureIdsFromResults = (results) => {
   const byResultIndex = [];
+  const identitiesByResultIndex = [];
   const allIds = new Set();
+  const allIdentities = createRenderedIdentityCollection();
   (Array.isArray(results) ? results : []).forEach((result, index) => {
-    const ids = collectRenderedFeatureIdsFromSvg(result?.content || '');
-    byResultIndex[index] = ids;
-    ids.forEach((id) => allIds.add(id));
+    const identities = collectRenderedFeatureIdentitiesFromSvg(result?.content || '');
+    identitiesByResultIndex[index] = identities;
+    byResultIndex[index] = identities.renderedIds;
+    identities.byRenderedId.forEach((identity) => {
+      allIds.add(identity.renderedId);
+      addRenderedIdentity(allIdentities, identity);
+    });
   });
-  return { byResultIndex, allIds, totalRenderedCount: allIds.size };
+  return {
+    byResultIndex,
+    identitiesByResultIndex,
+    renderedIdentitiesByResultIndex: identitiesByResultIndex,
+    allIds,
+    allIdentities,
+    totalRenderedCount: allIds.size
+  };
 };
 
-const collectMetadataFeatureIds = (features) => {
+const collectExactMetadataFeatureIds = (features) => {
   const ids = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     addNormalizedId(ids, feature?.svg_id);
-    addNormalizedId(ids, feature?.stable_svg_id);
+  });
+  return ids;
+};
+
+export const featureStableCandidate = (feature) =>
+  normalizeRenderedFeatureId(
+    feature?.stable_svg_id ||
+    feature?.stableFeatureSvgId ||
+    feature?.stable_feature_id ||
+    feature?.svg_id
+  );
+
+export const featureRecordIndexCandidate = (feature) => {
+  for (const value of [feature?.fileIdx, feature?.record_idx, feature?.recordIndex, feature?.record_index]) {
+    const normalized = normalizeRecordIndex(value);
+    if (normalized !== null) return normalized;
+  }
+  return null;
+};
+
+const collectAliasMetadataFeatureIds = (features) => {
+  const ids = new Set();
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    addNormalizedId(ids, featureStableCandidate(feature));
   });
   return ids;
 };
@@ -80,16 +200,24 @@ export const classifyFeatureMetadataState = ({
   const safeIndex = resultCount > 0
     ? Math.max(0, Math.min(Number(selectedResultIndex) || 0, resultCount - 1))
     : 0;
-  const selectedIds = rendered.byResultIndex[safeIndex] || new Set();
-  const metadataIds = collectMetadataFeatureIds(extractedFeatures);
+  const selectedIdentities = rendered.identitiesByResultIndex[safeIndex] || createRenderedIdentityCollection();
+  const selectedIds = selectedIdentities.renderedIds || new Set();
+  const exactMetadataIds = collectExactMetadataFeatureIds(extractedFeatures);
+  const aliasMetadataIds = collectAliasMetadataFeatureIds(extractedFeatures);
   const renderedCount = selectedIds.size;
   const metadataCount = Array.isArray(extractedFeatures) ? extractedFeatures.length : 0;
-  let matchingCount = 0;
+  let exactMatchingCount = 0;
+  let aliasMatchingCount = 0;
   selectedIds.forEach((id) => {
-    if (metadataIds.has(id)) matchingCount += 1;
+    if (exactMetadataIds.has(id)) {
+      exactMatchingCount += 1;
+      return;
+    }
+    const identity = selectedIdentities.byRenderedId?.get(id);
+    if (identity?.stableId && aliasMetadataIds.has(identity.stableId)) aliasMatchingCount += 1;
   });
-  const missingRenderedCount = Math.max(0, renderedCount - matchingCount);
-  const matchRatio = renderedCount > 0 ? matchingCount / renderedCount : 1;
+  const missingExactCount = Math.max(0, renderedCount - exactMatchingCount);
+  const matchRatio = renderedCount > 0 ? exactMatchingCount / renderedCount : 1;
 
   let state = 'stale';
   if (rendered.totalRenderedCount === 0) {
@@ -98,30 +226,26 @@ export const classifyFeatureMetadataState = ({
     state = 'ready';
   } else if (metadataCount === 0) {
     state = 'missing';
-  } else if (
-    (renderedCount <= READY_SMALL_RENDERED_COUNT && missingRenderedCount === 0) ||
-    (
-      renderedCount > READY_SMALL_RENDERED_COUNT &&
-      matchRatio >= READY_MATCH_RATIO &&
-      missingRenderedCount <= READY_MAX_MISSING_COUNT
-    )
-  ) {
+  } else if (missingExactCount === 0) {
     state = 'ready';
+  } else if (aliasMatchingCount > 0) {
+    state = 'alignable';
   }
 
   return {
     state,
     renderedCount,
     metadataCount,
-    matchingCount,
-    missingRenderedCount,
+    exactMatchingCount,
+    aliasMatchingCount,
+    missingExactCount,
+    matchingCount: exactMatchingCount,
+    missingRenderedCount: missingExactCount,
     matchRatio,
     selectedResultIndex: safeIndex,
     totalRenderedCount: rendered.totalRenderedCount
   };
 };
-
-const normalizeKey = (value) => String(value || '').trim();
 
 const featureId = (feature) => normalizeKey(feature?.id);
 const featureSvgId = (feature) => normalizeRenderedFeatureId(feature?.svg_id);
@@ -153,7 +277,7 @@ const qualifierValues = (feature, key) => {
 };
 
 const stableFeatureKey = (feature) => {
-  const key = normalizeKey(feature?.stable_svg_id);
+  const key = featureStableCandidate(feature);
   return key || '';
 };
 
@@ -193,12 +317,169 @@ const uniqueFeatureMap = (features, keyFn) => {
   return unique;
 };
 
+const countFeatureStableCandidates = (features) => {
+  const counts = new Map();
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const stableId = featureStableCandidate(feature);
+    if (!stableId) return;
+    counts.set(stableId, (counts.get(stableId) || 0) + 1);
+  });
+  return counts;
+};
+
+const identityCollectionOrEmpty = (renderedIdentities) => {
+  if (renderedIdentities?.byRenderedId instanceof Map && renderedIdentities?.renderedIds instanceof Set) {
+    return renderedIdentities;
+  }
+  return createRenderedIdentityCollection();
+};
+
+const plainMapWithEntry = (target, fromKey, toKey) => {
+  const from = normalizeRenderedFeatureId(fromKey);
+  const to = normalizeRenderedFeatureId(toKey);
+  if (from && to && from !== to) target[from] = to;
+};
+
+export const alignRecoveredFeatureIdsToRenderedSvg = ({
+  features,
+  renderedIdentities
+}) => {
+  const sourceFeatures = Array.isArray(features) ? features : [];
+  const rendered = identityCollectionOrEmpty(renderedIdentities);
+  const stableFeatureCounts = countFeatureStableCandidates(sourceFeatures);
+  const nextFeatures = [];
+  const svgIdMap = {};
+  const featureIdMap = {};
+  const resolutions = [];
+  let exactCount = 0;
+  let alignedCount = 0;
+  let ambiguousCount = 0;
+  let unresolvedCount = 0;
+  let changedCount = 0;
+
+  sourceFeatures.forEach((feature, index) => {
+    const oldSvgId = featureSvgId(feature);
+    if (oldSvgId && rendered.renderedIds.has(oldSvgId)) {
+      exactCount += 1;
+      nextFeatures.push(feature);
+      resolutions.push({
+        index,
+        status: 'exact',
+        fromSvgId: oldSvgId,
+        renderedId: oldSvgId,
+        stableId: featureStableCandidate(feature),
+        method: 'svg_id'
+      });
+      return;
+    }
+
+    const stableId = featureStableCandidate(feature);
+    const recordIndex = featureRecordIndexCandidate(feature);
+    const recordKey = stableRecordKey(stableId, recordIndex);
+    const recordMatches = recordKey ? rendered.byStableRecordKey.get(recordKey) || [] : [];
+    const stableMatches = stableId ? rendered.byStableId.get(stableId) || [] : [];
+    let match = null;
+    let method = '';
+
+    if (recordMatches.length === 1) {
+      match = recordMatches[0];
+      method = 'stable-record';
+    } else if (
+      stableId &&
+      (stableFeatureCounts.get(stableId) || 0) === 1 &&
+      stableMatches.length === 1
+    ) {
+      match = stableMatches[0];
+      method = 'unique-stable';
+    }
+
+    if (match?.renderedId) {
+      const oldId = featureId(feature);
+      const newFeature = {
+        ...feature,
+        svg_id: match.renderedId,
+        stable_svg_id: stableId || match.stableId
+      };
+      nextFeatures.push(newFeature);
+      plainMapWithEntry(svgIdMap, oldSvgId || stableId, match.renderedId);
+      const newId = featureId(newFeature);
+      if (oldId && newId && oldId !== newId) featureIdMap[oldId] = newId;
+      alignedCount += 1;
+      changedCount += 1;
+      resolutions.push({
+        index,
+        status: 'aligned',
+        fromSvgId: oldSvgId,
+        renderedId: match.renderedId,
+        stableId: stableId || match.stableId,
+        recordIndex,
+        method
+      });
+      return;
+    }
+
+    const isAmbiguous = Boolean(
+      stableId &&
+      (
+        recordMatches.length > 1 ||
+        stableMatches.length > 1 ||
+        (stableMatches.length === 1 && (stableFeatureCounts.get(stableId) || 0) > 1)
+      )
+    );
+    if (isAmbiguous) ambiguousCount += 1;
+    else unresolvedCount += 1;
+    nextFeatures.push(feature);
+    resolutions.push({
+      index,
+      status: isAmbiguous ? 'ambiguous' : 'unresolved',
+      fromSvgId: oldSvgId,
+      renderedId: '',
+      stableId,
+      recordIndex,
+      method: ''
+    });
+  });
+
+  return {
+    features: nextFeatures,
+    changedCount,
+    exactCount,
+    alignedCount,
+    ambiguousCount,
+    unresolvedCount,
+    svgIdMap,
+    featureIdMap,
+    resolutions
+  };
+};
+
+const normalizeMigrationMap = (source) => {
+  const normalized = {};
+  if (source instanceof Map) {
+    source.forEach((value, key) => {
+      const from = normalizeKey(key);
+      const to = normalizeKey(value);
+      if (from && to) normalized[from] = to;
+    });
+    return normalized;
+  }
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return normalized;
+  Object.entries(source).forEach(([key, value]) => {
+    const from = normalizeKey(key);
+    const to = normalizeKey(value);
+    if (from && to) normalized[from] = to;
+  });
+  return normalized;
+};
+
 export const buildFeatureOverrideMigration = ({
   previousFeatures,
-  recoveredFeatures
+  recoveredFeatures,
+  featureIdMap: explicitFeatureIdMap = {},
+  svgIdMap: explicitSvgIdMap = {}
 }) => {
-  const featureIdMap = {};
-  const svgIdMap = {};
+  const featureIdMap = normalizeMigrationMap(explicitFeatureIdMap);
+  const svgIdMap = normalizeMigrationMap(explicitSvgIdMap);
   const mappedOldFeatures = new Set();
   const mappedNewFeatures = new Set();
 
@@ -211,8 +492,8 @@ export const buildFeatureOverrideMigration = ({
     const newId = featureId(newFeature);
     const oldSvgId = featureSvgId(oldFeature);
     const newSvgId = featureSvgId(newFeature);
-    if (oldId && newId) featureIdMap[oldId] = newId;
-    if (oldSvgId && newSvgId) svgIdMap[oldSvgId] = newSvgId;
+    if (oldId && newId && !Object.prototype.hasOwnProperty.call(featureIdMap, oldId)) featureIdMap[oldId] = newId;
+    if (oldSvgId && newSvgId && !Object.prototype.hasOwnProperty.call(svgIdMap, oldSvgId)) svgIdMap[oldSvgId] = newSvgId;
   };
 
   const addUniqueMatches = (keyFn) => {
@@ -405,6 +686,35 @@ const buildRecoveredFeatureState = (snapshot, payload) => ({
     : 0
 });
 
+const selectedRenderedIdentities = (snapshot, selectedResultIndex) => {
+  const rendered = collectRenderedFeatureIdsFromResults(snapshot?.results);
+  return rendered.identitiesByResultIndex[selectedResultIndex] || createRenderedIdentityCollection();
+};
+
+const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResultIndex }) => {
+  const alignment = alignRecoveredFeatureIdsToRenderedSvg({
+    features: featureState?.extractedFeatures || [],
+    renderedIdentities: selectedRenderedIdentities(snapshot, selectedResultIndex)
+  });
+  const alignedFeatureState = {
+    ...(featureState || {}),
+    extractedFeatures: alignment.features
+  };
+  const alignedValidation = classifyFeatureMetadataState({
+    results: snapshot?.results,
+    selectedResultIndex: snapshot?.selectedResultIndex,
+    extractedFeatures: alignedFeatureState.extractedFeatures
+  });
+  return { alignment, alignedFeatureState, alignedValidation };
+};
+
+const isClickReadyValidation = (validation) =>
+  validation?.state === 'ready' || validation?.state === 'not-needed';
+
+const hasMigrationEntries = (migration) =>
+  Object.keys(migration?.featureIdMap || {}).length > 0 ||
+  Object.keys(migration?.svgIdMap || {}).length > 0;
+
 export const buildSessionFeatureRecoveryPlan = async ({
   snapshot,
   featureVisibilityTsv,
@@ -417,13 +727,39 @@ export const buildSessionFeatureRecoveryPlan = async ({
     extractedFeatures: snapshot?.featureState?.extractedFeatures
   });
 
-  if (validation.state === 'ready' || validation.state === 'not-needed') {
+  if (isClickReadyValidation(validation)) {
     return {
       status: 'ready',
       reason: validation.state,
       validation,
       errors: []
     };
+  }
+
+  if (validation.state === 'alignable') {
+    const existingAlignment = alignFeatureStateToRenderedSvg({
+      snapshot,
+      featureState: snapshot?.featureState || {},
+      selectedResultIndex: validation.selectedResultIndex
+    });
+    if (isClickReadyValidation(existingAlignment.alignedValidation)) {
+      const migrated = migrateFeatureOverrideState({
+        featureState: existingAlignment.alignedFeatureState,
+        editorState: snapshot?.editorState,
+        migration: existingAlignment.alignment
+      });
+      return {
+        status: 'aligned',
+        reason: 'stale-metadata-aligned',
+        validation,
+        recoveredValidation: existingAlignment.alignedValidation,
+        alignment: existingAlignment.alignment,
+        recoveredFeatureState: migrated.featureState,
+        migratedEditorState: migrated.editorState,
+        warning: migrated.warnings[0] || null,
+        errors: []
+      };
+    }
   }
 
   const recovery = recoverability(snapshot);
@@ -461,30 +797,36 @@ export const buildSessionFeatureRecoveryPlan = async ({
     });
 
     const recoveredFeatureState = buildRecoveredFeatureState(snapshot, payload);
-    const recoveredValidation = classifyFeatureMetadataState({
-      results: snapshot.results,
-      selectedResultIndex: snapshot.selectedResultIndex,
-      extractedFeatures: recoveredFeatureState.extractedFeatures
+    const recoveredAlignment = alignFeatureStateToRenderedSvg({
+      snapshot,
+      featureState: recoveredFeatureState,
+      selectedResultIndex: validation.selectedResultIndex
     });
+    const alignedRecoveredFeatureState = recoveredAlignment.alignedFeatureState;
+    const recoveredValidation = recoveredAlignment.alignedValidation;
 
-    if (recoveredValidation.state !== 'ready' && recoveredValidation.state !== 'not-needed') {
+    if (!isClickReadyValidation(recoveredValidation)) {
       return {
         status: 'failed',
         reason: 'validation-not-ready-after-recovery',
         validation,
         recoveredValidation,
+        alignment: recoveredAlignment.alignment,
         warning: EXTRACTION_FAILED_WARNING,
         errors: payload.errors || []
       };
     }
 
-    if (validation.state === 'stale') {
-      const migration = buildFeatureOverrideMigration({
-        previousFeatures: snapshot.featureState?.extractedFeatures || [],
-        recoveredFeatures: recoveredFeatureState.extractedFeatures
-      });
+    const migration = buildFeatureOverrideMigration({
+      previousFeatures: snapshot.featureState?.extractedFeatures || [],
+      recoveredFeatures: alignedRecoveredFeatureState.extractedFeatures,
+      featureIdMap: recoveredAlignment.alignment.featureIdMap,
+      svgIdMap: recoveredAlignment.alignment.svgIdMap
+    });
+
+    if (validation.state === 'stale' || validation.state === 'alignable' || hasMigrationEntries(migration)) {
       const migrated = migrateFeatureOverrideState({
-        featureState: recoveredFeatureState,
+        featureState: alignedRecoveredFeatureState,
         editorState: snapshot.editorState,
         migration
       });
@@ -505,7 +847,8 @@ export const buildSessionFeatureRecoveryPlan = async ({
       reason: 'missing-metadata-recovered',
       validation,
       recoveredValidation,
-      recoveredFeatureState,
+      alignment: recoveredAlignment.alignment,
+      recoveredFeatureState: alignedRecoveredFeatureState,
       migratedEditorState: null,
       warning: null,
       errors: payload.errors || []

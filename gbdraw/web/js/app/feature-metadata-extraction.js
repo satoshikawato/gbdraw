@@ -130,6 +130,8 @@ export const readFeatureExtractionData = async ({
   return featData;
 };
 
+// Worker feature extraction is per input file, so it returns stable IDs. Normalize
+// them once here to match the renderer's multi-record linear SVG contract.
 export const makeLinearRenderedFeatureId = (stableSvgId, recordIndex, recordCount) => {
   const svgId = String(stableSvgId || '').trim();
   if (!svgId || Number(recordCount) <= 1) return svgId;

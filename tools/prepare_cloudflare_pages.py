@@ -48,6 +48,16 @@ def _load_prepare_browser_wheel_module():
     return module
 
 
+def _load_refresh_gallery_sessions_module():
+    module_path = REPO_ROOT / "tools" / "refresh_gallery_sessions.py"
+    spec = spec_from_file_location("refresh_gallery_sessions", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load gallery session refresh module from {module_path}")
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _replace_once(source: str, old: str, new: str) -> str:
     if old not in source:
         raise RuntimeError(f"Expected text not found while preparing Cloudflare bundle: {old}")
@@ -137,9 +147,14 @@ def build_cloudflare_pages_bundle(
 def prepare_cloudflare_pages(
     *,
     refresh_cache_bust: bool = False,
+    refresh_gallery_sessions: bool = True,
     analytics_token: str | None = None,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
 ) -> Path:
+    if refresh_gallery_sessions:
+        refresh_gallery_sessions_module = _load_refresh_gallery_sessions_module()
+        refresh_gallery_sessions_module.refresh_gallery_sessions()
+        refresh_gallery_sessions_module.prepare_gallery_assets()
     prepare_browser_wheel_module = _load_prepare_browser_wheel_module()
     prepare_browser_wheel_module.prepare_browser_wheel(refresh_cache_bust=refresh_cache_bust)
     token = analytics_token or os.environ.get(ANALYTICS_TOKEN_ENV) or DEFAULT_ANALYTICS_TOKEN
@@ -165,9 +180,15 @@ def main(argv: list[str] | None = None) -> int:
             f"{ANALYTICS_TOKEN_ENV} or the repository default."
         ),
     )
+    parser.add_argument(
+        "--skip-gallery-refresh",
+        action="store_true",
+        help="Skip refreshing web gallery session JSON/SVG assets before copying the web bundle.",
+    )
     args = parser.parse_args(argv)
     output_root = prepare_cloudflare_pages(
         refresh_cache_bust=args.refresh_cache_bust,
+        refresh_gallery_sessions=not args.skip_gallery_refresh,
         analytics_token=args.analytics_token,
     )
     print(f"Prepared Cloudflare Pages bundle: {output_root.relative_to(REPO_ROOT)}")

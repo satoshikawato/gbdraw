@@ -2139,7 +2139,7 @@ const buildSessionFeatureRecoverySnapshot = () => ({
 const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature-recovery' } = {}) => {
   state.featureExtractionPending.value = false;
 
-  if (plan?.status === 'recovered') {
+  if (plan?.status === 'recovered' || plan?.status === 'aligned') {
     if (plan.recoveredFeatureState) applyFeatureStateData(plan.recoveredFeatureState);
     if (plan.migratedEditorState) applyEditorStateData(plan.migratedEditorState);
     state.featureExtractionError.value = null;
@@ -2189,7 +2189,7 @@ const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-f
     return { status: 'ready', validation };
   }
 
-  if (validation.state === 'missing' || validation.state === 'stale') {
+  if (validation.state === 'missing' || validation.state === 'alignable' || validation.state === 'stale') {
     state.featureExtractionPending.value = true;
     state.featureExtractionError.value = null;
     setFeatureEditorStatusData({

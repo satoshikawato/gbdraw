@@ -1150,6 +1150,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     out_formats = handle_output_formats(out_formats)
     record_count: int = 0
     outputs = []
+    session_feature_metadata = []
 
 
 
@@ -1268,17 +1269,19 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             alignment_length=alignment_length,
         )
         if INTERACTIVE_SVG_FORMAT in out_formats:
+            interactive_context = _build_interactive_svg_context(
+                gb_records,
+                selected_features_set,
+                feature_table=feature_table,
+                color_table=color_table,
+                default_colors=default_colors,
+            )
             save_figure(
                 canvas,
                 out_formats,
-                interactive_context=_build_interactive_svg_context(
-                    gb_records,
-                    selected_features_set,
-                    feature_table=feature_table,
-                    color_table=color_table,
-                    default_colors=default_colors,
-                ),
+                interactive_context=interactive_context,
             )
+            session_feature_metadata.extend(interactive_context.features)
         else:
             save_figure(canvas, out_formats)
         outputs.append(make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name))
@@ -1339,17 +1342,19 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 alignment_length=alignment_length,
             )
             if INTERACTIVE_SVG_FORMAT in out_formats:
+                interactive_context = _build_interactive_svg_context(
+                    [gb_record],
+                    selected_features_set,
+                    feature_table=feature_table,
+                    color_table=color_table,
+                    default_colors=default_colors,
+                )
                 save_figure(
                     canvas,
                     out_formats,
-                    interactive_context=_build_interactive_svg_context(
-                        [gb_record],
-                        selected_features_set,
-                        feature_table=feature_table,
-                        color_table=color_table,
-                        default_colors=default_colors,
-                    ),
+                    interactive_context=interactive_context,
                 )
+                session_feature_metadata.extend(interactive_context.features)
             else:
                 save_figure(canvas, out_formats)
             outputs.append(make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name))
@@ -1358,6 +1363,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         mode="circular",
         render_formats=tuple(out_formats),
         outputs=tuple(outputs),
+        feature_metadata=tuple(session_feature_metadata),
     )
 
 if __name__ == "__main__":
