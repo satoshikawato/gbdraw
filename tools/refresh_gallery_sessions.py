@@ -2,19 +2,22 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from gbdraw.session_io import load_session, session_mode  # noqa: E402
+from gbdraw.session_io import load_session, session_mode, write_session_json  # noqa: E402
 
 
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
@@ -38,11 +41,74 @@ def _session_path(name_or_id: str) -> Path:
     return SESSION_ROOT / name
 
 
+def _session_cli_invocation(session: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    cli = session.get("cliInvocation")
+    if isinstance(cli, Mapping) and isinstance(cli.get("args"), list):
+        return cli
+    config = session.get("config")
+    if isinstance(config, Mapping):
+        cli = config.get("cliInvocation")
+        if isinstance(cli, Mapping) and isinstance(cli.get("args"), list):
+            return cli
+    return None
+
+
+def _with_interactive_svg_format(args: list[Any]) -> list[str]:
+    updated: list[str] = []
+    index = 0
+    found_format = False
+    while index < len(args):
+        token = str(args[index])
+        if token in {"-f", "--format"}:
+            updated.append(token)
+            updated.append("interactive_svg")
+            index += 2 if index + 1 < len(args) else 1
+            found_format = True
+            continue
+        if token.startswith("--format="):
+            updated.append("--format=interactive_svg")
+            index += 1
+            found_format = True
+            continue
+        updated.append(token)
+        index += 1
+    if not found_format:
+        updated.extend(["-f", "interactive_svg"])
+    return updated
+
+
+def _preserve_gallery_cli_invocation(
+    source_session: Mapping[str, Any],
+    refreshed_session: dict[str, Any],
+    *,
+    mode: str,
+) -> bool:
+    source_cli = _session_cli_invocation(source_session)
+    if source_cli is None:
+        return False
+
+    preserved_cli = copy.deepcopy(dict(source_cli))
+    preserved_cli["schema"] = 1
+    preserved_cli["mode"] = mode
+    preserved_cli["args"] = _with_interactive_svg_format(list(source_cli["args"]))
+    preserved_cli["renderFormats"] = ["interactive-svg"]
+    preserved_cli.setdefault("fileBindings", [])
+    preserved_cli.setdefault("generatedBy", "gbdraw")
+    refreshed_session["cliInvocation"] = preserved_cli
+    return True
+
+
 def _refresh_one_session(session_path: Path) -> None:
     session = load_session(session_path)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
         raise RuntimeError(f"Could not determine gallery session mode: {session_path}")
+    if _session_cli_invocation(session) is None:
+        print(
+            "Skipping gallery session without cliInvocation; "
+            f"leaving existing output unchanged: {session_path.relative_to(REPO_ROOT)}"
+        )
+        return
 
     env = os.environ.copy()
     env["PYTHONPATH"] = (
@@ -70,6 +136,13 @@ def _refresh_one_session(session_path: Path) -> None:
             env=env,
             check=True,
         )
+        refreshed_payload = load_session(refreshed_session)
+        _preserve_gallery_cli_invocation(
+            session,
+            refreshed_payload,
+            mode=mode,
+        )
+        write_session_json(refreshed_session, refreshed_payload)
         load_session(refreshed_session)
         shutil.move(str(refreshed_session), session_path)
 

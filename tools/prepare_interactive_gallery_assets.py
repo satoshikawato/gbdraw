@@ -33,7 +33,6 @@ class GallerySessionExample:
     description: str = ""
     interactive_step: str = ""
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
-    generate_output_from_session: bool = False
     command: str = ""
 
     @property
@@ -158,21 +157,18 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         id="BGC0000708-BGC0000713",
         title="Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         tags=("Linear", "LOSAT", "Orthogroup"),
-        generate_output_from_session=True,
         command=BGC_COMMAND,
     ),
     GallerySessionExample(
         id="HmmtDNA_ATskew",
         title="<i>Homo sapiens</i> mitochondrion (AT skew)",
         tags=("Circular", "Mitochondrion"),
-        generate_output_from_session=True,
         command=HMMTDNA_ATSKEW_COMMAND,
     ),
     GallerySessionExample(
         id="WSSV_genome_comparison",
         title="White spot syndrome virus genome comparison",
         tags=("Circular", "Conservation", "LOSAT"),
-        generate_output_from_session=True,
         command=WSSV_COMMAND,
     ),
 )
@@ -315,9 +311,7 @@ def _write_source_svg(example: GallerySessionExample, session: dict[str, Any]) -
     example.source_svg_path.write_text(_session_result_svg(session, example), encoding="utf-8")
 
 
-def _write_gallery_svg_if_missing(example: GallerySessionExample, session: dict[str, Any]) -> None:
-    if example.gallery_svg_path.exists() and not example.generate_output_from_session:
-        return
+def _write_gallery_svg(example: GallerySessionExample, session: dict[str, Any]) -> None:
     source = _session_result_svg(session, example)
     enriched = enrich_svg(source, context=_session_interactive_context(session))
     example.gallery_svg_path.write_text(enriched, encoding="utf-8")
@@ -391,7 +385,7 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
     for example in EXAMPLES:
         session = _load_session(example)
         _write_source_svg(example, session)
-        _write_gallery_svg_if_missing(example, session)
+        _write_gallery_svg(example, session)
         _validate_source_assets(example)
         _render_thumbnail(example)
 
