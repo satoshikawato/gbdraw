@@ -769,6 +769,69 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
+def test_web_session_feature_metadata_recovery_source_contract() -> None:
+    extraction_path = WEB_ROOT / "js" / "app" / "feature-metadata-extraction.js"
+    recovery_path = WEB_ROOT / "js" / "app" / "session-feature-metadata.js"
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    extraction_js = extraction_path.read_text(encoding="utf-8")
+    recovery_js = recovery_path.read_text(encoding="utf-8")
+
+    assert extraction_path.exists()
+    assert "export const extractFeatureMetadataForPreview" in extraction_js
+    assert "export const makeLinearRenderedFeatureId" in extraction_js
+    assert "export const buildLinearRegionExtractionContext" in extraction_js
+    assert "import { extractFeatureMetadataForPreview } from './feature-metadata-extraction.js';" in run_analysis_js
+    assert "extractFeatureMetadataForPreview({" in run_analysis_js
+    assert "const makeLinearRenderedFeatureId" not in run_analysis_js
+
+    assert recovery_path.exists()
+    assert "export const classifyFeatureMetadataState" in recovery_js
+    assert "export const collectRenderedFeatureIdsFromSvg" in recovery_js
+    assert "export const buildSessionFeatureRecoveryPlan" in recovery_js
+    assert "export const buildFeatureOverrideMigration" in recovery_js
+    assert "buildSessionFeatureRecoveryPlan" in config_js
+    assert "classifyFeatureMetadataState" in config_js
+
+    import_session_source = config_js.split("export const importSession", 1)[1]
+    recovery_call = import_session_source.index("await recoverSessionFeatureMetadataIfNeeded")
+    assert import_session_source.index("applyOrthogroupStateData(") < recovery_call
+    assert import_session_source.index("applyEditorStateData(data.editorState);") < recovery_call
+
+    export_session_source = config_js.split("export const exportSession", 1)[1]
+    assert export_session_source.index("await guardSessionFeatureMetadataForExport();") < export_session_source.index("const sessionData = {")
+
+    assert "const READY_SMALL_RENDERED_COUNT = 20;" in recovery_js
+    assert "const READY_MATCH_RATIO = 0.98;" in recovery_js
+    assert "const READY_MAX_MISSING_COUNT = 20;" in recovery_js
+    assert "mode === 'circular' && cInputType === 'gb'" in recovery_js
+    assert "mode === 'linear' && lInputType === 'gb'" in recovery_js
+    assert "featureVisibilityTsv" in recovery_js
+    assert "nextFeatureState.featureColorOverrides = rewriteOverrideMap(" in recovery_js
+    assert "featureIdMaps" in recovery_js
+    assert "nextFeatureState.featureVisibilityOverrides = rewriteOverrideMap(" in recovery_js
+    assert "svgIdMaps" in recovery_js
+    assert "nextEditorState.featureStrokes.overrides = rewriteOverrideMap(" in recovery_js
+
+
+def test_web_session_feature_metadata_recovery_fixture_needs_recovery() -> None:
+    session_path = GALLERY_ROOT / "sessions" / "hepatoplasmataceae_orthogroup.gbdraw-session.json"
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+
+    assert session.get("features", {}).get("extractedFeatures", []) == []
+
+    svg_text = "\n".join(result.get("content", "") for result in session.get("results", []))
+    rendered_feature_ids = {
+        re.sub(r"__part\d+$", "", match)
+        for match in re.findall(r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']", svg_text)
+    }
+    pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
+    collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
+
+    assert rendered_feature_ids
+    assert pairwise_ids or collinearity_ids
+
+
 def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:
