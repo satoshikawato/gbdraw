@@ -47,7 +47,7 @@ The hosted web app runs entirely in your browser:
 
 [https://gbdraw.app/](https://gbdraw.app/)
 
-Uploaded genomic data stays on your machine. The hosted site also uses Cloudflare Web Analytics for aggregate page and performance metrics.
+Uploaded genomic data stays on your machine. The hosted site uses Google Analytics 4 for aggregate page-usage metrics; gbdraw does not send uploaded genome files or generated diagrams to Google Analytics.
 
 ## Local Installation
 

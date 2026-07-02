@@ -1661,11 +1661,13 @@ def test_layout_reposition_mode_gates_preview_dragging() -> None:
     assert "isLayoutRepositionModeEnabled() && target.closest('svg')" in ui_source
 
 
-def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
+def test_local_index_keeps_google_analytics_as_deploy_only() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert "googletagmanager.com/gtag/js" not in index_html
     assert "static.cloudflareinsights.com" not in index_html
-    assert "CLOUDFLARE_WEB_ANALYTICS_SCRIPT" in index_html
-    assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" in index_html
+    assert "cloudflareinsights.com" not in index_html
+    assert "GOOGLE_ANALYTICS_SCRIPT" in index_html
+    assert "GOOGLE_ANALYTICS_NOTICE" in index_html
     assert "GBDRAW_HOSTED_BUILD_LABEL" in index_html
 
 
@@ -1749,7 +1751,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     ]
 
 
-def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) -> None:
+def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path: Path) -> None:
     from gbdraw._build_support import read_project_version
 
     ensure_prepared_browser_wheel()
@@ -1763,14 +1765,24 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     )
 
     index_html = (bundle_path / "index.html").read_text(encoding="utf-8")
-    assert "https://static.cloudflareinsights.com/beacon.min.js" in index_html
-    assert 'data-cf-beacon=\'{"token": "e4dc2e66d09549868f5a5ac7d7a6e633"}\'' in index_html
+    assert "https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y" in index_html
+    assert "gtag('config', 'G-GG6JMKM02Y');" in index_html
+    assert "static.cloudflareinsights.com" not in index_html
+    assert "cloudflareinsights.com" not in index_html
     assert "Hosted Site Analytics" in index_html
-    assert "Uploaded genome files are still processed locally in your browser" in index_html
-    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com;" in index_html
-    assert "connect-src 'self' https://cloudflareinsights.com;" in index_html
-    assert "CLOUDFLARE_WEB_ANALYTICS_SCRIPT" not in index_html
-    assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" not in index_html
+    assert "uses Google Analytics 4 for aggregate page-usage metrics" in index_html
+    assert "Uploaded genome files and generated diagrams are still processed locally in your browser" in index_html
+    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com;" in index_html
+    assert (
+        "img-src 'self' data: blob: https://*.google-analytics.com "
+        "https://*.googletagmanager.com;"
+    ) in index_html
+    assert (
+        "connect-src 'self' https://*.google-analytics.com "
+        "https://*.analytics.google.com https://*.googletagmanager.com;"
+    ) in index_html
+    assert "GOOGLE_ANALYTICS_SCRIPT" not in index_html
+    assert "GOOGLE_ANALYTICS_NOTICE" not in index_html
     assert "GBDRAW_HOSTED_BUILD_LABEL" not in index_html
     assert f"Version: v{read_project_version()}+abcdef1" in index_html
     assert 'title="Commit abcdef1234567890"' in index_html
@@ -1832,7 +1844,7 @@ def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
         "build_cloudflare_pages_bundle",
         lambda *,
         output_root=cloudflare_module.DEFAULT_OUTPUT_ROOT,
-        analytics_token=cloudflare_module.DEFAULT_ANALYTICS_TOKEN,
+        google_analytics_measurement_id=cloudflare_module.DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID,
         gallery_remote_base=None: calls.append(("bundle", output_root)) or output_root,
     )
 
@@ -1892,7 +1904,7 @@ def test_cloudflare_prepare_refreshes_open_source_notices_before_copy(
         "build_cloudflare_pages_bundle",
         lambda *,
         output_root=cloudflare_module.DEFAULT_OUTPUT_ROOT,
-        analytics_token=cloudflare_module.DEFAULT_ANALYTICS_TOKEN,
+        google_analytics_measurement_id=cloudflare_module.DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID,
         gallery_remote_base=None: calls.append("copy") or output_root,
     )
 
