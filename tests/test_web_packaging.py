@@ -1689,6 +1689,66 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     assert (bundle_path / "gallery" / "examples" / "majanivirus_orthogroup.svg").exists()
 
 
+def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    calls: list[tuple[str, object]] = []
+    output_root = tmp_path / "cloudflare-pages"
+
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_prepare_browser_wheel_module",
+        lambda: SimpleNamespace(
+            prepare_browser_wheel=lambda refresh_cache_bust=False: calls.append(
+                ("wheel", refresh_cache_bust)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_refresh_gallery_sessions_module",
+        lambda: pytest.fail("Gallery refresh should be opt-in for Cloudflare Pages."),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
+        "build_cloudflare_pages_bundle",
+        lambda *,
+        output_root=cloudflare_module.DEFAULT_OUTPUT_ROOT,
+        analytics_token=cloudflare_module.DEFAULT_ANALYTICS_TOKEN,
+        gallery_remote_base=None: output_root,
+    )
+
+    assert cloudflare_module.prepare_cloudflare_pages(output_root=output_root) == output_root
+    assert calls == [("wheel", False)]
+
+    calls.clear()
+    gallery_module = SimpleNamespace(
+        refresh_gallery_sessions=lambda: calls.append(("gallery", "sessions")),
+        prepare_gallery_assets=lambda: calls.append(("gallery", "assets")),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_refresh_gallery_sessions_module",
+        lambda: gallery_module,
+    )
+
+    assert (
+        cloudflare_module.prepare_cloudflare_pages(
+            refresh_cache_bust=True,
+            refresh_gallery_sessions=True,
+            output_root=output_root,
+        )
+        == output_root
+    )
+    assert calls == [
+        ("gallery", "sessions"),
+        ("gallery", "assets"),
+        ("wheel", True),
+    ]
+
+
 def test_wrangler_uses_cloudflare_bundle_directory() -> None:
     wrangler_toml = (REPO_ROOT / "wrangler.toml").read_text(encoding="utf-8")
     assert 'main = "./gbdraw/web/cloudflare-worker.js"' in wrangler_toml
@@ -3192,6 +3252,9 @@ def test_hosted_web_build_refreshes_gallery_sessions_before_copy() -> None:
     refresh_index = deploy_yml.index("python tools/refresh_gallery_sessions.py")
     copy_index = deploy_yml.index("cp -r gbdraw/web/* public/")
     assert refresh_index < copy_index
+    assert "refresh_gallery_sessions: bool = False" in cloudflare_source
+    assert '"--refresh-gallery"' in cloudflare_source
+    assert "refresh_gallery_sessions=args.refresh_gallery" in cloudflare_source
     assert "refresh_gallery_sessions_module.refresh_gallery_sessions()" in cloudflare_source
     assert "refresh_gallery_sessions_module.prepare_gallery_assets()" in cloudflare_source
 

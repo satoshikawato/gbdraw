@@ -147,7 +147,7 @@ def build_cloudflare_pages_bundle(
 def prepare_cloudflare_pages(
     *,
     refresh_cache_bust: bool = False,
-    refresh_gallery_sessions: bool = True,
+    refresh_gallery_sessions: bool = False,
     analytics_token: str | None = None,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
 ) -> Path:
@@ -181,14 +181,17 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
-        "--skip-gallery-refresh",
+        "--refresh-gallery",
         action="store_true",
-        help="Skip refreshing web gallery session JSON/SVG assets before copying the web bundle.",
+        help=(
+            "Refresh web gallery session JSON/SVG assets before copying the web bundle. "
+            "This requires the optional gallery asset dependencies."
+        ),
     )
     args = parser.parse_args(argv)
     output_root = prepare_cloudflare_pages(
         refresh_cache_bust=args.refresh_cache_bust,
-        refresh_gallery_sessions=not args.skip_gallery_refresh,
+        refresh_gallery_sessions=args.refresh_gallery,
         analytics_token=args.analytics_token,
     )
     print(f"Prepared Cloudflare Pages bundle: {output_root.relative_to(REPO_ROOT)}")
