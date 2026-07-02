@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import functools
 import html
 import importlib.util
 import json
@@ -8,12 +10,16 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 import zipfile
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+
+from gbdraw.session_io import CURRENT_SESSION_VERSION
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +46,21 @@ BROWSER_WHEEL_FORBIDDEN_FILES = {
 BROWSER_WHEEL_REQUIRED_RUNTIME_DATA = {
     "gbdraw/data/color_palettes.toml",
     "gbdraw/data/config.toml",
+}
+GALLERY_SESSION_FILES = [
+    "BGC0000708-BGC0000713.gbdraw-session.json",
+    "HmmtDNA_ATskew.gbdraw-session.json",
+    "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
+    "WSSV_genome_comparison.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json",
+    "majanivirus_orthogroup.gbdraw-session.json",
+]
+GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
+    "BGC0000708-BGC0000713.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json",
+    "majanivirus_orthogroup.gbdraw-session.json",
 }
 
 
@@ -70,6 +91,39 @@ def _can_bind_loopback() -> bool:
     except OSError:
         return False
     return True
+
+
+class _WebTestRequestHandler(SimpleHTTPRequestHandler):
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        ".css": "text/css; charset=utf-8",
+        ".data": "application/octet-stream",
+        ".html": "text/html; charset=utf-8",
+        ".js": "text/javascript; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".mjs": "text/javascript; charset=utf-8",
+        ".svg": "image/svg+xml",
+        ".wasm": "application/wasm",
+        ".whl": "application/octet-stream",
+    }
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        return
+
+
+@contextlib.contextmanager
+def _serve_repo_root():
+    handler = functools.partial(_WebTestRequestHandler, directory=str(REPO_ROOT))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        yield f"http://{host}:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def _run_prepare_browser_wheel(*args: str) -> None:
@@ -276,6 +330,22 @@ def test_web_feature_selector_helpers() -> None:
     subprocess.run([node, "tests/web/feature-selector.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_preview_runtime_helpers() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/preview-runtime.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
+def test_web_session_feature_metadata_helpers() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/session-feature-metadata.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
@@ -293,7 +363,7 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     assert "{svg_id: 'on' | 'off' | 'exclude_matching'}" in state_js
     assert "/web_feature_visibility_table.tsv" in run_analysis_js
     assert "args.push('--feature_visibility_table', featureVisibilityTablePath);" in run_analysis_js
-    assert "serializeFeatureVisibilityRules(featureVisibilityRules)" in run_analysis_js
+    assert "serializeFeatureVisibilityRules(featureVisibilityRules?.value || [])" in run_analysis_js
     assert "featureVisibility: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTsv: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTablePath || null" in worker_js
@@ -641,7 +711,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
 
         svg_source = svg_path.read_text(encoding="utf-8")
         with session_path.open(encoding="utf-8") as session_handle:
-            session_prefix = session_handle.read(128)
+            session_prefix = session_handle.read(256)
         thumbnail_header = thumbnail_path.read_bytes()[:16]
 
         assert svg_path.stat().st_size > 1024
@@ -649,6 +719,9 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert source_figure_path.stat().st_size > 1024
         assert thumbnail_path.stat().st_size > 1024
         assert '"format":"gbdraw-session"' in session_prefix
+        version_match = re.search(r'"version":(\d+)', session_prefix)
+        assert version_match is not None
+        assert int(version_match.group(1)) == CURRENT_SESSION_VERSION
         assert 'data-gbdraw-interactive-svg="true"' in svg_source
         assert "gbdraw-interactive-feature-metadata" in svg_source
         assert "gbdraw-interactive-feature-script" in svg_source
@@ -759,6 +832,81 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert '"gene_id": _first_qualifier_value(feat.qualifiers, "gene_id")' in feature_metadata_source
     assert '"old_locus_tag": _first_qualifier_value(feat.qualifiers, "old_locus_tag")' in feature_metadata_source
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
+
+
+def test_web_session_feature_metadata_recovery_source_contract() -> None:
+    extraction_path = WEB_ROOT / "js" / "app" / "feature-metadata-extraction.js"
+    recovery_path = WEB_ROOT / "js" / "app" / "session-feature-metadata.js"
+    run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    extraction_js = extraction_path.read_text(encoding="utf-8")
+    recovery_js = recovery_path.read_text(encoding="utf-8")
+
+    assert extraction_path.exists()
+    assert "export const extractFeatureMetadataForPreview" in extraction_js
+    assert "export const makeLinearRenderedFeatureId" in extraction_js
+    assert "export const buildLinearRegionExtractionContext" in extraction_js
+    assert "import { extractFeatureMetadataForPreview } from './feature-metadata-extraction.js';" in run_analysis_js
+    assert "extractFeatureMetadataForPreview({" in run_analysis_js
+    assert "const makeLinearRenderedFeatureId" not in run_analysis_js
+
+    assert recovery_path.exists()
+    assert "export const classifyFeatureMetadataState" in recovery_js
+    assert "export const collectRenderedFeatureIdentitiesFromSvg" in recovery_js
+    assert "export const collectRenderedFeatureIdsFromSvg" in recovery_js
+    assert "export const alignRecoveredFeatureIdsToRenderedSvg" in recovery_js
+    assert "export const buildSessionFeatureRecoveryPlan" in recovery_js
+    assert "export const buildFeatureOverrideMigration" in recovery_js
+    assert "export const migrateFeatureOverrideState" in recovery_js
+    assert "buildSessionFeatureRecoveryPlan" in config_js
+    assert "classifyFeatureMetadataState" in config_js
+
+    import_session_source = config_js.split("export const importSession", 1)[1]
+    recovery_call = import_session_source.index("await recoverSessionFeatureMetadataIfNeeded")
+    assert import_session_source.index("applyOrthogroupStateData(") < recovery_call
+    assert import_session_source.index("applyEditorStateData(data.editorState);") < recovery_call
+
+    export_session_source = config_js.split("export const exportSession", 1)[1]
+    assert export_session_source.index("await guardSessionFeatureMetadataForExport();") < export_session_source.index("const sessionData = {")
+
+    assert "READY_MATCH_RATIO" not in recovery_js
+    assert "exactMatchingCount" in recovery_js
+    assert "aliasMatchingCount" in recovery_js
+    assert "missingExactCount" in recovery_js
+    assert "featureStableCandidate" in recovery_js
+    assert "stableRecordKey" in recovery_js
+    assert "data-gbdraw-stable-feature-id" in recovery_js
+    assert "data-gbdraw-record-index" in recovery_js
+    assert "data-gbdraw-record-id" in recovery_js
+    assert "mode === 'circular' && cInputType === 'gb'" in recovery_js
+    assert "mode === 'linear' && lInputType === 'gb'" in recovery_js
+    assert "featureVisibilityTsv" in recovery_js
+    assert "nextFeatureState.featureColorOverrides = rewriteOverrideMap(" in recovery_js
+    assert "featureIdMaps" in recovery_js
+    assert "nextFeatureState.featureVisibilityOverrides = rewriteOverrideMap(" in recovery_js
+    assert "svgIdMaps" in recovery_js
+    assert "nextEditorState.featureStrokes.overrides = rewriteOverrideMap(" in recovery_js
+
+
+def test_gallery_sessions_ship_current_feature_metadata() -> None:
+    for session_name in GALLERY_SESSION_FILES:
+        session_path = GALLERY_ROOT / "sessions" / session_name
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+        features = session.get("features", {}).get("extractedFeatures", [])
+        svg_text = "\n".join(result.get("content", "") for result in session.get("results", []))
+        rendered_feature_ids = {
+            re.sub(r"__part\d+$", "", match)
+            for match in re.findall(r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']", svg_text)
+        }
+        feature_ids = {str(feature.get("svg_id") or "") for feature in features}
+        pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
+        collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
+
+        assert features, session_name
+        assert rendered_feature_ids, session_name
+        assert rendered_feature_ids <= feature_ids, session_name
+        if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
+            assert pairwise_ids or collinearity_ids, session_name
 
 
 def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path) -> None:
@@ -1539,6 +1687,66 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
         bundle_path / "gallery" / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json"
     ).exists()
     assert (bundle_path / "gallery" / "examples" / "majanivirus_orthogroup.svg").exists()
+
+
+def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    calls: list[tuple[str, object]] = []
+    output_root = tmp_path / "cloudflare-pages"
+
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_prepare_browser_wheel_module",
+        lambda: SimpleNamespace(
+            prepare_browser_wheel=lambda refresh_cache_bust=False: calls.append(
+                ("wheel", refresh_cache_bust)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_refresh_gallery_sessions_module",
+        lambda: pytest.fail("Gallery refresh should be opt-in for Cloudflare Pages."),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
+        "build_cloudflare_pages_bundle",
+        lambda *,
+        output_root=cloudflare_module.DEFAULT_OUTPUT_ROOT,
+        analytics_token=cloudflare_module.DEFAULT_ANALYTICS_TOKEN,
+        gallery_remote_base=None: output_root,
+    )
+
+    assert cloudflare_module.prepare_cloudflare_pages(output_root=output_root) == output_root
+    assert calls == [("wheel", False)]
+
+    calls.clear()
+    gallery_module = SimpleNamespace(
+        refresh_gallery_sessions=lambda: calls.append(("gallery", "sessions")),
+        prepare_gallery_assets=lambda: calls.append(("gallery", "assets")),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_refresh_gallery_sessions_module",
+        lambda: gallery_module,
+    )
+
+    assert (
+        cloudflare_module.prepare_cloudflare_pages(
+            refresh_cache_bust=True,
+            refresh_gallery_sessions=True,
+            output_root=output_root,
+        )
+        == output_root
+    )
+    assert calls == [
+        ("gallery", "sessions"),
+        ("gallery", "assets"),
+        ("wheel", True),
+    ]
 
 
 def test_wrangler_uses_cloudflare_bundle_directory() -> None:
@@ -3036,6 +3244,21 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 
+def test_hosted_web_build_refreshes_gallery_sessions_before_copy() -> None:
+    deploy_yml = (REPO_ROOT / ".github" / "workflows" / "deploy_web.yml").read_text(encoding="utf-8")
+    cloudflare_source = (REPO_ROOT / "tools" / "prepare_cloudflare_pages.py").read_text(encoding="utf-8")
+
+    assert 'python -m pip install -e ".[dev]"' in deploy_yml
+    refresh_index = deploy_yml.index("python tools/refresh_gallery_sessions.py")
+    copy_index = deploy_yml.index("cp -r gbdraw/web/* public/")
+    assert refresh_index < copy_index
+    assert "refresh_gallery_sessions: bool = False" in cloudflare_source
+    assert '"--refresh-gallery"' in cloudflare_source
+    assert "refresh_gallery_sessions=args.refresh_gallery" in cloudflare_source
+    assert "refresh_gallery_sessions_module.refresh_gallery_sessions()" in cloudflare_source
+    assert "refresh_gallery_sessions_module.prepare_gallery_assets()" in cloudflare_source
+
+
 def test_conda_recipe_does_not_copy_entire_web_tree() -> None:
     build_sh = (REPO_ROOT / "recipe" / "build.sh").read_text(encoding="utf-8")
 
@@ -3120,6 +3343,182 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         gallery_members = sorted(name for name in outer_names if name.startswith("gbdraw/web/gallery/"))
         assert browser_wheels == [browser_wheel_member]
         assert gallery_members == []
+
+
+@pytest.mark.slow
+def test_gallery_session_restore_smoke() -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    ensure_prepared_browser_wheel()
+    bad_console_terms = (
+        "Definition update error",
+        "float() argument",
+        "JsNull",
+        "JsUndefined",
+    )
+
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        console_errors: list[str] = []
+
+        page.on(
+            "console",
+            lambda message: console_errors.append(message.text) if message.type == "error" else None,
+        )
+        page.on("pageerror", lambda error: console_errors.append(str(error)))
+
+        for session_name in GALLERY_SESSION_FILES:
+            page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+            page.wait_for_function("() => window.__GBDRAW_APP__")
+            page.evaluate(
+                """() => {
+                    window.__gbdrawDialogMessages = [];
+                    window.alert = (message) => {
+                        window.__gbdrawDialogMessages.push(String(message || ''));
+                    };
+                }"""
+            )
+            page.locator('input[accept=".json"]').first.set_input_files(
+                str(GALLERY_ROOT / "sessions" / session_name)
+            )
+            page.wait_for_function(
+                "() => Array.isArray(window.__gbdrawDialogMessages) && window.__gbdrawDialogMessages.length > 0",
+                timeout=180_000,
+            )
+            dialog_message = page.evaluate("() => window.__gbdrawDialogMessages.at(-1)")
+            page.wait_for_function(
+                """() => {
+                    const app = window.__GBDRAW_APP__;
+                    return Array.isArray(app?.results) &&
+                        app.results.length > 0 &&
+                        !app.featureExtractionPending;
+                }""",
+                timeout=180_000,
+            )
+
+            assert dialog_message == "Session loaded successfully!"
+            summary = page.evaluate(
+                """() => {
+                    const app = window.__GBDRAW_APP__;
+                    const index = Number.isInteger(app.selectedResultIndex) ? app.selectedResultIndex : 0;
+                    const selected = app.results?.[index] || app.results?.[0] || {};
+                    return {
+                        resultCount: Array.isArray(app.results) ? app.results.length : 0,
+                        hasSvg: String(selected.content || '').includes('<svg'),
+                        status: app.featureEditorStatus?.status || '',
+                        featureExtractionError: app.featureExtractionError || null,
+                        extractedCount: Array.isArray(app.extractedFeatures) ? app.extractedFeatures.length : 0
+                    };
+                }"""
+            )
+            assert summary["resultCount"] > 0, session_name
+            assert summary["hasSvg"], session_name
+            assert summary["status"] == "summary-ready", session_name
+            assert summary["featureExtractionError"] in (None, ""), session_name
+            assert summary["extractedCount"] > 0, session_name
+
+            if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
+                target = page.evaluate(
+                    """async () => {
+                        const app = window.__GBDRAW_APP__;
+                        const svg = document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement ||
+                            document.querySelector('svg');
+                        const featuresBySvgId = new Map(
+                            (Array.isArray(app.extractedFeatures) ? app.extractedFeatures : [])
+                                .map((feature) => [String(feature?.svg_id || '').trim(), feature])
+                                .filter(([id]) => id)
+                        );
+                        const candidates = Array.from(svg?.querySelectorAll('[data-gbdraw-feature-id]') || [])
+                            .filter((candidate) => {
+                                const id = String(candidate.getAttribute('data-gbdraw-feature-id') || candidate.id || '')
+                                    .replace(/__part\\d+$/, '');
+                                return featuresBySvgId.has(id);
+                            });
+                        const element = candidates.find((candidate) => {
+                            const rect = candidate.getBoundingClientRect();
+                            return rect.width > 0 && rect.height > 0;
+                        }) || candidates[0];
+                        if (!element) return null;
+                        element.scrollIntoView({ block: 'center', inline: 'center' });
+                        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                        const rect = element.getBoundingClientRect();
+                        return {
+                            id: String(element.getAttribute('data-gbdraw-feature-id') || element.id || '')
+                                .replace(/__part\\d+$/, ''),
+                            x: rect.left + rect.width / 2,
+                            y: rect.top + rect.height / 2
+                        };
+                    }"""
+                )
+                assert target is not None, session_name
+                page.evaluate(
+                    """(featureId) => {
+                        const svg = document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement ||
+                            document.querySelector('svg');
+                        const element = Array.from(svg?.querySelectorAll('[data-gbdraw-feature-id]') || [])
+                            .find((candidate) => {
+                                const id = String(candidate.getAttribute('data-gbdraw-feature-id') || candidate.id || '')
+                                    .replace(/__part\\d+$/, '');
+                                return id === featureId;
+                            });
+                        if (!element) return;
+                        const rect = element.getBoundingClientRect();
+                        element.dispatchEvent(new MouseEvent('click', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            clientX: rect.left + rect.width / 2,
+                            clientY: rect.top + rect.height / 2
+                        }));
+                    }""",
+                    target["id"],
+                )
+                try:
+                    page.wait_for_function(
+                        """(featureId) => {
+                            const clicked = window.__GBDRAW_APP__?.clickedFeature;
+                            return clicked?.svg_id === featureId || Boolean(document.querySelector('.feature-popup'));
+                        }""",
+                        arg=target["id"],
+                        timeout=20_000,
+                    )
+                except Exception as error:
+                    debug = page.evaluate(
+                        """(featureId) => {
+                            const app = window.__GBDRAW_APP__;
+                            return {
+                                featureId,
+                                clickedFeature: app?.clickedFeature?.svg_id || '',
+                                popupVisible: Boolean(document.querySelector('.feature-popup')),
+                                status: app?.featureEditorStatus?.status || '',
+                                extractedCount: Array.isArray(app?.extractedFeatures) ? app.extractedFeatures.length : 0,
+                                hasFeature: (Array.isArray(app?.extractedFeatures) ? app.extractedFeatures : [])
+                                    .some((feature) => String(feature?.svg_id || '').trim() === featureId)
+                            };
+                        }""",
+                        target["id"],
+                    )
+                    raise AssertionError(f"{session_name} feature click did not resolve: {debug}") from error
+                clicked = page.evaluate(
+                    "() => window.__GBDRAW_APP__?.clickedFeature ? { svg_id: window.__GBDRAW_APP__.clickedFeature.svg_id } : null"
+                )
+                assert clicked is not None, session_name
+                assert clicked["svg_id"] == target["id"], session_name
+
+            matching_console_errors = [
+                message
+                for message in console_errors
+                if any(term in message for term in bad_console_terms)
+            ]
+            assert matching_console_errors == [], session_name
+
+        browser.close()
 
 
 @pytest.mark.slow

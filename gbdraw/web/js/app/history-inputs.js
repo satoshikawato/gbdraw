@@ -14,9 +14,9 @@ const TEXT_INPUT_TYPES = new Set([
   'week'
 ]);
 
-const isIgnoredTarget = (target) =>
+export const isIgnoredTarget = (target) =>
   Boolean(
-    target?.closest?.('[data-history-ignore], [data-history-scope="transient"]')
+    target?.closest?.('[data-history-ignore], [data-history-managed], [data-history-scope="transient"]')
   );
 
 const isEditableControl = (element) => {

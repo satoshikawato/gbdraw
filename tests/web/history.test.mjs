@@ -11,7 +11,7 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await mkdir(join(tempDir, 'app'), { recursive: true });
-for (const filename of ['history.js', 'history-files.js', 'history-snapshot.js']) {
+for (const filename of ['history.js', 'history-files.js', 'history-snapshot.js', 'svg-serialization.js']) {
   await writeFile(
     join(tempDir, 'services', filename),
     await readFile(join(sourceDir, filename), 'utf8'),
@@ -176,6 +176,131 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
 }
 
 {
+  let value = 0;
+  let snapshotBuildCount = 0;
+  let snapshotApplyCount = 0;
+  const history = createHistoryManager({
+    buildSnapshot: async () => {
+      snapshotBuildCount += 1;
+      return { value };
+    },
+    applySnapshot: async (snapshot) => {
+      snapshotApplyCount += 1;
+      value = snapshot.value;
+    }
+  });
+
+  await history.captureBaseline('initial');
+  await history.runUndoable('Snapshot set one', () => {
+    value = 1;
+  });
+  const buildsAfterSnapshot = snapshotBuildCount;
+
+  await history.runUndoableCommand('Command set two', () => ({
+    apply: () => {
+      value = 2;
+    },
+    revert: () => {
+      value = 1;
+    },
+    estimateBytes: () => 8
+  }));
+
+  assert.equal(value, 2);
+  assert.equal(history.getUndoCount(), 2);
+  assert.equal(history.undoLabel(), 'Command set two');
+  assert.equal(snapshotBuildCount, buildsAfterSnapshot);
+
+  await history.undo();
+  assert.equal(value, 1);
+  assert.equal(snapshotApplyCount, 0);
+  assert.equal(history.undoLabel(), 'Snapshot set one');
+
+  await history.undo();
+  assert.equal(value, 0);
+  assert.equal(snapshotApplyCount, 1);
+
+  await history.redo();
+  assert.equal(value, 1);
+  await history.redo();
+  assert.equal(value, 2);
+  assert.equal(snapshotApplyCount, 2);
+}
+
+{
+  let value = 0;
+  let allowApply = true;
+  let allowRevert = true;
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (message) => warnings.push(String(message));
+  const history = createHistoryManager({
+    buildSnapshot: async () => ({ value }),
+    applySnapshot: async (snapshot) => {
+      value = snapshot.value;
+    }
+  });
+
+  try {
+    await history.captureBaseline('initial');
+    assert.equal(
+      await history.runUndoableCommand('Rejected command', () => ({
+        apply: () => false,
+        revert: () => true
+      })),
+      false
+    );
+    assert.equal(history.getUndoCount(), 0);
+
+    assert.equal(
+      await history.runUndoableCommand('Conditional command', () => ({
+        apply: () => {
+          if (!allowApply) return false;
+          value = 1;
+          return true;
+        },
+        revert: () => {
+          if (!allowRevert) return false;
+          value = 0;
+          return true;
+        }
+      })),
+      true
+    );
+    assert.equal(history.getUndoCount(), 1);
+    assert.equal(history.undoLabel(), 'Conditional command');
+
+    allowRevert = false;
+    assert.equal(await history.undo(), false);
+    assert.equal(value, 1);
+    assert.equal(history.getUndoCount(), 1);
+    assert.equal(history.getRedoCount(), 0);
+
+    allowRevert = true;
+    assert.equal(await history.undo(), true);
+    assert.equal(value, 0);
+    assert.equal(history.getUndoCount(), 0);
+    assert.equal(history.getRedoCount(), 1);
+    assert.equal(history.redoLabel(), 'Conditional command');
+
+    allowApply = false;
+    assert.equal(await history.redo(), false);
+    assert.equal(value, 0);
+    assert.equal(history.getUndoCount(), 0);
+    assert.equal(history.getRedoCount(), 1);
+
+    allowApply = true;
+    assert.equal(await history.redo(), true);
+    assert.equal(value, 1);
+    assert.equal(history.getUndoCount(), 1);
+    assert.equal(history.getRedoCount(), 0);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 3);
+}
+
+{
   const fileStore = createHistoryFileStore();
   const file = makeFile('restore.gb', 25);
   const state = {
@@ -206,8 +331,9 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
     featureRecordIds: ref([]),
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: { f1: { color: '#111111', caption: 'A' } },
-    featureVisibilityRules: [],
+    featureVisibilityManualRules: [],
     featureVisibilityOverrides: {},
+    featureVisibilitySelectorCache: {},
     featureStrokeOverrides: {},
     labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
@@ -249,7 +375,7 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
   assert.equal(state.files.c_gb.name, 'restore.gb');
   assert.equal(state.results.value[0].name, 'r1');
   assert.equal(state.featureColorOverrides.f1.color, '#111111');
-  assert.deepEqual(state.featureVisibilityRules, []);
+  assert.deepEqual(state.featureVisibilityManualRules, []);
   assert.equal(state.canvasPadding.top, 1);
 }
 
@@ -294,8 +420,9 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
     featureRecordIds: ref([]),
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: {},
-    featureVisibilityRules: [],
+    featureVisibilityManualRules: [],
     featureVisibilityOverrides: {},
+    featureVisibilitySelectorCache: {},
     featureStrokeOverrides: {},
     labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},

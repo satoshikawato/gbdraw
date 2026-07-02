@@ -22,6 +22,12 @@ const normalizeSource = (value) => {
 
 export const featureVisibilityQualifierSuggestions = COMMON_QUALIFIERS;
 
+export const normalizeVisibilityMode = (value) => {
+  const normalized = normalizeCell(value).toLowerCase();
+  if (normalized === 'suppress') return 'exclude_matching';
+  return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
+};
+
 export const normalizeFeatureVisibilityAction = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
   if (SHOW_ACTIONS.has(normalized)) return 'show';
@@ -193,6 +199,184 @@ const getFeatureId = (feat = {}) => normalizeCell(feat?.svg_id ?? feat?.svgId ??
 const getFeatureRecordId = (feat = {}) => normalizeCell(feat?.record_id ?? feat?.recordId ?? feat?.record) || '*';
 
 const getFeatureType = (feat = {}) => normalizeCell(feat?.type ?? feat?.featureType ?? feat?.feature_type) || '*';
+
+const getSelectorCacheEntry = (selectorCache, featureIdRaw) => {
+  const featureId = normalizeCell(featureIdRaw);
+  if (!featureId) return null;
+  if (selectorCache instanceof Map) return selectorCache.get(featureId) || null;
+  if (!selectorCache || typeof selectorCache !== 'object' || Array.isArray(selectorCache)) return null;
+  return selectorCache[featureId] || null;
+};
+
+const hasOverrideKey = (overrides, featureId) =>
+  Boolean(overrides && typeof overrides === 'object' && Object.prototype.hasOwnProperty.call(overrides, featureId));
+
+export const getFeatureVisibilityOverride = (overrides, featureIdRaw) => {
+  const featureId = normalizeCell(featureIdRaw);
+  if (!featureId || !hasOverrideKey(overrides, featureId)) return 'default';
+  return normalizeVisibilityMode(overrides[featureId]);
+};
+
+export const setFeatureVisibilityOverride = (overrides, featureIdRaw, modeRaw) => {
+  if (!overrides || typeof overrides !== 'object') return 'default';
+  const featureId = normalizeCell(featureIdRaw);
+  if (!featureId) return 'default';
+  const previous = getFeatureVisibilityOverride(overrides, featureId);
+  const mode = normalizeVisibilityMode(modeRaw);
+  if (mode === 'default') {
+    delete overrides[featureId];
+  } else {
+    overrides[featureId] = mode;
+  }
+  return previous;
+};
+
+export const applyFeatureVisibilityOverrideChanges = (overrides, changes) => {
+  if (!overrides || typeof overrides !== 'object' || !Array.isArray(changes)) return 0;
+  let applied = 0;
+  changes.forEach((change) => {
+    const featureId = normalizeCell(change?.featureId ?? change?.svgId ?? change?.id);
+    if (!featureId) return;
+    const mode = Object.prototype.hasOwnProperty.call(change || {}, 'mode')
+      ? change.mode
+      : change?.after;
+    setFeatureVisibilityOverride(overrides, featureId, mode);
+    applied += 1;
+  });
+  return applied;
+};
+
+export const buildFeatureVisibilityChanges = (features, modeRaw, currentOverrides = {}) => {
+  const mode = normalizeVisibilityMode(modeRaw);
+  const seen = new Set();
+  const changes = [];
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const featureId = getFeatureId(feature);
+    if (!featureId || seen.has(featureId)) return;
+    seen.add(featureId);
+    const before = getFeatureVisibilityOverride(currentOverrides, featureId);
+    if (before === mode) return;
+    changes.push({ featureId, before, after: mode });
+  });
+  return changes;
+};
+
+export const buildFeatureVisibilitySelectorCache = (features, selectorSafetyScope) => {
+  const cache = {};
+  const selectorUniquenessIndex = buildSelectorSafetyUniquenessIndex(selectorSafetyScope);
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const featureId = getFeatureId(feature);
+    if (!featureId || cache[featureId]) return;
+    const selector = selectFeatureSelector(
+      feature,
+      selectorUniquenessIndex,
+      {
+        priority: EDITOR_FEATURE_SELECTOR_PRIORITY,
+        requireSelector: true,
+        requireSafetyScope: true
+      }
+    );
+    const value = normalizeCell(selector?.value || featureId);
+    if (!value) return;
+    cache[featureId] = {
+      recordId: getFeatureRecordId(feature),
+      featureType: getFeatureType(feature),
+      qualifier: normalizeCell(selector?.qualifier || 'hash').toLowerCase() || 'hash',
+      value,
+      label: featureLabel(feature)
+    };
+  });
+  return cache;
+};
+
+const buildRuleFromSelectorCacheEntry = (featureIdRaw, modeRaw, selectorCache) => {
+  const featureId = normalizeCell(featureIdRaw);
+  const action = featureVisibilityModeToAction(modeRaw);
+  if (!featureId || !action) return null;
+  const cached = getSelectorCacheEntry(selectorCache, featureId) || {};
+  const qualifier = normalizeCell(cached.qualifier).toLowerCase() || 'hash';
+  const value = normalizeCell(cached.value) || featureId;
+  return normalizeFeatureVisibilityRule({
+    source: 'editor',
+    featureId,
+    label: normalizeCell(cached.label) || featureId,
+    recordId: normalizeCell(cached.recordId) || '*',
+    featureType: normalizeCell(cached.featureType) || '*',
+    qualifier,
+    value: exactRegexValue(value),
+    action
+  });
+};
+
+export const featureVisibilityOverridesToRules = (overrides, selectorCache = {}) => {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return [];
+  return Object.entries(overrides)
+    .map(([featureId, mode]) => buildRuleFromSelectorCacheEntry(featureId, mode, selectorCache))
+    .filter(Boolean);
+};
+
+export const deriveFeatureVisibilityRulesForBoundary = (
+  manualRules = [],
+  overrides = {},
+  selectorCache = {}
+) => [
+  ...featureVisibilityOverridesToRules(overrides, selectorCache),
+  ...(Array.isArray(manualRules) ? manualRules.map((rule) => normalizeFeatureVisibilityRule(rule)) : [])
+];
+
+export const splitLegacyVisibilityRules = (rules) => {
+  const overrides = {};
+  const manualRules = [];
+  const warnings = [];
+  (Array.isArray(rules) ? rules : []).forEach((rule) => {
+    const normalized = normalizeFeatureVisibilityRule(rule);
+    const mode = featureVisibilityActionToMode(normalized.action);
+    if (normalized.source === 'editor' && normalized.featureId) {
+      if (mode === 'default') {
+        warnings.push(`Feature visibility rule ${normalized.id} has no supported action and was kept as manual.`);
+        manualRules.push(normalized);
+        return;
+      }
+      overrides[normalized.featureId] = mode;
+      return;
+    }
+    manualRules.push(normalized);
+  });
+  return { overrides, manualRules, warnings };
+};
+
+const getCacheValue = (cache, featureId) => {
+  if (cache instanceof Map) return cache.get(featureId);
+  if (!cache || typeof cache !== 'object' || Array.isArray(cache)) return undefined;
+  return cache[featureId];
+};
+
+export const resolveEffectiveFeatureVisibility = (
+  featureIdRaw,
+  overrides = {},
+  baseVisibilityCache = null,
+  manualRules = []
+) => {
+  const featureId = normalizeCell(featureIdRaw);
+  if (!featureId) return 'default';
+  const override = getFeatureVisibilityOverride(overrides, featureId);
+  if (override !== 'default') return override;
+  const cached = normalizeVisibilityMode(getCacheValue(baseVisibilityCache, featureId));
+  if (cached !== 'default') return cached;
+  for (const rule of Array.isArray(manualRules) ? manualRules : []) {
+    const normalized = normalizeFeatureVisibilityRule(rule);
+    if (normalized.qualifier.toLowerCase() !== 'hash') continue;
+    if (normalized.recordId !== '*' || normalized.featureType !== '*') continue;
+    try {
+      if (new RegExp(normalized.value).test(featureId)) {
+        return featureVisibilityActionToMode(normalized.action);
+      }
+    } catch (_err) {
+      return 'default';
+    }
+  }
+  return 'on';
+};
 
 const isEditorRuleForFeatureId = (rule, featureId) => {
   const normalized = normalizeFeatureVisibilityRule(rule);

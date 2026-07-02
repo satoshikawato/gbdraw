@@ -98,8 +98,9 @@ const resetRuleDraftState = (state) => {
 const resetEditorDraftState = (state) => {
   const editorDefaults = createDefaultEditorDraftState();
   clearReactiveObject(state.featureColorOverrides);
-  replaceReactiveArray(state.featureVisibilityRules);
+  replaceReactiveArray(state.featureVisibilityManualRules);
   clearReactiveObject(state.featureVisibilityOverrides);
+  clearReactiveObject(state.featureVisibilitySelectorCache);
   clearReactiveObject(state.featureStrokeOverrides);
   clearReactiveObject(state.legendColorOverrides);
   clearReactiveObject(state.legendStrokeOverrides);
@@ -116,6 +117,7 @@ const resetEditorDraftState = (state) => {
   state.labelOverrideBuildWarning.value = '';
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
+  state.labelLayoutDirtyReason.value = '';
 
   state.featureSearch.value = '';
   state.labelSearch.value = '';

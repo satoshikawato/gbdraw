@@ -4,6 +4,7 @@ import {
   getTransformedBBox,
   parseTransform
 } from './legend-layout/transform-utils.js';
+import { serializeCleanSvg } from '../services/svg-serialization.js';
 
 export const createResultsManager = ({ state, getPyodide, legendLayout, rerenderLinearDefinitions = null }) => {
   const {
@@ -388,8 +389,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
           skipCaptureBaseConfig.value = true;
           const idx = selectedResultIndex.value;
           if (idx >= 0 && results.value.length > idx) {
-            const serializer = new XMLSerializer();
-            results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+            results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
           }
 
           console.log('Definition text updated');
@@ -505,8 +505,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
         skipCaptureBaseConfig.value = true;
         const idx = selectedResultIndex.value;
         if (idx >= 0 && results.value.length > idx) {
-          const serializer = new XMLSerializer();
-          results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+          results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
         }
       }
     }

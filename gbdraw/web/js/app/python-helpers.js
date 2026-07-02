@@ -1326,9 +1326,9 @@ def regenerate_definition_svgs(
             config_dict = tomllib.load(fh)
 
         # Override font sizes if provided
-        if font_size is not None:
+        if not _is_blank_or_js_nullish(font_size):
             config_dict["objects"]["definition"]["circular"]["font_size"] = float(font_size)
-        if plot_title_font_size is not None:
+        if not _is_blank_or_js_nullish(plot_title_font_size):
             config_dict["objects"]["definition"]["circular"]["plot_title_font_size"] = float(plot_title_font_size)
 
         # Parse the GenBank file

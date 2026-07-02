@@ -366,8 +366,8 @@ def test_linear_plot_title_drawn_once_and_coexists_with_record_labels(
     assert "Global Plot Title" in "".join(plot_title_groups[0].itertext())
     assert "Record A Label" in svg_content
     assert "Record B Label" in svg_content
-    assert root.find(".//svg:g[@id='RecA']", SVG_NS) is not None
-    assert root.find(".//svg:g[@id='RecB']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecA_record_1']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecB_record_2']", SVG_NS) is not None
 
 
 @pytest.mark.linear
@@ -507,8 +507,8 @@ def test_linear_definition_replicon_hidden_by_default_and_shown_on_request(
     )
     assert default_returncode == 0, f"gbdraw failed: {default_output}"
     default_root = ET.fromstring(default_svg.read_text(encoding="utf-8"))
-    assert _extract_group_texts(default_root, "RecA_definition") == ["RecA", f"{lengths['RecA']:,} bp"]
-    assert _extract_group_texts(default_root, "RecB_definition") == ["RecB", f"{lengths['RecB']:,} bp"]
+    assert _extract_group_texts(default_root, "RecA_definition_record_1") == ["RecA", f"{lengths['RecA']:,} bp"]
+    assert _extract_group_texts(default_root, "RecB_definition_record_2") == ["RecB", f"{lengths['RecB']:,} bp"]
 
     show_returncode, show_output, show_svg = gbdraw_runner.run_linear(
         [gbk_path],
@@ -518,8 +518,8 @@ def test_linear_definition_replicon_hidden_by_default_and_shown_on_request(
     )
     assert show_returncode == 0, f"gbdraw failed: {show_output}"
     show_root = ET.fromstring(show_svg.read_text(encoding="utf-8"))
-    assert _extract_group_texts(show_root, "RecA_definition") == ["Chromosome 1", "RecA", f"{lengths['RecA']:,} bp"]
-    assert _extract_group_texts(show_root, "RecB_definition") == ["pRecB", "RecB", f"{lengths['RecB']:,} bp"]
+    assert _extract_group_texts(show_root, "RecA_definition_record_1") == ["Chromosome 1", "RecA", f"{lengths['RecA']:,} bp"]
+    assert _extract_group_texts(show_root, "RecB_definition_record_2") == ["pRecB", "RecB", f"{lengths['RecB']:,} bp"]
 
 
 @pytest.mark.linear
@@ -586,15 +586,15 @@ def test_linear_definition_group_ids_are_unique_and_multi_line_blocks_do_not_ove
 
     assert returncode == 0, f"gbdraw failed: {output}"
     root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
-    assert root.find(".//svg:g[@id='RecA']", SVG_NS) is not None
-    assert root.find(".//svg:g[@id='RecB']", SVG_NS) is not None
-    assert root.find(".//svg:g[@id='RecA_definition']", SVG_NS) is not None
-    assert root.find(".//svg:g[@id='RecB_definition']", SVG_NS) is not None
-    assert _extract_group_texts(root, "RecA_definition") == ["Label A", "Chromosome 1", "RecA", f"{lengths['RecA']:,} bp"]
-    assert _extract_group_texts(root, "RecB_definition") == ["Label B", "pRecB", "RecB", f"{lengths['RecB']:,} bp"]
+    assert root.find(".//svg:g[@id='RecA_record_1']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecB_record_2']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecA_definition_record_1']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecB_definition_record_2']", SVG_NS) is not None
+    assert _extract_group_texts(root, "RecA_definition_record_1") == ["Label A", "Chromosome 1", "RecA", f"{lengths['RecA']:,} bp"]
+    assert _extract_group_texts(root, "RecB_definition_record_2") == ["Label B", "pRecB", "RecB", f"{lengths['RecB']:,} bp"]
 
-    rec_a_top, rec_a_bottom = _extract_definition_vertical_bounds(root, "RecA_definition")
-    rec_b_top, _rec_b_bottom = _extract_definition_vertical_bounds(root, "RecB_definition")
+    rec_a_top, rec_a_bottom = _extract_definition_vertical_bounds(root, "RecA_definition_record_1")
+    rec_b_top, _rec_b_bottom = _extract_definition_vertical_bounds(root, "RecB_definition_record_2")
     assert rec_a_bottom < rec_b_top
 
 

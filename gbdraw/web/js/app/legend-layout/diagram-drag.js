@@ -1,4 +1,5 @@
 import { parseTransform } from './transform-utils.js';
+import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 export const createDiagramDragActions = ({ state, debugLog = () => {}, history = null }) => {
   const {
@@ -71,8 +72,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     const idx = selectedResultIndex.value;
     if (!svg || idx < 0 || results.value.length <= idx) return;
     skipCaptureBaseConfig.value = true;
-    const serializer = new XMLSerializer();
-    results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+    results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
   };
 
   const isMultiRecordCanvasSvg = (svg) => {
@@ -409,6 +409,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
 
   const startDiagramDrag = (e) => {
     if (!isLayoutRepositionModeEnabled()) return;
+    if (e.shiftKey) return;
     if (
       e.target.closest('#legend') ||
       e.target.closest('text[data-label-editable="true"]') ||

@@ -10,6 +10,7 @@ import {
   getTransformedBBox,
   parseTransform
 } from './transform-utils.js';
+import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 const CIRCULAR_LEGEND_EDGE_PADDING = 16;
 const CIRCULAR_LEGEND_CONTENT_GAP = 12;
@@ -942,8 +943,7 @@ export const createLegendRepositionActions = ({
     skipPositionReapply.value = true;
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
-      const serializer = new XMLSerializer();
-      const serialized = serializer.serializeToString(svg);
+      const serialized = serializeCleanSvg(svg);
 
       if (!isLinear && diagramElements.value.length > 0) {
         const firstEl = diagramElements.value[0];

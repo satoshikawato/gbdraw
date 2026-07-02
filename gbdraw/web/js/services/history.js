@@ -58,10 +58,12 @@ export const createHistoryManager = ({
     const ids = new Set();
     if (currentSnapshot) collectHistoryFileIds(currentSnapshot, ids);
     undoStack.forEach((entry) => {
+      if (entry?.type === 'command') return;
       collectHistoryFileIds(entry.before, ids);
       collectHistoryFileIds(entry.after, ids);
     });
     redoStack.forEach((entry) => {
+      if (entry?.type === 'command') return;
       collectHistoryFileIds(entry.before, ids);
       collectHistoryFileIds(entry.after, ids);
     });
@@ -78,10 +80,12 @@ export const createHistoryManager = ({
 
     addSnapshot(currentSnapshot);
     undoStack.forEach((entry) => {
+      if (entry?.type === 'command') return;
       addSnapshot(entry.before);
       addSnapshot(entry.after);
     });
     redoStack.forEach((entry) => {
+      if (entry?.type === 'command') return;
       addSnapshot(entry.before);
       addSnapshot(entry.after);
     });
@@ -93,6 +97,16 @@ export const createHistoryManager = ({
     if (fileStore?.estimateBytes) {
       bytes += fileStore.estimateBytes(collectReferencedFileIds());
     }
+    undoStack.forEach((entry) => {
+      if (entry?.type === 'command' && typeof entry.estimateBytes === 'function') {
+        bytes += Number(entry.estimateBytes()) || 0;
+      }
+    });
+    redoStack.forEach((entry) => {
+      if (entry?.type === 'command' && typeof entry.estimateBytes === 'function') {
+        bytes += Number(entry.estimateBytes()) || 0;
+      }
+    });
     return bytes;
   };
 
@@ -176,6 +190,7 @@ export const createHistoryManager = ({
     }
 
     undoStack.push({
+      type: 'snapshot',
       label: transaction.label || options.label || 'Edit',
       before: transaction.before,
       beforeSignature: transaction.beforeSignature,
@@ -209,6 +224,59 @@ export const createHistoryManager = ({
     }
   };
 
+  const normalizeCommand = (label, command) => {
+    if (!command || typeof command !== 'object') return null;
+    if (command.noop) return null;
+    if (typeof command.apply !== 'function') {
+      throw new Error('Undoable command requires apply().');
+    }
+    if (typeof command.revert !== 'function') {
+      throw new Error('Undoable command requires revert().');
+    }
+    return {
+      type: 'command',
+      label: command.label || label || 'Edit',
+      apply: command.apply,
+      revert: command.revert,
+      estimateBytes: typeof command.estimateBytes === 'function'
+        ? command.estimateBytes
+        : () => estimateJsonBytes(command.metadata || {})
+    };
+  };
+
+  const commandSucceeded = (result) => result !== false;
+
+  const warnCommandNotApplied = (entry, action) => {
+    const label = entry?.label ? ` "${entry.label}"` : '';
+    console.warn(`Undo/redo command${label} could not ${action}; history was left unchanged.`);
+  };
+
+  const runUndoableCommand = async (label, buildCommand) => {
+    if (typeof buildCommand !== 'function') return false;
+    if (!restoring.value && !capturing.value && activeTransaction && !activeTransaction.closed) {
+      await commit(activeTransaction);
+    }
+    const command = normalizeCommand(label, await buildCommand());
+    if (!command) return false;
+
+    if (restoring.value || capturing.value) {
+      const applied = commandSucceeded(await command.apply());
+      if (applied) touch();
+      return applied;
+    }
+
+    const applied = commandSucceeded(await command.apply());
+    if (!applied) {
+      warnCommandNotApplied(command, 'apply');
+      return false;
+    }
+    undoStack.push(command);
+    redoStack.splice(0, redoStack.length);
+    enforceLimits();
+    touch();
+    return true;
+  };
+
   const applySnapshotWithFlag = async (snapshot) => {
     restoring.value = true;
     try {
@@ -218,12 +286,35 @@ export const createHistoryManager = ({
     }
   };
 
+  const applyCommandWithFlag = async (entry, direction) => {
+    restoring.value = true;
+    try {
+      const result = direction === 'undo'
+        ? await entry.revert()
+        : await entry.apply();
+      return commandSucceeded(result);
+    } finally {
+      restoring.value = false;
+    }
+  };
+
   const undo = async () => {
     if (restoring.value || undoStack.length === 0) return false;
-    const entry = undoStack.pop();
-    redoStack.push(entry);
-    await applySnapshotWithFlag(entry.before);
-    setCurrent(entry.before, entry.beforeSignature);
+    const entry = undoStack[undoStack.length - 1];
+    if (entry?.type === 'command') {
+      const reverted = await applyCommandWithFlag(entry, 'undo');
+      if (!reverted) {
+        warnCommandNotApplied(entry, 'undo');
+        return false;
+      }
+      undoStack.pop();
+      redoStack.push(entry);
+    } else {
+      undoStack.pop();
+      redoStack.push(entry);
+      await applySnapshotWithFlag(entry.before);
+      setCurrent(entry.before, entry.beforeSignature);
+    }
     enforceLimits();
     touch();
     return true;
@@ -231,10 +322,21 @@ export const createHistoryManager = ({
 
   const redo = async () => {
     if (restoring.value || redoStack.length === 0) return false;
-    const entry = redoStack.pop();
-    undoStack.push(entry);
-    await applySnapshotWithFlag(entry.after);
-    setCurrent(entry.after, entry.afterSignature);
+    const entry = redoStack[redoStack.length - 1];
+    if (entry?.type === 'command') {
+      const applied = await applyCommandWithFlag(entry, 'redo');
+      if (!applied) {
+        warnCommandNotApplied(entry, 'redo');
+        return false;
+      }
+      redoStack.pop();
+      undoStack.push(entry);
+    } else {
+      redoStack.pop();
+      undoStack.push(entry);
+      await applySnapshotWithFlag(entry.after);
+      setCurrent(entry.after, entry.afterSignature);
+    }
     enforceLimits();
     touch();
     return true;
@@ -263,6 +365,7 @@ export const createHistoryManager = ({
     capturing,
     revision,
     runUndoable,
+    runUndoableCommand,
     undo,
     undoLabel
   };

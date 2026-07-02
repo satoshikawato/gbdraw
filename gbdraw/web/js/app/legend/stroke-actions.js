@@ -1,6 +1,7 @@
 import { getFeatureCaption, ruleMatchesFeature } from '../feature-utils.js';
 import { FEATURE_SELECTOR, getFeatureElements } from '../feature-editor/svg-actions.js';
 import { getAllFeatureLegendGroups } from './utils.js';
+import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 export const createLegendStrokeActions = ({ state, debugLog }) => {
   const {
@@ -124,8 +125,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       skipCaptureBaseConfig.value = true;
       const resultIdx = selectedResultIndex.value;
       if (resultIdx >= 0 && results.value.length > resultIdx) {
-        const serializer = new XMLSerializer();
-        results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+        results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
       }
     }
   };
@@ -181,8 +181,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       skipCaptureBaseConfig.value = true;
       const resultIdx = selectedResultIndex.value;
       if (resultIdx >= 0 && results.value.length > resultIdx) {
-        const serializer = new XMLSerializer();
-        results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+        results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
       }
       console.log(
         `Reset all strokes: updated ${updatedCount} elements to original (color=${originalColor}, width=${originalWidth})`
@@ -308,8 +307,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       skipCaptureBaseConfig.value = true;
       const resultIdx = selectedResultIndex.value;
       if (resultIdx >= 0 && results.value.length > resultIdx) {
-        const serializer = new XMLSerializer();
-        results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+        results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
       }
       console.log(`Applied stroke to ${updatedCount} elements for caption "${caption}"`);
     }
@@ -381,8 +379,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       skipCaptureBaseConfig.value = true;
       const resultIdx = selectedResultIndex.value;
       if (resultIdx >= 0 && results.value.length > resultIdx) {
-        const serializer = new XMLSerializer();
-        results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+        results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
       }
       debugLog(`Reapplied stroke overrides to ${totalUpdated} elements`);
     }

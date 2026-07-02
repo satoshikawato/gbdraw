@@ -1,6 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
+import { serializeCleanSvg } from './svg-serialization.js';
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
@@ -34,15 +35,20 @@ import {
 import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import {
-  buildFeatureVisibilityOverrideCache,
-  featureVisibilityRulesFromOverrideCache,
-  normalizeFeatureVisibilityRule
+  serializeFeatureVisibilityRules,
+  normalizeFeatureVisibilityRule,
+  normalizeVisibilityMode,
+  splitLegacyVisibilityRules
 } from '../app/feature-visibility.js';
+import {
+  buildSessionFeatureRecoveryPlan,
+  classifyFeatureMetadataState
+} from '../app/session-feature-metadata.js';
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 29;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, SESSION_VERSION]);
+const SESSION_VERSION = 30;
+const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
 const LOSAT_DERIVED_CACHE_SCHEMA = 1;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -130,18 +136,42 @@ const normalizeFeatureVisibilityRulesForSession = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
 
-const rebuildFeatureVisibilityOverrideCache = () => {
-  const cache = buildFeatureVisibilityOverrideCache(state.featureVisibilityRules);
-  replacePlainObject(state.featureVisibilityOverrides, cache);
+const normalizeFeatureVisibilityOverridesForSession = (overrides) => {
+  const normalized = {};
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return normalized;
+  Object.entries(overrides).forEach(([featureIdRaw, modeRaw]) => {
+    const featureId = String(featureIdRaw || '').trim();
+    const mode = normalizeVisibilityMode(modeRaw);
+    if (!featureId || mode === 'default') return;
+    normalized[featureId] = mode;
+  });
+  return normalized;
 };
 
-const replaceFeatureVisibilityRules = (rules) => {
-  state.featureVisibilityRules.splice(
+const splitFeatureVisibilityStateForSession = (features = {}) => {
+  if (Array.isArray(features.featureVisibilityManualRules)) {
+    return {
+      manualRules: normalizeFeatureVisibilityRulesForSession(features.featureVisibilityManualRules),
+      overrides: normalizeFeatureVisibilityOverridesForSession(features.featureVisibilityOverrides)
+    };
+  }
+  if (Array.isArray(features.featureVisibilityRules)) {
+    return splitLegacyVisibilityRules(features.featureVisibilityRules);
+  }
+  return {
+    manualRules: [],
+    overrides: normalizeFeatureVisibilityOverridesForSession(features.featureVisibilityOverrides)
+  };
+};
+
+const replaceFeatureVisibilityState = (features = {}) => {
+  const { manualRules, overrides } = splitFeatureVisibilityStateForSession(features);
+  state.featureVisibilityManualRules.splice(
     0,
-    state.featureVisibilityRules.length,
-    ...normalizeFeatureVisibilityRulesForSession(rules)
+    state.featureVisibilityManualRules.length,
+    ...normalizeFeatureVisibilityRulesForSession(manualRules)
   );
-  rebuildFeatureVisibilityOverrideCache();
+  replacePlainObject(state.featureVisibilityOverrides, overrides);
 };
 
 const sanitizeExtractedFeatureForSession = (feature) => {
@@ -1372,13 +1402,26 @@ const deserializeFile = (entry) => {
   });
 };
 
+let activePreviewRuntime = null;
+
+export const setPreviewRuntime = (runtime) => {
+  activePreviewRuntime = runtime || null;
+};
+
 export const serializeResults = () => {
+  if (activePreviewRuntime?.flushActiveResult) {
+    activePreviewRuntime.flushActiveResult();
+    return state.results.value.map((res, idx) => ({
+      name: res.name || `Result ${idx + 1}`,
+      content: res.content
+    }));
+  }
+
   const currentSvg = (() => {
     if (!state.svgContainer.value) return null;
     const svg = state.svgContainer.value.querySelector('svg');
     if (!svg) return null;
-    const serializer = new XMLSerializer();
-    return serializer.serializeToString(svg);
+    return serializeCleanSvg(svg);
   })();
 
   return state.results.value.map((res, idx) => ({
@@ -1764,6 +1807,7 @@ const clearObject = (target) => {
 };
 
 const resetSessionBaseline = () => {
+  activePreviewRuntime?.clearActiveRuntime?.();
   preservedCliOptions = null;
   resetSettingsState(state);
   resetLayoutState(state);
@@ -1791,8 +1835,9 @@ const resetSessionBaseline = () => {
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
   clearObject(state.featureColorOverrides);
-  state.featureVisibilityRules.splice(0);
+  state.featureVisibilityManualRules.splice(0);
   clearObject(state.featureVisibilityOverrides);
+  clearObject(state.featureVisibilitySelectorCache);
   clearObject(state.featureStrokeOverrides);
   clearObject(state.labelTextFeatureOverrides);
   clearObject(state.labelTextBulkOverrides);
@@ -1800,6 +1845,7 @@ const resetSessionBaseline = () => {
   clearObject(state.labelVisibilityOverrides);
   state.labelOverrideContextKey.value = '';
   state.labelOverrideBuildWarning.value = '';
+  state.labelLayoutDirtyReason.value = '';
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
   state.generatedMultiRecordCanvas.value = false;
@@ -2017,7 +2063,8 @@ export const buildFeatureStateData = () => ({
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(state.featureColorOverrides),
-  featureVisibilityRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityRules),
+  featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
+  featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
   labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
   labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
@@ -2039,11 +2086,7 @@ export const applyFeatureStateData = (features = {}) => {
     ? features.selectedFeatureRecordIdx
     : 0;
   replacePlainObject(state.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
-  if (Array.isArray(features.featureVisibilityRules)) {
-    replaceFeatureVisibilityRules(features.featureVisibilityRules);
-  } else {
-    replaceFeatureVisibilityRules(featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides));
-  }
+  replaceFeatureVisibilityState(features);
   replacePlainObject(state.labelTextFeatureOverrides, cloneStringMap(features.labelTextFeatureOverrides));
   replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
   replacePlainObject(state.labelTextFeatureOverrideSources, cloneStringMap(features.labelTextFeatureOverrideSources));
@@ -2067,6 +2110,133 @@ export const buildRunStateData = () => ({
 export const applyRunStateData = (runState = {}) => {
   state.lastRunInfo.value = runState.lastRunInfo ? cloneJsonData(runState.lastRunInfo) : null;
   state.pairwiseMatchFactors.value = cloneJsonObject(runState.pairwiseMatchFactors);
+};
+
+const setFeatureEditorStatusData = (updates = {}) => {
+  if (!state.featureEditorStatus || typeof state.featureEditorStatus !== 'object') return;
+  Object.assign(state.featureEditorStatus, {
+    status: updates.status ?? state.featureEditorStatus.status,
+    generationId: updates.generationId ?? state.featureEditorStatus.generationId,
+    error: updates.error === undefined ? state.featureEditorStatus.error : updates.error,
+    summaryCount: updates.summaryCount ?? state.featureEditorStatus.summaryCount,
+    detailsCacheSize: updates.detailsCacheSize ?? state.featureEditorStatus.detailsCacheSize
+  });
+};
+
+const buildSessionFeatureRecoverySnapshot = () => ({
+  mode: state.mode.value,
+  cInputType: state.cInputType.value,
+  lInputType: state.lInputType.value,
+  files: state.files,
+  linearSeqs: state.linearSeqs,
+  results: state.results.value,
+  selectedResultIndex: state.selectedResultIndex.value,
+  featureState: buildFeatureStateData(),
+  editorState: buildEditorStateData(),
+  orthogroupIndex: state.featureOrthogroupIndex.value
+});
+
+const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature-recovery' } = {}) => {
+  state.featureExtractionPending.value = false;
+
+  if (plan?.status === 'recovered' || plan?.status === 'aligned') {
+    if (plan.recoveredFeatureState) applyFeatureStateData(plan.recoveredFeatureState);
+    if (plan.migratedEditorState) applyEditorStateData(plan.migratedEditorState);
+    state.featureExtractionError.value = null;
+    setFeatureEditorStatusData({
+      status: 'summary-ready',
+      generationId,
+      error: plan.warning || null,
+      summaryCount: Array.isArray(plan.recoveredFeatureState?.extractedFeatures)
+        ? plan.recoveredFeatureState.extractedFeatures.length
+        : state.extractedFeatures.value.length
+    });
+    return;
+  }
+
+  if (plan?.status === 'unrecoverable' || plan?.status === 'failed') {
+    const warning = plan.warning || 'Feature metadata recovery failed. The SVG preview remains available.';
+    state.featureExtractionError.value = { summary: warning, details: [] };
+    setFeatureEditorStatusData({
+      status: 'failed',
+      generationId,
+      error: warning,
+      summaryCount: 0
+    });
+    return;
+  }
+
+  if (state.extractedFeatures.value.length > 0) {
+    state.featureExtractionError.value = null;
+    setFeatureEditorStatusData({
+      status: 'summary-ready',
+      generationId,
+      error: null,
+      summaryCount: state.extractedFeatures.value.length
+    });
+  }
+};
+
+const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-feature-recovery' } = {}) => {
+  const validation = classifyFeatureMetadataState({
+    results: state.results.value,
+    selectedResultIndex: state.selectedResultIndex.value,
+    extractedFeatures: state.extractedFeatures.value
+  });
+
+  if (validation.state === 'ready' || validation.state === 'not-needed') {
+    applySessionFeatureRecoveryPlan({ status: 'ready', validation }, { generationId });
+    return { status: 'ready', validation };
+  }
+
+  if (validation.state === 'missing' || validation.state === 'alignable' || validation.state === 'stale') {
+    state.featureExtractionPending.value = true;
+    state.featureExtractionError.value = null;
+    setFeatureEditorStatusData({
+      status: 'pending-summary',
+      generationId,
+      error: null,
+      summaryCount: state.extractedFeatures.value.length
+    });
+  }
+
+  const featureVisibilityTsv = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
+  let plan;
+  try {
+    plan = await buildSessionFeatureRecoveryPlan({
+      snapshot: buildSessionFeatureRecoverySnapshot(),
+      featureVisibilityTsv
+    });
+  } catch (error) {
+    console.warn('Session feature metadata recovery failed.', error);
+    plan = {
+      status: 'failed',
+      reason: 'recovery-plan-failed',
+      validation,
+      warning: 'Feature metadata recovery failed. The SVG preview and pairwise popups remain available.',
+      errors: [error]
+    };
+  }
+  applySessionFeatureRecoveryPlan(plan, { generationId });
+  return plan;
+};
+
+const guardSessionFeatureMetadataForExport = async () => {
+  try {
+    return await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-export' });
+  } catch (error) {
+    console.warn('Session feature metadata export guard failed.', error);
+    state.featureExtractionPending.value = false;
+    const warning = 'Feature metadata recovery failed. The SVG preview and pairwise popups remain available.';
+    state.featureExtractionError.value = { summary: warning, details: [] };
+    setFeatureEditorStatusData({
+      status: 'failed',
+      generationId: 'session-export',
+      error: warning,
+      summaryCount: 0
+    });
+    return { status: 'failed', error };
+  }
 };
 
 export const exportSession = async (titleOverride = null) => {
@@ -2116,6 +2286,7 @@ export const exportSession = async (titleOverride = null) => {
         ? state.sessionTitle.value.trim()
         : '';
   const sessionFilename = buildSessionFilename(resolvedTitle);
+  await guardSessionFeatureMetadataForExport();
   const totalBytes =
     (state.files.c_gb?.size || 0) +
     (state.files.c_gff?.size || 0) +
@@ -2202,7 +2373,8 @@ export const exportSession = async (titleOverride = null) => {
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),
-      featureVisibilityRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityRules),
+      featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
+      featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
       labelTextFeatureOverrides: JSON.parse(JSON.stringify(state.labelTextFeatureOverrides)),
       labelTextBulkOverrides: JSON.parse(JSON.stringify(state.labelTextBulkOverrides)),
       labelTextFeatureOverrideSources: JSON.parse(JSON.stringify(state.labelTextFeatureOverrideSources)),
@@ -2273,6 +2445,7 @@ export const importSession = async (e, options = {}) => {
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
     state.labelOverrideBuildWarning.value = '';
+    state.labelLayoutDirtyReason.value = '';
     if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
       state.featurePanelTab.value = ui.featurePanelTab;
     } else {
@@ -2324,78 +2497,7 @@ export const importSession = async (e, options = {}) => {
     }
 
     const features = data.features || {};
-    if (Array.isArray(features.extractedFeatures)) {
-      state.extractedFeatures.value = features.extractedFeatures;
-    } else {
-      state.extractedFeatures.value = [];
-    }
-    if (Array.isArray(features.featureSelectorSafetyScope)) {
-      state.featureSelectorSafetyScope.value = features.featureSelectorSafetyScope;
-    } else {
-      state.featureSelectorSafetyScope.value = [];
-    }
-    if (Array.isArray(features.featureRecordIds)) {
-      state.featureRecordIds.value = features.featureRecordIds;
-    } else {
-      state.featureRecordIds.value = [];
-    }
-    if (Number.isInteger(features.selectedFeatureRecordIdx)) {
-      state.selectedFeatureRecordIdx.value = features.selectedFeatureRecordIdx;
-    } else {
-      state.selectedFeatureRecordIdx.value = 0;
-    }
-    if (features.featureColorOverrides && typeof features.featureColorOverrides === 'object') {
-      Object.keys(state.featureColorOverrides).forEach((k) => delete state.featureColorOverrides[k]);
-      Object.entries(features.featureColorOverrides).forEach(([key, value]) => {
-        state.featureColorOverrides[key] = value;
-      });
-    } else {
-      Object.keys(state.featureColorOverrides).forEach((k) => delete state.featureColorOverrides[k]);
-    }
-    if (Array.isArray(features.featureVisibilityRules)) {
-      replaceFeatureVisibilityRules(features.featureVisibilityRules);
-    } else if (features.featureVisibilityOverrides && typeof features.featureVisibilityOverrides === 'object') {
-      replaceFeatureVisibilityRules(featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides));
-    } else {
-      replaceFeatureVisibilityRules([]);
-    }
-
-    if (features.labelTextFeatureOverrides && typeof features.labelTextFeatureOverrides === 'object') {
-      Object.keys(state.labelTextFeatureOverrides).forEach((k) => delete state.labelTextFeatureOverrides[k]);
-      Object.entries(features.labelTextFeatureOverrides).forEach(([key, value]) => {
-        state.labelTextFeatureOverrides[key] = String(value ?? '');
-      });
-    } else {
-      Object.keys(state.labelTextFeatureOverrides).forEach((k) => delete state.labelTextFeatureOverrides[k]);
-    }
-
-    if (features.labelTextBulkOverrides && typeof features.labelTextBulkOverrides === 'object') {
-      Object.keys(state.labelTextBulkOverrides).forEach((k) => delete state.labelTextBulkOverrides[k]);
-      Object.entries(features.labelTextBulkOverrides).forEach(([key, value]) => {
-        state.labelTextBulkOverrides[key] = String(value ?? '');
-      });
-    } else {
-      Object.keys(state.labelTextBulkOverrides).forEach((k) => delete state.labelTextBulkOverrides[k]);
-    }
-    if (features.labelTextFeatureOverrideSources && typeof features.labelTextFeatureOverrideSources === 'object') {
-      Object.keys(state.labelTextFeatureOverrideSources).forEach((k) => delete state.labelTextFeatureOverrideSources[k]);
-      Object.entries(features.labelTextFeatureOverrideSources).forEach(([key, value]) => {
-        state.labelTextFeatureOverrideSources[key] = String(value ?? '');
-      });
-    } else {
-      Object.keys(state.labelTextFeatureOverrideSources).forEach((k) => delete state.labelTextFeatureOverrideSources[k]);
-    }
-    if (features.labelVisibilityOverrides && typeof features.labelVisibilityOverrides === 'object') {
-      Object.keys(state.labelVisibilityOverrides).forEach((k) => delete state.labelVisibilityOverrides[k]);
-      Object.entries(features.labelVisibilityOverrides).forEach(([key, value]) => {
-        const normalized = String(value || '').trim().toLowerCase();
-        if (normalized !== 'on' && normalized !== 'off') return;
-        state.labelVisibilityOverrides[String(key || '')] = normalized;
-      });
-    } else {
-      Object.keys(state.labelVisibilityOverrides).forEach((k) => delete state.labelVisibilityOverrides[k]);
-    }
-    state.labelOverrideContextKey.value = String(features.labelOverrideContextKey || '');
+    applyFeatureStateData(features);
 
     applyOrthogroupStateData(
       data.orthogroupState && typeof data.orthogroupState === 'object'
@@ -2414,6 +2516,7 @@ export const importSession = async (e, options = {}) => {
               {}
           }
     );
+    applyEditorStateData(data.editorState);
 
     const resultCount = state.results.value.length;
     if (resultCount > 0) {
@@ -2457,6 +2560,8 @@ export const importSession = async (e, options = {}) => {
       state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
     }
 
+    await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
+
     if (typeof options?.afterLoad === 'function') {
       try {
         await options.afterLoad({ data, ui });
@@ -2464,8 +2569,6 @@ export const importSession = async (e, options = {}) => {
         console.warn('Session loaded, but post-load refresh failed.', callbackError);
       }
     }
-
-    applyEditorStateData(data.editorState);
 
     alert('Session loaded successfully!');
     return { status: 'ok', data };

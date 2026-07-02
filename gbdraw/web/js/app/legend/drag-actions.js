@@ -1,4 +1,5 @@
 import { parseTransform } from './utils.js';
+import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 export const createLegendDragActions = ({ state, extractLegendEntries, history = null }) => {
   const {
@@ -58,6 +59,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
 
   const startLegendDrag = (e) => {
     if (!isLayoutRepositionModeEnabled()) return;
+    if (e.shiftKey) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -119,8 +121,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
       const idx = selectedResultIndex.value;
       if (svg && idx >= 0 && results.value.length > idx) {
         skipCaptureBaseConfig.value = true;
-        const serializer = new XMLSerializer();
-        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
       }
     }
 
@@ -154,8 +155,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     skipCaptureBaseConfig.value = true;
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
-      const serializer = new XMLSerializer();
-      results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
     }
   };
 

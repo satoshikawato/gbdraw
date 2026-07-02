@@ -171,10 +171,17 @@ const getFeatureForMember = (member, featureLookup) => {
   const svgId = memberFeatureSvgId(member);
   if (!svgId || !featureLookup) return null;
   const recordIndex = memberRecordIndex(member);
-  const direct = featureLookup.get?.(svgId) || null;
+  const renderedSvgId = recordIndex === null ? '' : `${svgId}_record_${recordIndex + 1}`;
+  const direct = featureLookup.get?.(renderedSvgId) || featureLookup.get?.(svgId) || null;
   if (direct && (recordIndex === null || featureRecordIndex(direct) === recordIndex)) return direct;
   return getFeatureLookupValues(featureLookup).find((feature) => {
-    if (normalizeText(feature?.svg_id || feature?.svgId) !== svgId) return false;
+    const featureSvgIds = [
+      feature?.svg_id,
+      feature?.svgId,
+      feature?.stable_svg_id,
+      feature?.stableSvgId
+    ].map(normalizeText).filter(Boolean);
+    if (!featureSvgIds.includes(svgId)) return false;
     return recordIndex === null || featureRecordIndex(feature) === recordIndex;
   }) || direct || null;
 };

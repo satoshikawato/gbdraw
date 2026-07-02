@@ -1,4 +1,5 @@
 import { getAllFeatureLegendGroups, parseTransform, parseTransformXY } from './utils.js';
+import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 export const createLegendSortActions = ({ state, extractLegendEntries }) => {
   const { svgContainer, legendEntries, originalLegendOrder, selectedResultIndex, results, skipCaptureBaseConfig } =
@@ -56,8 +57,7 @@ export const createLegendSortActions = ({ state, extractLegendEntries }) => {
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const serializer = new XMLSerializer();
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
     }
 
     extractLegendEntries();

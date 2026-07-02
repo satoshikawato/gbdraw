@@ -3,8 +3,7 @@ import {
   cancelDiagramGeneration,
   DiagramGenerationCanceledError,
   isDiagramGenerationCanceled,
-  runDiagramGeneration,
-  runFeatureExtraction
+  runDiagramGeneration
 } from '../services/diagram-generation.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
 import {
@@ -47,6 +46,7 @@ import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
 } from './color-utils.js';
+import { extractFeatureMetadataForPreview } from './feature-metadata-extraction.js';
 import { serializeSpecificRules } from './file-imports.js';
 import { serializeFeatureVisibilityRules } from './feature-visibility.js';
 import {
@@ -97,8 +97,6 @@ const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
 const proteinExtractionCache = new WeakMap();
 const PROTEIN_EXTRACTION_CACHE_LIMIT = 16;
-const featureExtractionCache = new WeakMap();
-const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 const LOSAT_CACHE_SCHEMA = 2;
 const LOSAT_DERIVED_CACHE_SCHEMA = 1;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -464,41 +462,6 @@ const setCachedProteinExtraction = (file, key, value) => {
   if (byKey.size >= PROTEIN_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
   byKey.set(key, value);
 };
-const cloneJsonValue = (value, fallback) => {
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (_err) {
-    return fallback;
-  }
-};
-const cloneFeatureExtractionData = (data) => ({
-  features: Array.isArray(data?.features)
-    ? data.features.map((feature) => cloneJsonValue(
-        feature,
-        feature && typeof feature === 'object' ? { ...feature } : feature
-      ))
-    : [],
-  record_ids: Array.isArray(data?.record_ids) ? [...data.record_ids] : [],
-  selector_safety_scope: Array.isArray(data?.selector_safety_scope)
-    ? cloneJsonValue(data.selector_safety_scope, [])
-    : []
-});
-const getCachedFeatureExtraction = (file, key) => {
-  if (!file) return null;
-  const byKey = featureExtractionCache.get(file);
-  const cached = byKey?.get(key) || null;
-  return cached ? cloneFeatureExtractionData(cached) : null;
-};
-const setCachedFeatureExtraction = (file, key, value) => {
-  if (!file || value?.error) return;
-  let byKey = featureExtractionCache.get(file);
-  if (!byKey) {
-    byKey = new Map();
-    featureExtractionCache.set(file, byKey);
-  }
-  if (byKey.size >= FEATURE_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
-  byKey.set(key, cloneFeatureExtractionData(value));
-};
 const measureTiming = (entries, label, fn) => {
   const startedAt = getNow();
   const result = fn();
@@ -729,6 +692,7 @@ export const createRunAnalysis = ({
     generationCancelRequested,
     results,
     selectedResultIndex,
+    resultGenerationKey,
     resultPanelTab,
     lastRunInfo,
     errorLog,
@@ -951,72 +915,6 @@ export const createRunAnalysis = ({
     });
   };
 
-  const buildFeatureExtractionCacheKey = ({ regionSpec, recordSelector, reverseFlag, selectedFeatures, featureVisibility }) =>
-    JSON.stringify({
-      regionSpec: String(regionSpec || ''),
-      recordSelector: normalizeRecordSelectorText(recordSelector),
-      reverseFlag: reverseFlag ? '1' : '0',
-      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : 'all',
-      featureVisibility: String(featureVisibility || '')
-    });
-
-  const readFeatureExtractionData = async ({
-    path,
-    file,
-    regionSpec,
-    recordSelector,
-    reverseFlag,
-    selectedFeatures = null,
-    featureVisibilityTablePath = null,
-    featureVisibilityTsv = '',
-    timingEntries,
-    timingLabel
-  }) => {
-    const cacheKey = buildFeatureExtractionCacheKey({
-      regionSpec,
-      recordSelector,
-      reverseFlag,
-      selectedFeatures,
-      featureVisibility: featureVisibilityTsv
-    });
-    const cached = getCachedFeatureExtraction(file, cacheKey);
-    if (cached) {
-      timingEntries.push({ label: timingLabel, ms: 0, details: 'cache hit' });
-      return cached;
-    }
-
-    if (!file) {
-      throw new Error('Feature extraction input file is not available.');
-    }
-
-    const startedAt = getNow();
-    const buffer = await file.arrayBuffer();
-    const requestFiles = [{
-      path,
-      name: file.name || path.split('/').pop() || 'input.gb',
-      bytes: buffer
-    }];
-    if (featureVisibilityTablePath && featureVisibilityTsv) {
-      requestFiles.push({
-        path: featureVisibilityTablePath,
-        name: featureVisibilityTablePath.split('/').pop() || 'feature_visibility.tsv',
-        bytes: new TextEncoder().encode(featureVisibilityTsv).buffer
-      });
-    }
-    const { result: featData } = await runFeatureExtraction({
-      path,
-      files: requestFiles,
-      regionSpec: regionSpec || null,
-      recordSelector: recordSelector || null,
-      reverseFlag: Boolean(reverseFlag),
-      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : null,
-      featureVisibilityTablePath: featureVisibilityTablePath || null
-    });
-    timingEntries.push({ label: timingLabel, ms: getNow() - startedAt, details: 'worker' });
-    setCachedFeatureExtraction(file, cacheKey, featData);
-    return featData;
-  };
-
   const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
   const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
@@ -1130,113 +1028,63 @@ export const createRunAnalysis = ({
 
     const timingEntries = [];
     try {
-      if (context.mode === 'circular' && context.cInputType === 'gb') {
-        const featData = await readFeatureExtractionData({
-          path: '/input.gb',
-          file: context.circularFile,
-          regionSpec: null,
-          recordSelector: null,
-          reverseFlag: false,
-          featureVisibilityTablePath: context.featureVisibilityTablePath,
-          featureVisibilityTsv: context.featureVisibilityTsv,
-          timingEntries,
-          timingLabel: 'feature extraction circular input'
-        });
-        if (!isCurrentFeatureExtractionContext(context)) return;
-        if (featData?.error) {
-          console.warn('Feature extraction failed for circular input:', featData.error);
-          featureExtractionError.value = { summary: String(featData.error), details: [] };
-          setFeatureEditorStatus({
-            status: 'failed',
-            generationId: context.requestId,
-            error: String(featData.error),
-            summaryCount: 0
-          });
-        } else if (Array.isArray(featData?.features)) {
-          extractedFeatures.value = featData.features;
-          featureSelectorSafetyScope.value = Array.isArray(featData.selector_safety_scope)
-            ? featData.selector_safety_scope
-            : [];
-          featureRecordIds.value = featData.record_ids || [];
-          selectedFeatureRecordIdx.value = 0;
-          refreshFeatureOverrides(featData.features);
-          setFeatureEditorStatus({
-            status: 'summary-ready',
-            generationId: context.requestId,
-            error: null,
-            summaryCount: featData.features.length
-          });
-          console.log(
-            `Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`
-          );
-        } else {
-          console.warn('Feature extraction returned an unexpected payload for circular input.', featData);
-          setFeatureEditorStatus({
-            status: 'failed',
-            generationId: context.requestId,
-            error: 'Feature extraction returned an unexpected payload.',
-            summaryCount: 0
-          });
-        }
-      } else if (context.mode === 'linear' && context.lInputType === 'gb' && context.linearSeqs.length > 0) {
-        let allFeatures = [];
-        let allSelectorSafetyScope = [];
-        const allRecordLabels = [];
+      const metadata = await extractFeatureMetadataForPreview({
+        mode: context.mode,
+        cInputType: context.cInputType,
+        lInputType: context.lInputType,
+        circularFile: context.circularFile,
+        linearSeqs: context.linearSeqs,
+        regionSpecs: context.regionSpecs,
+        recordSelectors: context.recordSelectors,
+        reverseFlags: context.reverseFlags,
+        featureVisibilityTablePath: context.featureVisibilityTablePath,
+        featureVisibilityTsv: context.featureVisibilityTsv,
+        enrichFeature: enrichFeatureWithOrthogroup,
+        timingEntries
+      });
 
-        for (let i = 0; i < context.linearSeqs.length; i++) {
-          if (!isCurrentFeatureExtractionContext(context)) return;
-          const seq = context.linearSeqs[i] || {};
-          const regionSpec = context.regionSpecs[i]?.file || null;
-          const recordSelector = context.recordSelectors[i] ?? '';
-          const reverseFlag = Boolean(context.reverseFlags[i]);
-          const featData = await readFeatureExtractionData({
-            path: `/seq_${i}.gb`,
-            file: seq.gb || null,
-            regionSpec,
-            recordSelector,
-            reverseFlag,
-            featureVisibilityTablePath: context.featureVisibilityTablePath,
-            featureVisibilityTsv: context.featureVisibilityTsv,
-            timingEntries,
-            timingLabel: `feature extraction linear input #${i + 1}`
-          });
-          if (featData?.error) {
-            console.warn(`Feature extraction failed for linear input #${i + 1}:`, featData.error);
-          } else if (Array.isArray(featData?.features)) {
-            const features = featData.features.map((feature) => ({
-              ...enrichFeatureWithOrthogroup(feature, i),
-              fileIdx: i,
-              displayRecordId: `File ${i + 1}: ${feature.record_id}`,
-              id: `file${i}_${feature.id}`
-            }));
-            allFeatures = allFeatures.concat(features);
-            if (Array.isArray(featData.selector_safety_scope)) {
-              allSelectorSafetyScope = allSelectorSafetyScope.concat(
-                featData.selector_safety_scope.map((entry) => ({ ...entry, fileIdx: i }))
-              );
-            }
-            (featData.record_ids || []).forEach((rid, ridx) => {
-              allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
-            });
-          } else {
-            console.warn(`Feature extraction returned an unexpected payload for linear input #${i + 1}.`, featData);
-          }
-        }
+      if (!isCurrentFeatureExtractionContext(context)) return;
 
-        if (!isCurrentFeatureExtractionContext(context)) return;
-        extractedFeatures.value = allFeatures;
-        featureSelectorSafetyScope.value = allSelectorSafetyScope;
-        featureRecordIds.value = allRecordLabels.map((r) => r.label);
-        selectedFeatureRecordIdx.value = 0;
-        refreshFeatureOverrides(allFeatures);
+      (metadata.errors || []).forEach((entry) => {
+        const label = Number.isInteger(entry?.inputIndex)
+          ? `input #${Number(entry.inputIndex) + 1}`
+          : 'input';
+        console.warn(`Feature extraction failed for ${label}:`, entry?.message || entry);
+      });
+
+      if (context.mode === 'circular' && metadata.errors?.length) {
+        const message = String(metadata.errors[0]?.message || 'Feature extraction failed');
+        featureExtractionError.value = { summary: message, details: [] };
         setFeatureEditorStatus({
-          status: 'summary-ready',
+          status: 'failed',
           generationId: context.requestId,
-          error: null,
-          summaryCount: allFeatures.length
+          error: message,
+          summaryCount: 0
         });
+        return;
+      }
+
+      extractedFeatures.value = metadata.extractedFeatures || [];
+      featureSelectorSafetyScope.value = metadata.featureSelectorSafetyScope || [];
+      featureRecordIds.value = metadata.featureRecordIds || [];
+      selectedFeatureRecordIdx.value = Number.isInteger(metadata.selectedFeatureRecordIdx)
+        ? metadata.selectedFeatureRecordIdx
+        : 0;
+      refreshFeatureOverrides(extractedFeatures.value);
+      setFeatureEditorStatus({
+        status: 'summary-ready',
+        generationId: context.requestId,
+        error: null,
+        summaryCount: extractedFeatures.value.length
+      });
+
+      if (context.mode === 'circular') {
         console.log(
-          `Extracted ${allFeatures.length} features from ${context.linearSeqs.length} file(s) for color editor.`
+          `Extracted ${extractedFeatures.value.length} features from ${featureRecordIds.value.length} record(s) for color editor.`
+        );
+      } else if (context.mode === 'linear') {
+        console.log(
+          `Extracted ${extractedFeatures.value.length} features from ${context.linearSeqs.length} file(s) for color editor.`
         );
       }
     } catch (e) {
@@ -2117,7 +1965,7 @@ json.dumps({
       }
       let featureVisibilityTablePath = null;
       let featureVisibilityCacheKey = '';
-      const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules);
+      const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules?.value || []);
       if (featureVisibilityTsv.trim()) {
         featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
         featureVisibilityCacheKey = featureVisibilityTsv;
@@ -4277,6 +4125,9 @@ json.dumps({
         results.value = shouldSuppressPairwiseIdentityLegend()
           ? stripPairwiseIdentityLegendsFromResults(res)
           : res;
+        if (!isReflow && resultGenerationKey) {
+          resultGenerationKey.value += 1;
+        }
       });
       if (!isReflow && manualRunStartedAt !== null) {
         const runInfo = buildRunInfo({

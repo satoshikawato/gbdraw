@@ -1984,18 +1984,20 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         alignment_length=alignment_length,
         cfg=cfg,
     )
+    interactive_context = None
     if INTERACTIVE_SVG_FORMAT in out_formats:
+        interactive_context = _build_interactive_svg_context(
+            records,
+            selected_features_set,
+            getattr(canvas, "_gbdraw_orthogroups", None) or collinearity_orthogroups,
+            feature_visibility_rules=feature_visibility_rules,
+            color_table=color_table,
+            default_colors=default_colors,
+        )
         save_figure(
             canvas,
             out_formats,
-            interactive_context=_build_interactive_svg_context(
-                records,
-                selected_features_set,
-                getattr(canvas, "_gbdraw_orthogroups", None) or collinearity_orthogroups,
-                feature_visibility_rules=feature_visibility_rules,
-                color_table=color_table,
-                default_colors=default_colors,
-            ),
+            interactive_context=interactive_context,
         )
     else:
         save_figure(canvas, out_formats)
@@ -2009,6 +2011,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         outputs=(
             make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name),
         ),
+        feature_metadata=tuple(interactive_context.features) if interactive_context else (),
         losat_cache_entries=losatp_cache_entries,
         linear_record_metadata=linear_record_metadata,
     )

@@ -6,6 +6,7 @@ import {
 } from './color-utils.js';
 import { FEATURE_SELECTOR, getFeatureElementIndex, getFeatureElements, getFeatureIdentity } from './feature-editor/svg-actions.js';
 import { ruleMatchesFeature } from './feature-utils.js';
+import { serializeCleanSvg } from '../services/svg-serialization.js';
 
 export const createSvgStyles = ({ state, watch, legendActions }) => {
   const {
@@ -390,8 +391,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        const serializer = new XMLSerializer();
-        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
       }
     }
   };
@@ -446,8 +446,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        const serializer = new XMLSerializer();
-        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
       }
       console.log(`Applied specific rules: updated ${updatedCount} elements`);
     }
@@ -592,8 +591,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        const serializer = new XMLSerializer();
-        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
       }
       console.log(`Applied styles: updated ${updatedCount} elements`);
     }
@@ -657,8 +655,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        const serializer = new XMLSerializer();
-        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
       }
       console.log('Track visibility updated');
     }

@@ -264,7 +264,8 @@ const getFeatureOrthogroupMember = (feature, group) => {
   const recordIndex = Number(feature?.record_idx ?? feature?.recordIndex ?? feature?.fileIdx);
   return members.find((member) => {
     const memberSvgId = String(member?.featureSvgId || member?.feature_svg_id || '').trim();
-    if (memberSvgId !== svgId) return false;
+    const stableSvgId = String(feature?.stable_svg_id || feature?.stableSvgId || '').trim();
+    if (memberSvgId !== svgId && memberSvgId !== stableSvgId) return false;
     if (!Number.isInteger(recordIndex)) return true;
     return Number(member?.recordIndex ?? member?.record_index) === recordIndex;
   }) || null;

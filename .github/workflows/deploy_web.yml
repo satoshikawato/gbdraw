@@ -29,6 +29,10 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel build
+          python -m pip install -e ".[dev]"
+
+      - name: Refresh gallery sessions
+        run: python tools/refresh_gallery_sessions.py
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py --refresh-cache-bust

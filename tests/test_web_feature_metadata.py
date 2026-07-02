@@ -43,6 +43,89 @@ def _extract_features(namespace: dict[str, object], path: Path) -> list[dict[str
     return payload["features"]
 
 
+class JsNull:
+    pass
+
+
+class JsUndefined:
+    pass
+
+
+def test_python_helpers_blank_or_js_nullish_accepts_pyodide_sentinels(
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    is_blank = python_helpers_namespace["_is_blank_or_js_nullish"]
+
+    for value in (None, JsNull(), JsUndefined(), "", "null", "undefined", "none"):
+        assert is_blank(value) is True  # type: ignore[operator]
+
+    for value in ("0", "12.5", "font"):
+        assert is_blank(value) is False  # type: ignore[operator]
+
+
+def test_regenerate_definition_svgs_accepts_nullish_font_sizes(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000010", name="Nullish")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 9, strand=1),
+            type="CDS",
+            qualifiers={"locus_tag": ["NULLISH_001"], "translation": ["MK"]},
+        )
+    )
+    path = _write_genbank(tmp_path, record)
+    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
+
+    payload = json.loads(
+        regenerate(  # type: ignore[operator]
+            str(path),
+            font_size=JsNull(),
+            plot_title_font_size=JsUndefined(),
+        )
+    )
+
+    assert "error" not in payload
+    assert payload["definitions"]
+
+
+def test_regenerate_definition_svgs_accepts_numeric_font_size_strings(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000011", name="Numeric")
+    path = _write_genbank(tmp_path, record)
+    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
+
+    payload = json.loads(
+        regenerate(  # type: ignore[operator]
+            str(path),
+            font_size="12.5",
+            plot_title_font_size="16",
+            plot_title="Numeric title",
+            plot_title_position="top",
+        )
+    )
+
+    assert "error" not in payload
+    assert len(payload["definitions"]) == 2
+
+
+def test_regenerate_definition_svgs_reports_invalid_font_size_strings(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000012", name="InvalidNumeric")
+    path = _write_genbank(tmp_path, record)
+    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
+
+    payload = json.loads(regenerate(str(path), font_size="not-a-number"))  # type: ignore[operator]
+
+    assert "error" in payload
+    assert "not-a-number" in payload["error"] or "could not convert" in payload["error"]
+
+
 def test_importable_feature_metadata_matches_pyodide_wrapper(
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],

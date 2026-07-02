@@ -1,37 +1,38 @@
 import {
-  buildFeatureVisibilityOverrideCache,
+  applyFeatureVisibilityOverrideChanges,
+  buildFeatureVisibilityChanges,
   createDefaultFeatureVisibilityRule,
+  deriveFeatureVisibilityRulesForBoundary,
   featureVisibilityQualifierSuggestions,
-  getEditorFeatureVisibilityMode,
+  getFeatureVisibilityOverride,
   normalizeFeatureVisibilityRule,
+  normalizeVisibilityMode,
   removeEditorQualifierFeatureVisibilityRule,
-  removeEditorFeatureVisibilityRule,
+  resolveEffectiveFeatureVisibility,
   serializeFeatureVisibilityRules,
+  setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
-  upsertEditorFeatureVisibilityRule
 } from '../feature-visibility.js';
 
-export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => {
+export const createFeatureVisibilityActions = ({ state, featureSvgActions, previewRuntime = null }) => {
   const {
     clickedFeature,
     extractedFeatures,
-    featureSelectorSafetyScope,
     orthogroups,
+    featureVisibilityManualRules,
     featureVisibilityRules,
     featureVisibilityOverrides,
+    featureVisibilitySelectorCache,
     featureVisibilityScopeDialog,
-    labelReflowForceRequestSeq,
-    labelReflowForceRequestReason
+    labelLayoutDirtyReason,
+    resultGenerationKey,
+    results,
+    selectedResultIndex,
+    svgContainer
   } = state;
 
-  const { applyVisibilityPreviewBySvgId } = featureSvgActions;
+  const { applyVisibilityPreviewBySvgId, applyVisibilityPreviewChanges } = featureSvgActions;
   const ruleFields = new Set(['recordId', 'featureType', 'qualifier', 'value', 'action']);
-
-  const normalizeVisibilityMode = (value) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    if (normalized === 'suppress') return 'exclude_matching';
-    return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
-  };
 
   const normalizeText = (value) => String(value ?? '').trim();
 
@@ -194,16 +195,19 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
     return scopes;
   };
 
-  const queueFeatureVisibilityReflow = (reason = 'feature-visibility-apply') => {
-    labelReflowForceRequestReason.value = String(reason || 'feature-visibility-apply');
-    labelReflowForceRequestSeq.value += 1;
+  const markFeatureVisibilityLabelLayoutDirty = (reason = 'feature-visibility') => {
+    if (labelLayoutDirtyReason) labelLayoutDirtyReason.value = String(reason || 'feature-visibility');
   };
 
-  const rebuildFeatureVisibilityOverrideCache = () => {
-    const cache = buildFeatureVisibilityOverrideCache(featureVisibilityRules);
-    Object.keys(featureVisibilityOverrides).forEach((key) => delete featureVisibilityOverrides[key]);
-    Object.assign(featureVisibilityOverrides, cache);
-  };
+  const boundaryFeatureVisibilityRules = () => (
+    Array.isArray(featureVisibilityRules?.value)
+      ? featureVisibilityRules.value
+      : deriveFeatureVisibilityRulesForBoundary(
+          featureVisibilityManualRules,
+          featureVisibilityOverrides,
+          featureVisibilitySelectorCache
+        )
+  );
 
   const collectAffectedFeatureIds = (scope, feat) => {
     if (scope?.id === 'orthogroup') {
@@ -225,8 +229,111 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
       const specificHashMode = (scope?.id === 'product' || scope?.id === 'protein_id')
         ? featureVisibilityOverrides[svgId]
         : '';
-      applyVisibilityPreviewBySvgId(svgId, specificHashMode || mode);
+      const effectiveMode = specificHashMode ||
+        (mode === 'default'
+          ? resolveEffectiveFeatureVisibility(svgId, featureVisibilityOverrides, null, featureVisibilityManualRules)
+          : mode);
+      applyVisibilityPreviewBySvgId(svgId, effectiveMode);
     });
+  };
+
+  const updateClickedFeatureVisibilityFromRules = (featureIds) => {
+    const clickedSvgId = normalizeText(clickedFeature.value?.svg_id);
+    if (!clickedSvgId || !featureIds.includes(clickedSvgId)) return;
+    clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(featureVisibilityOverrides, clickedSvgId);
+  };
+
+  const cloneOverrides = () => ({ ...(featureVisibilityOverrides || {}) });
+
+  const resolveEffectiveWithOverrides = (featureId, overrides) =>
+    resolveEffectiveFeatureVisibility(featureId, overrides, null, featureVisibilityManualRules);
+
+  const nextFrame = () => new Promise((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+
+  const ensureCommandTargetResult = async (resultIndex, generationKey) => {
+    if (String(resultGenerationKey?.value ?? '') !== String(generationKey ?? '')) return false;
+    const targetIndex = Number(resultIndex);
+    if (!Number.isInteger(targetIndex) || targetIndex < 0) return false;
+    const resultCount = Array.isArray(results?.value) ? results.value.length : 0;
+    if (targetIndex >= resultCount) return false;
+    if (Number(selectedResultIndex?.value || 0) !== targetIndex) {
+      if (previewRuntime?.selectResult) {
+        previewRuntime.selectResult(targetIndex);
+      } else if (selectedResultIndex) {
+        selectedResultIndex.value = targetIndex;
+      }
+      await nextFrame();
+    }
+    return Boolean(svgContainer?.value?.querySelector?.('svg'));
+  };
+
+  const buildSelectedFeaturesVisibilityCommand = (features, modeRaw) => {
+    const targetFeatures = uniqueFeaturesBySvgId(Array.isArray(features) ? features : []);
+    if (targetFeatures.length === 0) return null;
+
+    const affectedFeatureIds = targetFeatures
+      .map((feature) => normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id))
+      .filter(Boolean);
+    if (affectedFeatureIds.length === 0) return null;
+
+    const baseOverrides = cloneOverrides();
+    const rawChanges = buildFeatureVisibilityChanges(targetFeatures, modeRaw, baseOverrides);
+    if (rawChanges.length === 0) return null;
+    const afterOverrides = cloneOverrides();
+    applyFeatureVisibilityOverrideChanges(
+      afterOverrides,
+      rawChanges.map((change) => ({ featureId: change.featureId, mode: change.after }))
+    );
+    const changes = rawChanges.map((change) => ({
+      ...change,
+      beforeEffective: resolveEffectiveWithOverrides(change.featureId, baseOverrides),
+      afterEffective: resolveEffectiveWithOverrides(change.featureId, afterOverrides)
+    }));
+    const commandResultIndex = Number(selectedResultIndex?.value || 0);
+    const commandGenerationKey = String(resultGenerationKey?.value ?? '');
+
+    const applyChangeSet = async (direction, reason) => {
+      if (!(await ensureCommandTargetResult(commandResultIndex, commandGenerationKey))) return false;
+      const useAfter = direction === 'apply';
+      const overrideChanged = changes.some((change) => change.before !== change.after);
+      applyFeatureVisibilityOverrideChanges(
+        featureVisibilityOverrides,
+        changes.map((change) => ({
+          featureId: change.featureId,
+          mode: useAfter ? change.after : change.before
+        }))
+      );
+      const updated = applyVisibilityPreviewChanges(
+        changes.map((change) => ({
+          featureId: change.featureId,
+          mode: useAfter ? change.afterEffective : change.beforeEffective
+        })),
+        { reason }
+      );
+      if (!updated && !overrideChanged) return false;
+      if (updated && previewRuntime?.flushActiveResult) {
+        previewRuntime.flushActiveResult({ force: true });
+      }
+      updateClickedFeatureVisibilityFromRules(affectedFeatureIds);
+      markFeatureVisibilityLabelLayoutDirty(reason);
+      return true;
+    };
+
+    return {
+      label: 'Change selected feature visibility',
+      resultIndex: commandResultIndex,
+      resultGenerationKey: commandGenerationKey,
+      changes,
+      apply: () => applyChangeSet('apply', 'bulk-feature-visibility-apply'),
+      revert: () => applyChangeSet('revert', 'bulk-feature-visibility-undo'),
+      estimateBytes: () => JSON.stringify({ resultIndex: commandResultIndex, resultGenerationKey: commandGenerationKey, changes }).length * 2
+    };
   };
 
   const applyFeatureVisibilityScope = (feat, modeRaw, scope) => {
@@ -244,26 +351,18 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
         label: selectedScope.label
       };
       if (nextMode === 'default') {
-        removeEditorQualifierFeatureVisibilityRule(featureVisibilityRules, ruleInput);
+        removeEditorQualifierFeatureVisibilityRule(featureVisibilityManualRules, ruleInput);
       } else {
-        upsertEditorQualifierFeatureVisibilityRule(featureVisibilityRules, ruleInput, nextMode);
+        upsertEditorQualifierFeatureVisibilityRule(featureVisibilityManualRules, ruleInput, nextMode);
       }
     } else {
-      const selectorContext = {
-        selectorSafetyScope: featureSelectorSafetyScope?.value
-      };
       targetFeatures.forEach((targetFeat) => {
         const svgId = normalizeText(targetFeat?.svg_id ?? targetFeat?.svgId ?? targetFeat?.id);
         if (!svgId) return;
-        if (nextMode === 'default') {
-          removeEditorFeatureVisibilityRule(featureVisibilityRules, svgId);
-        } else {
-          upsertEditorFeatureVisibilityRule(featureVisibilityRules, targetFeat, nextMode, selectorContext);
-        }
+        setFeatureVisibilityOverride(featureVisibilityOverrides, svgId, nextMode);
       });
     }
 
-    rebuildFeatureVisibilityOverrideCache();
     applyVisibilityPreviewForScope(selectedScope, feat, nextMode);
 
     const clickedSvgId = normalizeText(clickedFeature.value?.svg_id);
@@ -290,15 +389,21 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
     const triggerReflow = options.triggerReflow !== false;
     const scope = options.scope || { id: 'feature' };
     const nextMode = normalizeVisibilityMode(modeRaw);
-    const previousMode = getEditorFeatureVisibilityMode(featureVisibilityRules, svgId);
+    const previousMode = getFeatureVisibilityOverride(featureVisibilityOverrides, svgId);
 
     applyFeatureVisibilityScope(feat, nextMode, scope);
 
     if (triggerReflow && previousMode !== nextMode) {
-      queueFeatureVisibilityReflow();
+      markFeatureVisibilityLabelLayoutDirty();
     }
 
     return previousMode !== nextMode;
+  };
+
+  const setSelectedFeaturesVisibility = async (features, modeRaw) => {
+    const command = buildSelectedFeaturesVisibilityCommand(features, modeRaw);
+    if (!command) return false;
+    return command.apply();
   };
 
   const updateClickedFeatureVisibility = (modeRaw) => {
@@ -306,7 +411,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
     const feat = clickedFeature.value.feat;
     const scopes = buildVisibilityScopes(feat);
     const nextMode = normalizeVisibilityMode(modeRaw);
-    const previousMode = getEditorFeatureVisibilityMode(featureVisibilityRules, normalizeText(feat.svg_id));
+    const previousMode = getFeatureVisibilityOverride(featureVisibilityOverrides, normalizeText(feat.svg_id));
     if (scopes.length <= 1) {
       return setFeatureVisibility(feat, nextMode, { triggerReflow: true, scope: scopes[0] });
     }
@@ -333,42 +438,38 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
     const previousMode = featureVisibilityScopeDialog.previousMode;
     applyFeatureVisibilityScope(feat, nextMode, scope);
     clearFeatureVisibilityScopeDialog();
-    if (previousMode !== nextMode) queueFeatureVisibilityReflow();
+    if (previousMode !== nextMode) markFeatureVisibilityLabelLayoutDirty();
     return previousMode !== nextMode;
   };
 
   const getFeatureVisibility = (feat) => {
     const svgId = String(feat?.svg_id || '').trim();
     if (!svgId) return 'default';
-    return getEditorFeatureVisibilityMode(featureVisibilityRules, svgId);
+    return getFeatureVisibilityOverride(featureVisibilityOverrides, svgId);
   };
 
   const setFeatureVisibilityRuleField = (index, field, value) => {
     if (!ruleFields.has(field)) return;
-    const current = featureVisibilityRules[index];
+    const current = featureVisibilityManualRules[index];
     if (!current) return;
     const nextRule = normalizeFeatureVisibilityRule({ ...current, [field]: value });
-    featureVisibilityRules.splice(index, 1, nextRule);
-    rebuildFeatureVisibilityOverrideCache();
+    featureVisibilityManualRules.splice(index, 1, nextRule);
   };
 
   const moveFeatureVisibilityRule = (index, offset) => {
     const target = index + offset;
-    if (target < 0 || target >= featureVisibilityRules.length) return;
-    const [rule] = featureVisibilityRules.splice(index, 1);
-    featureVisibilityRules.splice(target, 0, rule);
-    rebuildFeatureVisibilityOverrideCache();
+    if (target < 0 || target >= featureVisibilityManualRules.length) return;
+    const [rule] = featureVisibilityManualRules.splice(index, 1);
+    featureVisibilityManualRules.splice(target, 0, rule);
   };
 
   const addFeatureVisibilityRule = () => {
-    featureVisibilityRules.push(createDefaultFeatureVisibilityRule());
-    rebuildFeatureVisibilityOverrideCache();
+    featureVisibilityManualRules.push(createDefaultFeatureVisibilityRule());
   };
 
   const removeFeatureVisibilityRule = (index) => {
-    if (index < 0 || index >= featureVisibilityRules.length) return;
-    featureVisibilityRules.splice(index, 1);
-    rebuildFeatureVisibilityOverrideCache();
+    if (index < 0 || index >= featureVisibilityManualRules.length) return;
+    featureVisibilityManualRules.splice(index, 1);
   };
 
   const downloadTextFile = (filename, text) => {
@@ -383,7 +484,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
   };
 
   const downloadFeatureVisibilityRulesTsv = () => {
-    const text = serializeFeatureVisibilityRules(featureVisibilityRules);
+    const text = serializeFeatureVisibilityRules(boundaryFeatureVisibilityRules());
     if (!text.trim()) {
       alert('No valid feature visibility rules to export.');
       return;
@@ -408,12 +509,14 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions }) => 
     downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail,
+    buildSelectedFeaturesVisibilityCommand,
     getFeatureVisibility,
     handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: (index) => moveFeatureVisibilityRule(index, 1),
     moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),
     removeFeatureVisibilityRule,
     setFeatureVisibility,
+    setSelectedFeaturesVisibility,
     setFeatureVisibilityRuleField,
     updateClickedFeatureVisibility
   };

@@ -583,6 +583,85 @@
             stroke-opacity: 1 !important;
             stroke-width: 3px !important;
         }
+        .gbdraw-feature-selected {
+            opacity: 1 !important;
+            stroke: #2563eb !important;
+            stroke-opacity: 1 !important;
+            stroke-width: 2.5px !important;
+            paint-order: stroke fill markers;
+            filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.38));
+        }
+        .gbdraw-feature-selection-anchor {
+            stroke: #7c3aed !important;
+            stroke-width: 3.5px !important;
+            filter: drop-shadow(0 0 5px rgba(124, 58, 237, 0.42));
+        }
+        .gbdraw-feature-selection-candidate {
+            stroke: #0ea5e9 !important;
+            stroke-dasharray: 4 3;
+        }
+        .feature-selection-marquee {
+            position: fixed;
+            z-index: 35;
+            pointer-events: none;
+            border: 1px dashed #2563eb;
+            background: rgba(37, 99, 235, 0.12);
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+        }
+        .feature-selection-toolbar {
+            position: absolute;
+            top: 8.5rem;
+            left: 1rem;
+            z-index: 24;
+            width: min(680px, calc(100% - 2rem));
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+            padding: 0.55rem;
+        }
+        .feature-selection-toolbar-drag-handle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.8rem;
+            height: 1.8rem;
+            flex: 0 0 auto;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #64748b;
+            cursor: grab;
+            touch-action: none;
+        }
+        .feature-selection-toolbar-drag-handle:hover {
+            color: #2563eb;
+            border-color: #93c5fd;
+            background: #eff6ff;
+        }
+        .feature-selection-toolbar-drag-handle:active {
+            cursor: grabbing;
+        }
+        .feature-selection-toolbar input,
+        .feature-selection-toolbar select,
+        .feature-selection-toolbar button {
+            font-size: 11px;
+        }
+        .feature-selection-status {
+            position: absolute;
+            top: 6.25rem;
+            left: 1rem;
+            z-index: 23;
+            max-width: min(420px, calc(100% - 2rem));
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            background: rgba(239, 246, 255, 0.97);
+            color: #1e40af;
+            box-shadow: 0 8px 20px rgba(30, 64, 175, 0.12);
+            padding: 0.45rem 0.65rem;
+            font-size: 11px;
+            font-weight: 700;
+        }
         @media (max-width: 760px) {
             .feature-popup-grid {
                 grid-template-columns: minmax(0, 1fr);
@@ -2527,7 +2606,7 @@
                                 </datalist>
                                 <div class="space-y-1.5">
                                     <div
-                                        v-for="(rule, i) in featureVisibilityRules"
+                                        v-for="(rule, i) in featureVisibilityManualRules"
                                         :key="rule.id || `feature-visibility-rule-${i}`"
                                         class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1"
                                     >
@@ -2540,7 +2619,7 @@
                                             </div>
                                             <div class="flex items-center justify-end gap-0.5">
                                                 <button type="button" @click="moveFeatureVisibilityRuleUp(i)" :disabled="i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
-                                                <button type="button" @click="moveFeatureVisibilityRuleDown(i)" :disabled="i === featureVisibilityRules.length - 1" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
+                                                <button type="button" @click="moveFeatureVisibilityRuleDown(i)" :disabled="i === featureVisibilityManualRules.length - 1" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
                                                 <button type="button" @click="removeFeatureVisibilityRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule"><i class="ph ph-trash"></i></button>
                                             </div>
                                         </div>
@@ -2568,7 +2647,7 @@
                                             <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" placeholder="value regex" class="form-input form-input-compact w-full font-mono">
                                         </div>
                                     </div>
-                                    <div v-if="featureVisibilityRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No visibility rules</div>
+                                    <div v-if="featureVisibilityManualRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No manual visibility rules</div>
                                 </div>
                             </div>
 
@@ -3142,7 +3221,7 @@
                             <i class="ph ph-check-circle text-xl shrink-0"></i>
                             <span v-if="results.length === 1">Result Preview</span>
                             <span v-else>
-                                <select v-model="selectedResultIndex" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
+                                <select :value="selectedResultIndex" @change="selectResult($event.target.value)" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
                                     <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
                                 </select>
                             </span>
@@ -3273,6 +3352,123 @@
                         </div>
                     </div>
 
+                    <div v-if="featureSelectionStatus"
+                         class="feature-selection-status"
+                         role="status"
+                         @click.stop
+                         @pointerdown.stop>
+                        {{ featureSelectionStatus }}
+                    </div>
+
+                    <div v-if="hasFeatureSelection"
+                         class="feature-selection-toolbar"
+                         :style="featureSelectionToolbarStyle"
+                         @click.stop
+                         @pointerdown.stop="startFeatureSelectionToolbarDrag"
+                         @mousedown.stop
+                         @mousemove.stop
+                         @mouseup.stop
+                         @wheel.stop>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button type="button"
+                                    class="feature-selection-toolbar-drag-handle"
+                                    @pointerdown.stop.prevent="startFeatureSelectionToolbarDrag"
+                                    title="Move selected feature controls"
+                                    aria-label="Move selected feature controls">
+                                <i class="ph ph-arrows-out-cardinal"></i>
+                            </button>
+                            <span class="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700">
+                                <i class="ph ph-selection"></i>
+                                {{ selectedFeatureCount }} selected
+                            </span>
+                            <button type="button"
+                                    class="btn btn-secondary btn-sm"
+                                    @click="clearFeatureSelection({ clearStatus: true })"
+                                    title="Clear selected features"
+                                    aria-label="Clear selected features">
+                                <i class="ph ph-x"></i> Clear
+                            </button>
+                            <button type="button"
+                                    class="btn btn-secondary btn-sm"
+                                    @click="openFirstSelectedFeature($event)"
+                                    title="Open the first selected feature"
+                                    aria-label="Open first selected feature">
+                                <i class="ph ph-cursor-click"></i> Open
+                            </button>
+                        </div>
+                        <div class="mt-2 grid grid-cols-1 lg:grid-cols-3 gap-2">
+                            <div class="flex items-center gap-1 min-w-0">
+                                <input type="color"
+                                       v-model="selectedFeatureBulkColor"
+                                       data-history-ignore
+                                       class="w-8 h-8 border border-slate-200 rounded cursor-pointer"
+                                       aria-label="Selected feature color">
+                                <input type="text"
+                                       v-model="selectedFeatureBulkCaption"
+                                       data-history-ignore
+                                       class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
+                                       placeholder="Legend caption"
+                                       aria-label="Selected feature legend caption">
+                                <button type="button"
+                                        class="btn btn-primary btn-sm shrink-0"
+                                        data-history-managed
+                                        @click="applySelectedFeatureColor"
+                                        title="Apply color and caption to selected features"
+                                        aria-label="Apply color and caption to selected features">
+                                    <i class="ph ph-palette"></i>
+                                    <span>Apply</span>
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-1 min-w-0">
+                                <select v-model="selectedFeatureBulkVisibility"
+                                        data-history-ignore
+                                        class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
+                                        aria-label="Selected feature visibility">
+                                    <option value="default">Default</option>
+                                    <option value="on">Show</option>
+                                    <option value="off">Hide</option>
+                                    <option value="exclude_matching">Suppress</option>
+                                </select>
+                                <button type="button"
+                                        class="btn btn-secondary btn-sm shrink-0"
+                                        data-history-managed
+                                        @click="applySelectedFeatureVisibility"
+                                        title="Apply visibility to selected features"
+                                        aria-label="Apply visibility to selected features">
+                                    <i class="ph ph-eye"></i>
+                                    <span>Apply</span>
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-1 min-w-0">
+                                <input type="color"
+                                       v-model="selectedFeatureBulkStrokeColor"
+                                       data-history-ignore
+                                       class="w-8 h-8 border border-slate-200 rounded cursor-pointer"
+                                       aria-label="Selected feature stroke color">
+                                <input type="number"
+                                       v-model.number="selectedFeatureBulkStrokeWidth"
+                                       data-history-ignore
+                                       min="0"
+                                       step="0.1"
+                                       class="w-20 border border-slate-200 rounded px-2 py-1 text-xs"
+                                       aria-label="Selected feature stroke width">
+                                <button type="button"
+                                        class="btn btn-secondary btn-sm shrink-0"
+                                        data-history-managed
+                                        @click="applySelectedFeatureStroke"
+                                        title="Apply stroke to selected features"
+                                        aria-label="Apply stroke to selected features">
+                                    <i class="ph ph-line-segment"></i>
+                                    <span>Apply</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="featureSelectionDrag.active"
+                         class="feature-selection-marquee"
+                         :style="featureSelectionMarqueeStyle"></div>
+
                     <!-- Zoom and Canvas controls -->
                     <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
                         <!-- Reset preview layout button -->
@@ -3392,6 +3588,7 @@
                                    :value="clickedFeature.color"
                                    @input="clickedFeature.color = $event.target.value"
                                    @change="updateClickedFeatureColor($event.target.value)"
+                                   data-history-managed
                                    :disabled="!canEditFeatureColor(clickedFeature.feat)"
                                    :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
                                    :class="['w-8 h-8 cursor-pointer border-2 border-slate-200 rounded-lg shrink-0', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
@@ -3639,6 +3836,7 @@
                                    list="specific-rule-legend-name-options"
                                    @change="handleLegendNameCommit"
                                    @keydown.enter.prevent="handleLegendNameCommit"
+                                   data-history-managed
                                    :placeholder="clickedFeature.label"
                                    class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                             <datalist id="specific-rule-legend-name-options">
@@ -3668,6 +3866,7 @@
                             <label class="text-xs font-medium text-slate-500 block mb-1">Feature visibility</label>
                             <select v-model="clickedFeature.featureVisibility"
                                     @change="updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
+                                    data-history-managed
                                     class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                                 <option value="default">Default (follow feature filters)</option>
                                 <option value="on">On (force show)</option>
@@ -3699,6 +3898,7 @@
                             <input type="text"
                                    v-model="clickedFeature.labelText"
                                    @keydown.enter.prevent="updateClickedFeatureLabelText"
+                                   data-history-managed
                                    :disabled="!clickedFeature.hasEditableLabel"
                                    :placeholder="clickedFeature.hasEditableLabel ? 'Edit label text' : 'No editable label'"
                                    :class="[
@@ -3715,6 +3915,7 @@
                             </p>
                             <div class="mt-2 flex justify-end">
                                 <button @click="updateClickedFeatureLabelText"
+                                        data-history-managed
                                         :disabled="!clickedFeature.hasEditableLabel"
                                         :class="[
                                           'px-3 py-1.5 text-xs rounded-md',
@@ -3733,9 +3934,11 @@
                                        :value="clickedFeature.color"
                                        @input="clickedFeature.color = $event.target.value"
                                        @change="updateClickedFeatureColor($event.target.value)"
+                                       data-history-managed
                                        class="w-12 h-10 cursor-pointer border-2 border-slate-200 rounded-lg">
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
                                 <button @click="resetClickedFeatureFillColor"
+                                        data-history-managed
                                         class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
                                         title="Reset fill color to default">
                                     <i class="ph ph-arrow-counter-clockwise text-lg"></i>
@@ -3749,23 +3952,27 @@
                                        :value="clickedFeature.strokeColor || '#000000'"
                                        @input="clickedFeature.strokeColor = $event.target.value"
                                        @change="updateClickedFeatureStroke($event.target.value, null)"
+                                       data-history-managed
                                        class="w-10 h-8 cursor-pointer border-2 border-slate-200 rounded-lg"
                                        title="Stroke color">
                                 <input type="number"
                                        :value="clickedFeature.strokeWidth"
                                        @input="clickedFeature.strokeWidth = $event.target.value"
                                        @change="updateClickedFeatureStroke(null, $event.target.value)"
+                                       data-history-managed
                                        class="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"
                                        placeholder="Width"
                                        step="0.1"
                                        min="0"
                                        title="Stroke width">
                                 <button @click="resetClickedFeatureStroke"
+                                        data-history-managed
                                         class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
                                         title="Reset stroke to default">
                                     <i class="ph ph-arrow-counter-clockwise text-lg"></i>
                                 </button>
                                 <button @click="applyStrokeToAllSiblings"
+                                        data-history-managed
                                         class="text-slate-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50"
                                         title="Apply this stroke to all features with the same legend">
                                     <i class="ph ph-users-three text-lg"></i>
@@ -4136,6 +4343,7 @@
                                 <button v-for="scope in featureVisibilityScopeDialog.scopes"
                                         :key="`feature-visibility-scope-${scope.id}`"
                                         @click="handleFeatureVisibilityScopeChoice(scope.id)"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-start gap-2">
                                     <i class="ph ph-funnel text-lg mt-0.5"></i>
                                     <span class="min-w-0">
@@ -4145,6 +4353,7 @@
                                 </button>
                             </div>
                             <button @click="handleFeatureVisibilityScopeChoice('cancel')"
+                                    data-history-managed
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
@@ -4162,11 +4371,13 @@
 
                             <div class="flex flex-col gap-2">
                                 <button @click="handleLabelTextScopeChoice('single')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-user text-lg"></i>
                                     <span>This label only</span>
                                 </button>
                                 <button @click="handleLabelTextScopeChoice('all')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
                                     <span>All matching source labels ({{ labelTextScopeDialog.matchingCount }})</span>
@@ -4178,6 +4389,7 @@
                             </p>
 
                             <button @click="handleLabelTextScopeChoice('cancel')"
+                                    data-history-managed
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
@@ -4194,11 +4406,13 @@
                             </p>
                             <div class="flex flex-col gap-2">
                                 <button @click="handleGlobalLabelModeChoice('whitelist_only')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-funnel text-lg"></i>
                                     <span>Whitelist only</span>
                                 </button>
                                 <button @click="handleGlobalLabelModeChoice('show_all')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-list text-lg"></i>
                                     <span>Show all labels</span>
@@ -4231,6 +4445,7 @@
                                 <!-- Apply to all features matching the rule (when rule exists) -->
                                 <button v-if="colorScopeDialog.matchingRule"
                                         @click="handleColorScopeChoice('rule')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
                                     <span>Apply to all "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}" ({{ colorScopeDialog.ruleMatchCount }})</span>
@@ -4239,6 +4454,7 @@
                                 <!-- Apply to all features with same legend item (when siblings exist) -->
                                 <button v-if="colorScopeDialog.siblingCount > 0"
                                         @click="handleColorScopeChoice('caption')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users-three text-lg"></i>
                                     <span>Apply to all "{{ colorScopeDialog.legendName }}" ({{ colorScopeDialog.siblingCount + 1 }})</span>
@@ -4246,6 +4462,7 @@
 
                                 <!-- Apply to this feature only -->
                                 <button @click="handleColorScopeChoice('single')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-user text-lg"></i>
                                     <span>This feature only</span>
@@ -4258,6 +4475,7 @@
                                           String(colorScopeDialog.displayLabel || '').trim().toLowerCase() !== String(colorScopeDialog.legendName || '').trim().toLowerCase()
                                         "
                                         @click="handleColorScopeChoice('displayLabel')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-teal-100 hover:bg-teal-200 text-teal-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
                                     <span>Apply to all label "{{ colorScopeDialog.displayLabel }}" ({{ colorScopeDialog.displayLabelSiblingCount + 1 }})</span>
@@ -4271,6 +4489,7 @@
                                           String(colorScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(colorScopeDialog.displayLabel || '').trim().toLowerCase()
                                         "
                                         @click="handleColorScopeChoice('annotationLabel')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
                                     <span>Apply to all source label "{{ colorScopeDialog.annotationLabel }}" ({{ colorScopeDialog.annotationLabelSiblingCount + 1 }})</span>
@@ -4279,6 +4498,7 @@
                                 <!-- Use existing caption color (if available) -->
                                 <button v-if="colorScopeDialog.existingCaptionColor"
                                         @click="handleColorScopeChoice('useExisting')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <span class="w-5 h-5 rounded border border-purple-300 shrink-0"
                                           :style="{ backgroundColor: colorScopeDialog.existingCaptionColor }"></span>
@@ -4287,6 +4507,7 @@
                             </div>
 
                             <button @click="handleColorScopeChoice('cancel')"
+                                    data-history-managed
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
@@ -4323,11 +4544,13 @@
 
                             <div v-if="legendRenameDialog.mode === 'scope'" class="flex flex-col gap-2">
                                 <button @click="handleLegendRenameChoice('single')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-user text-lg"></i>
                                     <span>This feature only</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('group')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users-three text-lg"></i>
                                     <span>All current "{{ legendRenameDialog.oldCaption }}"</span>
@@ -4336,11 +4559,13 @@
 
                             <div v-else class="flex flex-col gap-2">
                                 <button @click="handleLegendRenameChoice('merge')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-arrows-merge text-lg"></i>
                                     <span>Merge into existing "{{ legendRenameDialog.targetCaption }}" and adopt its color</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('suffix')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-text-t text-lg"></i>
                                     <span>Keep current color and add a suffix</span>
@@ -4348,6 +4573,7 @@
                             </div>
 
                             <button @click="handleLegendRenameChoice('cancel')"
+                                    data-history-managed
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
@@ -4367,6 +4593,7 @@
                             <div class="flex flex-col gap-2">
                                 <!-- Reset all features with same caption -->
                                 <button @click="handleResetColorChoice('all')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
                                     <span>Reset all "{{ resetColorDialog.caption }}" ({{ resetColorDialog.siblingCount + 1 }})</span>
@@ -4374,6 +4601,7 @@
 
                                 <!-- Reset this feature only with new legend entry -->
                                 <button @click="handleResetColorChoice('this_with_legend')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-user-plus text-lg"></i>
                                     <span>This only + add legend entry</span>
@@ -4381,6 +4609,7 @@
 
                                 <!-- Reset this feature only -->
                                 <button @click="handleResetColorChoice('this')"
+                                        data-history-managed
                                         class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-user text-lg"></i>
                                     <span>This feature only</span>

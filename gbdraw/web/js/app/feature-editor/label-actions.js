@@ -6,6 +6,7 @@ import {
   selectStableFeatureKey
 } from './label-override-table.js';
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
+import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 const EXCLUDED_GROUP_SELECTOR =
   '#legend, #feature_legend, #pairwise_legend, #horizontal_legend, #vertical_legend, #length_bar, g[id="tick"], g[id^="tick_"]';
@@ -358,8 +359,7 @@ export const createFeatureLabelActions = ({ state }) => {
   const serializeCurrentSvg = (svg) => {
     const index = selectedResultIndex.value;
     if (index < 0 || index >= results.value.length) return;
-    const serializer = new XMLSerializer();
-    const serialized = serializer.serializeToString(svg);
+    const serialized = serializeCleanSvg(svg);
     if (results.value[index]?.content === serialized) return;
     skipCaptureBaseConfig.value = true;
     results.value[index] = { ...results.value[index], content: serialized };

@@ -5,6 +5,7 @@ import {
   parseSpecificRules,
   parseWhitelistRules
 } from './file-imports.js';
+import { buildFeatureVisibilitySelectorCache } from './feature-visibility.js';
 
 export const setupWatchers = ({
   state,
@@ -21,6 +22,7 @@ export const setupWatchers = ({
   runLabelReflow,
   refreshCircularRecordOrder,
   resetPreviewViewport,
+  previewRuntime = null,
   prepareDiagramGenerationWorker
 }) => {
   const {
@@ -31,6 +33,7 @@ export const setupWatchers = ({
     layoutRepositionMode,
     editableLabels,
     svgContent,
+    selectedResultIndex,
     form,
     generatedLegendPosition,
     generatedMode,
@@ -57,8 +60,9 @@ export const setupWatchers = ({
     featureRecordIds,
     selectedFeatureRecordIdx,
     featureColorOverrides,
-    featureVisibilityRules,
+    featureVisibilityManualRules,
     featureVisibilityOverrides,
+    featureVisibilitySelectorCache,
     featureStrokeOverrides,
     featurePanelTab,
     labelSearch,
@@ -98,7 +102,8 @@ export const setupWatchers = ({
     labelReflowRequestSeq,
     labelReflowRequestReason,
     labelReflowForceRequestSeq,
-    labelReflowForceRequestReason
+    labelReflowForceRequestReason,
+    labelLayoutDirtyReason
   } = state;
 
   const {
@@ -245,6 +250,20 @@ export const setupWatchers = ({
     console.groupEnd();
   };
 
+  const replacePlainObject = (target, source = {}) => {
+    Object.keys(target || {}).forEach((key) => delete target[key]);
+    Object.entries(source || {}).forEach(([key, value]) => {
+      target[key] = value;
+    });
+  };
+
+  const refreshFeatureVisibilitySelectorCache = () => {
+    replacePlainObject(
+      featureVisibilitySelectorCache,
+      buildFeatureVisibilitySelectorCache(extractedFeatures.value, featureSelectorSafetyScope.value)
+    );
+  };
+
   const scheduleCircularDefinitionUpdate = () => {
     if (mode.value !== 'circular') return;
     if (generatedMode.value !== mode.value) return;
@@ -370,8 +389,9 @@ export const setupWatchers = ({
   );
 
   watch(svgContent, () => {
-    const isIncrementalEdit = skipCaptureBaseConfig.value;
-    const shouldSkipPositionReapply = skipPositionReapply.value;
+    const isIncrementalEdit = Boolean(skipCaptureBaseConfig.value);
+    const shouldSkipPositionReapply = Boolean(skipPositionReapply.value);
+    skipCaptureBaseConfig.value = false;
     skipPositionReapply.value = false;
 
     let savedBaseTransformsById = null;
@@ -392,6 +412,11 @@ export const setupWatchers = ({
     nextTick(() => {
       const timingEntries = [];
       const svg = svgContainer.value?.querySelector('svg') || null;
+      if (svg) {
+        previewRuntime?.mountResultSvg?.(selectedResultIndex.value, svg);
+      } else {
+        previewRuntime?.clearActiveRuntime?.();
+      }
 
       if (svgContainer.value) {
         if (svg) {
@@ -410,6 +435,7 @@ export const setupWatchers = ({
         });
 
         if (normalizedSvgChanged) {
+          previewRuntime?.markActiveResultDirty?.('svg-normalization');
           timingEntries.push({
             label: 'watch(svgContent) persist normalized SVG',
             ms: 0,
@@ -491,6 +517,7 @@ export const setupWatchers = ({
   });
 
   watch(extractedFeatures, () => {
+    refreshFeatureVisibilitySelectorCache();
     if (!svgContent.value) return;
     nextTick(() => {
       const timingEntries = [];
@@ -500,6 +527,8 @@ export const setupWatchers = ({
       logPostGbdrawTimings(timingEntries);
     });
   });
+
+  watch(featureSelectorSafetyScope, refreshFeatureVisibilitySelectorCache, { immediate: true });
 
   watch(
     () => labelReflowRequestSeq.value,
@@ -550,8 +579,9 @@ export const setupWatchers = ({
       featureRecordIds.value = [];
       selectedFeatureRecordIdx.value = 0;
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
-      featureVisibilityRules.splice(0);
+      featureVisibilityManualRules.splice(0);
       Object.keys(featureVisibilityOverrides).forEach((k) => delete featureVisibilityOverrides[k]);
+      Object.keys(featureVisibilitySelectorCache).forEach((k) => delete featureVisibilitySelectorCache[k]);
       Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
       editableLabels.value = [];
       Object.keys(labelTextFeatureOverrides).forEach((k) => delete labelTextFeatureOverrides[k]);
@@ -567,6 +597,7 @@ export const setupWatchers = ({
       Object.keys(orthogroupDescriptionOverrides).forEach((k) => delete orthogroupDescriptionOverrides[k]);
       labelOverrideContextKey.value = '';
       labelOverrideBuildWarning.value = '';
+      labelLayoutDirtyReason.value = '';
       labelSearch.value = '';
       featurePanelTab.value = 'colors';
       clickedPairwiseMatch.value = null;

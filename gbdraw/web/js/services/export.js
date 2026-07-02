@@ -2,6 +2,7 @@ import { state } from '../state.js';
 import { setDpiInPng } from '../utils/png.js';
 import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
 import { enrichSvgWithStandaloneInteractivity, stripEditorOnlyCursorStyles } from './standalone-interactivity.js';
+import { stripTransientPreviewState } from './svg-serialization.js';
 
 const getDownloadName = (extension) => {
   const baseName =
@@ -33,6 +34,7 @@ const cloneCurrentSvg = () => {
 const getCurrentSvgString = ({ interactive = false } = {}) => {
   const clone = cloneCurrentSvg();
   if (!clone) return state.svgContent.value;
+  stripTransientPreviewState(clone, { stripCursor: false });
   stripPreviewFeatureSearchClasses(clone);
   if (interactive) {
     enrichSvgWithStandaloneInteractivity(clone, {

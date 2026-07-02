@@ -35,6 +35,7 @@ class DiagramRunResult:
     mode: Literal["circular", "linear"]
     render_formats: tuple[str, ...]
     outputs: tuple[RenderedSvg, ...]
+    feature_metadata: tuple[Mapping[str, Any], ...] = ()
     losat_cache_entries: tuple[Mapping[str, Any], ...] | None = None
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
 
@@ -211,6 +212,12 @@ def save_session_sidecar_if_requested(
         generated_at=datetime.now(timezone.utc),
         losat_cache_entries=run_result.losat_cache_entries,
     )
+    if run_result.feature_metadata:
+        features_payload = payload.setdefault("features", {})
+        if isinstance(features_payload, dict):
+            features_payload["extractedFeatures"] = [
+                dict(feature) for feature in run_result.feature_metadata
+            ]
     write_session_json(sidecar_path, payload)
     return sidecar_path
 
