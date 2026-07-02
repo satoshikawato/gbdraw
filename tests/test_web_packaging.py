@@ -74,6 +74,16 @@ def _load_verify_module():
     return module
 
 
+def _load_prepare_browser_wheel_module():
+    module_path = REPO_ROOT / "tools" / "prepare_browser_wheel.py"
+    spec = importlib.util.spec_from_file_location("prepare_browser_wheel", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load browser wheel preparation module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _load_prepare_cloudflare_pages_module():
     module_path = REPO_ROOT / "tools" / "prepare_cloudflare_pages.py"
     spec = importlib.util.spec_from_file_location("prepare_cloudflare_pages", module_path)
@@ -594,6 +604,50 @@ def test_public_web_html_entrypoints_are_not_gitignored() -> None:
                 check=False,
             )
             assert result.returncode == 1, f"{path} must be commit-visible for hosted builds"
+
+
+def test_open_source_notices_are_generated() -> None:
+    subprocess.run(
+        [sys.executable, "tools/generate_open_source_notices.py", "--check"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
+def test_open_source_notices_include_current_project_version() -> None:
+    from gbdraw._build_support import read_project_version
+
+    notices_html = (WEB_ROOT / "open-source-notices.html").read_text(encoding="utf-8")
+    assert read_project_version() in notices_html
+
+
+def test_open_source_notices_omit_internal_generation_details() -> None:
+    notices_html = (WEB_ROOT / "open-source-notices.html").read_text(encoding="utf-8")
+    assert "Distribution Summary" not in notices_html
+    assert "Inventory Sources" not in notices_html
+    assert "Project version:" not in notices_html
+    assert "tools/generate_open_source_notices.py" not in notices_html
+
+
+def test_open_source_notices_include_local_pyodide_wheels() -> None:
+    from gbdraw._web_assets import PYODIDE_LOCAL_WHEELS
+
+    notices_html = (WEB_ROOT / "open-source-notices.html").read_text(encoding="utf-8")
+    for wheel_path in PYODIDE_LOCAL_WHEELS:
+        assert wheel_path.as_posix() in notices_html
+
+
+def test_web_config_pyodide_local_wheels_match_shared_manifest() -> None:
+    from gbdraw._web_assets import PYODIDE_LOCAL_WHEELS
+
+    config_js = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
+    match = re.search(r"export const PYODIDE_LOCAL_WHEELS\s*=\s*\[(.*?)\];", config_js, re.DOTALL)
+    assert match is not None
+    configured_wheels = tuple(
+        Path(raw.lstrip("./"))
+        for raw in re.findall(r"""["']([^"']+\.whl)["']""", match.group(1))
+    )
+    assert configured_wheels == PYODIDE_LOCAL_WHEELS
 
 
 def test_index_uses_title_logo_separately_from_icon_assets() -> None:
@@ -1612,6 +1666,7 @@ def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
     assert "static.cloudflareinsights.com" not in index_html
     assert "CLOUDFLARE_WEB_ANALYTICS_SCRIPT" in index_html
     assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" in index_html
+    assert "GBDRAW_HOSTED_BUILD_LABEL" in index_html
 
 
 def test_web_losat_threaded_browser_wiring() -> None:
@@ -1646,7 +1701,57 @@ def test_web_losat_thread_count_options_are_contiguous() -> None:
     assert "Array.from({ length: childWorkerCount }" in worker_source
 
 
+def test_prepare_browser_wheel_refreshes_open_source_notices(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    prepare_module = _load_prepare_browser_wheel_module()
+    repo_root = tmp_path / "repo"
+    web_root = repo_root / "gbdraw" / "web"
+    web_root.mkdir(parents=True)
+    expected_name = "gbdraw-0.13.0-py3-none-any.whl"
+    calls: list[object] = []
+
+    def fake_run(args: list[str], *, cwd: Path, env: dict[str, str], check: bool) -> None:
+        calls.append("build")
+        assert cwd == repo_root
+        assert check is True
+        assert env["GBDRAW_BUILDING_BROWSER_WHEEL"] == "1"
+        outdir = Path(args[args.index("--outdir") + 1])
+        outdir.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(outdir / expected_name, "w") as zf:
+            zf.writestr("gbdraw/__init__.py", "")
+
+    def fake_validate_browser_wheel_prepared() -> Path:
+        calls.append("validate")
+        return web_root / expected_name
+
+    build_support = SimpleNamespace(
+        BROWSER_WHEEL_BUILD_ENV="GBDRAW_BUILDING_BROWSER_WHEEL",
+        expected_browser_wheel_name=lambda: expected_name,
+        refresh_open_source_notices=lambda: calls.append("notices"),
+        generate_cache_bust_token=lambda: "cache-token",
+        update_browser_wheel_config=lambda **kwargs: calls.append(("config", kwargs)),
+        validate_browser_wheel_prepared=fake_validate_browser_wheel_prepared,
+    )
+    monkeypatch.setattr(prepare_module, "REPO_ROOT", repo_root)
+    monkeypatch.setattr(prepare_module, "WEB_ROOT", web_root)
+    monkeypatch.setattr(prepare_module, "_load_build_support_module", lambda: build_support)
+    monkeypatch.setattr(prepare_module.subprocess, "run", fake_run)
+
+    assert prepare_module.prepare_browser_wheel(refresh_cache_bust=True) == 0
+    assert (web_root / expected_name).exists()
+    assert calls == [
+        "notices",
+        "build",
+        ("config", {"wheel_name": expected_name, "cache_bust": "cache-token"}),
+        "validate",
+    ]
+
+
 def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) -> None:
+    from gbdraw._build_support import read_project_version
+
     ensure_prepared_browser_wheel()
     cloudflare_module = _load_prepare_cloudflare_pages_module()
     output_root = tmp_path / "cloudflare-pages"
@@ -1654,6 +1759,7 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     bundle_path = cloudflare_module.build_cloudflare_pages_bundle(
         output_root=output_root,
         gallery_remote_base=remote_base,
+        commit_sha="abcdef1234567890",
     )
 
     index_html = (bundle_path / "index.html").read_text(encoding="utf-8")
@@ -1665,6 +1771,9 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     assert "connect-src 'self' https://cloudflareinsights.com;" in index_html
     assert "CLOUDFLARE_WEB_ANALYTICS_SCRIPT" not in index_html
     assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" not in index_html
+    assert "GBDRAW_HOSTED_BUILD_LABEL" not in index_html
+    assert f"Version: v{read_project_version()}+abcdef1" in index_html
+    assert 'title="Commit abcdef1234567890"' in index_html
     headers = (bundle_path / "_headers").read_text(encoding="utf-8")
     assert "Cross-Origin-Opener-Policy: same-origin" in headers
     assert "Cross-Origin-Embedder-Policy: require-corp" in headers
@@ -1708,6 +1817,13 @@ def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
     )
     monkeypatch.setattr(
         cloudflare_module,
+        "_load_build_support_module",
+        lambda: SimpleNamespace(
+            refresh_open_source_notices=lambda: calls.append(("notices", None))
+        ),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
         "_load_refresh_gallery_sessions_module",
         lambda: pytest.fail("Gallery refresh should be opt-in for Cloudflare Pages."),
     )
@@ -1717,11 +1833,11 @@ def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
         lambda *,
         output_root=cloudflare_module.DEFAULT_OUTPUT_ROOT,
         analytics_token=cloudflare_module.DEFAULT_ANALYTICS_TOKEN,
-        gallery_remote_base=None: output_root,
+        gallery_remote_base=None: calls.append(("bundle", output_root)) or output_root,
     )
 
     assert cloudflare_module.prepare_cloudflare_pages(output_root=output_root) == output_root
-    assert calls == [("wheel", False)]
+    assert calls == [("wheel", False), ("notices", None), ("bundle", output_root)]
 
     calls.clear()
     gallery_module = SimpleNamespace(
@@ -1746,6 +1862,45 @@ def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
         ("gallery", "sessions"),
         ("gallery", "assets"),
         ("wheel", True),
+        ("notices", None),
+        ("bundle", output_root),
+    ]
+
+
+def test_cloudflare_prepare_refreshes_open_source_notices_before_copy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    calls: list[str] = []
+    output_root = tmp_path / "cloudflare-pages"
+
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_prepare_browser_wheel_module",
+        lambda: SimpleNamespace(
+            prepare_browser_wheel=lambda refresh_cache_bust=False: calls.append("wheel")
+        ),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_build_support_module",
+        lambda: SimpleNamespace(refresh_open_source_notices=lambda: calls.append("notices")),
+    )
+    monkeypatch.setattr(
+        cloudflare_module,
+        "build_cloudflare_pages_bundle",
+        lambda *,
+        output_root=cloudflare_module.DEFAULT_OUTPUT_ROOT,
+        analytics_token=cloudflare_module.DEFAULT_ANALYTICS_TOKEN,
+        gallery_remote_base=None: calls.append("copy") or output_root,
+    )
+
+    assert cloudflare_module.prepare_cloudflare_pages(output_root=output_root) == output_root
+    assert calls == [
+        "wheel",
+        "notices",
+        "copy",
     ]
 
 
@@ -3251,7 +3406,9 @@ def test_hosted_web_build_refreshes_gallery_sessions_before_copy() -> None:
     assert 'python -m pip install -e ".[dev]"' in deploy_yml
     refresh_index = deploy_yml.index("python tools/refresh_gallery_sessions.py")
     copy_index = deploy_yml.index("cp -r gbdraw/web/* public/")
+    stamp_index = deploy_yml.index("python tools/stamp_web_build.py public")
     assert refresh_index < copy_index
+    assert copy_index < stamp_index
     assert "refresh_gallery_sessions: bool = False" in cloudflare_source
     assert '"--refresh-gallery"' in cloudflare_source
     assert "refresh_gallery_sessions=args.refresh_gallery" in cloudflare_source
@@ -3268,6 +3425,15 @@ def test_conda_recipe_does_not_copy_entire_web_tree() -> None:
     assert "gbdraw/web/open-source-notices.html" in build_sh
     assert "gbdraw/web/gbdraw-*.whl" in build_sh
     assert "for web_asset_dir in assets js presets vendor wasm" in build_sh
+
+
+def test_setup_commands_refresh_open_source_notices() -> None:
+    setup_source = (REPO_ROOT / "setup.py").read_text(encoding="utf-8")
+
+    assert "class build_py(_build_py):" in setup_source
+    assert "class sdist(_sdist):" in setup_source
+    assert setup_source.count("_build_support.refresh_open_source_notices()") == 2
+    assert 'cmdclass={"build_py": build_py, "sdist": sdist}' in setup_source
 
 
 @pytest.mark.slow

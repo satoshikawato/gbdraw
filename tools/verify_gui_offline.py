@@ -5,7 +5,6 @@ import argparse
 import contextlib
 import http.server
 import io
-import re
 import shutil
 import socketserver
 import subprocess
@@ -19,62 +18,20 @@ import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
-WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
-VENDOR_ROOT = WEB_ROOT / "vendor"
-PYODIDE_RUNTIME_DIR = VENDOR_ROOT / "pyodide" / "v0.29.0" / "full"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-ASSET_URLS = {
-    "vue": "https://unpkg.com/vue@3.5.25/dist/vue.global.js",
-    "tailwindcss": "https://cdn.tailwindcss.com",
-    "pyodide_core": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2",
-    "micropip": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
-    "tzdata": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl",
-    "browser_wasi_shim": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz",
-    "jspdf": "https://registry.npmjs.org/jspdf/-/jspdf-3.0.3.tgz",
-    "svg2pdf": "https://registry.npmjs.org/svg2pdf.js/-/svg2pdf.js-2.6.0.tgz",
-    "dompurify": "https://registry.npmjs.org/dompurify/-/dompurify-3.2.7.tgz",
-    "phosphor": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz",
-    "inter": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz",
-    "noto_sans_jp": "https://registry.npmjs.org/@fontsource/noto-sans-jp/-/noto-sans-jp-5.2.9.tgz",
-}
-
-PYODIDE_CORE_FILES = {
-    "package.json",
-    "pyodide.asm.js",
-    "pyodide.asm.wasm",
-    "pyodide.js",
-    "pyodide.mjs",
-    "pyodide-lock.json",
-    "python_stdlib.zip",
-}
-
-PYODIDE_RUNTIME_PACKAGE_WHEELS = {
-    "micropip": "micropip-0.11.0-py3-none-any.whl",
-    "tzdata": "tzdata-2025.2-py2.py3-none-any.whl",
-}
-
-UI_FONT_ASSETS = {
-    "inter": (
-        "inter-latin-300-normal.woff2",
-        "inter-latin-400-normal.woff2",
-        "inter-latin-500-normal.woff2",
-        "inter-latin-600-normal.woff2",
-        "inter-latin-700-normal.woff2",
-    ),
-    "noto-sans-jp": (
-        "noto-sans-jp-japanese-300-normal.woff2",
-        "noto-sans-jp-japanese-400-normal.woff2",
-        "noto-sans-jp-japanese-500-normal.woff2",
-        "noto-sans-jp-japanese-700-normal.woff2",
-    ),
-}
-
-REQUIRED_UI_FONT_FILES = tuple(
-    Path("vendor") / "fonts" / family / filename
-    for family, filenames in UI_FONT_ASSETS.items()
-    for filename in filenames
+from gbdraw._web_assets import (
+    ASSET_URLS,
+    PYODIDE_CORE_FILES,
+    PYODIDE_LOCAL_WHEELS,
+    PYODIDE_RUNTIME_DIR,
+    PYODIDE_RUNTIME_PACKAGE_WHEELS,
+    REQUIRED_UI_FONT_FILES,
+    UI_FONT_ASSETS,
+    VENDOR_ROOT,
+    WEB_ROOT,
 )
 
 
@@ -93,17 +50,7 @@ BUILD_SUPPORT = _load_build_support_module()
 
 
 def _parse_local_wheel_paths() -> tuple[Path, ...]:
-    config_text = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
-    match = re.search(r"export const PYODIDE_LOCAL_WHEELS\s*=\s*\[(.*?)\];", config_text, re.DOTALL)
-    if match is None:
-        raise RuntimeError("Could not determine PYODIDE_LOCAL_WHEELS from gbdraw/web/js/config.js")
-    wheel_paths = tuple(
-        Path(raw.lstrip("./"))
-        for raw in re.findall(r"""["']([^"']+\.whl)["']""", match.group(1))
-    )
-    if not wheel_paths:
-        raise RuntimeError("PYODIDE_LOCAL_WHEELS is empty in gbdraw/web/js/config.js")
-    return wheel_paths
+    return PYODIDE_LOCAL_WHEELS
 
 
 def _download(url: str, target: Path) -> None:

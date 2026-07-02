@@ -48,11 +48,31 @@ def _load_prepare_browser_wheel_module():
     return module
 
 
+def _load_build_support_module():
+    module_path = REPO_ROOT / "gbdraw" / "_build_support.py"
+    spec = spec_from_file_location("gbdraw_build_support", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load build support module from {module_path}")
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _load_refresh_gallery_sessions_module():
     module_path = REPO_ROOT / "tools" / "refresh_gallery_sessions.py"
     spec = spec_from_file_location("refresh_gallery_sessions", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load gallery session refresh module from {module_path}")
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_stamp_web_build_module():
+    module_path = REPO_ROOT / "tools" / "stamp_web_build.py"
+    spec = spec_from_file_location("stamp_web_build", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load hosted build stamping module from {module_path}")
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -116,6 +136,7 @@ def build_cloudflare_pages_bundle(
     output_root: Path = DEFAULT_OUTPUT_ROOT,
     analytics_token: str = DEFAULT_ANALYTICS_TOKEN,
     gallery_remote_base: str | None = None,
+    commit_sha: str | None = None,
 ) -> Path:
     if output_root.exists():
         shutil.rmtree(output_root)
@@ -136,6 +157,7 @@ def build_cloudflare_pages_bundle(
         "connect-src 'self' https://cloudflareinsights.com;",
     )
     index_path.write_text(index_html, encoding="utf-8")
+    _load_stamp_web_build_module().stamp_web_build(output_root, commit_sha=commit_sha)
     (output_root / "_headers").write_text(ISOLATION_HEADERS, encoding="utf-8")
     _write_remote_gallery_manifest(
         output_root=output_root,
@@ -157,6 +179,8 @@ def prepare_cloudflare_pages(
         refresh_gallery_sessions_module.prepare_gallery_assets()
     prepare_browser_wheel_module = _load_prepare_browser_wheel_module()
     prepare_browser_wheel_module.prepare_browser_wheel(refresh_cache_bust=refresh_cache_bust)
+    build_support = _load_build_support_module()
+    build_support.refresh_open_source_notices()
     token = analytics_token or os.environ.get(ANALYTICS_TOKEN_ENV) or DEFAULT_ANALYTICS_TOKEN
     return build_cloudflare_pages_bundle(output_root=output_root, analytics_token=token)
 
@@ -165,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Prepare the Cloudflare Pages bundle in dist/cloudflare-pages with the browser wheel, "
-            "Cloudflare Web Analytics snippet, and hosted-site privacy notice."
+            "Cloudflare Web Analytics snippet, hosted-site privacy notice, and build label."
         )
     )
     parser.add_argument(
