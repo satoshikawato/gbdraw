@@ -1,5 +1,6 @@
 import { state } from '../state.js';
 import { setDpiInPng } from '../utils/png.js';
+import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
 import { enrichSvgWithStandaloneInteractivity, stripEditorOnlyCursorStyles } from './standalone-interactivity.js';
 import { stripTransientPreviewState } from './svg-serialization.js';
 
@@ -34,6 +35,7 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
   const clone = cloneCurrentSvg();
   if (!clone) return state.svgContent.value;
   stripTransientPreviewState(clone, { stripCursor: false });
+  stripPreviewFeatureSearchClasses(clone);
   if (interactive) {
     enrichSvgWithStandaloneInteractivity(clone, {
       features: state.extractedFeatures.value,
@@ -48,8 +50,9 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
       legendEntries: state.legendEntries.value,
       currentColors: state.currentColors.value
     });
+  } else {
+    stripEditorOnlyCursorStyles(clone);
   }
-  stripEditorOnlyCursorStyles(clone);
   return new XMLSerializer().serializeToString(clone);
 };
 

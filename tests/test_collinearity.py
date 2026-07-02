@@ -2566,8 +2566,10 @@ def test_pairwise_match_path_marks_orthogroup_kind() -> None:
     assert 'data-orthogroup-id="og_2"' in svg_text
     assert 'data-query-protein-id="qa2"' in svg_text
     assert 'data-subject-protein-id="sb2"' in svg_text
-    assert 'data-query-feature-svg-id="feature_qa2"' in svg_text
-    assert 'data-subject-feature-svg-id="feature_sb2"' in svg_text
+    assert 'data-query-feature-svg-id="feature_qa2_record_1"' in svg_text
+    assert 'data-subject-feature-svg-id="feature_sb2_record_2"' in svg_text
+    assert 'data-query-stable-feature-svg-id="feature_qa2"' in svg_text
+    assert 'data-subject-stable-feature-svg-id="feature_sb2"' in svg_text
 
 
 @pytest.mark.linear

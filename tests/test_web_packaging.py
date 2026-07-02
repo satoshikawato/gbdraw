@@ -660,8 +660,8 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
 def test_interactive_gallery_examples_are_wired() -> None:
     expected_ids = [
         "HmmtDNA_ATskew",
-        "WSSV_genome_comparison",
         "BGC0000708-BGC0000713",
+        "WSSV_genome_comparison",
         "majanivirus_orthogroup",
         "hepatoplasmataceae_orthogroup",
         "Vnig_TUMSAT-TG-2018",
@@ -677,8 +677,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
     assert gallery_svg_sizes == sorted(gallery_svg_sizes)
     assert [entry["title"] for entry in examples] == [
         "<i>Homo sapiens</i> mitochondrion (AT skew)",
-        "White spot syndrome virus genome comparison",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
+        "White spot syndrome virus genome comparison",
         "Large dsDNA viruses (<i>Nimaviridae</i>)",
         "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",

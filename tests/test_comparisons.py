@@ -263,8 +263,10 @@ def test_pairwise_match_path_serializes_orthogroup_metadata_without_collinearity
     assert path.attribs["data-orthogroup-id"] == "og_1"
     assert path.attribs["data-query-protein-id"] == "query_protein"
     assert path.attribs["data-subject-protein-id"] == "subject_protein"
-    assert path.attribs["data-query-feature-svg-id"] == "fquery"
-    assert path.attribs["data-subject-feature-svg-id"] == "fsubject"
+    assert path.attribs["data-query-feature-svg-id"] == "fquery_record_1"
+    assert path.attribs["data-subject-feature-svg-id"] == "fsubject_record_2"
+    assert path.attribs["data-query-stable-feature-svg-id"] == "fquery"
+    assert path.attribs["data-subject-stable-feature-svg-id"] == "fsubject"
     assert "data-collinearity-block-id" not in path.attribs
 
 
