@@ -276,6 +276,14 @@ def test_web_feature_selector_helpers() -> None:
     subprocess.run([node, "tests/web/feature-selector.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_preview_runtime_helpers() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/preview-runtime.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
@@ -293,7 +301,7 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     assert "{svg_id: 'on' | 'off' | 'exclude_matching'}" in state_js
     assert "/web_feature_visibility_table.tsv" in run_analysis_js
     assert "args.push('--feature_visibility_table', featureVisibilityTablePath);" in run_analysis_js
-    assert "serializeFeatureVisibilityRules(featureVisibilityRules)" in run_analysis_js
+    assert "serializeFeatureVisibilityRules(featureVisibilityRules?.value || [])" in run_analysis_js
     assert "featureVisibility: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTsv: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTablePath || null" in worker_js

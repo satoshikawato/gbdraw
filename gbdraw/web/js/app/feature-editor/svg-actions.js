@@ -77,7 +77,8 @@ export const createFeatureSvgActions = ({
   getFeatureColor,
   getEffectiveLegendCaption,
   onFeaturePopupOpened = null,
-  featureSelection = null
+  featureSelection = null,
+  previewRuntime = null
 }) => {
   const {
     results,
@@ -631,6 +632,19 @@ export const createFeatureSvgActions = ({
       return;
     }
 
+    if (previewRuntime?.applyFeatureFillChanges) {
+      const updated = previewRuntime.applyFeatureFillChanges(
+        [{ featureId: svgId, color }],
+        { reason: 'feature-fill' }
+      );
+      if (updated) {
+        console.log(`Instant preview: updated feature ${svgId} to ${color}`);
+      } else {
+        console.log(`Instant preview: element ${svgId} not found in SVG`);
+      }
+      return;
+    }
+
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -679,25 +693,41 @@ export const createFeatureSvgActions = ({
     return payload;
   };
 
-  const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => {
-    const mode = normalizeVisibilityMode(modeRaw);
-    if (!svgId || !svgContainer.value) return false;
+  const applyVisibilityPreviewChanges = (changes, { reason = 'feature-visibility' } = {}) => {
+    const normalizedChanges = (Array.isArray(changes) ? changes : [])
+      .map((change) => ({
+        featureId: String(change?.featureId || change?.svgId || change?.id || '').trim(),
+        mode: normalizeVisibilityMode(change?.mode)
+      }))
+      .filter((change) => change.featureId);
+    if (normalizedChanges.length === 0) return false;
+
+    if (previewRuntime?.applyFeatureVisibilityChanges) {
+      return previewRuntime.applyFeatureVisibilityChanges(normalizedChanges, { reason });
+    }
+
+    if (!svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
 
     try {
-      const elements = getFeatureElements(svg, svgId);
-      if (!elements || elements.length === 0) {
-        console.log(`Instant preview: element ${svgId} not found for visibility update`);
-        return false;
-      }
-      elements.forEach((el) => {
-        if (mode === 'off') {
-          el.setAttribute('display', 'none');
-        } else {
-          el.removeAttribute('display');
+      let updated = false;
+      normalizedChanges.forEach(({ featureId, mode }) => {
+        const elements = getFeatureElements(svg, featureId);
+        if (!elements || elements.length === 0) {
+          console.log(`Instant preview: element ${featureId} not found for visibility update`);
+          return;
         }
+        elements.forEach((el) => {
+          if (mode === 'off') {
+            el.setAttribute('display', 'none');
+          } else {
+            el.removeAttribute('display');
+          }
+          updated = true;
+        });
       });
+      if (!updated) return false;
 
       const newContent = serializeCleanSvg(svg);
       skipCaptureBaseConfig.value = true;
@@ -711,6 +741,10 @@ export const createFeatureSvgActions = ({
       return false;
     }
   };
+
+  const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => (
+    applyVisibilityPreviewChanges([{ featureId: svgId, mode: modeRaw }])
+  );
 
   const attachSvgFeatureHandlers = () => {
     if (!svgContainer.value) return;
@@ -1065,6 +1099,7 @@ export const createFeatureSvgActions = ({
   return {
     applyInstantPreview,
     applyVisibilityPreviewBySvgId,
+    applyVisibilityPreviewChanges,
     attachSvgFeatureHandlers,
     getFeatureElements,
     openFeatureEditorForFeature

@@ -729,6 +729,7 @@ export const createRunAnalysis = ({
     generationCancelRequested,
     results,
     selectedResultIndex,
+    resultGenerationKey,
     resultPanelTab,
     lastRunInfo,
     errorLog,
@@ -2126,7 +2127,7 @@ json.dumps({
       }
       let featureVisibilityTablePath = null;
       let featureVisibilityCacheKey = '';
-      const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules);
+      const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules?.value || []);
       if (featureVisibilityTsv.trim()) {
         featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
         featureVisibilityCacheKey = featureVisibilityTsv;
@@ -4286,6 +4287,9 @@ json.dumps({
         results.value = shouldSuppressPairwiseIdentityLegend()
           ? stripPairwiseIdentityLegendsFromResults(res)
           : res;
+        if (!isReflow && resultGenerationKey) {
+          resultGenerationKey.value += 1;
+        }
       });
       if (!isReflow && manualRunStartedAt !== null) {
         const runInfo = buildRunInfo({

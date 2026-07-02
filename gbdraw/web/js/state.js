@@ -6,6 +6,7 @@ import {
 import { createDefaultLinearDefinitionLineStyles } from './app/cli-args.js';
 import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
 import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
+import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -663,6 +664,7 @@ const featureExtractionPending = ref(false);
 const featureExtractionError = ref(null);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
+const resultGenerationKey = ref(0);
 const showFeaturePanel = ref(false);
 const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
 const featureSearchInput = ref('');
@@ -678,8 +680,14 @@ const previewFeatureSearchActiveIndex = ref(-1);
 const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
-const featureVisibilityRules = reactive([]);
-const featureVisibilityOverrides = reactive({}); // Derived compatibility cache: {svg_id: 'on' | 'off' | 'exclude_matching'}
+const featureVisibilityManualRules = reactive([]);
+const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off' | 'exclude_matching'}
+const featureVisibilitySelectorCache = reactive({});
+const featureVisibilityRules = computed(() => deriveFeatureVisibilityRulesForBoundary(
+  featureVisibilityManualRules,
+  featureVisibilityOverrides,
+  featureVisibilitySelectorCache
+));
 const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
@@ -696,6 +704,7 @@ const labelReflowRequestReason = ref('');
 const labelReflowForceRequestSeq = ref(0);
 const labelReflowForceRequestReason = ref('');
 const labelReflowLastError = ref(null);
+const labelLayoutDirtyReason = ref('');
 
 // SVG Feature Click state
 const svgContainer = ref(null);
@@ -1137,6 +1146,7 @@ export const state = {
   featureExtractionError,
   featureRecordIds,
   selectedFeatureRecordIdx,
+  resultGenerationKey,
   showFeaturePanel,
   featurePanelTab,
   featureSearchInput,
@@ -1158,8 +1168,10 @@ export const state = {
   featureListTopSpacerPx,
   featureListBottomSpacerPx,
   featureColorOverrides,
+  featureVisibilityManualRules,
   featureVisibilityRules,
   featureVisibilityOverrides,
+  featureVisibilitySelectorCache,
   featureStrokeOverrides,
   labelSearch,
   editableLabels,
@@ -1176,6 +1188,7 @@ export const state = {
   labelReflowForceRequestSeq,
   labelReflowForceRequestReason,
   labelReflowLastError,
+  labelLayoutDirtyReason,
   svgContainer,
   clickedFeature,
   clickedFeaturePos,

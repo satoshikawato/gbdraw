@@ -35,15 +35,15 @@ import {
 import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import {
-  buildFeatureVisibilityOverrideCache,
-  featureVisibilityRulesFromOverrideCache,
-  normalizeFeatureVisibilityRule
+  normalizeFeatureVisibilityRule,
+  normalizeVisibilityMode,
+  splitLegacyVisibilityRules
 } from '../app/feature-visibility.js';
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 29;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, SESSION_VERSION]);
+const SESSION_VERSION = 30;
+const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
 const LOSAT_DERIVED_CACHE_SCHEMA = 1;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -131,18 +131,42 @@ const normalizeFeatureVisibilityRulesForSession = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
 
-const rebuildFeatureVisibilityOverrideCache = () => {
-  const cache = buildFeatureVisibilityOverrideCache(state.featureVisibilityRules);
-  replacePlainObject(state.featureVisibilityOverrides, cache);
+const normalizeFeatureVisibilityOverridesForSession = (overrides) => {
+  const normalized = {};
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return normalized;
+  Object.entries(overrides).forEach(([featureIdRaw, modeRaw]) => {
+    const featureId = String(featureIdRaw || '').trim();
+    const mode = normalizeVisibilityMode(modeRaw);
+    if (!featureId || mode === 'default') return;
+    normalized[featureId] = mode;
+  });
+  return normalized;
 };
 
-const replaceFeatureVisibilityRules = (rules) => {
-  state.featureVisibilityRules.splice(
+const splitFeatureVisibilityStateForSession = (features = {}) => {
+  if (Array.isArray(features.featureVisibilityManualRules)) {
+    return {
+      manualRules: normalizeFeatureVisibilityRulesForSession(features.featureVisibilityManualRules),
+      overrides: normalizeFeatureVisibilityOverridesForSession(features.featureVisibilityOverrides)
+    };
+  }
+  if (Array.isArray(features.featureVisibilityRules)) {
+    return splitLegacyVisibilityRules(features.featureVisibilityRules);
+  }
+  return {
+    manualRules: [],
+    overrides: normalizeFeatureVisibilityOverridesForSession(features.featureVisibilityOverrides)
+  };
+};
+
+const replaceFeatureVisibilityState = (features = {}) => {
+  const { manualRules, overrides } = splitFeatureVisibilityStateForSession(features);
+  state.featureVisibilityManualRules.splice(
     0,
-    state.featureVisibilityRules.length,
-    ...normalizeFeatureVisibilityRulesForSession(rules)
+    state.featureVisibilityManualRules.length,
+    ...normalizeFeatureVisibilityRulesForSession(manualRules)
   );
-  rebuildFeatureVisibilityOverrideCache();
+  replacePlainObject(state.featureVisibilityOverrides, overrides);
 };
 
 const sanitizeExtractedFeatureForSession = (feature) => {
@@ -1373,7 +1397,21 @@ const deserializeFile = (entry) => {
   });
 };
 
+let activePreviewRuntime = null;
+
+export const setPreviewRuntime = (runtime) => {
+  activePreviewRuntime = runtime || null;
+};
+
 export const serializeResults = () => {
+  if (activePreviewRuntime?.flushActiveResult) {
+    activePreviewRuntime.flushActiveResult();
+    return state.results.value.map((res, idx) => ({
+      name: res.name || `Result ${idx + 1}`,
+      content: res.content
+    }));
+  }
+
   const currentSvg = (() => {
     if (!state.svgContainer.value) return null;
     const svg = state.svgContainer.value.querySelector('svg');
@@ -1764,6 +1802,7 @@ const clearObject = (target) => {
 };
 
 const resetSessionBaseline = () => {
+  activePreviewRuntime?.clearActiveRuntime?.();
   preservedCliOptions = null;
   resetSettingsState(state);
   resetLayoutState(state);
@@ -1791,8 +1830,9 @@ const resetSessionBaseline = () => {
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
   clearObject(state.featureColorOverrides);
-  state.featureVisibilityRules.splice(0);
+  state.featureVisibilityManualRules.splice(0);
   clearObject(state.featureVisibilityOverrides);
+  clearObject(state.featureVisibilitySelectorCache);
   clearObject(state.featureStrokeOverrides);
   clearObject(state.labelTextFeatureOverrides);
   clearObject(state.labelTextBulkOverrides);
@@ -1800,6 +1840,7 @@ const resetSessionBaseline = () => {
   clearObject(state.labelVisibilityOverrides);
   state.labelOverrideContextKey.value = '';
   state.labelOverrideBuildWarning.value = '';
+  state.labelLayoutDirtyReason.value = '';
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
   state.generatedMultiRecordCanvas.value = false;
@@ -2017,7 +2058,8 @@ export const buildFeatureStateData = () => ({
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(state.featureColorOverrides),
-  featureVisibilityRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityRules),
+  featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
+  featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
   labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
   labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
@@ -2039,11 +2081,7 @@ export const applyFeatureStateData = (features = {}) => {
     ? features.selectedFeatureRecordIdx
     : 0;
   replacePlainObject(state.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
-  if (Array.isArray(features.featureVisibilityRules)) {
-    replaceFeatureVisibilityRules(features.featureVisibilityRules);
-  } else {
-    replaceFeatureVisibilityRules(featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides));
-  }
+  replaceFeatureVisibilityState(features);
   replacePlainObject(state.labelTextFeatureOverrides, cloneStringMap(features.labelTextFeatureOverrides));
   replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
   replacePlainObject(state.labelTextFeatureOverrideSources, cloneStringMap(features.labelTextFeatureOverrideSources));
@@ -2202,7 +2240,8 @@ export const exportSession = async (titleOverride = null) => {
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),
-      featureVisibilityRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityRules),
+      featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
+      featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
       labelTextFeatureOverrides: JSON.parse(JSON.stringify(state.labelTextFeatureOverrides)),
       labelTextBulkOverrides: JSON.parse(JSON.stringify(state.labelTextBulkOverrides)),
       labelTextFeatureOverrideSources: JSON.parse(JSON.stringify(state.labelTextFeatureOverrideSources)),
@@ -2273,6 +2312,7 @@ export const importSession = async (e, options = {}) => {
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
     state.labelOverrideBuildWarning.value = '';
+    state.labelLayoutDirtyReason.value = '';
     if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
       state.featurePanelTab.value = ui.featurePanelTab;
     } else {
@@ -2352,13 +2392,7 @@ export const importSession = async (e, options = {}) => {
     } else {
       Object.keys(state.featureColorOverrides).forEach((k) => delete state.featureColorOverrides[k]);
     }
-    if (Array.isArray(features.featureVisibilityRules)) {
-      replaceFeatureVisibilityRules(features.featureVisibilityRules);
-    } else if (features.featureVisibilityOverrides && typeof features.featureVisibilityOverrides === 'object') {
-      replaceFeatureVisibilityRules(featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides));
-    } else {
-      replaceFeatureVisibilityRules([]);
-    }
+    replaceFeatureVisibilityState(features);
 
     if (features.labelTextFeatureOverrides && typeof features.labelTextFeatureOverrides === 'object') {
       Object.keys(state.labelTextFeatureOverrides).forEach((k) => delete state.labelTextFeatureOverrides[k]);

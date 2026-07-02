@@ -191,3 +191,98 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
   );
   await expect(page.locator('.feature-popup')).toBeVisible();
 });
+
+test('BGC session selected feature Hide undo redo keeps visibility and legend stable', async ({ page }) => {
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.pyodideReady = true;
+  });
+
+  await page.locator('input[accept=".json"]').first().setInputFiles(bgcSessionPath);
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+  await page.waitForTimeout(250);
+
+  const featureIds = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const svg = document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement || document.querySelector('svg');
+    const renderedIds = new Set(
+      Array.from(svg?.querySelectorAll('[data-gbdraw-feature-id], path[id^="f"], polygon[id^="f"], rect[id^="f"]') || [])
+        .map((el) => String(el.getAttribute('data-gbdraw-feature-id') || el.id || '').replace(/__part\d+$/, ''))
+        .filter(Boolean)
+    );
+    return (Array.isArray(app.extractedFeatures) ? app.extractedFeatures : [])
+      .map((feature) => String(feature?.svg_id || '').trim())
+      .filter((id) => renderedIds.has(id))
+      .slice(0, 2);
+  });
+  expect(featureIds.length).toBeGreaterThanOrEqual(2);
+
+  const legendTransformBefore = await page.evaluate(() => {
+    const svg = document.querySelector('svg');
+    const legend = svg?.querySelector('#legend, #feature_legend, [id*="legend" i]');
+    return legend ? legend.getAttribute('transform') || '' : null;
+  });
+  expect(legendTransformBefore).not.toBeNull();
+
+  const getStates = async () => page.evaluate((ids) => {
+    const collect = (root) => ids.map((id) => {
+      const elements = Array.from(
+        root?.querySelectorAll?.('[data-gbdraw-feature-id], path[id^="f"], polygon[id^="f"], rect[id^="f"]') || []
+      ).filter((el) => String(el.getAttribute('data-gbdraw-feature-id') || el.id || '').replace(/__part\d+$/, '') === id);
+      return {
+        id,
+        count: elements.length,
+        hidden: elements.length > 0 && elements.every((el) => el.getAttribute('display') === 'none')
+      };
+    });
+
+    const app = window.__GBDRAW_APP__;
+    const liveSvg = document.querySelector('svg');
+    const content = app.results?.[app.selectedResultIndex]?.content || '';
+    const parsedSvg = new DOMParser().parseFromString(content, 'image/svg+xml').querySelector('svg');
+    return {
+      live: collect(liveSvg),
+      serialized: collect(parsedSvg),
+      serializedContent: content
+    };
+  }, featureIds);
+
+  await page.evaluate(async (ids) => {
+    const app = window.__GBDRAW_APP__;
+    app.selectedFeatureBulkVisibility = 'off';
+    app.selectedFeatureIds = new Set(ids);
+    app.selectedFeatureAnchorId = ids[0];
+    await app.applySelectedFeatureVisibility();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }, featureIds);
+  let states = await getStates();
+  expect(states.live.every((state) => state.count > 0 && state.hidden)).toBe(true);
+  expect(states.serialized.every((state) => state.count > 0 && state.hidden)).toBe(true);
+  expect(states.serializedContent).not.toContain('gbdraw-feature-selected');
+
+  await page.evaluate(async () => {
+    await window.__GBDRAW_APP__.undoHistory();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  states = await getStates();
+  expect(states.live.every((state) => state.count > 0 && !state.hidden)).toBe(true);
+  expect(states.serialized.every((state) => state.count > 0 && !state.hidden)).toBe(true);
+
+  const legendTransformAfterUndo = await page.evaluate(() => {
+    const svg = document.querySelector('svg');
+    const legend = svg?.querySelector('#legend, #feature_legend, [id*="legend" i]');
+    return legend ? legend.getAttribute('transform') || '' : null;
+  });
+  expect(legendTransformAfterUndo).toBe(legendTransformBefore);
+
+  await page.evaluate(async () => {
+    await window.__GBDRAW_APP__.redoHistory();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  states = await getStates();
+  expect(states.live.every((state) => state.count > 0 && state.hidden)).toBe(true);
+  expect(states.serialized.every((state) => state.count > 0 && state.hidden)).toBe(true);
+  expect(states.serializedContent).not.toContain('gbdraw-feature-selected');
+});

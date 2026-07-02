@@ -55,7 +55,8 @@ export const createFeatureColorActions = ({
   legendActions,
   svgActions,
   ruleActions,
-  featureSvgActions
+  featureSvgActions,
+  previewRuntime = null
 }) => {
   const {
     pyodideReady,
@@ -218,6 +219,10 @@ export const createFeatureColorActions = ({
 
   const persistCurrentSvg = (svg = getCurrentSvg()) => {
     if (!svg) return;
+    if (previewRuntime?.markActiveResultDirty) {
+      previewRuntime.markActiveResultDirty('feature-color');
+      return;
+    }
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
@@ -1240,11 +1245,7 @@ export const createFeatureColorActions = ({
       }
     });
 
-    skipCaptureBaseConfig.value = true;
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
-    }
+    persistCurrentSvg(svg);
   };
 
   const resetClickedFeatureStroke = () => {
@@ -1277,11 +1278,7 @@ export const createFeatureColorActions = ({
     clickedFeature.value.strokeWidth = originalWidth ?? '';
     clearFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, svgId);
 
-    skipCaptureBaseConfig.value = true;
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
-    }
+    persistCurrentSvg(svg);
   };
 
   const resetClickedFeatureFillColor = () => {
@@ -1394,11 +1391,7 @@ export const createFeatureColorActions = ({
       );
     }
 
-    skipCaptureBaseConfig.value = true;
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
-    }
+    persistCurrentSvg(svg);
 
     clickedFeature.value = null;
   };
@@ -1534,11 +1527,7 @@ export const createFeatureColorActions = ({
       legendStrokeOverrides[overrideKey].strokeWidth = parseFloat(currentStrokeWidth);
     }
 
-    skipCaptureBaseConfig.value = true;
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
-    }
+    persistCurrentSvg(svg);
 
     console.log(
       `Applied stroke (color: ${currentStrokeColor}, width: ${currentStrokeWidth}) to ${siblingFeatureIds.length} features`

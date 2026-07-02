@@ -4,7 +4,14 @@ import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
 import { createFeatureSvgActions } from './feature-editor/svg-actions.js';
 import { createFeatureVisibilityActions } from './feature-editor/visibility-actions.js';
 
-export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions, featureSelection = null }) => {
+export const createFeatureEditor = ({
+  state,
+  nextTick,
+  legendActions,
+  svgActions,
+  featureSelection = null,
+  previewRuntime = null
+}) => {
   const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions });
   const labelActions = createFeatureLabelActions({ state });
   const featureSvgActions = createFeatureSvgActions({
@@ -12,7 +19,8 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     getFeatureColor: ruleActions.getFeatureColor,
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
     onFeaturePopupOpened: labelActions.syncLabelEditor,
-    featureSelection
+    featureSelection,
+    previewRuntime
   });
   const colorActions = createFeatureColorActions({
     state,
@@ -20,11 +28,13 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     legendActions,
     svgActions,
     ruleActions,
-    featureSvgActions
+    featureSvgActions,
+    previewRuntime
   });
   const visibilityActions = createFeatureVisibilityActions({
     state,
-    featureSvgActions
+    featureSvgActions,
+    previewRuntime
   });
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     return featureSvgActions.openFeatureEditorForFeature(feat, eventLike);
@@ -58,6 +68,7 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     removeFeatureVisibilityRule: visibilityActions.removeFeatureVisibilityRule,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
     setSelectedFeaturesVisibility: visibilityActions.setSelectedFeaturesVisibility,
+    buildSelectedFeaturesVisibilityCommand: visibilityActions.buildSelectedFeaturesVisibilityCommand,
     setFeatureVisibilityRuleField: visibilityActions.setFeatureVisibilityRuleField,
     updateClickedFeatureVisibility: visibilityActions.updateClickedFeatureVisibility,
     requestFeatureColorChange: colorActions.requestFeatureColorChange,

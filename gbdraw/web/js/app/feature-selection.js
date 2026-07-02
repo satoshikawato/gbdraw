@@ -1,4 +1,4 @@
-const { computed } = window.Vue;
+const { computed, reactive } = window.Vue;
 
 export const FEATURE_SELECTION_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
 export const SELECTABLE_FEATURE_SELECTOR = `[${FEATURE_SELECTION_ID_ATTRIBUTE}]`;
@@ -18,6 +18,7 @@ export const FEATURE_SELECTION_CLASSES = Object.freeze([
 const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
 const TWO_PI = Math.PI * 2;
 const MARQUEE_THRESHOLD_PX = 4;
+const TOOLBAR_EDGE_MARGIN_PX = 8;
 
 export const normalizeFeatureSelectionId = (value) =>
   String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
@@ -115,6 +116,12 @@ const rectsIntersect = (left, right) => (
   left.bottom >= right.top
 );
 
+const clampNumber = (value, min, max) => {
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return value;
+  return Math.min(max, Math.max(min, value));
+};
+
 const getElementScreenRect = (element) => {
   if (!element || element.getAttribute?.('display') === 'none') return null;
   const rect = typeof element.getBoundingClientRect === 'function'
@@ -181,6 +188,8 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
 
   let statusTimeoutId = null;
   let pendingDrag = null;
+  let activeToolbarDrag = null;
+  const toolbarOffset = reactive({ x: 0, y: 0 });
 
   const getCurrentSvg = () => svgContainer.value?.querySelector?.('svg') || null;
 
@@ -206,6 +215,71 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
 
   const syncFeatureSelectionClasses = (svg = getCurrentSvg()) => {
     applyFeatureSelectionClasses(svg, state);
+  };
+
+  const getToolbarDragBounds = (toolbar) => {
+    if (!toolbar || typeof toolbar.getBoundingClientRect !== 'function') return null;
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const boundsElement = toolbar.offsetParent || toolbar.parentElement || svgContainer.value?.parentElement || null;
+    const boundsRect = boundsElement?.getBoundingClientRect?.() || {
+      left: 0,
+      top: 0,
+      right: window.innerWidth,
+      bottom: window.innerHeight
+    };
+    return {
+      minX: toolbarOffset.x + boundsRect.left + TOOLBAR_EDGE_MARGIN_PX - toolbarRect.left,
+      maxX: toolbarOffset.x + boundsRect.right - TOOLBAR_EDGE_MARGIN_PX - toolbarRect.right,
+      minY: toolbarOffset.y + boundsRect.top + TOOLBAR_EDGE_MARGIN_PX - toolbarRect.top,
+      maxY: toolbarOffset.y + boundsRect.bottom - TOOLBAR_EDGE_MARGIN_PX - toolbarRect.bottom
+    };
+  };
+
+  const featureSelectionToolbarStyle = computed(() => ({
+    transform: `translate(${Math.round(toolbarOffset.x)}px, ${Math.round(toolbarOffset.y)}px)`
+  }));
+
+  const moveToolbarDrag = (event) => {
+    if (!activeToolbarDrag) return;
+    const nextX = activeToolbarDrag.originX + ((Number(event.clientX) || 0) - activeToolbarDrag.startX);
+    const nextY = activeToolbarDrag.originY + ((Number(event.clientY) || 0) - activeToolbarDrag.startY);
+    toolbarOffset.x = clampNumber(nextX, activeToolbarDrag.minX, activeToolbarDrag.maxX);
+    toolbarOffset.y = clampNumber(nextY, activeToolbarDrag.minY, activeToolbarDrag.maxY);
+    event.preventDefault();
+  };
+
+  const stopToolbarDrag = () => {
+    if (!activeToolbarDrag) return;
+    activeToolbarDrag = null;
+    document.removeEventListener('pointermove', moveToolbarDrag, true);
+    document.removeEventListener('pointerup', stopToolbarDrag, true);
+    document.removeEventListener('pointercancel', stopToolbarDrag, true);
+    window.removeEventListener('blur', stopToolbarDrag);
+  };
+
+  const startToolbarDrag = (event) => {
+    if (event.button != null && event.button !== 0) return;
+    const fromHandle = Boolean(event.target?.closest?.('.feature-selection-toolbar-drag-handle'));
+    if (!fromHandle && event.target?.closest?.('input, select, button, label, textarea, a')) return;
+    stopToolbarDrag();
+    const toolbar = event.currentTarget?.closest?.('.feature-selection-toolbar') || null;
+    const bounds = getToolbarDragBounds(toolbar) || {};
+    activeToolbarDrag = {
+      startX: Number(event.clientX) || 0,
+      startY: Number(event.clientY) || 0,
+      originX: Number(toolbarOffset.x) || 0,
+      originY: Number(toolbarOffset.y) || 0,
+      minX: bounds.minX,
+      maxX: bounds.maxX,
+      minY: bounds.minY,
+      maxY: bounds.maxY
+    };
+    document.addEventListener('pointermove', moveToolbarDrag, true);
+    document.addEventListener('pointerup', stopToolbarDrag, true);
+    document.addEventListener('pointercancel', stopToolbarDrag, true);
+    window.addEventListener('blur', stopToolbarDrag);
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const replaceSelectedFeatureIds = (ids, { anchorId = selectedFeatureAnchorId.value, status = '' } = {}) => {
@@ -478,6 +552,11 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
 
   const handleEscape = (event) => {
     if (event.key !== 'Escape') return;
+    if (activeToolbarDrag) {
+      stopToolbarDrag();
+      event.preventDefault();
+      return;
+    }
     if (featureSelectionDrag.active || pendingDrag) {
       cancelMarqueePointer();
       event.preventDefault();
@@ -495,6 +574,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
 
   const handleWindowBlur = () => {
     if (featureSelectionDrag.active || pendingDrag) cancelMarqueePointer();
+    if (activeToolbarDrag) stopToolbarDrag();
   };
 
   if (typeof onMounted === 'function' && typeof onUnmounted === 'function') {
@@ -505,6 +585,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     onUnmounted(() => {
       document.removeEventListener('keydown', handleEscape);
       window.removeEventListener('blur', handleWindowBlur);
+      stopToolbarDrag();
       if (statusTimeoutId !== null) window.clearTimeout(statusTimeoutId);
     });
   }
@@ -513,11 +594,13 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     clearFeatureSelection,
     consumeSuppressNextClick,
     featureSelectionMarqueeStyle,
+    featureSelectionToolbarStyle,
     getFeatureById,
     getSelectableFeatureTarget,
     markPlainFeatureClick,
     replaceSelectedFeatureIds,
     selectFeatureRange,
+    startToolbarDrag,
     startMarqueePointer,
     moveMarqueePointer,
     commitMarqueePointer,

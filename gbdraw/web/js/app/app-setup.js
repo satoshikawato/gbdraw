@@ -17,7 +17,8 @@ import {
   buildUiStateData,
   exportSession,
   importSession as importSessionFromFile,
-  serializeResults
+  serializeResults,
+  setPreviewRuntime
 } from '../services/config.js';
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
@@ -42,6 +43,7 @@ import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
+import { createPreviewRuntime } from './preview-runtime.js';
 import { createOrthogroupEditor } from './orthogroups.js';
 import {
   createCircularTrackSlotEditor,
@@ -193,9 +195,13 @@ export const createAppSetup = () => {
     labelReflowProcessing,
     labelReflowLastError,
     featureColorOverrides,
+    featureVisibilityManualRules,
     featureVisibilityRules,
     featureVisibilityOverrides,
+    featureVisibilitySelectorCache,
     featureStrokeOverrides,
+    labelLayoutDirtyReason,
+    resultGenerationKey,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
@@ -263,6 +269,8 @@ export const createAppSetup = () => {
 
   const pyodideManager = createPyodideManager({ state });
   const getPyodide = pyodideManager.getPyodide;
+  const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
+  setPreviewRuntime(previewRuntime);
 
   const historyFileStore = createHistoryFileStore();
   const historySnapshots = createHistorySnapshotService({
@@ -313,6 +321,7 @@ export const createAppSetup = () => {
   });
   const undoHistory = () => history.undo();
   const redoHistory = () => history.redo();
+  const selectResult = (index) => previewRuntime.selectResult(index);
 
   const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
@@ -325,7 +334,8 @@ export const createAppSetup = () => {
     nextTick,
     legendActions,
     svgActions,
-    featureSelection
+    featureSelection,
+    previewRuntime
   });
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
@@ -336,7 +346,8 @@ export const createAppSetup = () => {
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
   });
 
-  watch(selectedResultIndex, () => {
+  watch(selectedResultIndex, (newIndex, oldIndex) => {
+    if (newIndex !== oldIndex) previewRuntime.flushActiveResult({ markIncremental: false });
     featureSelection.clearFeatureSelection({ clearStatus: true });
   });
   watch(mode, () => {
@@ -976,6 +987,7 @@ export const createAppSetup = () => {
     runLabelReflow,
     refreshCircularRecordOrder,
     resetPreviewViewport,
+    previewRuntime,
     prepareDiagramGenerationWorker: async () => {
       diagramGenerationWorkerReady.value = false;
       diagramGenerationWorkerError.value = null;
@@ -1093,7 +1105,7 @@ export const createAppSetup = () => {
     applyStrokeToAllSiblings,
     applyColorToSelectedFeatures,
     applyStrokeToSelectedFeatures,
-    setSelectedFeaturesVisibility,
+    buildSelectedFeaturesVisibilityCommand,
     setFeatureColor,
     openFeatureEditorForFeature,
     getEditableLabelByFeatureId,
@@ -1152,11 +1164,13 @@ export const createAppSetup = () => {
     if (changed) featureSelection.syncFeatureSelectionClasses();
     return changed;
   });
-  const applySelectedFeatureVisibility = () => history.runUndoable('Change selected feature visibility', async () => {
-    const changed = setSelectedFeaturesVisibility(selectedFeatures.value, selectedFeatureBulkVisibility.value);
+  const applySelectedFeatureVisibility = async () => {
+    const changed = await history.runUndoableCommand('Change selected feature visibility', () =>
+      buildSelectedFeaturesVisibilityCommand(selectedFeatures.value, selectedFeatureBulkVisibility.value)
+    );
     if (changed) featureSelection.clearFeatureSelection({ clearStatus: true });
     return changed;
-  });
+  };
   const applySelectedFeatureStroke = () => history.runUndoable('Change selected feature stroke', async () => {
     const changed = applyStrokeToSelectedFeatures(
       selectedFeatures.value,
@@ -2037,6 +2051,7 @@ export const createAppSetup = () => {
     sessionTitleLabel,
     results,
     selectedResultIndex,
+    selectResult,
     resultPanelTab,
     lastRunInfo,
     runInfoCopyStatus,
@@ -2316,6 +2331,8 @@ export const createAppSetup = () => {
     selectedFeatures,
     hasFeatureSelection,
     featureSelectionMarqueeStyle: featureSelection.featureSelectionMarqueeStyle,
+    featureSelectionToolbarStyle: featureSelection.featureSelectionToolbarStyle,
+    startFeatureSelectionToolbarDrag: featureSelection.startToolbarDrag,
     clearFeatureSelection: featureSelection.clearFeatureSelection,
     openFirstSelectedFeature,
     selectedFeatureBulkColor,
@@ -2346,9 +2363,12 @@ export const createAppSetup = () => {
     labelReflowLastError,
     filteredFeatures,
     featureColorOverrides,
+    featureVisibilityManualRules,
     featureVisibilityRules,
     featureVisibilityOverrides,
+    featureVisibilitySelectorCache,
     featureStrokeOverrides,
+    labelLayoutDirtyReason,
     addFeatureVisibilityRule: addFeatureVisibilityRuleWithHistory,
     downloadFeatureVisibilityRulesTsv,
     featureVisibilityFeatureSuggestions,

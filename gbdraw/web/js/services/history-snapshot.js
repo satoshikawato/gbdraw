@@ -1,7 +1,7 @@
 import {
-  buildFeatureVisibilityOverrideCache,
-  featureVisibilityRulesFromOverrideCache,
-  normalizeFeatureVisibilityRule
+  normalizeFeatureVisibilityRule,
+  normalizeVisibilityMode,
+  splitLegacyVisibilityRules
 } from '../app/feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 
@@ -27,12 +27,44 @@ const cloneFeatureVisibilityRules = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
 
-const replaceFeatureVisibilityRules = (state, rules) => {
-  const normalizedRules = cloneFeatureVisibilityRules(rules);
-  if (Array.isArray(state.featureVisibilityRules)) {
-    state.featureVisibilityRules.splice(0, state.featureVisibilityRules.length, ...normalizedRules);
+const cloneFeatureVisibilityOverrides = (overrides) => {
+  const normalized = {};
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return normalized;
+  Object.entries(overrides).forEach(([featureIdRaw, modeRaw]) => {
+    const featureId = String(featureIdRaw || '').trim();
+    const mode = normalizeVisibilityMode(modeRaw);
+    if (!featureId || mode === 'default') return;
+    normalized[featureId] = mode;
+  });
+  return normalized;
+};
+
+const splitFeatureVisibilityState = (features = {}) => {
+  if (Array.isArray(features.featureVisibilityManualRules)) {
+    return {
+      manualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules),
+      overrides: cloneFeatureVisibilityOverrides(features.featureVisibilityOverrides)
+    };
   }
-  replacePlainObject(state.featureVisibilityOverrides, buildFeatureVisibilityOverrideCache(normalizedRules));
+  if (Array.isArray(features.featureVisibilityRules)) {
+    return splitLegacyVisibilityRules(features.featureVisibilityRules);
+  }
+  return {
+    manualRules: [],
+    overrides: cloneFeatureVisibilityOverrides(features.featureVisibilityOverrides)
+  };
+};
+
+const replaceFeatureVisibilityState = (state, features = {}) => {
+  const { manualRules, overrides } = splitFeatureVisibilityState(features);
+  if (Array.isArray(state.featureVisibilityManualRules)) {
+    state.featureVisibilityManualRules.splice(
+      0,
+      state.featureVisibilityManualRules.length,
+      ...cloneFeatureVisibilityRules(manualRules)
+    );
+  }
+  replacePlainObject(state.featureVisibilityOverrides, overrides);
 };
 
 const setRef = (target, value) => {
@@ -189,7 +221,8 @@ const buildFallbackFeatureStateData = (state) => ({
   featureRecordIds: cloneJsonData(getRef(state.featureRecordIds, [])) || [],
   selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
   featureColorOverrides: clonePlainObject(state.featureColorOverrides),
-  featureVisibilityRules: cloneFeatureVisibilityRules(state.featureVisibilityRules),
+  featureVisibilityManualRules: cloneFeatureVisibilityRules(state.featureVisibilityManualRules),
+  featureVisibilityOverrides: cloneFeatureVisibilityOverrides(state.featureVisibilityOverrides),
   labelTextFeatureOverrides: clonePlainObject(state.labelTextFeatureOverrides),
   labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: clonePlainObject(state.labelTextFeatureOverrideSources),
@@ -206,12 +239,7 @@ const applyFallbackFeatureStateData = (state, features = {}) => {
     Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
   );
   replacePlainObject(state.featureColorOverrides, clonePlainObject(features.featureColorOverrides));
-  replaceFeatureVisibilityRules(
-    state,
-    Array.isArray(features.featureVisibilityRules)
-      ? features.featureVisibilityRules
-      : featureVisibilityRulesFromOverrideCache(features.featureVisibilityOverrides)
-  );
+  replaceFeatureVisibilityState(state, features);
   replacePlainObject(state.labelTextFeatureOverrides, clonePlainObject(features.labelTextFeatureOverrides));
   replacePlainObject(state.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
   replacePlainObject(
