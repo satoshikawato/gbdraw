@@ -2012,10 +2012,12 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linear_track_slots_enabled: false" in state_source
     assert "linear_track_slots_schema_version: 1" in state_source
     assert "createDefaultLinearTrackSlots" in state_source
-    assert '>Custom Track Slots <help-tip text="Edit the explicit linear track stack.' in index_html
+    assert "<span class=\"truncate\">Custom Track Slots</span>" in index_html
+    assert '@click="setLinearTrackSlotsEnabled(!adv.linear_track_slots_enabled)"' in index_html
+    assert 'aria-controls="linear-custom-track-slots-panel"' in index_html
     assert "Linear Custom Track Slots" not in index_html
     assert "Linear Custom Track Slots" not in config_source
-    assert 'v-model="adv.linear_track_slots_enabled"' in index_html
+    assert 'v-model="adv.linear_track_slots_enabled"' not in index_html
     assert 'v-model.number="entry.slot.params.track_index"' in index_html
     assert "--linear_track_slot" in run_source
     assert "buildLinearTrackSlotSpec" in run_source
@@ -2157,6 +2159,8 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "if (useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
+    assert '@click="setCircularTrackSlotsEnabled(!adv.circular_track_slots_enabled)"' in index_html
+    assert 'aria-controls="circular-custom-track-slots-panel"' in index_html
     assert "Track Preset" in index_html
     assert 'v-if="!adv.circular_track_slots_enabled"' in index_html
     assert "Reset to Tuckin" in index_html

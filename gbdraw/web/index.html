@@ -1859,10 +1859,21 @@
                                 </div>
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div class="flex items-center justify-between gap-2">
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.linear_track_slots_enabled" @change="setLinearTrackSlotsEnabled($event.target.checked)" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Edit the explicit linear track stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip></span>
-                                        </label>
+                                        <div class="inline-flex min-w-0 items-center gap-1 text-xs font-semibold">
+                                            <button
+                                                type="button"
+                                                class="inline-flex min-w-0 items-center gap-1 text-left select-none"
+                                                :class="adv.linear_track_slots_enabled ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
+                                                :aria-expanded="adv.linear_track_slots_enabled ? 'true' : 'false'"
+                                                aria-controls="linear-custom-track-slots-panel"
+                                                :title="adv.linear_track_slots_enabled ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
+                                                @click="setLinearTrackSlotsEnabled(!adv.linear_track_slots_enabled)"
+                                            >
+                                                <i class="ph" :class="adv.linear_track_slots_enabled ? 'ph-caret-down' : 'ph-caret-right'"></i>
+                                                <span class="truncate">Custom Track Slots</span>
+                                            </button>
+                                            <help-tip text="Edit the explicit linear track stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
+                                        </div>
                                         <button
                                             type="button"
                                             class="btn btn-secondary text-[10px] py-0.5 px-2"
@@ -1874,7 +1885,7 @@
                                             Reset
                                         </button>
                                     </div>
-                                    <div v-if="adv.linear_track_slots_enabled" class="space-y-1.5">
+                                    <div v-if="adv.linear_track_slots_enabled" id="linear-custom-track-slots-panel" class="space-y-1.5">
                                         <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
                                             <div class="flex items-center justify-between gap-2 text-[10px]">
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
@@ -2107,10 +2118,21 @@
 
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div class="flex items-center justify-between gap-2">
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" :checked="adv.circular_track_slots_enabled" @change="setCircularTrackSlotsEnabled($event.target.checked)" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Edit an explicit circular stack. Rows above Axis render outside, rows below Axis render inside, arrows reorder within the current side, and Move outside/inside crosses the Axis explicitly."></help-tip></span>
-                                        </label>
+                                        <div class="inline-flex min-w-0 items-center gap-1 text-xs font-semibold">
+                                            <button
+                                                type="button"
+                                                class="inline-flex min-w-0 items-center gap-1 text-left select-none"
+                                                :class="adv.circular_track_slots_enabled ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
+                                                :aria-expanded="adv.circular_track_slots_enabled ? 'true' : 'false'"
+                                                aria-controls="circular-custom-track-slots-panel"
+                                                :title="adv.circular_track_slots_enabled ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
+                                                @click="setCircularTrackSlotsEnabled(!adv.circular_track_slots_enabled)"
+                                            >
+                                                <i class="ph" :class="adv.circular_track_slots_enabled ? 'ph-caret-down' : 'ph-caret-right'"></i>
+                                                <span class="truncate">Custom Track Slots</span>
+                                            </button>
+                                            <help-tip text="Edit an explicit circular stack. Rows above Axis render outside, rows below Axis render inside, arrows reorder within the current side, and Move outside/inside crosses the Axis explicitly."></help-tip>
+                                        </div>
                                         <button
                                             type="button"
                                             class="btn btn-secondary text-[10px] py-0.5 px-2"
@@ -2122,7 +2144,7 @@
                                             Reset
                                         </button>
                                     </div>
-                                    <div v-if="adv.circular_track_slots_enabled" class="space-y-1.5">
+                                    <div v-if="adv.circular_track_slots_enabled" id="circular-custom-track-slots-panel" class="space-y-1.5">
                                         <div class="grid grid-cols-3 gap-1">
                                             <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('tuckin')" title="Replace the current custom stack with the Tuckin template">Reset to Tuckin</button>
                                             <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('middle')" title="Replace the current custom stack with the Middle template">Reset to Middle</button>
