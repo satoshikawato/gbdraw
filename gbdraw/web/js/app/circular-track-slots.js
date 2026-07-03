@@ -1647,6 +1647,15 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     }
     return '';
   };
+  const circularTrackSlotLegendLabelPlaceholder = (slot) => {
+    const renderer = String(slot?.renderer || '').trim();
+    if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
+      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, normalizeNt(state.adv.nt));
+      return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
+    }
+    if (renderer === 'depth') return 'Depth';
+    return 'Legend label';
+  };
   const circularTrackSlotColor = (slot) => {
     if (isManagedConservationSlot(slot)) return String(slot?.params?.color || '').trim();
     return '';
@@ -1875,6 +1884,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackSlotCliSpec,
     circularTrackSlotDisplayLabel,
     circularTrackSlotDisplayMeta,
+    circularTrackSlotLegendLabelPlaceholder,
     circularTrackSlotColor,
     circularTrackSlotHasSkewColorOverride,
     circularTrackSlotSkewColorValue,

@@ -869,6 +869,16 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     return placement === 'above' ? 'Above Axis' : 'Below Axis';
   };
 
+  const linearTrackSlotLegendLabelPlaceholder = (slot) => {
+    const renderer = normalizeRenderer(slot?.renderer);
+    if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
+      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, adv.nt);
+      return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
+    }
+    if (renderer === 'depth') return 'Depth';
+    return 'Legend label';
+  };
+
   const linearTrackSlotUsesPresetGeometry = (slot) => {
     if (!slot || typeof slot !== 'object') return false;
     const renderer = RENDERER_ALIASES[String(slot.renderer || '').trim().toLowerCase()] || String(slot.renderer || '').trim().toLowerCase();
@@ -1085,6 +1095,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     linearTrackSlotCliSpec: (slot) => buildLinearTrackSlotSpec(slot),
     linearTrackSlotDisplayLabel: (slot) => linearTrackRendererLabel(slot?.renderer),
     linearTrackSlotDisplayMeta: (slot) => buildLinearTrackSlotSpec(slot),
+    linearTrackSlotLegendLabelPlaceholder,
     linearTrackSlotPlacementLabel,
     linearTrackSlotUsesPresetGeometry
   };

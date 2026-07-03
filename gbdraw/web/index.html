@@ -1958,31 +1958,43 @@
                                                         {{ linearTrackSlotPlacementLabel(entry.slot) }}
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            step="1"
-                                                            v-model.number="entry.slot.params.track_index"
-                                                            @change="syncDepthTrackSlotLabel(entry.slot); syncLinearDepthSlotHeightsFromDepthTracks()"
-                                                            class="form-input px-1 py-0.5 text-[10px]"
-                                                            placeholder="track index"
-                                                            title="Depth track index"
-                                                        >
-                                                        <input
-                                                            :value="getDepthTrackLegendLabelForSlot(entry.slot)"
-                                                            @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
-                                                            class="form-input px-1 py-0.5 text-[10px]"
-                                                            placeholder="Legend label"
-                                                        >
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">track index <help-tip text="Zero-based depth TSV track number used by this slot."></help-tip></label>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                step="1"
+                                                                v-model.number="entry.slot.params.track_index"
+                                                                @change="syncDepthTrackSlotLabel(entry.slot); syncLinearDepthSlotHeightsFromDepthTracks()"
+                                                                class="form-input px-1 py-0.5 text-[10px]"
+                                                                placeholder="0"
+                                                                title="Depth track index"
+                                                            >
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">legend label <help-tip text="Text shown for this track in the diagram legend. Leave blank to use the depth track title."></help-tip></label>
+                                                            <input
+                                                                :value="getDepthTrackLegendLabelForSlot(entry.slot)"
+                                                                @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
+                                                                class="form-input px-1 py-0.5 text-[10px]"
+                                                                placeholder="Legend label"
+                                                            >
+                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
-                                                        <input
-                                                            v-model.trim="entry.slot.params.nt"
-                                                            class="form-input px-1 py-0.5 text-[10px]"
-                                                            placeholder="nt"
-                                                            title="Dinucleotide"
-                                                        >
-                                                        <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Legend label">
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">dinucleotide <help-tip text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></label>
+                                                            <input
+                                                                v-model.trim="entry.slot.params.nt"
+                                                                class="form-input px-1 py-0.5 text-[10px]"
+                                                                placeholder="GC"
+                                                                title="Dinucleotide"
+                                                            >
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">legend label <help-tip text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></label>
+                                                            <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" :placeholder="linearTrackSlotLegendLabelPlaceholder(entry.slot)">
+                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
@@ -2240,17 +2252,29 @@
                                                         </select>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
-                                                        <input type="number" min="0" step="1" v-model.number="entry.slot.params.track_index" @change="syncDepthTrackSlotLabel(entry.slot)" class="form-input px-1 py-0.5 text-[10px]" placeholder="track index">
-                                                        <input
-                                                            :value="getDepthTrackLegendLabelForSlot(entry.slot)"
-                                                            @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
-                                                            class="form-input px-1 py-0.5 text-[10px]"
-                                                            placeholder="Legend label"
-                                                        >
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">track index <help-tip text="Zero-based depth TSV track number used by this slot."></help-tip></label>
+                                                            <input type="number" min="0" step="1" v-model.number="entry.slot.params.track_index" @change="syncDepthTrackSlotLabel(entry.slot)" class="form-input px-1 py-0.5 text-[10px]" placeholder="0">
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">legend label <help-tip text="Text shown for this track in the diagram legend. Leave blank to use the depth track title."></help-tip></label>
+                                                            <input
+                                                                :value="getDepthTrackLegendLabelForSlot(entry.slot)"
+                                                                @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
+                                                                class="form-input px-1 py-0.5 text-[10px]"
+                                                                placeholder="Legend label"
+                                                            >
+                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
-                                                        <input v-model.trim="entry.slot.params.nt" class="form-input px-1 py-0.5 text-[10px]" placeholder="nt">
-                                                        <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Legend label">
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">dinucleotide <help-tip text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></label>
+                                                            <input v-model.trim="entry.slot.params.nt" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC">
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">legend label <help-tip text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></label>
+                                                            <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)">
+                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
