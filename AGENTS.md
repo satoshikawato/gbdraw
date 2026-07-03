@@ -35,6 +35,16 @@ python tools/prepare_browser_wheel.py --refresh-cache-bust
 python -m build
 ```
 
+## Browser / Playwright Checks
+
+- Do not conclude that browser testing is unavailable just because `node_modules/`, `package.json`, or `@playwright/test` is missing at the repo root. This workspace may have Playwright installed through Python/conda instead.
+- Check both paths when browser verification matters:
+  - `command -v playwright && playwright --version`
+  - `python -c "from playwright.sync_api import sync_playwright; print('python playwright ok')"`
+- The JavaScript specs under `tests/web/*.playwright.spec.js` require Node's `@playwright/test`. Verify it with `node -e "console.log(require.resolve('@playwright/test'))"` before trying to run those specs.
+- If Node's `@playwright/test` is unavailable, use Python Playwright for targeted browser checks instead of skipping browser verification.
+- In Codex/agent sandboxes, Chromium may fail with `sandbox_host_linux.cc ... Operation not permitted`. When that happens, rerun the same local browser check with the required sandbox escalation rather than reporting that Playwright is unavailable.
+
 ## Expectations When Editing
 
 - Keep the web UI as a single-page app with no build step; `gbdraw/web/index.html` hosts HTML/CSS/templates and loads ES modules from `gbdraw/web/js/` (`app.js` entry with `app/`, `services/`, `utils/`).

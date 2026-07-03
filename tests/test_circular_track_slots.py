@@ -69,6 +69,35 @@ def _normalize_svg_auto_ids(svg_text: str) -> str:
     return re.sub(r"id\d+", "id_auto", svg_text)
 
 
+def test_circular_track_slot_geometry_metadata_preserves_factor_width_and_gaps() -> None:
+    record = _load_record()
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=_base_config(track_type="tuckin"),
+        default_colors=load_default_colors("", palette="default"),
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=[
+            "features:features",
+            "gc_content:dinucleotide_content@w=0.15,r=0.75,inner_gap_px=4,outer_gap_px=6",
+        ],
+        circular_track_axis_index=1,
+    )
+
+    geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
+    assert geometry["schema"] == 1
+    assert geometry["mode"] == "circular"
+    assert geometry["records"][0]["recordIndex"] == 0
+    assert geometry["records"][0]["recordId"] == record.id
+    gc_slot = next(slot for slot in geometry["records"][0]["slots"] if slot["slotId"] == "gc_content")
+    assert gc_slot["slotIndex"] == 1
+    assert gc_slot["widthPx"] > 0
+    assert gc_slot["widthFactor"] == pytest.approx(0.15)
+    assert gc_slot["radiusFactor"] == pytest.approx(0.75)
+    assert gc_slot["innerGapPx"] == pytest.approx(4.0)
+    assert gc_slot["outerGapPx"] == pytest.approx(6.0)
+
+
 def _axis_circle_radius(svg_text: str) -> float:
     match = re.search(r'<g id="Axis"[^>]*>.*?<circle\b[^>]*\br="([^"]+)"', svg_text, re.S)
     assert match is not None

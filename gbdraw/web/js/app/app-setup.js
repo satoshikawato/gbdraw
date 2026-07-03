@@ -51,6 +51,7 @@ import {
 } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createLosatSettings } from './losat-settings.js';
+import { createAutoValueDisplay } from './auto-value-display.js';
 import {
   conservationSourceDescriptors,
   defaultConservationSeriesLabel,
@@ -68,6 +69,7 @@ import {
   compactDepthFileSlots,
   depthFileSlotsFromValue,
   ensureDepthTrackConfigCount as ensureDepthTrackConfigCountEntries,
+  ensureDepthTrackConfigShape,
   isDefaultManagedDepthSlot,
   normalizeDepthTrackConfig as normalizeDepthTrackConfigEntry,
   reindexDepthSlots,
@@ -414,6 +416,7 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
   const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(state));
   const losatSettings = createLosatSettings({ state });
+  const autoValueDisplay = createAutoValueDisplay(state);
   const depthTrackDefaultColors = [
     '#4A90E2',
     '#E45756',
@@ -430,6 +433,31 @@ export const createAppSetup = () => {
     return count === 1 ? '1 TSV' : `${count} TSVs`;
   };
   const hasCircularDepthFiles = computed(() => depthFileCount(files.c_depth) > 0);
+  const hasAnyLinearDepthFiles = computed(() => (
+    linearSeqs.some((seq) => depthFileCount(seq?.depth) > 0)
+  ));
+  const canShowDepthTrack = computed(() => (
+    mode.value === 'linear' ? hasAnyLinearDepthFiles.value : hasCircularDepthFiles.value
+  ));
+  const enabledOptionClass = 'text-slate-700 cursor-pointer';
+  const disabledOptionClass = 'text-slate-400 cursor-not-allowed opacity-60';
+  const depthToggleOptionClass = computed(() => (
+    canShowDepthTrack.value
+      ? enabledOptionClass
+      : disabledOptionClass
+  ));
+  const circularSeparateStrandsDisabled = computed(() => (
+    mode.value === 'circular' && Boolean(adv.resolve_overlaps)
+  ));
+  const circularResolveOverlapsDisabled = computed(() => (
+    mode.value === 'circular' && Boolean(form.separate_strands)
+  ));
+  const circularSeparateStrandsOptionClass = computed(() => (
+    circularSeparateStrandsDisabled.value ? disabledOptionClass : enabledOptionClass
+  ));
+  const circularResolveOverlapsOptionClass = computed(() => (
+    circularResolveOverlapsDisabled.value ? disabledOptionClass : enabledOptionClass
+  ));
   const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
   const depthTrackUiCounts = reactive({
     circular: 1,
@@ -442,7 +470,7 @@ export const createAppSetup = () => {
   );
   const rowsForDepthTrackCount = (count) => {
     const normalizedCount = Math.max(1, Number(count) || 1);
-    ensureDepthTrackConfigCount(normalizedCount);
+    ensureDepthTrackEditableConfigCount(normalizedCount);
     return Array.from({ length: normalizedCount }, (_, index) => ({
       index,
       key: `depth-track-${index}`,
@@ -475,6 +503,12 @@ export const createAppSetup = () => {
   const normalizeDepthTrackConfig = (entry, index) => (
     normalizeDepthTrackConfigEntry(entry, index, depthTrackConfigDefaults())
   );
+  const optionalNumberInputValue = (value) => value ?? '';
+  const setOptionalNumberInputValue = (target, key, value) => {
+    if (!target || typeof target !== 'object') return;
+    const text = String(value ?? '').trim();
+    target[key] = text === '' ? null : text;
+  };
   const activeDepthTrackCount = () => {
     if (mode.value === 'linear') {
       return linearSeqs.reduce(
@@ -495,6 +529,11 @@ export const createAppSetup = () => {
       depthTrackConfigDefaults()
     );
     adv.depth_tracks.splice(0, adv.depth_tracks.length, ...normalized);
+  };
+  const ensureDepthTrackEditableConfigCount = (count = activeDepthTrackCount()) => {
+    const targetCount = Math.max(1, Number(count) || 1);
+    if (!Array.isArray(adv.depth_tracks)) adv.depth_tracks = [];
+    ensureDepthTrackConfigShape(adv.depth_tracks, targetCount, depthTrackConfigDefaults());
   };
   const circularDepthTrackRows = computed(() => rowsForDepthTrackCount(
     sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular)
@@ -529,15 +568,11 @@ export const createAppSetup = () => {
     }
     return adv.linear_definition_line_styles[key];
   };
-  const getDefinitionLineStyleSize = (kind) => ensureDefinitionLineStyle(kind).font_size ?? '';
+  const getDefinitionLineStyleSize = (kind) => optionalNumberInputValue(
+    ensureDefinitionLineStyle(kind).font_size
+  );
   const setDefinitionLineStyleSize = (kind, value) => {
-    const style = ensureDefinitionLineStyle(kind);
-    if (value === null || value === undefined || String(value).trim() === '') {
-      style.font_size = null;
-      return;
-    }
-    const numeric = Number(value);
-    style.font_size = Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+    setOptionalNumberInputValue(ensureDefinitionLineStyle(kind), 'font_size', value);
   };
   const getDefinitionLineStyleWeight = (kind) => ensureDefinitionLineStyle(kind).font_weight ?? '';
   const setDefinitionLineStyleWeight = (kind, value) => {
@@ -563,7 +598,7 @@ export const createAppSetup = () => {
   };
   const depthTrackConfigForIndex = (index) => {
     const idx = Math.max(0, Number(index) || 0);
-    ensureDepthTrackConfigCount(idx + 1);
+    ensureDepthTrackEditableConfigCount(idx + 1);
     return adv.depth_tracks[idx];
   };
   const getDepthTrackLabel = (index) => {
@@ -687,14 +722,14 @@ export const createAppSetup = () => {
   const addCircularDepthTrack = () => {
     depthTrackUiCounts.circular = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular) + 1;
     ensureDepthTrackConfigCount(depthTrackUiCounts.circular);
-    form.show_depth = true;
+    if (canShowDepthTrack.value) form.show_depth = true;
   };
   const addLinearDepthTrack = (seq) => {
     if (!seq) return;
     const nextCount = sourceDepthTrackCount(seq.depth, linearDepthTrackUiCount(seq)) + 1;
     setLinearDepthTrackUiCount(seq, nextCount);
     ensureDepthTrackConfigCount(nextCount);
-    form.show_depth = true;
+    if (canShowDepthTrack.value) form.show_depth = true;
   };
   const removeCircularDepthTrack = (index) => {
     const idx = Number(index);
@@ -793,6 +828,22 @@ export const createAppSetup = () => {
       ensureDepthTrackConfigCount(activeDepthTrackCount());
     },
     { deep: true, immediate: true }
+  );
+  watch(
+    () => [canShowDepthTrack.value, form.show_depth],
+    ([available, showDepth]) => {
+      if (!available && showDepth) form.show_depth = false;
+    },
+    { immediate: true }
+  );
+  watch(
+    () => [mode.value, form.separate_strands, adv.resolve_overlaps],
+    ([currentMode, separateStrands, resolveOverlaps]) => {
+      if (currentMode === 'circular' && separateStrands && resolveOverlaps) {
+        adv.resolve_overlaps = false;
+      }
+    },
+    { immediate: true }
   );
   const isCircularConservationUploadSource = () => (
     String(circularConservation.source || '').trim().toLowerCase() === 'upload'
@@ -2088,6 +2139,12 @@ export const createAppSetup = () => {
     linearDepthTrackRows,
     hasCircularDepthFiles,
     hasLinearDepthFiles,
+    canShowDepthTrack,
+    depthToggleOptionClass,
+    circularSeparateStrandsDisabled,
+    circularResolveOverlapsDisabled,
+    circularSeparateStrandsOptionClass,
+    circularResolveOverlapsOptionClass,
     depthTrackCountLabel,
     getDepthTrackLabel,
     setDepthTrackLabel,
@@ -2115,6 +2172,10 @@ export const createAppSetup = () => {
     moveLinearSeqDown,
     form,
     adv,
+    optionalNumberInputValue,
+    setOptionalNumberInputValue,
+    autoValueText: autoValueDisplay.autoValueText,
+    autoValueVisible: autoValueDisplay.autoValueVisible,
     canUseLinearRulerOnAxis,
     circularTrackNewRenderer,
     linearTrackNewRenderer,
@@ -2150,9 +2211,13 @@ export const createAppSetup = () => {
     circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
     circularTrackSlotDisplayLabel: circularTrackSlotEditor.circularTrackSlotDisplayLabel,
     circularTrackSlotDisplayMeta: circularTrackSlotEditor.circularTrackSlotDisplayMeta,
+    circularTrackSlotLegendLabelPlaceholder: circularTrackSlotEditor.circularTrackSlotLegendLabelPlaceholder,
     circularTrackSlotColor: circularTrackSlotEditor.circularTrackSlotColor,
     circularTrackSlotHasSkewColorOverride: circularTrackSlotEditor.circularTrackSlotHasSkewColorOverride,
     circularTrackSlotSkewColorValue: circularTrackSlotEditor.circularTrackSlotSkewColorValue,
+    circularTrackSlotGeometryAutoText: circularTrackSlotEditor.circularTrackSlotGeometryAutoText,
+    circularTrackSlotGeometryHasManual: circularTrackSlotEditor.circularTrackSlotGeometryHasManual,
+    circularTrackSlotGeometryUnitSuffix: circularTrackSlotEditor.circularTrackSlotGeometryUnitSuffix,
     setCircularTrackSlotSkewColor: circularTrackSlotEditor.setCircularTrackSlotSkewColor,
     clearCircularTrackSlotSkewColor: circularTrackSlotEditor.clearCircularTrackSlotSkewColor,
     isManagedCircularConservationSlot: circularTrackSlotEditor.isManagedCircularConservationSlot,
@@ -2181,6 +2246,9 @@ export const createAppSetup = () => {
     updateLinearTrackSlotRenderer: linearTrackSlotEditor.updateLinearTrackSlotRenderer,
     updateLinearTrackSlotPlacement: linearTrackSlotEditor.updateLinearTrackSlotPlacement,
     linearTrackSlotHeightValue: linearTrackSlotEditor.linearTrackSlotHeightValue,
+    linearTrackSlotGeometryAutoText: linearTrackSlotEditor.linearTrackSlotGeometryAutoText,
+    linearTrackSlotGeometryHasManual: linearTrackSlotEditor.linearTrackSlotGeometryHasManual,
+    linearTrackSlotGeometryUnitSuffix: linearTrackSlotEditor.linearTrackSlotGeometryUnitSuffix,
     setLinearTrackSlotHeight: linearTrackSlotEditor.setLinearTrackSlotHeight,
     linearTrackSlotHasSkewColorOverride: linearTrackSlotEditor.linearTrackSlotHasSkewColorOverride,
     linearTrackSlotSkewColorValue: linearTrackSlotEditor.linearTrackSlotSkewColorValue,
@@ -2192,6 +2260,7 @@ export const createAppSetup = () => {
     linearTrackSlotCliSpec: linearTrackSlotEditor.linearTrackSlotCliSpec,
     linearTrackSlotDisplayLabel: linearTrackSlotEditor.linearTrackSlotDisplayLabel,
     linearTrackSlotDisplayMeta: linearTrackSlotEditor.linearTrackSlotDisplayMeta,
+    linearTrackSlotLegendLabelPlaceholder: linearTrackSlotEditor.linearTrackSlotLegendLabelPlaceholder,
     linearTrackSlotPlacementLabel: linearTrackSlotEditor.linearTrackSlotPlacementLabel,
     linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry,
     losat,

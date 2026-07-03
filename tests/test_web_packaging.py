@@ -2012,10 +2012,12 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linear_track_slots_enabled: false" in state_source
     assert "linear_track_slots_schema_version: 1" in state_source
     assert "createDefaultLinearTrackSlots" in state_source
-    assert '>Custom Track Slots <help-tip text="Edit the explicit linear track stack.' in index_html
+    assert "<span class=\"truncate\">Custom Track Slots</span>" in index_html
+    assert '@click="setLinearTrackSlotsEnabled(!adv.linear_track_slots_enabled)"' in index_html
+    assert 'aria-controls="linear-custom-track-slots-panel"' in index_html
     assert "Linear Custom Track Slots" not in index_html
     assert "Linear Custom Track Slots" not in config_source
-    assert 'v-model="adv.linear_track_slots_enabled"' in index_html
+    assert 'v-model="adv.linear_track_slots_enabled"' not in index_html
     assert 'v-model.number="entry.slot.params.track_index"' in index_html
     assert "--linear_track_slot" in run_source
     assert "buildLinearTrackSlotSpec" in run_source
@@ -2074,6 +2076,14 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "depthTrackRows" in app_setup_source
     assert "circularDepthTrackRows" in app_setup_source
     assert "linearDepthTrackRows" in app_setup_source
+    assert "ensureDepthTrackConfigShape" in app_setup_source
+    assert "ensureDepthTrackConfigShape" in depth_state_source
+    rows_block = app_setup_source.split("const rowsForDepthTrackCount", 1)[1].split(
+        "const linearDepthTrackUiCount",
+        1,
+    )[0]
+    assert "ensureDepthTrackEditableConfigCount(normalizedCount);" in rows_block
+    assert "ensureDepthTrackConfigCount(" not in rows_block
     assert "hasCircularDepthFiles" in app_setup_source
     assert "hasLinearDepthFiles" in app_setup_source
     assert "depthTrackCountLabel" in app_setup_source
@@ -2096,6 +2106,18 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert '@input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"' in index_html
     assert "v-model.number=\"track.config.height\"" in index_html
     assert "v-model.number=\"track.config.large_tick_interval\"" in index_html
+    assert "v-model.number=\"track.config.small_tick_interval\"" in index_html
+    assert "v-model.number=\"track.config.tick_font_size\"" in index_html
+    assert ':value="optionalNumberInputValue(adv.plot_title_font_size)"' in index_html
+    assert "@input=\"setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)\"" in index_html
+    assert ':value="optionalNumberInputValue(adv.def_font_size)"' in index_html
+    assert "@input=\"setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)\"" in index_html
+    definition_size_block = app_setup_source.split("const setDefinitionLineStyleSize", 1)[1].split(
+        "const getDefinitionLineStyleWeight",
+        1,
+    )[0]
+    assert "setOptionalNumberInputValue" in definition_size_block
+    assert "Number(value)" not in definition_size_block
     assert "depthTrackConfigAt(index, file)" in run_source
     assert "syncDepthSlotLegendLabelsFromTrackConfigs" in run_source
     assert "syncDepthSlotLabels({" in run_source
@@ -2137,6 +2159,8 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "if (useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
+    assert '@click="setCircularTrackSlotsEnabled(!adv.circular_track_slots_enabled)"' in index_html
+    assert 'aria-controls="circular-custom-track-slots-panel"' in index_html
     assert "Track Preset" in index_html
     assert 'v-if="!adv.circular_track_slots_enabled"' in index_html
     assert "Reset to Tuckin" in index_html
@@ -2386,7 +2410,7 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
     source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
     module_path = tmp_path / "linear-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["depth-track-state.js", "color-utils.js", "track-slot-colors.js"]:
+    for dependency in ["depth-track-state.js", "color-utils.js", "track-slot-colors.js", "track-slot-display.js"]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -2601,7 +2625,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
     module_path = tmp_path / "circular-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["conservation-series.js", "color-utils.js", "depth-track-state.js", "track-slot-colors.js"]:
+    for dependency in ["conservation-series.js", "color-utils.js", "depth-track-state.js", "track-slot-display.js", "track-slot-colors.js"]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -2617,6 +2641,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           estimateCircularConservationLayoutWarning
         }} from {module_path.as_uri()!r};
         import {{ normalizeConservationSeriesColor }} from './conservation-series.js';
+        import {{ formatCircularWidthValue }} from './track-slot-display.js';
 
         const defaultSlots = createDefaultCircularTrackSlots({{ preset: 'tuckin' }});
         const defaultTick = defaultSlots.find((slot) => slot.id === 'ticks');
@@ -2638,6 +2663,39 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         );
         if (!gapSpec.includes('inner_gap_px=4') || !gapSpec.includes('outer_gap_px=6') || gapSpec.includes('spacing=')) {{
           throw new Error(`Circular gap spec did not serialize physical px gaps: ${{gapSpec}}`);
+        }}
+        const pixelWidthSpec = buildCircularTrackSlotSpec(
+          {{
+            id: 'gc_content',
+            renderer: 'dinucleotide_content',
+            side: 'inside',
+            width: '50px',
+            params: {{ nt: 'GC' }}
+          }},
+          'GC',
+          'tuckin',
+          {{ includeSide: false }}
+        );
+        if (!pixelWidthSpec.includes('w=50px')) {{
+          throw new Error(`Circular px width was not preserved: ${{pixelWidthSpec}}`);
+        }}
+        const factorWidthSpec = buildCircularTrackSlotSpec(
+          {{
+            id: 'gc_content',
+            renderer: 'dinucleotide_content',
+            side: 'inside',
+            width: '0.15',
+            params: {{ nt: 'GC' }}
+          }},
+          'GC',
+          'tuckin',
+          {{ includeSide: false }}
+        );
+        if (!factorWidthSpec.includes('w=0.15') || factorWidthSpec.includes('w=0.15px')) {{
+          throw new Error(`Circular unitless width factor was not preserved: ${{factorWidthSpec}}`);
+        }}
+        if (formatCircularWidthValue('50px') !== '50 px' || formatCircularWidthValue('0.15') !== '0.15 R') {{
+          throw new Error('Circular width display did not distinguish px and radius factors');
         }}
         const legacySpacingSpec = buildCircularTrackSlotSpec(
           {{

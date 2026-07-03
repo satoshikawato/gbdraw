@@ -12,6 +12,7 @@ import copy
 from dataclasses import replace
 import logging
 import math
+from typing import Any
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 import pandas as pd
@@ -339,6 +340,63 @@ def _custom_slot_track_offset_y(
             - canvas_config.vertical_padding
         )
     return offset
+
+
+def _serialize_linear_track_slot_geometry(
+    *,
+    records: list[SeqRecord],
+    layout: LinearTrackLayout,
+    record_offsets: list[float],
+    feature_slot,
+    canvas_config: LinearCanvasConfigurator,
+    record_heights_below: list[float],
+    record_heights_above: list[float],
+    record_label_heights_below: list[float],
+    record_label_heights_above: list[float],
+) -> dict[str, Any]:
+    records_payload: list[dict[str, Any]] = []
+    for record_index, record in enumerate(records):
+        axis_y = float(record_offsets[record_index]) if record_index < len(record_offsets) else 0.0
+        slots_payload: list[dict[str, Any]] = []
+        for slot in layout.slots:
+            final_offset = _custom_slot_track_offset_y(
+                slot,
+                feature_slot=feature_slot,
+                record_index=record_index,
+                canvas_config=canvas_config,
+                record_heights_below=record_heights_below,
+                record_heights_above=record_heights_above,
+                record_label_heights_below=record_label_heights_below,
+                record_label_heights_above=record_label_heights_above,
+            )
+            slots_payload.append(
+                {
+                    "slotIndex": int(slot.slot_index),
+                    "slotId": str(slot.id),
+                    "renderer": str(slot.renderer),
+                    "side": str(slot.side),
+                    "heightPx": float(slot.height),
+                    "spacingAfterPx": float(slot.spacing_after_px),
+                    "baseYOffsetPx": float(slot.y_offset),
+                    "finalYOffsetPx": axis_y + float(final_offset),
+                    "source": "resolved",
+                }
+            )
+        record_id = str(getattr(record, "id", "") or "")
+        records_payload.append(
+            {
+                "recordIndex": int(record_index),
+                "recordId": record_id,
+                "recordLabel": record_id,
+                "slots": slots_payload,
+            }
+        )
+    return {
+        "schema": 1,
+        "mode": "linear",
+        "source": "resolved",
+        "records": records_payload,
+    }
 
 
 def _load_linear_comparison_dataframes(
@@ -1637,6 +1695,23 @@ def assemble_linear_diagram(
                 title_y = float(canvas_config.total_height) - plot_title_edge_margin - (0.5 * title_height)
         title_group.translate(0.5 * float(canvas_config.total_width), title_y)
         canvas.add(title_group)
+
+    if linear_track_layout is not None:
+        setattr(
+            canvas,
+            "_gbdraw_track_slot_geometry",
+            _serialize_linear_track_slot_geometry(
+                records=records,
+                layout=linear_track_layout,
+                record_offsets=record_offsets,
+                feature_slot=feature_slot,
+                canvas_config=canvas_config,
+                record_heights_below=record_heights_below,
+                record_heights_above=record_heights_above,
+                record_label_heights_below=record_label_heights_below,
+                record_label_heights_above=record_label_heights_above,
+            ),
+        )
 
     return canvas
 

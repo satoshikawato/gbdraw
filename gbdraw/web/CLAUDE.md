@@ -29,6 +29,15 @@ python -m build
 # Open DevTools Console (F12) to see Pyodide output and errors
 ```
 
+### Playwright Verification
+
+- Do not skip browser verification solely because this repo has no local `node_modules/`, `package.json`, or `@playwright/test`. Check for Python/conda Playwright as well:
+  - `command -v playwright && playwright --version`
+  - `python -c "from playwright.sync_api import sync_playwright; print('python playwright ok')"`
+- The JS specs in `tests/web/*.playwright.spec.js` need Node's `@playwright/test`; verify with `node -e "console.log(require.resolve('@playwright/test'))"` before running them.
+- If `@playwright/test` is not installed, use Python Playwright for focused browser assertions against `gbdraw/web/index.html` or a local server.
+- In Codex/agent sandboxes, Chromium may be installed but fail to launch with `sandbox_host_linux.cc ... Operation not permitted`. Request/run the browser check with the required sandbox escalation and report the real result.
+
 ### Key File References
 
 | Section | File | Description |

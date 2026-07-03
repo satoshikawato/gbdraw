@@ -11,6 +11,27 @@ export class DiagramGenerationCanceledError extends Error {
 export const isDiagramGenerationCanceled = (error) =>
   Boolean(error?.canceled || error?.name === 'DiagramGenerationCanceledError');
 
+export const normalizeGenerationResponse = (payload) => {
+  if (Array.isArray(payload)) {
+    return { results: payload, metadata: {} };
+  }
+  if (!payload || typeof payload !== 'object') {
+    return { results: [], metadata: {} };
+  }
+  if (payload.error) {
+    return { results: payload, metadata: {} };
+  }
+  const results = Array.isArray(payload.results) ? payload.results : [];
+  const metadata = (
+    payload.metadata &&
+    typeof payload.metadata === 'object' &&
+    !Array.isArray(payload.metadata)
+  )
+    ? payload.metadata
+    : {};
+  return { results, metadata };
+};
+
 const resolveWorkerUrl = () => new URL('../workers/diagram-generation-worker.js', import.meta.url).toString();
 
 let worker = null;
@@ -190,7 +211,7 @@ export const runDiagramGeneration = (payload = {}) => {
         if (data.type !== 'run' || data.requestId !== requestId) return;
         if (data.ok) {
           settleActiveRequest(request, () => {
-            resolveRequest({ requestId, results: data.results });
+            resolveRequest({ requestId, ...normalizeGenerationResponse(data.results) });
           });
           return;
         }

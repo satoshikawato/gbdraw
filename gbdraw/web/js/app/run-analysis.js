@@ -695,6 +695,7 @@ export const createRunAnalysis = ({
     resultGenerationKey,
     resultPanelTab,
     lastRunInfo,
+    trackSlotResolvedGeometry,
     errorLog,
     zoom,
     skipCaptureBaseConfig,
@@ -1644,6 +1645,7 @@ json.dumps({
       ? null
       : {
           results: Array.isArray(results.value) ? results.value.map((entry) => ({ ...entry })) : [],
+          trackSlotResolvedGeometry: cloneJsonSafe(trackSlotResolvedGeometry.value || null, null),
           selectedResultIndex: selectedResultIndex.value,
           zoom: zoom.value,
           pairwiseMatchFactors: { ...(pairwiseMatchFactors.value || {}) },
@@ -1669,6 +1671,7 @@ json.dumps({
     const restoreManualCancelSnapshot = () => {
       if (!manualCancelSnapshot) return;
       results.value = manualCancelSnapshot.results;
+      trackSlotResolvedGeometry.value = manualCancelSnapshot.trackSlotResolvedGeometry;
       selectedResultIndex.value = Math.max(
         0,
         Math.min(manualCancelSnapshot.selectedResultIndex, Math.max(0, manualCancelSnapshot.results.length - 1))
@@ -1736,6 +1739,7 @@ json.dumps({
       processing.value = true;
       processingStatus.value = 'Preparing input files...';
       results.value = [];
+      trackSlotResolvedGeometry.value = null;
       selectedResultIndex.value = 0;
       resultPanelTab.value = 'preview';
       lastRunInfo.value = null;
@@ -1900,7 +1904,9 @@ json.dumps({
 
       if (adv.legend_box_size) args.push('--legend_box_size', adv.legend_box_size);
       if (adv.legend_font_size) args.push('--legend_font_size', adv.legend_font_size);
-      if (adv.resolve_overlaps) args.push('--resolve_overlaps');
+      if (adv.resolve_overlaps && !(mode.value === 'circular' && form.separate_strands)) {
+        args.push('--resolve_overlaps');
+      }
 
       const activePaletteName = String(
         isReflow ? appliedPaletteName.value : (selectedPalette?.value || appliedPaletteName.value || 'default')
@@ -4098,6 +4104,13 @@ json.dumps({
       console.info(`gbdraw ${mode.value} wrapper execution: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
       const postGbdrawTimingEntries = [];
       const res = generationResponse.results;
+      const generationMetadata = (
+        generationResponse.metadata &&
+        typeof generationResponse.metadata === 'object' &&
+        !Array.isArray(generationResponse.metadata)
+      )
+        ? generationResponse.metadata
+        : {};
       if (res.error) {
         logPostGbdrawTimings(postGbdrawTimingEntries);
         if (isReflow) {
@@ -4125,6 +4138,9 @@ json.dumps({
         results.value = shouldSuppressPairwiseIdentityLegend()
           ? stripPairwiseIdentityLegendsFromResults(res)
           : res;
+        if (!isReflow) {
+          trackSlotResolvedGeometry.value = generationMetadata.trackSlotGeometry || null;
+        }
         if (!isReflow && resultGenerationKey) {
           resultGenerationKey.value += 1;
         }

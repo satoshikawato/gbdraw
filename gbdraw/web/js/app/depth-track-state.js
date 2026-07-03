@@ -104,6 +104,26 @@ export const ensureDepthTrackConfigCount = (tracks, count, defaults = {}) => {
   return normalized;
 };
 
+export const ensureDepthTrackConfigShape = (tracks, count, defaults = {}) => {
+  const targetTracks = Array.isArray(tracks) ? tracks : [];
+  const targetCount = Math.max(1, Number(count) || 1);
+  for (let index = 0; index < targetCount; index += 1) {
+    const current = targetTracks[index];
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      targetTracks[index] = normalizeDepthTrackConfig(null, index, defaults);
+      continue;
+    }
+    const fallback = normalizeDepthTrackConfig(null, index, defaults);
+    if (current.label === undefined || current.label === null) current.label = fallback.label;
+    if (current.color === undefined || current.color === null) current.color = fallback.color;
+    if (current.height === undefined) current.height = fallback.height;
+    if (current.large_tick_interval === undefined) current.large_tick_interval = fallback.large_tick_interval;
+    if (current.small_tick_interval === undefined) current.small_tick_interval = fallback.small_tick_interval;
+    if (current.tick_font_size === undefined) current.tick_font_size = fallback.tick_font_size;
+  }
+  return targetTracks;
+};
+
 export const reconcileDepthTracksToFiles = ({
   files,
   depthTracks,

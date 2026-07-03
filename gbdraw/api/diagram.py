@@ -15,7 +15,7 @@ import math
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import replace
-from typing import Optional, Sequence, Mapping, Literal, cast
+from typing import Any, Optional, Sequence, Mapping, Literal, cast
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -3005,6 +3005,7 @@ def assemble_circular_diagram_from_records(
     widths: list[float] = []
     heights: list[float] = []
     record_radii_px: list[float] = []
+    track_slot_geometry_records: list[dict[str, Any]] = []
     for record_index, (record, record_scale) in enumerate(zip(records, record_scales)):
         scaled_cfg = _scale_circular_cfg(cfg, scale=record_scale)
         record_radii_px.append(float(scaled_cfg.canvas.circular.radius))
@@ -3054,6 +3055,14 @@ def assemble_circular_diagram_from_records(
         canvases.append(sub_canvas)
         widths.append(_parse_svg_length_px(sub_canvas.attribs.get("width"), default=0.0))
         heights.append(_parse_svg_length_px(sub_canvas.attribs.get("height"), default=0.0))
+        sub_geometry = getattr(sub_canvas, "_gbdraw_track_slot_geometry", None)
+        if isinstance(sub_geometry, Mapping):
+            for record_payload in sub_geometry.get("records", []) or []:
+                if not isinstance(record_payload, Mapping):
+                    continue
+                updated_record = dict(record_payload)
+                updated_record["recordIndex"] = int(record_index)
+                track_slot_geometry_records.append(updated_record)
 
     max_record_radius_px = max(
         [float(radius) for radius in record_radii_px if float(radius) > 0.0],
@@ -3505,6 +3514,18 @@ def assemble_circular_diagram_from_records(
         ).get_group()
         legend_group.translate(legend_offset_x, legend_offset_y)
         merged_canvas.add(legend_group)
+
+    if track_slot_geometry_records:
+        setattr(
+            merged_canvas,
+            "_gbdraw_track_slot_geometry",
+            {
+                "schema": 1,
+                "mode": "circular",
+                "source": "resolved",
+                "records": track_slot_geometry_records,
+            },
+        )
 
     return merged_canvas
 

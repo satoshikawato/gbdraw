@@ -145,6 +145,62 @@ def _resolved_slots_from_radial_layout(
     return list(radial_layout.slots)
 
 
+def _serialize_circular_track_slot_geometry(
+    *,
+    gb_record: SeqRecord,
+    radial_layout: CircularRadialLayout,
+    layout_slots: Sequence[CircularTrackSlot],
+    base_radius_px: float,
+    record_index: int = 0,
+) -> dict[str, Any]:
+    source_by_index = {
+        int(getattr(slot, "slot_index", index)): slot
+        for index, slot in enumerate(layout_slots)
+    }
+    safe_base_radius = max(FEATURE_BAND_EPSILON, float(base_radius_px))
+    slots_payload: list[dict[str, Any]] = []
+    for resolved in radial_layout.slots:
+        source_slot = source_by_index.get(int(resolved.slot_index))
+        width_spec = getattr(source_slot, "width", None)
+        width_factor = None
+        if width_spec is not None and getattr(width_spec, "unit", None) == "factor":
+            width_factor = float(width_spec.value)
+        resolved_width = (
+            float(resolved.resolved_width_px)
+            if resolved.resolved_width_px is not None
+            else float(resolved.draw_width_px)
+        )
+        slots_payload.append(
+            {
+                "slotIndex": int(resolved.slot_index),
+                "slotId": str(resolved.id),
+                "renderer": str(resolved.renderer),
+                "side": str(resolved.side),
+                "widthPx": resolved_width,
+                "widthFactor": width_factor,
+                "radiusFactor": float(resolved.center_radius_px) / safe_base_radius,
+                "innerGapPx": float(resolved.inner_gap_px),
+                "outerGapPx": float(resolved.outer_gap_px),
+                "compressed": bool(resolved.compressed),
+                "source": "resolved",
+            }
+        )
+    record_id = str(getattr(gb_record, "id", "") or "")
+    return {
+        "schema": 1,
+        "mode": "circular",
+        "source": "resolved",
+        "records": [
+            {
+                "recordIndex": int(record_index),
+                "recordId": record_id,
+                "recordLabel": record_id,
+                "slots": slots_payload,
+            }
+        ],
+    }
+
+
 def _legend_bbox(canvas_config: CircularCanvasConfigurator, legend_config: LegendDrawingConfigurator) -> tuple[float, float, float, float]:
     """Return legend bbox on canvas as (min_x, min_y, max_x, max_y)."""
     min_x = float(canvas_config.legend_offset_x)
@@ -2396,6 +2452,16 @@ def add_record_on_circular_canvas(
     setattr(canvas_config, "circular_radial_layout", radial_layout)
     setattr(canvas_config, "circular_feature_layout", radial_layout.features)
     resolved_track_slots = _resolved_slots_from_radial_layout(radial_layout, layout_slots)
+    setattr(
+        canvas,
+        "_gbdraw_track_slot_geometry",
+        _serialize_circular_track_slot_geometry(
+            gb_record=gb_record,
+            radial_layout=radial_layout,
+            layout_slots=layout_slots,
+            base_radius_px=float(canvas_config.radius),
+        ),
+    )
     gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(
         gc_config=gc_config,
         depth_config=depth_config if show_depth_track else None,

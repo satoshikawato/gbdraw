@@ -4,6 +4,11 @@ import {
 } from './depth-track-state.js';
 import { resolveColorToHex } from './color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
+import {
+  findTrackSlotGeometry,
+  formatPxAuto,
+  isManualSlotValue
+} from './track-slot-display.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -41,6 +46,9 @@ const DEFAULT_SLOT_IDS = {
 const STACK_ENTRY_AXIS = 'axis';
 const STACK_ENTRY_SLOT = 'slot';
 const DEFAULT_LINEAR_SLOT_MANAGER = 'linear-default';
+const ESTIMATED_LINEAR_GC_HEIGHT_PX = 20;
+const ESTIMATED_LINEAR_DEPTH_HEIGHT_PX = 10;
+const ESTIMATED_LINEAR_DEPTH_SPACING_PX = 8;
 
 const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
@@ -861,6 +869,16 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     return placement === 'above' ? 'Above Axis' : 'Below Axis';
   };
 
+  const linearTrackSlotLegendLabelPlaceholder = (slot) => {
+    const renderer = normalizeRenderer(slot?.renderer);
+    if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
+      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, adv.nt);
+      return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
+    }
+    if (renderer === 'depth') return 'Depth';
+    return 'Legend label';
+  };
+
   const linearTrackSlotUsesPresetGeometry = (slot) => {
     if (!slot || typeof slot !== 'object') return false;
     const renderer = RENDERER_ALIASES[String(slot.renderer || '').trim().toLowerCase()] || String(slot.renderer || '').trim().toLowerCase();
@@ -934,6 +952,69 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     return heightText || String(slot?.height || '');
   };
 
+  const linearSlotManualValue = (slot, field) => {
+    if (!slot) return '';
+    if (field === 'height') return linearTrackSlotHeightValue(slot);
+    if (field === 'spacing') return slot.spacing;
+    return '';
+  };
+
+  const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
+
+  const resolvedLinearSlotGeometry = (slotIndex) => findTrackSlotGeometry({
+    geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'linear'
+      ? state.trackSlotResolvedGeometry.value
+      : null,
+    resultIndex: selectedResultIndexValue(),
+    recordIndex: 0,
+    slotIndex
+  });
+
+  const estimateLinearSlotGeometry = (slot) => {
+    const renderer = normalizeRenderer(slot?.renderer);
+    const configuredHeight = parsePositivePxNumber(slot?.height);
+    let heightPx = configuredHeight ?? ESTIMATED_LINEAR_GC_HEIGHT_PX;
+    if (renderer === 'features') heightPx = 0;
+    else if (renderer === 'spacer') heightPx = configuredHeight ?? 0;
+    else if (renderer === 'depth') {
+      heightPx = parsePositivePxNumber(adv.depth_height) ?? ESTIMATED_LINEAR_DEPTH_HEIGHT_PX;
+    } else if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
+      heightPx = parsePositivePxNumber(adv.gc_height) ?? ESTIMATED_LINEAR_GC_HEIGHT_PX;
+    }
+    const spacingAfterPx = renderer === 'depth' ? ESTIMATED_LINEAR_DEPTH_SPACING_PX : 0;
+    return {
+      heightPx,
+      spacingAfterPx,
+      baseYOffsetPx: 0,
+      finalYOffsetPx: 0,
+      source: 'estimated'
+    };
+  };
+
+  const linearTrackSlotDisplayGeometry = (slot, slotIndex) => {
+    const resolved = resolvedLinearSlotGeometry(slotIndex);
+    if (resolved) return { ...resolved, source: 'resolved' };
+    return estimateLinearSlotGeometry(slot);
+  };
+
+  const linearTrackSlotGeometryAutoText = (slot, slotIndex, field) => {
+    if (isManualSlotValue(linearSlotManualValue(slot, field))) return '';
+    const geometry = linearTrackSlotDisplayGeometry(slot, slotIndex);
+    if (field === 'height') return formatPxAuto(geometry.heightPx, geometry.source);
+    if (field === 'spacing') return formatPxAuto(geometry.spacingAfterPx, geometry.source);
+    return '';
+  };
+
+  const linearTrackSlotGeometryUnitSuffix = (slot, field) => {
+    const text = String(linearSlotManualValue(slot, field) ?? '').trim();
+    if (!text || /px$/i.test(text)) return '';
+    return 'px';
+  };
+
+  const linearTrackSlotGeometryHasManual = (slot, field) => (
+    isManualSlotValue(linearSlotManualValue(slot, field))
+  );
+
   const setLinearTrackSlotHeight = (slot, value) => {
     if (!slot) return;
     const text = String(value ?? '').trim();
@@ -998,6 +1079,9 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     updateLinearTrackSlotRenderer,
     updateLinearTrackSlotPlacement,
     linearTrackSlotHeightValue,
+    linearTrackSlotGeometryAutoText,
+    linearTrackSlotGeometryHasManual,
+    linearTrackSlotGeometryUnitSuffix,
     setLinearTrackSlotHeight,
     linearTrackSlotHasSkewColorOverride,
     linearTrackSlotSkewColorValue,
@@ -1011,6 +1095,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     linearTrackSlotCliSpec: (slot) => buildLinearTrackSlotSpec(slot),
     linearTrackSlotDisplayLabel: (slot) => linearTrackRendererLabel(slot?.renderer),
     linearTrackSlotDisplayMeta: (slot) => buildLinearTrackSlotSpec(slot),
+    linearTrackSlotLegendLabelPlaceholder,
     linearTrackSlotPlacementLabel,
     linearTrackSlotUsesPresetGeometry
   };

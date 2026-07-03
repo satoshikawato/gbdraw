@@ -118,6 +118,45 @@ def test_parse_linear_track_slot_with_layout_fields() -> None:
     assert slot.params["track_index"] == 0
 
 
+def test_linear_resolved_track_retains_spacing_after_px() -> None:
+    layout, _canvas_config = _resolve_layout(
+        [
+            "features:features@side=overlay",
+            "depth_1:depth@track_index=0,h=10px,spacing=8px",
+        ]
+    )
+
+    depth_track = _layout_track(layout, "depth_1")
+
+    assert depth_track.height == pytest.approx(10.0)
+    assert depth_track.spacing_after_px == pytest.approx(8.0)
+
+
+def test_linear_track_slot_geometry_metadata_keeps_duplicate_record_instances() -> None:
+    canvas = assemble_linear_diagram_from_records(
+        [_record("duplicate"), _record("duplicate")],
+        legend="none",
+        linear_track_slots=[
+            "features:features@side=overlay",
+            "gc_content:dinucleotide_content@h=20px,spacing=8px",
+        ],
+        linear_track_axis_index=0,
+    )
+
+    geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
+
+    assert geometry["schema"] == 1
+    assert geometry["mode"] == "linear"
+    assert [record["recordIndex"] for record in geometry["records"]] == [0, 1]
+    assert [record["recordId"] for record in geometry["records"]] == ["duplicate", "duplicate"]
+    gc_slots = [
+        next(slot for slot in record["slots"] if slot["slotId"] == "gc_content")
+        for record in geometry["records"]
+    ]
+    assert [slot["slotIndex"] for slot in gc_slots] == [1, 1]
+    assert [slot["spacingAfterPx"] for slot in gc_slots] == [pytest.approx(8.0), pytest.approx(8.0)]
+
+
 def test_parse_linear_track_slot_aliases() -> None:
     content = parse_linear_track_slot("gc_content:gc_content@nt=at")
     skew = parse_linear_track_slot("gc_skew:skew@dinucleotide=gc")

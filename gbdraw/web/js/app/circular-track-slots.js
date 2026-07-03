@@ -12,6 +12,13 @@ import {
 } from './depth-track-state.js';
 import { resolveColorToHex } from './color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
+import {
+  findTrackSlotGeometry,
+  formatPxAuto,
+  formatRadiusFactorAuto,
+  isManualSlotValue,
+  parseCircularScalarDisplay
+} from './track-slot-display.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -1640,6 +1647,15 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     }
     return '';
   };
+  const circularTrackSlotLegendLabelPlaceholder = (slot) => {
+    const renderer = String(slot?.renderer || '').trim();
+    if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
+      const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, normalizeNt(state.adv.nt));
+      return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
+    }
+    if (renderer === 'depth') return 'Depth';
+    return 'Legend label';
+  };
   const circularTrackSlotColor = (slot) => {
     if (isManagedConservationSlot(slot)) return String(slot?.params?.color || '').trim();
     return '';
@@ -1711,6 +1727,84 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     void slot;
     return null;
   };
+
+  const circularSlotManualValue = (slot, field) => {
+    if (!slot) return '';
+    if (field === 'width') return slot.width;
+    if (field === 'radius') return slot.radius;
+    if (field === 'inner_gap_px') return slot.inner_gap_px;
+    if (field === 'outer_gap_px') return slot.outer_gap_px;
+    return '';
+  };
+
+  const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
+
+  const resolvedCircularSlotGeometry = (slotIndex) => findTrackSlotGeometry({
+    geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'circular'
+      ? state.trackSlotResolvedGeometry.value
+      : null,
+    resultIndex: selectedResultIndexValue(),
+    recordIndex: 0,
+    slotIndex
+  });
+
+  const estimateCircularSlotGeometry = (slot, slotIndex) => {
+    const preset = normalizeCircularTrackPreset(state.form.track_type);
+    const lengthParam = getPreviewLengthParam(state);
+    const renderer = String(slot?.renderer || '').trim();
+    const widthPx = previewWidthPxForRenderer(renderer, lengthParam);
+    const spacingPx = previewSpacingPx();
+    let radiusFactor = getPresetRadiusRatio(slot, renderer, preset, lengthParam, state);
+    if (radiusFactor === null) {
+      const slots = Array.isArray(state.adv.circular_track_slots) ? state.adv.circular_track_slots : [];
+      const axis = clampCircularTrackAxisIndex(state.adv.circular_track_slots_axis_index, slots.length)
+        ?? inferLegacyAxisIndexFromFeature(slots, state.form.track_type);
+      const placement = effectiveSlotPlacement(slot, preset);
+      const distance = Math.max(1, Math.abs(Number(slotIndex) - Number(axis)) + 1);
+      const step = (widthPx + spacingPx) / Math.max(1, PREVIEW_RADIUS_PX);
+      if (placement === 'outside') radiusFactor = 1 + (distance * step);
+      else if (placement === 'overlay') radiusFactor = 1.0;
+      else radiusFactor = Math.max(0.05, 1 - (distance * step));
+    }
+    return {
+      widthPx,
+      radiusFactor,
+      innerGapPx: spacingPx,
+      outerGapPx: spacingPx,
+      source: 'estimated'
+    };
+  };
+
+  const circularTrackSlotDisplayGeometry = (slot, slotIndex) => {
+    const resolved = resolvedCircularSlotGeometry(slotIndex);
+    if (resolved) return { ...resolved, source: 'resolved' };
+    return estimateCircularSlotGeometry(slot, slotIndex);
+  };
+
+  const circularTrackSlotGeometryAutoText = (slot, slotIndex, field) => {
+    if (isManualSlotValue(circularSlotManualValue(slot, field))) return '';
+    const geometry = circularTrackSlotDisplayGeometry(slot, slotIndex);
+    if (field === 'width') return formatPxAuto(geometry.widthPx, geometry.source);
+    if (field === 'radius') return formatRadiusFactorAuto(geometry.radiusFactor, geometry.source);
+    if (field === 'inner_gap_px') return formatPxAuto(geometry.innerGapPx, geometry.source);
+    if (field === 'outer_gap_px') return formatPxAuto(geometry.outerGapPx, geometry.source);
+    return '';
+  };
+
+  const circularTrackSlotGeometryUnitSuffix = (slot, field) => {
+    const text = String(circularSlotManualValue(slot, field) ?? '').trim();
+    if (!text) return '';
+    if (field === 'width') {
+      const parsed = parseCircularScalarDisplay(text);
+      return parsed?.unit === 'factor' ? 'R' : '';
+    }
+    if (field === 'radius') return /px$/i.test(text) ? '' : 'R';
+    return /px$/i.test(text) ? '' : 'px';
+  };
+
+  const circularTrackSlotGeometryHasManual = (slot, field) => (
+    isManualSlotValue(circularSlotManualValue(slot, field))
+  );
 
   const circularTrackPresetSummary = () => {
     const preset = normalizeCircularTrackPreset(state.form.track_type);
@@ -1790,9 +1884,13 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackSlotCliSpec,
     circularTrackSlotDisplayLabel,
     circularTrackSlotDisplayMeta,
+    circularTrackSlotLegendLabelPlaceholder,
     circularTrackSlotColor,
     circularTrackSlotHasSkewColorOverride,
     circularTrackSlotSkewColorValue,
+    circularTrackSlotGeometryAutoText,
+    circularTrackSlotGeometryHasManual,
+    circularTrackSlotGeometryUnitSuffix,
     setCircularTrackSlotSkewColor,
     clearCircularTrackSlotSkewColor,
     circularTrackPresetSummary,

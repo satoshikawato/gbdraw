@@ -260,9 +260,13 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
           ? rawCircularPlotTitlePosition
           : 'none';
         const normalizedDefinitionFontSize =
-          definitionFontSize === null || Number.isNaN(definitionFontSize) ? null : definitionFontSize;
+          definitionFontSize !== null && Number.isFinite(definitionFontSize) && definitionFontSize > 0
+            ? definitionFontSize
+            : null;
         const normalizedPlotTitleFontSize =
-          plotTitleFontSize === null || Number.isNaN(plotTitleFontSize) ? null : plotTitleFontSize;
+          plotTitleFontSize !== null && Number.isFinite(plotTitleFontSize) && plotTitleFontSize > 0
+            ? plotTitleFontSize
+            : null;
         const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
 
         let resultJson = '';
@@ -434,9 +438,15 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
 
       const labels = linearSeqs.map((seq) => (seq.definition ?? '').toString());
       let updated = false;
-      const fontSizeOverride =
+      const parsedDefinitionFontSize =
         adv.def_font_size !== null && adv.def_font_size !== undefined && adv.def_font_size !== ''
-          ? String(adv.def_font_size)
+          ? Number(adv.def_font_size)
+          : null;
+      const fontSizeOverride =
+        parsedDefinitionFontSize !== null &&
+        Number.isFinite(parsedDefinitionFontSize) &&
+        parsedDefinitionFontSize > 0
+          ? String(parsedDefinitionFontSize)
           : null;
 
       groups.forEach((group, idx) => {

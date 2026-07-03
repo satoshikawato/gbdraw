@@ -77,6 +77,8 @@ from .cli_utils.common import (
 from .cli_utils.session import (
     DiagramRunResult,
     add_session_args,
+    build_track_slot_geometry_run_metadata,
+    collect_track_slot_geometry_records,
     make_rendered_svg,
     parse_session_pre_args,
     save_session_sidecar_if_requested,
@@ -2005,15 +2007,24 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     if losatp_cache is not None:
         losatp_cache_entries = losatp_cache.session_entries()
 
+    rendered_svg = make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name)
+    track_slot_geometry_records = collect_track_slot_geometry_records(
+        canvas,
+        result_index=0,
+        result_name=rendered_svg.svg_path.name,
+    )
+
     return DiagramRunResult(
         mode="linear",
         render_formats=tuple(out_formats),
-        outputs=(
-            make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name),
-        ),
+        outputs=(rendered_svg,),
         feature_metadata=tuple(interactive_context.features) if interactive_context else (),
         losat_cache_entries=losatp_cache_entries,
         linear_record_metadata=linear_record_metadata,
+        run_metadata=build_track_slot_geometry_run_metadata(
+            mode="linear",
+            records=track_slot_geometry_records,
+        ),
     )
 
 

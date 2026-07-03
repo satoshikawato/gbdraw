@@ -138,6 +138,16 @@ export const createLosatSettings = ({ state }) => {
     });
   });
 
+  const losatEffectiveExecutionMode = computed(() => {
+    const raw = String(losat.executionMode || 'auto').trim().toLowerCase();
+    if (raw === 'serial') return 'serial';
+    if (raw === 'threaded') return 'threaded';
+    const threadingState = String(state?.losatThreadingStatus?.value?.state || '').trim().toLowerCase();
+    if (threadingState && threadingState !== 'available' && threadingState !== 'running') return 'serial';
+    if (losatMaxPairWorkers.value > 1 || losatEffectiveThreadsPerJob.value > 1) return 'threaded if useful';
+    return 'serial';
+  });
+
   const losatThreadingPlanSummary = computed(() =>
     'By default, LOSAT can use up to half the number of cores available.'
   );
@@ -176,6 +186,7 @@ export const createLosatSettings = ({ state }) => {
     losatThreadsPerJobFixed,
     losatThreadOptions,
     losatEffectiveThreadsPerJob,
+    losatEffectiveExecutionMode,
     losatAutoPairWorkers,
     losatPairWorkerOptions,
     losatThreadingPlanSummary
