@@ -16,6 +16,7 @@ class LinearResolvedTrack:
     side: str
     y_offset: float
     height: float
+    spacing_after_px: float
     top_extent: float
     bottom_extent: float
     z: int
@@ -118,6 +119,7 @@ def _resolve_below_tracks(
                 side=slot.side,
                 y_offset=float(y_offset),
                 height=float(height),
+                spacing_after_px=float(spacing),
                 top_extent=float(top_extent),
                 bottom_extent=float(bottom_extent),
                 z=slot.z,
@@ -154,6 +156,7 @@ def _resolve_above_tracks(
             side=slot.side,
             y_offset=float(y_offset),
             height=float(height),
+            spacing_after_px=float(spacing),
             top_extent=float(top_extent),
             bottom_extent=float(bottom_extent),
             z=slot.z,
@@ -195,6 +198,7 @@ def resolve_linear_track_layout(
             side=slot.side,
             y_offset=0.0,
             height=0.0,
+            spacing_after_px=0.0,
             top_extent=0.0,
             bottom_extent=0.0,
             z=slot.z,

@@ -433,13 +433,18 @@ def _overlay_slot_on_preset_lane(
         and str(side or "inside").strip().lower() == "inside"
     ):
         params["_preferred_anchor_radius"] = geometry_slot.radius
+    explicit_gap = slot.inner_gap_px is not None or slot.outer_gap_px is not None
     return replace(
         slot,
         renderer=renderer,
         side=side,
         radius=slot.radius,
         width=slot.width if slot.width is not None else _inherited_width_for_renderer(renderer, params_slot, context),
-        spacing=slot.spacing if slot.spacing is not None else (geometry_slot.spacing if geometry_slot is not None else None),
+        spacing=(
+            slot.spacing
+            if slot.spacing is not None
+            else (None if explicit_gap else (geometry_slot.spacing if geometry_slot is not None else None))
+        ),
         inner_gap_px=(
             slot.inner_gap_px
             if slot.inner_gap_px is not None

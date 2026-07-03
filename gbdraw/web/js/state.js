@@ -28,6 +28,7 @@ const results = ref([]);
 const selectedResultIndex = ref(0);
 const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
+const trackSlotResolvedGeometry = ref(null);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 const svgContent = computed(() => {
@@ -1066,6 +1067,7 @@ export const state = {
   selectedResultIndex,
   resultPanelTab,
   lastRunInfo,
+  trackSlotResolvedGeometry,
   pairwiseMatchFactors,
   svgContent,
   zoom,

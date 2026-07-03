@@ -30,6 +30,19 @@ const {
   collectRenderedFeatureIdentitiesFromSvg,
   migrateFeatureOverrideState
 } = await import(pathToFileURL(join(tempDir, 'app', 'session-feature-metadata.js')));
+const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir, 'services', 'diagram-generation.js')));
+
+{
+  const legacyResults = [{ name: 'out.svg', content: '<svg />' }];
+  assert.deepEqual(normalizeGenerationResponse(legacyResults), { results: legacyResults, metadata: {} });
+  const metadata = { trackSlotGeometry: { schema: 1, mode: 'linear', records: [] } };
+  assert.deepEqual(
+    normalizeGenerationResponse({ results: legacyResults, metadata }),
+    { results: legacyResults, metadata }
+  );
+  const errorPayload = { error: { type: 'OutputError', message: 'No output files generated.' } };
+  assert.deepEqual(normalizeGenerationResponse(errorPayload), { results: errorPayload, metadata: {} });
+}
 
 const parseAttributes = (source) => {
   const attrs = {};

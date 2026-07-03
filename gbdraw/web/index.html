@@ -165,6 +165,62 @@
         .adv-options .form-input.text-xs { font-size: 10px; }
         .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
         .adv-options .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
+        .track-slot-geometry-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.25rem;
+        }
+        .track-slot-field {
+            min-width: 0;
+        }
+        .track-slot-field-label {
+            display: flex;
+            align-items: center;
+            gap: 0.125rem;
+            margin-bottom: 0.125rem;
+            font-size: 9px;
+            line-height: 1;
+            font-weight: 700;
+            color: #64748b;
+        }
+        .track-slot-value-field {
+            position: relative;
+            min-width: 0;
+        }
+        .track-slot-geometry-input {
+            height: 1.5rem;
+            padding-right: 1.55rem !important;
+            background: transparent;
+            position: relative;
+            z-index: 1;
+        }
+        .track-slot-auto-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            padding: 0.25rem 0.45rem;
+            color: #94a3b8;
+            font-size: 10px;
+            line-height: 1.2;
+            pointer-events: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .track-slot-unit-suffix {
+            position: absolute;
+            top: 50%;
+            right: 0.45rem;
+            transform: translateY(-50%);
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1;
+            pointer-events: none;
+            z-index: 2;
+        }
         .basic-settings .input-label { font-size: 10px; letter-spacing: 0.04em; }
         .basic-settings .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
         .basic-settings .form-input.text-xs { font-size: 10px; }
@@ -1789,15 +1845,28 @@
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index)" title="Delete"><i class="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
-                                                    <div class="grid grid-cols-2 gap-1">
-                                                        <input
-                                                            :value="linearTrackSlotHeightValue(entry.slot)"
-                                                            @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
-                                                            class="form-input px-1 py-0.5 text-[10px]"
-                                                            placeholder="h (auto)"
-                                                            title="Height"
-                                                        >
-                                                        <input v-model.trim="entry.slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)" title="Spacing">
+                                                    <div class="track-slot-geometry-grid">
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">h <help-tip text="Linear track height in pixels. Leave blank for the default height."></help-tip></label>
+                                                            <div class="track-slot-value-field">
+                                                                <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
+                                                                <input
+                                                                    :value="linearTrackSlotHeightValue(entry.slot)"
+                                                                    @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
+                                                                    class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]"
+                                                                    title="Height"
+                                                                >
+                                                                <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'height')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'height') }}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">spacing <help-tip text="Linear vertical spacing after the track, in pixels. Leave blank for the default spacing."></help-tip></label>
+                                                            <div class="track-slot-value-field">
+                                                                <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'spacing')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'spacing') }}</span>
+                                                                <input v-model.trim="entry.slot.spacing" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing">
+                                                                <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing') }}</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                         <select
@@ -2042,11 +2111,39 @@
                                                             <div class="truncate text-[9px] text-slate-500">{{ circularTrackSlotDisplayMeta(entry.slot) }}</div>
                                                         </div>
                                                     </div>
-                                                    <div class="grid grid-cols-4 gap-1">
-                                                        <input v-model.trim="entry.slot.width" class="form-input px-1 py-0.5 text-[10px]" placeholder="w (auto)">
-                                                        <input v-model.trim="entry.slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r (auto)">
-                                                        <input v-model.trim="entry.slot.inner_gap_px" class="form-input px-1 py-0.5 text-[10px]" placeholder="inner gap px">
-                                                        <input v-model.trim="entry.slot.outer_gap_px" class="form-input px-1 py-0.5 text-[10px]" placeholder="outer gap px">
+                                                    <div class="track-slot-geometry-grid">
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">w <help-tip text="Track width. Use px for physical pixels, or a unitless value for a multiple of the base circular radius. Leave blank for auto."></help-tip></label>
+                                                            <div class="track-slot-value-field">
+                                                                <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'width')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'width') }}</span>
+                                                                <input v-model.trim="entry.slot.width" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Width">
+                                                                <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'width')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'width') }}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">r <help-tip text="Track center radius as a multiple of the base circular radius. For example, 1.0 is on the axis and 0.75 is inside it. Leave blank for auto."></help-tip></label>
+                                                            <div class="track-slot-value-field">
+                                                                <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'radius')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'radius') }}</span>
+                                                                <input v-model.trim="entry.slot.radius" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Radius">
+                                                                <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'radius')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'radius') }}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">inner gap <help-tip text="Physical radial gap on the side closer to the center, in pixels. Leave blank for auto."></help-tip></label>
+                                                            <div class="track-slot-value-field">
+                                                                <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
+                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap">
+                                                                <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">outer gap <help-tip text="Physical radial gap on the side farther from the center, in pixels. Leave blank for auto."></help-tip></label>
+                                                            <div class="track-slot-value-field">
+                                                                <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
+                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap">
+                                                                <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                         <select

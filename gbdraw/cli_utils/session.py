@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
@@ -38,6 +38,7 @@ class DiagramRunResult:
     feature_metadata: tuple[Mapping[str, Any], ...] = ()
     losat_cache_entries: tuple[Mapping[str, Any], ...] | None = None
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
+    run_metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -156,6 +157,57 @@ def make_rendered_svg(output_prefix: str, result_name: str | None = None) -> Ren
         svg_path=svg_path,
         result_name=result_name or svg_path.stem,
     )
+
+
+def collect_track_slot_geometry_records(
+    canvas: Any,
+    *,
+    result_index: int,
+    result_name: str,
+) -> list[dict[str, Any]]:
+    """Copy track-slot geometry from a canvas and add run-result identity."""
+
+    geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
+    if not isinstance(geometry, Mapping):
+        return []
+    records = geometry.get("records")
+    if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
+        return []
+    copied_records: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        copied_record = dict(record)
+        copied_record["resultIndex"] = int(result_index)
+        copied_record["resultName"] = str(result_name)
+        slots = copied_record.get("slots")
+        if isinstance(slots, Sequence) and not isinstance(slots, (str, bytes)):
+            copied_record["slots"] = [
+                dict(slot) for slot in slots if isinstance(slot, Mapping)
+            ]
+        else:
+            copied_record["slots"] = []
+        copied_records.append(copied_record)
+    return copied_records
+
+
+def build_track_slot_geometry_run_metadata(
+    *,
+    mode: Literal["circular", "linear"],
+    records: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Build optional run metadata for resolved track-slot geometry."""
+
+    if not records:
+        return {}
+    return {
+        "trackSlotGeometry": {
+            "schema": 1,
+            "mode": mode,
+            "source": "resolved",
+            "records": [dict(record) for record in records],
+        }
+    }
 
 
 def save_session_sidecar_if_requested(
@@ -546,7 +598,9 @@ __all__ = [
     "RenderedSvg",
     "SessionCliRequest",
     "add_session_args",
+    "build_track_slot_geometry_run_metadata",
     "collect_embedded_files_from_cli_args",
+    "collect_track_slot_geometry_records",
     "make_rendered_svg",
     "parse_session_pre_args",
     "resolve_session_sidecar_path",

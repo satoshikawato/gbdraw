@@ -13,8 +13,8 @@ import os
 import io
 import contextlib
 import logging
-from gbdraw.circular import circular_main
-from gbdraw.linear import linear_main
+from gbdraw.circular import _get_args as _get_circular_args, run_circular_from_namespace
+from gbdraw.linear import _get_args as _get_linear_args, run_linear_from_namespace
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
@@ -97,6 +97,7 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
     stderr_buf = io.StringIO()
     original_load_comparisons = None
     assemble_module = None
+    run_result = None
 
     def _collect_output():
         stdout_text = stdout_buf.getvalue()
@@ -193,9 +194,9 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
                 handler.setStream(stdout_buf)
         with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
             if mode == 'circular':
-                circular_main(full_args)
+                run_result = run_circular_from_namespace(_get_circular_args(full_args))
             else:
-                linear_main(full_args)
+                run_result = run_linear_from_namespace(_get_linear_args(full_args))
     except SystemExit as e:
         code = getattr(e, "code", None)
         if code != 0:
@@ -216,14 +217,26 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
         if assemble_module is not None and original_load_comparisons is not None:
             assemble_module.load_comparisons = original_load_comparisons
 
-    files = glob.glob("*.svg")
+    files = []
+    if run_result is not None:
+        for output in getattr(run_result, "outputs", ()) or ():
+            svg_path = str(getattr(output, "svg_path", ""))
+            if svg_path:
+                files.append(svg_path)
+    if not files:
+        files = sorted(glob.glob("*.svg"))
     if not files:
         return json.dumps(_build_error("OutputError", "No output files generated."))
     results = []
-    for fname in sorted(files):
+    for fname in files:
         with open(fname, "r") as f:
-            results.append({"name": fname, "content": f.read()})
-    return json.dumps(results)
+            results.append({"name": os.path.basename(fname), "content": f.read()})
+    metadata = {}
+    if run_result is not None:
+        raw_metadata = getattr(run_result, "run_metadata", {}) or {}
+        if isinstance(raw_metadata, dict):
+            metadata.update(raw_metadata)
+    return json.dumps({"results": results, "metadata": metadata})
 
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""

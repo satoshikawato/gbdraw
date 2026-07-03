@@ -57,6 +57,8 @@ from .cli_utils.common import (
 from .cli_utils.session import (
     DiagramRunResult,
     add_session_args,
+    build_track_slot_geometry_run_metadata,
+    collect_track_slot_geometry_records,
     make_rendered_svg,
     parse_session_pre_args,
     save_session_sidecar_if_requested,
@@ -1150,6 +1152,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     out_formats = handle_output_formats(out_formats)
     record_count: int = 0
     outputs = []
+    track_slot_geometry_records = []
     session_feature_metadata = []
 
 
@@ -1284,7 +1287,15 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             session_feature_metadata.extend(interactive_context.features)
         else:
             save_figure(canvas, out_formats)
-        outputs.append(make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name))
+        rendered_svg = make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name)
+        track_slot_geometry_records.extend(
+            collect_track_slot_geometry_records(
+                canvas,
+                result_index=len(outputs),
+                result_name=rendered_svg.svg_path.name,
+            )
+        )
+        outputs.append(rendered_svg)
     else:
         for gb_record in gb_records:
             record_count += 1
@@ -1357,13 +1368,25 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 session_feature_metadata.extend(interactive_context.features)
             else:
                 save_figure(canvas, out_formats)
-            outputs.append(make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name))
+            rendered_svg = make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name)
+            track_slot_geometry_records.extend(
+                collect_track_slot_geometry_records(
+                    canvas,
+                    result_index=len(outputs),
+                    result_name=rendered_svg.svg_path.name,
+                )
+            )
+            outputs.append(rendered_svg)
 
     return DiagramRunResult(
         mode="circular",
         render_formats=tuple(out_formats),
         outputs=tuple(outputs),
         feature_metadata=tuple(session_feature_metadata),
+        run_metadata=build_track_slot_geometry_run_metadata(
+            mode="circular",
+            records=track_slot_geometry_records,
+        ),
     )
 
 if __name__ == "__main__":
