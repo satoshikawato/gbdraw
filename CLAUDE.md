@@ -53,6 +53,16 @@ gbdraw linear --gbk genome1.gb genome2.gb -b blast.txt -o comparison
 gbdraw gui  # Launch web UI
 ```
 
+### Browser / Playwright Checks
+
+- Do not treat missing repo-local `node_modules/`, `package.json`, or `@playwright/test` as proof that browser testing is unavailable. This environment may provide Playwright through Python/conda.
+- Check both installations when web UI verification matters:
+  - `command -v playwright && playwright --version`
+  - `python -c "from playwright.sync_api import sync_playwright; print('python playwright ok')"`
+- JavaScript Playwright specs in `tests/web/*.playwright.spec.js` require Node's `@playwright/test`; verify with `node -e "console.log(require.resolve('@playwright/test'))"`.
+- If `@playwright/test` is missing, run an equivalent targeted browser check with Python Playwright instead of skipping browser verification.
+- In Codex/agent sandboxes, Chromium can fail with `sandbox_host_linux.cc ... Operation not permitted`. Rerun the same local browser check with the required sandbox escalation before declaring Playwright unavailable.
+
 ## Project Structure
 
 ```

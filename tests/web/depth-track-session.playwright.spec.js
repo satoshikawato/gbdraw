@@ -56,6 +56,36 @@ test.afterAll(async () => {
   await new Promise((resolveClose) => server.close(resolveClose));
 });
 
+test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const showDepthCheckbox = page.locator('label:has-text("Show Depth") input[type="checkbox"]').first();
+  await expect(showDepthCheckbox).toBeDisabled();
+  await expect(showDepthCheckbox).not.toBeChecked();
+
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.addCircularDepthTrack();
+  });
+  await expect(showDepthCheckbox).toBeDisabled();
+  await expect(showDepthCheckbox).not.toBeChecked();
+
+  await page.evaluate(() => {
+    const file = new File(['position\tdepth\n1\t12\n'], 'depth.tsv', {
+      type: 'text/tab-separated-values'
+    });
+    window.__GBDRAW_APP__.setCircularDepthFile(0, file);
+  });
+  await expect(showDepthCheckbox).toBeEnabled();
+  await expect(showDepthCheckbox).toBeChecked();
+
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.setCircularDepthFile(0, null);
+  });
+  await expect(showDepthCheckbox).toBeDisabled();
+  await expect(showDepthCheckbox).not.toBeChecked();
+});
+
 test('WSSV depth session removes stale circular depth metadata and slots', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });

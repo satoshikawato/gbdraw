@@ -433,6 +433,17 @@ export const createAppSetup = () => {
     return count === 1 ? '1 TSV' : `${count} TSVs`;
   };
   const hasCircularDepthFiles = computed(() => depthFileCount(files.c_depth) > 0);
+  const hasAnyLinearDepthFiles = computed(() => (
+    linearSeqs.some((seq) => depthFileCount(seq?.depth) > 0)
+  ));
+  const canShowDepthTrack = computed(() => (
+    mode.value === 'linear' ? hasAnyLinearDepthFiles.value : hasCircularDepthFiles.value
+  ));
+  const depthToggleOptionClass = computed(() => (
+    canShowDepthTrack.value
+      ? 'text-slate-700 cursor-pointer'
+      : 'text-slate-400 cursor-not-allowed opacity-60'
+  ));
   const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
   const depthTrackUiCounts = reactive({
     circular: 1,
@@ -697,14 +708,14 @@ export const createAppSetup = () => {
   const addCircularDepthTrack = () => {
     depthTrackUiCounts.circular = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular) + 1;
     ensureDepthTrackConfigCount(depthTrackUiCounts.circular);
-    form.show_depth = true;
+    if (canShowDepthTrack.value) form.show_depth = true;
   };
   const addLinearDepthTrack = (seq) => {
     if (!seq) return;
     const nextCount = sourceDepthTrackCount(seq.depth, linearDepthTrackUiCount(seq)) + 1;
     setLinearDepthTrackUiCount(seq, nextCount);
     ensureDepthTrackConfigCount(nextCount);
-    form.show_depth = true;
+    if (canShowDepthTrack.value) form.show_depth = true;
   };
   const removeCircularDepthTrack = (index) => {
     const idx = Number(index);
@@ -803,6 +814,13 @@ export const createAppSetup = () => {
       ensureDepthTrackConfigCount(activeDepthTrackCount());
     },
     { deep: true, immediate: true }
+  );
+  watch(
+    () => [canShowDepthTrack.value, form.show_depth],
+    ([available, showDepth]) => {
+      if (!available && showDepth) form.show_depth = false;
+    },
+    { immediate: true }
   );
   const isCircularConservationUploadSource = () => (
     String(circularConservation.source || '').trim().toLowerCase() === 'upload'
@@ -2098,6 +2116,8 @@ export const createAppSetup = () => {
     linearDepthTrackRows,
     hasCircularDepthFiles,
     hasLinearDepthFiles,
+    canShowDepthTrack,
+    depthToggleOptionClass,
     depthTrackCountLabel,
     getDepthTrackLabel,
     setDepthTrackLabel,

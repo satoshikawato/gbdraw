@@ -1843,8 +1843,12 @@
                                         <input type="checkbox" v-model="form.show_skew" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Show GC Skew <help-tip text="Display GC skew track."></help-tip></span>
                                     </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.show_depth" class="form-checkbox">
+                                    <label
+                                        class="option-label flex items-center gap-2 text-xs select-none"
+                                        :class="depthToggleOptionClass"
+                                        :title="canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.'"
+                                    >
+                                        <input type="checkbox" v-model="form.show_depth" :disabled="!canShowDepthTrack" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Display depth coverage track from uploaded Depth TSV file(s)."></help-tip></span>
                                     </label>
                                 </div>
@@ -2078,8 +2082,12 @@
                                         <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Hide GC Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
                                     </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.show_depth" class="form-checkbox">
+                                    <label
+                                        class="option-label flex items-center gap-2 text-xs select-none"
+                                        :class="depthToggleOptionClass"
+                                        :title="canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.'"
+                                    >
+                                        <input type="checkbox" v-model="form.show_depth" :disabled="!canShowDepthTrack" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Display depth coverage track from the uploaded Depth TSV file."></help-tip></span>
                                     </label>
                                 </div>
