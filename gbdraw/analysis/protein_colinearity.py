@@ -154,6 +154,7 @@ class CdsProtein:
     feature_hash_start: int | None = None
     feature_hash_end: int | None = None
     feature_hash_strand: int | None = None
+    feature_hash_parts: tuple[tuple[int, int, int | None], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -439,6 +440,7 @@ class _CdsProteinCandidate:
     feature_hash_start: int | None
     feature_hash_end: int | None
     feature_hash_strand: int | None
+    feature_hash_parts: tuple[tuple[int, int, int | None], ...]
 
 
 LosatpRunner = Callable[[str, str], DataFrame]
@@ -930,14 +932,26 @@ def _cds_span(feature: SeqFeature) -> tuple[int, int, int | None] | None:
     return start, end, strand
 
 
-def _feature_hash_inputs(feature: SeqFeature) -> tuple[int | None, int | None, int | None]:
+def _feature_hash_parts(feature: SeqFeature) -> tuple[tuple[int, int, int | None], ...]:
     location = feature.location
     if location is None:
-        return None, None, None
+        return ()
     if hasattr(location, "parts") and location.parts:
-        location = location.parts[0]
-    strand = location.strand if location.strand in {-1, 1} else None
-    return int(location.start), int(location.end), strand
+        raw_parts = location.parts
+    else:
+        raw_parts = [location]
+    parts: list[tuple[int, int, int | None]] = []
+    for part in raw_parts:
+        strand = part.strand if part.strand in {-1, 1} else None
+        parts.append((int(part.start), int(part.end), strand))
+    return tuple(parts)
+
+
+def _feature_hash_inputs(feature: SeqFeature) -> tuple[int | None, int | None, int | None]:
+    parts = _feature_hash_parts(feature)
+    if not parts:
+        return None, None, None
+    return parts[0]
 
 
 def extract_cds_proteins(
@@ -989,7 +1003,8 @@ def extract_cds_proteins(
                 continue
 
             cds_count += 1
-            hash_start, hash_end, hash_strand = _feature_hash_inputs(feature)
+            hash_parts = _feature_hash_parts(feature)
+            hash_start, hash_end, hash_strand = hash_parts[0] if hash_parts else (None, None, None)
             synthetic_protein_id = f"gbd_r{global_record_index + 1:04d}_cds{cds_count:06d}"
             source_protein_id = _first_qualifier(feature, "protein_id")
             fasta_safe_source_id = _fasta_safe_protein_id(source_protein_id)
@@ -1043,6 +1058,7 @@ def extract_cds_proteins(
                     feature_hash_start=hash_start,
                     feature_hash_end=hash_end,
                     feature_hash_strand=hash_strand,
+                    feature_hash_parts=hash_parts,
                 )
             )
 
@@ -1089,6 +1105,7 @@ def extract_cds_proteins(
                 feature_hash_start=candidate.feature_hash_start,
                 feature_hash_end=candidate.feature_hash_end,
                 feature_hash_strand=candidate.feature_hash_strand,
+                feature_hash_parts=candidate.feature_hash_parts,
             )
             record_proteins.append(cds_protein)
             protein_map[protein_id] = cds_protein

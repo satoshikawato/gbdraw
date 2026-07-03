@@ -28,6 +28,7 @@ from gbdraw.io.genome import load_gbks
 from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator as CircularFeaturePathGenerator
 from gbdraw.render.drawers.linear.features import FeaturePathGenerator as LinearFeaturePathGenerator
+from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 
 
 def _build_test_record() -> SeqRecord:
@@ -223,9 +224,98 @@ def test_linear_multipart_feature_paths_have_unique_dom_ids_and_shared_feature_i
     ]
     path_ids = [path.attrib.get("id") for path in feature_paths]
 
-    assert len(feature_paths) == 2
-    assert path_ids == [f"{feature_id}__part1", f"{feature_id}__part2"]
+    assert len(feature_paths) == 3
+    assert path_ids == [
+        f"{feature_id}__part1",
+        f"{feature_id}__line1",
+        f"{feature_id}__part2",
+    ]
+    assert feature_paths[1].attrib.get("fill") == "none"
     assert len(path_ids) == len(set(path_ids))
+
+
+def test_linear_multipart_features_with_shared_first_exon_get_distinct_feature_ids() -> None:
+    first_mrna = SeqFeature(
+        CompoundLocation(
+            [
+                FeatureLocation(775, 1155, strand=1),
+                FeatureLocation(8503, 8636, strand=1),
+                FeatureLocation(12027, 13422, strand=1),
+            ]
+        ),
+        type="mRNA",
+        qualifiers={"gene": ["penF"]},
+    )
+    second_mrna = SeqFeature(
+        CompoundLocation(
+            [
+                FeatureLocation(775, 1155, strand=1),
+                FeatureLocation(12027, 13422, strand=1),
+            ]
+        ),
+        type="mRNA",
+        qualifiers={"gene": ["penF"]},
+    )
+    record = SeqRecord(Seq("A" * 14000), id="LC921558")
+    record.features = [first_mrna, second_mrna]
+    expected_ids = {
+        compute_feature_hash(first_mrna, record_id=record.id),
+        compute_feature_hash(second_mrna, record_id=record.id),
+    }
+    assert len(expected_ids) == 2
+
+    canvas = assemble_linear_diagram_from_records(
+        [record],
+        selected_features_set=["mRNA"],
+        legend="none",
+    )
+
+    root = ET.fromstring(canvas.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    rendered_ids = {
+        path.attrib.get("data-gbdraw-feature-id")
+        for path in root.findall(".//svg:path", ns)
+        if path.attrib.get("data-gbdraw-feature-id") in expected_ids
+    }
+    payload = extract_features_from_records_payload([record], selected_features=["mRNA"])
+    payload_ids = {feature["svg_id"] for feature in payload["features"]}
+
+    assert rendered_ids == expected_ids
+    assert expected_ids.issubset(payload_ids)
+
+
+def test_circular_multipart_feature_connector_shares_feature_id() -> None:
+    split_cds = SeqFeature(
+        CompoundLocation(
+            [
+                FeatureLocation(10, 60, strand=1),
+                FeatureLocation(120, 180, strand=1),
+            ]
+        ),
+        type="CDS",
+        qualifiers={"product": ["split cds"]},
+    )
+    record = SeqRecord(Seq("A" * 300), id="rec1")
+    record.features = [split_cds]
+    feature_id = compute_feature_hash(split_cds, record_id=record.id)
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+
+    root = ET.fromstring(canvas.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    feature_paths = [
+        path
+        for path in root.findall(".//svg:path", ns)
+        if path.attrib.get("data-gbdraw-feature-id") == feature_id
+    ]
+    connector_paths = [path for path in feature_paths if path.attrib.get("fill") == "none"]
+
+    assert connector_paths
+    assert connector_paths[0].attrib.get("id") == f"{feature_id}__line1"
 
 
 def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

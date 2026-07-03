@@ -11,7 +11,7 @@ from Bio.SeqFeature import SeqFeature
 
 from ..exceptions import InputFileError, ParseError, ValidationError
 from ..features.colors import compute_feature_hash
-from ..features.ids import compute_feature_hash_from_parts
+from ..features.ids import compute_feature_object_hash
 
 logger = logging.getLogger(__name__)
 
@@ -295,47 +295,12 @@ def _extract_first_location_part(feature: Any) -> Optional[tuple[int, int, Any]]
         return None
 
 
-def _normalize_strand_for_hash(strand: Any) -> Any:
-    if strand in (None, "", "none", "None", "undefined"):
-        return None
-    if isinstance(strand, str):
-        normalized = strand.strip().lower()
-        if normalized in {"positive", "plus", "+", "forward", "1"}:
-            return 1
-        if normalized in {"negative", "minus", "-", "reverse", "-1"}:
-            return -1
-        if normalized in {"undefined", "none", ""}:
-            return None
-        try:
-            return int(normalized)
-        except ValueError:
-            return strand
-    if isinstance(strand, (int, float)):
-        try:
-            return int(strand)
-        except Exception:
-            return strand
-    return strand
-
-
 def _get_feature_hash(feature: Any, record_id: Optional[str]) -> Optional[str]:
     resolved_record_id = _get_feature_record_id(feature, record_id)
     if isinstance(feature, SeqFeature):
         return compute_feature_hash(feature, record_id=resolved_record_id)
 
-    first_part = _extract_first_location_part(feature)
-    feature_type = _get_feature_type(feature)
-    if not first_part or not feature_type:
-        return None
-    start, end, strand = first_part
-    normalized_strand = _normalize_strand_for_hash(strand)
-    return compute_feature_hash_from_parts(
-        feature_type,
-        start,
-        end,
-        normalized_strand,
-        record_id=resolved_record_id,
-    )
+    return compute_feature_object_hash(feature, record_id=resolved_record_id)
 
 
 def _get_feature_location_str(feature: Any) -> Optional[str]:

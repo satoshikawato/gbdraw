@@ -109,6 +109,7 @@ class FeatureDrawer:
         )
         block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
         block_index = 0
+        line_index = 0
 
         for gene_path in gene_paths:
             path_type, path_data = gene_path[0], gene_path[1]
@@ -132,12 +133,19 @@ class FeatureDrawer:
                     record_index=record_index,
                 )
             elif path_type == "line":
+                line_index += 1
+                dom_element_id = f"{feature_data_id}__line{line_index}" if feature_data_id else None
                 self.draw_path(
                     path_data,
                     group,
                     fill_color="none",
                     stroke_color_specified=self.intron_stroke_color,
                     stroke_width_specified=self.intron_stroke_width,
+                    feature_data_id=feature_data_id,
+                    dom_element_id=dom_element_id,
+                    stable_feature_id=stable_feature_id,
+                    record_id=getattr(feature_object, "record_id", None),
+                    record_index=record_index,
                 )
         return group
 

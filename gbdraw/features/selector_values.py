@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from Bio.SeqFeature import SeqFeature
 
-from .ids import compute_feature_hash, compute_feature_hash_from_parts
+from .ids import compute_feature_hash, compute_feature_object_hash
 
 
 def normalize_qualifier_values(raw_values: Any) -> list[str]:
@@ -121,29 +121,6 @@ def extract_first_location_part(feature: Any) -> Optional[tuple[int, int, Any]]:
         return None
 
 
-def normalize_strand_for_hash(strand: Any) -> Any:
-    if strand in (None, "", "none", "None", "undefined"):
-        return None
-    if isinstance(strand, str):
-        normalized = strand.strip().lower()
-        if normalized in {"positive", "plus", "+", "forward", "1"}:
-            return 1
-        if normalized in {"negative", "minus", "-", "reverse", "-1"}:
-            return -1
-        if normalized in {"undefined", "none", ""}:
-            return None
-        try:
-            return int(normalized)
-        except ValueError:
-            return strand
-    if isinstance(strand, (int, float)):
-        try:
-            return int(strand)
-        except Exception:
-            return strand
-    return strand
-
-
 def normalize_strand_token(strand: Any) -> str:
     if strand in (None, "", "none", "None", "undefined"):
         return "undefined"
@@ -174,19 +151,7 @@ def get_feature_hash(feature: Any, record_id: Optional[str]) -> Optional[str]:
     if isinstance(feature, SeqFeature):
         return compute_feature_hash(feature, record_id=resolved_record_id)
 
-    first_part = extract_first_location_part(feature)
-    feature_type = get_feature_type(feature)
-    if not first_part or not feature_type:
-        return None
-    start, end, strand = first_part
-    normalized_strand = normalize_strand_for_hash(strand)
-    return compute_feature_hash_from_parts(
-        feature_type,
-        start,
-        end,
-        normalized_strand,
-        record_id=resolved_record_id,
-    )
+    return compute_feature_object_hash(feature, record_id=resolved_record_id)
 
 
 def get_feature_location_str(feature: Any) -> Optional[str]:

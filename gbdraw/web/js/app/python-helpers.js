@@ -344,12 +344,66 @@ def _compute_web_feature_svg_id(record_id, feature_type, start, end, strand):
         record_id=normalized_record_id or None,
     )
 
+def _compute_web_feature_svg_id_from_parts(record_id, feature_type, parts):
+    from gbdraw.features.ids import compute_feature_hash_from_location_parts
+
+    normalized_record_id = str(record_id or "")
+    normalized_type = str(feature_type or "CDS")
+    return compute_feature_hash_from_location_parts(
+        normalized_type,
+        parts,
+        record_id=normalized_record_id or None,
+    )
+
+def _normalize_web_feature_hash_parts(raw_parts):
+    if raw_parts is None or raw_parts == "":
+        return ()
+    if isinstance(raw_parts, str):
+        try:
+            raw_parts = json.loads(raw_parts)
+        except Exception:
+            return ()
+    if not isinstance(raw_parts, (list, tuple)):
+        return ()
+    parts = []
+    for item in raw_parts:
+        if isinstance(item, dict):
+            start = item.get("start")
+            end = item.get("end")
+            strand = item.get("strand")
+        elif isinstance(item, (list, tuple)) and len(item) >= 3:
+            start, end, strand = item[0], item[1], item[2]
+        else:
+            continue
+        try:
+            start = int(start)
+            end = int(end)
+        except Exception:
+            continue
+        if strand in (-1, 1, "-1", "1"):
+            strand = int(strand)
+        else:
+            strand = None
+        parts.append((start, end, strand))
+    return tuple(parts)
+
 def _display_feature_svg_id_from_data(data, display_start, display_end, display_strand, view_transform):
     normalized = _normalize_web_view_transform(view_transform)
     if not normalized["reverse"]:
         existing = data.get("feature_svg_id")
         if existing:
             return existing
+    hash_parts = _normalize_web_feature_hash_parts(data.get("feature_hash_parts"))
+    if hash_parts:
+        display_hash_parts = [
+            _web_transform_cds_span(start, end, strand, normalized)
+            for start, end, strand in hash_parts
+        ]
+        return _compute_web_feature_svg_id_from_parts(
+            data.get("record_id"),
+            data.get("feature_type") or "CDS",
+            display_hash_parts,
+        )
     hash_start = data.get("feature_hash_start")
     hash_end = data.get("feature_hash_end")
     hash_strand = data.get("feature_hash_strand")
@@ -470,6 +524,7 @@ def _serialize_cds_protein(protein):
         "feature_hash_start": getattr(protein, "feature_hash_start", None),
         "feature_hash_end": getattr(protein, "feature_hash_end", None),
         "feature_hash_strand": getattr(protein, "feature_hash_strand", None),
+        "feature_hash_parts": [list(part) for part in (getattr(protein, "feature_hash_parts", ()) or ())],
     }
 
 def _safe_web_protein_id_token(value):
@@ -633,6 +688,8 @@ def _build_web_cds_protein_map(raw_map):
                     kwargs[optional_int_field] = None
                 else:
                     kwargs[optional_int_field] = int(raw_value)
+        if "feature_hash_parts" in supported_fields:
+            kwargs["feature_hash_parts"] = _normalize_web_feature_hash_parts(data.get("feature_hash_parts"))
         for tuple_field in ("db_xref", "parent_ids"):
             if tuple_field in supported_fields:
                 raw_values = data.get(tuple_field) or ()

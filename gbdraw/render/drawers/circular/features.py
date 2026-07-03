@@ -55,6 +55,7 @@ class FeatureDrawer:
         stroke_color_specified: Optional[str] = None,
         stroke_width_specified: Optional[float] = None,
         feature_data_id: Optional[str] = None,
+        dom_element_id: Optional[str] = None,
     ) -> None:
         stroke_color: str = (
             stroke_color_specified if stroke_color_specified is not None else self.default_stroke_color
@@ -74,7 +75,7 @@ class FeatureDrawer:
         )
         if feature_data_id:
             path.attribs["data-gbdraw-feature-id"] = feature_data_id
-            path.attribs["id"] = feature_data_id
+            path.attribs["id"] = dom_element_id or feature_data_id
         group.add(path)
 
     def draw(
@@ -128,6 +129,7 @@ class FeatureDrawer:
 
         # Keep intron lines behind blocks for the same feature by drawing lines first.
         ordered_types: tuple[str, ...] = ("line", "block", "label")
+        line_index = 0
         for expected_type in ordered_types:
             for gene_path in gene_paths:
                 if not gene_path or not gene_path[0]:
@@ -139,12 +141,16 @@ class FeatureDrawer:
                 if path_type == "block":
                     self.draw_path(path_data, group, fill_color=feature_object.color, feature_data_id=feature_data_id)
                 elif path_type == "line":
+                    line_index += 1
+                    dom_element_id = f"{feature_data_id}__line{line_index}" if feature_data_id else None
                     self.draw_path(
                         path_data,
                         group,
                         fill_color="none",
                         stroke_color_specified=self.intron_stroke_color,
                         stroke_width_specified=self.intron_stroke_width,
+                        feature_data_id=feature_data_id,
+                        dom_element_id=dom_element_id,
                     )
                 elif path_type == "label":
                     for element in path_data:
