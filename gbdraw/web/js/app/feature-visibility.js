@@ -196,6 +196,18 @@ const featureLabel = (feat = {}) => {
 
 const getFeatureId = (feat = {}) => normalizeCell(feat?.svg_id ?? feat?.svgId ?? feat?.featureId ?? feat?.feature_id ?? feat?.id);
 
+const getFeatureStableHashValue = (feat = {}) => normalizeCell(
+  feat?.selector?.hash ??
+  feat?.stable_svg_id ??
+  feat?.stableSvgId ??
+  feat?.stableFeatureSvgId ??
+  feat?.stable_feature_id ??
+  feat?.stableFeatureId ??
+  feat?.feature_hash ??
+  feat?.hash ??
+  getFeatureId(feat)
+);
+
 const getFeatureRecordId = (feat = {}) => normalizeCell(feat?.record_id ?? feat?.recordId ?? feat?.record) || '*';
 
 const getFeatureType = (feat = {}) => normalizeCell(feat?.type ?? feat?.featureType ?? feat?.feature_type) || '*';
@@ -287,6 +299,25 @@ export const buildFeatureVisibilitySelectorCache = (features, selectorSafetyScop
     };
   });
   return cache;
+};
+
+export const preserveFeatureVisibilitySelectorCacheForOverrides = (
+  nextCache = {},
+  previousCache = {},
+  overrides = {}
+) => {
+  const merged = { ...(nextCache && typeof nextCache === 'object' && !Array.isArray(nextCache) ? nextCache : {}) };
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return merged;
+
+  Object.entries(overrides).forEach(([featureIdRaw, modeRaw]) => {
+    if (normalizeVisibilityMode(modeRaw) === 'default') return;
+    const featureId = normalizeCell(featureIdRaw);
+    if (!featureId || merged[featureId]) return;
+    const previous = getSelectorCacheEntry(previousCache, featureId);
+    if (previous) merged[featureId] = previous;
+  });
+
+  return merged;
 };
 
 const buildRuleFromSelectorCacheEntry = (featureIdRaw, modeRaw, selectorCache) => {
@@ -421,8 +452,9 @@ const reorderEditorVisibilityRules = (rules) => {
 
 export const buildExactHashFeatureVisibilityRule = (feat, actionRaw) => {
   const featureId = getFeatureId(feat);
+  const hashValue = getFeatureStableHashValue(feat);
   const action = featureVisibilityModeToAction(actionRaw);
-  if (!featureId || !action) return null;
+  if (!featureId || !hashValue || !action) return null;
   return normalizeFeatureVisibilityRule({
     source: 'editor',
     featureId,
@@ -430,7 +462,7 @@ export const buildExactHashFeatureVisibilityRule = (feat, actionRaw) => {
     recordId: '*',
     featureType: '*',
     qualifier: 'hash',
-    value: exactRegexValue(featureId),
+    value: exactRegexValue(hashValue),
     action
   });
 };

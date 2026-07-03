@@ -80,6 +80,17 @@ export const normalizeFeatureSelectorMetadata = (feature, options = {}) => {
     feature?.feature_id,
     feature?.id
   );
+  const stableFeatureId = firstText(
+    selector?.hash,
+    feature?.stable_svg_id,
+    feature?.stableSvgId,
+    feature?.stableFeatureSvgId,
+    feature?.stable_feature_id,
+    feature?.stableFeatureId,
+    feature?.feature_hash,
+    feature?.hash,
+    featureId
+  );
   const location = firstText(
     selector?.location,
     feature?.location,
@@ -97,6 +108,8 @@ export const normalizeFeatureSelectorMetadata = (feature, options = {}) => {
   return {
     featureId,
     featureIdKey: normalizeFeatureIdKey(featureId) || FEATURE_ID_KEY_EMPTY,
+    stableFeatureId,
+    stableFeatureIdKey: normalizeFeatureIdKey(stableFeatureId) || FEATURE_ID_KEY_EMPTY,
     recordId,
     record: recordId,
     featureType,
@@ -227,13 +240,14 @@ export const selectFeatureSelector = (featureMeta, uniquenessIndex, options = {}
     requireSelector,
     preferSelector: options.preferSelector !== false
   });
+  const fallbackHashValue = metadata.stableFeatureId || metadata.featureId;
   const fallback = {
     qualifier: 'hash',
-    value: metadata.featureId,
+    value: fallbackHashValue,
     isFallbackHash: true
   };
 
-  if (!metadata.featureId) return fallback;
+  if (!metadata.featureId && !fallbackHashValue) return fallback;
   if (requireSelector && !metadata.hasSelectorMetadata) return fallback;
   if (requireSafetyScope && !hasSelectorSafetyScope(uniquenessIndex)) return fallback;
 

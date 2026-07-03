@@ -135,6 +135,38 @@ const makeFeature = (overrides = {}) => ({
 }
 
 {
+  const feature = {
+    svg_id: 'ff51a6081_record_2',
+    stable_svg_id: 'ff51a6081',
+    record_id: 'LC921558.1',
+    type: 'mRNA',
+    selector: {
+      hash: 'ff51a6081',
+      record_location: 'LC921558.1:775..13422:+',
+      qualifiers: { gene: ['penF'] }
+    }
+  };
+  const scope = [
+    { record_id: 'LC921558.1', feature_type: 'mRNA', selector: feature.selector },
+    {
+      record_id: 'LC921558.1',
+      feature_type: 'mRNA',
+      selector: {
+        hash: 'f8468d457',
+        record_location: 'LC921558.1:775..13422:+',
+        qualifiers: { gene: ['penF'] }
+      }
+    }
+  ];
+  const selected = selectFeatureSelector(
+    feature,
+    buildSelectorSafetyUniquenessIndex(scope),
+    { priority: ['protein_id', 'locus_tag'], requireSelector: true, requireSafetyScope: true }
+  );
+  assert.deepEqual(selected, { qualifier: 'hash', value: 'ff51a6081', isFallbackHash: true });
+}
+
+{
   const feature = makeFeature({
     selector: {
       hash: 'h1',

@@ -36,6 +36,7 @@ const {
   getFeatureVisibilityOverride,
   normalizeVisibilityMode,
   parseFeatureVisibilityRules,
+  preserveFeatureVisibilitySelectorCacheForOverrides,
   removeEditorFeatureVisibilityRule,
   resolveEffectiveFeatureVisibility,
   serializeFeatureVisibilityRules,
@@ -137,6 +138,23 @@ assert.equal(normalizeVisibilityMode('bad'), 'default');
     value: '^f\\.1$',
     action: 'exclude_matching'
   });
+}
+
+{
+  const hashRule = buildExactHashFeatureVisibilityRule(
+    {
+      svg_id: 'ff51a6081_record_2',
+      stable_svg_id: 'ff51a6081',
+      selector: { hash: 'ff51a6081' },
+      label: 'penF transcript',
+      type: 'mRNA'
+    },
+    'off'
+  );
+  assert.equal(hashRule.featureId, 'ff51a6081_record_2');
+  assert.equal(hashRule.qualifier, 'hash');
+  assert.equal(hashRule.value, '^ff51a6081$');
+  assert.equal(hashRule.action, 'off');
 }
 
 {
@@ -246,6 +264,58 @@ assert.equal(normalizeVisibilityMode('bad'), 'default');
     'rec1\tCDS\tprotein_id\t^P1$\tshow\n*\tCDS\tproduct\ttransposase\toff\n'
   );
   assert.equal(featureVisibilityOverridesToRules({ 'f.missing': 'off' }, selectorCache)[0].qualifier, 'hash');
+}
+
+{
+  const feat = {
+    svg_id: 'ff51a6081_record_2',
+    stable_svg_id: 'ff51a6081',
+    label: 'penF transcript',
+    record_id: 'LC921558.1',
+    type: 'mRNA',
+    selector: {
+      hash: 'ff51a6081',
+      record_location: 'LC921558.1:775..13422:+',
+      qualifiers: { gene: ['penF'] }
+    }
+  };
+  const selectorCache = buildFeatureVisibilitySelectorCache(
+    [feat],
+    [
+      { record_id: 'LC921558.1', feature_type: 'mRNA', selector: feat.selector },
+      {
+        record_id: 'LC921558.1',
+        feature_type: 'mRNA',
+        selector: {
+          hash: 'f8468d457',
+          record_location: 'LC921558.1:775..13422:+',
+          qualifiers: { gene: ['penF'] }
+        }
+      }
+    ]
+  );
+  assert.deepEqual(selectorCache['ff51a6081_record_2'], {
+    recordId: 'LC921558.1',
+    featureType: 'mRNA',
+    qualifier: 'hash',
+    value: 'ff51a6081',
+    label: 'penF transcript'
+  });
+
+  const rules = deriveFeatureVisibilityRulesForBoundary([], { 'ff51a6081_record_2': 'off' }, selectorCache);
+  assert.equal(
+    serializeFeatureVisibilityRules(rules),
+    'LC921558.1\tmRNA\thash\t^ff51a6081$\toff\n'
+  );
+
+  assert.deepEqual(
+    preserveFeatureVisibilitySelectorCacheForOverrides({}, selectorCache, { 'ff51a6081_record_2': 'off' }),
+    selectorCache
+  );
+  assert.deepEqual(
+    preserveFeatureVisibilitySelectorCacheForOverrides({}, selectorCache, { 'ff51a6081_record_2': 'default' }),
+    {}
+  );
 }
 
 {

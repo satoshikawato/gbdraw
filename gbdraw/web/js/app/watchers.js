@@ -5,7 +5,10 @@ import {
   parseSpecificRules,
   parseWhitelistRules
 } from './file-imports.js';
-import { buildFeatureVisibilitySelectorCache } from './feature-visibility.js';
+import {
+  buildFeatureVisibilitySelectorCache,
+  preserveFeatureVisibilitySelectorCacheForOverrides
+} from './feature-visibility.js';
 
 export const setupWatchers = ({
   state,
@@ -258,9 +261,14 @@ export const setupWatchers = ({
   };
 
   const refreshFeatureVisibilitySelectorCache = () => {
+    const nextCache = preserveFeatureVisibilitySelectorCacheForOverrides(
+      buildFeatureVisibilitySelectorCache(extractedFeatures.value, featureSelectorSafetyScope.value),
+      featureVisibilitySelectorCache,
+      featureVisibilityOverrides
+    );
     replacePlainObject(
       featureVisibilitySelectorCache,
-      buildFeatureVisibilitySelectorCache(extractedFeatures.value, featureSelectorSafetyScope.value)
+      nextCache
     );
   };
 
