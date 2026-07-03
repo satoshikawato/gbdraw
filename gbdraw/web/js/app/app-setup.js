@@ -68,6 +68,7 @@ import {
   compactDepthFileSlots,
   depthFileSlotsFromValue,
   ensureDepthTrackConfigCount as ensureDepthTrackConfigCountEntries,
+  ensureDepthTrackConfigShape,
   isDefaultManagedDepthSlot,
   normalizeDepthTrackConfig as normalizeDepthTrackConfigEntry,
   reindexDepthSlots,
@@ -442,7 +443,7 @@ export const createAppSetup = () => {
   );
   const rowsForDepthTrackCount = (count) => {
     const normalizedCount = Math.max(1, Number(count) || 1);
-    ensureDepthTrackConfigCount(normalizedCount);
+    ensureDepthTrackEditableConfigCount(normalizedCount);
     return Array.from({ length: normalizedCount }, (_, index) => ({
       index,
       key: `depth-track-${index}`,
@@ -475,6 +476,12 @@ export const createAppSetup = () => {
   const normalizeDepthTrackConfig = (entry, index) => (
     normalizeDepthTrackConfigEntry(entry, index, depthTrackConfigDefaults())
   );
+  const optionalNumberInputValue = (value) => value ?? '';
+  const setOptionalNumberInputValue = (target, key, value) => {
+    if (!target || typeof target !== 'object') return;
+    const text = String(value ?? '').trim();
+    target[key] = text === '' ? null : text;
+  };
   const activeDepthTrackCount = () => {
     if (mode.value === 'linear') {
       return linearSeqs.reduce(
@@ -495,6 +502,11 @@ export const createAppSetup = () => {
       depthTrackConfigDefaults()
     );
     adv.depth_tracks.splice(0, adv.depth_tracks.length, ...normalized);
+  };
+  const ensureDepthTrackEditableConfigCount = (count = activeDepthTrackCount()) => {
+    const targetCount = Math.max(1, Number(count) || 1);
+    if (!Array.isArray(adv.depth_tracks)) adv.depth_tracks = [];
+    ensureDepthTrackConfigShape(adv.depth_tracks, targetCount, depthTrackConfigDefaults());
   };
   const circularDepthTrackRows = computed(() => rowsForDepthTrackCount(
     sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular)
@@ -529,15 +541,11 @@ export const createAppSetup = () => {
     }
     return adv.linear_definition_line_styles[key];
   };
-  const getDefinitionLineStyleSize = (kind) => ensureDefinitionLineStyle(kind).font_size ?? '';
+  const getDefinitionLineStyleSize = (kind) => optionalNumberInputValue(
+    ensureDefinitionLineStyle(kind).font_size
+  );
   const setDefinitionLineStyleSize = (kind, value) => {
-    const style = ensureDefinitionLineStyle(kind);
-    if (value === null || value === undefined || String(value).trim() === '') {
-      style.font_size = null;
-      return;
-    }
-    const numeric = Number(value);
-    style.font_size = Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+    setOptionalNumberInputValue(ensureDefinitionLineStyle(kind), 'font_size', value);
   };
   const getDefinitionLineStyleWeight = (kind) => ensureDefinitionLineStyle(kind).font_weight ?? '';
   const setDefinitionLineStyleWeight = (kind, value) => {
@@ -563,7 +571,7 @@ export const createAppSetup = () => {
   };
   const depthTrackConfigForIndex = (index) => {
     const idx = Math.max(0, Number(index) || 0);
-    ensureDepthTrackConfigCount(idx + 1);
+    ensureDepthTrackEditableConfigCount(idx + 1);
     return adv.depth_tracks[idx];
   };
   const getDepthTrackLabel = (index) => {
@@ -2115,6 +2123,8 @@ export const createAppSetup = () => {
     moveLinearSeqDown,
     form,
     adv,
+    optionalNumberInputValue,
+    setOptionalNumberInputValue,
     canUseLinearRulerOnAxis,
     circularTrackNewRenderer,
     linearTrackNewRenderer,

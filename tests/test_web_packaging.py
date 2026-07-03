@@ -2074,6 +2074,14 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "depthTrackRows" in app_setup_source
     assert "circularDepthTrackRows" in app_setup_source
     assert "linearDepthTrackRows" in app_setup_source
+    assert "ensureDepthTrackConfigShape" in app_setup_source
+    assert "ensureDepthTrackConfigShape" in depth_state_source
+    rows_block = app_setup_source.split("const rowsForDepthTrackCount", 1)[1].split(
+        "const linearDepthTrackUiCount",
+        1,
+    )[0]
+    assert "ensureDepthTrackEditableConfigCount(normalizedCount);" in rows_block
+    assert "ensureDepthTrackConfigCount(" not in rows_block
     assert "hasCircularDepthFiles" in app_setup_source
     assert "hasLinearDepthFiles" in app_setup_source
     assert "depthTrackCountLabel" in app_setup_source
@@ -2096,6 +2104,18 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert '@input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"' in index_html
     assert "v-model.number=\"track.config.height\"" in index_html
     assert "v-model.number=\"track.config.large_tick_interval\"" in index_html
+    assert "v-model.number=\"track.config.small_tick_interval\"" in index_html
+    assert "v-model.number=\"track.config.tick_font_size\"" in index_html
+    assert ':value="optionalNumberInputValue(adv.plot_title_font_size)"' in index_html
+    assert "@input=\"setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)\"" in index_html
+    assert ':value="optionalNumberInputValue(adv.def_font_size)"' in index_html
+    assert "@input=\"setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)\"" in index_html
+    definition_size_block = app_setup_source.split("const setDefinitionLineStyleSize", 1)[1].split(
+        "const getDefinitionLineStyleWeight",
+        1,
+    )[0]
+    assert "setOptionalNumberInputValue" in definition_size_block
+    assert "Number(value)" not in definition_size_block
     assert "depthTrackConfigAt(index, file)" in run_source
     assert "syncDepthSlotLegendLabelsFromTrackConfigs" in run_source
     assert "syncDepthSlotLabels({" in run_source

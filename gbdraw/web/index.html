@@ -2352,8 +2352,8 @@
                                     </label>
                                     <input
                                         type="number"
-                                        :value="adv.plot_title_font_size ?? ''"
-                                        @input="adv.plot_title_font_size = $event.target.value === '' ? null : Number($event.target.value)"
+                                        :value="optionalNumberInputValue(adv.plot_title_font_size)"
+                                        @input="setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)"
                                         class="form-input form-input-compact"
                                         placeholder="Auto (32)"
                                     >
@@ -2365,8 +2365,8 @@
                                     </label>
                                     <input
                                         type="number"
-                                        :value="adv.def_font_size ?? ''"
-                                        @input="adv.def_font_size = $event.target.value === '' ? null : Number($event.target.value)"
+                                        :value="optionalNumberInputValue(adv.def_font_size)"
+                                        @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)"
                                         class="form-input form-input-compact"
                                         placeholder="Auto"
                                     >
