@@ -51,6 +51,7 @@ import {
 } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createLosatSettings } from './losat-settings.js';
+import { createAutoValueDisplay } from './auto-value-display.js';
 import {
   conservationSourceDescriptors,
   defaultConservationSeriesLabel,
@@ -415,6 +416,7 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
   const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(state));
   const losatSettings = createLosatSettings({ state });
+  const autoValueDisplay = createAutoValueDisplay(state);
   const depthTrackDefaultColors = [
     '#4A90E2',
     '#E45756',
@@ -2125,6 +2127,8 @@ export const createAppSetup = () => {
     adv,
     optionalNumberInputValue,
     setOptionalNumberInputValue,
+    autoValueText: autoValueDisplay.autoValueText,
+    autoValueVisible: autoValueDisplay.autoValueVisible,
     canUseLinearRulerOnAxis,
     circularTrackNewRenderer,
     linearTrackNewRenderer,

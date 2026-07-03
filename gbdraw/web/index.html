@@ -187,6 +187,30 @@
             position: relative;
             min-width: 0;
         }
+        .auto-value-field {
+            position: relative;
+            min-width: 0;
+        }
+        .auto-value-input {
+            background: transparent;
+            position: relative;
+            z-index: 1;
+        }
+        .auto-value-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            padding: 0.2rem 0.5rem;
+            color: #94a3b8;
+            font-size: 10px;
+            line-height: 1.2;
+            pointer-events: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         .track-slot-geometry-input {
             height: 1.5rem;
             padding-right: 1.55rem !important;
@@ -1085,26 +1109,41 @@
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <label class="input-label text-[10px]">Depth Window <help-tip text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
-                                            <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.depth_window_size, 'depthWindow')" class="auto-value-placeholder">{{ autoValueText('depthWindow') }}</span>
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Depth Step <help-tip text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
-                                            <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.depth_step_size, 'depthStep')" class="auto-value-placeholder">{{ autoValueText('depthStep') }}</span>
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <label class="input-label text-[10px]">Depth Min <help-tip text="Minimum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
-                                            <input type="number" min="0" step="1" v-model.number="adv.depth_min" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.depth_min, 'depthMin')" class="auto-value-placeholder">{{ autoValueText('depthMin') }}</span>
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Depth Max <help-tip text="Maximum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
-                                            <input type="number" min="0" step="1" v-model.number="adv.depth_max" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.depth_max, 'depthMax')" class="auto-value-placeholder">{{ autoValueText('depthMax') }}</span>
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Depth Width <help-tip text="Depth track width in px."></help-tip></label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" class="form-input form-input-compact" placeholder="Auto">
+                                        <div class="auto-value-field">
+                                            <span v-if="autoValueVisible(adv.depth_width_circular, 'circularDepthWidth')" class="auto-value-placeholder">{{ autoValueText('circularDepthWidth') }}</span>
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" class="form-input form-input-compact auto-value-input">
+                                        </div>
                                     </div>
                                 </div>
                                 <div v-for="track in circularDepthTrackRows" :key="`c-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
@@ -1141,7 +1180,10 @@
                                         <div class="grid grid-cols-3 gap-1.5">
                                             <div>
                                                 <label class="input-label text-[10px]">Large Tick <help-tip text="Large tick interval in x coverage units. Leave blank for min/max ticks."></help-tip></label>
-                                                <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" class="form-input form-input-compact" placeholder="Auto">
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(track.config.large_tick_interval, 'depthLargeTick')" class="auto-value-placeholder">{{ autoValueText('depthLargeTick') }}</span>
+                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" class="form-input form-input-compact auto-value-input">
+                                                </div>
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Small Tick <help-tip text="Small tick interval in x coverage units. Leave blank to hide small ticks."></help-tip></label>
@@ -1149,7 +1191,10 @@
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Tick Font <help-tip text="Font size for this track's depth tick labels. Leave blank for auto."></help-tip></label>
-                                                <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" class="auto-value-placeholder">{{ autoValueText('depthTickFont', track.config) }}</span>
+                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" class="form-input form-input-compact auto-value-input">
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1190,7 +1235,7 @@
                                     <div>
                                         <label class="text-[9px] flex items-center">Execution <help-tip text="Auto uses threaded LOSAT only when the browser supports it and the workload is large enough. Serial always uses the existing browser artifact."></help-tip></label>
                                         <select v-model="losat.executionMode" class="form-input px-1 py-0.5 text-xs">
-                                            <option value="auto">Auto</option>
+                                            <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
                                             <option value="serial">Serial</option>
                                             <option value="threaded">Threaded</option>
                                         </select>
@@ -1399,26 +1444,41 @@
                                         <div class="grid grid-cols-2 gap-1.5">
                                             <div>
                                                 <label class="input-label text-[10px]">Depth Window <help-tip text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" class="form-input form-input-compact" placeholder="Auto">
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(adv.depth_window_size, 'depthWindow')" class="auto-value-placeholder">{{ autoValueText('depthWindow') }}</span>
+                                                    <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" class="form-input form-input-compact auto-value-input">
+                                                </div>
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Depth Step <help-tip text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" class="form-input form-input-compact" placeholder="Auto">
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(adv.depth_step_size, 'depthStep')" class="auto-value-placeholder">{{ autoValueText('depthStep') }}</span>
+                                                    <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" class="form-input form-input-compact auto-value-input">
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5">
                                             <div>
                                                 <label class="input-label text-[10px]">Depth Min <help-tip text="Minimum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" class="form-input form-input-compact" placeholder="Auto">
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(adv.depth_min, 'depthMin')" class="auto-value-placeholder">{{ autoValueText('depthMin') }}</span>
+                                                    <input type="number" min="0" step="1" v-model.number="adv.depth_min" class="form-input form-input-compact auto-value-input">
+                                                </div>
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Depth Max <help-tip text="Maximum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" class="form-input form-input-compact" placeholder="Auto">
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(adv.depth_max, 'depthMax')" class="auto-value-placeholder">{{ autoValueText('depthMax') }}</span>
+                                                    <input type="number" min="0" step="1" v-model.number="adv.depth_max" class="form-input form-input-compact auto-value-input">
+                                                </div>
                                             </div>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Default Depth Height <help-tip text="Fallback height for linear depth tracks that leave per-track Height blank."></help-tip></label>
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_height" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.depth_height, 'linearDepthHeight')" class="auto-value-placeholder">{{ autoValueText('linearDepthHeight') }}</span>
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_height" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="space-y-1.5">
@@ -1442,15 +1502,17 @@
                                                 </div>
                                                 <div>
                                                     <label class="input-label text-[10px]">Height <help-tip text="Height of this linear depth coverage track in px. Leave blank for auto."></help-tip></label>
-                                                    <input
-                                                        type="number"
-                                                        min="0.01"
-                                                        step="0.5"
-                                                        v-model.number="track.config.height"
-                                                        @input="syncLinearDepthSlotHeightsFromDepthTracks(track.index)"
-                                                        class="form-input form-input-compact"
-                                                        placeholder="Auto"
-                                                    >
+                                                    <div class="auto-value-field">
+                                                        <span v-if="autoValueVisible(track.config.height, 'linearDepthTrackHeight')" class="auto-value-placeholder">{{ autoValueText('linearDepthTrackHeight') }}</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0.01"
+                                                            step="0.5"
+                                                            v-model.number="track.config.height"
+                                                            @input="syncLinearDepthSlotHeightsFromDepthTracks(track.index)"
+                                                            class="form-input form-input-compact auto-value-input"
+                                                        >
+                                                    </div>
                                                 </div>
                                                 <div>
                                                     <label class="input-label text-[10px]">Color</label>
@@ -1468,7 +1530,10 @@
                                                 <div class="grid grid-cols-3 gap-1.5">
                                                     <div>
                                                         <label class="input-label text-[10px]">Large Tick <help-tip text="Large tick interval in x coverage units. Leave blank for min/max ticks."></help-tip></label>
-                                                        <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" class="form-input form-input-compact" placeholder="Auto">
+                                                        <div class="auto-value-field">
+                                                            <span v-if="autoValueVisible(track.config.large_tick_interval, 'depthLargeTick')" class="auto-value-placeholder">{{ autoValueText('depthLargeTick') }}</span>
+                                                            <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" class="form-input form-input-compact auto-value-input">
+                                                        </div>
                                                     </div>
                                                     <div>
                                                         <label class="input-label text-[10px]">Small Tick <help-tip text="Small tick interval in x coverage units. Leave blank to hide small ticks."></help-tip></label>
@@ -1476,7 +1541,10 @@
                                                     </div>
                                                     <div>
                                                         <label class="input-label text-[10px]">Tick Font <help-tip text="Font size for this track's depth tick labels. Leave blank for auto."></help-tip></label>
-                                                        <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                                        <div class="auto-value-field">
+                                                            <span v-if="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" class="auto-value-placeholder">{{ autoValueText('depthTickFont', track.config) }}</span>
+                                                            <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" class="form-input form-input-compact auto-value-input">
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1576,7 +1644,7 @@
                                 <div>
                                     <label class="text-[9px] flex items-center">Reference side <help-tip text="Use Auto when exactly one BLAST side matches the displayed reference record IDs; choose Query or Subject for ambiguous files."></help-tip></label>
                                     <select v-model="circularConservation.reference" class="form-input px-1 py-0.5 text-xs">
-                                        <option value="auto">Auto</option>
+                                        <option value="auto">Auto ({{ autoValueText('conservationReference') }})</option>
                                         <option value="query">Query</option>
                                         <option value="subject">Subject</option>
                                     </select>
@@ -1648,11 +1716,17 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <label class="input-label text-[10px]">Ring Width</label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" class="form-input form-input-compact" placeholder="Auto">
+                                        <div class="auto-value-field">
+                                            <span v-if="autoValueVisible(circularConservation.ring_width, 'conservationRingWidth')" class="auto-value-placeholder">{{ autoValueText('conservationRingWidth') }}</span>
+                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" class="form-input form-input-compact auto-value-input">
+                                        </div>
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Ring Gap</label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" class="form-input form-input-compact" placeholder="Auto">
+                                        <div class="auto-value-field">
+                                            <span v-if="autoValueVisible(circularConservation.ring_gap, 'conservationRingGap')" class="auto-value-placeholder">{{ autoValueText('conservationRingGap') }}</span>
+                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" class="form-input form-input-compact auto-value-input">
+                                        </div>
                                     </div>
                                 </div>
                                 <div v-if="circularConservationLayoutWarning" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">
@@ -2324,12 +2398,15 @@
                                         ? 'Optional circular plot title used when the title position is Top or Bottom. Leave blank to use the default species + strain title.'
                                         : 'Global title shown once for the whole linear plot.'"></help-tip>
                                 </label>
-                                <input
-                                    type="text"
-                                    v-model="form.plot_title"
-                                    class="form-input form-input-compact"
-                                    :placeholder="mode === 'circular' ? 'Optional shared plot title' : 'Optional plot title'"
-                                >
+                                <div class="auto-value-field">
+                                    <span v-if="autoValueVisible(form.plot_title, 'plotTitle')" class="auto-value-placeholder">{{ autoValueText('plotTitle') }}</span>
+                                    <input
+                                        type="text"
+                                        v-model="form.plot_title"
+                                        class="form-input form-input-compact auto-value-input"
+                                        :placeholder="mode === 'circular' ? '' : 'Optional plot title'"
+                                    >
+                                </div>
                             </div>
 
                             <div class="grid grid-cols-2 gap-1.5">
@@ -2363,13 +2440,15 @@
                                         Definition Font Size
                                         <help-tip text="Font size for definition text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip>
                                     </label>
-                                    <input
-                                        type="number"
-                                        :value="optionalNumberInputValue(adv.def_font_size)"
-                                        @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)"
-                                        class="form-input form-input-compact"
-                                        placeholder="Auto"
-                                    >
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.def_font_size, 'definitionFontSize')" class="auto-value-placeholder">{{ autoValueText('definitionFontSize') }}</span>
+                                        <input
+                                            type="number"
+                                            :value="optionalNumberInputValue(adv.def_font_size)"
+                                            @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)"
+                                            class="form-input form-input-compact auto-value-input"
+                                        >
+                                    </div>
                                 </div>
                             </div>
 
@@ -2504,11 +2583,17 @@
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <label class="input-label text-[10px]">Legend Box Size <help-tip text="Size of the color boxes in the legend."></help-tip></label>
-                                    <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact" placeholder="Auto">
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.legend_box_size, 'legendBoxSize')" class="auto-value-placeholder">{{ autoValueText('legendBoxSize') }}</span>
+                                        <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact auto-value-input">
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Legend Font Size <help-tip text="Font size for the legend text."></help-tip></label>
-                                    <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.legend_font_size, 'legendFontSize')" class="auto-value-placeholder">{{ autoValueText('legendFontSize') }}</span>
+                                        <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact auto-value-input">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2757,23 +2842,31 @@
                                     <div v-if="mode === 'linear'" class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <label class="input-label text-[10px]">Feature Height <help-tip text="Height of the feature blocks."></help-tip></label>
-                                            <input type="number" v-model.number="adv.feature_height" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.feature_height, 'linearFeatureHeight')" class="auto-value-placeholder">{{ autoValueText('linearFeatureHeight') }}</span>
+                                                <input type="number" v-model.number="adv.feature_height" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Axis Gap <help-tip text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></label>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                :value="adv.track_axis_gap ?? ''"
-                                                @input="adv.track_axis_gap = $event.target.value === '' ? null : Number($event.target.value)"
-                                                class="form-input form-input-compact"
-                                                placeholder="Auto"
-                                            >
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.track_axis_gap, 'linearAxisGap')" class="auto-value-placeholder">{{ autoValueText('linearAxisGap') }}</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    :value="adv.track_axis_gap ?? ''"
+                                                    @input="adv.track_axis_gap = $event.target.value === '' ? null : Number($event.target.value)"
+                                                    class="form-input form-input-compact auto-value-input"
+                                                >
+                                            </div>
                                         </div>
                                     </div>
                                     <div v-if="mode === 'circular'">
                                         <label class="input-label text-[10px]">Feature Track Width <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input form-input-compact" placeholder="Auto">
+                                        <div class="auto-value-field">
+                                            <span v-if="autoValueVisible(adv.feature_width_circular, 'circularFeatureWidth')" class="auto-value-placeholder">{{ autoValueText('circularFeatureWidth') }}</span>
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input form-input-compact auto-value-input">
+                                        </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
@@ -2782,7 +2875,10 @@
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label>
-                                            <input type="number" v-model.number="adv.block_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.block_stroke_width, 'blockStrokeWidth')" class="auto-value-placeholder">{{ autoValueText('blockStrokeWidth') }}</span>
+                                                <input type="number" v-model.number="adv.block_stroke_width" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
@@ -2792,7 +2888,10 @@
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label>
-                                            <input type="number" v-model.number="adv.line_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.line_stroke_width, 'lineStrokeWidth')" class="auto-value-placeholder">{{ autoValueText('lineStrokeWidth') }}</span>
+                                                <input type="number" v-model.number="adv.line_stroke_width" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -2884,7 +2983,10 @@
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <label class="input-label text-[10px] mb-0">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label>
-                                            <input type="number" v-model.number="adv.label_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.label_font_size, 'labelFontSize')" class="auto-value-placeholder">{{ autoValueText('labelFontSize') }}</span>
+                                                <input type="number" v-model.number="adv.label_font_size" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                         <div v-if="!(mode === 'linear' && adv.label_placement === 'above_feature')">
                                             <label class="input-label text-[10px] mb-0">
@@ -2892,7 +2994,7 @@
                                                 <help-tip text="Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies."></help-tip>
                                             </label>
                                             <select v-model="adv.label_rendering" class="form-input form-input-compact">
-                                                <option value="auto">Auto</option>
+                                                <option value="auto">Auto ({{ autoValueText('labelRendering') }})</option>
                                                 <option value="embedded_only">Embedded Only</option>
                                                 <option value="external_only">External Only</option>
                                             </select>
@@ -2903,16 +3005,18 @@
                                                     Circular Label Spacing
                                                     <help-tip text="Minimum label-to-label vertical spacing for circular layouts in px."></help-tip>
                                                 </label>
-                                                <input
-                                                    type="number"
-                                                    min="0.01"
-                                                    step="0.5"
-                                                    :value="adv.circular_label_spacing ?? ''"
-                                                    @input="adv.circular_label_spacing = $event.target.value === '' ? null : Number($event.target.value)"
-                                                    @blur="adv.circular_label_spacing = Number($event.target.value) > 0 ? Number($event.target.value) : null"
-                                                    class="form-input form-input-compact"
-                                                    placeholder="Auto"
-                                                >
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(adv.circular_label_spacing, 'circularLabelSpacing')" class="auto-value-placeholder">{{ autoValueText('circularLabelSpacing') }}</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0.01"
+                                                        step="0.5"
+                                                        :value="adv.circular_label_spacing ?? ''"
+                                                        @input="adv.circular_label_spacing = $event.target.value === '' ? null : Number($event.target.value)"
+                                                        @blur="adv.circular_label_spacing = Number($event.target.value) > 0 ? Number($event.target.value) : null"
+                                                        class="form-input form-input-compact auto-value-input"
+                                                    >
+                                                </div>
                                             </div>
                                         </template>
                                         <template v-if="mode === 'linear'">
@@ -2926,7 +3030,7 @@
                                                     @change="adv.label_placement === 'above_feature' && (adv.label_rendering = 'auto')"
                                                     class="form-input form-input-compact"
                                                 >
-                                                    <option value="auto">Auto</option>
+                                                    <option value="auto">Auto ({{ autoValueText('linearLabelPlacement') }})</option>
                                                     <option value="above_feature">Above Feature</option>
                                                 </select>
                                             </div>
@@ -2948,16 +3052,18 @@
                                                     Linear Label Spacing
                                                     <help-tip text="Extra vertical spacing between stacked external labels in linear layouts, in px."></help-tip>
                                                 </label>
-                                                <input
-                                                    type="number"
-                                                    min="0.01"
-                                                    step="0.5"
-                                                    :value="adv.linear_label_spacing ?? ''"
-                                                    @input="adv.linear_label_spacing = $event.target.value === '' ? null : Number($event.target.value)"
-                                                    @blur="adv.linear_label_spacing = Number($event.target.value) > 0 ? Number($event.target.value) : null"
-                                                    class="form-input form-input-compact"
-                                                    placeholder="Auto"
-                                                >
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(adv.linear_label_spacing, 'linearLabelSpacing')" class="auto-value-placeholder">{{ autoValueText('linearLabelSpacing') }}</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0.01"
+                                                        step="0.5"
+                                                        :value="adv.linear_label_spacing ?? ''"
+                                                        @input="adv.linear_label_spacing = $event.target.value === '' ? null : Number($event.target.value)"
+                                                        @blur="adv.linear_label_spacing = Number($event.target.value) > 0 ? Number($event.target.value) : null"
+                                                        class="form-input form-input-compact auto-value-input"
+                                                    >
+                                                </div>
                                             </div>
                                         </template>
                                     </div>
@@ -2968,20 +3074,32 @@
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <label class="input-label text-[10px]">Outer X Offset</label>
-                                            <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.outer_label_x_offset, 'labelRadiusOffset')" class="auto-value-placeholder">{{ autoValueText('labelRadiusOffset') }}</span>
+                                                <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Outer Y Offset</label>
-                                            <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.outer_label_y_offset, 'labelRadiusOffset')" class="auto-value-placeholder">{{ autoValueText('labelRadiusOffset') }}</span>
+                                                <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                         <template v-if="form.labels_mode === 'both'">
                                             <div>
                                                 <label class="input-label text-[10px]">Inner X Offset</label>
-                                                <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input form-input-compact" placeholder="Auto">
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(adv.inner_label_x_offset, 'labelRadiusOffset')" class="auto-value-placeholder">{{ autoValueText('labelRadiusOffset') }}</span>
+                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input form-input-compact auto-value-input">
+                                                </div>
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Inner Y Offset</label>
-                                                <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" class="form-input form-input-compact" placeholder="Auto">
+                                                <div class="auto-value-field">
+                                                    <span v-if="autoValueVisible(adv.inner_label_y_offset, 'labelRadiusOffset')" class="auto-value-placeholder">{{ autoValueText('labelRadiusOffset') }}</span>
+                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" class="form-input form-input-compact auto-value-input">
+                                                </div>
                                             </div>
                                         </template>
                                     </div>
@@ -3014,11 +3132,17 @@
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
-                                    <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" class="auto-value-placeholder">{{ autoValueText('axisStrokeWidth') }}</span>
+                                        <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact auto-value-input">
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Line Width <help-tip text="Line width of the scale bar or ruler."></help-tip></label>
-                                    <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.scale_stroke_width, 'scaleStrokeWidth')" class="auto-value-placeholder">{{ autoValueText('scaleStrokeWidth') }}</span>
+                                        <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact auto-value-input">
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Scale Line Color <help-tip text="Color of the scale bar or ruler line."></help-tip></label>
@@ -3043,11 +3167,17 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for the scale label text. Used by bar style and by ruler labels unless the CLI-only ruler override is used."></help-tip></label>
-                                        <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                        <div class="auto-value-field">
+                                            <span v-if="autoValueVisible(adv.scale_font_size, 'scaleFontSize')" class="auto-value-placeholder">{{ autoValueText('scaleFontSize') }}</span>
+                                            <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact auto-value-input">
+                                        </div>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
                                         <label class="input-label text-[10px]">Interval <help-tip text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></label>
-                                        <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
+                                        <div class="auto-value-field">
+                                            <span v-if="autoValueVisible(adv.scale_interval, 'scaleInterval')" class="auto-value-placeholder">{{ autoValueText('scaleInterval') }}</span>
+                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input">
+                                        </div>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
                                         <label class="input-label text-[10px]">Ruler Label Color <help-tip text="Color of ruler tick labels."></help-tip></label>
@@ -3066,11 +3196,17 @@
                             <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                 <div>
                                     <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
-                                    <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.scale_interval, 'scaleInterval')" class="auto-value-placeholder">{{ autoValueText('scaleInterval') }}</span>
+                                        <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input">
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Tick Label Font Size <help-tip text="Font size for circular tick labels. Leave blank to use the default size."></help-tip></label>
-                                    <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.tick_label_font_size, 'tickLabelFontSize')" class="auto-value-placeholder">{{ autoValueText('tickLabelFontSize') }}</span>
+                                        <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact auto-value-input">
+                                    </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
@@ -3079,7 +3215,10 @@
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
-                                        <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                        <div class="auto-value-field">
+                                            <span v-if="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" class="auto-value-placeholder">{{ autoValueText('axisStrokeWidth') }}</span>
+                                            <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact auto-value-input">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -3092,8 +3231,20 @@
                         <summary><i class="ph ph-dna"></i> Dinucleotide content/skew <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
-                                <div><label class="input-label text-[10px]">Window <help-tip text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.window_size" class="form-input form-input-compact" placeholder="Auto"></div>
-                                <div><label class="input-label text-[10px]">Step <help-tip text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.step_size" class="form-input form-input-compact" placeholder="Auto"></div>
+                                <div>
+                                    <label class="input-label text-[10px]">Window <help-tip text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></label>
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.window_size, 'dinucleotideWindow')" class="auto-value-placeholder">{{ autoValueText('dinucleotideWindow') }}</span>
+                                        <input type="number" v-model.number="adv.window_size" class="form-input form-input-compact auto-value-input">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Step <help-tip text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></label>
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.step_size, 'dinucleotideStep')" class="auto-value-placeholder">{{ autoValueText('dinucleotideStep') }}</span>
+                                        <input type="number" v-model.number="adv.step_size" class="form-input form-input-compact auto-value-input">
+                                    </div>
+                                </div>
                                 <div><label class="input-label text-[10px]">Dinucleotide <help-tip text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></label><input type="text" v-model="adv.nt" class="form-input form-input-compact" placeholder="GC"></div>
                             </div>
 
@@ -3137,7 +3288,10 @@
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Tick Font <help-tip text="Font size for GC content percent tick labels. Leave blank for auto."></help-tip></label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                        <div class="auto-value-field">
+                                            <span v-if="autoValueVisible(adv.gc_content_tick_font_size, 'gcTickFont')" class="auto-value-placeholder">{{ autoValueText('gcTickFont') }}</span>
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" class="form-input form-input-compact auto-value-input">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -3145,7 +3299,10 @@
                             <template v-if="mode === 'linear'">
                                 <div>
                                     <label class="input-label text-[10px]">GC Height <help-tip text="Height of the linear GC content and GC skew tracks. Applies to whichever of those tracks are enabled when the diagram is generated."></help-tip></label>
-                                    <input type="number" v-model.number="adv.gc_height" class="form-input form-input-compact" placeholder="Auto">
+                                    <div class="auto-value-field">
+                                        <span v-if="autoValueVisible(adv.gc_height, 'linearGcHeight')" class="auto-value-placeholder">{{ autoValueText('linearGcHeight') }}</span>
+                                        <input type="number" v-model.number="adv.gc_height" class="form-input form-input-compact auto-value-input">
+                                    </div>
                                 </div>
                             </template>
 
@@ -3154,21 +3311,33 @@
                                     <template v-if="!form.suppress_gc">
                                         <div>
                                             <label class="input-label text-[10px]">GC Content Width <help-tip text="GC content track width in px."></help-tip></label>
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.gc_content_width_circular, 'circularGcWidth')" class="auto-value-placeholder">{{ autoValueText('circularGcWidth') }}</span>
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">GC Content Radius <help-tip text="GC content center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></label>
-                                            <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.gc_content_radius_circular, 'circularGcRadius')" class="auto-value-placeholder">{{ autoValueText('circularGcRadius') }}</span>
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                     </template>
                                     <template v-if="!form.suppress_skew">
                                         <div>
                                             <label class="input-label text-[10px]">GC Skew Width <help-tip text="GC skew track width in px."></help-tip></label>
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.gc_skew_width_circular, 'circularSkewWidth')" class="auto-value-placeholder">{{ autoValueText('circularSkewWidth') }}</span>
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">GC Skew Radius <help-tip text="GC skew center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></label>
-                                            <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" class="form-input form-input-compact" placeholder="Auto">
+                                            <div class="auto-value-field">
+                                                <span v-if="autoValueVisible(adv.gc_skew_radius_circular, 'circularSkewRadius')" class="auto-value-placeholder">{{ autoValueText('circularSkewRadius') }}</span>
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" class="form-input form-input-compact auto-value-input">
+                                            </div>
                                         </div>
                                     </template>
                                 </div>
@@ -3196,7 +3365,10 @@
                             </div>
                             <div>
                                 <label class="input-label text-[10px]">Pairwise Match Height <help-tip text="Height of the comparison blocks."></help-tip></label>
-                                <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact" placeholder="Auto">
+                                <div class="auto-value-field">
+                                    <span v-if="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" class="auto-value-placeholder">{{ autoValueText('pairwiseMatchHeight') }}</span>
+                                    <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact auto-value-input">
+                                </div>
                             </div>
                             <div v-if="!(blastSource === 'losat' && losatProgram === 'blastp')" class="grid grid-cols-2 gap-1.5">
                                 <div>
