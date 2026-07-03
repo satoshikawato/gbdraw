@@ -439,10 +439,24 @@ export const createAppSetup = () => {
   const canShowDepthTrack = computed(() => (
     mode.value === 'linear' ? hasAnyLinearDepthFiles.value : hasCircularDepthFiles.value
   ));
+  const enabledOptionClass = 'text-slate-700 cursor-pointer';
+  const disabledOptionClass = 'text-slate-400 cursor-not-allowed opacity-60';
   const depthToggleOptionClass = computed(() => (
     canShowDepthTrack.value
-      ? 'text-slate-700 cursor-pointer'
-      : 'text-slate-400 cursor-not-allowed opacity-60'
+      ? enabledOptionClass
+      : disabledOptionClass
+  ));
+  const circularSeparateStrandsDisabled = computed(() => (
+    mode.value === 'circular' && Boolean(adv.resolve_overlaps)
+  ));
+  const circularResolveOverlapsDisabled = computed(() => (
+    mode.value === 'circular' && Boolean(form.separate_strands)
+  ));
+  const circularSeparateStrandsOptionClass = computed(() => (
+    circularSeparateStrandsDisabled.value ? disabledOptionClass : enabledOptionClass
+  ));
+  const circularResolveOverlapsOptionClass = computed(() => (
+    circularResolveOverlapsDisabled.value ? disabledOptionClass : enabledOptionClass
   ));
   const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
   const depthTrackUiCounts = reactive({
@@ -819,6 +833,15 @@ export const createAppSetup = () => {
     () => [canShowDepthTrack.value, form.show_depth],
     ([available, showDepth]) => {
       if (!available && showDepth) form.show_depth = false;
+    },
+    { immediate: true }
+  );
+  watch(
+    () => [mode.value, form.separate_strands, adv.resolve_overlaps],
+    ([currentMode, separateStrands, resolveOverlaps]) => {
+      if (currentMode === 'circular' && separateStrands && resolveOverlaps) {
+        adv.resolve_overlaps = false;
+      }
     },
     { immediate: true }
   );
@@ -2118,6 +2141,10 @@ export const createAppSetup = () => {
     hasLinearDepthFiles,
     canShowDepthTrack,
     depthToggleOptionClass,
+    circularSeparateStrandsDisabled,
+    circularResolveOverlapsDisabled,
+    circularSeparateStrandsOptionClass,
+    circularResolveOverlapsOptionClass,
     depthTrackCountLabel,
     getDepthTrackLabel,
     setDepthTrackLabel,

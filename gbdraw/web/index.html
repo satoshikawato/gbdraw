@@ -2062,13 +2062,21 @@
                                     </select>
                                 </div>
                                 <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.separate_strands" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
+                                    <label
+                                        class="option-label flex items-center gap-2 text-xs select-none"
+                                        :class="circularSeparateStrandsOptionClass"
+                                        :title="circularSeparateStrandsDisabled ? 'Turn off Resolve Overlaps to enable Separate Strands.' : ''"
+                                    >
+                                        <input type="checkbox" v-model="form.separate_strands" :disabled="circularSeparateStrandsDisabled" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction. Cannot be combined with Resolve Overlaps in circular mode."></help-tip></span>
                                     </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Feature layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
+                                    <label
+                                        class="option-label flex items-center gap-2 text-xs select-none"
+                                        :class="circularResolveOverlapsOptionClass"
+                                        :title="circularResolveOverlapsDisabled ? 'Turn off Separate Strands to enable Resolve Overlaps.' : ''"
+                                    >
+                                        <input type="checkbox" v-model="adv.resolve_overlaps" :disabled="circularResolveOverlapsDisabled" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. Cannot be combined with Separate Strands in circular mode. Feature layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
@@ -2409,10 +2417,6 @@
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-
-                                <div v-if="adv.resolve_overlaps && form.separate_strands" class="text-[10px] text-amber-700 leading-tight">
-                                    Resolve Overlaps is ignored when Separate Strands is enabled.
                                 </div>
                             </template>
                         </div>

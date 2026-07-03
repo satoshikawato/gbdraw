@@ -1904,7 +1904,9 @@ json.dumps({
 
       if (adv.legend_box_size) args.push('--legend_box_size', adv.legend_box_size);
       if (adv.legend_font_size) args.push('--legend_font_size', adv.legend_font_size);
-      if (adv.resolve_overlaps) args.push('--resolve_overlaps');
+      if (adv.resolve_overlaps && !(mode.value === 'circular' && form.separate_strands)) {
+        args.push('--resolve_overlaps');
+      }
 
       const activePaletteName = String(
         isReflow ? appliedPaletteName.value : (selectedPalette?.value || appliedPaletteName.value || 'default')
