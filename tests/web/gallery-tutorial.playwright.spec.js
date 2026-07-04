@@ -174,7 +174,7 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('Open Custom Track Slots', { exact: true })).toBeVisible();
   await expect(tutorialPanel.getByText('Dinucleotide: AT')).toBeVisible();
-  await expect(tutorialPanel.getByText('AT skew (+) and AT skew (-)')).toBeVisible();
+  await expect(tutorialPanel.getByText('Legend label: AT skew')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(3);
   await expect(mediaImages.nth(1)).toHaveAttribute('src', /02-atskew-preview\.webp$/);
