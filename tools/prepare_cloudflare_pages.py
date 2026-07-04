@@ -23,6 +23,7 @@ GALLERY_REMOTE_ASSET_PATTERNS = (
     "gallery/examples/*.svg",
     "gallery/sessions/*.gbdraw-session.json",
     "gallery/sources/*.svg",
+    "gallery/media/**/*",
 )
 SCRIPT_MARKER = "<!-- GOOGLE_ANALYTICS_SCRIPT -->"
 NOTICE_MARKER = "<!-- GOOGLE_ANALYTICS_NOTICE -->"

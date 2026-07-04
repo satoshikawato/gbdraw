@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync, statSync } = require('node:fs');
+const { createReadStream, existsSync, readFileSync, statSync } = require('node:fs');
 const { createServer } = require('node:http');
 const { extname, join, normalize, resolve, sep } = require('node:path');
 
@@ -11,13 +11,43 @@ const contentTypes = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.mp4': 'video/mp4',
+  '.ogg': 'video/ogg',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.webm': 'video/webm',
   '.webp': 'image/webp'
 };
 
 let server;
 let baseUrl;
+
+const readGalleryExamples = () =>
+  JSON.parse(readFileSync(join(webRoot, 'gallery/examples.json'), 'utf8'));
+
+const readTutorialJson = (filename) =>
+  readFileSync(join(webRoot, 'gallery/tutorials', filename), 'utf8');
+
+const readTutorialWithOperationMedia = () => {
+  const tutorial = JSON.parse(readTutorialJson('hepatoplasmataceae_collinear.json'));
+  ['quickReproduce', 'manualSteps', 'colorRules', 'postGenerationEdits'].forEach((sectionName) => {
+    (tutorial[sectionName] || []).forEach((step) => {
+      if (step && typeof step === 'object') delete step.operations;
+    });
+  });
+  tutorial.manualSteps[0].operations = [
+    {
+      title: 'Select Linear mode',
+      body: 'Use Linear mode before adding the five GenBank inputs.',
+      media: {
+        src: './media/hepatoplasmataceae_collinear/02-web-linear-losat-settings.webp',
+        alt: 'Pairwise Comparisons settings cropped as an operation-level tutorial screenshot.',
+        caption: 'Operation-level media uses the same image fallback path as step media.'
+      }
+    }
+  ];
+  return JSON.stringify(tutorial);
+};
 
 test.beforeAll(async () => {
   await new Promise((resolveServer, rejectServer) => {
@@ -78,8 +108,9 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   await expect(page.getByText('Use Orientation + identity for Color mode.')).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(3);
+  await expect(mediaImages).toHaveCount(19);
   await expect(mediaImages.first()).toHaveAttribute('src', /01-gallery-session\.webp$/);
+  await expect(tutorialPanel.locator('img[src$="manual-07-01-collinear-block-popup.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -110,8 +141,9 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   await expect(page.getByText('orthogroup ID, display name, member count')).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(3);
-  await expect(mediaImages.nth(1)).toHaveAttribute('src', /02-orthogroup-preview\.webp$/);
+  await expect(mediaImages).toHaveCount(20);
+  await expect(tutorialPanel.locator('img[src$="02-orthogroup-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-01-orthogroups-mode.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -144,9 +176,10 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await expect(page.getByText('CDS / gene_kind / biosynthetic$')).toBeVisible();
   await expect(page.getByText('Reverse complement: BGC0000713 only')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(4);
-  await expect(mediaImages.nth(2)).toHaveAttribute('src', /03-orthogroup-popup\.webp$/);
-  await expect(mediaImages.nth(3)).toHaveAttribute('src', /04-feature-popup\.webp$/);
+  await expect(mediaImages).toHaveCount(27);
+  await expect(tutorialPanel.locator('img[src$="03-orthogroup-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="04-feature-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-07-01-color-rule-core.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -178,10 +211,11 @@ test('Gallery renders the WSSV conservation tutorial and media', async ({ page }
   await expect(tutorialPanel.getByText('Ring width: 5')).toBeVisible();
   await expect(tutorialPanel.getByText('MG18PR-0187-N40S.fa')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(4);
-  await expect(mediaImages.nth(1)).toHaveAttribute('src', /03-conservation-rings\.webp$/);
-  await expect(mediaImages.nth(2)).toHaveAttribute('src', /02-input-files\.webp$/);
-  await expect(mediaImages.nth(3)).toHaveAttribute('src', /04-feature-popup\.webp$/);
+  await expect(mediaImages).toHaveCount(24);
+  await expect(tutorialPanel.locator('img[src$="03-conservation-rings.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="02-input-files.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="04-feature-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-08-01-browser-losat-run.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -214,9 +248,10 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   await expect(tutorialPanel.getByText('Dinucleotide: AT')).toBeVisible();
   await expect(tutorialPanel.getByText('Legend label: AT skew')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(3);
-  await expect(mediaImages.nth(1)).toHaveAttribute('src', /02-atskew-preview\.webp$/);
-  await expect(mediaImages.nth(2)).toHaveAttribute('src', /03-feature-popup\.webp$/);
+  await expect(mediaImages).toHaveCount(21);
+  await expect(tutorialPanel.locator('img[src$="02-atskew-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="03-feature-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-06-01-at-skew-slot-values.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -247,10 +282,11 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   await expect(tutorialPanel.getByText('WSSV-like proteins').first()).toBeVisible();
   await expect(tutorialPanel.getByText('Use 32 threads only deliberately')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(4);
-  await expect(mediaImages.nth(1)).toHaveAttribute('src', /02-orthogroup-preview\.webp$/);
-  await expect(mediaImages.nth(2)).toHaveAttribute('src', /03-orthogroup-popup\.webp$/);
-  await expect(mediaImages.nth(3)).toHaveAttribute('src', /04-files\.webp$/);
+  await expect(mediaImages).toHaveCount(26);
+  await expect(tutorialPanel.locator('img[src$="02-orthogroup-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="03-orthogroup-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="04-files.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-03-03-thread-threshold-settings.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -284,10 +320,11 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await expect(tutorialPanel.getByText('NZ_AP024087.1: chromosome 1')).toBeVisible();
   await expect(tutorialPanel.getByText('Record positions: #1@1, #2@1, #3@2, #4@2, #5@2, #6@2')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(4);
-  await expect(mediaImages.nth(1)).toHaveAttribute('src', /02-multirecord-preview\.webp$/);
-  await expect(mediaImages.nth(2)).toHaveAttribute('src', /03-files\.webp$/);
-  await expect(mediaImages.nth(3)).toHaveAttribute('src', /04-feature-popup\.webp$/);
+  await expect(mediaImages).toHaveCount(21);
+  await expect(tutorialPanel.locator('img[src$="02-multirecord-preview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="03-files.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="04-feature-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-record-positions.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -319,6 +356,59 @@ test('Gallery keeps command panel usable when a tutorial fetch fails', async ({ 
 
   await page.getByRole('tab', { name: 'Command' }).click();
   await expect(page.getByText('gbdraw circular -o Vnig_TUMSAT-TG-2018')).toBeVisible();
+});
+
+test('Gallery shows an inline fallback when tutorial media fails to load', async ({ page }) => {
+  await page.route('**/media/hepatoplasmataceae_collinear/01-gallery-session.webp', (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: 'image/webp',
+      body: ''
+    })
+  );
+
+  await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app' })
+  ).toBeVisible();
+  await page.locator('#tutorial-panel .tutorial-media').first().scrollIntoViewIfNeeded();
+  await expect(
+    page.getByText('Media unavailable: ./media/hepatoplasmataceae_collinear/01-gallery-session.webp')
+  ).toBeVisible();
+  await expect(page.getByText('Manual rebuild')).toBeVisible();
+});
+
+test('Gallery renders operation media and keeps it inside a mobile viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/tutorials/hepatoplasmataceae_collinear.json', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: readTutorialWithOperationMedia()
+    });
+  });
+
+  await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+
+  const operation = page.locator('#tutorial-panel .tutorial-operation').first();
+  await expect(operation.getByText('Select Linear mode')).toBeVisible();
+  await expect(operation.getByText('Use Linear mode before adding the five GenBank inputs.')).toBeVisible();
+  const image = operation.getByRole('img');
+  await expect(image).toHaveAttribute('src', /02-web-linear-losat-settings\.webp$/);
+  await expect(
+    operation.getByText('Operation-level media uses the same image fallback path as step media.')
+  ).toBeVisible();
+  await image.scrollIntoViewIfNeeded();
+  await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+
+  const overflow = await image.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const parentRect = element.parentElement.getBoundingClientRect();
+    return rect.width > parentRect.width + 1 || rect.right > document.documentElement.clientWidth + 1;
+  });
+  expect(overflow).toBe(false);
 });
 
 test('Gallery copy link button copies the selected sample URL', async ({ page }) => {
@@ -365,10 +455,13 @@ test('Gallery tab controls support keyboard navigation', async ({ page }) => {
   await page.keyboard.press('End');
   await expect(filesTab).toBeFocused();
   await expect(filesTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#files-panel')).not.toHaveAttribute('hidden', '');
+  await expect.poll(() => page.locator('#preview-panel').evaluate((panel) => getComputedStyle(panel).display)).toBe('none');
 
   await page.keyboard.press('Home');
   await expect(previewTab).toBeFocused();
   await expect(previewTab).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(() => page.locator('#files-panel').evaluate((panel) => getComputedStyle(panel).display)).toBe('none');
 
   await page.keyboard.press('ArrowLeft');
   await expect(filesTab).toBeFocused();
@@ -381,7 +474,7 @@ test('Gallery tutorial media fits a mobile viewport', async ({ page }) => {
   await page.getByRole('tab', { name: 'Tutorial' }).click();
 
   const mediaImages = page.locator('#tutorial-panel .tutorial-media img');
-  await expect(mediaImages).toHaveCount(3);
+  await expect(mediaImages).toHaveCount(19);
   await mediaImages.last().scrollIntoViewIfNeeded();
   const overflowingImages = await mediaImages.evaluateAll((images) =>
     images
@@ -393,4 +486,175 @@ test('Gallery tutorial media fits a mobile viewport', async ({ page }) => {
       .filter(Boolean)
   );
   expect(overflowingImages).toEqual([]);
+});
+
+test('Gallery respects tutorialStatus draft and planned states', async ({ page }) => {
+  let tutorialFetchCount = 0;
+  await page.route('**/gallery/examples.json', (route) => {
+    const examples = readGalleryExamples().map((entry) => {
+      if (entry.id === 'hepatoplasmataceae_collinear') {
+        return { ...entry, tutorialStatus: 'planned' };
+      }
+      if (entry.id === 'Vnig_TUMSAT-TG-2018') {
+        return { ...entry, tutorialStatus: 'draft' };
+      }
+      return entry;
+    });
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify(examples)
+    });
+  });
+  await page.route('**/tutorials/hepatoplasmataceae_collinear.json', (route) => {
+    tutorialFetchCount += 1;
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: readTutorialJson('hepatoplasmataceae_collinear.json')
+    });
+  });
+
+  await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  await expect(page.getByRole('heading', { name: 'Tutorial planned' })).toBeVisible();
+  await expect(page.getByText('A step-by-step web tutorial is not available')).toBeVisible();
+  expect(tutorialFetchCount).toBe(0);
+
+  await page.locator('[data-sample-id="Vnig_TUMSAT-TG-2018"]').click();
+  await expect(page.getByRole('heading', { name: 'Tutorial draft' })).toBeVisible();
+  await expect(page.getByText('not published in the public Gallery yet')).toBeVisible();
+});
+
+test('Gallery can preview draft tutorials when explicitly enabled', async ({ page }) => {
+  await page.route('**/gallery/examples.json', (route) => {
+    const examples = readGalleryExamples().map((entry) =>
+      entry.id === 'Vnig_TUMSAT-TG-2018' ? { ...entry, tutorialStatus: 'draft' } : entry
+    );
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify(examples)
+    });
+  });
+
+  await page.goto(`${baseUrl}/gallery/?showDraftTutorials=1#Vnig_TUMSAT-TG-2018`, {
+    waitUntil: 'domcontentloaded'
+  });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+    })
+  ).toBeVisible();
+});
+
+test('Gallery ignores stale tutorial fetch results after sample changes', async ({ page }) => {
+  let releaseCollinearTutorial;
+  let resolveCollinearRequestFinished;
+  const collinearRequestStarted = new Promise((resolveStarted) => {
+    page.route('**/tutorials/hepatoplasmataceae_collinear.json', async (route) => {
+      resolveStarted();
+      await new Promise((resolveRelease) => {
+        releaseCollinearTutorial = resolveRelease;
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json; charset=utf-8',
+        body: readTutorialJson('hepatoplasmataceae_collinear.json')
+      });
+      resolveCollinearRequestFinished();
+    });
+  });
+  const collinearRequestFinished = new Promise((resolveFinished) => {
+    resolveCollinearRequestFinished = resolveFinished;
+  });
+
+  await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  await collinearRequestStarted;
+  await expect(page.getByText('Loading tutorial for')).toBeVisible();
+
+  await page.locator('[data-sample-id="Vnig_TUMSAT-TG-2018"]').click();
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(
+    tutorialPanel.getByRole('heading', {
+      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+    })
+  ).toBeVisible();
+
+  releaseCollinearTutorial();
+  await collinearRequestFinished;
+  await expect(
+    tutorialPanel.getByRole('heading', {
+      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+    })
+  ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('heading', {
+      name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app'
+    })
+  ).toHaveCount(0);
+});
+
+test('Gallery mobile controls and tutorial text do not overlap or overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseUrl}/gallery/#Vnig_TUMSAT-TG-2018`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+    })
+  ).toBeVisible();
+
+  const layoutIssues = await page.evaluate(() => {
+    const overlaps = [];
+    const checkedParents = ['.viewer-actions', '.tab-bar'];
+    checkedParents.forEach((selector) => {
+      const parent = document.querySelector(selector);
+      if (!parent) return;
+      const children = Array.from(parent.children).filter((child) => !child.hidden);
+      for (let leftIndex = 0; leftIndex < children.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < children.length; rightIndex += 1) {
+          const leftRect = children[leftIndex].getBoundingClientRect();
+          const rightRect = children[rightIndex].getBoundingClientRect();
+          const hasOverlap =
+            leftRect.left < rightRect.right - 1 &&
+            leftRect.right > rightRect.left + 1 &&
+            leftRect.top < rightRect.bottom - 1 &&
+            leftRect.bottom > rightRect.top + 1;
+          if (hasOverlap) {
+            overlaps.push(`${selector}: ${children[leftIndex].textContent} / ${children[rightIndex].textContent}`);
+          }
+        }
+      }
+    });
+
+    const viewportWidth = document.documentElement.clientWidth;
+    const overflowing = Array.from(
+      document.querySelectorAll(
+        '.viewer-actions .action-button, .tab-button, #selected-title, .tutorial-step__title, .tutorial-step__body, .download-title, .file-title'
+      )
+    )
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left < -1 || rect.right > viewportWidth + 1
+          ? `${element.tagName.toLowerCase()}.${element.className || element.id}`
+          : '';
+      })
+      .filter(Boolean);
+
+    return {
+      overlaps,
+      overflowing,
+      documentOverflow:
+        document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+    };
+  });
+
+  expect(layoutIssues).toEqual({
+    overlaps: [],
+    overflowing: [],
+    documentOverflow: false
+  });
 });

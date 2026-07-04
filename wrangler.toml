@@ -10,4 +10,5 @@ run_worker_first = [
   "/gallery/examples/*",
   "/gallery/sessions/*",
   "/gallery/sources/*",
+  "/gallery/media/*",
 ]

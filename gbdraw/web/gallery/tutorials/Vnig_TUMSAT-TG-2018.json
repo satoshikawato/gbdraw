@@ -30,21 +30,65 @@
         "src": "./media/Vnig_TUMSAT-TG-2018/01-gallery-session.webp",
         "alt": "Gallery header for the Vibrio nigripulchritudo multi-record circular genome with the Session action visible.",
         "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
-      }
+      },
+      "operations": [
+        {
+          "title": "Session button for this Gallery entry",
+          "body": "Confirm Session action button.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/quick-01-01-download-session.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing session button for this gallery entry.",
+            "caption": "Session button for this Gallery entry in the gallery page view."
+          }
+        }
+      ]
     },
     {
       "title": "Open the web app",
-      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls.",
+      "operations": [
+        {
+          "title": "Header session controls",
+          "body": "Use the rendered web app header toolbar and click Load Session.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/quick-02-01-open-session-controls.webp",
+            "alt": "Actual Circular web app header toolbar with Load Session, Save Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "caption": "The rendered .app-toolbar crop shows the Load Session control in its real header-toolbar context."
+          }
+        }
+      ]
     },
     {
       "title": "Inspect the restored multi-record layout",
-      "body": "The session restores the GBFF input, circular mode, six-record canvas, automatic size scaling, row placement, title, legend, and generated interactive SVG."
+      "body": "The session restores the GBFF input, circular mode, six-record canvas, automatic size scaling, row placement, title, legend, and generated interactive SVG.",
+      "operations": [
+        {
+          "title": "Restored multi-record layout",
+          "body": "Confirm preview viewport.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/quick-03-01-restored-multirecord-layout.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing restored multi-record layout.",
+            "caption": "Restored multi-record layout in the generated preview view."
+          }
+        }
+      ]
     }
   ],
   "manualSteps": [
     {
       "title": "Switch to Circular mode",
-      "body": "Open gbdraw.app and select Circular mode before adding the RefSeq GBFF input."
+      "body": "Open gbdraw.app and select Circular mode before adding the RefSeq GBFF input.",
+      "operations": [
+        {
+          "title": "Mode segmented control",
+          "body": "Confirm Circular selected.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-01-01-circular-mode.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing mode segmented control.",
+            "caption": "Mode segmented control in the web app session view."
+          }
+        }
+      ]
     },
     {
       "title": "Upload the multi-record GBFF",
@@ -56,6 +100,26 @@
         "NZ_AP024090.1: plasmid pVNTG2",
         "NZ_AP024091.1: plasmid pVNTG3",
         "NZ_AP024092.1: plasmid pVNTG4"
+      ],
+      "operations": [
+        {
+          "title": "Multi-record GBFF uploader",
+          "body": "Confirm GBFF file chip.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-01-gbff-upload.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing multi-record gbff uploader.",
+            "caption": "Multi-record GBFF uploader in the web app session view."
+          }
+        },
+        {
+          "title": "Detected record list",
+          "body": "Confirm chromosomes and plasmids.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-02-record-list.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing detected record list.",
+            "caption": "Detected record list in the web app session view."
+          }
+        }
       ]
     },
     {
@@ -68,6 +132,17 @@
         "Separate strands: on",
         "Legend: left",
         "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
+      ],
+      "operations": [
+        {
+          "title": "Basic circular layout controls",
+          "body": "Confirm tuckin, orchid, strands, legend.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-01-basic-circular-layout.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing basic circular layout controls.",
+            "caption": "Basic circular layout controls in the web app session view."
+          }
+        }
       ]
     },
     {
@@ -81,11 +156,42 @@
         "Row gap ratio: 0.05",
         "Record positions: #1@1, #2@1, #3@2, #4@2, #5@2, #6@2"
       ],
-      "note": "The two large chromosomes sit in the top row. The four smaller plasmids share the second row."
+      "note": "The two large chromosomes sit in the top row. The four smaller plasmids share the second row.",
+      "operations": [
+        {
+          "title": "Multi-record canvas controls",
+          "body": "Confirm enabled, auto size.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-01-multirecord-canvas.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing multi-record canvas controls.",
+            "caption": "Multi-record canvas controls in the web app session view."
+          }
+        },
+        {
+          "title": "Record position controls",
+          "body": "Confirm `#1@1` through `#6@2`.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-02-record-positions.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing record position controls.",
+            "caption": "Record position controls in the web app session view."
+          }
+        }
+      ]
     },
     {
       "title": "Add the bottom title",
-      "body": "Set the plot title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome and place it at the bottom."
+      "body": "Set the plot title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome and place it at the bottom.",
+      "operations": [
+        {
+          "title": "Bottom title controls",
+          "body": "Confirm title text and bottom position.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing bottom title controls.",
+            "caption": "Bottom title controls in the web app session view."
+          }
+        }
+      ]
     },
     {
       "title": "Generate the diagram",
@@ -94,16 +200,38 @@
         "src": "./media/Vnig_TUMSAT-TG-2018/02-multirecord-preview.webp",
         "alt": "Generated Vibrio nigripulchritudo multi-record circular diagram in the Gallery preview.",
         "caption": "The finished figure uses automatic radius scaling so chromosomes and plasmids remain readable in one canvas."
-      }
+      },
+      "operations": [
+        {
+          "title": "Generated multi-record preview",
+          "body": "Confirm two chromosomes + plasmids.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing generated multi-record preview.",
+            "caption": "Generated multi-record preview in the generated preview view."
+          }
+        }
+      ]
     },
     {
       "title": "Check the Files tab",
       "body": "Use the Gallery Files tab to confirm the required GBFF input, assembly source, session JSON, interactive SVG, and thumbnail.",
       "media": {
         "src": "./media/Vnig_TUMSAT-TG-2018/03-files.webp",
-        "alt": "Vibrio nigripulchritudo Gallery Files tab listing the GBFF input download and Gallery artifacts.",
-        "caption": "The Files tab shows that this multi-record figure starts from one GBFF input rather than six separate uploads."
-      }
+        "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
+        "caption": "The rendered Gallery .tab-bar stays visible with Files selected above the file and artifact list."
+      },
+      "operations": [
+        {
+          "title": "Files tab inputs",
+          "body": "Open the Gallery Files tab; the selected tab remains visible above the file list.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-07-01-files-tab.webp",
+            "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
+            "caption": "The rendered Gallery .tab-bar stays visible with Files selected above the file and artifact list."
+          }
+        }
+      ]
     },
     {
       "title": "Inspect a CDS feature",
@@ -112,7 +240,18 @@
         "src": "./media/Vnig_TUMSAT-TG-2018/04-feature-popup.webp",
         "alt": "Vibrio nigripulchritudo multi-record circular diagram with a CDS feature popup open.",
         "caption": "Feature clicks are useful for checking which chromosome or plasmid owns a selected annotation."
-      }
+      },
+      "operations": [
+        {
+          "title": "CDS feature popup",
+          "body": "Confirm feature + popup.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing cds feature popup.",
+            "caption": "CDS feature popup in the popup view."
+          }
+        }
+      ]
     }
   ],
   "colorRules": [
@@ -136,19 +275,63 @@
   "postGenerationEdits": [
     {
       "title": "Click features to verify record ownership",
-      "body": "Feature popups show record ID and location, which is important when the same canvas contains chromosomes and plasmids."
+      "body": "Feature popups show record ID and location, which is important when the same canvas contains chromosomes and plasmids.",
+      "operations": [
+        {
+          "title": "Feature popup with record ownership",
+          "body": "Confirm record ID visible.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/post-01-01-record-feature-popup.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing feature popup with record ownership.",
+            "caption": "Feature popup with record ownership in the popup view."
+          }
+        }
+      ]
     },
     {
       "title": "Keep the left legend compact",
-      "body": "The multi-record canvas already uses most of the width. If you edit the legend, keep it narrow enough that it does not cover chromosome 1."
+      "body": "The multi-record canvas already uses most of the width. If you edit the legend, keep it narrow enough that it does not cover chromosome 1.",
+      "operations": [
+        {
+          "title": "Compact left legend",
+          "body": "Confirm legend + chromosome 1 edge.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/post-02-01-left-legend-compactness.webp",
+            "alt": "Vibrio multi-record tutorial operation screenshot showing compact left legend.",
+            "caption": "Compact left legend in the generated preview view."
+          }
+        }
+      ]
     },
     {
       "title": "Export SVG first",
-      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures."
+      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures.",
+      "operations": [
+        {
+          "title": "Export controls",
+          "body": "Use the rendered Preview export toolbar for SVG, Interactive SVG, PNG, or PDF.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/post-03-01-export-controls.webp",
+            "alt": "Actual Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
+            "caption": "The rendered .preview-toolbar crop shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
+          }
+        }
+      ]
     },
     {
       "title": "Save a session",
-      "body": "Save a .gbdraw-session.json after edits so the web app can restore the GBFF input, multi-record placement, generated output, and SVG adjustments."
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore the GBFF input, multi-record placement, generated output, and SVG adjustments.",
+      "operations": [
+        {
+          "title": "Session save controls",
+          "body": "Use the rendered web app header toolbar and click Save Session.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/post-04-01-save-session.webp",
+            "alt": "Actual Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "caption": "The rendered .app-toolbar crop shows Save Session in the same header toolbar used to load sessions."
+          }
+        }
+      ]
     }
   ],
   "troubleshooting": [

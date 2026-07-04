@@ -606,6 +606,12 @@ def test_public_web_html_entrypoints_are_not_gitignored() -> None:
             assert result.returncode == 1, f"{path} must be commit-visible for hosted builds"
 
 
+def test_gallery_csp_allows_same_origin_tutorial_media() -> None:
+    gallery_index = (WEB_ROOT / "gallery" / "index.html").read_text(encoding="utf-8")
+    assert "media-src 'self';" in gallery_index
+    assert "img-src 'self' data:;" in gallery_index
+
+
 def test_open_source_notices_are_generated() -> None:
     subprocess.run(
         [sys.executable, "tools/generate_open_source_notices.py", "--check"],
@@ -1794,6 +1800,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     assert "/gallery/examples/*" in headers
     assert "! Content-Security-Policy" in headers
     assert "frame-ancestors 'self'" in headers
+    assert "gallery/media/**/*" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     remote_assets = json.loads((bundle_path / "gallery" / "remote-assets.json").read_text(encoding="utf-8"))
     assert (
         remote_assets["gallery/examples/Vnig_TUMSAT-TG-2018.svg"]
@@ -1924,6 +1931,7 @@ def test_wrangler_uses_cloudflare_bundle_directory() -> None:
     assert 'not_found_handling = "single-page-application"' in wrangler_toml
     assert '"/gallery/examples/*"' in wrangler_toml
     assert '"/gallery/sessions/*"' in wrangler_toml
+    assert '"/gallery/media/*"' in wrangler_toml
 
 
 def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
@@ -1931,6 +1939,11 @@ def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
     assert "/gallery/remote-assets.json" in source
     assert "/gallery/examples/" in source
     assert "/gallery/sessions/" in source
+    assert "/gallery/media/" in source
+    assert "video/mp4" in source
+    assert "video/webm" in source
+    assert "video/ogg" in source
+    assert "image/webp" in source
     assert "env.ASSETS.fetch" in source
     assert "Content-Security-Policy" in source
     assert "Cross-Origin-Embedder-Policy" in source

@@ -58,21 +58,65 @@
         "src": "./media/hepatoplasmataceae_orthogroup/01-gallery-session.webp",
         "alt": "Gallery header for the Hepatoplasmataceae orthogroup comparison with the Session action visible.",
         "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
-      }
+      },
+      "operations": [
+        {
+          "title": "Session button for this Gallery entry",
+          "body": "Confirm Session action button.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/quick-01-01-download-session.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing session button for this gallery entry.",
+            "caption": "Session button for this Gallery entry in the gallery page view."
+          }
+        }
+      ]
     },
     {
       "title": "Open the web app",
-      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls.",
+      "operations": [
+        {
+          "title": "Header session controls",
+          "body": "Use the rendered web app header toolbar and click Load Session.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/quick-02-01-open-session-controls.webp",
+            "alt": "Actual Linear web app header toolbar with Load Session, Save Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "caption": "The rendered .app-toolbar crop shows the Load Session control in its real header-toolbar context."
+          }
+        }
+      ]
     },
     {
       "title": "Compare with the collinear session",
-      "body": "Use the collinear Gallery entry when you want gene-order-preserving block reduction. Use this orthogroup entry when you want individual orthogroup-backed protein matches."
+      "body": "Use the collinear Gallery entry when you want gene-order-preserving block reduction. Use this orthogroup entry when you want individual orthogroup-backed protein matches.",
+      "operations": [
+        {
+          "title": "Contrast with collinear example",
+          "body": "Confirm sample list entries.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/quick-03-01-compare-collinear.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing contrast with collinear example.",
+            "caption": "Contrast with collinear example in the gallery page view."
+          }
+        }
+      ]
     }
   ],
   "manualSteps": [
     {
       "title": "Switch to Linear mode",
-      "body": "Open gbdraw.app and select Linear mode before adding inputs."
+      "body": "Open gbdraw.app and select Linear mode before adding inputs.",
+      "operations": [
+        {
+          "title": "Mode segmented control",
+          "body": "Confirm Linear selected.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-01-01-linear-mode.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing mode segmented control.",
+            "caption": "Mode segmented control in the web app session view."
+          }
+        }
+      ]
     },
     {
       "title": "Upload the five GenBank files",
@@ -83,6 +127,17 @@
         "AP027133.gb",
         "AP027132.gb",
         "NZ_CP006932.gb"
+      ],
+      "operations": [
+        {
+          "title": "Linear GenBank uploader with file order",
+          "body": "Confirm file chips in order.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-02-01-five-file-upload-order.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing linear genbank uploader with file order.",
+            "caption": "Linear GenBank uploader with file order in the web app session view."
+          }
+        }
       ]
     },
     {
@@ -93,6 +148,17 @@
         "Total threads: Safe",
         "Parallel runs: Auto",
         "Threads per run: Auto for normal use, or 32 when you need to mirror the saved CLI command"
+      ],
+      "operations": [
+        {
+          "title": "Pairwise Comparisons panel",
+          "body": "Confirm Run LOSAT, LOSATP.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-03-01-browser-losat.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing pairwise comparisons panel.",
+            "caption": "Pairwise Comparisons panel in the web app session view."
+          }
+        }
       ]
     },
     {
@@ -104,7 +170,27 @@
         "Max hits: 5",
         "Pairwise evidence: adjacent genome pairs"
       ],
-      "note": "The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks."
+      "note": "The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks.",
+      "operations": [
+        {
+          "title": "Orthogroups mode controls",
+          "body": "Confirm blastp mode Orthogroups.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-04-01-orthogroups-mode.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing orthogroups mode controls.",
+            "caption": "Orthogroups mode controls in the web app session view."
+          }
+        },
+        {
+          "title": "Orthogroup membership and hit settings",
+          "body": "Confirm membership, max hits.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-04-02-orthogroup-settings.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing orthogroup membership and hit settings.",
+            "caption": "Orthogroup membership and hit settings in the web app session view."
+          }
+        }
+      ]
     },
     {
       "title": "Set the diagram layout",
@@ -117,11 +203,33 @@
         "Show skew: on",
         "Pairwise match style: curve",
         "Palette: ajisai"
+      ],
+      "operations": [
+        {
+          "title": "Linear layout controls",
+          "body": "Confirm align center, GC/skew, ruler.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-05-01-layout-gc-skew-ruler.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing linear layout controls.",
+            "caption": "Linear layout controls in the web app session view."
+          }
+        }
       ]
     },
     {
       "title": "Generate the diagram",
-      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache."
+      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache.",
+      "operations": [
+        {
+          "title": "Generate button and processing context",
+          "body": "Confirm Generate Diagram button.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-06-01-generate.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing generate button and processing context.",
+            "caption": "Generate button and processing context in the web app session view."
+          }
+        }
+      ]
     },
     {
       "title": "Inspect the orthogroup overview",
@@ -130,7 +238,18 @@
         "src": "./media/hepatoplasmataceae_orthogroup/02-orthogroup-preview.webp",
         "alt": "Generated Hepatoplasmataceae orthogroup comparison in the Gallery preview.",
         "caption": "Orthogroup mode keeps individual orthogroup-backed match ribbons visible between adjacent genomes."
-      }
+      },
+      "operations": [
+        {
+          "title": "Orthogroup overview in preview",
+          "body": "Confirm ribbon-dense region.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-07-01-orthogroup-overview.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing orthogroup overview in preview.",
+            "caption": "Orthogroup overview in preview in the generated preview view."
+          }
+        }
+      ]
     },
     {
       "title": "Open an orthogroup match popup",
@@ -139,7 +258,18 @@
         "src": "./media/hepatoplasmataceae_orthogroup/03-orthogroup-popup.webp",
         "alt": "Hepatoplasmataceae orthogroup comparison with an orthogroup match popup open.",
         "caption": "The pairwise match popup exposes the orthogroup metadata and member table used to interpret a ribbon."
-      }
+      },
+      "operations": [
+        {
+          "title": "Orthogroup match popup",
+          "body": "Confirm ribbon + popup.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-08-01-orthogroup-popup.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing orthogroup match popup.",
+            "caption": "Orthogroup match popup in the popup view."
+          }
+        }
+      ]
     }
   ],
   "colorRules": [
@@ -163,23 +293,78 @@
   "postGenerationEdits": [
     {
       "title": "Click a pairwise ribbon",
-      "body": "Use the pairwise match popup to confirm the orthogroup ID, member count, record coverage, identity, and linked query and subject features."
+      "body": "Use the pairwise match popup to confirm the orthogroup ID, member count, record coverage, identity, and linked query and subject features.",
+      "operations": [
+        {
+          "title": "Pairwise ribbon popup",
+          "body": "Confirm ribbon + popup.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/post-01-01-match-popup.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing pairwise ribbon popup.",
+            "caption": "Pairwise ribbon popup in the popup view."
+          }
+        }
+      ]
     },
     {
       "title": "Click a CDS feature",
-      "body": "Feature clicks show qualifiers, sequences, and orthogroup membership details. This is useful when you need to decide whether to add feature-specific colors."
+      "body": "Feature clicks show qualifiers, sequences, and orthogroup membership details. This is useful when you need to decide whether to add feature-specific colors.",
+      "operations": [
+        {
+          "title": "CDS feature popup",
+          "body": "Confirm feature + popup.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/post-02-01-feature-popup.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing cds feature popup.",
+            "caption": "CDS feature popup in the popup view."
+          }
+        }
+      ]
     },
     {
       "title": "Edit the legend",
-      "body": "Use the legend editor to rename, reorder, or remove feature legend entries after the SVG has been generated."
+      "body": "Use the legend editor to rename, reorder, or remove feature legend entries after the SVG has been generated.",
+      "operations": [
+        {
+          "title": "Legend editor",
+          "body": "Confirm legend editor drawer.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/post-03-01-legend-editor.webp",
+            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing legend editor.",
+            "caption": "Legend editor in the web app session view."
+          }
+        }
+      ]
     },
     {
       "title": "Export the figure",
-      "body": "Download SVG for editable vector output. Use PNG or PDF when you need quick sharing or manuscript draft assets."
+      "body": "Download SVG for editable vector output. Use PNG or PDF when you need quick sharing or manuscript draft assets.",
+      "operations": [
+        {
+          "title": "Export controls",
+          "body": "Use the rendered Preview export toolbar for SVG, Interactive SVG, PNG, or PDF.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/post-04-01-export-controls.webp",
+            "alt": "Actual Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
+            "caption": "The rendered .preview-toolbar crop shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
+          }
+        }
+      ]
     },
     {
       "title": "Save a session",
-      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, settings, generated output, and post-generation SVG adjustments."
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, settings, generated output, and post-generation SVG adjustments.",
+      "operations": [
+        {
+          "title": "Session save controls",
+          "body": "Use the rendered web app header toolbar and click Save Session.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/post-05-01-save-session.webp",
+            "alt": "Actual Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "caption": "The rendered .app-toolbar crop shows Save Session in the same header toolbar used to load sessions."
+          }
+        }
+      ]
     }
   ],
   "losatTips": [

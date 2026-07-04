@@ -3,6 +3,7 @@ const REMOTE_GALLERY_PREFIXES = [
   '/gallery/examples/',
   '/gallery/sessions/',
   '/gallery/sources/',
+  '/gallery/media/',
 ];
 const REMOTE_CACHE_CONTROL = 'public, max-age=86400';
 const SVG_CONTENT_SECURITY_POLICY = [
@@ -21,6 +22,10 @@ const isRemoteGalleryCandidate = (pathname) =>
 const inferContentType = (pathname, upstreamHeaders) => {
   if (pathname.endsWith('.svg')) return 'image/svg+xml; charset=utf-8';
   if (pathname.endsWith('.json')) return 'application/json; charset=utf-8';
+  if (pathname.endsWith('.webp')) return 'image/webp';
+  if (pathname.endsWith('.mp4')) return 'video/mp4';
+  if (pathname.endsWith('.webm')) return 'video/webm';
+  if (pathname.endsWith('.ogg')) return 'video/ogg';
   return upstreamHeaders.get('content-type') || 'application/octet-stream';
 };
 

@@ -85,6 +85,23 @@ const asArray = (value) => (Array.isArray(value) ? value : []);
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '');
 
+const getTutorialStatus = (sample) => {
+  const status = asText(sample?.tutorialStatus).toLowerCase();
+  if (['ready', 'draft', 'planned'].includes(status)) return status;
+  return sample?.tutorial ? 'ready' : 'planned';
+};
+
+const isDraftTutorialPreviewEnabled = () => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('showDraftTutorials') === '1' || params.get('draftTutorials') === '1';
+};
+
+const canLoadTutorial = (sample) => {
+  if (!sample?.tutorial) return false;
+  const status = getTutorialStatus(sample);
+  return status === 'ready' || (status === 'draft' && isDraftTutorialPreviewEnabled());
+};
+
 const selectedSample = () => examples.find((entry) => entry.id === selectedId);
 
 const pluralize = (count, singular, plural = `${singular}s`) =>
@@ -200,6 +217,43 @@ const renderMedia = (parent, media) => {
   });
 };
 
+const renderOperationList = (parent, operations) => {
+  const entries = asArray(operations);
+  if (!entries.length) return;
+
+  const list = document.createElement('div');
+  list.className = 'tutorial-operation-list';
+
+  entries.forEach((operation, index) => {
+    const operationObject = typeof operation === 'string' ? { body: operation } : operation;
+    if (!operationObject || typeof operationObject !== 'object') return;
+
+    const item = document.createElement('section');
+    item.className = 'tutorial-operation';
+
+    const title = asText(operationObject.title);
+    if (title) {
+      const titleRow = document.createElement('div');
+      titleRow.className = 'tutorial-operation__title';
+      appendText(titleRow, 'span', 'tutorial-operation__number', `${index + 1}.`);
+      appendText(titleRow, 'span', '', title);
+      item.appendChild(titleRow);
+    }
+
+    const body = asText(operationObject.body);
+    if (body) appendText(item, 'p', 'tutorial-operation__body', body);
+    appendList(item, operationObject.items, 'tutorial-operation__list');
+
+    const note = asText(operationObject.note);
+    if (note) appendText(item, 'p', 'tutorial-operation__note', note);
+    renderMedia(item, operationObject.media);
+
+    if (item.childElementCount) list.appendChild(item);
+  });
+
+  if (list.childElementCount) parent.appendChild(list);
+};
+
 const renderStepSection = (parent, title, steps, { numbered = false } = {}) => {
   const entries = asArray(steps);
   if (!entries.length) return;
@@ -230,6 +284,7 @@ const renderStepSection = (parent, title, steps, { numbered = false } = {}) => {
     const note = asText(stepObject.note);
     if (note) appendText(item, 'p', 'tutorial-step__note', note);
     renderMedia(item, stepObject.media);
+    renderOperationList(item, stepObject.operations);
 
     list.appendChild(item);
   });
@@ -264,12 +319,26 @@ const renderRelated = (parent, related) => {
 
 const renderTutorialUnavailable = (sample) => {
   clearChildren(tutorialContent);
-  appendText(tutorialContent, 'h2', '', 'Tutorial coming soon');
+  const status = getTutorialStatus(sample);
+  const title = plainTitle(sample);
+
+  if (status === 'draft' && sample?.tutorial) {
+    appendText(tutorialContent, 'h2', '', 'Tutorial draft');
+    appendText(
+      tutorialContent,
+      'p',
+      'tutorial-summary',
+      `A draft tutorial exists for ${title}, but it is not published in the public Gallery yet. Enable draft preview with ?showDraftTutorials=1 when checking local builds.`
+    );
+    return;
+  }
+
+  appendText(tutorialContent, 'h2', '', status === 'planned' ? 'Tutorial planned' : 'Tutorial coming soon');
   appendText(
     tutorialContent,
     'p',
     'tutorial-summary',
-    `A step-by-step web tutorial is not available for ${plainTitle(sample)} yet. Use the Preview and Session controls to inspect the completed diagram, or open the Command tab for the CLI command.`
+    `A step-by-step web tutorial is not available for ${title} yet. Use the Preview and Session controls to inspect the completed diagram, or open the Command tab for the CLI command.`
   );
 };
 
@@ -296,6 +365,16 @@ const validateTutorial = (data, sample) => {
   if (!Array.isArray(data.manualSteps)) {
     throw new Error(`Tutorial ${sample.id} is missing manualSteps.`);
   }
+  ['quickReproduce', 'manualSteps', 'colorRules', 'postGenerationEdits', 'losatTips', 'troubleshooting'].forEach(
+    (sectionName) => {
+      asArray(data[sectionName]).forEach((step, index) => {
+        if (!step || typeof step !== 'object' || Array.isArray(step)) return;
+        if (step.operations !== undefined && !Array.isArray(step.operations)) {
+          throw new Error(`Tutorial ${sample.id} ${sectionName}[${index}] operations must be an array.`);
+        }
+      });
+    }
+  );
   return data;
 };
 
@@ -491,7 +570,7 @@ const requestTutorialForSample = async (sample, { renderTutorialPanel = false, r
   tutorialRequestToken += 1;
   const requestToken = tutorialRequestToken;
 
-  if (!sample?.tutorial) {
+  if (!canLoadTutorial(sample)) {
     if (renderTutorialPanel) renderTutorialUnavailable(sample);
     if (renderFiles) renderFilesPanel(sample);
     return;
@@ -600,6 +679,15 @@ const renderSampleList = () => {
     tagRow.className = 'tag-row';
     renderTags(tagRow, sample.tags);
     body.appendChild(tagRow);
+    const tutorialStatus = getTutorialStatus(sample);
+    if (tutorialStatus !== 'ready') {
+      appendText(
+        body,
+        'span',
+        `sample-card__status sample-card__status--${tutorialStatus}`,
+        tutorialStatus === 'draft' ? 'Draft tutorial' : 'Tutorial planned'
+      );
+    }
     appendText(body, 'span', 'sample-card__size', sample.fileSizeLabel);
     button.appendChild(body);
 
@@ -618,7 +706,7 @@ const resetSamplePanels = (sample) => {
   tutorialRequestToken += 1;
   renderFilesPanel(sample);
   clearChildren(tutorialContent);
-  if (sample.tutorial) {
+  if (canLoadTutorial(sample)) {
     appendText(
       tutorialContent,
       'p',
