@@ -1,4 +1,5 @@
 const DEFAULT_SAMPLE_ID = 'Vnig_TUMSAT-TG-2018';
+const COMMON_COLOR_RULE_GUIDE_PATH = './tutorials/_common-color-rule-guide.json';
 
 const sampleList = document.querySelector('#sample-list');
 const sampleCount = document.querySelector('#sample-count');
@@ -30,6 +31,8 @@ let selectedId = '';
 let activeTab = 'preview';
 let copyStatusTimer = 0;
 let tutorialRequestToken = 0;
+let commonColorRuleGuide = null;
+let commonColorRuleGuidePromise = null;
 const tutorialCache = new Map();
 
 const normalizeHash = () => decodeURIComponent(window.location.hash.replace(/^#/, '')).trim();
@@ -296,6 +299,57 @@ const validateTutorial = (data, sample) => {
   return data;
 };
 
+const validateCommonColorRuleGuide = (data) => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Common color rule guide JSON must be an object.');
+  }
+  const colorRules = asArray(data.colorRules);
+  if (!colorRules.length) {
+    throw new Error('Common color rule guide is missing colorRules.');
+  }
+  return {
+    title: asText(data.title) || 'Color rule basics',
+    colorRules
+  };
+};
+
+const loadCommonColorRuleGuide = async () => {
+  if (commonColorRuleGuide) return commonColorRuleGuide;
+  if (!commonColorRuleGuidePromise) {
+    commonColorRuleGuidePromise = fetch(COMMON_COLOR_RULE_GUIDE_PATH, { cache: 'no-cache' })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Could not load common color rule guide (${response.status}).`);
+        }
+        return response.json();
+      })
+      .then(validateCommonColorRuleGuide)
+      .then((guide) => {
+        commonColorRuleGuide = guide;
+        return guide;
+      })
+      .catch((error) => {
+        commonColorRuleGuidePromise = null;
+        throw error;
+      });
+  }
+  return commonColorRuleGuidePromise;
+};
+
+const hydrateTutorial = async (tutorial) => {
+  if (!asArray(tutorial.colorRules).length) return tutorial;
+
+  try {
+    return {
+      ...tutorial,
+      commonColorRuleGuide: await loadCommonColorRuleGuide()
+    };
+  } catch (error) {
+    console.warn('Could not load common color rule guide.', error);
+    return tutorial;
+  }
+};
+
 const loadTutorial = async (sample) => {
   if (!sample?.tutorial) return null;
   if (tutorialCache.has(sample.id)) return tutorialCache.get(sample.id);
@@ -304,7 +358,7 @@ const loadTutorial = async (sample) => {
   if (!response.ok) {
     throw new Error(`Could not load tutorial (${response.status}).`);
   }
-  const tutorial = validateTutorial(await response.json(), sample);
+  const tutorial = await hydrateTutorial(validateTutorial(await response.json(), sample));
   tutorialCache.set(sample.id, tutorial);
   return tutorial;
 };
@@ -341,6 +395,11 @@ const renderTutorial = (tutorial, sample) => {
   }
   renderStepSection(tutorialContent, 'Quick reproduce', tutorial.quickReproduce);
   renderStepSection(tutorialContent, 'Manual rebuild', tutorial.manualSteps, { numbered: true });
+  renderStepSection(
+    tutorialContent,
+    asText(tutorial.commonColorRuleGuide?.title) || 'Color rule basics',
+    tutorial.commonColorRuleGuide?.colorRules
+  );
   renderStepSection(tutorialContent, 'Color rules', tutorial.colorRules);
   renderStepSection(tutorialContent, 'Post-generation edits', tutorial.postGenerationEdits);
   renderStepSection(tutorialContent, 'LOSAT tips', tutorial.losatTips);

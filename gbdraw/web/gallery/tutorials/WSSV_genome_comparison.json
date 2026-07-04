@@ -1,0 +1,373 @@
+{
+  "id": "WSSV_genome_comparison",
+  "version": 1,
+  "title": "Reproduce the WSSV circular conservation ring comparison in the web app",
+  "summary": "Build a single-reference circular White spot syndrome virus diagram with 20 conservation rings generated from browser LOSAT blastn results.",
+  "estimatedTime": "10-30 min after inputs are available",
+  "difficulty": "Advanced",
+  "appMode": "Circular",
+  "primaryWorkflow": "Circular conservation rings with browser LOSAT blastn",
+  "requirements": [
+    "A browser with WebAssembly support.",
+    "Enough available memory for one WSSV GenBank record, 20 comparison FASTA files, and LOSAT blastn output.",
+    "The reference GenBank file and comparison FASTA files listed below.",
+    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+  ],
+  "downloads": [
+    {
+      "label": "AP027280",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027280",
+      "targetName": "AP027280.gb",
+      "note": "Download the JP02 White spot syndrome virus record as a GenBank flat file."
+    },
+    {
+      "label": "CN01",
+      "source": "Comparison FASTA",
+      "targetName": "CN01.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "WSSV-TW",
+      "source": "Comparison FASTA",
+      "targetName": "WSSV-TW.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "WSSV-CN",
+      "source": "Comparison FASTA",
+      "targetName": "WSSV-CN.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "WSSV-TH",
+      "source": "Comparison FASTA",
+      "targetName": "WSSV-TH.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "JP01A",
+      "source": "Comparison FASTA",
+      "targetName": "JP01A.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "JP01B",
+      "source": "Comparison FASTA",
+      "targetName": "JP01B.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "Pc2020",
+      "source": "Comparison FASTA",
+      "targetName": "Pc2020.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "E1",
+      "source": "Comparison FASTA",
+      "targetName": "E1.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "0722-1",
+      "source": "Comparison FASTA",
+      "targetName": "0722-1.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "CN03",
+      "source": "Comparison FASTA",
+      "targetName": "CN03.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "CN04",
+      "source": "Comparison FASTA",
+      "targetName": "CN04.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "WSSV-AU",
+      "source": "Comparison FASTA",
+      "targetName": "WSSV-AU.fasta",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "EU129",
+      "source": "Comparison FASTA",
+      "targetName": "EU129.fa",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "GCF7",
+      "source": "Comparison FASTA",
+      "targetName": "GCF7.fa",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "MES-753",
+      "source": "Comparison FASTA",
+      "targetName": "MES-753.fa",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "Shantou2019",
+      "source": "Comparison FASTA",
+      "targetName": "Shantou2019.fa",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "POMZ1",
+      "source": "Comparison FASTA",
+      "targetName": "POMZ1.fa",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "POMZ4",
+      "source": "Comparison FASTA",
+      "targetName": "POMZ4.fa",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "MG18PR-0187-N40S",
+      "source": "Comparison FASTA",
+      "targetName": "MG18PR-0187-N40S.fa",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    },
+    {
+      "label": "Angostura2013",
+      "source": "Comparison FASTA",
+      "targetName": "Angostura2013.fa",
+      "note": "Prepare the complete comparison genome sequence as FASTA."
+    }
+  ],
+  "quickReproduce": [
+    {
+      "title": "Download the Gallery session",
+      "body": "Use the Session button in this Gallery entry to save WSSV_genome_comparison.gbdraw-session.json.",
+      "media": {
+        "src": "./media/WSSV_genome_comparison/01-gallery-session.webp",
+        "alt": "Gallery header for the WSSV circular conservation ring comparison with the Session action visible.",
+        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
+      }
+    },
+    {
+      "title": "Open the web app",
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+    },
+    {
+      "title": "Inspect the restored conservation stack",
+      "body": "The session restores the AP027280 GenBank input, comparison FASTA files, cached LOSAT results, conservation series labels and colors, the circular layout, and the generated interactive SVG."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Circular mode",
+      "body": "Open gbdraw.app and select Circular mode before adding the WSSV reference record."
+    },
+    {
+      "title": "Upload the reference GenBank file",
+      "body": "Upload AP027280.gb as the circular reference. This record is the JP02 White spot syndrome virus genome shown at the center of the Gallery figure.",
+      "items": [
+        "Input type: GenBank",
+        "File: AP027280.gb",
+        "Output prefix: WSSV_genome_comparison",
+        "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
+      ]
+    },
+    {
+      "title": "Set the basic circular layout",
+      "body": "Use a spread-out circular track so the outer CDS features remain readable around the conservation rings.",
+      "items": [
+        "Track type: spreadout",
+        "Palette: royal_gala",
+        "Separate strands: on",
+        "Legend: left",
+        "Labels: none",
+        "Suppress GC: on",
+        "Suppress skew: on",
+        "Feature width: 10",
+        "Scale interval: 20000"
+      ]
+    },
+    {
+      "title": "Open Circular Conservation",
+      "body": "Enable circular conservation, then upload the 20 comparison FASTA files in the order used by the Gallery session.",
+      "items": [
+        "Source: Run LOSAT from FASTA inputs",
+        "LOSAT program: blastn",
+        "blastn task: megablast",
+        "Reference: Auto",
+        "Ring width: 5",
+        "Ring gap: 2"
+      ],
+      "note": "If you import precomputed conservation BLAST tables instead of running browser LOSAT, use the subject/reference orientation expected by those tables."
+    },
+    {
+      "title": "Name the conservation rings",
+      "body": "Assign one short label per FASTA so the left legend and each ring order match the Gallery figure.",
+      "items": [
+        "CN01, WSSV-TW, WSSV-CN, WSSV-TH, JP01A, JP01B, Pc2020, E1, 0722-1, CN03",
+        "CN04, WSSV-AU, EU129, GCF7, MES-753, Shantou2019, POMZ1, POMZ4, MG18PR-0187-N40S, Angostura2013"
+      ]
+    },
+    {
+      "title": "Set ring colors",
+      "body": "Use distinct ring colors so conservation gaps can be compared by eye across the full 20-genome stack.",
+      "items": [
+        "#6e91b7, #f4a251, #77b26f, #e67577, #8fc4c0, #f0d369, #be92b2, #ffafb7, #ae8e7c, #c6bebb",
+        "#6e91b7, #f4a251, #e67577, #8fc4c0, #bcb4ca, #f0d369, #be92b2, #ffafb7, #ae8e7c, #c6bebb"
+      ]
+    },
+    {
+      "title": "Set conservation thresholds",
+      "body": "Use strict blastn thresholds so the rings show high-confidence conserved nucleotide segments.",
+      "items": [
+        "Bitscore: 100",
+        "E-value: 1e-30",
+        "Identity: 90",
+        "Alignment length: 100"
+      ]
+    },
+    {
+      "title": "Run browser LOSAT",
+      "body": "Use Auto execution with a Safe total thread budget for the first run. The saved session includes cached LOSAT output; manual rebuilds need to run the FASTA comparisons once.",
+      "items": [
+        "Execution: Auto",
+        "Total threads: Safe",
+        "Threads per job: 1",
+        "Program: blastn megablast"
+      ]
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The preview should show the AP027280 feature ring, 20 conservation rings, the position scale, and a left legend with an identity gradient for each comparison genome.",
+      "media": {
+        "src": "./media/WSSV_genome_comparison/03-conservation-rings.webp",
+        "alt": "Generated WSSV circular diagram with 20 colored conservation rings and a left identity legend.",
+        "caption": "The finished figure stacks 20 blastn-backed conservation rings inside the reference CDS feature ring."
+      }
+    },
+    {
+      "title": "Check the Files tab",
+      "body": "Use the Gallery Files tab to confirm the required input names, session JSON, interactive SVG, and thumbnail for this example.",
+      "media": {
+        "src": "./media/WSSV_genome_comparison/02-input-files.webp",
+        "alt": "WSSV Gallery Files tab listing input filenames and Gallery artifacts.",
+        "caption": "The Files tab keeps the input checklist and reusable Gallery assets near the finished preview."
+      }
+    },
+    {
+      "title": "Inspect a CDS feature",
+      "body": "Click an outer CDS feature in the interactive SVG to inspect the label, location, product, protein_id, and source qualifiers.",
+      "media": {
+        "src": "./media/WSSV_genome_comparison/04-feature-popup.webp",
+        "alt": "WSSV conservation ring diagram with a CDS feature popup open.",
+        "caption": "Feature clicks are useful for checking which annotation field is driving labels and colors."
+      }
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "Feature colors and ring colors are separate",
+      "body": "The CDS ring uses the royal_gala feature palette. Conservation ring colors are configured per comparison FASTA and are not feature color rules."
+    },
+    {
+      "title": "Use the identity gradient legend",
+      "body": "Each conservation ring uses a light-to-strong gradient for nucleotide identity. In this Gallery figure the useful displayed range is 90% to 100%."
+    },
+    {
+      "title": "Keep ring labels short",
+      "body": "Short labels such as CN01 or WSSV-TW keep the 20-row legend readable. Put longer isolate details in your notes or figure caption."
+    },
+    {
+      "title": "Use feature rules only for reference annotations",
+      "body": "If you add feature-specific colors, make them from AP027280 qualifiers such as note, product, locus_tag, or protein_id. They will not recolor the conservation rings."
+    }
+  ],
+  "postGenerationEdits": [
+    {
+      "title": "Use zoom before editing",
+      "body": "This SVG is large. Zoom or pan the preview before clicking small CDS features or inspecting narrow conservation gaps."
+    },
+    {
+      "title": "Click features to verify annotations",
+      "body": "Use the feature popup to confirm note, product, protein_id, location, and sequence metadata before changing feature color or label settings."
+    },
+    {
+      "title": "Keep the conservation legend visible",
+      "body": "The left legend explains ring order and the identity gradient. If you move or edit the legend, confirm that the 90% and 100% endpoints remain visible."
+    },
+    {
+      "title": "Export SVG first",
+      "body": "Download SVG when you need editable vector output. PNG and PDF export can take longer for this large, detailed interactive figure."
+    },
+    {
+      "title": "Save a session",
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSAT cache, conservation series settings, generated output, and SVG adjustments."
+    }
+  ],
+  "losatTips": [
+    {
+      "title": "Use blastn megablast for close viral genomes",
+      "body": "The WSSV comparison uses nucleotide-level conservation, so blastn with megablast is the appropriate browser LOSAT workflow."
+    },
+    {
+      "title": "Start with Auto execution",
+      "body": "Auto uses threaded LOSAT only when the browser supports it and the workload justifies it."
+    },
+    {
+      "title": "Prefer Safe total threads",
+      "body": "Safe avoids consuming every logical CPU and is the best default for keeping the browser responsive during 20 FASTA comparisons."
+    },
+    {
+      "title": "Use Serial on constrained browsers",
+      "body": "If threaded WebAssembly is unavailable or the tab becomes unresponsive, switch Execution to Serial before rerunning."
+    },
+    {
+      "title": "Reuse the cache",
+      "body": "Raw LOSAT results are reused when the canonical inputs and LOSAT settings match, so styling-only changes should be faster after the first run."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "Conservation rings are missing",
+      "body": "Confirm Circular Conservation is enabled, comparison FASTA files are uploaded, source is set to Run LOSAT from FASTA inputs, and the generated result is the circular output."
+    },
+    {
+      "title": "A ring appears in the wrong order",
+      "body": "Confirm the FASTA upload order, ring labels, and ring colors. The legend follows the configured conservation series order."
+    },
+    {
+      "title": "The rings look too sparse",
+      "body": "The Gallery figure uses strict thresholds. Lower identity or alignment length only when you intentionally want weaker matches to appear."
+    },
+    {
+      "title": "The browser becomes slow",
+      "body": "Use the Gallery session for inspection, close other heavy tabs, run LOSAT with Safe or Serial settings, or temporarily use fewer comparison FASTA files while tuning layout."
+    },
+    {
+      "title": "Threaded LOSAT is unavailable",
+      "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
+    },
+    {
+      "title": "The generated diagram differs from the Gallery image",
+      "body": "Confirm AP027280.gb, spreadout track type, separate strands, suppressed GC and skew tracks, conservation ring width and gap, thresholds, labels, colors, and comparison FASTA order."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#WSSV_genome_comparison"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    },
+    {
+      "label": "Read command-focused Gallery examples",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/GALLERY.md"
+    }
+  ]
+}

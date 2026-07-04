@@ -8,12 +8,24 @@ The interactive Gallery assets are hosted online and are not bundled with local 
 
 For circular examples, `--track_type` names the simple-layout preset. Custom Track Slots use explicit geometry instead, and the circular axis remains fixed.
 
+#### White spot syndrome virus genome comparison
+
+Interactive SVG session output: [https://gbdraw.app/gallery/#WSSV_genome_comparison](https://gbdraw.app/gallery/#WSSV_genome_comparison)
+
+Web tutorial: open the [WSSV Gallery entry](https://gbdraw.app/gallery/#WSSV_genome_comparison) and select the Tutorial tab.
+
+This circular web tutorial covers browser LOSAT `blastn` conservation rings, comparison FASTA inputs, ring labels and colors, large SVG handling, feature clicks, legend inspection, and session export.
+
 
 #### <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 Complete Genome
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018)
 
+Web tutorial: open the [Vibrio multi-record Gallery entry](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018) and select the Tutorial tab.
+
 This circular multi-record session uses a saved hosted Gallery session and interactive SVG output.
+
+The web tutorial covers one GBFF input with six records, Multi-record canvas settings, automatic record sizing, explicit row placement, feature clicks, and session export.
 
 #### Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.
 
@@ -26,6 +38,10 @@ This linear web tutorial covers browser LOSATP orthogroups, antiSMASH `gene_kind
 #### Majaniviruses Multi-Genome Comparison
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#majanivirus_orthogroup](https://gbdraw.app/gallery/#majanivirus_orthogroup)
+
+Web tutorial: open the [majanivirus Gallery entry](https://gbdraw.app/gallery/#majanivirus_orthogroup) and select the Tutorial tab.
+
+This linear web tutorial covers a large nine-record browser LOSATP orthogroup comparison, product-based color rules, record labels, match popups, large SVG handling, and session export.
 
 <details><summary>Expand to see the script</summary>
 

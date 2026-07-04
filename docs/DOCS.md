@@ -22,7 +22,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) if you want the fastest path to a
 
 - [CLI Reference](./CLI_Reference.md): current command help for `gbdraw`, `gbdraw circular`, and `gbdraw linear`.
 - [Gallery](./GALLERY.md): example plots and the commands used to generate them.
-- [Interactive SVG Gallery](https://gbdraw.app/gallery/): hosted JavaScript-enabled SVG examples embedded in sandboxed iframes, with step-by-step web tutorials for selected entries such as Hepatoplasmataceae and aminoglycoside BGC comparisons.
+- [Interactive SVG Gallery](https://gbdraw.app/gallery/): hosted JavaScript-enabled SVG examples embedded in sandboxed iframes, with step-by-step web tutorials for selected entries such as Hepatoplasmataceae, aminoglycoside BGC, WSSV conservation, majanivirus, Vibrio multi-record, and human mitochondrial comparisons.
 - [FAQ](./FAQ.md): common questions, limitations, and workarounds.
 - [About](./ABOUT.md): citation information and project background.
 

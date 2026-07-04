@@ -1,0 +1,186 @@
+{
+  "id": "Vnig_TUMSAT-TG-2018",
+  "version": 1,
+  "title": "Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app",
+  "summary": "Build a circular multi-record canvas for two chromosomes and four plasmids from a single RefSeq GBFF file, using automatic record sizing, explicit row placement, GC content, GC skew, and a left legend.",
+  "estimatedTime": "5-15 min after the input is available",
+  "difficulty": "Intermediate",
+  "appMode": "Circular",
+  "primaryWorkflow": "Circular multi-record canvas",
+  "requirements": [
+    "A browser with WebAssembly support.",
+    "The multi-record Vibrio nigripulchritudo GBFF file listed below.",
+    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+  ],
+  "downloads": [
+    {
+      "label": "GCF_015097735.1",
+      "source": "NCBI Assembly",
+      "accession": "GCF_015097735.1",
+      "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_015097735.1",
+      "targetName": "GCF_015097735.1_ASM1509773v1_genomic.gbff",
+      "note": "Download the RefSeq genomic GBFF. The Gallery session uses six records from this file: NZ_AP024087.1 through NZ_AP024092.1."
+    }
+  ],
+  "quickReproduce": [
+    {
+      "title": "Download the Gallery session",
+      "body": "Use the Session button in this Gallery entry to save Vnig_TUMSAT-TG-2018.gbdraw-session.json.",
+      "media": {
+        "src": "./media/Vnig_TUMSAT-TG-2018/01-gallery-session.webp",
+        "alt": "Gallery header for the Vibrio nigripulchritudo multi-record circular genome with the Session action visible.",
+        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
+      }
+    },
+    {
+      "title": "Open the web app",
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+    },
+    {
+      "title": "Inspect the restored multi-record layout",
+      "body": "The session restores the GBFF input, circular mode, six-record canvas, automatic size scaling, row placement, title, legend, and generated interactive SVG."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Circular mode",
+      "body": "Open gbdraw.app and select Circular mode before adding the RefSeq GBFF input."
+    },
+    {
+      "title": "Upload the multi-record GBFF",
+      "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The file contains two chromosomes and four plasmids.",
+      "items": [
+        "NZ_AP024087.1: chromosome 1",
+        "NZ_AP024088.1: chromosome 2",
+        "NZ_AP024089.1: plasmid pVNTG1",
+        "NZ_AP024090.1: plasmid pVNTG2",
+        "NZ_AP024091.1: plasmid pVNTG3",
+        "NZ_AP024092.1: plasmid pVNTG4"
+      ]
+    },
+    {
+      "title": "Set the basic circular layout",
+      "body": "Use the compact circular settings from the Gallery session.",
+      "items": [
+        "Output prefix: Vnig_TUMSAT-TG-2018",
+        "Track type: tuckin",
+        "Palette: orchid",
+        "Separate strands: on",
+        "Legend: left",
+        "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
+      ]
+    },
+    {
+      "title": "Enable Multi-record canvas",
+      "body": "Turn on Multi-record canvas so all six records are drawn into one figure instead of separate output files.",
+      "items": [
+        "Multi-record canvas: on",
+        "Multi-record size mode: auto",
+        "Minimum radius ratio: 0.55",
+        "Column gap ratio: 0.1",
+        "Row gap ratio: 0.05",
+        "Record positions: #1@1, #2@1, #3@2, #4@2, #5@2, #6@2"
+      ],
+      "note": "The two large chromosomes sit in the top row. The four smaller plasmids share the second row."
+    },
+    {
+      "title": "Add the bottom title",
+      "body": "Set the plot title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome and place it at the bottom."
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The preview should show chromosome 1 and chromosome 2 above plasmids pVNTG1 through pVNTG4, with GC content and GC skew rings inside each record.",
+      "media": {
+        "src": "./media/Vnig_TUMSAT-TG-2018/02-multirecord-preview.webp",
+        "alt": "Generated Vibrio nigripulchritudo multi-record circular diagram in the Gallery preview.",
+        "caption": "The finished figure uses automatic radius scaling so chromosomes and plasmids remain readable in one canvas."
+      }
+    },
+    {
+      "title": "Check the Files tab",
+      "body": "Use the Gallery Files tab to confirm the required GBFF input, assembly source, session JSON, interactive SVG, and thumbnail.",
+      "media": {
+        "src": "./media/Vnig_TUMSAT-TG-2018/03-files.webp",
+        "alt": "Vibrio nigripulchritudo Gallery Files tab listing the GBFF input download and Gallery artifacts.",
+        "caption": "The Files tab shows that this multi-record figure starts from one GBFF input rather than six separate uploads."
+      }
+    },
+    {
+      "title": "Inspect a CDS feature",
+      "body": "Click a CDS feature in the interactive SVG to inspect its label, record ID, location, protein_id, qualifiers, and sequence.",
+      "media": {
+        "src": "./media/Vnig_TUMSAT-TG-2018/04-feature-popup.webp",
+        "alt": "Vibrio nigripulchritudo multi-record circular diagram with a CDS feature popup open.",
+        "caption": "Feature clicks are useful for checking which chromosome or plasmid owns a selected annotation."
+      }
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "This example uses palette defaults",
+      "body": "The main tutorial point is the multi-record layout. Feature colors use the orchid palette defaults."
+    },
+    {
+      "title": "Use record layout before adding color complexity",
+      "body": "Confirm the six-record canvas, automatic sizing, and row placement before adding feature-specific colors or label changes."
+    },
+    {
+      "title": "Choose qualifiers from feature clicks",
+      "body": "If you add feature color rules, click representative CDS features first and inspect gene, locus_tag, product, protein_id, and note values."
+    },
+    {
+      "title": "Keep plasmid categories specific",
+      "body": "Use narrow product or locus_tag patterns when highlighting plasmid genes so chromosome annotations are not colored unintentionally."
+    }
+  ],
+  "postGenerationEdits": [
+    {
+      "title": "Click features to verify record ownership",
+      "body": "Feature popups show record ID and location, which is important when the same canvas contains chromosomes and plasmids."
+    },
+    {
+      "title": "Keep the left legend compact",
+      "body": "The multi-record canvas already uses most of the width. If you edit the legend, keep it narrow enough that it does not cover chromosome 1."
+    },
+    {
+      "title": "Export SVG first",
+      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures."
+    },
+    {
+      "title": "Save a session",
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore the GBFF input, multi-record placement, generated output, and SVG adjustments."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "Only one record is shown",
+      "body": "Confirm Multi-record canvas is enabled. Without that option, circular mode can render records separately instead of placing them in one canvas."
+    },
+    {
+      "title": "The plasmids are too small",
+      "body": "Raise the minimum radius ratio, or switch size mode if you need less proportional scaling between chromosomes and plasmids."
+    },
+    {
+      "title": "The rows differ from the Gallery figure",
+      "body": "Confirm record positions #1@1, #2@1, #3@2, #4@2, #5@2, and #6@2, plus column gap ratio 0.1 and row gap ratio 0.05."
+    },
+    {
+      "title": "The generated diagram differs from the Gallery image",
+      "body": "Confirm the GBFF input, tuckin track type, orchid palette, separate strands, left legend, bottom title, multi-record size mode auto, and minimum radius ratio 0.55."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#Vnig_TUMSAT-TG-2018"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    },
+    {
+      "label": "Read command-focused Gallery examples",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/GALLERY.md"
+    }
+  ]
+}

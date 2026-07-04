@@ -1,0 +1,300 @@
+{
+  "id": "majanivirus_orthogroup",
+  "version": 1,
+  "title": "Reproduce the large majanivirus orthogroup comparison in the web app",
+  "summary": "Build a nine-genome linear comparison for large dsDNA viruses using browser LOSATP orthogroups, product-based feature colors, curved match ribbons, and a right legend.",
+  "estimatedTime": "15-40 min after inputs are available",
+  "difficulty": "Advanced",
+  "appMode": "Linear",
+  "primaryWorkflow": "Large LOSATP orthogroup comparison",
+  "requirements": [
+    "A browser with WebAssembly support.",
+    "Enough available memory for nine large viral GenBank records and LOSATP output.",
+    "The nine GenBank flat files listed below.",
+    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+  ],
+  "downloads": [
+    {
+      "label": "LC738868",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738868",
+      "targetName": "MjeNMV.gb",
+      "note": "Download the Marsupenaeus japonicus endogenous nimavirus record as a GenBank flat file."
+    },
+    {
+      "label": "LC738874",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738874",
+      "targetName": "MelaMJNV.gb",
+      "note": "Download the Melicertus latisulcatus majanivirus record as a GenBank flat file."
+    },
+    {
+      "label": "LC738870",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738870",
+      "targetName": "PemoMJNVA.gb",
+      "note": "Download the Penaeus monodon majanivirus A record as a GenBank flat file."
+    },
+    {
+      "label": "LC738873",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738873",
+      "targetName": "PeseMJNV.gb",
+      "note": "Download the Penaeus semisulcatus majanivirus record as a GenBank flat file."
+    },
+    {
+      "label": "LC738871",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738871",
+      "targetName": "PemoMJNVB.gb",
+      "note": "Download the Penaeus monodon majanivirus B record as a GenBank flat file."
+    },
+    {
+      "label": "LC738872",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738872",
+      "targetName": "LvMJNV.gb",
+      "note": "Download the Litopenaeus vannamei majanivirus record as a GenBank flat file."
+    },
+    {
+      "label": "LC738879",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738879",
+      "targetName": "TrcuMJNV.gb",
+      "note": "Download the Trachysalambria curvirostris majanivirus record as a GenBank flat file."
+    },
+    {
+      "label": "LC738876",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738876",
+      "targetName": "MeenMJNV.gb",
+      "note": "Download the Metapenaeus ensis majanivirus record as a GenBank flat file."
+    },
+    {
+      "label": "LC738878",
+      "source": "NCBI Nucleotide",
+      "accession": "LC738878",
+      "targetName": "MejoMJNV.gb",
+      "note": "Download the Metapenaeus joyneri majanivirus record as a GenBank flat file."
+    }
+  ],
+  "quickReproduce": [
+    {
+      "title": "Download the Gallery session",
+      "body": "Use the Session button in this Gallery entry to save majanivirus_orthogroup.gbdraw-session.json.",
+      "media": {
+        "src": "./media/majanivirus_orthogroup/01-gallery-session.webp",
+        "alt": "Gallery header for the majanivirus orthogroup comparison with the Session action visible.",
+        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
+      }
+    },
+    {
+      "title": "Open the web app",
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+    },
+    {
+      "title": "Inspect the restored large session first",
+      "body": "The session restores the nine inputs, cached LOSATP output, record labels, feature color rules, legend, and generated interactive SVG. Use it before rebuilding the large comparison manually."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Linear mode",
+      "body": "Open gbdraw.app and select Linear mode before adding the viral GenBank records."
+    },
+    {
+      "title": "Upload the nine GenBank files",
+      "body": "Keep the records in the same order as the Gallery command so adjacent comparison tracks and labels match the published example.",
+      "items": [
+        "MjeNMV.gb",
+        "MelaMJNV.gb",
+        "PemoMJNVA.gb",
+        "PeseMJNV.gb",
+        "PemoMJNVB.gb",
+        "LvMJNV.gb",
+        "TrcuMJNV.gb",
+        "MeenMJNV.gb",
+        "MejoMJNV.gb"
+      ]
+    },
+    {
+      "title": "Configure browser LOSAT",
+      "body": "In Pairwise Comparisons, choose Run LOSAT. Use LOSATP with protein blastp mode: Orthogroups.",
+      "items": [
+        "Execution: Auto",
+        "Total threads: Safe for normal browser use, or 32 when mirroring the Gallery command on a capable workstation",
+        "Threads per run: Auto",
+        "protein blastp mode: Orthogroups",
+        "Bitscore: 100",
+        "E-value: 1e-3",
+        "Identity: 20"
+      ],
+      "note": "This is a large browser workload. Start with Safe thread budgeting unless you know the browser and machine have enough memory."
+    },
+    {
+      "title": "Set the linear layout",
+      "body": "Use a centered, compact layout so the long viral rows and many orthogroup ribbons stay comparable.",
+      "items": [
+        "Align to Center: on",
+        "Separate Strands: on",
+        "Pairwise match style: curve",
+        "Keep definitions left aligned: on",
+        "Comparison height: 25",
+        "Hide length: on",
+        "Definition font size: 18",
+        "Legend font size: 18"
+      ]
+    },
+    {
+      "title": "Set the record labels",
+      "body": "Use descriptive record labels rather than raw accessions so the figure can be read without opening the input files.",
+      "items": [
+        "Marsupenaeus japonicus endogenous nimavirus",
+        "Melicertus latisulcatus majanivirus",
+        "Penaeus monodon majanivirus A",
+        "Penaeus semisulcatus majanivirus",
+        "Penaeus monodon majanivirus B",
+        "Litopenaeus vannamei majanivirus",
+        "Trachysalambria curvirostris majanivirus",
+        "Metapenaeus ensis majanivirus",
+        "Metapenaeus joyneri majanivirus"
+      ]
+    },
+    {
+      "title": "Add feature color rules",
+      "body": "Use product-based CDS rules for the broad viral protein categories visible in the Gallery legend.",
+      "items": [
+        "CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins",
+        "CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP",
+        "CDS / product / tyrosine recombinase / red / tyrosine recombinase",
+        "Default CDS color: #d3d3d3 / other proteins"
+      ],
+      "note": "Use product here because the visual categories are broad protein families rather than individual genes."
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The finished preview should show nine viral genome rows, many red identity-scaled orthogroup ribbons, and a right legend.",
+      "media": {
+        "src": "./media/majanivirus_orthogroup/02-orthogroup-preview.webp",
+        "alt": "Generated majanivirus orthogroup comparison in the Gallery preview.",
+        "caption": "The large linear figure uses curved orthogroup ribbons to compare conserved protein families across nine viral genomes."
+      }
+    },
+    {
+      "title": "Inspect an orthogroup ribbon",
+      "body": "Click a pairwise match ribbon to inspect the orthogroup ID, inferred display name, member count, record coverage, and member table.",
+      "media": {
+        "src": "./media/majanivirus_orthogroup/03-orthogroup-popup.webp",
+        "alt": "Majanivirus orthogroup comparison with an orthogroup match popup open.",
+        "caption": "The match popup helps distinguish high-confidence shared orthogroups from dense background similarity."
+      }
+    },
+    {
+      "title": "Check the Files tab",
+      "body": "Use the Gallery Files tab to confirm the required input filenames, accession sources, session JSON, interactive SVG, and thumbnail.",
+      "media": {
+        "src": "./media/majanivirus_orthogroup/04-files.webp",
+        "alt": "Majanivirus Gallery Files tab listing input downloads and Gallery artifacts.",
+        "caption": "For large examples, the Files tab is the quickest checklist for matching the Gallery session inputs."
+      }
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "Use product for broad viral protein families",
+      "body": "The visible categories in this figure are WSSV-like proteins, BIRP, tyrosine recombinase, and other proteins. Product text is the practical qualifier for those broad family rules."
+    },
+    {
+      "title": "Keep regex values narrow enough",
+      "body": "Rules are matching patterns. wsv.*-like protein is targeted enough for this dataset, while a value such as protein would swallow most CDS features."
+    },
+    {
+      "title": "Use default CDS color for the background",
+      "body": "Set default CDS to #d3d3d3 so the highlighted product families stand out without adding a rule for every annotation."
+    },
+    {
+      "title": "Separate feature colors from ribbon colors",
+      "body": "Feature color rules affect genome features. Orthogroup ribbon color is controlled by pairwise match identity and the comparison style."
+    }
+  ],
+  "postGenerationEdits": [
+    {
+      "title": "Click match ribbons first",
+      "body": "In dense large-genome comparisons, pairwise match popups are the fastest way to confirm which orthogroup and proteins support a ribbon."
+    },
+    {
+      "title": "Click CDS features before refining rules",
+      "body": "Feature popups expose product, protein_id, locus_tag, sequence, and orthogroup membership. Use those values before tightening feature color rules."
+    },
+    {
+      "title": "Keep the identity legend visible",
+      "body": "The ribbon gradient encodes match identity, so avoid deleting the pairwise match identity legend when simplifying the figure."
+    },
+    {
+      "title": "Export SVG first",
+      "body": "Download SVG for editable vector output. PNG and PDF export can take longer because the interactive SVG contains many features and match paths."
+    },
+    {
+      "title": "Save a session",
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSATP cache, settings, generated output, and SVG adjustments."
+    }
+  ],
+  "losatTips": [
+    {
+      "title": "Use the session for quick inspection",
+      "body": "This is a large example. Load the Gallery session first when the goal is to inspect the finished figure rather than benchmark a fresh LOSATP run."
+    },
+    {
+      "title": "Start with Auto execution",
+      "body": "Auto uses threaded LOSAT only when the browser supports it and the workload justifies it."
+    },
+    {
+      "title": "Prefer Safe total threads",
+      "body": "Safe avoids consuming every logical CPU and is the best default when you want the browser to stay responsive."
+    },
+    {
+      "title": "Use 32 threads only deliberately",
+      "body": "The Gallery command records 32 LOSATP threads, but browser memory and worker limits vary. Use that setting only on a capable local environment."
+    },
+    {
+      "title": "Reuse the cache",
+      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so styling-only changes should be faster after the first run."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "The browser becomes slow",
+      "body": "Load the Gallery session for inspection, close other heavy tabs, run LOSAT with Safe or Serial settings, or temporarily reduce the number of records while tuning layout."
+    },
+    {
+      "title": "Expected ribbons are missing",
+      "body": "Confirm protein blastp mode is Orthogroups, the input order matches the Gallery session, and the bitscore, e-value, and identity thresholds match the tutorial values."
+    },
+    {
+      "title": "The rows do not match the Gallery figure",
+      "body": "Confirm Align to Center, Separate Strands, Hide length, record labels, and the nine-record input order."
+    },
+    {
+      "title": "Feature categories are not colored",
+      "body": "Confirm the product rules and default CDS color are present, and check a CDS popup to verify that the expected product text exists in the input annotations."
+    },
+    {
+      "title": "Threaded LOSAT is unavailable",
+      "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#majanivirus_orthogroup"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    },
+    {
+      "label": "Compare with the Hepatoplasmataceae orthogroup example",
+      "href": "./#hepatoplasmataceae_orthogroup"
+    }
+  ]
+}

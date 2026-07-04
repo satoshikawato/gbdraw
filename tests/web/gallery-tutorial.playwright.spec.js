@@ -137,10 +137,12 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await expect(
     page.getByRole('heading', { name: 'Reproduce the aminoglycoside BGC comparison in the web app' })
   ).toBeVisible();
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(tutorialPanel.getByRole('heading', { name: 'Color rule basics' })).toBeVisible();
+  await expect(tutorialPanel.getByText('CDS / gene / dnaA / #d95f02 / DnaA')).toBeVisible();
   await expect(page.getByText('antiSMASH gene-kind color rules')).toBeVisible();
   await expect(page.getByText('CDS / gene_kind / biosynthetic$')).toBeVisible();
   await expect(page.getByText('Reverse complement: BGC0000713 only')).toBeVisible();
-  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(4);
   await expect(mediaImages.nth(2)).toHaveAttribute('src', /03-orthogroup-popup\.webp$/);
@@ -155,6 +157,42 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('BGC0000708.gbk')).toBeVisible();
   await expect(filesPanel.getByText('BGC0000713.gbk')).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+
+  expect(pageErrors).toEqual([]);
+});
+
+test('Gallery renders the WSSV conservation tutorial and media', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto(`${baseUrl}/gallery/#WSSV_genome_comparison`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: /White spot syndrome virus genome comparison/i })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Reproduce the WSSV circular conservation ring comparison in the web app' })
+  ).toBeVisible();
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
+  await expect(tutorialPanel.getByText('Ring width: 5')).toBeVisible();
+  await expect(tutorialPanel.getByText('MG18PR-0187-N40S.fa')).toBeVisible();
+  const mediaImages = tutorialPanel.getByRole('img');
+  await expect(mediaImages).toHaveCount(4);
+  await expect(mediaImages.nth(1)).toHaveAttribute('src', /03-conservation-rings\.webp$/);
+  await expect(mediaImages.nth(2)).toHaveAttribute('src', /02-input-files\.webp$/);
+  await expect(mediaImages.nth(3)).toHaveAttribute('src', /04-feature-popup\.webp$/);
+  for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
+    const image = mediaImages.nth(idx);
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+  }
+
+  await page.getByRole('tab', { name: 'Files' }).click();
+  const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
+  await expect(filesPanel.getByText('AP027280.gb')).toBeVisible();
+  await expect(filesPanel.getByText('CN01.fasta')).toBeVisible();
+  await expect(filesPanel.getByText('Angostura2013.fa')).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
@@ -193,15 +231,148 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   expect(pageErrors).toEqual([]);
 });
 
-test('Gallery keeps tutorial-less entries usable', async ({ page }) => {
+test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto(`${baseUrl}/gallery/#majanivirus_orthogroup`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: /Large dsDNA viruses/i })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Reproduce the large majanivirus orthogroup comparison in the web app' })
+  ).toBeVisible();
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(tutorialPanel.getByText('protein blastp mode: Orthogroups', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByText('WSSV-like proteins').first()).toBeVisible();
+  await expect(tutorialPanel.getByText('Use 32 threads only deliberately')).toBeVisible();
+  const mediaImages = tutorialPanel.getByRole('img');
+  await expect(mediaImages).toHaveCount(4);
+  await expect(mediaImages.nth(1)).toHaveAttribute('src', /02-orthogroup-preview\.webp$/);
+  await expect(mediaImages.nth(2)).toHaveAttribute('src', /03-orthogroup-popup\.webp$/);
+  await expect(mediaImages.nth(3)).toHaveAttribute('src', /04-files\.webp$/);
+  for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
+    const image = mediaImages.nth(idx);
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+  }
+
+  await page.getByRole('tab', { name: 'Files' }).click();
+  const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
+  await expect(filesPanel.getByText('MjeNMV.gb')).toBeVisible();
+  await expect(filesPanel.getByText('MejoMJNV.gb')).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+
+  expect(pageErrors).toEqual([]);
+});
+
+test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
   await page.goto(`${baseUrl}/gallery/#Vnig_TUMSAT-TG-2018`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /Vibrio nigripulchritudo/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
-  await expect(page.getByRole('heading', { name: 'Tutorial coming soon' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+    })
+  ).toBeVisible();
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(tutorialPanel.getByText('Enable Multi-record canvas')).toBeVisible();
+  await expect(tutorialPanel.getByText('NZ_AP024087.1: chromosome 1')).toBeVisible();
+  await expect(tutorialPanel.getByText('Record positions: #1@1, #2@1, #3@2, #4@2, #5@2, #6@2')).toBeVisible();
+  const mediaImages = tutorialPanel.getByRole('img');
+  await expect(mediaImages).toHaveCount(4);
+  await expect(mediaImages.nth(1)).toHaveAttribute('src', /02-multirecord-preview\.webp$/);
+  await expect(mediaImages.nth(2)).toHaveAttribute('src', /03-files\.webp$/);
+  await expect(mediaImages.nth(3)).toHaveAttribute('src', /04-feature-popup\.webp$/);
+  for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
+    const image = mediaImages.nth(idx);
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+  }
+
+  await page.getByRole('tab', { name: 'Files' }).click();
+  const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
+  await expect(filesPanel.getByText('GCF_015097735.1_ASM1509773v1_genomic.gbff')).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+
+  expect(pageErrors).toEqual([]);
+});
+
+test('Gallery keeps command panel usable when a tutorial fetch fails', async ({ page }) => {
+  await page.route('**/tutorials/Vnig_TUMSAT-TG-2018.json', (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: 'application/json; charset=utf-8',
+      body: '{}'
+    })
+  );
+
+  await page.goto(`${baseUrl}/gallery/#Vnig_TUMSAT-TG-2018`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: /Vibrio nigripulchritudo/i })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  await expect(page.getByText('Could not load tutorial (404).')).toBeVisible();
 
   await page.getByRole('tab', { name: 'Command' }).click();
   await expect(page.getByText('gbdraw circular -o Vnig_TUMSAT-TG-2018')).toBeVisible();
+});
+
+test('Gallery copy link button copies the selected sample URL', async ({ page }) => {
+  await page.addInitScript(() => {
+    let copiedText = '';
+    Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText: async (text) => {
+          copiedText = String(text);
+          window.__copiedGalleryLink = copiedText;
+        },
+        readText: async () => copiedText
+      },
+      configurable: true
+    });
+  });
+
+  await page.goto(`${baseUrl}/gallery/#HmmtDNA_ATskew`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Copy' }).click();
+
+  await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__copiedGalleryLink)).toBe(`${baseUrl}/gallery/#HmmtDNA_ATskew`);
+});
+
+test('Gallery tab controls support keyboard navigation', async ({ page }) => {
+  await page.goto(`${baseUrl}/gallery/#Vnig_TUMSAT-TG-2018`, { waitUntil: 'domcontentloaded' });
+
+  const previewTab = page.getByRole('tab', { name: 'Preview' });
+  const tutorialTab = page.getByRole('tab', { name: 'Tutorial' });
+  const commandTab = page.getByRole('tab', { name: 'Command' });
+  const filesTab = page.getByRole('tab', { name: 'Files' });
+
+  await previewTab.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(tutorialTab).toBeFocused();
+  await expect(tutorialTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel', { name: 'Tutorial' })).toBeVisible();
+
+  await page.keyboard.press('ArrowRight');
+  await expect(commandTab).toBeFocused();
+  await expect(commandTab).toHaveAttribute('aria-selected', 'true');
+
+  await page.keyboard.press('End');
+  await expect(filesTab).toBeFocused();
+  await expect(filesTab).toHaveAttribute('aria-selected', 'true');
+
+  await page.keyboard.press('Home');
+  await expect(previewTab).toBeFocused();
+  await expect(previewTab).toHaveAttribute('aria-selected', 'true');
+
+  await page.keyboard.press('ArrowLeft');
+  await expect(filesTab).toBeFocused();
+  await expect(filesTab).toHaveAttribute('aria-selected', 'true');
 });
 
 test('Gallery tutorial media fits a mobile viewport', async ({ page }) => {
