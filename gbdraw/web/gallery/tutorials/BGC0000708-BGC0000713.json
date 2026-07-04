@@ -126,11 +126,11 @@
       "operations": [
         {
           "title": "Linear GenBank uploader with five BGC files",
-          "body": "Confirm file chips in order.",
+          "body": "Confirm the five uploaded GenBank file rows in order.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-02-01-five-file-upload-order.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing linear genbank uploader with five bgc files.",
-            "caption": "Linear GenBank uploader with five BGC files in the web app session view."
+            "alt": "Actual Linear Input Genomes uploader rows showing BGC0000708.gbk, BGC0000709.gbk, BGC0000711.gbk, BGC0000712.gbk, and BGC0000713.gbk in order.",
+            "caption": "The rendered Linear GenBank upload rows show the five BGC files in the same order as the Gallery command."
           }
         }
       ]
@@ -150,21 +150,21 @@
       "note": "This example compares protein-coding genes across related biosynthetic gene clusters, so orthogroup-backed blastp matches are the useful comparison signal.",
       "operations": [
         {
-          "title": "Pairwise Comparisons panel",
-          "body": "Confirm expanded panel.",
+          "title": "Run LOSAT settings panel",
+          "body": "Confirm Run LOSAT, LOSATP, execution, and thread settings.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing pairwise comparisons panel.",
-            "caption": "Pairwise Comparisons panel in the web app session view."
+            "alt": "Actual Linear Run LOSAT settings panel with Run LOSAT selected, LOSATP selected, and execution and thread controls visible.",
+            "caption": "The rendered LOSAT settings panel shows the Run LOSAT source, LOSATP mode, and browser execution controls."
           }
         },
         {
           "title": "LOSATP orthogroups mode",
-          "body": "Confirm Orthogroups selected.",
+          "body": "Confirm blastp mode is Orthogroups.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing losatp orthogroups mode.",
-            "caption": "LOSATP orthogroups mode in the web app session view."
+            "alt": "Actual LOSATP blastp mode control with Orthogroups selected.",
+            "caption": "Use the blastp mode selector in the LOSAT settings panel and choose Orthogroups."
           }
         },
         {
@@ -172,8 +172,8 @@
           "body": "Confirm identity, bitscore, e-value.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-03-set-thresholds.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing threshold controls.",
-            "caption": "Threshold controls in the web app session view."
+            "alt": "Actual LOSATP threshold controls showing bitscore 50, e-value 1e-2, minimum identity 30, and minimum length 0.",
+            "caption": "Set the LOSATP thresholds directly in the LOSAT settings panel."
           }
         }
       ]
@@ -189,12 +189,12 @@
       ],
       "operations": [
         {
-          "title": "Orthogroup alignment field",
-          "body": "Confirm `og_1` value.",
+          "title": "Clicked og_1 feature Align button",
+          "body": "Click an og_1 CDS feature in the preview, then use Align in the feature popup.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-01-align-og1.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing orthogroup alignment field.",
-            "caption": "Orthogroup alignment field in the web app session view."
+            "alt": "Actual feature popup for an og_1 CDS feature with the Align button highlighted.",
+            "caption": "The feature popup exposes the orthogroup action buttons; click Align for the selected og_1 feature."
           }
         },
         {
@@ -202,8 +202,26 @@
           "body": "Confirm BGC0000713 selected.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-02-reverse-bgc0000713.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing reverse-complement selector.",
-            "caption": "Reverse-complement selector in the web app session view."
+            "alt": "Actual fifth Linear input row for BGC0000713.gbk with the Region reverse complement checkbox checked.",
+            "caption": "Use the BGC0000713 row's Region controls and check Reverse complement for that record only."
+          }
+        },
+        {
+          "title": "Track layout selector",
+          "body": "Confirm Track Layout is Middle.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-03-track-layout-middle.webp",
+            "alt": "Actual Linear Layout card with the Track Layout selector set to Middle.",
+            "caption": "Set Track Layout to Middle from the rendered Layout card."
+          }
+        },
+        {
+          "title": "Pairwise match style selector",
+          "body": "Confirm Pairwise Match Style is Curve.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-04-pairwise-style-curve.webp",
+            "alt": "Actual Pairwise Match card with Pairwise Match Style set to Curve.",
+            "caption": "Set Pairwise Match Style to Curve from the Pairwise Match card."
           }
         }
       ]

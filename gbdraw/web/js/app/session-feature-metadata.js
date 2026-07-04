@@ -639,8 +639,14 @@ const orthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${Str
 const enrichFeatureWithOrthogroup = (orthogroupIndex, feature, recordIndex) => {
   const svgId = String(feature?.svg_id || '').trim();
   if (!svgId) return feature;
+  const stableSvgId = featureStableCandidate(feature);
   const entry = orthogroupIndex instanceof Map
-    ? (orthogroupIndex.get(orthogroupIndexKey(recordIndex, svgId)) || orthogroupIndex.get(svgId))
+    ? (
+        orthogroupIndex.get(orthogroupIndexKey(recordIndex, svgId)) ||
+        orthogroupIndex.get(svgId) ||
+        orthogroupIndex.get(orthogroupIndexKey(recordIndex, stableSvgId)) ||
+        orthogroupIndex.get(stableSvgId)
+      )
     : null;
   if (!entry) return feature;
   return {

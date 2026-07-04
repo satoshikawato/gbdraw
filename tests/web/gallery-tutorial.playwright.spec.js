@@ -176,9 +176,11 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await expect(page.getByText('CDS / gene_kind / biosynthetic$')).toBeVisible();
   await expect(page.getByText('Reverse complement: BGC0000713 only')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(27);
+  await expect(mediaImages).toHaveCount(29);
   await expect(tutorialPanel.locator('img[src$="03-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="04-feature-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-03-track-layout-middle.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-04-pairwise-style-curve.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-color-rule-core.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
