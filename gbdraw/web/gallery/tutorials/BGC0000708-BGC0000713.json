@@ -57,11 +57,11 @@
       "operations": [
         {
           "title": "Session button for this Gallery entry",
-          "body": "Confirm Session action button.",
+          "body": "Use the rendered Gallery action toolbar and click Session.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/quick-01-01-download-session.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing session button for this gallery entry.",
-            "caption": "Session button for this Gallery entry in the gallery page view."
+            "alt": "Actual aminoglycoside BGC tutorial Gallery .viewer-actions toolbar with the Session action visible.",
+            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
           }
         }
       ]
@@ -87,11 +87,11 @@
       "operations": [
         {
           "title": "Restored BGC settings summary",
-          "body": "Confirm Pairwise and color settings.",
+          "body": "Use the rendered Restored BGC settings summary with Pairwise and color settings.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/quick-03-01-restored-settings.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing restored bgc settings summary.",
-            "caption": "Restored BGC settings summary in the web app session view."
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Restored BGC settings summary with Pairwise and color settings.",
+            "caption": "The rendered web app crop shows Restored BGC settings summary; Pairwise and color settings."
           }
         }
       ]
@@ -104,11 +104,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Confirm Linear selected.",
+          "body": "Select Linear in the rendered mode segmented control.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing mode segmented control.",
-            "caption": "Mode segmented control in the web app session view."
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Mode segmented control with Linear selected.",
+            "caption": "Select Linear in the rendered mode segmented control."
           }
         }
       ]
@@ -126,7 +126,7 @@
       "operations": [
         {
           "title": "Linear GenBank uploader with five BGC files",
-          "body": "Confirm the five uploaded GenBank file rows in order.",
+          "body": "Use the rendered upload rows so file chips in order is visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-02-01-five-file-upload-order.webp",
             "alt": "Actual Linear Input Genomes uploader rows showing BGC0000708.gbk, BGC0000709.gbk, BGC0000711.gbk, BGC0000712.gbk, and BGC0000713.gbk in order.",
@@ -151,7 +151,7 @@
       "operations": [
         {
           "title": "Run LOSAT settings panel",
-          "body": "Confirm Run LOSAT, LOSATP, execution, and thread settings.",
+          "body": "Use the rendered Pairwise Comparisons panel with expanded panel.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
             "alt": "Actual Linear Run LOSAT settings panel with Run LOSAT selected, LOSATP selected, and execution and thread controls visible.",
@@ -160,7 +160,7 @@
         },
         {
           "title": "LOSATP orthogroups mode",
-          "body": "Confirm blastp mode is Orthogroups.",
+          "body": "Use the rendered LOSATP orthogroups mode with Orthogroups selected.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
             "alt": "Actual LOSATP blastp mode control with Orthogroups selected.",
@@ -169,7 +169,7 @@
         },
         {
           "title": "Threshold controls",
-          "body": "Confirm identity, bitscore, e-value.",
+          "body": "Use the rendered Threshold controls with identity, bitscore, e-value.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-03-set-thresholds.webp",
             "alt": "Actual LOSATP threshold controls showing bitscore 50, e-value 1e-2, minimum identity 30, and minimum length 0.",
@@ -199,7 +199,7 @@
         },
         {
           "title": "Reverse-complement selector",
-          "body": "Confirm BGC0000713 selected.",
+          "body": "Use the rendered Reverse-complement selector with BGC0000713 selected.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-02-reverse-bgc0000713.webp",
             "alt": "Actual fifth Linear input row for BGC0000713.gbk with the Region reverse complement checkbox checked.",
@@ -208,7 +208,7 @@
         },
         {
           "title": "Track layout selector",
-          "body": "Confirm Track Layout is Middle.",
+          "body": "Use the rendered Track Layout selector with Middle selected.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-03-track-layout-middle.webp",
             "alt": "Actual Linear Layout card with the Track Layout selector set to Middle.",
@@ -217,7 +217,7 @@
         },
         {
           "title": "Pairwise match style selector",
-          "body": "Confirm Pairwise Match Style is Curve.",
+          "body": "Use the rendered Pairwise Match Style selector with Curve selected.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-04-pairwise-style-curve.webp",
             "alt": "Actual Pairwise Match card with Pairwise Match Style set to Curve.",
@@ -241,11 +241,11 @@
       "operations": [
         {
           "title": "Label and ruler layout controls",
-          "body": "Confirm first-record labels, ruler, legend bottom.",
+          "body": "Use the rendered Label and ruler layout controls with first-record labels, ruler, legend bottom.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-05-01-label-layout.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing label and ruler layout controls.",
-            "caption": "Label and ruler layout controls in the web app session view."
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Label and ruler layout controls with first-record labels, ruler, legend bottom.",
+            "caption": "The rendered web app crop shows Label and ruler layout controls; First-record labels, ruler, legend bottom."
           }
         }
       ]
@@ -256,11 +256,11 @@
       "operations": [
         {
           "title": "Title and record text controls",
-          "body": "Confirm plot title and labels.",
+          "body": "Use the rendered Title and record text controls with plot title and labels.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing title and record text controls.",
-            "caption": "Title and record text controls in the web app session view."
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Title and record text controls with plot title and labels.",
+            "caption": "The rendered web app crop shows Title and record text controls; Plot title and labels."
           }
         }
       ]
@@ -278,38 +278,38 @@
       "operations": [
         {
           "title": "Rule 1: core biosynthetic genes",
-          "body": "Confirm gene_kind biosynthetic$.",
+          "body": "Enter CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes in the rendered SPECIFIC RULES (-t) controls.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-01-color-rule-core.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing rule 1: core biosynthetic genes.",
-            "caption": "Rule 1: core biosynthetic genes in the web app session view."
+            "alt": "Actual aminoglycoside BGC SPECIFIC RULES (-t) controls showing CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes.",
+            "caption": "Enter CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes in the rendered SPECIFIC RULES (-t) row."
           }
         },
         {
           "title": "Rule 2: additional biosynthetic genes",
-          "body": "Confirm gene_kind biosynthetic-additional.",
+          "body": "Enter CDS / gene_kind / biosynthetic-additional / #f787a9 / Additional biosynthetic genes in the rendered SPECIFIC RULES (-t) controls.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-02-color-rule-additional.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing rule 2: additional biosynthetic genes.",
-            "caption": "Rule 2: additional biosynthetic genes in the web app session view."
+            "alt": "Actual aminoglycoside BGC SPECIFIC RULES (-t) controls showing CDS / gene_kind / biosynthetic-additional / #f787a9 / Additional biosynthetic genes.",
+            "caption": "Enter CDS / gene_kind / biosynthetic-additional / #f787a9 / Additional biosynthetic genes in the rendered SPECIFIC RULES (-t) row."
           }
         },
         {
           "title": "Rule 3: transport genes",
-          "body": "Confirm gene_kind transport.",
+          "body": "Enter CDS / gene_kind / transport / #577edb / Transport-related genes in the rendered SPECIFIC RULES (-t) controls.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-03-color-rule-transport.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing rule 3: transport genes.",
-            "caption": "Rule 3: transport genes in the web app session view."
+            "alt": "Actual aminoglycoside BGC SPECIFIC RULES (-t) controls showing CDS / gene_kind / transport / #577edb / Transport-related genes.",
+            "caption": "Enter CDS / gene_kind / transport / #577edb / Transport-related genes in the rendered SPECIFIC RULES (-t) row."
           }
         },
         {
           "title": "Rule 4: regulatory genes",
-          "body": "Confirm gene_kind regulatory.",
+          "body": "Enter CDS / gene_kind / regulatory / #57b767 / Regulatory genes in the rendered SPECIFIC RULES (-t) controls.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-04-color-rule-regulatory.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing rule 4: regulatory genes.",
-            "caption": "Rule 4: regulatory genes in the web app session view."
+            "alt": "Actual aminoglycoside BGC SPECIFIC RULES (-t) controls showing CDS / gene_kind / regulatory / #57b767 / Regulatory genes.",
+            "caption": "Enter CDS / gene_kind / regulatory / #57b767 / Regulatory genes in the rendered SPECIFIC RULES (-t) row."
           }
         }
       ]
@@ -325,11 +325,11 @@
       "operations": [
         {
           "title": "Generated BGC comparison preview",
-          "body": "Confirm five rows + bottom legend.",
+          "body": "Inspect the generated preview with five rows + bottom legend.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing generated bgc comparison preview.",
-            "caption": "Generated BGC comparison preview in the generated preview view."
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Generated BGC comparison preview with five rows + bottom legend.",
+            "caption": "The generated preview crop shows five rows + bottom legend."
           }
         }
       ]
@@ -345,11 +345,11 @@
       "operations": [
         {
           "title": "Orthogroup ribbon popup",
-          "body": "Confirm ribbon + popup.",
+          "body": "Click the rendered feature or match so the Orthogroup ribbon popup is visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-09-01-orthogroup-popup.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing orthogroup ribbon popup.",
-            "caption": "Orthogroup ribbon popup in the popup view."
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Orthogroup ribbon popup with ribbon + popup.",
+            "caption": "The real clicked popup crop shows Orthogroup ribbon popup with ribbon + popup."
           }
         }
       ]
@@ -365,11 +365,11 @@
       "operations": [
         {
           "title": "Colored feature popup",
-          "body": "Confirm feature + popup.",
+          "body": "Click the rendered feature or match so the Colored feature popup metadata is visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-10-01-feature-popup.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing colored feature popup.",
-            "caption": "Colored feature popup in the popup view."
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Colored feature popup metadata with gene_kind and orthogroup fields.",
+            "caption": "The real clicked popup crop shows Colored feature popup metadata with gene_kind and orthogroup fields."
           }
         }
       ]
@@ -404,10 +404,10 @@
       "operations": [
         {
           "title": "Colored feature popup",
-          "body": "Confirm gene_kind and orthogroup metadata before refining rules.",
+          "body": "Click the rendered feature or match so the Colored feature popup metadata is visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-10-01-feature-popup.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing colored feature popup metadata.",
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Colored feature popup metadata with gene_kind and orthogroup fields.",
             "caption": "Feature popup metadata explains which qualifier values should drive color rules."
           }
         }
@@ -419,11 +419,11 @@
       "operations": [
         {
           "title": "Legend editor",
-          "body": "Confirm legend editor drawer.",
+          "body": "Use the rendered Legend editor with legend editor drawer.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/post-02-01-legend-editor.webp",
-            "alt": "aminoglycoside BGC tutorial operation screenshot showing legend editor.",
-            "caption": "Legend editor in the web app session view."
+            "alt": "Actual aminoglycoside BGC tutorial UI showing Legend editor with legend editor drawer.",
+            "caption": "The rendered web app crop shows Legend editor; Legend editor drawer."
           }
         }
       ]

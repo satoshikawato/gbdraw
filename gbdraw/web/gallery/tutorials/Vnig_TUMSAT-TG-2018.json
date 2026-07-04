@@ -34,11 +34,11 @@
       "operations": [
         {
           "title": "Session button for this Gallery entry",
-          "body": "Confirm Session action button.",
+          "body": "Use the rendered Gallery action toolbar and click Session.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/quick-01-01-download-session.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing session button for this gallery entry.",
-            "caption": "Session button for this Gallery entry in the gallery page view."
+            "alt": "Actual Vibrio multi-record tutorial Gallery .viewer-actions toolbar with the Session action visible.",
+            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
           }
         }
       ]
@@ -64,11 +64,11 @@
       "operations": [
         {
           "title": "Restored multi-record layout",
-          "body": "Confirm preview viewport.",
+          "body": "Inspect the generated preview with preview viewport.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/quick-03-01-restored-multirecord-layout.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing restored multi-record layout.",
-            "caption": "Restored multi-record layout in the generated preview view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Restored multi-record layout with preview viewport.",
+            "caption": "The generated preview crop shows preview viewport."
           }
         }
       ]
@@ -81,11 +81,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Confirm Circular selected.",
+          "body": "Select Circular in the rendered mode segmented control.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-01-01-circular-mode.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing mode segmented control.",
-            "caption": "Mode segmented control in the web app session view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Mode segmented control with Circular selected.",
+            "caption": "Select Circular in the rendered mode segmented control."
           }
         }
       ]
@@ -104,20 +104,20 @@
       "operations": [
         {
           "title": "Multi-record GBFF uploader",
-          "body": "Confirm GBFF file chip.",
+          "body": "Use the rendered upload rows so GBFF file chip is visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-01-gbff-upload.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing multi-record gbff uploader.",
-            "caption": "Multi-record GBFF uploader in the web app session view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Multi-record GBFF uploader with GBFF file chip.",
+            "caption": "The rendered web app crop shows Multi-record GBFF uploader; GBFF file chip."
           }
         },
         {
           "title": "Detected record list",
-          "body": "Confirm chromosomes and plasmids.",
+          "body": "Use the rendered Detected record list with chromosomes and plasmids.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-02-record-list.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing detected record list.",
-            "caption": "Detected record list in the web app session view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Detected record list with chromosomes and plasmids.",
+            "caption": "The rendered web app crop shows Detected record list; Chromosomes and plasmids."
           }
         }
       ]
@@ -136,11 +136,11 @@
       "operations": [
         {
           "title": "Basic circular layout controls",
-          "body": "Confirm tuckin, orchid, strands, legend.",
+          "body": "Use the rendered Basic circular layout controls with tuckin, orchid, strands, legend.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-01-basic-circular-layout.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing basic circular layout controls.",
-            "caption": "Basic circular layout controls in the web app session view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Basic circular layout controls with tuckin, orchid, strands, legend.",
+            "caption": "The rendered web app crop shows Basic circular layout controls; Tuckin, orchid, strands, legend."
           }
         }
       ]
@@ -160,20 +160,20 @@
       "operations": [
         {
           "title": "Multi-record canvas controls",
-          "body": "Confirm enabled, auto size.",
+          "body": "Use the rendered Multi-record canvas controls with enabled, auto size.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-01-multirecord-canvas.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing multi-record canvas controls.",
-            "caption": "Multi-record canvas controls in the web app session view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Multi-record canvas controls with enabled, auto size.",
+            "caption": "The rendered web app crop shows Multi-record canvas controls; Enabled, auto size."
           }
         },
         {
           "title": "Record position controls",
-          "body": "Confirm `#1@1` through `#6@2`.",
+          "body": "Use the rendered Record position controls with #1@1 through #6@2.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-02-record-positions.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing record position controls.",
-            "caption": "Record position controls in the web app session view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Record position controls with #1@1 through #6@2.",
+            "caption": "The rendered web app crop shows Record position controls; #1@1 through #6@2."
           }
         }
       ]
@@ -184,11 +184,11 @@
       "operations": [
         {
           "title": "Bottom title controls",
-          "body": "Confirm title text and bottom position.",
+          "body": "Use the rendered Bottom title controls with title text and bottom position.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing bottom title controls.",
-            "caption": "Bottom title controls in the web app session view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Bottom title controls with title text and bottom position.",
+            "caption": "The rendered web app crop shows Bottom title controls; Title text and bottom position."
           }
         }
       ]
@@ -204,11 +204,11 @@
       "operations": [
         {
           "title": "Generated multi-record preview",
-          "body": "Confirm two chromosomes + plasmids.",
+          "body": "Inspect the generated preview with two chromosomes + plasmids.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing generated multi-record preview.",
-            "caption": "Generated multi-record preview in the generated preview view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Generated multi-record preview with two chromosomes + plasmids.",
+            "caption": "The generated preview crop shows two chromosomes + plasmids."
           }
         }
       ]
@@ -244,11 +244,11 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Confirm feature + popup.",
+          "body": "Click the rendered feature or match so the CDS feature popup is visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing cds feature popup.",
-            "caption": "CDS feature popup in the popup view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing CDS feature popup with feature + popup.",
+            "caption": "The real clicked popup crop shows CDS feature popup with feature + popup."
           }
         }
       ]
@@ -279,11 +279,11 @@
       "operations": [
         {
           "title": "Feature popup with record ownership",
-          "body": "Confirm record ID visible.",
+          "body": "Click the rendered feature or match so the Feature popup with record ownership is visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/post-01-01-record-feature-popup.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing feature popup with record ownership.",
-            "caption": "Feature popup with record ownership in the popup view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Feature popup with record ownership with record ID visible.",
+            "caption": "The real clicked popup crop shows Feature popup with record ownership with record ID visible."
           }
         }
       ]
@@ -294,11 +294,11 @@
       "operations": [
         {
           "title": "Compact left legend",
-          "body": "Confirm legend + chromosome 1 edge.",
+          "body": "Inspect the generated preview with legend + chromosome 1 edge.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/post-02-01-left-legend-compactness.webp",
-            "alt": "Vibrio multi-record tutorial operation screenshot showing compact left legend.",
-            "caption": "Compact left legend in the generated preview view."
+            "alt": "Actual Vibrio multi-record tutorial UI showing Compact left legend with legend + chromosome 1 edge.",
+            "caption": "The generated preview crop shows legend + chromosome 1 edge."
           }
         }
       ]

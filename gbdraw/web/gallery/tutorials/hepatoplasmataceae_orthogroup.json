@@ -62,11 +62,11 @@
       "operations": [
         {
           "title": "Session button for this Gallery entry",
-          "body": "Confirm Session action button.",
+          "body": "Use the rendered Gallery action toolbar and click Session.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/quick-01-01-download-session.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing session button for this gallery entry.",
-            "caption": "Session button for this Gallery entry in the gallery page view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial Gallery .viewer-actions toolbar with the Session action visible.",
+            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
           }
         }
       ]
@@ -92,11 +92,11 @@
       "operations": [
         {
           "title": "Contrast with collinear example",
-          "body": "Confirm sample list entries.",
+          "body": "Use the rendered Contrast with collinear example with sample list entries.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/quick-03-01-compare-collinear.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing contrast with collinear example.",
-            "caption": "Contrast with collinear example in the gallery page view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Contrast with collinear example with sample list entries.",
+            "caption": "The rendered Gallery crop shows Contrast with collinear example; Sample list entries."
           }
         }
       ]
@@ -109,11 +109,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Confirm Linear selected.",
+          "body": "Select Linear in the rendered mode segmented control.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-01-01-linear-mode.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing mode segmented control.",
-            "caption": "Mode segmented control in the web app session view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Mode segmented control with Linear selected.",
+            "caption": "Select Linear in the rendered mode segmented control."
           }
         }
       ]
@@ -131,11 +131,11 @@
       "operations": [
         {
           "title": "Linear GenBank uploader with file order",
-          "body": "Confirm file chips in order.",
+          "body": "Use the rendered upload rows so file chips in order is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-02-01-five-file-upload-order.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing linear genbank uploader with file order.",
-            "caption": "Linear GenBank uploader with file order in the web app session view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Linear GenBank uploader with file order with file chips in the tutorial order.",
+            "caption": "The rendered web app crop shows Linear GenBank uploader with file order; File chips in order."
           }
         }
       ]
@@ -152,11 +152,11 @@
       "operations": [
         {
           "title": "Pairwise Comparisons panel",
-          "body": "Confirm Run LOSAT, LOSATP.",
+          "body": "Use the rendered Pairwise Comparisons panel with Run LOSAT, LOSATP.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-03-01-browser-losat.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing pairwise comparisons panel.",
-            "caption": "Pairwise Comparisons panel in the web app session view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Pairwise Comparisons panel with Run LOSAT, LOSATP.",
+            "caption": "The rendered web app crop shows Pairwise Comparisons panel; Run LOSAT, LOSATP."
           }
         }
       ]
@@ -174,20 +174,20 @@
       "operations": [
         {
           "title": "Orthogroups mode controls",
-          "body": "Confirm blastp mode Orthogroups.",
+          "body": "Use the rendered Orthogroups mode controls with blastp mode Orthogroups.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-04-01-orthogroups-mode.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing orthogroups mode controls.",
-            "caption": "Orthogroups mode controls in the web app session view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Orthogroups mode controls with blastp mode Orthogroups.",
+            "caption": "The rendered web app crop shows Orthogroups mode controls; Blastp mode Orthogroups."
           }
         },
         {
           "title": "Orthogroup membership and hit settings",
-          "body": "Confirm membership, max hits.",
+          "body": "Use the rendered Orthogroup membership and hit settings with membership, max hits.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-04-02-orthogroup-settings.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing orthogroup membership and hit settings.",
-            "caption": "Orthogroup membership and hit settings in the web app session view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Orthogroup membership and hit settings with membership, max hits.",
+            "caption": "The rendered web app crop shows Orthogroup membership and hit settings; Membership, max hits."
           }
         }
       ]
@@ -207,11 +207,11 @@
       "operations": [
         {
           "title": "Linear layout controls",
-          "body": "Confirm align center, GC/skew, ruler.",
+          "body": "Use the rendered Linear layout controls with align center, GC/skew, ruler.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-05-01-layout-gc-skew-ruler.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing linear layout controls.",
-            "caption": "Linear layout controls in the web app session view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Linear layout controls with align center, GC/skew, ruler.",
+            "caption": "The rendered web app crop shows Linear layout controls; Align center, GC/skew, ruler."
           }
         }
       ]
@@ -222,11 +222,11 @@
       "operations": [
         {
           "title": "Generate button and processing context",
-          "body": "Confirm Generate Diagram button.",
+          "body": "Use the rendered Generate Diagram button in its panel context.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-06-01-generate.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing generate button and processing context.",
-            "caption": "Generate button and processing context in the web app session view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Generate button and processing context with Generate Diagram button.",
+            "caption": "The rendered web app crop shows Generate button and processing context; Generate Diagram button."
           }
         }
       ]
@@ -242,11 +242,11 @@
       "operations": [
         {
           "title": "Orthogroup overview in preview",
-          "body": "Confirm ribbon-dense region.",
+          "body": "Inspect the generated preview with ribbon-dense region.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-07-01-orthogroup-overview.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing orthogroup overview in preview.",
-            "caption": "Orthogroup overview in preview in the generated preview view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Orthogroup overview in preview with ribbon-dense region.",
+            "caption": "The generated preview crop shows ribbon-dense region."
           }
         }
       ]
@@ -262,11 +262,11 @@
       "operations": [
         {
           "title": "Orthogroup match popup",
-          "body": "Confirm ribbon + popup.",
+          "body": "Click the rendered feature or match so the Orthogroup match popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-08-01-orthogroup-popup.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing orthogroup match popup.",
-            "caption": "Orthogroup match popup in the popup view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Orthogroup match popup with ribbon + popup.",
+            "caption": "The real clicked popup crop shows Orthogroup match popup with ribbon + popup."
           }
         }
       ]
@@ -297,11 +297,11 @@
       "operations": [
         {
           "title": "Pairwise ribbon popup",
-          "body": "Confirm ribbon + popup.",
+          "body": "Click the rendered feature or match so the Pairwise ribbon popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-01-01-match-popup.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing pairwise ribbon popup.",
-            "caption": "Pairwise ribbon popup in the popup view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Pairwise ribbon popup with ribbon + popup.",
+            "caption": "The real clicked popup crop shows Pairwise ribbon popup with ribbon + popup."
           }
         }
       ]
@@ -312,11 +312,11 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Confirm feature + popup.",
+          "body": "Click the rendered feature or match so the CDS feature popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing cds feature popup.",
-            "caption": "CDS feature popup in the popup view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing CDS feature popup with feature + popup.",
+            "caption": "The real clicked popup crop shows CDS feature popup with feature + popup."
           }
         }
       ]
@@ -327,11 +327,11 @@
       "operations": [
         {
           "title": "Legend editor",
-          "body": "Confirm legend editor drawer.",
+          "body": "Use the rendered Legend editor with legend editor drawer.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-03-01-legend-editor.webp",
-            "alt": "Hepatoplasmataceae orthogroup tutorial operation screenshot showing legend editor.",
-            "caption": "Legend editor in the web app session view."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Legend editor with legend editor drawer.",
+            "caption": "The rendered web app crop shows Legend editor; Legend editor drawer."
           }
         }
       ]

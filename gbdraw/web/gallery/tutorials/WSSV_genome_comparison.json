@@ -154,11 +154,11 @@
       "operations": [
         {
           "title": "Session button for this Gallery entry",
-          "body": "Confirm Session action button.",
+          "body": "Use the rendered Gallery action toolbar and click Session.",
           "media": {
             "src": "./media/WSSV_genome_comparison/quick-01-01-download-session.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing session button for this gallery entry.",
-            "caption": "Session button for this Gallery entry in the gallery page view."
+            "alt": "Actual WSSV conservation tutorial Gallery .viewer-actions toolbar with the Session action visible.",
+            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
           }
         }
       ]
@@ -184,11 +184,11 @@
       "operations": [
         {
           "title": "Restored conservation stack",
-          "body": "Confirm preview viewport.",
+          "body": "Inspect the generated preview with preview viewport.",
           "media": {
             "src": "./media/WSSV_genome_comparison/quick-03-01-restored-conservation-stack.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing restored conservation stack.",
-            "caption": "Restored conservation stack in the generated preview view."
+            "alt": "Actual WSSV conservation tutorial UI showing Restored conservation stack with preview viewport.",
+            "caption": "The generated preview crop shows preview viewport."
           }
         }
       ]
@@ -201,11 +201,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Confirm Circular selected.",
+          "body": "Select Circular in the rendered mode segmented control.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-01-01-circular-mode.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing mode segmented control.",
-            "caption": "Mode segmented control in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Mode segmented control with Circular selected.",
+            "caption": "Select Circular in the rendered mode segmented control."
           }
         }
       ]
@@ -222,11 +222,11 @@
       "operations": [
         {
           "title": "Circular GenBank uploader",
-          "body": "Confirm AP027280.gb file chip.",
+          "body": "Use the rendered upload rows so AP027280.gb file chip is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-02-01-reference-genbank-upload.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing circular genbank uploader.",
-            "caption": "Circular GenBank uploader in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Circular GenBank uploader with AP027280.gb file chip.",
+            "caption": "The rendered web app crop shows Circular GenBank uploader; AP027280.gb file chip."
           }
         }
       ]
@@ -248,11 +248,11 @@
       "operations": [
         {
           "title": "Basic circular layout controls",
-          "body": "Confirm spreadout, legend left, suppress GC/skew.",
+          "body": "Use the rendered Basic circular layout controls with spreadout, legend left, suppress GC/skew.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-03-01-basic-circular-layout.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing basic circular layout controls.",
-            "caption": "Basic circular layout controls in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Basic circular layout controls with spreadout, legend left, suppress GC/skew.",
+            "caption": "The rendered web app crop shows Basic circular layout controls; Spreadout, legend left, suppress GC/skew."
           }
         }
       ]
@@ -272,20 +272,20 @@
       "operations": [
         {
           "title": "Circular Conservation panel",
-          "body": "Confirm panel expanded.",
+          "body": "Use the rendered Circular Conservation panel with panel expanded.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-04-01-open-conservation-panel.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing circular conservation panel.",
-            "caption": "Circular Conservation panel in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Circular Conservation panel with panel expanded.",
+            "caption": "The rendered web app crop shows Circular Conservation panel; Panel expanded."
           }
         },
         {
           "title": "Conservation FASTA uploader",
-          "body": "Confirm comparison FASTA list.",
+          "body": "Use the rendered upload rows so comparison FASTA list is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-04-02-upload-fasta-comparisons.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing conservation fasta uploader.",
-            "caption": "Conservation FASTA uploader in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Conservation FASTA uploader with comparison FASTA list.",
+            "caption": "The rendered web app crop shows Conservation FASTA uploader; Comparison FASTA list."
           }
         }
       ]
@@ -300,11 +300,11 @@
       "operations": [
         {
           "title": "Ring label controls",
-          "body": "Confirm labels textarea/list.",
+          "body": "Use the rendered Ring label controls with labels textarea/list.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-05-01-ring-labels.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing ring label controls.",
-            "caption": "Ring label controls in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Ring label controls with labels textarea/list.",
+            "caption": "The rendered web app crop shows Ring label controls; Labels textarea/list."
           }
         }
       ]
@@ -319,11 +319,11 @@
       "operations": [
         {
           "title": "Ring color controls",
-          "body": "Confirm color swatches.",
+          "body": "Use the rendered Ring color controls with color swatches.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-06-01-ring-colors.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing ring color controls.",
-            "caption": "Ring color controls in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Ring color controls with color swatches.",
+            "caption": "The rendered web app crop shows Ring color controls; Color swatches."
           }
         }
       ]
@@ -340,11 +340,11 @@
       "operations": [
         {
           "title": "Conservation thresholds",
-          "body": "Confirm bitscore, e-value, identity, length.",
+          "body": "Use the rendered Conservation thresholds with bitscore, e-value, identity, length.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-07-01-thresholds.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing conservation thresholds.",
-            "caption": "Conservation thresholds in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Conservation thresholds with bitscore, e-value, identity, length.",
+            "caption": "The rendered web app crop shows Conservation thresholds; Bitscore, e-value, identity, length."
           }
         }
       ]
@@ -361,11 +361,11 @@
       "operations": [
         {
           "title": "Browser LOSAT execution controls",
-          "body": "Confirm Auto, Safe, blastn megablast.",
+          "body": "Use the rendered Browser LOSAT execution controls with Auto, Safe, blastn megablast.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-08-01-browser-losat-run.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing browser losat execution controls.",
-            "caption": "Browser LOSAT execution controls in the web app session view."
+            "alt": "Actual WSSV conservation tutorial UI showing Browser LOSAT execution controls with Auto, Safe, blastn megablast.",
+            "caption": "The rendered web app crop shows Browser LOSAT execution controls; Auto, Safe, blastn megablast."
           }
         }
       ]
@@ -381,11 +381,11 @@
       "operations": [
         {
           "title": "Generated conservation rings",
-          "body": "Confirm 20 rings + legend.",
+          "body": "Inspect the generated preview with 20 rings + legend.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-09-01-conservation-rings.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing generated conservation rings.",
-            "caption": "Generated conservation rings in the generated preview view."
+            "alt": "Actual WSSV conservation tutorial UI showing Generated conservation rings with 20 rings + legend.",
+            "caption": "The generated preview crop shows 20 rings + legend."
           }
         }
       ]
@@ -421,11 +421,11 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Confirm outer CDS + popup.",
+          "body": "Click the rendered feature or match so the CDS feature popup metadata is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing cds feature popup.",
-            "caption": "CDS feature popup in the popup view."
+            "alt": "Actual WSSV conservation tutorial UI showing CDS feature popup metadata with note, product, protein_id fields.",
+            "caption": "The real clicked popup crop shows CDS feature popup metadata with note, product, protein_id fields."
           }
         }
       ]
@@ -471,10 +471,10 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Confirm annotation fields before changing feature colors or labels.",
+          "body": "Click the rendered feature or match so the CDS feature popup metadata is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing CDS feature popup metadata.",
+            "alt": "Actual WSSV conservation tutorial UI showing CDS feature popup metadata with note, product, protein_id fields.",
             "caption": "Feature popup metadata identifies the annotation fields behind labels and colors."
           }
         }
@@ -486,11 +486,11 @@
       "operations": [
         {
           "title": "Conservation legend",
-          "body": "Confirm identity endpoints visible.",
+          "body": "Inspect the generated preview with identity endpoints visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-03-01-conservation-legend.webp",
-            "alt": "WSSV conservation tutorial operation screenshot showing conservation legend.",
-            "caption": "Conservation legend in the generated preview view."
+            "alt": "Actual WSSV conservation tutorial UI showing Conservation legend with identity endpoints visible.",
+            "caption": "The generated preview crop shows identity endpoints visible."
           }
         }
       ]

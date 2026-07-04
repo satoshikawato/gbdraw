@@ -33,11 +33,11 @@
       "operations": [
         {
           "title": "Session button for this Gallery entry",
-          "body": "Confirm Session action button.",
+          "body": "Use the rendered Gallery action toolbar and click Session.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/quick-01-01-download-session.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing session button for this gallery entry.",
-            "caption": "Session button for this Gallery entry in the gallery page view."
+            "alt": "Actual human mitochondrial AT skew tutorial Gallery .viewer-actions toolbar with the Session action visible.",
+            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
           }
         }
       ]
@@ -63,11 +63,11 @@
       "operations": [
         {
           "title": "Restored custom track stack",
-          "body": "Confirm custom track slots.",
+          "body": "Use the rendered Restored custom track stack with custom track slots.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/quick-03-01-restored-custom-stack.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing restored custom track stack.",
-            "caption": "Restored custom track stack in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Restored custom track stack with custom track slots.",
+            "caption": "The rendered web app crop shows Restored custom track stack; Custom track slots."
           }
         }
       ]
@@ -80,11 +80,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Confirm Circular selected.",
+          "body": "Select Circular in the rendered mode segmented control.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-01-01-circular-mode.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing mode segmented control.",
-            "caption": "Mode segmented control in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Mode segmented control with Circular selected.",
+            "caption": "Select Circular in the rendered mode segmented control."
           }
         }
       ]
@@ -101,11 +101,11 @@
       "operations": [
         {
           "title": "Circular GenBank uploader",
-          "body": "Confirm HmmtDNA.gbk file chip.",
+          "body": "Use the rendered upload rows so HmmtDNA.gbk file chip is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-02-01-genbank-upload.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing circular genbank uploader.",
-            "caption": "Circular GenBank uploader in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Circular GenBank uploader with HmmtDNA.gbk file chip.",
+            "caption": "The rendered web app crop shows Circular GenBank uploader; HmmtDNA.gbk file chip."
           }
         }
       ]
@@ -125,11 +125,11 @@
       "operations": [
         {
           "title": "Basic circular layout controls",
-          "body": "Confirm middle, left legend, labels out.",
+          "body": "Use the rendered Basic circular layout controls with middle, left legend, labels out.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-03-01-basic-circular-layout.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing basic circular layout controls.",
-            "caption": "Basic circular layout controls in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Basic circular layout controls with middle, left legend, labels out.",
+            "caption": "The rendered web app crop shows Basic circular layout controls; Middle, left legend, labels out."
           }
         }
       ]
@@ -145,11 +145,11 @@
       "operations": [
         {
           "title": "Dinucleotide window controls",
-          "body": "Confirm GC, 500, 50.",
+          "body": "Use the rendered Dinucleotide window controls with GC, 500, 50.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-04-01-window-step.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing dinucleotide window controls.",
-            "caption": "Dinucleotide window controls in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Dinucleotide window controls with GC, 500, 50.",
+            "caption": "The rendered web app crop shows Dinucleotide window controls; GC, 500, 50."
           }
         }
       ]
@@ -166,20 +166,20 @@
       "operations": [
         {
           "title": "Custom Track Slots panel",
-          "body": "Confirm panel expanded.",
+          "body": "Use the rendered Custom Track Slots panel with panel expanded.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-05-01-open-custom-track-slots.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing custom track slots panel.",
-            "caption": "Custom Track Slots panel in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Custom Track Slots panel with panel expanded.",
+            "caption": "The rendered web app crop shows Custom Track Slots panel; Panel expanded."
           }
         },
         {
           "title": "Middle template slot stack",
-          "body": "Confirm features, GC, GC skew slots.",
+          "body": "Use the rendered Middle template slot stack with features, GC, GC skew slots.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-05-02-middle-template-stack.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing middle template slot stack.",
-            "caption": "Middle template slot stack in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Middle template slot stack with features, GC, GC skew slots.",
+            "caption": "The rendered web app crop shows Middle template slot stack; Features, GC, GC skew slots."
           }
         }
       ]
@@ -204,11 +204,11 @@
       "operations": [
         {
           "title": "Add AT skew slot",
-          "body": "Confirm AT, label, width, colors.",
+          "body": "Use the rendered Add AT skew slot with AT, label, width, colors.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-06-01-at-skew-slot-values.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing add at skew slot.",
-            "caption": "Add AT skew slot in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Add AT skew slot with AT, label, width, colors.",
+            "caption": "The rendered web app crop shows Add AT skew slot; AT, label, width, colors."
           }
         }
       ]
@@ -224,11 +224,11 @@
       "operations": [
         {
           "title": "Tick track slot",
-          "body": "Confirm ticks renderer and layout.",
+          "body": "Use the rendered Tick track slot with ticks renderer and layout.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-07-01-tick-track-slot.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing tick track slot.",
-            "caption": "Tick track slot in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Tick track slot with ticks renderer and layout.",
+            "caption": "The rendered web app crop shows Tick track slot; Ticks renderer and layout."
           }
         }
       ]
@@ -243,11 +243,11 @@
       "operations": [
         {
           "title": "CDS label priority controls",
-          "body": "Confirm CDS, gene.",
+          "body": "Use the rendered CDS label priority controls with CDS, gene.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-08-01-cds-label-priority.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing cds label priority controls.",
-            "caption": "CDS label priority controls in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing CDS label priority controls with CDS, gene.",
+            "caption": "The rendered web app crop shows CDS label priority controls; CDS, gene."
           }
         }
       ]
@@ -258,11 +258,11 @@
       "operations": [
         {
           "title": "Generated AT skew preview",
-          "body": "Confirm track stack + left legend.",
+          "body": "Inspect the generated preview with track stack + left legend.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing generated at skew preview.",
-            "caption": "Generated AT skew preview in the generated preview view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Generated AT skew preview with track stack + left legend.",
+            "caption": "The generated preview crop shows track stack + left legend."
           }
         }
       ]
@@ -278,11 +278,11 @@
       "operations": [
         {
           "title": "Feature popup",
-          "body": "Confirm feature + popup.",
+          "body": "Click the rendered feature or match so the Feature popup metadata is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing feature popup.",
-            "caption": "Feature popup in the popup view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Feature popup metadata with gene, product, db_xref fields.",
+            "caption": "The real clicked popup crop shows Feature popup metadata with gene, product, db_xref fields."
           }
         }
       ]
@@ -313,10 +313,10 @@
       "operations": [
         {
           "title": "Feature popup",
-          "body": "Confirm gene, product, location, and sequence metadata.",
+          "body": "Click the rendered feature or match so the Feature popup metadata is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing feature popup metadata.",
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Feature popup metadata with gene, product, db_xref fields.",
             "caption": "Feature popup metadata supports label and qualifier-priority checks."
           }
         }
@@ -328,11 +328,11 @@
       "operations": [
         {
           "title": "Legend editor",
-          "body": "Confirm AT skew entries visible.",
+          "body": "Use the rendered Legend editor with AT skew entries visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-02-01-legend-editor.webp",
-            "alt": "human mitochondrial AT skew tutorial operation screenshot showing legend editor.",
-            "caption": "Legend editor in the web app session view."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing Legend editor with AT skew entries visible.",
+            "caption": "The rendered web app crop shows Legend editor; AT skew entries visible."
           }
         }
       ]

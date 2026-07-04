@@ -62,11 +62,11 @@
       "operations": [
         {
           "title": "Session button for this Gallery entry",
-          "body": "Confirm Session action button.",
+          "body": "Use the rendered Gallery action toolbar and click Session.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/quick-01-01-download-session.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing session button for this gallery entry.",
-            "caption": "Session button for this Gallery entry in the gallery page view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial Gallery .viewer-actions toolbar with the Session action visible.",
+            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
           }
         }
       ]
@@ -92,11 +92,11 @@
       "operations": [
         {
           "title": "Restored generated diagram",
-          "body": "Confirm preview viewport.",
+          "body": "Inspect the generated preview with preview viewport.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/quick-03-01-restored-diagram.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing restored generated diagram.",
-            "caption": "Restored generated diagram in the generated preview view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Restored generated diagram with preview viewport.",
+            "caption": "The generated preview crop shows preview viewport."
           }
         }
       ]
@@ -109,11 +109,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Confirm Linear selected.",
+          "body": "Select Linear in the rendered mode segmented control.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing mode segmented control.",
-            "caption": "Mode segmented control in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Mode segmented control with Linear selected.",
+            "caption": "Select Linear in the rendered mode segmented control."
           }
         }
       ]
@@ -131,11 +131,11 @@
       "operations": [
         {
           "title": "Linear GenBank uploader with file order",
-          "body": "Confirm file chips in order.",
+          "body": "Use the rendered upload rows so file chips in order is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-02-01-five-file-upload-order.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing linear genbank uploader with file order.",
-            "caption": "Linear GenBank uploader with file order in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Linear GenBank uploader with file order with file chips in the tutorial order.",
+            "caption": "The rendered web app crop shows Linear GenBank uploader with file order; File chips in order."
           }
         }
       ]
@@ -157,20 +157,20 @@
       "operations": [
         {
           "title": "Pairwise Comparisons panel",
-          "body": "Confirm expanded Pairwise Comparisons.",
+          "body": "Use the rendered Pairwise Comparisons panel with expanded Pairwise Comparisons.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-01-open-pairwise.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing pairwise comparisons panel.",
-            "caption": "Pairwise Comparisons panel in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Pairwise Comparisons panel with expanded Pairwise Comparisons.",
+            "caption": "The rendered web app crop shows Pairwise Comparisons panel; Expanded Pairwise Comparisons."
           }
         },
         {
           "title": "LOSAT run settings",
-          "body": "Confirm Run LOSAT, LOSATP.",
+          "body": "Use the rendered LOSAT run settings with Run LOSAT, LOSATP.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-02-browser-losat.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing losat run settings.",
-            "caption": "LOSAT run settings in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing LOSAT run settings with Run LOSAT, LOSATP.",
+            "caption": "The rendered web app crop shows LOSAT run settings; Run LOSAT, LOSATP."
           }
         }
       ]
@@ -188,20 +188,20 @@
       "operations": [
         {
           "title": "LOSATP collinear controls",
-          "body": "Confirm Collinear blocks selected.",
+          "body": "Use the rendered LOSATP collinear controls with Collinear blocks selected.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-04-01-collinear-reduction.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing losatp collinear controls.",
-            "caption": "LOSATP collinear controls in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing LOSATP collinear controls with Collinear blocks selected.",
+            "caption": "The rendered web app crop shows LOSATP collinear controls; Collinear blocks selected."
           }
         },
         {
           "title": "Collinear color mode",
-          "body": "Confirm Orientation + identity.",
+          "body": "Use the rendered Collinear color mode with Orientation + identity.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-04-02-orientation-identity.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing collinear color mode.",
-            "caption": "Collinear color mode in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Collinear color mode with Orientation + identity.",
+            "caption": "The rendered web app crop shows Collinear color mode; Orientation + identity."
           }
         }
       ]
@@ -221,11 +221,11 @@
       "operations": [
         {
           "title": "Linear layout controls",
-          "body": "Confirm align center, GC/skew, ruler.",
+          "body": "Use the rendered Linear layout controls with align center, GC/skew, ruler.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-05-01-layout-gc-skew-ruler.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing linear layout controls.",
-            "caption": "Linear layout controls in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Linear layout controls with align center, GC/skew, ruler.",
+            "caption": "The rendered web app crop shows Linear layout controls; Align center, GC/skew, ruler."
           }
         }
       ]
@@ -236,11 +236,11 @@
       "operations": [
         {
           "title": "Generate button and processing context",
-          "body": "Confirm Generate Diagram button.",
+          "body": "Use the rendered Generate Diagram button in its panel context.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-06-01-generate.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing generate button and processing context.",
-            "caption": "Generate button and processing context in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Generate button and processing context with Generate Diagram button.",
+            "caption": "The rendered web app crop shows Generate button and processing context; Generate Diagram button."
           }
         }
       ]
@@ -256,11 +256,11 @@
       "operations": [
         {
           "title": "Collinear block popup",
-          "body": "Confirm ribbon + popup.",
+          "body": "Click the rendered feature or match so the Collinear block popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing collinear block popup.",
-            "caption": "Collinear block popup in the popup view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Collinear block popup with ribbon + popup.",
+            "caption": "The real clicked popup crop shows Collinear block popup with ribbon + popup."
           }
         }
       ]
@@ -291,11 +291,11 @@
       "operations": [
         {
           "title": "Feature popup",
-          "body": "Confirm feature + popup.",
+          "body": "Click the rendered feature or match so the Feature popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing feature popup.",
-            "caption": "Feature popup in the popup view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Feature popup with feature + popup.",
+            "caption": "The real clicked popup crop shows Feature popup with feature + popup."
           }
         }
       ]
@@ -306,11 +306,11 @@
       "operations": [
         {
           "title": "Legend editor",
-          "body": "Confirm legend editor drawer.",
+          "body": "Use the rendered Legend editor with legend editor drawer.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-02-01-legend-editor.webp",
-            "alt": "Hepatoplasmataceae collinear tutorial operation screenshot showing legend editor.",
-            "caption": "Legend editor in the web app session view."
+            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Legend editor with legend editor drawer.",
+            "caption": "The rendered web app crop shows Legend editor; Legend editor drawer."
           }
         }
       ]

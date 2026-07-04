@@ -6,6 +6,7 @@ import contextlib
 import http.server
 import io
 import json
+import re
 import socketserver
 import sys
 import threading
@@ -37,6 +38,17 @@ OPERATION_REQUIRED_SECTIONS = (
     "quickReproduce",
     "manualSteps",
     "postGenerationEdits",
+)
+
+GENERIC_OPERATION_BODY_RE = re.compile(r"^\s*Confirm\b", re.IGNORECASE)
+GENERIC_OPERATION_MEDIA_RE = re.compile(
+    r"operation screenshot showing|"
+    r"in the web app session view\.?$|"
+    r"in the gallery page view\.?$|"
+    r"in the generated preview view\.?$|"
+    r"in the popup view\.?$|"
+    r"operation screenshot",
+    re.IGNORECASE,
 )
 
 DEFAULT_MAX_IMAGE_WIDTH = 1400
@@ -263,6 +275,26 @@ def add_media_validation(
             result.warnings.append(message)
 
 
+def add_operation_text_validation(
+    result: ValidationResult,
+    context: TutorialContext,
+    operation: dict[str, Any],
+) -> None:
+    body = as_text(operation.get("body"))
+    if GENERIC_OPERATION_BODY_RE.search(body):
+        result.errors.append(
+            f"{context.label}: operation body uses generic Confirm wording."
+        )
+
+    for entry in media_entries(operation.get("media")):
+        for field in ("alt", "caption"):
+            text = as_text(entry.get(field))
+            if GENERIC_OPERATION_MEDIA_RE.search(text):
+                result.errors.append(
+                    f"{context.label}: media {field} uses generic screenshot wording."
+                )
+
+
 def validate_tutorial_media(
     samples: list[dict[str, Any]],
     *,
@@ -298,6 +330,7 @@ def validate_tutorial_media(
         for context, operation in iter_operation_contexts(sample, tutorial):
             result.operation_count += 1
             example_operation_count += 1
+            add_operation_text_validation(result, context, operation)
             operation_media = media_entries(operation.get("media"))
             if not operation_media:
                 result.errors.append(f"{context.label}: operation is missing media.")
@@ -323,11 +356,13 @@ def validate_tutorial_media(
 
 @contextlib.contextmanager
 def serve_web_root():
-    handler = lambda *args, **kwargs: QuietGalleryRequestHandler(
-        *args,
-        directory=str(WEB_ROOT),
-        **kwargs,
-    )
+    def handler(*args, **kwargs):
+        return QuietGalleryRequestHandler(
+            *args,
+            directory=str(WEB_ROOT),
+            **kwargs,
+        )
+
     with socketserver.TCPServer(("127.0.0.1", 0), handler) as httpd:
         port = httpd.server_address[1]
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)

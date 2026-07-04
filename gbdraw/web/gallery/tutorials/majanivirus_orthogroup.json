@@ -90,11 +90,11 @@
       "operations": [
         {
           "title": "Session button for this Gallery entry",
-          "body": "Confirm Session action button.",
+          "body": "Use the rendered Gallery action toolbar and click Session.",
           "media": {
             "src": "./media/majanivirus_orthogroup/quick-01-01-download-session.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing session button for this gallery entry.",
-            "caption": "Session button for this Gallery entry in the gallery page view."
+            "alt": "Actual majanivirus orthogroup tutorial Gallery .viewer-actions toolbar with the Session action visible.",
+            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
           }
         }
       ]
@@ -120,11 +120,11 @@
       "operations": [
         {
           "title": "Restored large-session preview",
-          "body": "Confirm preview viewport.",
+          "body": "Inspect the generated preview with preview viewport.",
           "media": {
             "src": "./media/majanivirus_orthogroup/quick-03-01-restored-large-session.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing restored large-session preview.",
-            "caption": "Restored large-session preview in the generated preview view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Restored large-session preview with preview viewport.",
+            "caption": "The generated preview crop shows preview viewport."
           }
         }
       ]
@@ -137,11 +137,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Confirm Linear selected.",
+          "body": "Select Linear in the rendered mode segmented control.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing mode segmented control.",
-            "caption": "Mode segmented control in the web app session view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Mode segmented control with Linear selected.",
+            "caption": "Select Linear in the rendered mode segmented control."
           }
         }
       ]
@@ -163,11 +163,11 @@
       "operations": [
         {
           "title": "Linear GenBank uploader with nine viral files",
-          "body": "Confirm file chips in order.",
+          "body": "Use the rendered upload rows so file chips in order is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-02-01-nine-file-upload-order.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing linear genbank uploader with nine viral files.",
-            "caption": "Linear GenBank uploader with nine viral files in the web app session view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Linear GenBank uploader with nine viral files with file chips in the tutorial order.",
+            "caption": "The rendered web app crop shows Linear GenBank uploader with nine viral files; File chips in order."
           }
         }
       ]
@@ -188,29 +188,29 @@
       "operations": [
         {
           "title": "Pairwise Comparisons panel",
-          "body": "Confirm expanded panel.",
+          "body": "Use the rendered Pairwise Comparisons panel with expanded panel.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-01-open-pairwise.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing pairwise comparisons panel.",
-            "caption": "Pairwise Comparisons panel in the web app session view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Pairwise Comparisons panel with expanded panel.",
+            "caption": "The rendered web app crop shows Pairwise Comparisons panel; Expanded panel."
           }
         },
         {
           "title": "LOSATP orthogroups mode",
-          "body": "Confirm Orthogroups selected.",
+          "body": "Use the rendered LOSATP orthogroups mode with Orthogroups selected.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-02-losatp-orthogroups.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing losatp orthogroups mode.",
-            "caption": "LOSATP orthogroups mode in the web app session view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing LOSATP orthogroups mode with Orthogroups selected.",
+            "caption": "The rendered web app crop shows LOSATP orthogroups mode; Orthogroups selected."
           }
         },
         {
           "title": "Large-session thread and threshold settings",
-          "body": "Confirm threads, bitscore, e-value, identity.",
+          "body": "Use the rendered Large-session thread and threshold settings with threads, bitscore, e-value, identity.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-03-thread-threshold-settings.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing large-session thread and threshold settings.",
-            "caption": "Large-session thread and threshold settings in the web app session view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Large-session thread and threshold settings with threads, bitscore, e-value, identity.",
+            "caption": "The rendered web app crop shows Large-session thread and threshold settings; Threads, bitscore, e-value, identity."
           }
         }
       ]
@@ -231,11 +231,11 @@
       "operations": [
         {
           "title": "Linear layout controls",
-          "body": "Confirm align center and compact layout.",
+          "body": "Use the rendered Linear layout controls with align center and compact layout.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-04-01-linear-layout.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing linear layout controls.",
-            "caption": "Linear layout controls in the web app session view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Linear layout controls with align center and compact layout.",
+            "caption": "The rendered web app crop shows Linear layout controls; Align center and compact layout."
           }
         }
       ]
@@ -257,11 +257,11 @@
       "operations": [
         {
           "title": "Record label editor",
-          "body": "Confirm nine descriptive labels.",
+          "body": "Use the rendered Record label editor with nine descriptive labels.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-05-01-record-labels.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing record label editor.",
-            "caption": "Record label editor in the web app session view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Record label editor with nine descriptive labels.",
+            "caption": "The rendered web app crop shows Record label editor; Nine descriptive labels."
           }
         }
       ]
@@ -279,38 +279,38 @@
       "operations": [
         {
           "title": "Rule 1: WSSV-like proteins",
-          "body": "Confirm product regex.",
+          "body": "Enter CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins in the rendered SPECIFIC RULES (-t) controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-01-color-rule-wssv-like.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing rule 1: wssv-like proteins.",
-            "caption": "Rule 1: WSSV-like proteins in the web app session view."
+            "alt": "Actual majanivirus orthogroup SPECIFIC RULES (-t) controls showing CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins.",
+            "caption": "Enter CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins in the rendered SPECIFIC RULES (-t) row."
           }
         },
         {
           "title": "Rule 2: BIRP",
-          "body": "Confirm product regex.",
+          "body": "Enter CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP in the rendered SPECIFIC RULES (-t) controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-02-color-rule-birp.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing rule 2: birp.",
-            "caption": "Rule 2: BIRP in the web app session view."
+            "alt": "Actual majanivirus orthogroup SPECIFIC RULES (-t) controls showing CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP.",
+            "caption": "Enter CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP in the rendered SPECIFIC RULES (-t) row."
           }
         },
         {
           "title": "Rule 3: tyrosine recombinase",
-          "body": "Confirm product regex.",
+          "body": "Enter CDS / product / tyrosine recombinase / red / tyrosine recombinase in the rendered SPECIFIC RULES (-t) controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-03-color-rule-recombinase.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing rule 3: tyrosine recombinase.",
-            "caption": "Rule 3: tyrosine recombinase in the web app session view."
+            "alt": "Actual majanivirus orthogroup SPECIFIC RULES (-t) controls showing CDS / product / tyrosine recombinase / red / tyrosine recombinase.",
+            "caption": "Enter CDS / product / tyrosine recombinase / red / tyrosine recombinase in the rendered SPECIFIC RULES (-t) row."
           }
         },
         {
           "title": "Default CDS color",
-          "body": "Confirm default CDS swatch.",
+          "body": "Set Default CDS color: #d3d3d3 / other proteins in the rendered default CDS color controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-04-default-cds-color.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing default cds color.",
-            "caption": "Default CDS color in the web app session view."
+            "alt": "Actual majanivirus orthogroup default CDS color controls showing Default CDS color: #d3d3d3 / other proteins.",
+            "caption": "Set Default CDS color: #d3d3d3 / other proteins in the rendered default CDS color controls."
           }
         }
       ]
@@ -326,11 +326,11 @@
       "operations": [
         {
           "title": "Generated orthogroup preview",
-          "body": "Confirm nine rows + right legend.",
+          "body": "Inspect the generated preview with nine rows + right legend.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-07-01-orthogroup-preview.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing generated orthogroup preview.",
-            "caption": "Generated orthogroup preview in the generated preview view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Generated orthogroup preview with nine rows + right legend.",
+            "caption": "The generated preview crop shows nine rows + right legend."
           }
         }
       ]
@@ -346,11 +346,11 @@
       "operations": [
         {
           "title": "Orthogroup ribbon popup",
-          "body": "Confirm ribbon + popup.",
+          "body": "Click the rendered feature or match so the Orthogroup ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-08-01-orthogroup-popup.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing orthogroup ribbon popup.",
-            "caption": "Orthogroup ribbon popup in the popup view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Orthogroup ribbon popup with ribbon + popup.",
+            "caption": "The real clicked popup crop shows Orthogroup ribbon popup with ribbon + popup."
           }
         }
       ]
@@ -401,11 +401,11 @@
       "operations": [
         {
           "title": "Match ribbon popup",
-          "body": "Confirm ribbon + popup.",
+          "body": "Click the rendered feature or match so the Match ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-01-01-match-popup.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing match ribbon popup.",
-            "caption": "Match ribbon popup in the popup view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Match ribbon popup with ribbon + popup.",
+            "caption": "The real clicked popup crop shows Match ribbon popup with ribbon + popup."
           }
         }
       ]
@@ -416,11 +416,11 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Confirm feature + popup.",
+          "body": "Click the rendered feature or match so the CDS feature popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing cds feature popup.",
-            "caption": "CDS feature popup in the popup view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing CDS feature popup with feature + popup.",
+            "caption": "The real clicked popup crop shows CDS feature popup with feature + popup."
           }
         }
       ]
@@ -431,11 +431,11 @@
       "operations": [
         {
           "title": "Identity legend in preview",
-          "body": "Confirm identity legend.",
+          "body": "Inspect the generated preview with identity legend.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-03-01-identity-legend.webp",
-            "alt": "majanivirus orthogroup tutorial operation screenshot showing identity legend in preview.",
-            "caption": "Identity legend in preview in the generated preview view."
+            "alt": "Actual majanivirus orthogroup tutorial UI showing Identity legend in preview with identity legend.",
+            "caption": "The generated preview crop shows identity legend."
           }
         }
       ]
