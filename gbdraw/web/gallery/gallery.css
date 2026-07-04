@@ -305,6 +305,52 @@ h1 {
     outline: none;
 }
 
+.tab-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    border-bottom: 1px solid var(--line);
+}
+
+.tab-button {
+    min-height: 34px;
+    padding: 7px 12px;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    border-radius: 7px 7px 0 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 760;
+    cursor: pointer;
+}
+
+.tab-button:hover,
+.tab-button:focus-visible {
+    color: var(--accent-strong);
+    outline: none;
+}
+
+.tab-button[aria-selected="true"] {
+    border-color: var(--line);
+    background: var(--panel);
+    color: var(--text);
+}
+
+.tab-panel {
+    min-width: 0;
+}
+
+#preview-panel {
+    display: grid;
+    gap: 12px;
+}
+
+.tab-panel[hidden] {
+    display: none;
+}
+
 .frame-wrap {
     position: relative;
     width: 100%;
@@ -346,14 +392,32 @@ h1 {
 }
 
 .command-panel,
-.notes-panel {
+.notes-panel,
+.tutorial-panel,
+.files-panel {
     border: 1px solid var(--line);
     border-radius: 7px;
     background: var(--panel);
 }
 
-.command-panel {
+.command-panel,
+.tutorial-panel,
+.files-panel {
     padding: 12px;
+}
+
+.files-panel__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.files-panel h2 {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.08em;
 }
 
 .command-panel pre {
@@ -385,6 +449,186 @@ h1 {
     padding: 11px 13px;
     color: var(--muted);
     font-size: 0.9rem;
+}
+
+.panel-status {
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+.panel-status--error {
+    color: #8a1f1f;
+    font-weight: 720;
+}
+
+.tutorial-content {
+    max-width: 920px;
+}
+
+.tutorial-content h2 {
+    font-size: 1.08rem;
+    line-height: 1.25;
+    font-weight: 780;
+}
+
+.tutorial-summary {
+    margin-top: 7px;
+    max-width: 80ch;
+    color: var(--muted);
+    font-size: 0.93rem;
+}
+
+.tutorial-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.tutorial-meta__item {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 8px;
+    border: 1px solid #cbd9dc;
+    border-radius: 999px;
+    background: var(--panel-soft);
+    color: #334550;
+    font-size: 0.72rem;
+    font-weight: 720;
+}
+
+.tutorial-section {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid var(--line);
+}
+
+.tutorial-section h3 {
+    margin: 0 0 9px;
+    font-size: 0.86rem;
+    line-height: 1.3;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+}
+
+.tutorial-list {
+    margin: 0;
+    padding-left: 19px;
+    color: var(--text);
+    font-size: 0.92rem;
+}
+
+.tutorial-list li + li {
+    margin-top: 5px;
+}
+
+.tutorial-step-list {
+    display: grid;
+    gap: 12px;
+}
+
+.tutorial-step {
+    padding: 1px 0 1px 13px;
+    border-left: 3px solid #b6d7d4;
+}
+
+.tutorial-step__title {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 3px;
+    font-size: 0.95rem;
+    font-weight: 760;
+}
+
+.tutorial-step__number {
+    flex: 0 0 auto;
+    color: var(--accent-strong);
+    font-size: 0.78rem;
+    font-weight: 820;
+}
+
+.tutorial-step__body,
+.tutorial-step__note,
+.download-note,
+.file-note {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.tutorial-step__note {
+    margin-top: 5px;
+}
+
+.tutorial-media {
+    margin-top: 9px;
+}
+
+.tutorial-media img,
+.tutorial-media video {
+    display: block;
+    width: 100%;
+    max-height: 520px;
+    object-fit: contain;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.tutorial-media figcaption {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.download-list,
+.file-list {
+    display: grid;
+    gap: 8px;
+}
+
+.download-item,
+.file-item {
+    padding: 9px 0 9px 12px;
+    border-left: 3px solid #cbd9dc;
+}
+
+.download-title,
+.file-title {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    align-items: baseline;
+    font-size: 0.94rem;
+    font-weight: 760;
+}
+
+.download-source,
+.file-source {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 680;
+}
+
+.download-note,
+.file-note {
+    margin-top: 3px;
+}
+
+.files-content {
+    display: grid;
+    gap: 16px;
+    margin-top: 10px;
+}
+
+.files-content h3 {
+    margin: 0 0 7px;
+    font-size: 0.86rem;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.08em;
 }
 
 .noscript {
@@ -450,6 +694,10 @@ h1 {
         grid-template-columns: repeat(4, minmax(0, 1fr));
         justify-content: stretch;
         min-width: 0;
+    }
+
+    .tab-button {
+        flex: 1 1 110px;
     }
 }
 

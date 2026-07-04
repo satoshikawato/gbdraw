@@ -1,0 +1,231 @@
+{
+  "id": "hepatoplasmataceae_collinear",
+  "version": 1,
+  "title": "Reproduce the Hepatoplasmataceae collinear analysis in the web app",
+  "summary": "Build a five-genome linear comparison from GenBank inputs using browser LOSATP and collinear block reduction.",
+  "estimatedTime": "10-20 min after inputs are available",
+  "difficulty": "Advanced",
+  "appMode": "Linear",
+  "primaryWorkflow": "LOSATP collinear blocks",
+  "requirements": [
+    "A browser with WebAssembly support.",
+    "Enough available memory for five bacterial GenBank records and LOSATP output.",
+    "The five GenBank flat files listed below.",
+    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+  ],
+  "downloads": [
+    {
+      "label": "AP027078",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027078",
+      "targetName": "AP027078.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    },
+    {
+      "label": "AP027131",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027131",
+      "targetName": "AP027131.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    },
+    {
+      "label": "AP027133",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027133",
+      "targetName": "AP027133.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    },
+    {
+      "label": "AP027132",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027132",
+      "targetName": "AP027132.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    },
+    {
+      "label": "NZ_CP006932",
+      "source": "NCBI Nucleotide",
+      "accession": "NZ_CP006932",
+      "targetName": "NZ_CP006932.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    }
+  ],
+  "quickReproduce": [
+    {
+      "title": "Download the Gallery session",
+      "body": "Use the Session button in this Gallery entry to save hepatoplasmataceae_collinear.gbdraw-session.json.",
+      "media": {
+        "src": "./media/hepatoplasmataceae_collinear/01-gallery-session.webp",
+        "alt": "Gallery header for the Hepatoplasmataceae collinear analysis with the Session action visible.",
+        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
+      }
+    },
+    {
+      "title": "Open the web app",
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+    },
+    {
+      "title": "Inspect the restored diagram",
+      "body": "The session restores the diagram settings, uploaded GenBank files, cached LOSATP results, and generated interactive SVG state."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Linear mode",
+      "body": "Open gbdraw.app and select Linear mode before adding inputs."
+    },
+    {
+      "title": "Upload the five GenBank files",
+      "body": "Keep the records in the same order as the Gallery command so adjacent comparison tracks match the published example.",
+      "items": [
+        "AP027078.gb",
+        "AP027131.gb",
+        "AP027133.gb",
+        "AP027132.gb",
+        "NZ_CP006932.gb"
+      ]
+    },
+    {
+      "title": "Use browser LOSAT",
+      "body": "In Pairwise Comparisons, choose Run LOSAT. Set LOSAT Mode to LOSATP.",
+      "items": [
+        "Execution: Auto",
+        "Total threads: Safe",
+        "Parallel runs: Auto",
+        "Threads per run: Auto unless you need to reproduce a fixed thread count"
+      ],
+      "media": {
+        "src": "./media/hepatoplasmataceae_collinear/02-web-linear-losat-settings.webp",
+        "alt": "Web app Linear mode input panel with Run LOSAT, LOSATP, Collinear blocks, and Orientation plus identity selected.",
+        "caption": "The Linear input panel exposes LOSATP execution settings and the collinear reduction controls before generation."
+      }
+    },
+    {
+      "title": "Select collinear reduction",
+      "body": "In LOSATP settings, set blastp mode to Collinear blocks. Use Orientation + identity for Color mode.",
+      "items": [
+        "Max unit gap: 0",
+        "Min block genes: 1",
+        "Evidence scope: Adjacent pairs",
+        "Merge conflicts: 1"
+      ],
+      "note": "These settings summarize orthogroup-backed protein anchors as gene-order-preserving ribbons."
+    },
+    {
+      "title": "Set the diagram layout",
+      "body": "Use the layout and track options that match the Gallery session.",
+      "items": [
+        "Align to Center: on",
+        "Separate Strands: on",
+        "Scale Style: ruler",
+        "Show GC: on",
+        "Show skew: on",
+        "Pairwise match style: curve",
+        "Palette: ajisai"
+      ]
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache."
+    },
+    {
+      "title": "Check collinear blocks",
+      "body": "Use the generated SVG preview to inspect the curved block ribbons between adjacent genomes. Orientation + identity colors separate forward and reverse orientation while retaining identity information.",
+      "media": {
+        "src": "./media/hepatoplasmataceae_collinear/03-collinearity-popup.webp",
+        "alt": "Generated Hepatoplasmataceae collinear diagram with a Collinearity block popup open over the interactive SVG.",
+        "caption": "Click a collinearity ribbon in the interactive SVG to inspect the block ID, orientation, covered orthogroups, and source intervals."
+      }
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "Choose the qualifier by intent",
+      "body": "Use gene for shared gene names, locus_tag or protein_id for individual genes, and product for broader functional categories."
+    },
+    {
+      "title": "Keep value patterns specific",
+      "body": "Specific rule values are treated as matching patterns, so avoid broad words such as protein unless you intentionally want many features to share one color."
+    },
+    {
+      "title": "Use feature clicks to discover qualifiers",
+      "body": "After generation, click a CDS and open the qualifier details before deciding which feature type, qualifier, value, color, and legend caption should become a color rule."
+    },
+    {
+      "title": "Separate feature colors from block colors",
+      "body": "Feature color rules affect genome features. Collinear block colors are controlled by the LOSATP Collinear Color mode and the comparison color settings."
+    }
+  ],
+  "postGenerationEdits": [
+    {
+      "title": "Click a feature",
+      "body": "Feature clicks show the selected feature, qualifiers, sequence details, and color controls. Use this to verify gene, locus_tag, product, and protein_id values."
+    },
+    {
+      "title": "Edit the legend",
+      "body": "Use the legend editor to rename, reorder, or remove feature legend entries after the SVG has been generated."
+    },
+    {
+      "title": "Export the figure",
+      "body": "Download SVG for editable vector output. Use PNG or PDF when you need quick sharing or manuscript draft assets."
+    },
+    {
+      "title": "Save a session",
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, settings, generated output, and post-generation SVG adjustments."
+    }
+  ],
+  "losatTips": [
+    {
+      "title": "Start with Auto execution",
+      "body": "Auto uses threaded LOSAT only when the browser supports it and the workload justifies it."
+    },
+    {
+      "title": "Prefer Safe total threads",
+      "body": "Safe avoids consuming every logical CPU and is the best default when you want the browser to remain responsive."
+    },
+    {
+      "title": "Keep Threads per run on Auto",
+      "body": "Auto lets the app balance parallel pair runs and per-run LOSATP threads from the selected total thread budget."
+    },
+    {
+      "title": "Use Serial when the browser is constrained",
+      "body": "If threaded execution is unavailable or the tab becomes unresponsive, switch Execution to Serial or lower the thread budget."
+    },
+    {
+      "title": "Reuse the cache",
+      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so iterative diagram styling is faster after the first run."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "Threaded LOSAT is unavailable",
+      "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
+    },
+    {
+      "title": "The first run feels slow",
+      "body": "This example runs five genomes through LOSATP in the browser. Wait for the first cache entry before making styling-only changes."
+    },
+    {
+      "title": "The output is cluttered",
+      "body": "Raise Min block genes or identity thresholds to reduce weak blocks, then regenerate."
+    },
+    {
+      "title": "The generated diagram differs from the Gallery image",
+      "body": "Confirm input order, Collinear Color mode, Pairwise match style, Align to Center, Separate Strands, Show GC, and Show skew settings."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#hepatoplasmataceae_collinear"
+    },
+    {
+      "label": "Compare with the orthogroup example",
+      "href": "./#hepatoplasmataceae_orthogroup"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    }
+  ]
+}

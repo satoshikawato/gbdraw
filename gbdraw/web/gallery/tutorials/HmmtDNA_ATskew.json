@@ -1,0 +1,207 @@
+{
+  "id": "HmmtDNA_ATskew",
+  "version": 1,
+  "title": "Reproduce the human mitochondrial AT skew diagram in the web app",
+  "summary": "Build a single-record circular mitochondrial genome diagram with custom circular track slots for GC content, GC skew, AT skew, ticks, labels, and a left legend.",
+  "estimatedTime": "5-10 min after the input is available",
+  "difficulty": "Intermediate",
+  "appMode": "Circular",
+  "primaryWorkflow": "Circular custom track slots with AT skew",
+  "requirements": [
+    "A browser with WebAssembly support.",
+    "The human mitochondrial GenBank flat file listed below.",
+    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+  ],
+  "downloads": [
+    {
+      "label": "NC_012920",
+      "source": "NCBI Nucleotide",
+      "accession": "NC_012920",
+      "targetName": "HmmtDNA.gbk",
+      "note": "Download the complete human mitochondrial genome as a GenBank flat file and save it with this filename if you want to match the Gallery session."
+    }
+  ],
+  "quickReproduce": [
+    {
+      "title": "Download the Gallery session",
+      "body": "Use the Session button in this Gallery entry to save HmmtDNA_ATskew.gbdraw-session.json.",
+      "media": {
+        "src": "./media/HmmtDNA_ATskew/01-gallery-session.webp",
+        "alt": "Gallery header for the human mitochondrial AT skew diagram with the Session action visible.",
+        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
+      }
+    },
+    {
+      "title": "Open the web app",
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+    },
+    {
+      "title": "Inspect the restored custom stack",
+      "body": "The session restores the input GenBank file, circular mode, labels, the left legend, and the explicit circular track stack including the AT skew row."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Circular mode",
+      "body": "Open gbdraw.app and select Circular mode before adding the mitochondrial GenBank input."
+    },
+    {
+      "title": "Upload the GenBank file",
+      "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1.",
+      "items": [
+        "Input type: GenBank",
+        "File: HmmtDNA.gbk",
+        "Output prefix: HmmtDNA_ATskew",
+        "Species: Homo sapiens"
+      ]
+    },
+    {
+      "title": "Set the basic circular layout",
+      "body": "Use the same compact circular defaults as the Gallery figure.",
+      "items": [
+        "Track type: middle",
+        "Legend: left",
+        "Labels: out",
+        "Palette: ajisai",
+        "Definition font size: 28",
+        "Label font size: 20",
+        "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
+      ]
+    },
+    {
+      "title": "Set the dinucleotide calculation window",
+      "body": "Use a short mitochondrial window so GC content, GC skew, and AT skew all show local structure.",
+      "items": [
+        "Dinucleotide: GC",
+        "Window size: 500",
+        "Step size: 50"
+      ]
+    },
+    {
+      "title": "Open Custom Track Slots",
+      "body": "In the circular layout controls, enable Custom Track Slots and reset to the Middle template if you need a clean starting stack.",
+      "items": [
+        "Axis index: 0",
+        "features: Features, on the axis, lane direction split",
+        "gc_content: Dinucleotide content, inside, w 0.1",
+        "gc_skew: Dinucleotide skew, inside, w 0.1"
+      ]
+    },
+    {
+      "title": "Add the AT skew track",
+      "body": "Add another Dinucleotide skew row inside the axis and use it for AT skew rather than the default GC skew.",
+      "items": [
+        "Slot id: a_skew_2",
+        "Renderer: Dinucleotide skew",
+        "Dinucleotide: AT",
+        "Legend label: AT skew",
+        "Width: 0.1",
+        "Positive color: #deaf6e",
+        "Negative color: #7294e3"
+      ],
+      "media": {
+        "src": "./media/HmmtDNA_ATskew/02-atskew-preview.webp",
+        "alt": "Generated circular human mitochondrial diagram with GC content, GC skew, and AT skew rings.",
+        "caption": "The finished diagram adds an AT skew ring inside the standard GC content and GC skew rings."
+      }
+    },
+    {
+      "title": "Add the tick track",
+      "body": "Keep a Ticks row inside the axis so position labels sit inside the tick marks.",
+      "items": [
+        "Slot id: ticks",
+        "Renderer: Ticks",
+        "Tick label layout: label_in_tick_out"
+      ]
+    },
+    {
+      "title": "Prioritize gene labels for CDS features",
+      "body": "Set qualifier priority for CDS labels to gene so compact labels such as ND1, COX1, ATP6, and CYTB are used instead of long product names.",
+      "items": [
+        "Feature type: CDS",
+        "Qualifier order: gene"
+      ]
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The preview should show the labeled mitochondrial feature ring, GC content, GC skew, AT skew, and a left legend that includes AT skew (+) and AT skew (-)."
+    },
+    {
+      "title": "Inspect a feature",
+      "body": "Click a CDS or RNA feature in the interactive SVG to confirm its gene, product, location, and sequence metadata.",
+      "media": {
+        "src": "./media/HmmtDNA_ATskew/03-feature-popup.webp",
+        "alt": "Human mitochondrial AT skew diagram with a feature popup open.",
+        "caption": "Feature clicks are useful for checking that label text came from the intended qualifier."
+      }
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "This example does not need feature color rules",
+      "body": "The main tutorial point is the custom numeric track stack. Feature colors use the ajisai palette defaults."
+    },
+    {
+      "title": "Use gene for compact labels",
+      "body": "For mitochondrial CDS labels, gene is usually more readable than product because product names are long and repetitive."
+    },
+    {
+      "title": "Separate feature colors from skew colors",
+      "body": "Feature color rules affect CDS, rRNA, tRNA, and other genome features. GC skew and AT skew colors are set on the Dinucleotide skew slot rows."
+    },
+    {
+      "title": "Name custom numeric tracks through legend labels",
+      "body": "Use the slot legend label AT skew so the legend shows AT skew (+) and AT skew (-) instead of another generic skew entry."
+    }
+  ],
+  "postGenerationEdits": [
+    {
+      "title": "Click features before changing labels",
+      "body": "Use the feature popup to inspect gene, product, note, and db_xref values before changing qualifier priority or label overrides."
+    },
+    {
+      "title": "Edit the legend",
+      "body": "Use the legend editor to adjust captions or order after generation. Keep both AT skew entries visible because the two colors encode positive and negative skew."
+    },
+    {
+      "title": "Export the figure",
+      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures."
+    },
+    {
+      "title": "Save a session",
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore the input, custom track slots, generated output, and SVG adjustments."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "AT skew is missing from the legend",
+      "body": "Confirm the added slot uses renderer Dinucleotide skew, dinucleotide AT, and legend label AT skew."
+    },
+    {
+      "title": "The skew rings overlap labels or ticks",
+      "body": "Confirm Custom Track Slots are enabled, reset to Middle if needed, and keep GC content, GC skew, AT skew, and ticks inside the axis."
+    },
+    {
+      "title": "Labels show long product names",
+      "body": "Confirm the CDS qualifier priority rule uses gene before regenerating the diagram."
+    },
+    {
+      "title": "The generated diagram differs from the Gallery image",
+      "body": "Confirm input record NC_012920.1, track type middle, labels out, legend left, window 500, step 50, AT skew colors, and the tick label layout."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#HmmtDNA_ATskew"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    },
+    {
+      "label": "Read the advanced customization tutorial",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md"
+    }
+  ]
+}

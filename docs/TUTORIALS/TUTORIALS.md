@@ -15,6 +15,7 @@ Step-by-step guides for the main `gbdraw` workflows.
 
 ## Related Pages
 
+- [Web app gallery tutorials](https://gbdraw.app/gallery/): reproduce selected hosted Gallery figures through the web interface. Start with the Hepatoplasmataceae collinear, Hepatoplasmataceae orthogroup, aminoglycoside BGC, or human mitochondrial AT skew entries and open the Tutorial tab.
 - [Recipes](../RECIPES.md)
 - [CLI Reference](../CLI_Reference.md)
 - [Gallery](../GALLERY.md)

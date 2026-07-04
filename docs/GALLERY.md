@@ -2,7 +2,7 @@
 # Gallery
 This gallery showcases representative `gbdraw` outputs and the commands used to generate them. For shorter copy-paste examples, see [Recipes](./RECIPES.md).
 
-Interactive SVG versions of selected examples are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub previews static SVG images, so use the public gallery when you want to inspect JavaScript-enabled standalone SVG output.
+Interactive SVG versions of selected examples are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub previews static SVG images, so use the public gallery when you want to inspect JavaScript-enabled standalone SVG output. Selected Gallery entries also include a Tutorial tab for reproducing the same figure in the web app.
 
 The interactive Gallery assets are hosted online and are not bundled with local `gbdraw` installs. Running `gbdraw gui` locally still keeps genome analysis on your own machine.
 
@@ -14,6 +14,14 @@ For circular examples, `--track_type` names the simple-layout preset. Custom Tra
 Interactive SVG session output: [https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018)
 
 This circular multi-record session uses a saved hosted Gallery session and interactive SVG output.
+
+#### Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.
+
+Interactive SVG session output: [https://gbdraw.app/gallery/#BGC0000708-BGC0000713](https://gbdraw.app/gallery/#BGC0000708-BGC0000713)
+
+Web tutorial: open the [BGC Gallery entry](https://gbdraw.app/gallery/#BGC0000708-BGC0000713) and select the Tutorial tab.
+
+This linear web tutorial covers browser LOSATP orthogroups, antiSMASH `gene_kind` color rules, rotated first-record labels, feature clicks, orthogroup popups, legend editing, and session export.
 
 #### Majaniviruses Multi-Genome Comparison
 
@@ -73,6 +81,8 @@ gbdraw linear \
 
 Interactive SVG session outputs: [collinear](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear), [orthogroup](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup)
 
+Web tutorials: open the [collinear Gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) or [orthogroup Gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and select the Tutorial tab.
+
 <details><summary>Expand to see the script</summary>
 
 ```bash
@@ -102,6 +112,12 @@ AP027132_NZ_CP006932.tblastx.out \
 ![hepatoplasmataceae_default.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae_default.svg)
 
 #### Human mitochondrial genome (feature qualifier priority)
+
+Interactive SVG session output: [https://gbdraw.app/gallery/#HmmtDNA_ATskew](https://gbdraw.app/gallery/#HmmtDNA_ATskew)
+
+Web tutorial: open the [human mitochondrial AT skew Gallery entry](https://gbdraw.app/gallery/#HmmtDNA_ATskew) and select the Tutorial tab.
+
+This circular web tutorial covers Custom Track Slots, an added AT skew dinucleotide track, gene-based CDS labels, feature clicks, legend editing, and session export.
 
 <details><summary>Expand to see the script</summary>
 

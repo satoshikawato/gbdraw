@@ -1,0 +1,239 @@
+{
+  "id": "hepatoplasmataceae_orthogroup",
+  "version": 1,
+  "title": "Reproduce the Hepatoplasmataceae orthogroup comparison in the web app",
+  "summary": "Build the five-genome Hepatoplasmataceae linear comparison with browser LOSATP orthogroup matching.",
+  "estimatedTime": "10-20 min after inputs are available",
+  "difficulty": "Advanced",
+  "appMode": "Linear",
+  "primaryWorkflow": "LOSATP orthogroups",
+  "requirements": [
+    "A browser with WebAssembly support.",
+    "Enough available memory for five bacterial GenBank records and LOSATP output.",
+    "The five GenBank flat files listed below.",
+    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+  ],
+  "downloads": [
+    {
+      "label": "AP027078",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027078",
+      "targetName": "AP027078.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    },
+    {
+      "label": "AP027131",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027131",
+      "targetName": "AP027131.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    },
+    {
+      "label": "AP027133",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027133",
+      "targetName": "AP027133.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    },
+    {
+      "label": "AP027132",
+      "source": "NCBI Nucleotide",
+      "accession": "AP027132",
+      "targetName": "AP027132.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    },
+    {
+      "label": "NZ_CP006932",
+      "source": "NCBI Nucleotide",
+      "accession": "NZ_CP006932",
+      "targetName": "NZ_CP006932.gb",
+      "note": "Download the complete record as a GenBank flat file."
+    }
+  ],
+  "quickReproduce": [
+    {
+      "title": "Download the Gallery session",
+      "body": "Use the Session button in this Gallery entry to save hepatoplasmataceae_orthogroup.gbdraw-session.json.",
+      "media": {
+        "src": "./media/hepatoplasmataceae_orthogroup/01-gallery-session.webp",
+        "alt": "Gallery header for the Hepatoplasmataceae orthogroup comparison with the Session action visible.",
+        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
+      }
+    },
+    {
+      "title": "Open the web app",
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+    },
+    {
+      "title": "Compare with the collinear session",
+      "body": "Use the collinear Gallery entry when you want gene-order-preserving block reduction. Use this orthogroup entry when you want individual orthogroup-backed protein matches."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Linear mode",
+      "body": "Open gbdraw.app and select Linear mode before adding inputs."
+    },
+    {
+      "title": "Upload the five GenBank files",
+      "body": "Keep the records in the same order as the Gallery command so adjacent comparison tracks match the published example.",
+      "items": [
+        "AP027078.gb",
+        "AP027131.gb",
+        "AP027133.gb",
+        "AP027132.gb",
+        "NZ_CP006932.gb"
+      ]
+    },
+    {
+      "title": "Use browser LOSAT",
+      "body": "In Pairwise Comparisons, choose Run LOSAT. Set LOSAT Mode to LOSATP and set blastp mode to Orthogroups.",
+      "items": [
+        "Execution: Auto",
+        "Total threads: Safe",
+        "Parallel runs: Auto",
+        "Threads per run: Auto for normal use, or 32 when you need to mirror the saved CLI command"
+      ]
+    },
+    {
+      "title": "Keep orthogroup matching enabled",
+      "body": "Use Orthogroups when you want each ribbon to represent an orthogroup-backed protein relationship rather than a merged collinear block.",
+      "items": [
+        "blastp mode: Orthogroups",
+        "Membership mode: Anchor core v1",
+        "Max hits: 5",
+        "Pairwise evidence: adjacent genome pairs"
+      ],
+      "note": "The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks."
+    },
+    {
+      "title": "Set the diagram layout",
+      "body": "Use the layout and track options that match the Gallery session.",
+      "items": [
+        "Align to Center: on",
+        "Separate Strands: on",
+        "Scale Style: ruler",
+        "Show GC: on",
+        "Show skew: on",
+        "Pairwise match style: curve",
+        "Palette: ajisai"
+      ]
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache."
+    },
+    {
+      "title": "Inspect the orthogroup overview",
+      "body": "The generated preview should show many individual green pairwise ribbons instead of the larger orientation-colored collinear blocks.",
+      "media": {
+        "src": "./media/hepatoplasmataceae_orthogroup/02-orthogroup-preview.webp",
+        "alt": "Generated Hepatoplasmataceae orthogroup comparison in the Gallery preview.",
+        "caption": "Orthogroup mode keeps individual orthogroup-backed match ribbons visible between adjacent genomes."
+      }
+    },
+    {
+      "title": "Open an orthogroup match popup",
+      "body": "Click a pairwise ribbon in the interactive SVG to inspect the orthogroup ID, display name, member count, record coverage, and member table.",
+      "media": {
+        "src": "./media/hepatoplasmataceae_orthogroup/03-orthogroup-popup.webp",
+        "alt": "Hepatoplasmataceae orthogroup comparison with an orthogroup match popup open.",
+        "caption": "The pairwise match popup exposes the orthogroup metadata and member table used to interpret a ribbon."
+      }
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "This example uses default feature colors",
+      "body": "The main visual signal is the orthogroup ribbon identity gradient, while genome features use the ajisai palette defaults."
+    },
+    {
+      "title": "Choose feature rules separately from orthogroups",
+      "body": "Feature color rules affect CDS, rRNA, tRNA, and other genome features. Orthogroup ribbon colors come from pairwise match identity and comparison style settings."
+    },
+    {
+      "title": "Use feature clicks to discover qualifiers",
+      "body": "After generation, click a CDS and inspect gene, locus_tag, product, protein_id, and orthogroup values before adding a specific feature color rule."
+    },
+    {
+      "title": "Keep value patterns specific",
+      "body": "Specific rule values are treated as matching patterns, so avoid broad words such as protein unless you intentionally want many features to share one color."
+    }
+  ],
+  "postGenerationEdits": [
+    {
+      "title": "Click a pairwise ribbon",
+      "body": "Use the pairwise match popup to confirm the orthogroup ID, member count, record coverage, identity, and linked query and subject features."
+    },
+    {
+      "title": "Click a CDS feature",
+      "body": "Feature clicks show qualifiers, sequences, and orthogroup membership details. This is useful when you need to decide whether to add feature-specific colors."
+    },
+    {
+      "title": "Edit the legend",
+      "body": "Use the legend editor to rename, reorder, or remove feature legend entries after the SVG has been generated."
+    },
+    {
+      "title": "Export the figure",
+      "body": "Download SVG for editable vector output. Use PNG or PDF when you need quick sharing or manuscript draft assets."
+    },
+    {
+      "title": "Save a session",
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, settings, generated output, and post-generation SVG adjustments."
+    }
+  ],
+  "losatTips": [
+    {
+      "title": "Start with Auto execution",
+      "body": "Auto uses threaded LOSAT only when the browser supports it and the workload justifies it."
+    },
+    {
+      "title": "Prefer Safe total threads",
+      "body": "Safe avoids consuming every logical CPU and is the best default when you want the browser to remain responsive."
+    },
+    {
+      "title": "Keep Threads per run on Auto",
+      "body": "Auto lets the app balance parallel pair runs and per-run LOSATP threads from the selected total thread budget."
+    },
+    {
+      "title": "Use Serial when the browser is constrained",
+      "body": "If threaded execution is unavailable or the tab becomes unresponsive, switch Execution to Serial or lower the thread budget."
+    },
+    {
+      "title": "Reuse the cache",
+      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so iterative diagram styling is faster after the first run."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "Threaded LOSAT is unavailable",
+      "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
+    },
+    {
+      "title": "The first run feels slow",
+      "body": "This example runs five genomes through LOSATP in the browser. Wait for the first cache entry before making styling-only changes."
+    },
+    {
+      "title": "The output is too dense",
+      "body": "Raise identity, bitscore, or match length thresholds, reduce Max hits, or use the collinear tutorial when you want larger block-level summaries."
+    },
+    {
+      "title": "The generated diagram differs from the Gallery image",
+      "body": "Confirm input order, blastp mode Orthogroups, Pairwise match style, Align to Center, Separate Strands, Show GC, and Show skew settings."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#hepatoplasmataceae_orthogroup"
+    },
+    {
+      "label": "Compare with the collinear example",
+      "href": "./#hepatoplasmataceae_collinear"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    }
+  ]
+}

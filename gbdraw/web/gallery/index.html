@@ -48,29 +48,52 @@
                 </div>
             </div>
 
-            <div class="frame-wrap">
-                <div id="frame-loading" class="frame-loading" role="status">Loading selected SVG...</div>
-                <iframe
-                    id="demo-frame"
-                    class="demo-frame"
-                    sandbox="allow-scripts"
-                    title="Interactive gbdraw SVG demo">
-                </iframe>
+            <div class="tab-bar" role="tablist" aria-label="Selected sample views">
+                <button id="preview-tab" class="tab-button" type="button" role="tab" aria-selected="true" aria-controls="preview-panel" data-gallery-tab="preview">Preview</button>
+                <button id="tutorial-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tutorial-panel" data-gallery-tab="tutorial">Tutorial</button>
+                <button id="command-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="command-panel" data-gallery-tab="command">Command</button>
+                <button id="files-tab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="files-panel" data-gallery-tab="files">Files</button>
             </div>
 
-            <div class="command-panel">
+            <section id="preview-panel" class="tab-panel" role="tabpanel" aria-labelledby="preview-tab">
+                <div class="frame-wrap">
+                    <div id="frame-loading" class="frame-loading" role="status">Loading selected SVG...</div>
+                    <iframe
+                        id="demo-frame"
+                        class="demo-frame"
+                        sandbox="allow-scripts"
+                        title="Interactive gbdraw SVG demo">
+                    </iframe>
+                </div>
+
+                <div class="notes-panel">
+                    <p>GitHub-rendered documentation shows static previews only. This page embeds the JavaScript-enabled SVG artifacts in sandboxed iframes.</p>
+                    <a href="https://github.com/satoshikawato/gbdraw/blob/main/docs/GALLERY.md">Command-focused examples in docs/GALLERY.md</a>
+                </div>
+            </section>
+
+            <section id="tutorial-panel" class="tab-panel tutorial-panel" role="tabpanel" aria-labelledby="tutorial-tab" hidden>
+                <div id="tutorial-content" class="tutorial-content">
+                    <p class="panel-status">Select a sample to load its tutorial.</p>
+                </div>
+            </section>
+
+            <section id="command-panel" class="tab-panel command-panel" role="tabpanel" aria-labelledby="command-tab" hidden>
                 <div class="command-panel__heading">
                     <h2>Command</h2>
                     <span id="file-size" class="file-size"></span>
                 </div>
                 <pre id="command-block"><code></code></pre>
                 <p id="interactive-step" class="interactive-step"></p>
-            </div>
+            </section>
 
-            <div class="notes-panel">
-                <p>GitHub-rendered documentation shows static previews only. This page embeds the JavaScript-enabled SVG artifacts in sandboxed iframes.</p>
-                <a href="https://github.com/satoshikawato/gbdraw/blob/main/docs/GALLERY.md">Command-focused examples in docs/GALLERY.md</a>
-            </div>
+            <section id="files-panel" class="tab-panel files-panel" role="tabpanel" aria-labelledby="files-tab" hidden>
+                <div class="files-panel__heading">
+                    <h2>Files</h2>
+                    <span id="files-summary" class="file-size"></span>
+                </div>
+                <div id="files-content" class="files-content"></div>
+            </section>
         </section>
     </main>
 

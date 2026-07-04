@@ -1,0 +1,261 @@
+{
+  "id": "BGC0000708-BGC0000713",
+  "version": 1,
+  "title": "Reproduce the aminoglycoside BGC comparison in the web app",
+  "summary": "Build a five-cluster linear comparison with browser LOSATP orthogroups, antiSMASH gene-kind color rules, rotated labels, and a bottom legend.",
+  "estimatedTime": "10-20 min after inputs are available",
+  "difficulty": "Advanced",
+  "appMode": "Linear",
+  "primaryWorkflow": "LOSATP orthogroups with feature color rules",
+  "requirements": [
+    "A browser with WebAssembly support.",
+    "The five MIBiG GenBank flat files listed below.",
+    "GenBank features that retain antiSMASH qualifiers such as gene_kind.",
+    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+  ],
+  "downloads": [
+    {
+      "label": "BGC0000708",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000708.gbk",
+      "note": "Download the lividomycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "BGC0000709",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000709.gbk",
+      "note": "Download the neomycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "BGC0000711",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000711.gbk",
+      "note": "Download the second neomycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "BGC0000712",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000712.gbk",
+      "note": "Download the paromomycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "BGC0000713",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000713.gbk",
+      "note": "Download the ribostamycin biosynthetic gene cluster as GenBank."
+    }
+  ],
+  "quickReproduce": [
+    {
+      "title": "Download the Gallery session",
+      "body": "Use the Session button in this Gallery entry to save BGC0000708-BGC0000713.gbdraw-session.json.",
+      "media": {
+        "src": "./media/BGC0000708-BGC0000713/01-gallery-session.webp",
+        "alt": "Gallery header for the aminoglycoside biosynthetic gene cluster comparison with the Session action visible.",
+        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
+      }
+    },
+    {
+      "title": "Open the web app",
+      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls."
+    },
+    {
+      "title": "Inspect the restored settings",
+      "body": "The session restores the input files, LOSATP cache, orthogroup settings, record labels, color rules, rotated labels, legend position, and generated SVG state."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Linear mode",
+      "body": "Open gbdraw.app and select Linear mode before adding inputs."
+    },
+    {
+      "title": "Upload the five GenBank files",
+      "body": "Keep the records in the same order as the Gallery command so adjacent orthogroup tracks and labels match the saved example.",
+      "items": [
+        "BGC0000708.gbk",
+        "BGC0000709.gbk",
+        "BGC0000711.gbk",
+        "BGC0000712.gbk",
+        "BGC0000713.gbk"
+      ]
+    },
+    {
+      "title": "Configure browser LOSAT",
+      "body": "In Pairwise Comparisons, choose Run LOSAT. Use LOSATP with blastp mode Orthogroups.",
+      "items": [
+        "Execution: Auto",
+        "Total threads: Safe",
+        "Threads per run: Auto",
+        "protein blastp max hits: 5",
+        "Identity: 30",
+        "Bitscore: 50",
+        "E-value: 1e-2"
+      ],
+      "note": "This example compares protein-coding genes across related biosynthetic gene clusters, so orthogroup-backed blastp matches are the useful comparison signal."
+    },
+    {
+      "title": "Align the shared core",
+      "body": "Use orthogroup alignment around og_1 and reverse-complement BGC0000713 so the conserved biosynthetic core is visually comparable across all five rows.",
+      "items": [
+        "Align orthogroup feature: og_1",
+        "Reverse complement: BGC0000713 only",
+        "Track layout: middle",
+        "Pairwise match style: curve"
+      ]
+    },
+    {
+      "title": "Set labels and figure layout",
+      "body": "Use the saved session values for a compact manuscript-style comparison.",
+      "items": [
+        "Show labels: first record",
+        "Label placement: above feature",
+        "Label rotation: 45",
+        "Scale style: ruler",
+        "Ruler on axis: on",
+        "Legend: bottom",
+        "Keep definitions left aligned: on"
+      ]
+    },
+    {
+      "title": "Add the plot title and record text",
+      "body": "Set the plot title to Aminoglycoside biosynthetic gene clusters from Streptomyces spp. Use species-level record labels and cluster subtitles when you want the web output to match the Gallery session exactly."
+    },
+    {
+      "title": "Add feature color rules",
+      "body": "Create four CDS rules from the antiSMASH gene_kind qualifier before generating the final figure.",
+      "items": [
+        "CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes",
+        "CDS / gene_kind / biosynthetic-additional / #f787a9 / Additional biosynthetic genes",
+        "CDS / gene_kind / transport / #577edb / Transport-related genes",
+        "CDS / gene_kind / regulatory / #57b767 / Regulatory genes"
+      ],
+      "note": "Use biosynthetic$ for the core category so it does not also catch biosynthetic-additional."
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The generated preview should show five BGC rows, blue orthogroup ribbons, rotated first-record labels, and a bottom legend.",
+      "media": {
+        "src": "./media/BGC0000708-BGC0000713/02-bgc-preview.webp",
+        "alt": "Generated aminoglycoside biosynthetic gene cluster comparison in the Gallery preview.",
+        "caption": "The finished web figure combines antiSMASH gene-kind feature colors with orthogroup identity ribbons."
+      }
+    },
+    {
+      "title": "Inspect an orthogroup ribbon",
+      "body": "Click a pairwise match ribbon to inspect the orthogroup ID, member count, record coverage, and member table.",
+      "media": {
+        "src": "./media/BGC0000708-BGC0000713/03-orthogroup-popup.webp",
+        "alt": "Aminoglycoside BGC comparison with an orthogroup match popup open.",
+        "caption": "The orthogroup popup is the quickest way to confirm which proteins support a pairwise ribbon."
+      }
+    },
+    {
+      "title": "Inspect a colored feature",
+      "body": "Click a CDS feature to confirm its label, product, orthogroup membership, and qualifier values before deciding whether to refine a color rule.",
+      "media": {
+        "src": "./media/BGC0000708-BGC0000713/04-feature-popup.webp",
+        "alt": "Aminoglycoside BGC comparison with a CDS feature popup open.",
+        "caption": "Feature clicks expose the metadata behind labels and color-rule decisions."
+      }
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "Use gene_kind for antiSMASH categories",
+      "body": "These BGC records carry antiSMASH gene_kind qualifiers, which are more reliable for core, additional, transport, and regulatory categories than broad product text."
+    },
+    {
+      "title": "Use gene for label text",
+      "body": "Set the CDS qualifier priority to gene so rotated labels use concise gene names when available."
+    },
+    {
+      "title": "Keep regex values specific",
+      "body": "Specific rule values are matching patterns. Use biosynthetic$ for core biosynthetic genes and a separate biosynthetic-additional rule for the additional category."
+    },
+    {
+      "title": "Use product only as a fallback",
+      "body": "When gene_kind is absent, product can group functional categories, but terms such as protein, enzyme, or transporter may match more features than intended."
+    },
+    {
+      "title": "Let the legend caption explain the biology",
+      "body": "Use captions such as Core biosynthetic genes and Transport-related genes instead of raw qualifier values."
+    }
+  ],
+  "postGenerationEdits": [
+    {
+      "title": "Click features before changing colors",
+      "body": "Use the feature popup to inspect gene, product, note, gene_kind, and orthogroup metadata. Then add or edit a rule only when the qualifier and value are specific enough."
+    },
+    {
+      "title": "Edit the legend",
+      "body": "Use the legend editor to adjust captions or ordering after generation. Keep the pairwise match identity legend visible because ribbon color encodes identity."
+    },
+    {
+      "title": "Export the figure",
+      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures."
+    },
+    {
+      "title": "Save a session",
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSATP cache, settings, generated output, and SVG adjustments."
+    }
+  ],
+  "losatTips": [
+    {
+      "title": "Start with Auto execution",
+      "body": "Auto uses threaded LOSAT only when the browser supports it and the workload justifies it."
+    },
+    {
+      "title": "Prefer Safe total threads",
+      "body": "Safe avoids consuming every logical CPU and is the best default for keeping the browser responsive."
+    },
+    {
+      "title": "Use orthogroups for protein-level BGC comparison",
+      "body": "Orthogroup mode keeps related proteins linked even when local gene order differs across clusters."
+    },
+    {
+      "title": "Tune Max hits and identity together",
+      "body": "Lower Max hits or raise identity when the figure has too many weak ribbons; raise Max hits only when expected homologs are missing."
+    },
+    {
+      "title": "Reuse the cache",
+      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so label, color, and legend changes should be faster after the first run."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "The rows do not line up like the Gallery figure",
+      "body": "Confirm the input order, Align orthogroup feature og_1, and reverse-complement setting for BGC0000713."
+    },
+    {
+      "title": "Core genes are not red",
+      "body": "Confirm the input GenBank files include gene_kind qualifiers and that the core rule uses biosynthetic$."
+    },
+    {
+      "title": "Labels are missing or too dense",
+      "body": "Use Show labels: first record, label placement above feature, and 45 degree label rotation. If needed, reduce labels by tightening the label filter."
+    },
+    {
+      "title": "Threaded LOSAT is unavailable",
+      "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
+    },
+    {
+      "title": "The generated diagram differs from the Gallery image",
+      "body": "Confirm orthogroup mode, identity and bitscore thresholds, max hits, track layout, legend position, label rotation, color rules, and record orientation."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#BGC0000708-BGC0000713"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    },
+    {
+      "label": "Compare with the Hepatoplasmataceae orthogroup example",
+      "href": "./#hepatoplasmataceae_orthogroup"
+    }
+  ]
+}
