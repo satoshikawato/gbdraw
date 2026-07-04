@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Gallery Screenshot Maintenance"
+  short_description: "Audit and recapture Gallery tutorial screenshots"
+  default_prompt: "Use $web-gallery-screenshot-maintenance to audit and replace inaccurate gbdraw Web Gallery tutorial screenshots."

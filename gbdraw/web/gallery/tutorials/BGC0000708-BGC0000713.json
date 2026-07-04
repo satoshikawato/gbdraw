@@ -45,73 +45,15 @@
       "note": "Download the ribostamycin biosynthetic gene cluster as GenBank."
     }
   ],
-  "quickReproduce": [
-    {
-      "title": "Download the Gallery session",
-      "body": "Use the Session button in this Gallery entry to save BGC0000708-BGC0000713.gbdraw-session.json.",
-      "media": {
-        "src": "./media/BGC0000708-BGC0000713/01-gallery-session.webp",
-        "alt": "Gallery header for the aminoglycoside biosynthetic gene cluster comparison with the Session action visible.",
-        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
-      },
-      "operations": [
-        {
-          "title": "Session button for this Gallery entry",
-          "body": "Use the rendered Gallery action toolbar and click Session.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/quick-01-01-download-session.webp",
-            "alt": "Actual aminoglycoside BGC tutorial Gallery .viewer-actions toolbar with the Session action visible.",
-            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Open the web app",
-      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls.",
-      "operations": [
-        {
-          "title": "Header session controls",
-          "body": "Use the rendered web app header toolbar and click Load Session.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/quick-02-01-open-session-controls.webp",
-            "alt": "Actual Linear web app header toolbar with Load Session, Save Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows the Load Session control in its real header-toolbar context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Inspect the restored settings",
-      "body": "The session restores the input files, LOSATP cache, orthogroup settings, record labels, color rules, rotated labels, legend position, and generated SVG state.",
-      "operations": [
-        {
-          "title": "Restored BGC settings summary",
-          "body": "Use the rendered Restored BGC settings summary with Pairwise and color settings.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/quick-03-01-restored-settings.webp",
-            "alt": "Actual aminoglycoside BGC tutorial UI showing Restored BGC settings summary with Pairwise and color settings.",
-            "caption": "The rendered web app crop shows Restored BGC settings summary; Pairwise and color settings."
-          }
-        }
-      ]
-    }
-  ],
   "manualSteps": [
     {
       "title": "Switch to Linear mode",
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
-      "operations": [
-        {
-          "title": "Mode segmented control",
-          "body": "Select Linear in the rendered mode segmented control.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
-            "alt": "Actual aminoglycoside BGC tutorial UI showing Mode segmented control with Linear selected.",
-            "caption": "Select Linear in the rendered mode segmented control."
-          }
-        }
-      ]
+      "media": {
+        "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
+        "alt": "Web app header mode segmented control with Linear selected.",
+        "caption": "Select Linear in the mode segmented control before adding inputs."
+      }
     },
     {
       "title": "Upload the five GenBank files",
@@ -160,11 +102,30 @@
         },
         {
           "title": "LOSATP orthogroups mode",
-          "body": "Use the rendered LOSATP orthogroups mode with Orthogroups selected.",
+          "body": "Open the blastp mode selector and choose Orthogroups.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
-            "alt": "Actual LOSATP blastp mode control with Orthogroups selected.",
-            "caption": "Use the blastp mode selector in the LOSAT settings panel and choose Orthogroups."
+            "alt": "LOSAT Settings panel with the blastp mode menu open and the Orthogroups option highlighted.",
+            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Orthogroups option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 80,
+              "right": 80,
+              "bottom": 66,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Orthogroups",
+              "options": [
+                "Orthogroups",
+                "Collinear blocks",
+                "Pairwise"
+              ],
+              "label": "blastp mode"
+            }
           }
         },
         {
@@ -208,20 +169,63 @@
         },
         {
           "title": "Track layout selector",
-          "body": "Use the rendered Track Layout selector with Middle selected.",
+          "body": "Open the Track Layout selector and choose Middle.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-03-track-layout-middle.webp",
-            "alt": "Actual Linear Layout card with the Track Layout selector set to Middle.",
-            "caption": "Set Track Layout to Middle from the rendered Layout card."
+            "alt": "Linear Layout card with the Track Layout menu open and the Middle option highlighted.",
+            "caption": "Open Track Layout in the Layout card and choose the highlighted Middle option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Middle",
+              "options": [
+                "Above",
+                "Middle",
+                "Below"
+              ],
+              "label": "Track Layout"
+            },
+            "openDetails": [
+              "Layout"
+            ]
           }
         },
         {
           "title": "Pairwise match style selector",
-          "body": "Use the rendered Pairwise Match Style selector with Curve selected.",
+          "body": "Open the Pairwise Match Style selector and choose Curve.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-04-pairwise-style-curve.webp",
-            "alt": "Actual Pairwise Match card with Pairwise Match Style set to Curve.",
-            "caption": "Set Pairwise Match Style to Curve from the Pairwise Match card."
+            "alt": "Pairwise Match card with the Pairwise Match Style menu open and the Curve option highlighted.",
+            "caption": "Open Pairwise Match Style in the Pairwise Match card and choose the highlighted Curve option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Curve",
+              "options": [
+                "Ribbon",
+                "Curve"
+              ],
+              "label": "Pairwise Match Style"
+            },
+            "openDetails": [
+              "Pairwise Match"
+            ]
           }
         }
       ]
@@ -240,12 +244,98 @@
       ],
       "operations": [
         {
-          "title": "Label and ruler layout controls",
-          "body": "Use the rendered Label and ruler layout controls with first-record labels, ruler, legend bottom.",
+          "title": "Show labels selector",
+          "body": "Open Show Labels and choose First Record Only.",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-05-01-label-layout.webp",
-            "alt": "Actual aminoglycoside BGC tutorial UI showing Label and ruler layout controls with first-record labels, ruler, legend bottom.",
-            "caption": "The rendered web app crop shows Label and ruler layout controls; First-record labels, ruler, legend bottom."
+            "src": "./media/BGC0000708-BGC0000713/manual-05-01-show-labels-first.webp",
+            "alt": "Labels card with the Show Labels menu open and the First Record Only option highlighted.",
+            "caption": "Open Show Labels in the Labels card and choose the highlighted First Record Only option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "First Record Only",
+              "options": [
+                "None",
+                "All Records",
+                "First Record Only",
+                "Top Orthogroup Record"
+              ],
+              "label": "Show Labels"
+            },
+            "openDetails": [
+              "Labels"
+            ]
+          }
+        },
+        {
+          "title": "Scale style selector",
+          "body": "Open Scale Style and choose Ruler.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-05-02-scale-style-ruler.webp",
+            "alt": "Axis and Scale card with the Scale Style menu open and the Ruler option highlighted.",
+            "caption": "Open Scale Style in the Axis & Scale card and choose the highlighted Ruler option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Ruler (Ticks)",
+              "options": [
+                "Bar (Simple)",
+                "Ruler (Ticks)"
+              ],
+              "label": "Scale Style"
+            },
+            "openDetails": [
+              "Axis & Scale"
+            ]
+          }
+        },
+        {
+          "title": "Legend position selector",
+          "body": "Open Legend Position and choose Bottom.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-05-03-legend-position-bottom.webp",
+            "alt": "Title and Legend card with the Legend Position menu open and the Bottom option highlighted.",
+            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Bottom option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Bottom",
+              "options": [
+                "Right",
+                "Left",
+                "Top",
+                "Bottom",
+                "None"
+              ],
+              "label": "Legend Position"
+            },
+            "openDetails": [
+              "Title & Legend"
+            ]
           }
         }
       ]

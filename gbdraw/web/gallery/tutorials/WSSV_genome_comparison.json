@@ -142,58 +142,6 @@
       "note": "Prepare the complete comparison genome sequence as FASTA."
     }
   ],
-  "quickReproduce": [
-    {
-      "title": "Download the Gallery session",
-      "body": "Use the Session button in this Gallery entry to save WSSV_genome_comparison.gbdraw-session.json.",
-      "media": {
-        "src": "./media/WSSV_genome_comparison/01-gallery-session.webp",
-        "alt": "Gallery header for the WSSV circular conservation ring comparison with the Session action visible.",
-        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
-      },
-      "operations": [
-        {
-          "title": "Session button for this Gallery entry",
-          "body": "Use the rendered Gallery action toolbar and click Session.",
-          "media": {
-            "src": "./media/WSSV_genome_comparison/quick-01-01-download-session.webp",
-            "alt": "Actual WSSV conservation tutorial Gallery .viewer-actions toolbar with the Session action visible.",
-            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Open the web app",
-      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls.",
-      "operations": [
-        {
-          "title": "Header session controls",
-          "body": "Use the rendered web app header toolbar and click Load Session.",
-          "media": {
-            "src": "./media/WSSV_genome_comparison/quick-02-01-open-session-controls.webp",
-            "alt": "Actual Circular web app header toolbar with Load Session, Save Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows the Load Session control in its real header-toolbar context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Inspect the restored conservation stack",
-      "body": "The session restores the AP027280 GenBank input, comparison FASTA files, cached LOSAT results, conservation series labels and colors, the circular layout, and the generated interactive SVG.",
-      "operations": [
-        {
-          "title": "Restored conservation stack",
-          "body": "Inspect the generated preview with preview viewport.",
-          "media": {
-            "src": "./media/WSSV_genome_comparison/quick-03-01-restored-conservation-stack.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Restored conservation stack with preview viewport.",
-            "caption": "The generated preview crop shows preview viewport."
-          }
-        }
-      ]
-    }
-  ],
   "manualSteps": [
     {
       "title": "Switch to Circular mode",
@@ -247,12 +195,67 @@
       ],
       "operations": [
         {
-          "title": "Basic circular layout controls",
-          "body": "Use the rendered Basic circular layout controls with spreadout, legend left, suppress GC/skew.",
+          "title": "Track preset selector",
+          "body": "Open Track Preset and choose Spreadout.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-03-01-basic-circular-layout.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Basic circular layout controls with spreadout, legend left, suppress GC/skew.",
-            "caption": "The rendered web app crop shows Basic circular layout controls; Spreadout, legend left, suppress GC/skew."
+            "alt": "Layout card with the Track Preset menu open and the Spreadout option highlighted.",
+            "caption": "Open Track Preset in the Layout card and choose the highlighted Spreadout option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Spreadout",
+              "options": [
+                "Tuckin",
+                "Middle",
+                "Spreadout"
+              ],
+              "label": "Track Preset"
+            },
+            "openDetails": [
+              "Layout"
+            ]
+          }
+        },
+        {
+          "title": "Legend position selector",
+          "body": "Open Legend Position and choose Left.",
+          "media": {
+            "src": "./media/WSSV_genome_comparison/manual-03-02-legend-position-left.webp",
+            "alt": "Title and Legend card with the Legend Position menu open and the Left option highlighted.",
+            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Left option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Left",
+              "options": [
+                "Right",
+                "Left",
+                "Top",
+                "Bottom",
+                "None"
+              ],
+              "label": "Legend Position"
+            },
+            "openDetails": [
+              "Title & Legend"
+            ]
           }
         }
       ]

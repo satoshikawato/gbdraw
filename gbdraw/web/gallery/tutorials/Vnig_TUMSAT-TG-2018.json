@@ -22,58 +22,6 @@
       "note": "Download the RefSeq genomic GBFF. The Gallery session uses six records from this file: NZ_AP024087.1 through NZ_AP024092.1."
     }
   ],
-  "quickReproduce": [
-    {
-      "title": "Download the Gallery session",
-      "body": "Use the Session button in this Gallery entry to save Vnig_TUMSAT-TG-2018.gbdraw-session.json.",
-      "media": {
-        "src": "./media/Vnig_TUMSAT-TG-2018/01-gallery-session.webp",
-        "alt": "Gallery header for the Vibrio nigripulchritudo multi-record circular genome with the Session action visible.",
-        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
-      },
-      "operations": [
-        {
-          "title": "Session button for this Gallery entry",
-          "body": "Use the rendered Gallery action toolbar and click Session.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/quick-01-01-download-session.webp",
-            "alt": "Actual Vibrio multi-record tutorial Gallery .viewer-actions toolbar with the Session action visible.",
-            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Open the web app",
-      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls.",
-      "operations": [
-        {
-          "title": "Header session controls",
-          "body": "Use the rendered web app header toolbar and click Load Session.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/quick-02-01-open-session-controls.webp",
-            "alt": "Actual Circular web app header toolbar with Load Session, Save Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows the Load Session control in its real header-toolbar context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Inspect the restored multi-record layout",
-      "body": "The session restores the GBFF input, circular mode, six-record canvas, automatic size scaling, row placement, title, legend, and generated interactive SVG.",
-      "operations": [
-        {
-          "title": "Restored multi-record layout",
-          "body": "Inspect the generated preview with preview viewport.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/quick-03-01-restored-multirecord-layout.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Restored multi-record layout with preview viewport.",
-            "caption": "The generated preview crop shows preview viewport."
-          }
-        }
-      ]
-    }
-  ],
   "manualSteps": [
     {
       "title": "Switch to Circular mode",
@@ -135,12 +83,84 @@
       ],
       "operations": [
         {
-          "title": "Basic circular layout controls",
-          "body": "Use the rendered Basic circular layout controls with tuckin, orchid, strands, legend.",
+          "title": "Palette selector",
+          "body": "Open the default color palette selector and choose orchid.",
           "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-01-basic-circular-layout.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Basic circular layout controls with tuckin, orchid, strands, legend.",
-            "caption": "The rendered web app crop shows Basic circular layout controls; Tuckin, orchid, strands, legend."
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-01-palette-orchid.webp",
+            "alt": "Colors card with the default color palette menu open and the orchid option highlighted.",
+            "caption": "Open the default color palette selector in the Colors card and choose the highlighted orchid option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 80,
+              "right": 100,
+              "bottom": 40,
+              "left": 90
+            },
+            "openSelect": {
+              "selectedLabel": "orchid",
+              "options": [
+                "default",
+                "pastel",
+                "vivid",
+                "colorblind",
+                "grayscale",
+                "warm",
+                "cool",
+                "earth",
+                "marine",
+                "forest",
+                "sunset",
+                "berry",
+                "citrus",
+                "orchid",
+                "royal_gala",
+                "ajisai",
+                "orange"
+              ],
+              "cardTitle": "Colors",
+              "selectIndex": 1,
+              "minWidth": 150,
+              "placement": "right"
+            },
+            "openDetails": [
+              "Colors"
+            ]
+          }
+        },
+        {
+          "title": "Legend position selector",
+          "body": "Open Legend Position and choose Left.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-02-legend-position-left.webp",
+            "alt": "Title and Legend card with the Legend Position menu open and the Left option highlighted.",
+            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Left option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Left",
+              "options": [
+                "Right",
+                "Left",
+                "Top",
+                "Bottom",
+                "None"
+              ],
+              "label": "Legend Position"
+            },
+            "openDetails": [
+              "Title & Legend"
+            ]
           }
         }
       ]
@@ -183,12 +203,34 @@
       "body": "Set the plot title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome and place it at the bottom.",
       "operations": [
         {
-          "title": "Bottom title controls",
-          "body": "Use the rendered Bottom title controls with title text and bottom position.",
+          "title": "Bottom title position selector",
+          "body": "Open Plot Title Position and choose Bottom.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Bottom title controls with title text and bottom position.",
-            "caption": "The rendered web app crop shows Bottom title controls; Title text and bottom position."
+            "alt": "Title and Legend card with the Plot Title Position menu open and the Bottom option highlighted.",
+            "caption": "Open Plot Title Position in the Title & Legend card and choose the highlighted Bottom option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Bottom",
+              "options": [
+                "None (Default)",
+                "Top",
+                "Bottom"
+              ],
+              "label": "Plot Title Position"
+            },
+            "openDetails": [
+              "Title & Legend"
+            ]
           }
         }
       ]

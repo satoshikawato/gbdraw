@@ -50,73 +50,15 @@
       "note": "Download the complete record as a GenBank flat file."
     }
   ],
-  "quickReproduce": [
-    {
-      "title": "Download the Gallery session",
-      "body": "Use the Session button in this Gallery entry to save hepatoplasmataceae_orthogroup.gbdraw-session.json.",
-      "media": {
-        "src": "./media/hepatoplasmataceae_orthogroup/01-gallery-session.webp",
-        "alt": "Gallery header for the Hepatoplasmataceae orthogroup comparison with the Session action visible.",
-        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
-      },
-      "operations": [
-        {
-          "title": "Session button for this Gallery entry",
-          "body": "Use the rendered Gallery action toolbar and click Session.",
-          "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/quick-01-01-download-session.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial Gallery .viewer-actions toolbar with the Session action visible.",
-            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Open the web app",
-      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls.",
-      "operations": [
-        {
-          "title": "Header session controls",
-          "body": "Use the rendered web app header toolbar and click Load Session.",
-          "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/quick-02-01-open-session-controls.webp",
-            "alt": "Actual Linear web app header toolbar with Load Session, Save Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows the Load Session control in its real header-toolbar context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Compare with the collinear session",
-      "body": "Use the collinear Gallery entry when you want gene-order-preserving block reduction. Use this orthogroup entry when you want individual orthogroup-backed protein matches.",
-      "operations": [
-        {
-          "title": "Contrast with collinear example",
-          "body": "Use the rendered Contrast with collinear example with sample list entries.",
-          "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/quick-03-01-compare-collinear.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Contrast with collinear example with sample list entries.",
-            "caption": "The rendered Gallery crop shows Contrast with collinear example; Sample list entries."
-          }
-        }
-      ]
-    }
-  ],
   "manualSteps": [
     {
       "title": "Switch to Linear mode",
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
-      "operations": [
-        {
-          "title": "Mode segmented control",
-          "body": "Select Linear in the rendered mode segmented control.",
-          "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/manual-01-01-linear-mode.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Mode segmented control with Linear selected.",
-            "caption": "Select Linear in the rendered mode segmented control."
-          }
-        }
-      ]
+      "media": {
+        "src": "./media/hepatoplasmataceae_orthogroup/manual-01-01-linear-mode.webp",
+        "alt": "Web app header mode segmented control with Linear selected.",
+        "caption": "Select Linear in the mode segmented control before adding inputs."
+      }
     },
     {
       "title": "Upload the five GenBank files",
@@ -174,11 +116,30 @@
       "operations": [
         {
           "title": "Orthogroups mode controls",
-          "body": "Use the rendered Orthogroups mode controls with blastp mode Orthogroups.",
+          "body": "Open the blastp mode selector and choose Orthogroups.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-04-01-orthogroups-mode.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Orthogroups mode controls with blastp mode Orthogroups.",
-            "caption": "The rendered web app crop shows Orthogroups mode controls; Blastp mode Orthogroups."
+            "alt": "LOSAT Settings panel with the blastp mode menu open and the Orthogroups option highlighted.",
+            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Orthogroups option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 80,
+              "right": 80,
+              "bottom": 66,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Orthogroups",
+              "options": [
+                "Orthogroups",
+                "Collinear blocks",
+                "Pairwise"
+              ],
+              "label": "blastp mode"
+            }
           }
         },
         {
@@ -206,12 +167,33 @@
       ],
       "operations": [
         {
-          "title": "Linear layout controls",
-          "body": "Use the rendered Linear layout controls with align center, GC/skew, ruler.",
+          "title": "Scale style selector",
+          "body": "Open Scale Style and choose Ruler.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-05-01-layout-gc-skew-ruler.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Linear layout controls with align center, GC/skew, ruler.",
-            "caption": "The rendered web app crop shows Linear layout controls; Align center, GC/skew, ruler."
+            "alt": "Axis and Scale card with the Scale Style menu open and the Ruler option highlighted.",
+            "caption": "Open Scale Style in the Axis & Scale card and choose the highlighted Ruler option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Ruler (Ticks)",
+              "options": [
+                "Bar (Simple)",
+                "Ruler (Ticks)"
+              ],
+              "label": "Scale Style"
+            },
+            "openDetails": [
+              "Axis & Scale"
+            ]
           }
         }
       ]

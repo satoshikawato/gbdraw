@@ -78,73 +78,15 @@
       "note": "Download the Metapenaeus joyneri majanivirus record as a GenBank flat file."
     }
   ],
-  "quickReproduce": [
-    {
-      "title": "Download the Gallery session",
-      "body": "Use the Session button in this Gallery entry to save majanivirus_orthogroup.gbdraw-session.json.",
-      "media": {
-        "src": "./media/majanivirus_orthogroup/01-gallery-session.webp",
-        "alt": "Gallery header for the majanivirus orthogroup comparison with the Session action visible.",
-        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
-      },
-      "operations": [
-        {
-          "title": "Session button for this Gallery entry",
-          "body": "Use the rendered Gallery action toolbar and click Session.",
-          "media": {
-            "src": "./media/majanivirus_orthogroup/quick-01-01-download-session.webp",
-            "alt": "Actual majanivirus orthogroup tutorial Gallery .viewer-actions toolbar with the Session action visible.",
-            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Open the web app",
-      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls.",
-      "operations": [
-        {
-          "title": "Header session controls",
-          "body": "Use the rendered web app header toolbar and click Load Session.",
-          "media": {
-            "src": "./media/majanivirus_orthogroup/quick-02-01-open-session-controls.webp",
-            "alt": "Actual Linear web app header toolbar with Load Session, Save Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows the Load Session control in its real header-toolbar context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Inspect the restored large session first",
-      "body": "The session restores the nine inputs, cached LOSATP output, record labels, feature color rules, legend, and generated interactive SVG. Use it before rebuilding the large comparison manually.",
-      "operations": [
-        {
-          "title": "Restored large-session preview",
-          "body": "Inspect the generated preview with preview viewport.",
-          "media": {
-            "src": "./media/majanivirus_orthogroup/quick-03-01-restored-large-session.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Restored large-session preview with preview viewport.",
-            "caption": "The generated preview crop shows preview viewport."
-          }
-        }
-      ]
-    }
-  ],
   "manualSteps": [
     {
       "title": "Switch to Linear mode",
       "body": "Open gbdraw.app and select Linear mode before adding the viral GenBank records.",
-      "operations": [
-        {
-          "title": "Mode segmented control",
-          "body": "Select Linear in the rendered mode segmented control.",
-          "media": {
-            "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Mode segmented control with Linear selected.",
-            "caption": "Select Linear in the rendered mode segmented control."
-          }
-        }
-      ]
+      "media": {
+        "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
+        "alt": "Web app header mode segmented control with Linear selected.",
+        "caption": "Select Linear in the mode segmented control before adding the viral GenBank records."
+      }
     },
     {
       "title": "Upload the nine GenBank files",
@@ -197,11 +139,30 @@
         },
         {
           "title": "LOSATP orthogroups mode",
-          "body": "Use the rendered LOSATP orthogroups mode with Orthogroups selected.",
+          "body": "Open the blastp mode selector and choose Orthogroups.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-02-losatp-orthogroups.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing LOSATP orthogroups mode with Orthogroups selected.",
-            "caption": "The rendered web app crop shows LOSATP orthogroups mode; Orthogroups selected."
+            "alt": "LOSAT Settings panel with the blastp mode menu open and the Orthogroups option highlighted.",
+            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Orthogroups option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 80,
+              "right": 80,
+              "bottom": 66,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Orthogroups",
+              "options": [
+                "Orthogroups",
+                "Collinear blocks",
+                "Pairwise"
+              ],
+              "label": "blastp mode"
+            }
           }
         },
         {
@@ -231,11 +192,18 @@
       "operations": [
         {
           "title": "Linear layout controls",
-          "body": "Use the rendered Linear layout controls with align center and compact layout.",
+          "body": "Use the Layout card crop to confirm Align to Center and compact row options.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-04-01-linear-layout.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Linear layout controls with align center and compact layout.",
-            "caption": "The rendered web app crop shows Linear layout controls; Align center and compact layout."
+            "alt": "Linear Layout card showing Align to Center and compact layout-related controls.",
+            "caption": "Use the Layout card to confirm Align to Center and compact layout-related controls."
+          },
+          "capture": {
+            "source": "webapp",
+            "cardTitle": "Layout",
+            "openDetails": [
+              "Layout"
+            ]
           }
         }
       ]

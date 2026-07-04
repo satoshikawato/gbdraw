@@ -29,13 +29,11 @@ GALLERY_TUTORIAL_ROOT = GALLERY_ROOT / "tutorials"
 GALLERY_MEDIA_ROOT = GALLERY_ROOT / "media"
 
 READY_SECTIONS = (
-    "quickReproduce",
     "manualSteps",
     "postGenerationEdits",
     "colorRules",
 )
 OPERATION_REQUIRED_SECTIONS = (
-    "quickReproduce",
     "manualSteps",
     "postGenerationEdits",
 )
@@ -56,6 +54,8 @@ DEFAULT_MAX_IMAGE_HEIGHT = 1400
 DEFAULT_MAX_FILE_SIZE_KB = 650
 DEFAULT_WEBP_QUALITY = 86
 DEFAULT_VIEWPORT = {"width": 1280, "height": 900}
+CAPTURE_SELECT_MENU_SELECTOR = ".gbdraw-capture-select-menu"
+CAPTURE_SELECT_CONTROL_SELECTOR = ".gbdraw-capture-select-control"
 
 
 class QuietGalleryRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -314,7 +314,11 @@ def validate_tutorial_media(
 
         example_operation_count = 0
         for context, step in iter_step_contexts(sample, tutorial):
-            if context.section in OPERATION_REQUIRED_SECTIONS and not as_array(step.get("operations")):
+            if (
+                context.section in OPERATION_REQUIRED_SECTIONS
+                and not as_array(step.get("operations"))
+                and not media_entries(step.get("media"))
+            ):
                 result.errors.append(f"{context.label}: step is missing operations.")
             for entry in media_entries(step.get("media")):
                 add_media_validation(
@@ -450,6 +454,271 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
         raise RuntimeError(f"Unsupported capture action: {action_type}")
 
 
+def open_capture_details(page, titles: Any) -> None:
+    detail_titles = [title for title in as_array(titles) if as_text(title)]
+    if not detail_titles:
+        return
+
+    page.evaluate(
+        """
+        (titles) => {
+          const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+          const wanted = titles.map(normalize);
+          document.querySelectorAll('details').forEach((details) => {
+            const summary = details.querySelector('summary');
+            const label = normalize(summary?.textContent || '');
+            if (wanted.some((title) => label.includes(title))) details.open = true;
+          });
+        }
+        """,
+        detail_titles,
+    )
+
+
+def apply_open_select_overlays(page, open_select: Any) -> None:
+    specs = as_array(open_select) if isinstance(open_select, list) else ([open_select] if isinstance(open_select, dict) else [])
+
+    page.evaluate(
+        """
+        (specs) => {
+          const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+          const normalizeKey = (value) => normalize(value).toLowerCase();
+
+          document.querySelectorAll('.gbdraw-capture-select-menu').forEach((node) => node.remove());
+          document.querySelectorAll('.gbdraw-capture-select-control').forEach((node) => {
+            node.classList.remove('gbdraw-capture-select-control');
+          });
+          if (!specs.length) return;
+          let style = document.getElementById('gbdraw-capture-select-style');
+          if (!style) {
+            style = document.createElement('style');
+            style.id = 'gbdraw-capture-select-style';
+            style.textContent = `
+              .gbdraw-capture-select-control {
+                outline: 3px solid #f59e0b !important;
+                outline-offset: 2px !important;
+                box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18) !important;
+              }
+              .gbdraw-capture-select-menu {
+                position: absolute;
+                z-index: 2147483647;
+                box-sizing: border-box;
+                padding: 4px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                background: #ffffff;
+                box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.12);
+                color: #334155;
+                font-family: Inter, "Noto Sans JP", system-ui, sans-serif;
+                pointer-events: none;
+              }
+              .gbdraw-capture-select-option {
+                min-height: 24px;
+                display: flex;
+                align-items: center;
+                padding: 3px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                line-height: 1.25;
+                white-space: nowrap;
+              }
+              .gbdraw-capture-select-option.is-selected {
+                outline: 3px solid #f59e0b;
+                outline-offset: -2px;
+                background: #fff7ed;
+                color: #1d4ed8;
+                font-weight: 800;
+              }
+            `;
+            document.head.appendChild(style);
+          }
+
+          const selectNearLabel = (labelText, nth = 0) => {
+            const labelKey = normalizeKey(labelText);
+            const matches = [];
+            document.querySelectorAll('label').forEach((label) => {
+              if (!normalizeKey(label.textContent).includes(labelKey)) return;
+              if (label.control?.tagName === 'SELECT') {
+                matches.push(label.control);
+                return;
+              }
+              const local = label.parentElement?.querySelector('select');
+              if (local) {
+                matches.push(local);
+                return;
+              }
+              const container = label.closest('div, section, details, .card');
+              const nearby = container?.querySelector('select');
+              if (nearby) matches.push(nearby);
+            });
+            return matches[nth] || null;
+          };
+
+          const selectInCard = (cardTitle, selectIndex = 0) => {
+            const titleKey = normalizeKey(cardTitle);
+            const cards = Array.from(document.querySelectorAll('.card'));
+            const card = cards.find((candidate) => {
+              const header = candidate.querySelector('.card-header, summary');
+              return normalizeKey(header?.textContent || '').includes(titleKey);
+            });
+            if (!card) return null;
+            return Array.from(card.querySelectorAll('select'))[Number(selectIndex || 0)] || null;
+          };
+
+          const resolveSelect = (spec) => {
+            if (spec.selector) {
+              const selected = document.querySelector(spec.selector);
+              if (selected?.tagName === 'SELECT') return selected;
+            }
+            if (spec.cardTitle) return selectInCard(spec.cardTitle, spec.selectIndex);
+            if (spec.label) return selectNearLabel(spec.label, Number(spec.nth || 0));
+            return null;
+          };
+
+          specs.forEach((spec, index) => {
+            const select = resolveSelect(spec);
+            if (!select) {
+              throw new Error(`Could not find select for openSelect ${spec.label || spec.selector || index}.`);
+            }
+            if (index === 0) select.scrollIntoView({ block: 'center', inline: 'nearest' });
+          });
+
+          specs.forEach((spec, index) => {
+            const select = resolveSelect(spec);
+            if (!select) {
+              throw new Error(`Could not find select for openSelect ${spec.label || spec.selector || index}.`);
+            }
+
+            const optionLabels = spec.options && Array.isArray(spec.options) && spec.options.length
+              ? spec.options.map(normalize)
+              : Array.from(select.options).map((option) => normalize(option.textContent));
+            const selectedLabel = normalize(spec.selectedLabel);
+            if (!optionLabels.some((label) => normalizeKey(label) === normalizeKey(selectedLabel))) {
+              throw new Error(`Selected label "${selectedLabel}" is not in openSelect options: ${optionLabels.join(', ')}`);
+            }
+
+            const selectedOption = Array.from(select.options).find(
+              (option) => normalizeKey(option.textContent) === normalizeKey(selectedLabel)
+            );
+            if (selectedOption && select.value !== selectedOption.value) {
+              select.value = selectedOption.value;
+              select.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            select.classList.add('gbdraw-capture-select-control');
+            const rect = select.getBoundingClientRect();
+            const menu = document.createElement('div');
+            menu.className = 'gbdraw-capture-select-menu';
+            menu.dataset.captureOpenSelect = String(index);
+            const minWidth = Number(spec.minWidth || 0);
+            menu.style.minWidth = `${Math.max(rect.width, minWidth, 120)}px`;
+
+            optionLabels.forEach((label) => {
+              const option = document.createElement('div');
+              option.className = 'gbdraw-capture-select-option';
+              if (normalizeKey(label) === normalizeKey(selectedLabel)) option.classList.add('is-selected');
+              option.textContent = label;
+              menu.appendChild(option);
+            });
+
+            document.body.appendChild(menu);
+            const placement = normalizeKey(spec.placement || 'below');
+            const gap = Number(spec.gap ?? 4);
+            if (placement === 'right') {
+              menu.style.left = `${window.scrollX + rect.right + gap}px`;
+              menu.style.top = `${window.scrollY + rect.top}px`;
+            } else if (placement === 'left') {
+              menu.style.left = `${window.scrollX + rect.left - menu.offsetWidth - gap}px`;
+              menu.style.top = `${window.scrollY + rect.top}px`;
+            } else if (placement === 'above') {
+              menu.style.left = `${window.scrollX + rect.left}px`;
+              menu.style.top = `${window.scrollY + rect.top - menu.offsetHeight - gap}px`;
+            } else {
+              menu.style.left = `${window.scrollX + rect.left}px`;
+              menu.style.top = `${window.scrollY + rect.bottom + gap}px`;
+            }
+          });
+        }
+        """,
+        specs,
+    )
+    if not specs:
+        return
+    page.wait_for_timeout(100)
+
+
+def resolve_capture_target(page, capture: dict[str, Any]):
+    selector = as_text(capture.get("selector"))
+    if selector:
+        return page.locator(selector).first()
+
+    card_title = as_text(capture.get("cardTitle"))
+    if card_title:
+        return page.locator(".card").filter(has_text=re.compile(re.escape(card_title), re.IGNORECASE)).first()
+
+    return None
+
+
+def normalize_crop_padding(value: Any, default: int = 12) -> dict[str, float]:
+    if isinstance(value, dict):
+        return {
+            "top": float(value.get("top", default)),
+            "right": float(value.get("right", default)),
+            "bottom": float(value.get("bottom", default)),
+            "left": float(value.get("left", default)),
+        }
+    if value is None:
+        amount = float(default)
+    else:
+        amount = float(value)
+    return {"top": amount, "right": amount, "bottom": amount, "left": amount}
+
+
+def capture_open_select_clip(page, padding: dict[str, float]) -> dict[str, float]:
+    boxes = page.evaluate(
+        """
+        () => {
+          const selectors = ['.gbdraw-capture-select-control', '.gbdraw-capture-select-menu'];
+          return selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))).map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              x: rect.left + window.scrollX,
+              y: rect.top + window.scrollY,
+              width: rect.width,
+              height: rect.height,
+            };
+          }).filter((box) => box.width > 0 && box.height > 0);
+        }
+        """
+    )
+    if not boxes:
+        raise RuntimeError("openSelect crop requested, but no capture select overlay exists.")
+
+    min_x = min(float(box["x"]) for box in boxes)
+    min_y = min(float(box["y"]) for box in boxes)
+    max_x = max(float(box["x"]) + float(box["width"]) for box in boxes)
+    max_y = max(float(box["y"]) + float(box["height"]) for box in boxes)
+    dimensions = page.evaluate(
+        """
+        () => ({
+          width: Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth || 0),
+          height: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0),
+        })
+        """
+    )
+
+    x = max(0.0, min_x - padding["left"])
+    y = max(0.0, min_y - padding["top"])
+    right = min(float(dimensions["width"]), max_x + padding["right"])
+    bottom = min(float(dimensions["height"]), max_y + padding["bottom"])
+    return {
+        "x": x,
+        "y": y,
+        "width": max(1.0, right - x),
+        "height": max(1.0, bottom - y),
+    }
+
+
 def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: dict[str, Any]) -> None:
     source = as_text(capture.get("source")).lower() or "gallery"
     viewport = capture.get("viewport") if isinstance(capture.get("viewport"), dict) else DEFAULT_VIEWPORT
@@ -481,6 +750,8 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
             load_web_app_session(page, session_path)
     else:
         raise RuntimeError(f"Unsupported capture source: {source}")
+
+    open_capture_details(page, capture.get("openDetails"))
 
     for action in as_array(capture.get("actions")):
         if isinstance(action, dict):
@@ -515,14 +786,26 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         raise RuntimeError("operation media must point at a local output path.")
 
     prepare_capture_page(page, base_url, sample, capture)
+    target_locator = resolve_capture_target(page, capture)
+    if target_locator is not None:
+        target_locator.scroll_into_view_if_needed()
+        page.wait_for_timeout(100)
+    apply_open_select_overlays(page, capture.get("openSelect"))
 
-    selector = as_text(capture.get("selector"))
-    if selector:
-        png_bytes = page.locator(selector).screenshot(type="png")
+    if as_text(capture.get("crop")) == "openSelect":
+        png_bytes = page.screenshot(
+            type="png",
+            clip=capture_open_select_clip(
+                page,
+                normalize_crop_padding(capture.get("cropPadding"), default=14),
+            ),
+        )
+    elif target_locator is not None:
+        png_bytes = target_locator.screenshot(type="png")
     else:
         box = capture.get("boundingBox")
         if not isinstance(box, dict):
-            raise RuntimeError("capture metadata needs selector or boundingBox.")
+            raise RuntimeError("capture metadata needs selector, cardTitle, crop=openSelect, or boundingBox.")
         png_bytes = page.screenshot(
             type="png",
             clip={

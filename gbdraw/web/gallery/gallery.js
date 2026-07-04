@@ -365,7 +365,7 @@ const validateTutorial = (data, sample) => {
   if (!Array.isArray(data.manualSteps)) {
     throw new Error(`Tutorial ${sample.id} is missing manualSteps.`);
   }
-  ['quickReproduce', 'manualSteps', 'colorRules', 'postGenerationEdits', 'losatTips', 'troubleshooting'].forEach(
+  ['manualSteps', 'colorRules', 'postGenerationEdits', 'losatTips', 'troubleshooting'].forEach(
     (sectionName) => {
       asArray(data[sectionName]).forEach((step, index) => {
         if (!step || typeof step !== 'object' || Array.isArray(step)) return;
@@ -472,7 +472,6 @@ const renderTutorial = (tutorial, sample) => {
     const downloads = appendSection(tutorialContent, 'Input downloads');
     renderDownloads(downloads, tutorial.downloads);
   }
-  renderStepSection(tutorialContent, 'Quick reproduce', tutorial.quickReproduce);
   renderStepSection(tutorialContent, 'Manual rebuild', tutorial.manualSteps, { numbered: true });
   renderStepSection(
     tutorialContent,

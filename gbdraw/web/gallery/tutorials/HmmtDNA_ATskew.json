@@ -21,58 +21,6 @@
       "note": "Download the complete human mitochondrial genome as a GenBank flat file and save it with this filename if you want to match the Gallery session."
     }
   ],
-  "quickReproduce": [
-    {
-      "title": "Download the Gallery session",
-      "body": "Use the Session button in this Gallery entry to save HmmtDNA_ATskew.gbdraw-session.json.",
-      "media": {
-        "src": "./media/HmmtDNA_ATskew/01-gallery-session.webp",
-        "alt": "Gallery header for the human mitochondrial AT skew diagram with the Session action visible.",
-        "caption": "The Gallery entry keeps the finished interactive SVG, downloadable SVG, and session JSON together."
-      },
-      "operations": [
-        {
-          "title": "Session button for this Gallery entry",
-          "body": "Use the rendered Gallery action toolbar and click Session.",
-          "media": {
-            "src": "./media/HmmtDNA_ATskew/quick-01-01-download-session.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial Gallery .viewer-actions toolbar with the Session action visible.",
-            "caption": "The rendered Gallery .viewer-actions toolbar shows the Session action in context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Open the web app",
-      "body": "Open gbdraw.app, then load the saved .gbdraw-session.json from the session controls.",
-      "operations": [
-        {
-          "title": "Header session controls",
-          "body": "Use the rendered web app header toolbar and click Load Session.",
-          "media": {
-            "src": "./media/HmmtDNA_ATskew/quick-02-01-open-session-controls.webp",
-            "alt": "Actual Circular web app header toolbar with Load Session, Save Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows the Load Session control in its real header-toolbar context."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Inspect the restored custom stack",
-      "body": "The session restores the input GenBank file, circular mode, labels, the left legend, and the explicit circular track stack including the AT skew row.",
-      "operations": [
-        {
-          "title": "Restored custom track stack",
-          "body": "Use the rendered Restored custom track stack with custom track slots.",
-          "media": {
-            "src": "./media/HmmtDNA_ATskew/quick-03-01-restored-custom-stack.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Restored custom track stack with custom track slots.",
-            "caption": "The rendered web app crop shows Restored custom track stack; Custom track slots."
-          }
-        }
-      ]
-    }
-  ],
   "manualSteps": [
     {
       "title": "Switch to Circular mode",
@@ -124,12 +72,104 @@
       ],
       "operations": [
         {
-          "title": "Basic circular layout controls",
-          "body": "Use the rendered Basic circular layout controls with middle, left legend, labels out.",
+          "title": "Track preset selector",
+          "body": "Open Track Preset and choose Middle.",
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-03-01-basic-circular-layout.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Basic circular layout controls with middle, left legend, labels out.",
-            "caption": "The rendered web app crop shows Basic circular layout controls; Middle, left legend, labels out."
+            "src": "./media/HmmtDNA_ATskew/manual-03-01-track-preset-middle.webp",
+            "alt": "Layout card with the Track Preset menu open and the Middle option highlighted.",
+            "caption": "Open Track Preset in the Layout card and choose the highlighted Middle option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Middle",
+              "options": [
+                "Tuckin",
+                "Middle",
+                "Spreadout"
+              ],
+              "label": "Track Preset"
+            },
+            "openDetails": [
+              "Layout"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.adv) app.adv.circular_track_slots_enabled = false;"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Label mode selector",
+          "body": "Open Label Mode and choose Out.",
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-03-02-label-mode-out.webp",
+            "alt": "Labels card with the Label Mode menu open and the Out option highlighted.",
+            "caption": "Open Label Mode in the Labels card and choose the highlighted Out option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Out",
+              "options": [
+                "None",
+                "Out",
+                "Both (Out + Inner)"
+              ],
+              "label": "Label Mode"
+            },
+            "openDetails": [
+              "Labels"
+            ]
+          }
+        },
+        {
+          "title": "Legend position selector",
+          "body": "Open Legend Position and choose Left.",
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-03-03-legend-position-left.webp",
+            "alt": "Title and Legend card with the Legend Position menu open and the Left option highlighted.",
+            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Left option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Left",
+              "options": [
+                "Right",
+                "Left",
+                "Top",
+                "Bottom",
+                "None"
+              ],
+              "label": "Legend Position"
+            },
+            "openDetails": [
+              "Title & Legend"
+            ]
           }
         }
       ]

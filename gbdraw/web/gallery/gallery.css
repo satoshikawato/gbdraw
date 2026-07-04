@@ -668,7 +668,9 @@ h1 {
 .tutorial-media img,
 .tutorial-media video {
     display: block;
-    width: 100%;
+    width: auto;
+    max-width: 100%;
+    height: auto;
     max-height: 520px;
     object-fit: contain;
     border: 1px solid var(--line);
