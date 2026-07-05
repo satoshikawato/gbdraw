@@ -114,7 +114,7 @@
         "rows": [
           ["blastp mode", "Orthogroups"],
           ["Pairwise evidence", "adjacent genome pairs"],
-          ["LOSATP thresholds", "Keep visible for review"]
+          ["LOSATP thresholds", "Bitscore 50, e-value 1e-2, identity 30, minimum length 0"]
         ]
       },
       "note": "The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks.",
@@ -149,11 +149,11 @@
         },
         {
           "title": "Orthogroups threshold settings",
-          "body": "Use Orthogroups mode with the visible LOSATP threshold settings.",
+          "body": "Use Orthogroups mode with bitscore 50, e-value 1e-2, identity 30, and minimum length 0.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-04-02-orthogroup-settings.webp",
             "alt": "LOSAT Settings panel with Orthogroups mode and the visible threshold controls.",
-            "caption": "Use Orthogroups mode with the visible LOSATP threshold settings."
+            "caption": "Use Orthogroups mode with bitscore 50, e-value 1e-2, identity 30, and minimum length 0."
           }
         }
       ]
