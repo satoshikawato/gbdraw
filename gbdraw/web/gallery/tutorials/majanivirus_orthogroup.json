@@ -329,7 +329,7 @@
       "media": {
         "src": "./media/majanivirus_orthogroup/04-files.webp",
         "alt": "Actual Linear Gallery tab bar with Files selected above the Files panel.",
-        "caption": "The rendered Gallery .tab-bar stays visible with Files selected above the file and artifact list."
+        "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
       },
       "operations": [
         {
@@ -338,7 +338,7 @@
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-09-01-files-tab.webp",
             "alt": "Actual Linear Gallery tab bar with Files selected above the Files panel.",
-            "caption": "The rendered Gallery .tab-bar stays visible with Files selected above the file and artifact list."
+            "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
           }
         }
       ]
@@ -414,11 +414,11 @@
       "operations": [
         {
           "title": "Export controls",
-          "body": "Use the rendered Preview export toolbar for SVG, Interactive SVG, PNG, or PDF.",
+          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-04-01-export-controls.webp",
             "alt": "Actual Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The rendered .preview-toolbar crop shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
+            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
           }
         }
       ]
@@ -429,11 +429,11 @@
       "operations": [
         {
           "title": "Session save controls",
-          "body": "Use the rendered web app header toolbar and click Save Session.",
+          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-05-01-save-session.webp",
             "alt": "Actual Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows Save Session in the same header toolbar used to load sessions."
+            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }
       ]
@@ -468,15 +468,15 @@
     },
     {
       "title": "Expected ribbons are missing",
-      "body": "Confirm protein blastp mode is Orthogroups, the input order matches the Gallery session, and the bitscore, e-value, and identity thresholds match the tutorial values."
+      "body": "Check that protein blastp mode is Orthogroups, the input order matches the Gallery session, and the bitscore, e-value, and identity thresholds match the tutorial values."
     },
     {
       "title": "The rows do not match the Gallery figure",
-      "body": "Confirm Align to Center, Separate Strands, Hide length, record labels, and the nine-record input order."
+      "body": "Check Align to Center, Separate Strands, Hide length, record labels, and the nine-record input order."
     },
     {
       "title": "Feature categories are not colored",
-      "body": "Confirm the product rules and default CDS color are present, and check a CDS popup to verify that the expected product text exists in the input annotations."
+      "body": "Check that the product rules and default CDS color are present, and inspect a CDS popup to verify that the expected product text exists in the input annotations."
     },
     {
       "title": "Threaded LOSAT is unavailable",

@@ -261,7 +261,7 @@
       "media": {
         "src": "./media/Vnig_TUMSAT-TG-2018/03-files.webp",
         "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
-        "caption": "The rendered Gallery .tab-bar stays visible with Files selected above the file and artifact list."
+        "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
       },
       "operations": [
         {
@@ -270,7 +270,7 @@
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-07-01-files-tab.webp",
             "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
-            "caption": "The rendered Gallery .tab-bar stays visible with Files selected above the file and artifact list."
+            "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
           }
         }
       ]
@@ -303,7 +303,7 @@
     },
     {
       "title": "Use record layout before adding color complexity",
-      "body": "Confirm the six-record canvas, automatic sizing, and row placement before adding feature-specific colors or label changes."
+      "body": "Set up the six-record canvas, automatic sizing, and row placement before adding feature-specific colors or label changes."
     },
     {
       "title": "Choose qualifiers from feature clicks",
@@ -351,11 +351,11 @@
       "operations": [
         {
           "title": "Export controls",
-          "body": "Use the rendered Preview export toolbar for SVG, Interactive SVG, PNG, or PDF.",
+          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/post-03-01-export-controls.webp",
             "alt": "Actual Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The rendered .preview-toolbar crop shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
+            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
           }
         }
       ]
@@ -366,11 +366,11 @@
       "operations": [
         {
           "title": "Session save controls",
-          "body": "Use the rendered web app header toolbar and click Save Session.",
+          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/post-04-01-save-session.webp",
             "alt": "Actual Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows Save Session in the same header toolbar used to load sessions."
+            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }
       ]
@@ -379,7 +379,7 @@
   "troubleshooting": [
     {
       "title": "Only one record is shown",
-      "body": "Confirm Multi-record canvas is enabled. Without that option, circular mode can render records separately instead of placing them in one canvas."
+      "body": "Check that Multi-record canvas is enabled. Without that option, circular mode can render records separately instead of placing them in one canvas."
     },
     {
       "title": "The plasmids are too small",
@@ -387,11 +387,11 @@
     },
     {
       "title": "The rows differ from the Gallery figure",
-      "body": "Confirm record positions #1@1, #2@1, #3@2, #4@2, #5@2, and #6@2, plus column gap ratio 0.1 and row gap ratio 0.05."
+      "body": "Check record positions #1@1, #2@1, #3@2, #4@2, #5@2, and #6@2, plus column gap ratio 0.1 and row gap ratio 0.05."
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Confirm the GBFF input, tuckin track type, orchid palette, separate strands, left legend, bottom title, multi-record size mode auto, and minimum radius ratio 0.55."
+      "body": "Check the GBFF input, tuckin track type, orchid palette, separate strands, left legend, bottom title, multi-record size mode auto, and minimum radius ratio 0.55."
     }
   ],
   "related": [

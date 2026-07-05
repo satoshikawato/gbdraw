@@ -399,7 +399,7 @@
       "media": {
         "src": "./media/WSSV_genome_comparison/02-input-files.webp",
         "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
-        "caption": "The rendered Gallery .tab-bar stays visible with Files selected above the file and artifact list."
+        "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
       },
       "operations": [
         {
@@ -408,7 +408,7 @@
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-10-01-files-tab.webp",
             "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
-            "caption": "The rendered Gallery .tab-bar stays visible with Files selected above the file and artifact list."
+            "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
           }
         }
       ]
@@ -463,7 +463,7 @@
           "media": {
             "src": "./media/WSSV_genome_comparison/post-01-01-zoom-controls.webp",
             "alt": "Actual WSSV web app floating preview controls with Reset Layout, Layout edit, Canvas padding, and zoom buttons visible.",
-            "caption": "The rendered floating preview toolbar shows zoom together with reset, layout edit, and canvas padding controls."
+            "caption": "The floating preview toolbar shows zoom together with reset, layout edit, and canvas padding controls."
           }
         }
       ]
@@ -504,11 +504,11 @@
       "operations": [
         {
           "title": "Export controls",
-          "body": "Use the rendered Preview export toolbar for SVG, Interactive SVG, PNG, or PDF.",
+          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-04-01-export-controls.webp",
             "alt": "Actual Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The rendered .preview-toolbar crop shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
+            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
           }
         }
       ]
@@ -519,11 +519,11 @@
       "operations": [
         {
           "title": "Session save controls",
-          "body": "Use the rendered web app header toolbar and click Save Session.",
+          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-05-01-save-session.webp",
             "alt": "Actual Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows Save Session in the same header toolbar used to load sessions."
+            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }
       ]
@@ -554,11 +554,11 @@
   "troubleshooting": [
     {
       "title": "Conservation rings are missing",
-      "body": "Confirm Circular Conservation is enabled, comparison FASTA files are uploaded, source is set to Run LOSAT from FASTA inputs, and the generated result is the circular output."
+      "body": "Check that Circular Conservation is enabled, comparison FASTA files are uploaded, source is set to Run LOSAT from FASTA inputs, and the generated result is the circular output."
     },
     {
       "title": "A ring appears in the wrong order",
-      "body": "Confirm the FASTA upload order, ring labels, and ring colors. The legend follows the configured conservation series order."
+      "body": "Check the FASTA upload order, ring labels, and ring colors. The legend follows the configured conservation series order."
     },
     {
       "title": "The rings look too sparse",
@@ -574,7 +574,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Confirm AP027280.gb, spreadout track type, separate strands, suppressed GC and skew tracks, conservation ring width and gap, thresholds, labels, colors, and comparison FASTA order."
+      "body": "Check AP027280.gb, spreadout track type, separate strands, suppressed GC and skew tracks, conservation ring width and gap, thresholds, labels, colors, and comparison FASTA order."
     }
   ],
   "related": [

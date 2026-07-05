@@ -1087,10 +1087,64 @@ export const createAppSetup = () => {
     }
   };
 
+  const restoreLoadedSessionLegendEntries = async (editorState) => {
+    const entries = Array.isArray(editorState?.legend?.entries)
+      ? editorState.legend.entries
+          .map((entry) => ({
+            ...entry,
+            caption: String(entry?.caption || '').trim(),
+            color: String(entry?.color || '').trim()
+          }))
+          .filter((entry) => entry.caption && entry.color)
+      : [];
+    if (!entries.length || !svgContent.value) return;
+
+    let pyodideReadyForLegend = pyodideReady.value;
+    for (let attempt = 0; !pyodideReadyForLegend && attempt < 150; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      pyodideReadyForLegend = pyodideReady.value;
+    }
+    if (!pyodideReadyForLegend) return;
+
+    let svgReady = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await nextTick();
+      if (svgContainer.value?.querySelector?.('svg')) {
+        svgReady = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (!svgReady) return;
+
+    legendActions.extractLegendEntries();
+
+    const expectedCaptions = new Set(entries.map((entry) => entry.caption));
+    for (const entry of [...legendEntries.value]) {
+      const caption = String(entry?.caption || '').trim();
+      if (caption && !expectedCaptions.has(caption)) {
+        legendActions.removeLegendEntry(caption);
+      }
+    }
+
+    for (const entry of entries) {
+      await legendActions.addLegendEntry(entry.caption, entry.color);
+    }
+
+    legendEntries.value = entries.map((entry) => ({
+      ...entry,
+      showStroke: Boolean(entry.showStroke),
+      featureIds: Array.isArray(entry.featureIds) ? entry.featureIds : []
+    }));
+  };
+
   const importSession = async (event) => {
     const result = await importSessionFromFile(event, { afterLoad: refreshLoadedSessionSvgLayout });
     if (result?.status === 'ok' || result?.status === 'legacy') {
       await nextTick();
+      if (result?.status === 'ok') {
+        await restoreLoadedSessionLegendEntries(result.data?.editorState);
+      }
       await history.captureBaseline('Loaded session');
     }
     return result;

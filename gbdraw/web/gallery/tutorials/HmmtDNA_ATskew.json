@@ -383,11 +383,11 @@
       "operations": [
         {
           "title": "Export controls",
-          "body": "Use the rendered Preview export toolbar for SVG, Interactive SVG, PNG, or PDF.",
+          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-03-01-export-controls.webp",
             "alt": "Actual Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The rendered .preview-toolbar crop shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
+            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
           }
         }
       ]
@@ -398,11 +398,11 @@
       "operations": [
         {
           "title": "Session save controls",
-          "body": "Use the rendered web app header toolbar and click Save Session.",
+          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-04-01-save-session.webp",
             "alt": "Actual Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The rendered .app-toolbar crop shows Save Session in the same header toolbar used to load sessions."
+            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }
       ]
@@ -411,19 +411,19 @@
   "troubleshooting": [
     {
       "title": "AT skew is missing from the legend",
-      "body": "Confirm the added slot uses renderer Dinucleotide skew, dinucleotide AT, and legend label AT skew."
+      "body": "Check that the added slot uses renderer Dinucleotide skew, dinucleotide AT, and legend label AT skew."
     },
     {
       "title": "The skew rings overlap labels or ticks",
-      "body": "Confirm Custom Track Slots are enabled, reset to Middle if needed, and keep GC content, GC skew, AT skew, and ticks inside the axis."
+      "body": "Check that Custom Track Slots are enabled, reset to Middle if needed, and keep GC content, GC skew, AT skew, and ticks inside the axis."
     },
     {
       "title": "Labels show long product names",
-      "body": "Confirm the CDS qualifier priority rule uses gene before regenerating the diagram."
+      "body": "Check that the CDS qualifier priority rule uses gene before regenerating the diagram."
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Confirm input record NC_012920.1, track type middle, labels out, legend left, window 500, step 50, AT skew colors, and the tick label layout."
+      "body": "Check input record NC_012920.1, track type middle, labels out, legend left, window 500, step 50, AT skew colors, and the tick label layout."
     }
   ],
   "related": [

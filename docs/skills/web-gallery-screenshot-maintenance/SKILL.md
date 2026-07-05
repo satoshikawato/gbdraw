@@ -54,6 +54,9 @@ Use the real UI the user operates.
 - Toolbar actions must show the actual toolbar, not an isolated or reconstructed button.
 - Popups must come from real clicks in the restored session whenever possible.
 - Generated preview crops are appropriate only for final result checks, visual inspection, legends, popups, or rendered-output comparisons.
+- Post-generation editor screenshots must come from the exact restored session for that example. Before capturing drawers such as Legend, Features, or Orthogroups, verify the restored editor state matches the example-specific generated result. A generic or stale drawer state, such as a BGC legend editor showing only `CDS`, is a `replace`, even if it is a real drawer crop.
+- If a restored session's saved editor state and rendered SVG disagree, fix the app restore behavior or refresh the session artifact before capturing. Do not document the broken intermediate state as the tutorial screenshot.
+- When capturing a drawer, keep the actual drawer controls visible, but exclude unrelated floating preview controls if they visually overlap the drawer; use temporary capture-only CSS rather than permanent app changes.
 
 Reject preview screenshots for non-final input/edit operations even if the generated result is visually correct.
 
