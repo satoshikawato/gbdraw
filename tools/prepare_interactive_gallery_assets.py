@@ -12,6 +12,7 @@ import cairosvg
 from PIL import Image, ImageDraw, ImageFont
 
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from gbdraw.session_io import write_session_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -307,14 +308,44 @@ def _session_interactive_context(session: dict[str, Any]) -> InteractiveSvgConte
     )
 
 
-def _write_source_svg(example: GallerySessionExample, session: dict[str, Any]) -> None:
-    example.source_svg_path.write_text(_session_result_svg(session, example), encoding="utf-8")
-
-
-def _write_gallery_svg(example: GallerySessionExample, session: dict[str, Any]) -> None:
+def _read_or_create_source_svg(example: GallerySessionExample, session: dict[str, Any]) -> str:
+    if example.source_svg_path.exists():
+        return example.source_svg_path.read_text(encoding="utf-8")
     source = _session_result_svg(session, example)
+    example.source_svg_path.write_text(source, encoding="utf-8")
+    return source
+
+
+def _write_gallery_svg(
+    example: GallerySessionExample,
+    session: dict[str, Any],
+    source: str,
+) -> None:
     enriched = enrich_svg(source, context=_session_interactive_context(session))
     example.gallery_svg_path.write_text(enriched, encoding="utf-8")
+
+
+def _sync_session_result_svg(
+    example: GallerySessionExample,
+    session: dict[str, Any],
+    source: str,
+) -> None:
+    results = session.get("results")
+    if not isinstance(results, list) or not results or not isinstance(results[0], dict):
+        return
+    result = results[0]
+    changed = False
+    if result.get("name") != example.id:
+        result["name"] = example.id
+        changed = True
+    if result.get("content") != source:
+        result["content"] = source
+        changed = True
+    if session.get("title") != example.id:
+        session["title"] = example.id
+        changed = True
+    if changed:
+        write_session_json(example.session_path, session)
 
 
 def _remove_stale_assets() -> None:
@@ -384,8 +415,9 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
     payload: list[dict[str, object]] = []
     for example in EXAMPLES:
         session = _load_session(example)
-        _write_source_svg(example, session)
-        _write_gallery_svg(example, session)
+        source = _read_or_create_source_svg(example, session)
+        _sync_session_result_svg(example, session, source)
+        _write_gallery_svg(example, session, source)
         _validate_source_assets(example)
         _render_thumbnail(example)
 

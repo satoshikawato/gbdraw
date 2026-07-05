@@ -720,8 +720,8 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
 def test_interactive_gallery_examples_are_wired() -> None:
     expected_ids = [
         "HmmtDNA_ATskew",
-        "WSSV_genome_comparison",
         "BGC0000708-BGC0000713",
+        "WSSV_genome_comparison",
         "majanivirus_orthogroup",
         "hepatoplasmataceae_collinear",
         "hepatoplasmataceae_orthogroup",
@@ -737,8 +737,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
     assert gallery_svg_sizes == sorted(gallery_svg_sizes)
     assert [entry["title"] for entry in examples] == [
         "<i>Homo sapiens</i> mitochondrion (AT skew)",
-        "White spot syndrome virus genome comparison",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
+        "White spot syndrome virus genome comparison",
         "Large dsDNA viruses (<i>Nimaviridae</i>)",
         "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
         "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
@@ -803,6 +803,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert features
         assert any(feature.get("qualifiers") for feature in features)
         assert any(feature.get("location_parts") for feature in features)
+        assert all(feature.get("nucleotide_sequence") for feature in features)
 
         assert thumbnail_header.startswith(b"RIFF")
         assert b"WEBP" in thumbnail_header
@@ -960,7 +961,15 @@ def test_gallery_sessions_ship_current_feature_metadata() -> None:
             re.sub(r"__part\d+$", "", match)
             for match in re.findall(r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']", svg_text)
         }
-        feature_ids = {str(feature.get("svg_id") or "") for feature in features}
+        feature_ids = {
+            candidate
+            for feature in features
+            for candidate in (
+                str(feature.get("svg_id") or ""),
+                re.sub(r"_record_\d+$", "", str(feature.get("svg_id") or "")),
+            )
+            if candidate
+        }
         pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
         collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
 

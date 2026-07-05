@@ -112,13 +112,17 @@ def test_preserve_gallery_cli_invocation_reports_missing_source_cli() -> None:
     ]
 
 
-def test_prepare_gallery_assets_rewrites_existing_example_svgs() -> None:
+def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
     source = Path("tools/prepare_interactive_gallery_assets.py").read_text(
         encoding="utf-8"
     )
 
-    assert "def _write_gallery_svg(" in source
-    assert "_write_gallery_svg(example, session)" in source
-    assert "if example.gallery_svg_path.exists()" not in source
+    assert "def _read_or_create_source_svg(" in source
+    assert "if example.source_svg_path.exists():" in source
+    assert "example.source_svg_path.write_text(source" in source
+    assert "def _sync_session_result_svg(" in source
+    assert "write_session_json(example.session_path, session)" in source
+    assert "_sync_session_result_svg(example, session, source)" in source
+    assert "_write_gallery_svg(example, session, source)" in source
     assert 'entry["tutorial"] = f"./tutorials/{example.id}.json"' in source
     assert 'entry["tutorialStatus"] = "ready"' in source
