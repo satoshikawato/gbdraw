@@ -54,6 +54,7 @@ Use the real UI the user operates.
 - When several color rules are entered before one final generation, use one focused crop showing all entered rule rows if it is readable; otherwise use focused per-row input crops. Do not place a full-plot screenshot after each rule.
 - Show the generated plot only once after all required pre-generation inputs and rules have been entered, unless a later step is explicitly about inspecting a popup or visual result.
 - Toolbar actions must show the actual toolbar, not an isolated or reconstructed button.
+- Crops with highlighted toolbar buttons, track slots, drawer rows, or other position-sensitive controls must include enough surrounding controls above, below, left, or right for the highlight to convey where the target sits. Do not crop exactly to only the highlighted box when neighboring items define the action context.
 - Popups must come from real clicks in the restored session whenever possible.
 - Popup crops must be tight enough that the highlighted clicked feature, match ribbon, orthogroup ribbon, or collinear block and the popup text are readable in the rendered Gallery. Do not use a full generated-preview crop when the inspected target is only a small part of the figure.
 - If the popup covers the highlighted feature, orthogroup ribbon, or collinear block, move the popup during capture and then crop the real UI state. Do not accept a crop where the popup is readable but the highlighted diagram target is hidden.
@@ -83,6 +84,8 @@ Capture standards:
 - Use WebP quality 92-95 for UI controls and dense forms.
 - Do not upscale a crop. Recapture at higher scale instead.
 - Keep labels and selected values readable at the rendered Gallery size.
+- For highlighted track-slot rows or toolbar buttons, prefer a selector crop with asymmetric padding or a broader panel crop so adjacent relevant items stay readable.
+- When a replacement screenshot must be reviewed immediately in a running Gallery tab or hosted static cache, change the media filename or add a deliberate cache-bust path change; do not rely on same-URL image replacement being visible after a normal refresh.
 - Prefer multiple focused crops over one tall unreadable crop.
 - Do not add permanent tutorial-only UI to the app; injected capture overlays must be temporary.
 

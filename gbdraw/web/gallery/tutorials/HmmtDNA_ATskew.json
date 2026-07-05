@@ -244,9 +244,24 @@
           "title": "Add AT skew slot",
           "body": "Set the added dinucleotide skew slot to AT, label it AT skew, and keep the two custom colors.",
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-06-01-at-skew-slot-values.webp",
+            "src": "./media/HmmtDNA_ATskew/manual-06-01-at-skew-slot-context.webp",
             "alt": "Custom circular track slot a_skew_2 set to dinucleotide AT with AT skew legend colors.",
             "caption": "Set the added dinucleotide skew slot to AT and label it AT skew."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": "[data-capture='circular-track-slot-a_skew_2']",
+            "highlightSelector": "[data-capture='circular-track-slot-a_skew_2']",
+            "cropPadding": {
+              "top": 200,
+              "right": 8,
+              "bottom": 178,
+              "left": 8
+            },
+            "openDetails": [
+              "Layout"
+            ],
+            "waitForSelector": "[data-capture='circular-track-slot-a_skew_2']"
           }
         }
       ]
@@ -264,9 +279,24 @@
           "title": "Tick track slot",
           "body": "Keep the tick slot in the custom stack and set the tick layout to Labels inside and ticks outside.",
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-07-01-tick-track-slot.webp",
+            "src": "./media/HmmtDNA_ATskew/manual-07-01-tick-track-context.webp",
             "alt": "Custom circular tick slot set to Labels inside and ticks outside.",
             "caption": "Keep the tick slot in the custom circular track stack."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": "[data-capture='circular-track-slot-ticks']",
+            "highlightSelector": "[data-capture='circular-track-slot-ticks']",
+            "cropPadding": {
+              "top": 224,
+              "right": 8,
+              "bottom": 54,
+              "left": 8
+            },
+            "openDetails": [
+              "Layout"
+            ],
+            "waitForSelector": "[data-capture='circular-track-slot-ticks']"
           }
         }
       ]

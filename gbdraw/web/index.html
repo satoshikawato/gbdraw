@@ -2173,6 +2173,7 @@
                                             <div
                                                 v-for="entry in circularTrackStackEntries()"
                                                 :key="entry.kind === 'axis' ? 'circular-axis-row' : `circular-slot-${entry.slot.id}-${entry.index}`"
+                                                :data-capture="entry.kind === 'axis' ? 'circular-track-axis-row' : `circular-track-slot-${entry.slot.id}`"
                                             >
                                                 <div
                                                     v-if="entry.kind === 'axis'"

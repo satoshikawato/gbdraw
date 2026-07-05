@@ -274,7 +274,12 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   await expect(mediaImages).toHaveCount(17);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-atskew-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(2);
-  await expect(tutorialPanel.locator('img[src$="manual-06-01-at-skew-slot-values.webp"]')).toHaveCount(1);
+  const atSkewSlotImage = tutorialPanel.locator('img[src$="manual-06-01-at-skew-slot-context.webp"]');
+  const tickTrackImage = tutorialPanel.locator('img[src$="manual-07-01-tick-track-context.webp"]');
+  await expect(atSkewSlotImage).toHaveCount(1);
+  await expect(tickTrackImage).toHaveCount(1);
+  await expect.poll(() => atSkewSlotImage.evaluate((element) => element.naturalHeight)).toBeGreaterThan(1000);
+  await expect.poll(() => tickTrackImage.evaluate((element) => element.naturalHeight)).toBeGreaterThan(800);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();

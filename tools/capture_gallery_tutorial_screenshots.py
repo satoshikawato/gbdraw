@@ -674,6 +674,60 @@ def normalize_crop_padding(value: Any, default: int = 12) -> dict[str, float]:
     return {"top": amount, "right": amount, "bottom": amount, "left": amount}
 
 
+def page_scroll_dimensions(page) -> dict[str, float]:
+    dimensions = page.evaluate(
+        """
+        () => ({
+          width: Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth || 0),
+          height: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0),
+        })
+        """
+    )
+    return {"width": float(dimensions["width"]), "height": float(dimensions["height"])}
+
+
+def padded_clip_from_boxes(
+    boxes: list[dict[str, Any]],
+    padding: dict[str, float],
+    dimensions: dict[str, float],
+) -> dict[str, float]:
+    if not boxes:
+        raise RuntimeError("Cannot compute screenshot clip without visible boxes.")
+
+    min_x = min(float(box["x"]) for box in boxes)
+    min_y = min(float(box["y"]) for box in boxes)
+    max_x = max(float(box["x"]) + float(box["width"]) for box in boxes)
+    max_y = max(float(box["y"]) + float(box["height"]) for box in boxes)
+
+    x = max(0.0, min_x - padding["left"])
+    y = max(0.0, min_y - padding["top"])
+    right = min(dimensions["width"], max_x + padding["right"])
+    bottom = min(dimensions["height"], max_y + padding["bottom"])
+    return {
+        "x": x,
+        "y": y,
+        "width": max(1.0, right - x),
+        "height": max(1.0, bottom - y),
+    }
+
+
+def capture_selector_clip(page, target_locator, padding: dict[str, float]) -> dict[str, float]:
+    box = target_locator.evaluate(
+        """
+        (element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            x: rect.left + window.scrollX,
+            y: rect.top + window.scrollY,
+            width: rect.width,
+            height: rect.height,
+          };
+        }
+        """
+    )
+    return padded_clip_from_boxes([box], padding, page_scroll_dimensions(page))
+
+
 def capture_open_select_clip(page, padding: dict[str, float]) -> dict[str, float]:
     boxes = page.evaluate(
         """
@@ -693,30 +747,7 @@ def capture_open_select_clip(page, padding: dict[str, float]) -> dict[str, float
     )
     if not boxes:
         raise RuntimeError("openSelect crop requested, but no capture select overlay exists.")
-
-    min_x = min(float(box["x"]) for box in boxes)
-    min_y = min(float(box["y"]) for box in boxes)
-    max_x = max(float(box["x"]) + float(box["width"]) for box in boxes)
-    max_y = max(float(box["y"]) + float(box["height"]) for box in boxes)
-    dimensions = page.evaluate(
-        """
-        () => ({
-          width: Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth || 0),
-          height: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0),
-        })
-        """
-    )
-
-    x = max(0.0, min_x - padding["left"])
-    y = max(0.0, min_y - padding["top"])
-    right = min(float(dimensions["width"]), max_x + padding["right"])
-    bottom = min(float(dimensions["height"]), max_y + padding["bottom"])
-    return {
-        "x": x,
-        "y": y,
-        "width": max(1.0, right - x),
-        "height": max(1.0, bottom - y),
-    }
+    return padded_clip_from_boxes(boxes, padding, page_scroll_dimensions(page))
 
 
 def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: dict[str, Any]) -> None:
@@ -798,6 +829,15 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
             clip=capture_open_select_clip(
                 page,
                 normalize_crop_padding(capture.get("cropPadding"), default=14),
+            ),
+        )
+    elif target_locator is not None and capture.get("cropPadding") is not None:
+        png_bytes = page.screenshot(
+            type="png",
+            clip=capture_selector_clip(
+                page,
+                target_locator,
+                normalize_crop_padding(capture.get("cropPadding"), default=12),
             ),
         )
     elif target_locator is not None:
