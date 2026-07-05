@@ -111,9 +111,7 @@
               "minWidth": 150,
               "placement": "right"
             },
-            "openDetails": [
-              "Colors"
-            ]
+            "openDetails": ["Colors"]
           }
         },
         {
@@ -135,18 +133,10 @@
             },
             "openSelect": {
               "selectedLabel": "Left",
-              "options": [
-                "Right",
-                "Left",
-                "Top",
-                "Bottom",
-                "None"
-              ],
+              "options": ["Right", "Left", "Top", "Bottom", "None"],
               "label": "Legend Position"
             },
-            "openDetails": [
-              "Title & Legend"
-            ]
+            "openDetails": ["Title & Legend"]
           }
         },
         {
@@ -196,9 +186,7 @@
           "capture": {
             "source": "webapp",
             "selector": "[data-capture=\"multi-record-canvas-controls\"]",
-            "openDetails": [
-              "Layout"
-            ],
+            "openDetails": ["Layout"],
             "actions": [
               {
                 "type": "evaluate",
@@ -244,16 +232,10 @@
             },
             "openSelect": {
               "selectedLabel": "Bottom",
-              "options": [
-                "None (Default)",
-                "Top",
-                "Bottom"
-              ],
+              "options": ["None (Default)", "Top", "Bottom"],
               "label": "Plot Title Position"
             },
-            "openDetails": [
-              "Title & Legend"
-            ],
+            "openDetails": ["Title & Legend"],
             "actions": [
               {
                 "type": "evaluate",
@@ -286,6 +268,40 @@
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
             "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",
             "caption": "The zoomed crop keeps the clicked chromosome CDS and popup metadata readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.25; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-80px, -40px) scale(1.25)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".feature-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]

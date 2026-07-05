@@ -501,6 +501,50 @@ test('Gallery renders operation media and keeps it inside a mobile viewport', as
   expect(overflow).toBe(false);
 });
 
+test('Gallery opens tutorial images at natural size in a modal', async ({ page }) => {
+  await page.goto(`${baseUrl}/gallery/#BGC0000708-BGC0000713`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  const image = tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]');
+  await expect(image).toHaveCount(1);
+  await image.scrollIntoViewIfNeeded();
+  await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+
+  const previewImageSize = await image.evaluate((element) => ({
+    naturalHeight: element.naturalHeight,
+    naturalWidth: element.naturalWidth
+  }));
+
+  await image.click();
+
+  const dialog = page.locator('.tutorial-lightbox');
+  await expect(dialog).toHaveAttribute('open', '');
+  await expect(dialog.locator(':scope > *')).toHaveCount(1);
+  await expect(dialog.locator('.tutorial-lightbox__shell, .tutorial-lightbox__header, .tutorial-lightbox__caption')).toHaveCount(0);
+  await expect(dialog.getByRole('button')).toHaveCount(0);
+
+  const fullSizeImage = dialog.getByRole('img');
+  await expect(fullSizeImage).toHaveAttribute('src', /manual-09-01-orthogroup-popup\.webp$/);
+  await expect.poll(() => fullSizeImage.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+
+  const fullSizeImageSize = await fullSizeImage.evaluate((element) => {
+    return {
+      displayHeight: element.clientHeight,
+      displayWidth: element.clientWidth,
+      naturalHeight: element.naturalHeight,
+      naturalWidth: element.naturalWidth
+    };
+  });
+  expect(fullSizeImageSize.naturalWidth).toBe(previewImageSize.naturalWidth);
+  expect(fullSizeImageSize.naturalHeight).toBe(previewImageSize.naturalHeight);
+  expect(Math.abs(fullSizeImageSize.displayWidth - previewImageSize.naturalWidth)).toBeLessThanOrEqual(1);
+  expect(Math.abs(fullSizeImageSize.displayHeight - previewImageSize.naturalHeight)).toBeLessThanOrEqual(1);
+
+  await fullSizeImage.click();
+  await expect(dialog).not.toHaveAttribute('open', '');
+});
+
 test('Gallery copy link button copies the selected sample URL', async ({ page }) => {
   await page.addInitScript(() => {
     let copiedText = '';

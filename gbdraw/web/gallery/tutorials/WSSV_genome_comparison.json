@@ -7,9 +7,7 @@
   "difficulty": "Advanced",
   "appMode": "Circular",
   "primaryWorkflow": "Circular conservation rings with browser LOSAT blastn",
-  "requirements": [
-    "Enough available memory for one WSSV GenBank record, 20 comparison FASTA files, and LOSAT blastn output."
-  ],
+  "requirements": ["Enough available memory for one WSSV GenBank record, 20 comparison FASTA files, and LOSAT blastn output."],
   "downloads": [
     {
       "label": "AP027280",
@@ -212,16 +210,10 @@
             },
             "openSelect": {
               "selectedLabel": "Spreadout",
-              "options": [
-                "Tuckin",
-                "Middle",
-                "Spreadout"
-              ],
+              "options": ["Tuckin", "Middle", "Spreadout"],
               "label": "Track Preset"
             },
-            "openDetails": [
-              "Layout"
-            ]
+            "openDetails": ["Layout"]
           }
         },
         {
@@ -243,18 +235,10 @@
             },
             "openSelect": {
               "selectedLabel": "Left",
-              "options": [
-                "Right",
-                "Left",
-                "Top",
-                "Bottom",
-                "None"
-              ],
+              "options": ["Right", "Left", "Top", "Bottom", "None"],
               "label": "Legend Position"
             },
-            "openDetails": [
-              "Title & Legend"
-            ]
+            "openDetails": ["Title & Legend"]
           }
         }
       ]
@@ -437,6 +421,40 @@
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
             "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and feature popup metadata.",
             "caption": "The zoomed crop keeps the clicked CDS, ring context, and note, product, and protein_id metadata readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.25; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-80px, -40px) scale(1.25)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".feature-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]

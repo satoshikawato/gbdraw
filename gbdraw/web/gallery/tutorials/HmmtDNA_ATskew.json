@@ -87,16 +87,10 @@
             },
             "openSelect": {
               "selectedLabel": "Middle",
-              "options": [
-                "Tuckin",
-                "Middle",
-                "Spreadout"
-              ],
+              "options": ["Tuckin", "Middle", "Spreadout"],
               "label": "Track Preset"
             },
-            "openDetails": [
-              "Layout"
-            ],
+            "openDetails": ["Layout"],
             "actions": [
               {
                 "type": "evaluate",
@@ -124,16 +118,10 @@
             },
             "openSelect": {
               "selectedLabel": "Out",
-              "options": [
-                "None",
-                "Out",
-                "Both (Out + Inner)"
-              ],
+              "options": ["None", "Out", "Both (Out + Inner)"],
               "label": "Label Mode"
             },
-            "openDetails": [
-              "Labels"
-            ]
+            "openDetails": ["Labels"]
           }
         },
         {
@@ -155,18 +143,10 @@
             },
             "openSelect": {
               "selectedLabel": "Left",
-              "options": [
-                "Right",
-                "Left",
-                "Top",
-                "Bottom",
-                "None"
-              ],
+              "options": ["Right", "Left", "Top", "Bottom", "None"],
               "label": "Legend Position"
             },
-            "openDetails": [
-              "Title & Legend"
-            ]
+            "openDetails": ["Title & Legend"]
           }
         }
       ]
@@ -259,9 +239,7 @@
               "bottom": 178,
               "left": 8
             },
-            "openDetails": [
-              "Layout"
-            ],
+            "openDetails": ["Layout"],
             "waitForSelector": "[data-capture='circular-track-slot-a_skew_2']"
           }
         }
@@ -297,9 +275,7 @@
               "bottom": 54,
               "left": 8
             },
-            "openDetails": [
-              "Layout"
-            ],
+            "openDetails": ["Layout"],
             "waitForSelector": "[data-capture='circular-track-slot-ticks']"
           }
         }
@@ -347,6 +323,40 @@
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
             "alt": "Zoomed human mitochondrial AT skew crop with the clicked RNR2 rRNA feature and feature popup metadata.",
             "caption": "The zoomed crop keeps the clicked RNR2 feature and its gene, product, and db_xref metadata readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-120px, -40px) scale(1.35)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id='fbdb78069']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; }"
+              }
+            ],
+            "clipSelectors": ["[data-gbdraw-feature-id='fbdb78069']", ".feature-popup"],
+            "cropPadding": {
+              "top": 150,
+              "right": 28,
+              "bottom": 24,
+              "left": 150
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]

@@ -7,9 +7,7 @@
   "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP collinear blocks",
-  "requirements": [
-    "Enough available memory for five bacterial GenBank records and LOSATP output."
-  ],
+  "requirements": ["Enough available memory for five bacterial GenBank records and LOSATP output."],
   "downloads": [
     {
       "label": "AP027078",
@@ -139,11 +137,7 @@
             },
             "openSelect": {
               "selectedLabel": "Collinear blocks",
-              "options": [
-                "Orthogroups",
-                "Collinear blocks",
-                "Pairwise"
-              ],
+              "options": ["Orthogroups", "Collinear blocks", "Pairwise"],
               "label": "blastp mode"
             }
           }
@@ -167,11 +161,7 @@
             },
             "openSelect": {
               "selectedLabel": "Orientation + identity",
-              "options": [
-                "Average identity",
-                "Orientation",
-                "Orientation + identity"
-              ],
+              "options": ["Average identity", "Orientation", "Orientation + identity"],
               "label": "Color mode"
             }
           }
@@ -213,15 +203,10 @@
             },
             "openSelect": {
               "selectedLabel": "Ruler (Ticks)",
-              "options": [
-                "Bar (Simple)",
-                "Ruler (Ticks)"
-              ],
+              "options": ["Bar (Simple)", "Ruler (Ticks)"],
               "label": "Scale Style"
             },
-            "openDetails": [
-              "Axis & Scale"
-            ]
+            "openDetails": ["Axis & Scale"]
           }
         }
       ]
@@ -248,6 +233,40 @@
             "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae collinear crop with the highlighted collinear block ribbon and popup.",
             "caption": "The zoomed crop keeps the highlighted collinear block ribbon and popup readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-110px, -30px) scale(1.15)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "path[data-gbdraw-pairwise-match-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".pairwise-match-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = 520; app.clickedPairwiseMatchPos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".pairwise-match-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".pairwise-match-popup"
           }
         }
       ]
@@ -263,6 +282,40 @@
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
             "alt": "Hepatoplasmataceae Feature editor drawer controls with label, visibility, fill, stroke, and multi-target controls visible.",
             "caption": "The Feature editor drawer crop keeps label, visibility, fill, stroke, and multi-target controls readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".feature-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]

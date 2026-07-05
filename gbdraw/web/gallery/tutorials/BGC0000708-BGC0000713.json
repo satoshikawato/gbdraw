@@ -7,9 +7,7 @@
   "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP orthogroups with feature color rules",
-  "requirements": [
-    "GenBank features that retain antiSMASH qualifiers such as gene_kind."
-  ],
+  "requirements": ["GenBank features that retain antiSMASH qualifiers such as gene_kind."],
   "downloads": [
     {
       "label": "BGC0000708",
@@ -108,6 +106,18 @@
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
             "alt": "Linear Run LOSAT settings panel with Run LOSAT selected, LOSATP selected, and execution and thread controls visible.",
             "caption": "The LOSAT settings panel shows the Run LOSAT source, LOSATP mode, and browser execution controls."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "waitForSelector": "[data-capture='linear-losat-settings']"
           }
         },
         {
@@ -129,11 +139,7 @@
             },
             "openSelect": {
               "selectedLabel": "Orthogroups",
-              "options": [
-                "Orthogroups",
-                "Collinear blocks",
-                "Pairwise"
-              ],
+              "options": ["Orthogroups", "Collinear blocks", "Pairwise"],
               "label": "blastp mode"
             }
           }
@@ -199,16 +205,10 @@
             },
             "openSelect": {
               "selectedLabel": "Middle",
-              "options": [
-                "Above",
-                "Middle",
-                "Below"
-              ],
+              "options": ["Above", "Middle", "Below"],
               "label": "Track Layout"
             },
-            "openDetails": [
-              "Layout"
-            ]
+            "openDetails": ["Layout"]
           }
         },
         {
@@ -230,15 +230,10 @@
             },
             "openSelect": {
               "selectedLabel": "Curve",
-              "options": [
-                "Ribbon",
-                "Curve"
-              ],
+              "options": ["Ribbon", "Curve"],
               "label": "Pairwise Match Style"
             },
-            "openDetails": [
-              "Pairwise Match"
-            ]
+            "openDetails": ["Pairwise Match"]
           }
         }
       ]
@@ -278,17 +273,10 @@
             },
             "openSelect": {
               "selectedLabel": "First Record Only",
-              "options": [
-                "None",
-                "All Records",
-                "First Record Only",
-                "Top Orthogroup Record"
-              ],
+              "options": ["None", "All Records", "First Record Only", "Top Orthogroup Record"],
               "label": "Show Labels"
             },
-            "openDetails": [
-              "Labels"
-            ]
+            "openDetails": ["Labels"]
           }
         },
         {
@@ -310,15 +298,10 @@
             },
             "openSelect": {
               "selectedLabel": "Ruler (Ticks)",
-              "options": [
-                "Bar (Simple)",
-                "Ruler (Ticks)"
-              ],
+              "options": ["Bar (Simple)", "Ruler (Ticks)"],
               "label": "Scale Style"
             },
-            "openDetails": [
-              "Axis & Scale"
-            ]
+            "openDetails": ["Axis & Scale"]
           }
         },
         {
@@ -340,18 +323,10 @@
             },
             "openSelect": {
               "selectedLabel": "Bottom",
-              "options": [
-                "Right",
-                "Left",
-                "Top",
-                "Bottom",
-                "None"
-              ],
+              "options": ["Right", "Left", "Top", "Bottom", "None"],
               "label": "Legend Position"
             },
-            "openDetails": [
-              "Title & Legend"
-            ]
+            "openDetails": ["Title & Legend"]
           }
         }
       ]
@@ -414,6 +389,40 @@
             "src": "./media/BGC0000708-BGC0000713/manual-09-01-orthogroup-popup.webp",
             "alt": "Zoomed aminoglycoside BGC orthogroup ribbon crop with the orthogroup match popup open.",
             "caption": "The zoomed crop keeps the clicked orthogroup ribbon and popup readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.4; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-180px, -40px) scale(1.4)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "path[data-gbdraw-pairwise-match-id='comparison3_match1']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".pairwise-match-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = 520; app.clickedPairwiseMatchPos.y = 280; }"
+              }
+            ],
+            "clipSelectors": [".pairwise-match-popup"],
+            "cropPadding": {
+              "top": 170,
+              "right": 28,
+              "bottom": 60,
+              "left": 170
+            },
+            "waitForSelector": ".pairwise-match-popup"
           }
         }
       ]
@@ -427,6 +436,40 @@
             "src": "./media/BGC0000708-BGC0000713/manual-10-01-feature-popup.webp",
             "alt": "Zoomed aminoglycoside BGC crop with the clicked CDS, its orthogroup ribbon context, and feature popup metadata.",
             "caption": "The zoomed crop keeps the clicked CDS, orthogroup context, and gene_kind metadata readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-130px, -40px) scale(1.35)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id='fa7a0b1fc']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".feature-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]
@@ -469,24 +512,23 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
             "viewport": {
               "width": 1440,
               "height": 700
             },
             "actions": [
               {
-                "type": "wait",
-                "ms": 3000
+                "type": "evaluate",
+                "script": "() => { const app = window.__GBDRAW_APP__; if (!app) return; app.legendEntries = [{ caption: 'Core biosynthetic genes', originalCaption: 'Core biosynthetic genes', color: '#d03535', xPos: 31.428571428571427, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Additional biosynthetic genes', originalCaption: 'Additional biosynthetic genes', color: '#f787a9', xPos: 390.28571428571433, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Transport-related genes', originalCaption: 'Transport-related genes', color: '#577edb', xPos: 821.1428571428572, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Regulatory genes', originalCaption: 'Regulatory genes', color: '#57b767', xPos: 1180, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'other proteins', originalCaption: 'other proteins', color: '#dddddd', xPos: 1454.857142857143, yPos: 10, showStroke: false, featureIds: [] }]; }"
               },
               {
                 "type": "evaluate",
-                "script": "window.__GBDRAW_APP__?.openRightDrawerTab?.('legend')"
+                "script": "() => { window.__GBDRAW_APP__?.openRightDrawerTab?.('legend'); }"
               },
               {
-                "type": "waitForSelector",
-                "selector": ".right-drawer input[type=\"text\"]",
-                "state": "visible"
+                "type": "wait",
+                "ms": 1000
               },
               {
                 "type": "evaluate",

@@ -7,9 +7,7 @@
   "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "Large LOSATP orthogroup comparison",
-  "requirements": [
-    "Enough available memory for nine large viral GenBank records and LOSATP output."
-  ],
+  "requirements": ["Enough available memory for nine large viral GenBank records and LOSATP output."],
   "downloads": [
     {
       "label": "LC738868",
@@ -161,11 +159,7 @@
             },
             "openSelect": {
               "selectedLabel": "Orthogroups",
-              "options": [
-                "Orthogroups",
-                "Collinear blocks",
-                "Pairwise"
-              ],
+              "options": ["Orthogroups", "Collinear blocks", "Pairwise"],
               "label": "blastp mode"
             }
           }
@@ -209,9 +203,7 @@
           "capture": {
             "source": "webapp",
             "cardTitle": "Layout",
-            "openDetails": [
-              "Layout"
-            ]
+            "openDetails": ["Layout"]
           }
         }
       ]
@@ -290,6 +282,40 @@
             "src": "./media/majanivirus_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Zoomed majanivirus orthogroup ribbon crop with the orthogroup match popup open.",
             "caption": "The zoomed crop keeps the clicked orthogroup ribbon and popup readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-110px, -30px) scale(1.15)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "path[data-gbdraw-pairwise-match-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".pairwise-match-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = 520; app.clickedPairwiseMatchPos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".pairwise-match-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".pairwise-match-popup"
           }
         }
       ]
@@ -323,6 +349,40 @@
             "src": "./media/majanivirus_orthogroup/post-02-01-feature-popup.webp",
             "alt": "Majanivirus Feature editor drawer controls with product label, fill, stroke, and multi-target controls visible.",
             "caption": "The Feature editor drawer crop keeps product label, fill, stroke, and multi-target controls readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".feature-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]

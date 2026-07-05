@@ -49,10 +49,11 @@ GENERIC_OPERATION_MEDIA_RE = re.compile(
     re.IGNORECASE,
 )
 
-DEFAULT_MAX_IMAGE_WIDTH = 1400
-DEFAULT_MAX_IMAGE_HEIGHT = 1400
-DEFAULT_MAX_FILE_SIZE_KB = 650
-DEFAULT_WEBP_QUALITY = 86
+DEFAULT_MAX_IMAGE_WIDTH = 4200
+DEFAULT_MAX_IMAGE_HEIGHT = 4200
+DEFAULT_MAX_FILE_SIZE_KB = 2400
+DEFAULT_WEBP_QUALITY = 95
+DEFAULT_DEVICE_SCALE_FACTOR = 3
 DEFAULT_VIEWPORT = {"width": 1280, "height": 900}
 CAPTURE_SELECT_MENU_SELECTOR = ".gbdraw-capture-select-menu"
 CAPTURE_SELECT_CONTROL_SELECTOR = ".gbdraw-capture-select-control"
@@ -263,7 +264,7 @@ def add_media_validation(
         return
 
     too_large = width > max_width or height > max_height
-    full_screen_like = width >= 1800 or (width >= 1400 and height >= 900) or (width >= 1200 and height >= 1000)
+    full_screen_like = width >= 5400 or (width >= 4200 and height >= 2700) or (width >= 3600 and height >= 3000)
     if too_large or full_screen_like:
         message = (
             f"{context.label}: {source} dimensions are {width}x{height}; "
@@ -433,7 +434,8 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
     value = action.get("value")
 
     if action_type == "click":
-        page.locator(selector).click()
+        click_options = {"force": True} if action.get("force") is True else {}
+        page.locator(selector).first.click(**click_options)
     elif action_type == "fill":
         page.locator(selector).fill("" if value is None else str(value))
     elif action_type == "select":
@@ -443,7 +445,12 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
     elif action_type == "uncheck":
         page.locator(selector).uncheck()
     elif action_type == "waitForSelector":
-        page.locator(selector).wait_for(state=as_text(action.get("state")) or "visible")
+        page.locator(selector).first.wait_for(state=as_text(action.get("state")) or "visible")
+    elif action_type == "waitForFunction":
+        script = as_text(action.get("script"))
+        timeout = action.get("timeout")
+        if script:
+            page.wait_for_function(script, timeout=int(timeout) if timeout else None)
     elif action_type == "evaluate":
         script = as_text(action.get("script"))
         if script:
@@ -650,11 +657,11 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
 def resolve_capture_target(page, capture: dict[str, Any]):
     selector = as_text(capture.get("selector"))
     if selector:
-        return page.locator(selector).first()
+        return page.locator(selector).first
 
     card_title = as_text(capture.get("cardTitle"))
     if card_title:
-        return page.locator(".card").filter(has_text=re.compile(re.escape(card_title), re.IGNORECASE)).first()
+        return page.locator(".card").filter(has_text=re.compile(re.escape(card_title), re.IGNORECASE)).first
 
     return None
 
@@ -750,6 +757,36 @@ def capture_open_select_clip(page, padding: dict[str, float]) -> dict[str, float
     return padded_clip_from_boxes(boxes, padding, page_scroll_dimensions(page))
 
 
+def capture_multi_selector_clip(
+    page,
+    selectors: list[str],
+    padding: dict[str, float],
+) -> dict[str, float]:
+    boxes = page.evaluate(
+        """
+        (selectors) => selectors.flatMap((selector) => {
+          try {
+            return Array.from(document.querySelectorAll(selector));
+          } catch {
+            return [];
+          }
+        }).map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            x: rect.left + window.scrollX,
+            y: rect.top + window.scrollY,
+            width: rect.width,
+            height: rect.height,
+          };
+        }).filter((box) => box.width > 0 && box.height > 0)
+        """,
+        selectors,
+    )
+    if not boxes:
+        raise RuntimeError("clipSelectors crop requested, but no visible selector boxes were found.")
+    return padded_clip_from_boxes(boxes, padding, page_scroll_dimensions(page))
+
+
 def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: dict[str, Any]) -> None:
     source = as_text(capture.get("source")).lower() or "gallery"
     viewport = capture.get("viewport") if isinstance(capture.get("viewport"), dict) else DEFAULT_VIEWPORT
@@ -823,12 +860,23 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         page.wait_for_timeout(100)
     apply_open_select_overlays(page, capture.get("openSelect"))
 
+    clip_selectors = [as_text(selector) for selector in as_array(capture.get("clipSelectors")) if as_text(selector)]
+
     if as_text(capture.get("crop")) == "openSelect":
         png_bytes = page.screenshot(
             type="png",
             clip=capture_open_select_clip(
                 page,
                 normalize_crop_padding(capture.get("cropPadding"), default=14),
+            ),
+        )
+    elif clip_selectors:
+        png_bytes = page.screenshot(
+            type="png",
+            clip=capture_multi_selector_clip(
+                page,
+                clip_selectors,
+                normalize_crop_padding(capture.get("cropPadding"), default=24),
             ),
         )
     elif target_locator is not None and capture.get("cropPadding") is not None:
@@ -862,7 +910,14 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
     return target
 
 
-def capture_examples(samples: list[dict[str, Any]], *, operation_filter: str, quality: int) -> int:
+def capture_examples(
+    samples: list[dict[str, Any]],
+    *,
+    operation_filter: str,
+    quality: int,
+    device_scale_factor: float,
+    keep_going: bool,
+) -> int:
     capturable: list[tuple[dict[str, Any], TutorialContext, dict[str, Any]]] = []
     for sample in samples:
         tutorial_path = resolve_gallery_reference(as_text(sample.get("tutorial")))
@@ -890,16 +945,28 @@ def capture_examples(samples: list[dict[str, Any]], *, operation_filter: str, qu
                 "Could not launch Playwright Chromium. In sandboxed agent environments, rerun this "
                 f"command with sandbox escalation. Underlying error: {exc}"
             ) from exc
-        page = browser.new_page()
+        page = browser.new_page(device_scale_factor=device_scale_factor)
+        captured_count = 0
+        failures: list[str] = []
         try:
             for sample, context, operation in capturable:
-                target = capture_operation(page, sample, operation, base_url, quality)
-                rel = target.relative_to(REPO_ROOT)
-                with Image.open(target) as image:
-                    print(f"captured {context.label}: {rel} {image.size[0]}x{image.size[1]}")
+                try:
+                    target = capture_operation(page, sample, operation, base_url, quality)
+                    rel = target.relative_to(REPO_ROOT)
+                    with Image.open(target) as image:
+                        print(f"captured {context.label}: {rel} {image.size[0]}x{image.size[1]}", flush=True)
+                    captured_count += 1
+                except Exception as exc:
+                    message = f"failed {context.label}: {exc}"
+                    if not keep_going:
+                        raise
+                    print(message, file=sys.stderr, flush=True)
+                    failures.append(message)
         finally:
             browser.close()
-    return len(capturable)
+    if failures:
+        print(f"capture completed with {len(failures)} failure(s).", file=sys.stderr)
+    return captured_count
 
 
 def print_validation(result: ValidationResult, *, strict: bool) -> int:
@@ -930,6 +997,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--strict", action="store_true", help="Treat validation warnings as failures.")
     parser.add_argument("--operation", default="", help="Capture only operations whose label or output filename contains this text.")
     parser.add_argument("--quality", type=int, default=DEFAULT_WEBP_QUALITY, help="WebP quality for captured screenshots.")
+    parser.add_argument(
+        "--device-scale-factor",
+        type=float,
+        default=DEFAULT_DEVICE_SCALE_FACTOR,
+        help="Browser device scale factor for captured screenshots.",
+    )
+    parser.add_argument("--keep-going", action="store_true", help="Continue capturing after an operation fails.")
     parser.add_argument("--max-width", type=int, default=DEFAULT_MAX_IMAGE_WIDTH, help="Maximum accepted image width.")
     parser.add_argument("--max-height", type=int, default=DEFAULT_MAX_IMAGE_HEIGHT, help="Maximum accepted image height.")
     parser.add_argument(
@@ -954,7 +1028,13 @@ def main() -> int:
         )
         return print_validation(result, strict=args.strict)
 
-    capture_examples(samples, operation_filter=args.operation, quality=args.quality)
+    capture_examples(
+        samples,
+        operation_filter=args.operation,
+        quality=args.quality,
+        device_scale_factor=args.device_scale_factor,
+        keep_going=args.keep_going,
+    )
     return 0
 
 

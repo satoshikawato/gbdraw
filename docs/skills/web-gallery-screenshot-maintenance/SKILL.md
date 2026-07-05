@@ -49,6 +49,8 @@ Then inspect the target tutorial JSON and media directory:
 
 Use the real UI the user operates.
 
+- Tutorial media must render as appropriately scaled thumbnails in the Gallery, while click-to-open behavior must show the original image itself at natural bitmap size. Do not use a framed page-like modal, captions, headers, or extra white shell around the opened image.
+- If a screenshot is unreadable in the Gallery, fix the source capture density, crop extent, or thumbnail/lightbox behavior. Do not rely on browser zoom, CSS upscaling, or a larger wrapper around the same low-resolution bitmap.
 - Mode selector screenshots must show the real Circular/Linear control with the active choice readable.
 - File uploads must show the real uploader/input card the user operates, not a reconstructed list of file chips. The crop must include the uploaded file and the neighboring per-record controls that are visible in the actual row.
 - When the session or command uses per-record metadata that affects the figure, such as `--record_label`, `--record_subtitle`, `definition`, `record_subtitle`, organism/strain, subtitle/title, region, reverse complement, or LOSAT filename, include those fields in both the tutorial table/text and the upload-row crop. Do not split file upload and record label/title entry into disconnected screenshots when the values live in the same input card.
@@ -68,6 +70,7 @@ Use the real UI the user operates.
 - Popups must come from real clicks in the restored session whenever possible.
 - Popup crops must be tight enough that the highlighted clicked feature, match ribbon, orthogroup ribbon, or collinear block and the popup text are readable in the rendered Gallery. Do not use a full generated-preview crop when the inspected target is only a small part of the figure.
 - If the popup covers the highlighted feature, orthogroup ribbon, or collinear block, move the popup during capture and then crop the real UI state. Do not accept a crop where the popup is readable but the highlighted diagram target is hidden.
+- Before recapturing a popup from a restored session, verify the saved SVG and session metadata agree with the tutorial's intended label rules. Stale session artifacts can make popups fall back to `product` even when the rendered figure or tutorial expects `gene`; fix the session/result metadata first, then recapture.
 - Feature editor popup crops must keep the relevant affected item(s) or multi-target controls readable, including apply-to-all/scope icons or dialogs when they are the point of the operation. Crop or move the popup so these controls are not cut off at the image edge.
 - Judge readability at the rendered Gallery size, not at the source bitmap's full size. A source image that looks readable only when opened standalone is a `recrop` if Gallery CSS downscales it enough to make popup text, highlighted targets, or affected item(s) hard to read.
 - Generated preview crops are appropriate only for final result checks, visual inspection, legends, popups, or rendered-output comparisons.
@@ -89,8 +92,9 @@ Use Playwright against the current app or Gallery state. If `@playwright/test` i
 Capture standards:
 
 - For restored-session captures, assert critical control values in the browser before saving the crop when the operation depends on exact row/order/selector state. Multi-record Record Order crops, for example, should verify `#1@1, #2@1, #3@2, #4@2, #5@2, #6@2` rather than trusting the restored page by sight.
+- For restored-session label or popup captures, assert representative label text in both `results[0].content` and the relevant feature/orthogroup metadata before saving. For qualifier-priority examples, check `qualifierPriorityRules`, feature `label`/`display_label`, and orthogroup overrides or candidates instead of trusting a visual crop alone.
 - For representative upload-row crops, assert both the file order and the row's metadata values in app state before capture; do not trust visible labels alone because input values may be clipped in the DOM text.
-- Use device scale factor 2 or higher; use 3 for dense forms.
+- Use device scale factor 2 or higher; use 3 for dense forms and popup/detail screenshots. Treat requests such as "150 dpi" as a demand for a higher-density source bitmap: increase device scale factor or crop tighter, never upscale an existing low-resolution image.
 - Save temporary PNGs under `/tmp` and commit WebP only.
 - Use WebP quality 92-95 for UI controls and dense forms.
 - Do not upscale a crop. Recapture at higher scale instead.
@@ -98,9 +102,12 @@ Capture standards:
 - For multi-row form captures such as `SPECIFIC RULES (-t)`, preserve the intended vertical scope when recapturing. If the previous screenshot included the surrounding uploader rows and whitespace, keep that top/bottom extent, but reduce excess horizontal whitespace by changing the source panel width before capture.
 - Use temporary capture-only CSS or DOM changes to hide unrelated fixed bars, footers, or following cards only when they intrude into the preserved crop area. Do not commit those UI changes unless the app itself is wrong.
 - For highlighted track-slot rows or toolbar buttons, prefer a selector crop with asymmetric padding or a broader panel crop so adjacent relevant items stay readable.
+- When overlapping SVG paths intercept a real popup target, use a forced click only for the capture action and then visually verify the opened popup corresponds to the intended feature, orthogroup, ribbon, or block.
 - When a replacement screenshot must be reviewed immediately in a running Gallery tab or hosted static cache, change the media filename or add a deliberate cache-bust path change; do not rely on same-URL image replacement being visible after a normal refresh.
 - Prefer multiple focused crops over one tall unreadable crop.
 - Do not add permanent tutorial-only UI to the app; injected capture overlays must be temporary.
+
+For broad "all screenshots" refreshes, distinguish "all capture-defined operations" from all referenced media. If a tutorial still has manual-only screenshots, either add capture metadata for high-risk controls/popups before recapturing or explicitly report which referenced media remain manual.
 
 ## Writing Rules
 
