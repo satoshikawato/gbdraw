@@ -147,6 +147,7 @@ Use structured display when tutorial content has repeated fields.
 - Keep caveats such as regex specificity in a separate `note`; do not hide them inside a dense row.
 - If the Gallery renderer only supports bullet lists, add a small reusable renderer field such as `table: { columns, rows }` rather than encoding table markup in JSON strings.
 - Add compact CSS with horizontal overflow for narrow viewports and update focused browser tests to assert table headers and representative rows.
+- Do not allow table text to break inside short file names, accessions, extensions, or other atomic tokens such as `BGC0000708.gbk`. If a table is too narrow, preserve the token and rely on the table wrapper's horizontal overflow instead of using character-level wrapping.
 - Keep existing `items` bullets for simple one-column checklists where a table would add noise.
 
 ## Verification
@@ -164,5 +165,6 @@ If Node Playwright is unavailable, use Python Playwright for equivalent media an
 
 When adding or removing tutorial media references, update focused browser tests that assert image counts or exact `src` values.
 When removing a duplicate operation media reference, delete the now-unreferenced WebP and assert the removed `src` is absent if a focused test already covers that tutorial.
+When adding or changing tutorial tables, verify representative cells in browser rendering so short file names, accessions, extensions, and similar atomic tokens are not split across lines.
 
 Manual review must check desktop and mobile Gallery views, image readability, caption specificity, writing/section structure, table suitability, preview toolbar/title/legend overlap, and that no input/edit operation is represented only by a generated preview.
