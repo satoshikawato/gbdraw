@@ -371,8 +371,8 @@
           "body": "Click the rendered feature or match so the Match ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-01-01-match-popup.webp",
-            "alt": "Zoomed majanivirus match ribbon crop with the orthogroup match popup open.",
-            "caption": "The zoomed crop keeps the clicked match ribbon and popup readable."
+            "alt": "Zoomed majanivirus match ribbon crop with the highlighted orthogroup ribbon and popup open.",
+            "caption": "The zoomed crop keeps the highlighted match ribbon and popup readable."
           }
         }
       ]
@@ -386,8 +386,8 @@
           "body": "Click a CDS feature to inspect product, label, and color controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "CDS feature popup opened from the majanivirus comparison preview.",
-            "caption": "Click a CDS feature to inspect product, label, and color controls."
+            "alt": "Majanivirus feature popup edit controls with product label, fill, stroke, and multi-target controls visible.",
+            "caption": "The feature popup crop keeps product label, fill, stroke, and multi-target controls readable."
           }
         }
       ]

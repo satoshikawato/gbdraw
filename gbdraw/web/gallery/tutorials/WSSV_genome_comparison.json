@@ -458,19 +458,14 @@
     {
       "title": "Inspect a CDS feature",
       "body": "Click an outer CDS feature in the interactive SVG to inspect the label, location, product, protein_id, and source qualifiers.",
-      "media": {
-        "src": "./media/WSSV_genome_comparison/04-feature-popup.webp",
-        "alt": "WSSV conservation ring diagram with a CDS feature popup open.",
-        "caption": "Feature clicks are useful for checking which annotation field is driving labels and colors."
-      },
       "operations": [
         {
           "title": "CDS feature popup",
           "body": "Click the rendered feature or match so the CDS feature popup metadata is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing CDS feature popup metadata with note, product, protein_id fields.",
-            "caption": "The real clicked popup crop shows CDS feature popup metadata with note, product, protein_id fields."
+            "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and feature popup metadata.",
+            "caption": "The zoomed crop keeps the clicked CDS, ring context, and note, product, and protein_id metadata readable."
           }
         }
       ]
@@ -519,8 +514,8 @@
           "body": "Click the rendered feature or match so the CDS feature popup metadata is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing CDS feature popup metadata with note, product, protein_id fields.",
-            "caption": "Feature popup metadata identifies the annotation fields behind labels and colors."
+            "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and feature popup metadata.",
+            "caption": "The clicked CDS, ring context, and popup metadata identify the annotation fields behind labels and colors."
           }
         }
       ]

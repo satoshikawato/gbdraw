@@ -15,10 +15,10 @@ Before editing or reviewing Gallery tutorial screenshots, read:
 
 - `CLAUDE.md`
 - `gbdraw/web/CLAUDE.md`
-- `docs/WEB_GALLERY_OPERATION_SCREENSHOTS_PLAN.md`
-- `docs/WEB_GALLERY_REAL_UI_SCREENSHOT_ROLLOUT_PLAN.md`
-- `docs/WEB_GALLERY_DROPDOWN_SCREENSHOT_PLAN.md`
-- `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`
+- `docs/WEB_GALLERY_OPERATION_SCREENSHOTS_PLAN.md`, if present
+- `docs/WEB_GALLERY_REAL_UI_SCREENSHOT_ROLLOUT_PLAN.md`, if present
+- `docs/WEB_GALLERY_DROPDOWN_SCREENSHOT_PLAN.md`, if present
+- `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`, if present
 - `docs/WEB_GALLERY_SCREENSHOT_RECAPTURE_PLAN.md`, if present
 
 Then inspect the target tutorial JSON and media directory:
@@ -53,7 +53,10 @@ Use the real UI the user operates.
 - Show the generated plot only once after all required pre-generation inputs and rules have been entered, unless a later step is explicitly about inspecting a popup or visual result.
 - Toolbar actions must show the actual toolbar, not an isolated or reconstructed button.
 - Popups must come from real clicks in the restored session whenever possible.
-- Popup crops must be tight enough that the clicked feature, match ribbon, or orthogroup ribbon and the popup text are readable in the rendered Gallery. Do not use a full generated-preview crop when the inspected target is only a small part of the figure.
+- Popup crops must be tight enough that the highlighted clicked feature, match ribbon, orthogroup ribbon, or collinear block and the popup text are readable in the rendered Gallery. Do not use a full generated-preview crop when the inspected target is only a small part of the figure.
+- If the popup covers the highlighted feature, orthogroup ribbon, or collinear block, move the popup during capture and then crop the real UI state. Do not accept a crop where the popup is readable but the highlighted diagram target is hidden.
+- Feature editor popup crops must keep the relevant affected item(s) or multi-target controls readable, including apply-to-all/scope icons or dialogs when they are the point of the operation. Crop or move the popup so these controls are not cut off at the image edge.
+- Judge readability at the rendered Gallery size, not at the source bitmap's full size. A source image that looks readable only when opened standalone is a `recrop` if Gallery CSS downscales it enough to make popup text, highlighted targets, or affected item(s) hard to read.
 - Generated preview crops are appropriate only for final result checks, visual inspection, legends, popups, or rendered-output comparisons.
 - Do not show the same generated preview or popup twice in immediate succession as both step-level media and operation media. If the operation already carries the result or popup crop, omit step-level media or make the two crops visibly different and purposeful.
 - Post-generation editor screenshots must come from the exact restored session for that example. Before capturing drawers such as Legend, Features, or Orthogroups, verify the restored editor state matches the example-specific generated result. A generic or stale drawer state, such as a BGC legend editor showing only `CDS`, is a `replace`, even if it is a real drawer crop.

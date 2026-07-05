@@ -313,19 +313,14 @@
     {
       "title": "Inspect a feature",
       "body": "Click a CDS or RNA feature in the interactive SVG to confirm its gene, product, location, and sequence metadata.",
-      "media": {
-        "src": "./media/HmmtDNA_ATskew/03-feature-popup.webp",
-        "alt": "Human mitochondrial AT skew diagram with a feature popup open.",
-        "caption": "Feature clicks are useful for checking that label text came from the intended qualifier."
-      },
       "operations": [
         {
           "title": "Feature popup",
           "body": "Click the rendered feature or match so the Feature popup metadata is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Feature popup metadata with gene, product, db_xref fields.",
-            "caption": "The real clicked popup crop shows Feature popup metadata with gene, product, db_xref fields."
+            "alt": "Zoomed human mitochondrial AT skew crop with the clicked RNR2 rRNA feature and feature popup metadata.",
+            "caption": "The zoomed crop keeps the clicked RNR2 feature and its gene, product, and db_xref metadata readable."
           }
         }
       ]
@@ -359,8 +354,8 @@
           "body": "Click the rendered feature or match so the Feature popup metadata is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Feature popup metadata with gene, product, db_xref fields.",
-            "caption": "Feature popup metadata supports label and qualifier-priority checks."
+            "alt": "Zoomed human mitochondrial AT skew crop with the clicked RNR2 rRNA feature and feature popup metadata.",
+            "caption": "The clicked RNR2 feature and popup metadata support label and qualifier-priority checks."
           }
         }
       ]

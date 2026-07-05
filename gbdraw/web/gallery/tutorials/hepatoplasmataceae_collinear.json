@@ -255,19 +255,14 @@
     {
       "title": "Check collinear blocks",
       "body": "Use the generated SVG preview to inspect the curved block ribbons between adjacent genomes. Orientation + identity colors separate forward and reverse orientation while retaining identity information.",
-      "media": {
-        "src": "./media/hepatoplasmataceae_collinear/03-collinearity-popup.webp",
-        "alt": "Generated Hepatoplasmataceae collinear diagram with a Collinearity block popup open over the interactive SVG.",
-        "caption": "Click a collinearity ribbon in the interactive SVG to inspect the block ID, orientation, covered orthogroups, and source intervals."
-      },
       "operations": [
         {
           "title": "Collinear block popup",
           "body": "Click the rendered feature or match so the Collinear block popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
-            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Collinear block popup with ribbon + popup.",
-            "caption": "The real clicked popup crop shows Collinear block popup with ribbon + popup."
+            "alt": "Zoomed Hepatoplasmataceae collinear crop with the highlighted collinear block ribbon and popup.",
+            "caption": "The zoomed crop keeps the highlighted collinear block ribbon and popup readable."
           }
         }
       ]
@@ -301,8 +296,8 @@
           "body": "Click a feature in the generated SVG to inspect its qualifiers and color controls.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
-            "alt": "Feature popup opened from a clicked Hepatoplasmataceae feature.",
-            "caption": "Click a feature in the generated SVG to inspect its qualifiers and color controls."
+            "alt": "Hepatoplasmataceae feature popup edit controls with label, visibility, fill, stroke, and multi-target controls visible.",
+            "caption": "The feature popup crop keeps label, visibility, fill, stroke, and multi-target controls readable."
           }
         }
       ]

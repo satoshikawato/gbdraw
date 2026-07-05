@@ -309,19 +309,14 @@
     {
       "title": "Inspect a CDS feature",
       "body": "Click a CDS feature in the interactive SVG to inspect its label, record ID, location, protein_id, qualifiers, and sequence.",
-      "media": {
-        "src": "./media/Vnig_TUMSAT-TG-2018/04-feature-popup.webp",
-        "alt": "Vibrio nigripulchritudo multi-record circular diagram with a CDS feature popup open.",
-        "caption": "Feature clicks are useful for checking which chromosome or plasmid owns a selected annotation."
-      },
       "operations": [
         {
           "title": "CDS feature popup",
           "body": "Click the rendered feature or match so the CDS feature popup is visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing CDS feature popup with feature + popup.",
-            "caption": "The real clicked popup crop shows CDS feature popup with feature + popup."
+            "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",
+            "caption": "The zoomed crop keeps the clicked chromosome CDS and popup metadata readable."
           }
         }
       ]
@@ -355,8 +350,8 @@
           "body": "Click the rendered feature or match so the Feature popup with record ownership is visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/post-01-01-record-feature-popup.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Feature popup with record ownership with record ID visible.",
-            "caption": "The real clicked popup crop shows Feature popup with record ownership with record ID visible."
+            "alt": "Zoomed Vibrio multi-record crop with the clicked chromosome CDS and record ID visible in the feature popup.",
+            "caption": "The zoomed crop keeps the clicked chromosome CDS and record ownership metadata readable."
           }
         }
       ]

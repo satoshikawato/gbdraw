@@ -241,19 +241,14 @@
     {
       "title": "Open an orthogroup match popup",
       "body": "Click a pairwise ribbon in the interactive SVG to inspect the orthogroup ID, display name, member count, record coverage, and member table.",
-      "media": {
-        "src": "./media/hepatoplasmataceae_orthogroup/03-orthogroup-popup.webp",
-        "alt": "Hepatoplasmataceae orthogroup comparison with an orthogroup match popup open.",
-        "caption": "The pairwise match popup exposes the orthogroup metadata and member table used to interpret a ribbon."
-      },
       "operations": [
         {
           "title": "Orthogroup match popup",
           "body": "Click the rendered feature or match so the Orthogroup match popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-08-01-orthogroup-popup.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Orthogroup match popup with ribbon + popup.",
-            "caption": "The real clicked popup crop shows Orthogroup match popup with ribbon + popup."
+            "alt": "Zoomed Hepatoplasmataceae orthogroup crop with the highlighted match ribbon and popup.",
+            "caption": "The zoomed crop keeps the highlighted orthogroup ribbon and popup readable."
           }
         }
       ]
@@ -287,8 +282,8 @@
           "body": "Click the rendered feature or match so the Pairwise ribbon popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-01-01-match-popup.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Pairwise ribbon popup with ribbon + popup.",
-            "caption": "The real clicked popup crop shows Pairwise ribbon popup with ribbon + popup."
+            "alt": "Zoomed Hepatoplasmataceae orthogroup crop with the highlighted pairwise ribbon and popup.",
+            "caption": "The zoomed crop keeps the highlighted pairwise ribbon and popup readable."
           }
         }
       ]
@@ -302,8 +297,8 @@
           "body": "Click a CDS feature to inspect qualifiers, label text, and color controls.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "CDS feature popup opened from the orthogroup comparison preview.",
-            "caption": "Click a CDS feature to inspect qualifiers, label text, and color controls."
+            "alt": "Hepatoplasmataceae feature popup edit controls with label, visibility, fill, stroke, and multi-target controls visible.",
+            "caption": "The feature popup crop keeps label, visibility, fill, stroke, and multi-target controls readable."
           }
         }
       ]
