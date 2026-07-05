@@ -359,7 +359,10 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await expect(tutorialPanel.getByText('Track type to tuckin')).toBeVisible();
   await expect(tutorialPanel.getByText('records #1 and #2 in row 1 and #3 through #6 in row 2')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(8);
+  await expect(mediaImages).toHaveCount(11);
+  await expect(tutorialPanel.locator('img[src$="manual-03-00-circular-layout-settings.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-03-03-selected-features.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-00-multirecord-toggle.webp"]')).toHaveCount(1);
   const multiRecordControlsImage = tutorialPanel.locator('img[src$="manual-04-01-multirecord-canvas.webp"]');
   await expect(tutorialPanel.locator('img[src$="manual-06-01-multirecord-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-files-tab.webp"]')).toHaveCount(0);

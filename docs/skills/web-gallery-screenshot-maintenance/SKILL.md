@@ -48,6 +48,8 @@ Use the real UI the user operates.
 - File uploads must show the uploader and uploaded file rows/chips in the correct order.
 - Dropdown/select operations must show the select in context plus a capture-only opened-option overlay with the chosen option highlighted.
 - Text and number inputs must show labels, values, units, and nearby related controls. Highlight changed fields when multiple inputs are visible.
+- When one operation sentence lists several pre-generation settings, include an overview crop that shows the actual text inputs, selects, toggles, or selected chips, even if separate dropdown crops also show individual menu choices.
+- Plot title operations must include the full Plot Title input value and the Plot Title Position control in the same readable context. If the default sidebar width clips the title text, widen the sidebar or crop wider for capture instead of accepting a cut-off title input.
 - Checkboxes, toggles, and radio groups must show selected state in context.
 - Track slots, conservation rings, record labels, record positions, and color rules must show the actual row/panel where values are typed or edited.
 - Feature-specific color rule operations must show the real `SPECIFIC RULES (-t)` controls, not a generated plot preview.

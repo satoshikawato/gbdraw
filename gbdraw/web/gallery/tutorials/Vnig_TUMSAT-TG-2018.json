@@ -51,6 +51,15 @@
       "body": "Set Output Prefix to Vnig_TUMSAT-TG-2018, Track type to tuckin, Palette to orchid, Separate strands to on, Legend to left, and keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
       "operations": [
         {
+          "title": "Basic circular settings",
+          "body": "Set Output Prefix to Vnig_TUMSAT-TG-2018, Track Preset to Tuckin, and Separate Strands to on.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-00-circular-layout-settings.webp",
+            "alt": "Basic and Layout cards with Vnig_TUMSAT-TG-2018 as the output prefix, Tuckin as the track preset, and Separate Strands selected.",
+            "caption": "Set Output Prefix, Track Preset, and Separate Strands."
+          }
+        },
+        {
           "title": "Palette selector",
           "body": "Open the default color palette selector and choose orchid.",
           "media": {
@@ -130,6 +139,15 @@
               "Title & Legend"
             ]
           }
+        },
+        {
+          "title": "Selected feature types",
+          "body": "Keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-03-selected-features.webp",
+            "alt": "Features card with CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
+            "caption": "Keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected."
+          }
         }
       ]
     },
@@ -138,6 +156,15 @@
       "body": "Turn on Multi-record canvas. Use auto size mode, minimum radius ratio 0.55, column gap 0.1, row gap 0.05, and place records #1 and #2 in row 1 and #3 through #6 in row 2.",
       "note": "The two large chromosomes sit in the top row. The four smaller plasmids share the second row.",
       "operations": [
+        {
+          "title": "Multi-record canvas toggle",
+          "body": "Turn on Multi-record canvas.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-00-multirecord-toggle.webp",
+            "alt": "Layout card with the Multi-Record Canvas checkbox selected.",
+            "caption": "Turn on Multi-record canvas."
+          }
+        },
         {
           "title": "Multi-record canvas controls",
           "body": "Set the multi-record canvas controls shown in the screenshot.",
@@ -168,21 +195,25 @@
       "body": "Set Plot Title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome. For this figure, choose Bottom in Plot Title Position.",
       "operations": [
         {
-          "title": "Plot Title Position",
-          "body": "Open Plot Title Position and choose Bottom.",
+          "title": "Plot title and bottom position",
+          "body": "Enter the plot title, then open Plot Title Position and choose Bottom.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
-            "alt": "Title and Legend card with the Plot Title Position menu open and the Bottom option highlighted.",
-            "caption": "Open Plot Title Position in the Title & Legend card and choose the highlighted Bottom option."
+            "alt": "Title and Legend card with the full Vibrio plot title visible and the Plot Title Position menu open with Bottom highlighted.",
+            "caption": "Enter the plot title and choose the highlighted Bottom option."
           },
           "capture": {
             "source": "webapp",
             "crop": "openSelect",
+            "viewport": {
+              "width": 1700,
+              "height": 1000
+            },
             "cropPadding": {
-              "top": 54,
-              "right": 80,
-              "bottom": 24,
-              "left": 80
+              "top": 120,
+              "right": 620,
+              "bottom": 220,
+              "left": 240
             },
             "openSelect": {
               "selectedLabel": "Bottom",
@@ -195,6 +226,12 @@
             },
             "openDetails": [
               "Title & Legend"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "() => { const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 500; }"
+              }
             ]
           }
         }
