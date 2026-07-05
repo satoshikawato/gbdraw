@@ -22,11 +22,14 @@
     {
       "title": "Example rules",
       "body": "These examples show the feature type, qualifier, value, color, and legend caption fields used by the web app.",
-      "items": [
-        "CDS / gene / dnaA / #d95f02 / DnaA",
-        "CDS / product / transposase / #8da0cb / Transposase",
-        "CDS / locus_tag / TYPL_0010 / #66c2a5 / Selected CDS"
-      ]
+      "table": {
+        "columns": ["Feature", "Qualifier", "Value pattern", "Color", "Legend caption"],
+        "rows": [
+          ["CDS", "gene", "dnaA", "#d95f02", "DnaA"],
+          ["CDS", "product", "transposase", "#8da0cb", "Transposase"],
+          ["CDS", "locus_tag", "TYPL_0010", "#66c2a5", "Selected CDS"]
+        ]
+      }
     }
   ]
 }

@@ -102,6 +102,7 @@ When replacing a screenshot, update the caption and alt text in the same change 
 Use structured display when tutorial content has repeated fields.
 
 - Prefer a table over slash-delimited bullets for color rules, track-slot recipes, file mappings, record metadata, or any list where each row shares the same fields.
+- When one slash-delimited or comma-packed structured list is found, scan sibling tutorial JSON for the same pattern before stopping; convert true repeated-field content and leave simple one-column checklists as bullets.
 - Use clear column headers that match the UI or data model, such as `Feature`, `Qualifier`, `Value pattern`, `Color`, and `Legend caption`.
 - Keep caveats such as regex specificity in a separate `note`; do not hide them inside a dense row.
 - If the Gallery renderer only supports bullet lists, add a small reusable renderer field such as `table: { columns, rows }` rather than encoding table markup in JSON strings.

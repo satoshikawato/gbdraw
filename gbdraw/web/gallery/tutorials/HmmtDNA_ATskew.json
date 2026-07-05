@@ -197,12 +197,15 @@
     {
       "title": "Open Custom Track Slots",
       "body": "In the circular layout controls, enable Custom Track Slots and reset to the Middle template if you need a clean starting stack.",
-      "items": [
-        "Axis index: 0",
-        "features: Features, on the axis, lane direction split",
-        "gc_content: Dinucleotide content, inside, w 0.1",
-        "gc_skew: Dinucleotide skew, inside, w 0.1"
-      ],
+      "table": {
+        "columns": ["Slot", "Renderer", "Position", "Key settings"],
+        "rows": [
+          ["features", "Features", "on the axis", "Lane direction: split"],
+          ["gc_content", "Dinucleotide content", "inside", "Width: 0.1"],
+          ["gc_skew", "Dinucleotide skew", "inside", "Width: 0.1"]
+        ]
+      },
+      "note": "Axis index 0 keeps all listed slots on the single circular axis.",
       "operations": [
         {
           "title": "Custom Track Slots panel",

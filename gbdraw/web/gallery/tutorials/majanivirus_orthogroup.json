@@ -243,12 +243,15 @@
     {
       "title": "Add feature color rules",
       "body": "Use product-based CDS rules for the broad viral protein categories visible in the Gallery legend.",
-      "items": [
-        "CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins",
-        "CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP",
-        "CDS / product / tyrosine recombinase / red / tyrosine recombinase",
-        "Default CDS color: #d3d3d3 / other proteins"
-      ],
+      "table": {
+        "columns": ["Color source", "Feature", "Qualifier", "Value pattern", "Color", "Legend caption"],
+        "rows": [
+          ["Specific rule", "CDS", "product", "wsv.*-like protein", "#89d1fa", "WSSV-like proteins"],
+          ["Specific rule", "CDS", "product", "baculoviral IAP repeat-containing protein", "yellow", "BIRP"],
+          ["Specific rule", "CDS", "product", "tyrosine recombinase", "red", "tyrosine recombinase"],
+          ["Default color", "CDS", "", "unmatched CDS", "#d3d3d3", "other proteins"]
+        ]
+      },
       "note": "Use product here because the visual categories are broad protein families rather than individual genes.",
       "operations": [
         {

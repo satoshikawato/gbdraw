@@ -41,14 +41,17 @@
     {
       "title": "Upload the multi-record GBFF",
       "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The file contains two chromosomes and four plasmids.",
-      "items": [
-        "NZ_AP024087.1: chromosome 1",
-        "NZ_AP024088.1: chromosome 2",
-        "NZ_AP024089.1: plasmid pVNTG1",
-        "NZ_AP024090.1: plasmid pVNTG2",
-        "NZ_AP024091.1: plasmid pVNTG3",
-        "NZ_AP024092.1: plasmid pVNTG4"
-      ],
+      "table": {
+        "columns": ["Record accession", "Replicon"],
+        "rows": [
+          ["NZ_AP024087.1", "chromosome 1"],
+          ["NZ_AP024088.1", "chromosome 2"],
+          ["NZ_AP024089.1", "plasmid pVNTG1"],
+          ["NZ_AP024090.1", "plasmid pVNTG2"],
+          ["NZ_AP024091.1", "plasmid pVNTG3"],
+          ["NZ_AP024092.1", "plasmid pVNTG4"]
+        ]
+      },
       "operations": [
         {
           "title": "Multi-record GBFF uploader",

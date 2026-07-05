@@ -296,10 +296,31 @@
     {
       "title": "Name the conservation rings",
       "body": "Assign one short label per FASTA so the left legend and each ring order match the Gallery figure.",
-      "items": [
-        "CN01, WSSV-TW, WSSV-CN, WSSV-TH, JP01A, JP01B, Pc2020, E1, 0722-1, CN03",
-        "CN04, WSSV-AU, EU129, GCF7, MES-753, Shantou2019, POMZ1, POMZ4, MG18PR-0187-N40S, Angostura2013"
-      ],
+      "table": {
+        "columns": ["Ring", "Label"],
+        "rows": [
+          ["1", "CN01"],
+          ["2", "WSSV-TW"],
+          ["3", "WSSV-CN"],
+          ["4", "WSSV-TH"],
+          ["5", "JP01A"],
+          ["6", "JP01B"],
+          ["7", "Pc2020"],
+          ["8", "E1"],
+          ["9", "0722-1"],
+          ["10", "CN03"],
+          ["11", "CN04"],
+          ["12", "WSSV-AU"],
+          ["13", "EU129"],
+          ["14", "GCF7"],
+          ["15", "MES-753"],
+          ["16", "Shantou2019"],
+          ["17", "POMZ1"],
+          ["18", "POMZ4"],
+          ["19", "MG18PR-0187-N40S"],
+          ["20", "Angostura2013"]
+        ]
+      },
       "operations": [
         {
           "title": "Ring label controls",
@@ -315,10 +336,31 @@
     {
       "title": "Set ring colors",
       "body": "Use distinct ring colors so conservation gaps can be compared by eye across the full 20-genome stack.",
-      "items": [
-        "#6e91b7, #f4a251, #77b26f, #e67577, #8fc4c0, #f0d369, #be92b2, #ffafb7, #ae8e7c, #c6bebb",
-        "#6e91b7, #f4a251, #e67577, #8fc4c0, #bcb4ca, #f0d369, #be92b2, #ffafb7, #ae8e7c, #c6bebb"
-      ],
+      "table": {
+        "columns": ["Ring", "Label", "Color"],
+        "rows": [
+          ["1", "CN01", "#6e91b7"],
+          ["2", "WSSV-TW", "#f4a251"],
+          ["3", "WSSV-CN", "#77b26f"],
+          ["4", "WSSV-TH", "#e67577"],
+          ["5", "JP01A", "#8fc4c0"],
+          ["6", "JP01B", "#f0d369"],
+          ["7", "Pc2020", "#be92b2"],
+          ["8", "E1", "#ffafb7"],
+          ["9", "0722-1", "#ae8e7c"],
+          ["10", "CN03", "#c6bebb"],
+          ["11", "CN04", "#6e91b7"],
+          ["12", "WSSV-AU", "#f4a251"],
+          ["13", "EU129", "#e67577"],
+          ["14", "GCF7", "#8fc4c0"],
+          ["15", "MES-753", "#bcb4ca"],
+          ["16", "Shantou2019", "#f0d369"],
+          ["17", "POMZ1", "#be92b2"],
+          ["18", "POMZ4", "#ffafb7"],
+          ["19", "MG18PR-0187-N40S", "#ae8e7c"],
+          ["20", "Angostura2013", "#c6bebb"]
+        ]
+      },
       "operations": [
         {
           "title": "Ring color controls",
