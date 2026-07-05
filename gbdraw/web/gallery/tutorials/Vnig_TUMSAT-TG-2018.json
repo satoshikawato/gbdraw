@@ -46,7 +46,18 @@
     },
     {
       "title": "Set the circular layout",
-      "body": "Set Output Prefix to Vnig_TUMSAT-TG-2018, Track type to tuckin, Palette to orchid, Separate strands to on, Legend to left, and keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
+      "body": "Use these circular layout settings before enabling the multi-record canvas.",
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Output Prefix", "Vnig_TUMSAT-TG-2018"],
+          ["Track type", "tuckin"],
+          ["Palette", "orchid"],
+          ["Separate strands", "on"],
+          ["Legend", "left"],
+          ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
+        ]
+      },
       "operations": [
         {
           "title": "Basic circular settings",
@@ -151,7 +162,18 @@
     },
     {
       "title": "Enable Multi-record canvas",
-      "body": "Turn on Multi-record canvas. Use auto size mode, minimum radius ratio 0.55, column gap 0.1, row gap 0.05, and place records #1 and #2 in row 1 and #3 through #6 in row 2.",
+      "body": "Turn on Multi-record canvas and use these sizing and row-placement values.",
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Multi-record canvas", "on"],
+          ["Record Size Mode", "Auto"],
+          ["Minimum radius ratio", "0.55"],
+          ["Column gap ratio", "0.1"],
+          ["Row gap ratio", "0.05"],
+          ["Record rows", "#1@1, #2@1, #3@2, #4@2, #5@2, #6@2"]
+        ]
+      },
       "note": "The two large chromosomes sit in the top row. The four smaller plasmids share the second row.",
       "operations": [
         {
@@ -190,7 +212,14 @@
     },
     {
       "title": "Add Title",
-      "body": "Set Plot Title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome. For this figure, choose Bottom in Plot Title Position.",
+      "body": "Set the plot title and place it below the multi-record canvas.",
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Plot Title", "Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome"],
+          ["Plot Title Position", "Bottom"]
+        ]
+      },
       "operations": [
         {
           "title": "Plot title and bottom position",

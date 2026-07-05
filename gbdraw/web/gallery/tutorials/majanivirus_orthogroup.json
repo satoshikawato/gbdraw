@@ -92,17 +92,20 @@
     {
       "title": "Upload the nine GenBank files",
       "body": "Keep the records in the same order as the Gallery command so adjacent comparison tracks and labels match the published example.",
-      "items": [
-        "MjeNMV.gb",
-        "MelaMJNV.gb",
-        "PemoMJNVA.gb",
-        "PeseMJNV.gb",
-        "PemoMJNVB.gb",
-        "LvMJNV.gb",
-        "TrcuMJNV.gb",
-        "MeenMJNV.gb",
-        "MejoMJNV.gb"
-      ],
+      "table": {
+        "columns": ["Order", "GenBank file"],
+        "rows": [
+          ["1", "MjeNMV.gb"],
+          ["2", "MelaMJNV.gb"],
+          ["3", "PemoMJNVA.gb"],
+          ["4", "PeseMJNV.gb"],
+          ["5", "PemoMJNVB.gb"],
+          ["6", "LvMJNV.gb"],
+          ["7", "TrcuMJNV.gb"],
+          ["8", "MeenMJNV.gb"],
+          ["9", "MejoMJNV.gb"]
+        ]
+      },
       "operations": [
         {
           "media": {
@@ -116,15 +119,18 @@
     {
       "title": "Configure browser LOSAT",
       "body": "In Pairwise Comparisons, choose Run LOSAT. Use LOSATP with protein blastp mode: Orthogroups.",
-      "items": [
-        "Execution: Auto",
-        "Total threads: Safe for normal browser use, or 32 when mirroring the Gallery command on a capable workstation",
-        "Threads per run: Auto",
-        "protein blastp mode: Orthogroups",
-        "Bitscore: 100",
-        "E-value: 1e-3",
-        "Identity: 20"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Execution", "Auto"],
+          ["Total threads", "Safe for normal browser use, or 32 when mirroring the Gallery command on a capable workstation"],
+          ["Threads per run", "Auto"],
+          ["protein blastp mode", "Orthogroups"],
+          ["Bitscore", "100"],
+          ["E-value", "1e-3"],
+          ["Identity", "20"]
+        ]
+      },
       "note": "This is a large browser workload. Start with Safe thread budgeting unless you know the browser and machine have enough memory.",
       "operations": [
         {
@@ -178,16 +184,19 @@
     {
       "title": "Set the linear layout",
       "body": "Use a centered, compact layout so the long viral rows and many orthogroup ribbons stay comparable.",
-      "items": [
-        "Align to Center: on",
-        "Separate Strands: on",
-        "Pairwise match style: curve",
-        "Keep definitions left aligned: on",
-        "Comparison height: 25",
-        "Hide length: on",
-        "Definition font size: 18",
-        "Legend font size: 18"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Align to Center", "on"],
+          ["Separate Strands", "on"],
+          ["Pairwise match style", "curve"],
+          ["Keep definitions left aligned", "on"],
+          ["Comparison height", "25"],
+          ["Hide length", "on"],
+          ["Definition font size", "18"],
+          ["Legend font size", "18"]
+        ]
+      },
       "operations": [
         {
           "title": "Linear layout controls",
@@ -210,17 +219,20 @@
     {
       "title": "Set the record labels",
       "body": "Use descriptive record labels rather than raw accessions so the figure can be read without opening the input files.",
-      "items": [
-        "Marsupenaeus japonicus endogenous nimavirus",
-        "Melicertus latisulcatus majanivirus",
-        "Penaeus monodon majanivirus A",
-        "Penaeus semisulcatus majanivirus",
-        "Penaeus monodon majanivirus B",
-        "Litopenaeus vannamei majanivirus",
-        "Trachysalambria curvirostris majanivirus",
-        "Metapenaeus ensis majanivirus",
-        "Metapenaeus joyneri majanivirus"
-      ],
+      "table": {
+        "columns": ["Record", "Label"],
+        "rows": [
+          ["1", "Marsupenaeus japonicus endogenous nimavirus"],
+          ["2", "Melicertus latisulcatus majanivirus"],
+          ["3", "Penaeus monodon majanivirus A"],
+          ["4", "Penaeus semisulcatus majanivirus"],
+          ["5", "Penaeus monodon majanivirus B"],
+          ["6", "Litopenaeus vannamei majanivirus"],
+          ["7", "Trachysalambria curvirostris majanivirus"],
+          ["8", "Metapenaeus ensis majanivirus"],
+          ["9", "Metapenaeus joyneri majanivirus"]
+        ]
+      },
       "operations": [
         {
           "media": {

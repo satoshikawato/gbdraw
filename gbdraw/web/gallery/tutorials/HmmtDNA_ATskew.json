@@ -33,12 +33,15 @@
     {
       "title": "Upload the GenBank file",
       "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1.",
-      "items": [
-        "Input type: GenBank",
-        "File: HmmtDNA.gbk",
-        "Output prefix: HmmtDNA_ATskew",
-        "Species: Homo sapiens"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Input type", "GenBank"],
+          ["File", "HmmtDNA.gbk"],
+          ["Output prefix", "HmmtDNA_ATskew"],
+          ["Species", "Homo sapiens"]
+        ]
+      },
       "operations": [
         {
           "media": {
@@ -52,15 +55,18 @@
     {
       "title": "Set the basic circular layout",
       "body": "Use the same compact circular defaults as the Gallery figure.",
-      "items": [
-        "Track type: middle",
-        "Legend: left",
-        "Labels: out",
-        "Palette: ajisai",
-        "Definition font size: 28",
-        "Label font size: 20",
-        "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Track type", "middle"],
+          ["Legend", "left"],
+          ["Labels", "out"],
+          ["Palette", "ajisai"],
+          ["Definition font size", "28"],
+          ["Label font size", "20"],
+          ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
+        ]
+      },
       "operations": [
         {
           "title": "Track preset selector",
@@ -168,11 +174,14 @@
     {
       "title": "Set the dinucleotide calculation window",
       "body": "Use a short mitochondrial window so GC content, GC skew, and AT skew all show local structure.",
-      "items": [
-        "Dinucleotide: GC",
-        "Window size: 500",
-        "Step size: 50"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Dinucleotide", "GC"],
+          ["Window size", "500"],
+          ["Step size", "50"]
+        ]
+      },
       "operations": [
         {
           "media": {
@@ -219,15 +228,18 @@
     {
       "title": "Add the AT skew track",
       "body": "Add another Dinucleotide skew row inside the axis and use it for AT skew rather than the default GC skew.",
-      "items": [
-        "Slot id: a_skew_2",
-        "Renderer: Dinucleotide skew",
-        "Dinucleotide: AT",
-        "Legend label: AT skew",
-        "Width: 0.1",
-        "Positive color: #deaf6e",
-        "Negative color: #7294e3"
-      ],
+      "table": {
+        "columns": ["Slot setting", "Value"],
+        "rows": [
+          ["Slot id", "a_skew_2"],
+          ["Renderer", "Dinucleotide skew"],
+          ["Dinucleotide", "AT"],
+          ["Legend label", "AT skew"],
+          ["Width", "0.1"],
+          ["Positive color", "#deaf6e"],
+          ["Negative color", "#7294e3"]
+        ]
+      },
       "operations": [
         {
           "title": "Add AT skew slot",
@@ -258,11 +270,14 @@
     {
       "title": "Add the tick track",
       "body": "Keep a Ticks row inside the axis so position labels sit inside the tick marks.",
-      "items": [
-        "Slot id: ticks",
-        "Renderer: Ticks",
-        "Tick label layout: label_in_tick_out"
-      ],
+      "table": {
+        "columns": ["Slot setting", "Value"],
+        "rows": [
+          ["Slot id", "ticks"],
+          ["Renderer", "Ticks"],
+          ["Tick label layout", "label_in_tick_out"]
+        ]
+      },
       "operations": [
         {
           "title": "Tick track slot",
@@ -293,10 +308,13 @@
     {
       "title": "Prioritize gene labels for CDS features",
       "body": "Set qualifier priority for CDS labels to gene so compact labels such as ND1, COX1, ATP6, and CYTB are used instead of long product names.",
-      "items": [
-        "Feature type: CDS",
-        "Qualifier order: gene"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Feature type", "CDS"],
+          ["Qualifier order", "gene"]
+        ]
+      },
       "operations": [
         {
           "media": {

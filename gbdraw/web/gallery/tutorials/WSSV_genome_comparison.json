@@ -156,12 +156,15 @@
     {
       "title": "Upload the reference GenBank file",
       "body": "Upload AP027280.gb as the circular reference. This record is the JP02 White spot syndrome virus genome shown at the center of the Gallery figure.",
-      "items": [
-        "Input type: GenBank",
-        "File: AP027280.gb",
-        "Output prefix: WSSV_genome_comparison",
-        "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Input type", "GenBank"],
+          ["File", "AP027280.gb"],
+          ["Output prefix", "WSSV_genome_comparison"],
+          ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
+        ]
+      },
       "operations": [
         {
           "media": {
@@ -175,17 +178,20 @@
     {
       "title": "Set the basic circular layout",
       "body": "Use a spread-out circular track so the outer CDS features remain readable around the conservation rings.",
-      "items": [
-        "Track type: spreadout",
-        "Palette: royal_gala",
-        "Separate strands: on",
-        "Legend: left",
-        "Labels: none",
-        "Suppress GC: on",
-        "Suppress skew: on",
-        "Feature width: 10",
-        "Scale interval: 20000"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Track type", "spreadout"],
+          ["Palette", "royal_gala"],
+          ["Separate strands", "on"],
+          ["Legend", "left"],
+          ["Labels", "none"],
+          ["Suppress GC", "on"],
+          ["Suppress skew", "on"],
+          ["Feature width", "10"],
+          ["Scale interval", "20000"]
+        ]
+      },
       "operations": [
         {
           "title": "Track preset selector",
@@ -256,14 +262,17 @@
     {
       "title": "Open Circular Conservation",
       "body": "Enable circular conservation, then upload the 20 comparison FASTA files in the order listed in the ring-label table below.",
-      "items": [
-        "Source: Run LOSAT from FASTA inputs",
-        "LOSAT program: blastn",
-        "blastn task: megablast",
-        "Reference: Auto",
-        "Ring width: 5",
-        "Ring gap: 2"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Source", "Run LOSAT from FASTA inputs"],
+          ["LOSAT program", "blastn"],
+          ["blastn task", "megablast"],
+          ["Reference", "Auto"],
+          ["Ring width", "5"],
+          ["Ring gap", "2"]
+        ]
+      },
       "note": "If you import precomputed conservation BLAST tables instead of running browser LOSAT, use the subject/reference orientation expected by those tables.",
       "operations": [
         {
@@ -365,12 +374,15 @@
     {
       "title": "Set conservation thresholds",
       "body": "Use strict blastn thresholds so the rings show high-confidence conserved nucleotide segments.",
-      "items": [
-        "Bitscore: 100",
-        "E-value: 1e-30",
-        "Identity: 90",
-        "Alignment length: 100"
-      ],
+      "table": {
+        "columns": ["Threshold", "Value"],
+        "rows": [
+          ["Bitscore", "100"],
+          ["E-value", "1e-30"],
+          ["Identity", "90"],
+          ["Alignment length", "100"]
+        ]
+      },
       "operations": [
         {
           "media": {
@@ -384,12 +396,15 @@
     {
       "title": "Run browser LOSAT",
       "body": "Use Auto execution with a Safe total thread budget for the first run. The saved session includes cached LOSAT output; manual rebuilds need to run the FASTA comparisons once.",
-      "items": [
-        "Execution: Auto",
-        "Total threads: Safe",
-        "Threads per job: 1",
-        "Program: blastn megablast"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Execution", "Auto"],
+          ["Total threads", "Safe"],
+          ["Threads per job", "1"],
+          ["Program", "blastn megablast"]
+        ]
+      },
       "operations": [
         {
           "media": {

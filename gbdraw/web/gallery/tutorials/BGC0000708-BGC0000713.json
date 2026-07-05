@@ -59,13 +59,16 @@
     {
       "title": "Upload the five GenBank files",
       "body": "Add the GenBank files in this order, then fill the organism/strain and subtitle/title fields for each record to match the Gallery session.",
-      "items": [
-        "BGC0000708.gbk",
-        "BGC0000709.gbk",
-        "BGC0000711.gbk",
-        "BGC0000712.gbk",
-        "BGC0000713.gbk"
-      ],
+      "table": {
+        "columns": ["Order", "GenBank file", "Organism / strain", "Subtitle", "Reverse complement"],
+        "rows": [
+          ["1", "BGC0000708.gbk", "Streptomyces lividus CBS 844.73", "Lividomycin biosynthetic gene cluster", "off"],
+          ["2", "BGC0000709.gbk", "Streptomyces fradiae ATCC 10745", "Neomycin biosynthetic gene cluster", "off"],
+          ["3", "BGC0000711.gbk", "Streptomyces fradiae MCIMB 8233", "Neomycin biosynthetic gene cluster", "off"],
+          ["4", "BGC0000712.gbk", "Streptomyces rimosus subsp. paromomycinus NRRL 2455", "Paromomycin biosynthetic gene cluster", "off"],
+          ["5", "BGC0000713.gbk", "Streptomyces ribosidificus ATCC 21294", "Ribostamycin biosynthetic gene", "on"]
+        ]
+      },
       "operations": [
         {
           "media": {
@@ -79,15 +82,18 @@
     {
       "title": "Configure browser LOSAT",
       "body": "In Pairwise Comparisons, choose Run LOSAT. Use LOSATP with blastp mode Orthogroups.",
-      "items": [
-        "Execution: Auto",
-        "Total threads: Safe",
-        "Threads per run: Auto",
-        "protein blastp max hits: 5",
-        "Identity: 30",
-        "Bitscore: 50",
-        "E-value: 1e-2"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Execution", "Auto"],
+          ["Total threads", "Safe"],
+          ["Threads per run", "Auto"],
+          ["protein blastp max hits", "5"],
+          ["Identity", "30"],
+          ["Bitscore", "50"],
+          ["E-value", "1e-2"]
+        ]
+      },
       "note": "This example compares protein-coding genes across related biosynthetic gene clusters, so orthogroup-backed blastp matches are the useful comparison signal.",
       "operations": [
         {
@@ -141,12 +147,15 @@
     {
       "title": "Align the shared core",
       "body": "Use orthogroup alignment around og_1 and reverse-complement BGC0000713 so the conserved biosynthetic core is visually comparable across all five rows.",
-      "items": [
-        "Align orthogroup feature: og_1",
-        "Reverse complement: BGC0000713 only",
-        "Track layout: middle",
-        "Pairwise match style: curve"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Align orthogroup feature", "og_1"],
+          ["Reverse complement", "BGC0000713 only"],
+          ["Track layout", "middle"],
+          ["Pairwise match style", "curve"]
+        ]
+      },
       "operations": [
         {
           "title": "Clicked og_1 feature Align button",
@@ -232,15 +241,18 @@
     {
       "title": "Set labels and figure layout",
       "body": "Use the saved session values for a compact manuscript-style comparison.",
-      "items": [
-        "Show labels: first record",
-        "Label placement: above feature",
-        "Label rotation: 45",
-        "Scale style: ruler",
-        "Ruler on axis: on",
-        "Legend: bottom",
-        "Keep definitions left aligned: on"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Show labels", "first record"],
+          ["Label placement", "above feature"],
+          ["Label rotation", "45"],
+          ["Scale style", "ruler"],
+          ["Ruler on axis", "on"],
+          ["Legend", "bottom"],
+          ["Keep definitions left aligned", "on"]
+        ]
+      },
       "operations": [
         {
           "title": "Show labels selector",

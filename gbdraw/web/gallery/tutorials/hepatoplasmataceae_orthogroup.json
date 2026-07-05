@@ -64,13 +64,16 @@
     {
       "title": "Upload the five GenBank files",
       "body": "Keep the records in the same order as the Gallery command so adjacent comparison tracks match the published example.",
-      "items": [
-        "AP027078.gb",
-        "AP027131.gb",
-        "AP027133.gb",
-        "AP027132.gb",
-        "NZ_CP006932.gb"
-      ],
+      "table": {
+        "columns": ["Order", "GenBank file"],
+        "rows": [
+          ["1", "AP027078.gb"],
+          ["2", "AP027131.gb"],
+          ["3", "AP027133.gb"],
+          ["4", "AP027132.gb"],
+          ["5", "NZ_CP006932.gb"]
+        ]
+      },
       "operations": [
         {
           "media": {
@@ -84,12 +87,15 @@
     {
       "title": "Use browser LOSAT",
       "body": "In Pairwise Comparisons, choose Run LOSAT. Set LOSAT Mode to LOSATP and set blastp mode to Orthogroups.",
-      "items": [
-        "Execution: Auto",
-        "Total threads: Safe",
-        "Parallel runs: Auto",
-        "Threads per run: Auto for normal use, or 32 when you need to mirror the saved CLI command"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Execution", "Auto"],
+          ["Total threads", "Safe"],
+          ["Parallel runs", "Auto"],
+          ["Threads per run", "Auto for normal use, or 32 when you need to mirror the saved CLI command"]
+        ]
+      },
       "operations": [
         {
           "media": {
@@ -103,11 +109,14 @@
     {
       "title": "Keep orthogroup matching enabled",
       "body": "Use Orthogroups when you want each ribbon to represent an orthogroup-backed protein relationship rather than a merged collinear block.",
-      "items": [
-        "blastp mode: Orthogroups",
-        "Pairwise evidence: adjacent genome pairs",
-        "Keep the LOSATP thresholds visible for review"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["blastp mode", "Orthogroups"],
+          ["Pairwise evidence", "adjacent genome pairs"],
+          ["LOSATP thresholds", "Keep visible for review"]
+        ]
+      },
       "note": "The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks.",
       "operations": [
         {
@@ -152,15 +161,18 @@
     {
       "title": "Set the diagram layout",
       "body": "Use the layout and track options that match the Gallery session.",
-      "items": [
-        "Align to Center: on",
-        "Separate Strands: on",
-        "Scale Style: ruler",
-        "Show GC: on",
-        "Show skew: on",
-        "Pairwise match style: curve",
-        "Palette: ajisai"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Align to Center", "on"],
+          ["Separate Strands", "on"],
+          ["Scale Style", "ruler"],
+          ["Show GC", "on"],
+          ["Show skew", "on"],
+          ["Pairwise match style", "curve"],
+          ["Palette", "ajisai"]
+        ]
+      },
       "operations": [
         {
           "title": "Scale style selector",

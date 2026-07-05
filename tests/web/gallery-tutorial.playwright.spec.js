@@ -185,7 +185,11 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
       name: 'CDS gene_kind biosynthetic$ #d03535 Core biosynthetic genes'
     })
   ).toBeVisible();
-  await expect(page.getByText('Reverse complement: BGC0000713 only')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Reverse complement BGC0000713 only'
+    })
+  ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(20);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
@@ -221,7 +225,11 @@ test('Gallery renders the WSSV conservation tutorial and media', async ({ page }
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
-  await expect(tutorialPanel.getByText('Ring width: 5')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Ring width 5'
+    })
+  ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
       name: '20 Angostura2013 #c6bebb'
@@ -270,8 +278,16 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
       name: 'gc_content Dinucleotide content inside Width: 0.1'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByText('Dinucleotide: AT')).toBeVisible();
-  await expect(tutorialPanel.getByText('Legend label: AT skew')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Dinucleotide AT'
+    })
+  ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Legend label AT skew'
+    })
+  ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(16);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-atskew-preview.webp"]')).toHaveCount(1);
@@ -308,7 +324,11 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
     page.getByRole('heading', { name: 'Reproduce the large majanivirus orthogroup comparison in the web app' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
-  await expect(tutorialPanel.getByText('protein blastp mode: Orthogroups', { exact: true })).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'protein blastp mode Orthogroups'
+    })
+  ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
       name: 'Specific rule CDS product wsv.*-like protein #89d1fa WSSV-like proteins'
@@ -358,8 +378,16 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await expect(tutorialPanel.getByText('Enable Multi-record canvas')).toBeVisible();
   await expect(tutorialPanel.getByText('Upload the GenBank file')).toBeVisible();
   await expect(tutorialPanel.getByText('Set the circular layout')).toBeVisible();
-  await expect(tutorialPanel.getByText('Track type to tuckin')).toBeVisible();
-  await expect(tutorialPanel.getByText('records #1 and #2 in row 1 and #3 through #6 in row 2')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Track type tuckin'
+    })
+  ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Record rows #1@1, #2@1, #3@2, #4@2, #5@2, #6@2'
+    })
+  ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(11);
   await expect(tutorialPanel.locator('img[src$="manual-03-00-circular-layout-settings.webp"]')).toHaveCount(1);
