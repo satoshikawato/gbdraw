@@ -54,11 +54,17 @@
     {
       "title": "Switch to Linear mode",
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
-      "media": {
-        "src": "./media/hepatoplasmataceae_orthogroup/manual-01-01-linear-mode.webp",
-        "alt": "Web app header mode segmented control with Linear selected.",
-        "caption": "Select Linear in the mode segmented control before adding inputs."
-      }
+      "operations": [
+        {
+          "title": "Mode segmented control",
+          "body": "Select Linear in the mode segmented control.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-01-01-linear-mode.webp",
+            "alt": "Web app header mode segmented control with Linear selected.",
+            "caption": "Select Linear in the mode segmented control before adding inputs."
+          }
+        }
+      ]
     },
     {
       "title": "Upload the five GenBank files",

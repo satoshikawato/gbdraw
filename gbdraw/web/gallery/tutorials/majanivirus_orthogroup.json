@@ -82,11 +82,17 @@
     {
       "title": "Switch to Linear mode",
       "body": "Open gbdraw.app and select Linear mode before adding the viral GenBank records.",
-      "media": {
-        "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
-        "alt": "Web app header mode segmented control with Linear selected.",
-        "caption": "Select Linear in the mode segmented control before adding the viral GenBank records."
-      }
+      "operations": [
+        {
+          "title": "Mode segmented control",
+          "body": "Select Linear in the mode segmented control.",
+          "media": {
+            "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
+            "alt": "Web app header mode segmented control with Linear selected.",
+            "caption": "Select Linear in the mode segmented control before adding the viral GenBank records."
+          }
+        }
+      ]
     },
     {
       "title": "Upload the nine GenBank files",
@@ -286,18 +292,13 @@
     {
       "title": "Generate the diagram",
       "body": "Click Generate Diagram. The finished preview should show nine viral genome rows, many red identity-scaled orthogroup ribbons, and a right legend.",
-      "media": {
-        "src": "./media/majanivirus_orthogroup/02-orthogroup-preview.webp",
-        "alt": "Generated majanivirus orthogroup comparison in the Gallery preview.",
-        "caption": "The large linear figure uses curved orthogroup ribbons to compare conserved protein families across nine viral genomes."
-      },
       "operations": [
         {
           "title": "Generated orthogroup preview",
           "body": "Inspect the generated preview with nine rows + right legend.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-07-01-orthogroup-preview.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Generated orthogroup preview with nine rows + right legend.",
+            "alt": "Generated majanivirus orthogroup preview showing nine viral genome rows and the right legend.",
             "caption": "The generated preview crop shows nine rows + right legend."
           }
         }
@@ -306,19 +307,14 @@
     {
       "title": "Inspect an orthogroup ribbon",
       "body": "Click a pairwise match ribbon to inspect the orthogroup ID, inferred display name, member count, record coverage, and member table.",
-      "media": {
-        "src": "./media/majanivirus_orthogroup/03-orthogroup-popup.webp",
-        "alt": "Majanivirus orthogroup comparison with an orthogroup match popup open.",
-        "caption": "The match popup helps distinguish high-confidence shared orthogroups from dense background similarity."
-      },
       "operations": [
         {
           "title": "Orthogroup ribbon popup",
           "body": "Click the rendered feature or match so the Orthogroup ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-08-01-orthogroup-popup.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Orthogroup ribbon popup with ribbon + popup.",
-            "caption": "The real clicked popup crop shows Orthogroup ribbon popup with ribbon + popup."
+            "alt": "Zoomed majanivirus orthogroup ribbon crop with the orthogroup match popup open.",
+            "caption": "The zoomed crop keeps the clicked orthogroup ribbon and popup readable."
           }
         }
       ]
@@ -372,8 +368,8 @@
           "body": "Click the rendered feature or match so the Match ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-01-01-match-popup.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Match ribbon popup with ribbon + popup.",
-            "caption": "The real clicked popup crop shows Match ribbon popup with ribbon + popup."
+            "alt": "Zoomed majanivirus match ribbon crop with the orthogroup match popup open.",
+            "caption": "The zoomed crop keeps the clicked match ribbon and popup readable."
           }
         }
       ]

@@ -969,6 +969,33 @@ def test_gallery_sessions_ship_current_feature_metadata() -> None:
             assert pairwise_ids or collinearity_ids, session_name
 
 
+def test_vnig_gallery_session_multirecord_positions_are_restoreable() -> None:
+    session = json.loads(
+        (GALLERY_ROOT / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected_positions = ["#1@1", "#2@1", "#3@2", "#4@2", "#5@2", "#6@2"]
+    config_positions = session.get("config", {}).get("adv", {}).get("multi_record_positions")
+    if isinstance(config_positions, list) and config_positions:
+        actual_positions = [
+            f"{entry.get('selector')}@{entry.get('row')}"
+            for entry in config_positions
+        ]
+    else:
+        args = session.get("cliInvocation", {}).get("args", [])
+        actual_positions = [
+            str(args[index + 1])
+            for index, arg in enumerate(args[:-1])
+            if arg == "--multi_record_position"
+        ]
+
+    assert actual_positions == expected_positions
+
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    assert "hydrateMissingMultiRecordPositionsFromCliInvocation(data.config, data.cliInvocation)" in config_source
+
+
 def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:
@@ -3671,6 +3698,23 @@ def test_gallery_session_restore_smoke() -> None:
             assert summary["status"] == "summary-ready", session_name
             assert summary["featureExtractionError"] in (None, ""), session_name
             assert summary["extractedCount"] > 0, session_name
+
+            if session_name == "Vnig_TUMSAT-TG-2018.gbdraw-session.json":
+                multi_record_positions = page.evaluate(
+                    """() => {
+                        const app = window.__GBDRAW_APP__;
+                        return (Array.isArray(app?.adv?.multi_record_positions) ? app.adv.multi_record_positions : [])
+                            .map((entry) => `${entry.selector}@${entry.row}`);
+                    }"""
+                )
+                assert multi_record_positions == [
+                    "#1@1",
+                    "#2@1",
+                    "#3@2",
+                    "#4@2",
+                    "#5@2",
+                    "#6@2",
+                ]
 
             if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
                 target = page.evaluate(

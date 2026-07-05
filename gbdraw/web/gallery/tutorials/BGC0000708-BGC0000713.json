@@ -49,11 +49,17 @@
     {
       "title": "Switch to Linear mode",
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
-      "media": {
-        "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
-        "alt": "Web app header mode segmented control with Linear selected.",
-        "caption": "Select Linear in the mode segmented control before adding inputs."
-      }
+      "operations": [
+        {
+          "title": "Mode segmented control",
+          "body": "Select Linear in the mode segmented control.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
+            "alt": "Web app header mode segmented control with Linear selected.",
+            "caption": "Select Linear in the mode segmented control before adding inputs."
+          }
+        }
+      ]
     },
     {
       "title": "Upload the five GenBank files",
@@ -398,19 +404,14 @@
     {
       "title": "Inspect an orthogroup ribbon",
       "body": "Click a pairwise match ribbon to inspect the orthogroup ID, member count, record coverage, and member table.",
-      "media": {
-        "src": "./media/BGC0000708-BGC0000713/03-orthogroup-popup.webp",
-        "alt": "Aminoglycoside BGC comparison with an orthogroup match popup open.",
-        "caption": "The orthogroup popup is the quickest way to confirm which proteins support a pairwise ribbon."
-      },
       "operations": [
         {
           "title": "Orthogroup ribbon popup",
           "body": "Click the rendered feature or match so the Orthogroup ribbon popup is visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-09-01-orthogroup-popup.webp",
-            "alt": "Actual aminoglycoside BGC tutorial UI showing Orthogroup ribbon popup with ribbon + popup.",
-            "caption": "The real clicked popup crop shows Orthogroup ribbon popup with ribbon + popup."
+            "alt": "Zoomed aminoglycoside BGC orthogroup ribbon crop with the orthogroup match popup open.",
+            "caption": "The zoomed crop keeps the clicked orthogroup ribbon and popup readable."
           }
         }
       ]
