@@ -352,11 +352,13 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   ).toBeVisible();
   await expect(tutorialPanel.getByText('Record positions: #1@1, #2@1, #3@2, #4@2, #5@2, #6@2')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(15);
+  await expect(mediaImages).toHaveCount(14);
+  const multiRecordControlsImage = tutorialPanel.locator('img[src$="manual-04-01-multirecord-canvas.webp"]');
   await expect(tutorialPanel.locator('img[src$="manual-06-01-multirecord-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-files-tab.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-feature-popup.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-04-02-record-positions.webp"]')).toHaveCount(1);
+  await expect(multiRecordControlsImage).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-record-positions.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();

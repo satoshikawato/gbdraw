@@ -239,7 +239,7 @@
       "operations": [
         {
           "title": "Orthogroup match popup",
-          "body": "Click the rendered feature or match so the Orthogroup match popup is visible.",
+          "body": "Click an orthogroup ribbon so the Orthogroup match popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae orthogroup crop with the highlighted match ribbon and popup.",
@@ -274,7 +274,7 @@
       "operations": [
         {
           "title": "Pairwise ribbon popup",
-          "body": "Click the rendered feature or match so the Pairwise ribbon popup is visible.",
+          "body": "Click a pairwise ribbon so the Pairwise ribbon popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-01-01-match-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae orthogroup crop with the highlighted pairwise ribbon and popup.",
@@ -285,15 +285,15 @@
     },
     {
       "title": "Click a CDS feature",
-      "body": "Feature clicks show qualifiers, sequences, and orthogroup membership details. This is useful when you need to decide whether to add feature-specific colors.",
+      "body": "Feature clicks show qualifiers, sequences, and orthogroup membership details; the Feature editor drawer shows label, visibility, color, and scope controls. This is useful when you need to decide whether to add feature-specific colors.",
       "operations": [
         {
-          "title": "CDS feature popup",
-          "body": "Click a CDS feature to inspect qualifiers, label text, and color controls.",
+          "title": "CDS feature editor drawer",
+          "body": "Select a CDS feature and use the Feature editor drawer to inspect label text and color controls.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "Hepatoplasmataceae feature popup edit controls with label, visibility, fill, stroke, and multi-target controls visible.",
-            "caption": "The feature popup crop keeps label, visibility, fill, stroke, and multi-target controls readable."
+            "alt": "Hepatoplasmataceae Feature editor drawer controls with label, visibility, fill, stroke, and multi-target controls visible.",
+            "caption": "The Feature editor drawer crop keeps label, visibility, fill, stroke, and multi-target controls readable."
           }
         }
       ]

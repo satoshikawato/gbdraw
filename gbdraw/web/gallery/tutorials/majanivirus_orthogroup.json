@@ -313,7 +313,7 @@
       "operations": [
         {
           "title": "Orthogroup ribbon popup",
-          "body": "Click the rendered feature or match so the Orthogroup ribbon popup is visible.",
+          "body": "Click an orthogroup ribbon so the Orthogroup ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Zoomed majanivirus orthogroup ribbon crop with the orthogroup match popup open.",
@@ -363,7 +363,7 @@
       "operations": [
         {
           "title": "Match ribbon popup",
-          "body": "Click the rendered feature or match so the Match ribbon popup is visible.",
+          "body": "Click a match ribbon so the Match ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-01-01-match-popup.webp",
             "alt": "Zoomed majanivirus match ribbon crop with the highlighted orthogroup ribbon and popup open.",
@@ -374,15 +374,15 @@
     },
     {
       "title": "Click CDS features before refining rules",
-      "body": "Feature popups expose product, protein_id, locus_tag, sequence, and orthogroup membership. Use those values before tightening feature color rules.",
+      "body": "Feature popups expose product, protein_id, locus_tag, sequence, and orthogroup membership; the Feature editor drawer shows label, color, and scope controls. Use those values before tightening feature color rules.",
       "operations": [
         {
-          "title": "CDS feature popup",
+          "title": "CDS feature editor drawer",
           "body": "Click a CDS feature to inspect product, label, and color controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "Majanivirus feature popup edit controls with product label, fill, stroke, and multi-target controls visible.",
-            "caption": "The feature popup crop keeps product label, fill, stroke, and multi-target controls readable."
+            "alt": "Majanivirus Feature editor drawer controls with product label, fill, stroke, and multi-target controls visible.",
+            "caption": "The Feature editor drawer crop keeps product label, fill, stroke, and multi-target controls readable."
           }
         }
       ]

@@ -451,7 +451,7 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Click the rendered feature or match so the CDS feature popup metadata is visible.",
+          "body": "Click an outer CDS feature so the CDS feature popup metadata is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
             "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and feature popup metadata.",
@@ -501,7 +501,7 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Click the rendered feature or match so the CDS feature popup metadata is visible.",
+          "body": "Click an outer CDS feature so the CDS feature popup metadata is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
             "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and feature popup metadata.",

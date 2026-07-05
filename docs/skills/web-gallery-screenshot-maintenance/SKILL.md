@@ -30,14 +30,15 @@ Then inspect the target tutorial JSON and media directory:
 
 1. Enumerate only media referenced by tutorial JSON first. Treat unreferenced media as cleanup candidates after visible screenshots are fixed.
 2. Compare each referenced screenshot with its operation text and caption.
-3. Classify each screenshot as:
+3. Check adjacent operation screenshots for parent/child duplication. If a broader crop already shows the child controls clearly and the child crop adds no new action context, remove the child operation/media instead of recropping the broader image.
+4. Classify each screenshot as:
    - `keep`: real UI/result crop, readable, caption matches.
    - `recrop`: correct state but poor extent, blurry text, missing context, or too much page.
    - `replace`: final preview or stale/empty crop used for an input/edit/upload/setting operation.
    - `add`: operation needs an extra crop to avoid one overloaded screenshot.
-4. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
-5. Record the result in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
-6. Keep batches small. Do not migrate every tutorial in one risky change.
+5. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
+6. Record the result in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
+7. Keep batches small. Do not migrate every tutorial in one risky change.
 
 ## Screenshot Rules
 
@@ -61,6 +62,7 @@ Use the real UI the user operates.
 - Generated preview crops are appropriate only for final result checks, visual inspection, legends, popups, or rendered-output comparisons.
 - Do not show the same generated preview or popup twice in immediate succession as both step-level media and operation media. If the operation already carries the result or popup crop, omit step-level media or make the two crops visibly different and purposeful.
 - More generally, omit step-level media when the operation media already shows the same UI state, Files tab, generated preview, or popup without adding new context.
+- When one operation crop already includes another operation's entire control area, keep the broader crop if it remains readable and remove the narrower duplicate. Prefer a single truthful panel crop over consecutive screenshots that repeat the same controls.
 - Post-generation editor screenshots must come from the exact restored session for that example. Before capturing drawers such as Legend, Features, or Orthogroups, verify the restored editor state matches the example-specific generated result. A generic or stale drawer state, such as a BGC legend editor showing only `CDS`, is a `replace`, even if it is a real drawer crop.
 - Drawer screenshots must show the named active drawer tab and must not be overlapped by a popup or another drawer's controls. Legend drawer crops should be scrolled so the entries named by the caption are visible.
 - If a restored session's saved editor state and rendered SVG disagree, fix the app restore behavior or refresh the session artifact before capturing. Do not document the broken intermediate state as the tutorial screenshot.
@@ -130,5 +132,6 @@ npx playwright test tests/web/gallery-tutorial.playwright.spec.js --project=chro
 If Node Playwright is unavailable, use Python Playwright for equivalent media and viewport checks.
 
 When adding or removing tutorial media references, update focused browser tests that assert image counts or exact `src` values.
+When removing a duplicate operation media reference, delete the now-unreferenced WebP and assert the removed `src` is absent if a focused test already covers that tutorial.
 
 Manual review must check desktop and mobile Gallery views, image readability, caption specificity, and that no input/edit operation is represented only by a generated preview.

@@ -311,7 +311,7 @@
       "operations": [
         {
           "title": "Feature popup",
-          "body": "Click the rendered feature or match so the Feature popup metadata is visible.",
+          "body": "Click the RNR2 rRNA feature so the Feature popup metadata is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
             "alt": "Zoomed human mitochondrial AT skew crop with the clicked RNR2 rRNA feature and feature popup metadata.",
@@ -346,7 +346,7 @@
       "operations": [
         {
           "title": "Feature popup",
-          "body": "Click the rendered feature or match so the Feature popup metadata is visible.",
+          "body": "Click the RNR2 rRNA feature so the Feature popup metadata is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
             "alt": "Zoomed human mitochondrial AT skew crop with the clicked RNR2 rRNA feature and feature popup metadata.",

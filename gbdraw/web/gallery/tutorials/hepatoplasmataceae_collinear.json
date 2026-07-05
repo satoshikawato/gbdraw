@@ -253,7 +253,7 @@
       "operations": [
         {
           "title": "Collinear block popup",
-          "body": "Click the rendered feature or match so the Collinear block popup is visible.",
+          "body": "Click a collinear block ribbon so the Collinear block popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae collinear crop with the highlighted collinear block ribbon and popup.",
@@ -284,15 +284,15 @@
   "postGenerationEdits": [
     {
       "title": "Click a feature",
-      "body": "Feature clicks show the selected feature, qualifiers, sequence details, and color controls. Use this to verify gene, locus_tag, product, and protein_id values.",
+      "body": "Feature clicks expose qualifiers and sequence details, while the Feature editor drawer shows label, visibility, color, and scope controls. Use these views to verify gene, locus_tag, product, and protein_id values.",
       "operations": [
         {
-          "title": "Feature popup",
-          "body": "Click a feature in the generated SVG to inspect its qualifiers and color controls.",
+          "title": "Feature editor drawer",
+          "body": "Select a feature and use the Feature editor drawer to inspect label, visibility, fill, stroke, and scope controls.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
-            "alt": "Hepatoplasmataceae feature popup edit controls with label, visibility, fill, stroke, and multi-target controls visible.",
-            "caption": "The feature popup crop keeps label, visibility, fill, stroke, and multi-target controls readable."
+            "alt": "Hepatoplasmataceae Feature editor drawer controls with label, visibility, fill, stroke, and multi-target controls visible.",
+            "caption": "The Feature editor drawer crop keeps label, visibility, fill, stroke, and multi-target controls readable."
           }
         }
       ]
