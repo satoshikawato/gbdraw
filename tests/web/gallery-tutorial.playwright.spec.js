@@ -111,6 +111,8 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(12);
   await expect(mediaImages.first()).toHaveAttribute('src', /manual-01-01-linear-mode\.webp$/);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-collinear-block-popup.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
@@ -143,6 +145,8 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(13);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-orthogroup-overview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-01-orthogroups-mode.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
@@ -336,8 +340,16 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('cell', { name: 'unmatched CDS' })).toBeVisible();
   await expect(tutorialPanel.getByText('Use 32 threads only deliberately')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: '1 MjeNMV.gb Marsupenaeus japonicus endogenous nimavirus'
+    })
+  ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(16);
+  await expect(mediaImages).toHaveCount(15);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-label-context.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-nine-file-upload-order.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-05-01-record-labels.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-orthogroup-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-files-tab.webp"]')).toHaveCount(0);

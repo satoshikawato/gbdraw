@@ -90,28 +90,28 @@
       ]
     },
     {
-      "title": "Upload the nine GenBank files",
-      "body": "Keep the records in the same order as the Gallery command so adjacent comparison tracks and labels match the published example.",
+      "title": "Upload the nine GenBank files and labels",
+      "body": "Keep the records and Organism / strain labels in the same order as the Gallery command so adjacent comparison tracks and labels match the published example.",
       "table": {
-        "columns": ["Order", "GenBank file"],
+        "columns": ["Order", "GenBank file", "Organism / strain"],
         "rows": [
-          ["1", "MjeNMV.gb"],
-          ["2", "MelaMJNV.gb"],
-          ["3", "PemoMJNVA.gb"],
-          ["4", "PeseMJNV.gb"],
-          ["5", "PemoMJNVB.gb"],
-          ["6", "LvMJNV.gb"],
-          ["7", "TrcuMJNV.gb"],
-          ["8", "MeenMJNV.gb"],
-          ["9", "MejoMJNV.gb"]
+          ["1", "MjeNMV.gb", "Marsupenaeus japonicus endogenous nimavirus"],
+          ["2", "MelaMJNV.gb", "Melicertus latisulcatus majanivirus"],
+          ["3", "PemoMJNVA.gb", "Penaeus monodon majanivirus A"],
+          ["4", "PeseMJNV.gb", "Penaeus semisulcatus majanivirus"],
+          ["5", "PemoMJNVB.gb", "Penaeus monodon majanivirus B"],
+          ["6", "LvMJNV.gb", "Litopenaeus vannamei majanivirus"],
+          ["7", "TrcuMJNV.gb", "Trachysalambria curvirostris majanivirus"],
+          ["8", "MeenMJNV.gb", "Metapenaeus ensis majanivirus"],
+          ["9", "MejoMJNV.gb", "Metapenaeus joyneri majanivirus"]
         ]
       },
       "operations": [
         {
           "media": {
-            "src": "./media/majanivirus_orthogroup/manual-02-01-nine-file-upload-order.webp",
-            "alt": "Linear GenBank upload rows showing the nine majanivirus files in order.",
-            "caption": "Upload the nine majanivirus GenBank files in order."
+            "src": "./media/majanivirus_orthogroup/manual-02-01-upload-row-label-context.webp",
+            "alt": "Linear GenBank input row 1 with MjeNMV.gb uploaded and its Organism / strain label in the same input card.",
+            "caption": "The first uploaded row shows MjeNMV.gb and its Organism / strain label in the real Linear input card; repeat the remaining rows from the table."
           }
         }
       ]
@@ -212,33 +212,6 @@
             "openDetails": [
               "Layout"
             ]
-          }
-        }
-      ]
-    },
-    {
-      "title": "Set the record labels",
-      "body": "Use descriptive record labels rather than raw accessions so the figure can be read without opening the input files.",
-      "table": {
-        "columns": ["Record", "Label"],
-        "rows": [
-          ["1", "Marsupenaeus japonicus endogenous nimavirus"],
-          ["2", "Melicertus latisulcatus majanivirus"],
-          ["3", "Penaeus monodon majanivirus A"],
-          ["4", "Penaeus semisulcatus majanivirus"],
-          ["5", "Penaeus monodon majanivirus B"],
-          ["6", "Litopenaeus vannamei majanivirus"],
-          ["7", "Trachysalambria curvirostris majanivirus"],
-          ["8", "Metapenaeus ensis majanivirus"],
-          ["9", "Metapenaeus joyneri majanivirus"]
-        ]
-      },
-      "operations": [
-        {
-          "media": {
-            "src": "./media/majanivirus_orthogroup/manual-05-01-record-labels.webp",
-            "alt": "Record label editor rows with nine descriptive majanivirus names.",
-            "caption": "Enter the nine descriptive record labels."
           }
         }
       ]

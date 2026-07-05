@@ -50,8 +50,9 @@ Then inspect the target tutorial JSON and media directory:
 Use the real UI the user operates.
 
 - Mode selector screenshots must show the real Circular/Linear control with the active choice readable.
-- File uploads must show the uploader and uploaded file rows/chips in the correct order. When the same upload row also contains metadata fields that affect the figure, such as organism/strain, subtitle/title, region, reverse complement, or LOSAT filename, include those fields instead of cropping only the file chip.
-- For tall multi-file upload workflows, keep the full file order as a tutorial list or table and use one representative row crop with the file chip and relevant metadata fields, rather than one unreadable crop of every row.
+- File uploads must show the real uploader/input card the user operates, not a reconstructed list of file chips. The crop must include the uploaded file and the neighboring per-record controls that are visible in the actual row.
+- When the session or command uses per-record metadata that affects the figure, such as `--record_label`, `--record_subtitle`, `definition`, `record_subtitle`, organism/strain, subtitle/title, region, reverse complement, or LOSAT filename, include those fields in both the tutorial table/text and the upload-row crop. Do not split file upload and record label/title entry into disconnected screenshots when the values live in the same input card.
+- For tall multi-file upload workflows, keep the full file order and metadata as a tutorial table and use one representative real row crop with the file chip and relevant metadata fields, rather than one unreadable crop of every row.
 - Dropdown/select operations must show the select in context plus a capture-only opened-option overlay with the chosen option highlighted.
 - Text and number inputs must show labels, values, units, and nearby related controls. Highlight changed fields when multiple inputs are visible.
 - When one operation sentence lists several pre-generation settings, include an overview crop that shows the actual text inputs, selects, toggles, or selected chips, even if separate dropdown crops also show individual menu choices.
