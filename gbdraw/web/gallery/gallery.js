@@ -31,6 +31,7 @@ let selectedId = '';
 let activeTab = 'preview';
 let copyStatusTimer = 0;
 let tutorialRequestToken = 0;
+let mediaLightbox = null;
 let commonColorRuleGuide = null;
 let commonColorRuleGuidePromise = null;
 const tutorialCache = new Map();
@@ -225,6 +226,45 @@ const mediaIsVideo = (entry, source) => {
   return type === 'video' || /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(source);
 };
 
+const ensureMediaLightbox = () => {
+  if (mediaLightbox) return mediaLightbox;
+
+  const dialog = document.createElement('dialog');
+  dialog.className = 'tutorial-lightbox';
+  dialog.setAttribute('aria-label', 'Full-size tutorial image');
+  dialog.tabIndex = -1;
+
+  const image = document.createElement('img');
+  image.className = 'tutorial-lightbox__image';
+  dialog.appendChild(image);
+  document.body.appendChild(dialog);
+
+  image.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener('close', () => {
+    image.removeAttribute('src');
+    image.alt = '';
+  });
+
+  mediaLightbox = { dialog, image };
+  return mediaLightbox;
+};
+
+const openMediaLightbox = (source, label) => {
+  const lightbox = ensureMediaLightbox();
+  if (lightbox.dialog.open) lightbox.dialog.close();
+  lightbox.image.src = source;
+  lightbox.image.alt = label || '';
+  if (typeof lightbox.dialog.showModal === 'function') {
+    lightbox.dialog.showModal();
+  } else {
+    lightbox.dialog.setAttribute('open', '');
+  }
+  lightbox.dialog.focus();
+};
+
 const renderMedia = (parent, media) => {
   mediaEntryList(media).forEach((entry) => {
     const mediaObject = typeof entry === 'string' ? { src: entry } : entry;
@@ -233,6 +273,8 @@ const renderMedia = (parent, media) => {
     const source = asText(mediaObject.src) || asText(mediaObject.href);
     if (!source) return;
 
+    const caption = asText(mediaObject.caption);
+    const altText = asText(mediaObject.alt) || caption || '';
     const figure = document.createElement('figure');
     figure.className = 'tutorial-media';
     const mediaElement = document.createElement(mediaIsVideo(mediaObject, source) ? 'video' : 'img');
@@ -242,15 +284,27 @@ const renderMedia = (parent, media) => {
       mediaElement.preload = 'metadata';
     } else {
       mediaElement.loading = 'lazy';
-      mediaElement.alt = asText(mediaObject.alt) || asText(mediaObject.caption) || '';
+      mediaElement.alt = altText;
     }
     mediaElement.addEventListener('error', () => {
       clearChildren(figure);
       appendText(figure, 'p', 'panel-status panel-status--error', `Media unavailable: ${source}`);
     });
-    figure.appendChild(mediaElement);
 
-    const caption = asText(mediaObject.caption);
+    if (mediaElement.tagName === 'IMG') {
+      const openButton = document.createElement('button');
+      openButton.type = 'button';
+      openButton.className = 'tutorial-media__button';
+      openButton.setAttribute('aria-label', `Open full-size image: ${caption || altText || source}`);
+      openButton.appendChild(mediaElement);
+      openButton.addEventListener('click', () => {
+        openMediaLightbox(source, caption || altText);
+      });
+      figure.appendChild(openButton);
+    } else {
+      figure.appendChild(mediaElement);
+    }
+
     if (caption) appendText(figure, 'figcaption', '', caption);
     parent.appendChild(figure);
   });
@@ -495,19 +549,6 @@ const renderTutorial = (tutorial, sample) => {
 
   const summary = asText(tutorial.summary);
   if (summary) appendText(tutorialContent, 'p', 'tutorial-summary', summary);
-
-  const metaItems = [
-    asText(tutorial.estimatedTime),
-    asText(tutorial.difficulty),
-    asText(tutorial.appMode),
-    asText(tutorial.primaryWorkflow)
-  ].filter(Boolean);
-  if (metaItems.length) {
-    const meta = document.createElement('div');
-    meta.className = 'tutorial-meta';
-    metaItems.forEach((item) => appendText(meta, 'span', 'tutorial-meta__item', item));
-    tutorialContent.appendChild(meta);
-  }
 
   renderTextListSection(tutorialContent, 'Requirements', tutorial.requirements);
   if (asArray(tutorial.downloads).length) {

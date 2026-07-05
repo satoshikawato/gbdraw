@@ -111,6 +111,8 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(12);
   await expect(mediaImages.first()).toHaveAttribute('src', /manual-01-01-linear-mode\.webp$/);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-collinear-block-popup.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
@@ -143,6 +145,8 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(13);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-orthogroup-overview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-01-orthogroups-mode.webp"]')).toHaveCount(1);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
@@ -185,7 +189,13 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
       name: 'CDS gene_kind biosynthetic$ #d03535 Core biosynthetic genes'
     })
   ).toBeVisible();
-  await expect(page.getByText('Reverse complement: BGC0000713 only')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Reverse complement BGC0000713 only'
+    })
+  ).toBeVisible();
+  const bgc0708MibigHref = 'https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk';
+  await expect(tutorialPanel.locator(`a[href="${bgc0708MibigHref}"]`)).toHaveText('MIBiG repository');
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(20);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
@@ -202,6 +212,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('BGC0000708.gbk')).toBeVisible();
+  await expect(filesPanel.locator(`a[href="${bgc0708MibigHref}"]`)).toHaveText('MIBiG repository');
   await expect(filesPanel.getByText('BGC0000713.gbk')).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
 
@@ -221,15 +232,21 @@ test('Gallery renders the WSSV conservation tutorial and media', async ({ page }
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
-  await expect(tutorialPanel.getByText('Ring width: 5')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Ring width 5'
+    })
+  ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
       name: '20 Angostura2013 #c6bebb'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByText('MG18PR-0187-N40S.fa')).toBeVisible();
+  await expect(tutorialPanel.getByRole('cell', { name: 'MG18PR-0187-N40S.fa' })).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(15);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-comparison-fasta-series.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-upload-fasta-comparisons.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-conservation-rings.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-files-tab.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-11-01-feature-popup.webp"]')).toHaveCount(1);
@@ -268,8 +285,16 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
       name: 'gc_content Dinucleotide content inside Width: 0.1'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByText('Dinucleotide: AT')).toBeVisible();
-  await expect(tutorialPanel.getByText('Legend label: AT skew')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Dinucleotide AT'
+    })
+  ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Legend label AT skew'
+    })
+  ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(16);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-atskew-preview.webp"]')).toHaveCount(1);
@@ -306,7 +331,11 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
     page.getByRole('heading', { name: 'Reproduce the large majanivirus orthogroup comparison in the web app' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
-  await expect(tutorialPanel.getByText('protein blastp mode: Orthogroups', { exact: true })).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'protein blastp mode Orthogroups'
+    })
+  ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
       name: 'Specific rule CDS product wsv.*-like protein #89d1fa WSSV-like proteins'
@@ -314,8 +343,16 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('cell', { name: 'unmatched CDS' })).toBeVisible();
   await expect(tutorialPanel.getByText('Use 32 threads only deliberately')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: '1 MjeNMV.gb Marsupenaeus japonicus endogenous nimavirus'
+    })
+  ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(16);
+  await expect(mediaImages).toHaveCount(15);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-label-context.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-nine-file-upload-order.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-05-01-record-labels.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-orthogroup-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-files-tab.webp"]')).toHaveCount(0);
@@ -356,8 +393,16 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await expect(tutorialPanel.getByText('Enable Multi-record canvas')).toBeVisible();
   await expect(tutorialPanel.getByText('Upload the GenBank file')).toBeVisible();
   await expect(tutorialPanel.getByText('Set the circular layout')).toBeVisible();
-  await expect(tutorialPanel.getByText('Track type to tuckin')).toBeVisible();
-  await expect(tutorialPanel.getByText('records #1 and #2 in row 1 and #3 through #6 in row 2')).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Track type tuckin'
+    })
+  ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Record rows #1@1, #2@1, #3@2, #4@2, #5@2, #6@2'
+    })
+  ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(11);
   await expect(tutorialPanel.locator('img[src$="manual-03-00-circular-layout-settings.webp"]')).toHaveCount(1);
@@ -454,6 +499,50 @@ test('Gallery renders operation media and keeps it inside a mobile viewport', as
     return rect.width > parentRect.width + 1 || rect.right > document.documentElement.clientWidth + 1;
   });
   expect(overflow).toBe(false);
+});
+
+test('Gallery opens tutorial images at natural size in a modal', async ({ page }) => {
+  await page.goto(`${baseUrl}/gallery/#BGC0000708-BGC0000713`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  const image = tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]');
+  await expect(image).toHaveCount(1);
+  await image.scrollIntoViewIfNeeded();
+  await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+
+  const previewImageSize = await image.evaluate((element) => ({
+    naturalHeight: element.naturalHeight,
+    naturalWidth: element.naturalWidth
+  }));
+
+  await image.click();
+
+  const dialog = page.locator('.tutorial-lightbox');
+  await expect(dialog).toHaveAttribute('open', '');
+  await expect(dialog.locator(':scope > *')).toHaveCount(1);
+  await expect(dialog.locator('.tutorial-lightbox__shell, .tutorial-lightbox__header, .tutorial-lightbox__caption')).toHaveCount(0);
+  await expect(dialog.getByRole('button')).toHaveCount(0);
+
+  const fullSizeImage = dialog.getByRole('img');
+  await expect(fullSizeImage).toHaveAttribute('src', /manual-09-01-orthogroup-popup\.webp$/);
+  await expect.poll(() => fullSizeImage.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+
+  const fullSizeImageSize = await fullSizeImage.evaluate((element) => {
+    return {
+      displayHeight: element.clientHeight,
+      displayWidth: element.clientWidth,
+      naturalHeight: element.naturalHeight,
+      naturalWidth: element.naturalWidth
+    };
+  });
+  expect(fullSizeImageSize.naturalWidth).toBe(previewImageSize.naturalWidth);
+  expect(fullSizeImageSize.naturalHeight).toBe(previewImageSize.naturalHeight);
+  expect(Math.abs(fullSizeImageSize.displayWidth - previewImageSize.naturalWidth)).toBeLessThanOrEqual(1);
+  expect(Math.abs(fullSizeImageSize.displayHeight - previewImageSize.naturalHeight)).toBeLessThanOrEqual(1);
+
+  await fullSizeImage.click();
+  await expect(dialog).not.toHaveAttribute('open', '');
 });
 
 test('Gallery copy link button copies the selected sample URL', async ({ page }) => {

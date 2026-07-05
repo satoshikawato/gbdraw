@@ -7,38 +7,41 @@
   "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP orthogroups with feature color rules",
-  "requirements": [
-    "GenBank features that retain antiSMASH qualifiers such as gene_kind."
-  ],
+  "requirements": ["GenBank features that retain antiSMASH qualifiers such as gene_kind."],
   "downloads": [
     {
       "label": "BGC0000708",
       "source": "MIBiG repository",
       "targetName": "BGC0000708.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk",
       "note": "Download the lividomycin biosynthetic gene cluster as GenBank."
     },
     {
       "label": "BGC0000709",
       "source": "MIBiG repository",
       "targetName": "BGC0000709.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk",
       "note": "Download the neomycin biosynthetic gene cluster as GenBank."
     },
     {
       "label": "BGC0000711",
       "source": "MIBiG repository",
       "targetName": "BGC0000711.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk",
       "note": "Download the second neomycin biosynthetic gene cluster as GenBank."
     },
     {
       "label": "BGC0000712",
       "source": "MIBiG repository",
       "targetName": "BGC0000712.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk",
       "note": "Download the paromomycin biosynthetic gene cluster as GenBank."
     },
     {
       "label": "BGC0000713",
       "source": "MIBiG repository",
       "targetName": "BGC0000713.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk",
       "note": "Download the ribostamycin biosynthetic gene cluster as GenBank."
     }
   ],
@@ -48,8 +51,6 @@
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
       "operations": [
         {
-          "title": "Mode selector",
-          "body": "Select Linear.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
             "alt": "Mode selector with Linear selected.",
@@ -60,22 +61,23 @@
     },
     {
       "title": "Upload the five GenBank files",
-      "body": "Keep the records in the same order as the Gallery command so adjacent orthogroup tracks and labels match the saved example.",
-      "items": [
-        "BGC0000708.gbk",
-        "BGC0000709.gbk",
-        "BGC0000711.gbk",
-        "BGC0000712.gbk",
-        "BGC0000713.gbk"
-      ],
+      "body": "Add the GenBank files in this order, then fill the organism/strain and subtitle/title fields for each record to match the Gallery session.",
+      "table": {
+        "columns": ["Order", "GenBank file", "Organism / strain", "Subtitle", "Reverse complement"],
+        "rows": [
+          ["1", "BGC0000708.gbk", "Streptomyces lividus CBS 844.73", "Lividomycin biosynthetic gene cluster", "off"],
+          ["2", "BGC0000709.gbk", "Streptomyces fradiae ATCC 10745", "Neomycin biosynthetic gene cluster", "off"],
+          ["3", "BGC0000711.gbk", "Streptomyces fradiae MCIMB 8233", "Neomycin biosynthetic gene cluster", "off"],
+          ["4", "BGC0000712.gbk", "Streptomyces rimosus subsp. paromomycinus NRRL 2455", "Paromomycin biosynthetic gene cluster", "off"],
+          ["5", "BGC0000713.gbk", "Streptomyces ribosidificus ATCC 21294", "Ribostamycin biosynthetic gene", "on"]
+        ]
+      },
       "operations": [
         {
-          "title": "Linear GenBank uploader with five BGC files",
-          "body": "Use the Linear upload rows to verify the file chips are in order.",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-02-01-five-file-upload-order.webp",
-            "alt": "Linear Input Genomes uploader rows showing BGC0000708.gbk, BGC0000709.gbk, BGC0000711.gbk, BGC0000712.gbk, and BGC0000713.gbk in order.",
-            "caption": "The Linear GenBank upload rows show the five BGC files in the same order as the Gallery command."
+            "src": "./media/BGC0000708-BGC0000713/manual-02-01-record-text-row.webp",
+            "alt": "Linear GenBank row 1 with BGC0000708.gbk selected and organism/strain, subtitle/title, region, and LOSAT filename fields visible.",
+            "caption": "Fill row 1 with BGC0000708.gbk, the organism/strain label, and the BGC subtitle; repeat for the remaining files in the listed order."
           }
         }
       ]
@@ -83,15 +85,18 @@
     {
       "title": "Configure browser LOSAT",
       "body": "In Pairwise Comparisons, choose Run LOSAT. Use LOSATP with blastp mode Orthogroups.",
-      "items": [
-        "Execution: Auto",
-        "Total threads: Safe",
-        "Threads per run: Auto",
-        "protein blastp max hits: 5",
-        "Identity: 30",
-        "Bitscore: 50",
-        "E-value: 1e-2"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Execution", "Auto"],
+          ["Total threads", "Safe"],
+          ["Threads per run", "Auto"],
+          ["protein blastp max hits", "5"],
+          ["Identity", "30"],
+          ["Bitscore", "50"],
+          ["E-value", "1e-2"]
+        ]
+      },
       "note": "This example compares protein-coding genes across related biosynthetic gene clusters, so orthogroup-backed blastp matches are the useful comparison signal.",
       "operations": [
         {
@@ -101,6 +106,18 @@
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
             "alt": "Linear Run LOSAT settings panel with Run LOSAT selected, LOSATP selected, and execution and thread controls visible.",
             "caption": "The LOSAT settings panel shows the Run LOSAT source, LOSATP mode, and browser execution controls."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "waitForSelector": "[data-capture='linear-losat-settings']"
           }
         },
         {
@@ -122,11 +139,7 @@
             },
             "openSelect": {
               "selectedLabel": "Orthogroups",
-              "options": [
-                "Orthogroups",
-                "Collinear blocks",
-                "Pairwise"
-              ],
+              "options": ["Orthogroups", "Collinear blocks", "Pairwise"],
               "label": "blastp mode"
             }
           }
@@ -145,12 +158,15 @@
     {
       "title": "Align the shared core",
       "body": "Use orthogroup alignment around og_1 and reverse-complement BGC0000713 so the conserved biosynthetic core is visually comparable across all five rows.",
-      "items": [
-        "Align orthogroup feature: og_1",
-        "Reverse complement: BGC0000713 only",
-        "Track layout: middle",
-        "Pairwise match style: curve"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Align orthogroup feature", "og_1"],
+          ["Reverse complement", "BGC0000713 only"],
+          ["Track layout", "middle"],
+          ["Pairwise match style", "curve"]
+        ]
+      },
       "operations": [
         {
           "title": "Clicked og_1 feature Align button",
@@ -189,16 +205,10 @@
             },
             "openSelect": {
               "selectedLabel": "Middle",
-              "options": [
-                "Above",
-                "Middle",
-                "Below"
-              ],
+              "options": ["Above", "Middle", "Below"],
               "label": "Track Layout"
             },
-            "openDetails": [
-              "Layout"
-            ]
+            "openDetails": ["Layout"]
           }
         },
         {
@@ -220,15 +230,10 @@
             },
             "openSelect": {
               "selectedLabel": "Curve",
-              "options": [
-                "Ribbon",
-                "Curve"
-              ],
+              "options": ["Ribbon", "Curve"],
               "label": "Pairwise Match Style"
             },
-            "openDetails": [
-              "Pairwise Match"
-            ]
+            "openDetails": ["Pairwise Match"]
           }
         }
       ]
@@ -236,15 +241,18 @@
     {
       "title": "Set labels and figure layout",
       "body": "Use the saved session values for a compact manuscript-style comparison.",
-      "items": [
-        "Show labels: first record",
-        "Label placement: above feature",
-        "Label rotation: 45",
-        "Scale style: ruler",
-        "Ruler on axis: on",
-        "Legend: bottom",
-        "Keep definitions left aligned: on"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Show labels", "first record"],
+          ["Label placement", "above feature"],
+          ["Label rotation", "45"],
+          ["Scale style", "ruler"],
+          ["Ruler on axis", "on"],
+          ["Legend", "bottom"],
+          ["Keep definitions left aligned", "on"]
+        ]
+      },
       "operations": [
         {
           "title": "Show labels selector",
@@ -265,17 +273,10 @@
             },
             "openSelect": {
               "selectedLabel": "First Record Only",
-              "options": [
-                "None",
-                "All Records",
-                "First Record Only",
-                "Top Orthogroup Record"
-              ],
+              "options": ["None", "All Records", "First Record Only", "Top Orthogroup Record"],
               "label": "Show Labels"
             },
-            "openDetails": [
-              "Labels"
-            ]
+            "openDetails": ["Labels"]
           }
         },
         {
@@ -297,15 +298,10 @@
             },
             "openSelect": {
               "selectedLabel": "Ruler (Ticks)",
-              "options": [
-                "Bar (Simple)",
-                "Ruler (Ticks)"
-              ],
+              "options": ["Bar (Simple)", "Ruler (Ticks)"],
               "label": "Scale Style"
             },
-            "openDetails": [
-              "Axis & Scale"
-            ]
+            "openDetails": ["Axis & Scale"]
           }
         },
         {
@@ -327,33 +323,23 @@
             },
             "openSelect": {
               "selectedLabel": "Bottom",
-              "options": [
-                "Right",
-                "Left",
-                "Top",
-                "Bottom",
-                "None"
-              ],
+              "options": ["Right", "Left", "Top", "Bottom", "None"],
               "label": "Legend Position"
             },
-            "openDetails": [
-              "Title & Legend"
-            ]
+            "openDetails": ["Title & Legend"]
           }
         }
       ]
     },
     {
       "title": "Add the plot title and record text",
-      "body": "Set the plot title to Aminoglycoside biosynthetic gene clusters from Streptomyces spp. Use species-level record labels and cluster subtitles when you want the web output to match the Gallery session exactly.",
+      "body": "Set the plot title to Aminoglycoside biosynthetic gene clusters from Streptomyces spp. Use the shown title and definition font settings when you want the web output to match the Gallery session exactly.",
       "operations": [
         {
-          "title": "Title and record text controls",
-          "body": "Type the plot title in the Title & Legend controls and keep the saved definition text settings visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
             "alt": "Title and Legend controls showing the aminoglycoside BGC plot title, bottom title position, definition font size, and definition line style settings.",
-            "caption": "Type the aminoglycoside BGC plot title in the Title & Legend controls before generating the figure."
+            "caption": "Set the plot title, title position, definition font size, and definition line-style values before generating the figure."
           }
         }
       ]
@@ -373,8 +359,6 @@
       "note": "Use biosynthetic$ for the core category so it does not also catch biosynthetic-additional.",
       "operations": [
         {
-          "title": "All antiSMASH gene_kind color rules",
-          "body": "Enter the four antiSMASH gene_kind rules from the table in SPECIFIC RULES (-t), then generate the figure once after all rules are present.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-01-specific-rules-all.webp",
             "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
@@ -388,8 +372,6 @@
       "body": "Click Generate Diagram. The generated preview should show five BGC rows, blue orthogroup ribbons, rotated first-record labels, and a bottom legend.",
       "operations": [
         {
-          "title": "Generated BGC comparison preview",
-          "body": "Inspect the generated preview with five rows and the bottom legend.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
             "alt": "Generated aminoglycoside BGC comparison preview with five rows and the bottom legend.",
@@ -403,12 +385,44 @@
       "body": "Click a pairwise match ribbon to inspect the orthogroup ID, member count, record coverage, and member table.",
       "operations": [
         {
-          "title": "Orthogroup ribbon popup",
-          "body": "Click an orthogroup ribbon so the Orthogroup ribbon popup is visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-09-01-orthogroup-popup.webp",
             "alt": "Zoomed aminoglycoside BGC orthogroup ribbon crop with the orthogroup match popup open.",
             "caption": "The zoomed crop keeps the clicked orthogroup ribbon and popup readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.4; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-180px, -40px) scale(1.4)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "path[data-gbdraw-pairwise-match-id='comparison3_match1']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".pairwise-match-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = 520; app.clickedPairwiseMatchPos.y = 280; }"
+              }
+            ],
+            "clipSelectors": [".pairwise-match-popup"],
+            "cropPadding": {
+              "top": 170,
+              "right": 28,
+              "bottom": 60,
+              "left": 170
+            },
+            "waitForSelector": ".pairwise-match-popup"
           }
         }
       ]
@@ -418,12 +432,44 @@
       "body": "Click a CDS feature to inspect its label, product, orthogroup membership, and qualifier values before deciding whether to refine a color rule.",
       "operations": [
         {
-          "title": "Colored feature popup",
-          "body": "Click a colored CDS feature so the Colored feature popup metadata is visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-10-01-feature-popup.webp",
             "alt": "Zoomed aminoglycoside BGC crop with the clicked CDS, its orthogroup ribbon context, and feature popup metadata.",
             "caption": "The zoomed crop keeps the clicked CDS, orthogroup context, and gene_kind metadata readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-130px, -40px) scale(1.35)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id='fa7a0b1fc']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".feature-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]
@@ -466,24 +512,23 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
             "viewport": {
               "width": 1440,
               "height": 700
             },
             "actions": [
               {
-                "type": "wait",
-                "ms": 3000
+                "type": "evaluate",
+                "script": "() => { const app = window.__GBDRAW_APP__; if (!app) return; app.legendEntries = [{ caption: 'Core biosynthetic genes', originalCaption: 'Core biosynthetic genes', color: '#d03535', xPos: 31.428571428571427, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Additional biosynthetic genes', originalCaption: 'Additional biosynthetic genes', color: '#f787a9', xPos: 390.28571428571433, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Transport-related genes', originalCaption: 'Transport-related genes', color: '#577edb', xPos: 821.1428571428572, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Regulatory genes', originalCaption: 'Regulatory genes', color: '#57b767', xPos: 1180, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'other proteins', originalCaption: 'other proteins', color: '#dddddd', xPos: 1454.857142857143, yPos: 10, showStroke: false, featureIds: [] }]; }"
               },
               {
                 "type": "evaluate",
-                "script": "window.__GBDRAW_APP__?.openRightDrawerTab?.('legend')"
+                "script": "() => { window.__GBDRAW_APP__?.openRightDrawerTab?.('legend'); }"
               },
               {
-                "type": "waitForSelector",
-                "selector": ".right-drawer input[type=\"text\"]",
-                "state": "visible"
+                "type": "wait",
+                "ms": 1000
               },
               {
                 "type": "evaluate",
@@ -504,8 +549,6 @@
       "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures.",
       "operations": [
         {
-          "title": "Export controls",
-          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/post-03-01-export-controls.webp",
             "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
@@ -519,8 +562,6 @@
       "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSATP cache, settings, generated output, and SVG adjustments.",
       "operations": [
         {
-          "title": "Session save controls",
-          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/post-04-01-save-session.webp",
             "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",

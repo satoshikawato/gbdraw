@@ -7,9 +7,7 @@
   "difficulty": "Advanced",
   "appMode": "Circular",
   "primaryWorkflow": "Circular conservation rings with browser LOSAT blastn",
-  "requirements": [
-    "Enough available memory for one WSSV GenBank record, 20 comparison FASTA files, and LOSAT blastn output."
-  ],
+  "requirements": ["Enough available memory for one WSSV GenBank record, 20 comparison FASTA files, and LOSAT blastn output."],
   "downloads": [
     {
       "label": "AP027280",
@@ -145,8 +143,6 @@
       "body": "Open gbdraw.app and select Circular mode before adding the WSSV reference record.",
       "operations": [
         {
-          "title": "Mode selector",
-          "body": "Select Circular.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-01-01-circular-mode.webp",
             "alt": "Mode selector with Circular selected.",
@@ -158,16 +154,17 @@
     {
       "title": "Upload the reference GenBank file",
       "body": "Upload AP027280.gb as the circular reference. This record is the JP02 White spot syndrome virus genome shown at the center of the Gallery figure.",
-      "items": [
-        "Input type: GenBank",
-        "File: AP027280.gb",
-        "Output prefix: WSSV_genome_comparison",
-        "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Input type", "GenBank"],
+          ["File", "AP027280.gb"],
+          ["Output prefix", "WSSV_genome_comparison"],
+          ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
+        ]
+      },
       "operations": [
         {
-          "title": "Circular GenBank uploader",
-          "body": "Upload AP027280.gb so the reference file chip is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-02-01-reference-genbank-upload.webp",
             "alt": "Circular GenBank uploader with the AP027280.gb file chip.",
@@ -179,17 +176,20 @@
     {
       "title": "Set the basic circular layout",
       "body": "Use a spread-out circular track so the outer CDS features remain readable around the conservation rings.",
-      "items": [
-        "Track type: spreadout",
-        "Palette: royal_gala",
-        "Separate strands: on",
-        "Legend: left",
-        "Labels: none",
-        "Suppress GC: on",
-        "Suppress skew: on",
-        "Feature width: 10",
-        "Scale interval: 20000"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Track type", "spreadout"],
+          ["Palette", "royal_gala"],
+          ["Separate strands", "on"],
+          ["Legend", "left"],
+          ["Labels", "none"],
+          ["Suppress GC", "on"],
+          ["Suppress skew", "on"],
+          ["Feature width", "10"],
+          ["Scale interval", "20000"]
+        ]
+      },
       "operations": [
         {
           "title": "Track preset selector",
@@ -210,16 +210,10 @@
             },
             "openSelect": {
               "selectedLabel": "Spreadout",
-              "options": [
-                "Tuckin",
-                "Middle",
-                "Spreadout"
-              ],
+              "options": ["Tuckin", "Middle", "Spreadout"],
               "label": "Track Preset"
             },
-            "openDetails": [
-              "Layout"
-            ]
+            "openDetails": ["Layout"]
           }
         },
         {
@@ -241,33 +235,28 @@
             },
             "openSelect": {
               "selectedLabel": "Left",
-              "options": [
-                "Right",
-                "Left",
-                "Top",
-                "Bottom",
-                "None"
-              ],
+              "options": ["Right", "Left", "Top", "Bottom", "None"],
               "label": "Legend Position"
             },
-            "openDetails": [
-              "Title & Legend"
-            ]
+            "openDetails": ["Title & Legend"]
           }
         }
       ]
     },
     {
       "title": "Open Circular Conservation",
-      "body": "Enable circular conservation, then upload the 20 comparison FASTA files in the order used by the Gallery session.",
-      "items": [
-        "Source: Run LOSAT from FASTA inputs",
-        "LOSAT program: blastn",
-        "blastn task: megablast",
-        "Reference: Auto",
-        "Ring width: 5",
-        "Ring gap: 2"
-      ],
+      "body": "Enable circular conservation, then upload the 20 comparison FASTA files in the order listed in the ring-label table below.",
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Source", "Run LOSAT from FASTA inputs"],
+          ["LOSAT program", "blastn"],
+          ["blastn task", "megablast"],
+          ["Reference", "Auto"],
+          ["Ring width", "5"],
+          ["Ring gap", "2"]
+        ]
+      },
       "note": "If you import precomputed conservation BLAST tables instead of running browser LOSAT, use the subject/reference orientation expected by those tables.",
       "operations": [
         {
@@ -280,12 +269,12 @@
           }
         },
         {
-          "title": "Conservation FASTA uploader",
-          "body": "Add the comparison FASTA rows in the tutorial order.",
+          "title": "Comparison FASTA series rows",
+          "body": "Use the table below for the full FASTA order, then check that the uploaded series rows show the expected labels and row controls.",
           "media": {
-            "src": "./media/WSSV_genome_comparison/manual-04-02-upload-fasta-comparisons.webp",
-            "alt": "Comparison FASTA file rows listed in Pairwise Comparisons.",
-            "caption": "Add the comparison FASTA rows in the tutorial order."
+            "src": "./media/WSSV_genome_comparison/manual-04-02-comparison-fasta-series.webp",
+            "alt": "Comparison FASTA series rows for CN01, WSSV-TW, WSSV-CN, and WSSV-TH with color swatches and order controls.",
+            "caption": "The representative FASTA series rows show labels, color swatches, and row controls; use the table for all 20 inputs."
           }
         }
       ]
@@ -294,34 +283,32 @@
       "title": "Name the conservation rings",
       "body": "Assign one short label per FASTA so the left legend and each ring order match the Gallery figure.",
       "table": {
-        "columns": ["Ring", "Label"],
+        "columns": ["Ring", "Comparison FASTA", "Label"],
         "rows": [
-          ["1", "CN01"],
-          ["2", "WSSV-TW"],
-          ["3", "WSSV-CN"],
-          ["4", "WSSV-TH"],
-          ["5", "JP01A"],
-          ["6", "JP01B"],
-          ["7", "Pc2020"],
-          ["8", "E1"],
-          ["9", "0722-1"],
-          ["10", "CN03"],
-          ["11", "CN04"],
-          ["12", "WSSV-AU"],
-          ["13", "EU129"],
-          ["14", "GCF7"],
-          ["15", "MES-753"],
-          ["16", "Shantou2019"],
-          ["17", "POMZ1"],
-          ["18", "POMZ4"],
-          ["19", "MG18PR-0187-N40S"],
-          ["20", "Angostura2013"]
+          ["1", "CN01.fasta", "CN01"],
+          ["2", "WSSV-TW.fasta", "WSSV-TW"],
+          ["3", "WSSV-CN.fasta", "WSSV-CN"],
+          ["4", "WSSV-TH.fasta", "WSSV-TH"],
+          ["5", "JP01A.fasta", "JP01A"],
+          ["6", "JP01B.fasta", "JP01B"],
+          ["7", "Pc2020.fasta", "Pc2020"],
+          ["8", "E1.fasta", "E1"],
+          ["9", "0722-1.fasta", "0722-1"],
+          ["10", "CN03.fasta", "CN03"],
+          ["11", "CN04.fasta", "CN04"],
+          ["12", "WSSV-AU.fasta", "WSSV-AU"],
+          ["13", "EU129.fa", "EU129"],
+          ["14", "GCF7.fa", "GCF7"],
+          ["15", "MES-753.fa", "MES-753"],
+          ["16", "Shantou2019.fa", "Shantou2019"],
+          ["17", "POMZ1.fa", "POMZ1"],
+          ["18", "POMZ4.fa", "POMZ4"],
+          ["19", "MG18PR-0187-N40S.fa", "MG18PR-0187-N40S"],
+          ["20", "Angostura2013.fa", "Angostura2013"]
         ]
       },
       "operations": [
         {
-          "title": "Ring label controls",
-          "body": "Enter the short ring labels for the comparison FASTA rows.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-05-01-ring-labels.webp",
             "alt": "Comparison FASTA label rows with short labels such as CN01, WSSV-TW, and WSSV-CN.",
@@ -360,8 +347,6 @@
       },
       "operations": [
         {
-          "title": "Ring color controls",
-          "body": "Set the per-ring color swatches for the conservation rows.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-06-01-ring-colors.webp",
             "alt": "Comparison FASTA color swatches for the conservation ring rows.",
@@ -373,16 +358,17 @@
     {
       "title": "Set conservation thresholds",
       "body": "Use strict blastn thresholds so the rings show high-confidence conserved nucleotide segments.",
-      "items": [
-        "Bitscore: 100",
-        "E-value: 1e-30",
-        "Identity: 90",
-        "Alignment length: 100"
-      ],
+      "table": {
+        "columns": ["Threshold", "Value"],
+        "rows": [
+          ["Bitscore", "100"],
+          ["E-value", "1e-30"],
+          ["Identity", "90"],
+          ["Alignment length", "100"]
+        ]
+      },
       "operations": [
         {
-          "title": "Conservation thresholds",
-          "body": "Set bitscore 100, e-value 1e-30, identity 90, and minimum length 100.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-07-01-thresholds.webp",
             "alt": "LOSAT Settings thresholds with bitscore 100, e-value 1e-30, identity 90, and minimum length 100.",
@@ -394,16 +380,17 @@
     {
       "title": "Run browser LOSAT",
       "body": "Use Auto execution with a Safe total thread budget for the first run. The saved session includes cached LOSAT output; manual rebuilds need to run the FASTA comparisons once.",
-      "items": [
-        "Execution: Auto",
-        "Total threads: Safe",
-        "Threads per job: 1",
-        "Program: blastn megablast"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Execution", "Auto"],
+          ["Total threads", "Safe"],
+          ["Threads per job", "1"],
+          ["Program", "blastn megablast"]
+        ]
+      },
       "operations": [
         {
-          "title": "Browser LOSAT execution controls",
-          "body": "Use Auto execution, Safe threads, and LOSATN megablast before generating.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-08-01-browser-losat-run.webp",
             "alt": "Browser LOSAT controls with LOSATN megablast, Safe threads, and strict thresholds.",
@@ -417,8 +404,6 @@
       "body": "Click Generate Diagram. The preview should show the AP027280 feature ring, 20 conservation rings, the position scale, and a left legend with an identity gradient for each comparison genome.",
       "operations": [
         {
-          "title": "Generated conservation rings",
-          "body": "Inspect the generated preview with 20 conservation rings and the left identity legend.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-09-01-conservation-rings.webp",
             "alt": "Generated WSSV conservation diagram with 20 conservation rings and the left identity legend.",
@@ -432,12 +417,44 @@
       "body": "Click an outer CDS feature in the interactive SVG to inspect the label, location, product, protein_id, and source qualifiers.",
       "operations": [
         {
-          "title": "CDS feature popup",
-          "body": "Click an outer CDS feature so the CDS feature popup metadata is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
             "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and feature popup metadata.",
             "caption": "The zoomed crop keeps the clicked CDS, ring context, and note, product, and protein_id metadata readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.25; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-80px, -40px) scale(1.25)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".feature-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]
@@ -449,8 +466,6 @@
       "body": "This SVG is large. Zoom or pan the preview before clicking small CDS features or inspecting narrow conservation gaps.",
       "operations": [
         {
-          "title": "Zoom controls",
-          "body": "Use the floating preview toolbar for zoom, reset, layout editing, or canvas padding.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-01-01-zoom-controls.webp",
             "alt": "WSSV web app floating preview controls with Reset Layout, Layout edit, Canvas padding, and zoom buttons visible.",
@@ -464,8 +479,6 @@
       "body": "Download SVG when you need editable vector output. PNG and PDF export can take longer for this large, detailed interactive figure.",
       "operations": [
         {
-          "title": "Export controls",
-          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-04-01-export-controls.webp",
             "alt": "Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
@@ -479,8 +492,6 @@
       "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSAT cache, conservation series settings, generated output, and SVG adjustments.",
       "operations": [
         {
-          "title": "Session save controls",
-          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-05-01-save-session.webp",
             "alt": "Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",

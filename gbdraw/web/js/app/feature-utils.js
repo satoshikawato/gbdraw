@@ -1,5 +1,8 @@
 export const getFeatureCaption = (feature) => {
   return (
+    feature.label ||
+    feature.display_label ||
+    feature.displayLabel ||
     feature.product ||
     feature.gene ||
     feature.locus_tag ||

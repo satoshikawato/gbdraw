@@ -22,8 +22,6 @@
       "body": "Open gbdraw.app and select Circular mode before adding the mitochondrial GenBank input.",
       "operations": [
         {
-          "title": "Mode selector",
-          "body": "Select Circular.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-01-01-circular-mode.webp",
             "alt": "Mode selector with Circular selected.",
@@ -35,16 +33,17 @@
     {
       "title": "Upload the GenBank file",
       "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1.",
-      "items": [
-        "Input type: GenBank",
-        "File: HmmtDNA.gbk",
-        "Output prefix: HmmtDNA_ATskew",
-        "Species: Homo sapiens"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Input type", "GenBank"],
+          ["File", "HmmtDNA.gbk"],
+          ["Output prefix", "HmmtDNA_ATskew"],
+          ["Species", "Homo sapiens"]
+        ]
+      },
       "operations": [
         {
-          "title": "Circular GenBank uploader",
-          "body": "Upload HmmtDNA.gbk so the file chip is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-02-01-genbank-upload.webp",
             "alt": "Circular GenBank uploader with the HmmtDNA.gbk file chip.",
@@ -56,15 +55,18 @@
     {
       "title": "Set the basic circular layout",
       "body": "Use the same compact circular defaults as the Gallery figure.",
-      "items": [
-        "Track type: middle",
-        "Legend: left",
-        "Labels: out",
-        "Palette: ajisai",
-        "Definition font size: 28",
-        "Label font size: 20",
-        "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Track type", "middle"],
+          ["Legend", "left"],
+          ["Labels", "out"],
+          ["Palette", "ajisai"],
+          ["Definition font size", "28"],
+          ["Label font size", "20"],
+          ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
+        ]
+      },
       "operations": [
         {
           "title": "Track preset selector",
@@ -85,16 +87,10 @@
             },
             "openSelect": {
               "selectedLabel": "Middle",
-              "options": [
-                "Tuckin",
-                "Middle",
-                "Spreadout"
-              ],
+              "options": ["Tuckin", "Middle", "Spreadout"],
               "label": "Track Preset"
             },
-            "openDetails": [
-              "Layout"
-            ],
+            "openDetails": ["Layout"],
             "actions": [
               {
                 "type": "evaluate",
@@ -122,16 +118,10 @@
             },
             "openSelect": {
               "selectedLabel": "Out",
-              "options": [
-                "None",
-                "Out",
-                "Both (Out + Inner)"
-              ],
+              "options": ["None", "Out", "Both (Out + Inner)"],
               "label": "Label Mode"
             },
-            "openDetails": [
-              "Labels"
-            ]
+            "openDetails": ["Labels"]
           }
         },
         {
@@ -153,18 +143,10 @@
             },
             "openSelect": {
               "selectedLabel": "Left",
-              "options": [
-                "Right",
-                "Left",
-                "Top",
-                "Bottom",
-                "None"
-              ],
+              "options": ["Right", "Left", "Top", "Bottom", "None"],
               "label": "Legend Position"
             },
-            "openDetails": [
-              "Title & Legend"
-            ]
+            "openDetails": ["Title & Legend"]
           }
         }
       ]
@@ -172,15 +154,16 @@
     {
       "title": "Set the dinucleotide calculation window",
       "body": "Use a short mitochondrial window so GC content, GC skew, and AT skew all show local structure.",
-      "items": [
-        "Dinucleotide: GC",
-        "Window size: 500",
-        "Step size: 50"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Dinucleotide", "GC"],
+          ["Window size", "500"],
+          ["Step size", "50"]
+        ]
+      },
       "operations": [
         {
-          "title": "Dinucleotide window controls",
-          "body": "Set Dinucleotide to GC, Window to 500, and Step to 50.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-04-01-window-step.webp",
             "alt": "Dinucleotide content/skew controls set to Window 500, Step 50, and Dinucleotide GC.",
@@ -225,15 +208,18 @@
     {
       "title": "Add the AT skew track",
       "body": "Add another Dinucleotide skew row inside the axis and use it for AT skew rather than the default GC skew.",
-      "items": [
-        "Slot id: a_skew_2",
-        "Renderer: Dinucleotide skew",
-        "Dinucleotide: AT",
-        "Legend label: AT skew",
-        "Width: 0.1",
-        "Positive color: #deaf6e",
-        "Negative color: #7294e3"
-      ],
+      "table": {
+        "columns": ["Slot setting", "Value"],
+        "rows": [
+          ["Slot id", "a_skew_2"],
+          ["Renderer", "Dinucleotide skew"],
+          ["Dinucleotide", "AT"],
+          ["Legend label", "AT skew"],
+          ["Width", "0.1"],
+          ["Positive color", "#deaf6e"],
+          ["Negative color", "#7294e3"]
+        ]
+      },
       "operations": [
         {
           "title": "Add AT skew slot",
@@ -253,9 +239,7 @@
               "bottom": 178,
               "left": 8
             },
-            "openDetails": [
-              "Layout"
-            ],
+            "openDetails": ["Layout"],
             "waitForSelector": "[data-capture='circular-track-slot-a_skew_2']"
           }
         }
@@ -264,11 +248,14 @@
     {
       "title": "Add the tick track",
       "body": "Keep a Ticks row inside the axis so position labels sit inside the tick marks.",
-      "items": [
-        "Slot id: ticks",
-        "Renderer: Ticks",
-        "Tick label layout: label_in_tick_out"
-      ],
+      "table": {
+        "columns": ["Slot setting", "Value"],
+        "rows": [
+          ["Slot id", "ticks"],
+          ["Renderer", "Ticks"],
+          ["Tick label layout", "label_in_tick_out"]
+        ]
+      },
       "operations": [
         {
           "title": "Tick track slot",
@@ -288,9 +275,7 @@
               "bottom": 54,
               "left": 8
             },
-            "openDetails": [
-              "Layout"
-            ],
+            "openDetails": ["Layout"],
             "waitForSelector": "[data-capture='circular-track-slot-ticks']"
           }
         }
@@ -299,14 +284,15 @@
     {
       "title": "Prioritize gene labels for CDS features",
       "body": "Set qualifier priority for CDS labels to gene so compact labels such as ND1, COX1, ATP6, and CYTB are used instead of long product names.",
-      "items": [
-        "Feature type: CDS",
-        "Qualifier order: gene"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Feature type", "CDS"],
+          ["Qualifier order", "gene"]
+        ]
+      },
       "operations": [
         {
-          "title": "CDS label priority controls",
-          "body": "Set the CDS qualifier priority rule to gene in the Labels card.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-08-01-cds-label-priority.webp",
             "alt": "Qualifier Priority controls with a CDS rule prioritizing gene.",
@@ -320,8 +306,6 @@
       "body": "Click Generate Diagram. The preview should show the labeled mitochondrial feature ring, GC content, GC skew, AT skew, and a left legend that includes AT skew (+) and AT skew (-).",
       "operations": [
         {
-          "title": "Generated AT skew preview",
-          "body": "Inspect the generated preview with the custom track stack and left legend.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",
             "alt": "Generated human mitochondrial AT skew preview with the custom track stack and left legend.",
@@ -335,12 +319,44 @@
       "body": "Click a CDS or RNA feature in the interactive SVG to inspect its gene, product, location, and sequence metadata.",
       "operations": [
         {
-          "title": "Feature popup",
-          "body": "Click the RNR2 rRNA feature so the Feature popup metadata is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
             "alt": "Zoomed human mitochondrial AT skew crop with the clicked RNR2 rRNA feature and feature popup metadata.",
             "caption": "The zoomed crop keeps the clicked RNR2 feature and its gene, product, and db_xref metadata readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-120px, -40px) scale(1.35)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id='fbdb78069']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; }"
+              }
+            ],
+            "clipSelectors": ["[data-gbdraw-feature-id='fbdb78069']", ".feature-popup"],
+            "cropPadding": {
+              "top": 150,
+              "right": 28,
+              "bottom": 24,
+              "left": 150
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]
@@ -352,8 +368,6 @@
       "body": "Generate Diagram already adds AT skew (+) and AT skew (-) to the legend. Use the legend editor only for optional caption/order tweaks; the two entries represent positive and negative skew.",
       "operations": [
         {
-          "title": "Generated legend entries",
-          "body": "Open the Legend drawer to review the generated AT skew entries.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-02-01-legend-editor.webp",
             "alt": "Legend editor drawer with AT skew legend entries visible.",
@@ -367,8 +381,6 @@
       "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures.",
       "operations": [
         {
-          "title": "Export controls",
-          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-03-01-export-controls.webp",
             "alt": "Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
@@ -382,8 +394,6 @@
       "body": "Save a .gbdraw-session.json after edits so the web app can restore the input, custom track slots, generated output, and SVG adjustments.",
       "operations": [
         {
-          "title": "Session save controls",
-          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-04-01-save-session.webp",
             "alt": "Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",

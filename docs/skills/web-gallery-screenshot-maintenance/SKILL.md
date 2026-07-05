@@ -7,11 +7,11 @@ description: Maintain gbdraw Web Gallery tutorial screenshots, manual text, and 
 
 ## Overview
 
-Use this skill to keep `gbdraw` Web Gallery tutorials visually truthful: every operation screenshot should show the actual UI the reader operates, and every caption should name the action or selected value.
+Use this skill to keep `gbdraw` Web Gallery tutorials visually and textually truthful: every operation screenshot should show the actual UI the reader operates, every caption should name the action or selected value, tutorial text should match the real workflow, and repeated-field content should use structured display.
 
 ## Read First
 
-Before editing or reviewing Gallery tutorial screenshots, read:
+Before editing or reviewing Gallery tutorial screenshots, writing, or structured content, read:
 
 - `CLAUDE.md`
 - `gbdraw/web/CLAUDE.md`
@@ -28,26 +28,33 @@ Then inspect the target tutorial JSON and media directory:
 
 ## Audit Workflow
 
-1. Enumerate only media referenced by tutorial JSON first. Treat unreferenced media as cleanup candidates after visible screenshots are fixed.
-2. Compare each referenced screenshot with its operation text and caption.
-3. Check adjacent operation screenshots for parent/child duplication. If a broader crop already shows the child controls clearly and the child crop adds no new action context, remove the child operation/media instead of recropping the broader image.
-4. Hash or otherwise compare referenced screenshots after the visual pass. Pixel-identical screenshots inside the same tutorial are acceptable only when they are intentionally reused across non-adjacent, clearly different contexts; otherwise consolidate the operation, recrop one image, or delete the duplicate media.
-5. Classify each screenshot as:
+1. Audit screenshots, tutorial writing, and structured content together. Do not treat a screenshot pass as complete until the tutorial also satisfies the Writing Rules and Structured Content Rules below.
+2. Enumerate only media referenced by tutorial JSON first. Treat unreferenced media as cleanup candidates after visible screenshots are fixed.
+3. Compare each referenced screenshot with its operation text and caption.
+4. Check adjacent operation screenshots for parent/child duplication. If a broader crop already shows the child controls clearly and the child crop adds no new action context, remove the child operation/media instead of recropping the broader image.
+5. Hash or otherwise compare referenced screenshots after the visual pass. Pixel-identical screenshots inside the same tutorial are acceptable only when they are intentionally reused across non-adjacent, clearly different contexts; otherwise consolidate the operation, recrop one image, or delete the duplicate media.
+6. Classify each screenshot as:
    - `keep`: real UI/result crop, readable, caption matches.
    - `recrop`: correct state but poor extent, blurry text, missing context, or too much page.
    - `replace`: final preview or stale/empty crop used for an input/edit/upload/setting operation.
    - `add`: operation needs an extra crop to avoid one overloaded screenshot.
-6. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
-7. Record the result in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
-8. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
-9. Keep batches small. Do not migrate every tutorial in one risky change.
+7. Review tutorial writing and structure: remove generic Requirements, avoid unnecessary Files tab steps, keep pre-generation setup, generated-result inspection, and post-generation edits separate, and omit redundant operation `title`/`body` when a clear step plus media caption already conveys the action.
+8. Review structured content: convert repeated-field setup lists, file mappings, record metadata, track recipes, and color rules to tables when rows share the same fields; keep simple one-column checklists as bullets.
+9. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
+10. Record screenshot, writing, and structured-content decisions in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
+11. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
+12. Keep batches small. Do not migrate every tutorial in one risky change.
 
 ## Screenshot Rules
 
 Use the real UI the user operates.
 
+- Tutorial media must render as appropriately scaled thumbnails in the Gallery, while click-to-open behavior must show the original image itself at natural bitmap size. Do not use a framed page-like modal, captions, headers, or extra white shell around the opened image.
+- If a screenshot is unreadable in the Gallery, fix the source capture density, crop extent, or thumbnail/lightbox behavior. Do not rely on browser zoom, CSS upscaling, or a larger wrapper around the same low-resolution bitmap.
 - Mode selector screenshots must show the real Circular/Linear control with the active choice readable.
-- File uploads must show the uploader and uploaded file rows/chips in the correct order.
+- File uploads must show the real uploader/input card the user operates, not a reconstructed list of file chips. The crop must include the uploaded file and the neighboring per-record controls that are visible in the actual row.
+- When the session or command uses per-record metadata that affects the figure, such as `--record_label`, `--record_subtitle`, `definition`, `record_subtitle`, organism/strain, subtitle/title, region, reverse complement, or LOSAT filename, include those fields in both the tutorial table/text and the upload-row crop. Do not split file upload and record label/title entry into disconnected screenshots when the values live in the same input card.
+- For tall multi-file upload workflows, keep the full file order and metadata as a tutorial table and use one representative real row crop with the file chip and relevant metadata fields, rather than one unreadable crop of every row.
 - Dropdown/select operations must show the select in context plus a capture-only opened-option overlay with the chosen option highlighted.
 - Text and number inputs must show labels, values, units, and nearby related controls. Highlight changed fields when multiple inputs are visible.
 - When one operation sentence lists several pre-generation settings, include an overview crop that shows the actual text inputs, selects, toggles, or selected chips, even if separate dropdown crops also show individual menu choices.
@@ -63,6 +70,7 @@ Use the real UI the user operates.
 - Popups must come from real clicks in the restored session whenever possible.
 - Popup crops must be tight enough that the highlighted clicked feature, match ribbon, orthogroup ribbon, or collinear block and the popup text are readable in the rendered Gallery. Do not use a full generated-preview crop when the inspected target is only a small part of the figure.
 - If the popup covers the highlighted feature, orthogroup ribbon, or collinear block, move the popup during capture and then crop the real UI state. Do not accept a crop where the popup is readable but the highlighted diagram target is hidden.
+- Before recapturing a popup from a restored session, verify the saved SVG and session metadata agree with the tutorial's intended label rules. Stale session artifacts can make popups fall back to `product` even when the rendered figure or tutorial expects `gene`; fix the session/result metadata first, then recapture.
 - Feature editor popup crops must keep the relevant affected item(s) or multi-target controls readable, including apply-to-all/scope icons or dialogs when they are the point of the operation. Crop or move the popup so these controls are not cut off at the image edge.
 - Judge readability at the rendered Gallery size, not at the source bitmap's full size. A source image that looks readable only when opened standalone is a `recrop` if Gallery CSS downscales it enough to make popup text, highlighted targets, or affected item(s) hard to read.
 - Generated preview crops are appropriate only for final result checks, visual inspection, legends, popups, or rendered-output comparisons.
@@ -84,7 +92,9 @@ Use Playwright against the current app or Gallery state. If `@playwright/test` i
 Capture standards:
 
 - For restored-session captures, assert critical control values in the browser before saving the crop when the operation depends on exact row/order/selector state. Multi-record Record Order crops, for example, should verify `#1@1, #2@1, #3@2, #4@2, #5@2, #6@2` rather than trusting the restored page by sight.
-- Use device scale factor 2 or higher; use 3 for dense forms.
+- For restored-session label or popup captures, assert representative label text in both `results[0].content` and the relevant feature/orthogroup metadata before saving. For qualifier-priority examples, check `qualifierPriorityRules`, feature `label`/`display_label`, and orthogroup overrides or candidates instead of trusting a visual crop alone.
+- For representative upload-row crops, assert both the file order and the row's metadata values in app state before capture; do not trust visible labels alone because input values may be clipped in the DOM text.
+- Use device scale factor 2 or higher; use 3 for dense forms and popup/detail screenshots. Treat requests such as "150 dpi" as a demand for a higher-density source bitmap: increase device scale factor or crop tighter, never upscale an existing low-resolution image.
 - Save temporary PNGs under `/tmp` and commit WebP only.
 - Use WebP quality 92-95 for UI controls and dense forms.
 - Do not upscale a crop. Recapture at higher scale instead.
@@ -92,9 +102,12 @@ Capture standards:
 - For multi-row form captures such as `SPECIFIC RULES (-t)`, preserve the intended vertical scope when recapturing. If the previous screenshot included the surrounding uploader rows and whitespace, keep that top/bottom extent, but reduce excess horizontal whitespace by changing the source panel width before capture.
 - Use temporary capture-only CSS or DOM changes to hide unrelated fixed bars, footers, or following cards only when they intrude into the preserved crop area. Do not commit those UI changes unless the app itself is wrong.
 - For highlighted track-slot rows or toolbar buttons, prefer a selector crop with asymmetric padding or a broader panel crop so adjacent relevant items stay readable.
+- When overlapping SVG paths intercept a real popup target, use a forced click only for the capture action and then visually verify the opened popup corresponds to the intended feature, orthogroup, ribbon, or block.
 - When a replacement screenshot must be reviewed immediately in a running Gallery tab or hosted static cache, change the media filename or add a deliberate cache-bust path change; do not rely on same-URL image replacement being visible after a normal refresh.
 - Prefer multiple focused crops over one tall unreadable crop.
 - Do not add permanent tutorial-only UI to the app; injected capture overlays must be temporary.
+
+For broad "all screenshots" refreshes, distinguish "all capture-defined operations" from all referenced media. If a tutorial still has manual-only screenshots, either add capture metadata for high-risk controls/popups before recapturing or explicitly report which referenced media remain manual.
 
 ## Writing Rules
 
@@ -107,6 +120,7 @@ Keep tutorial text aligned with the actual workflow.
 - Prefer screenshots over dense setup lists when the UI can show the values clearly. Keep any remaining text to the values the reader must type or choose.
 - Do not describe automatically generated output as a manual editor task. If `Generate Diagram` creates legend entries, tracks, labels, or previews, say they are generated and reserve drawers/editors for review or optional tweaks.
 - Use action text for operations and state text for generated results. Avoid vague instructions such as `keep visible` when the UI already produced the state.
+- Omit operation `title` and `body` when a single media item already sits under a clear step title/body and the extra operation text would only create a redundant bold subheading.
 - Keep pre-generation setup, generated-result inspection, and post-generation edits as separate concepts.
 - When a step already has a `table`, do not repeat the same fields as slash-delimited operation text or captions. Refer to the table row or category instead.
 
@@ -149,4 +163,4 @@ If Node Playwright is unavailable, use Python Playwright for equivalent media an
 When adding or removing tutorial media references, update focused browser tests that assert image counts or exact `src` values.
 When removing a duplicate operation media reference, delete the now-unreferenced WebP and assert the removed `src` is absent if a focused test already covers that tutorial.
 
-Manual review must check desktop and mobile Gallery views, image readability, caption specificity, and that no input/edit operation is represented only by a generated preview.
+Manual review must check desktop and mobile Gallery views, image readability, caption specificity, writing/section structure, table suitability, and that no input/edit operation is represented only by a generated preview.

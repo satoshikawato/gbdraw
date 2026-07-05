@@ -521,26 +521,6 @@ h1 {
     font-size: 0.93rem;
 }
 
-.tutorial-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 10px;
-}
-
-.tutorial-meta__item {
-    display: inline-flex;
-    align-items: center;
-    min-height: 22px;
-    padding: 2px 8px;
-    border: 1px solid #cbd9dc;
-    border-radius: 999px;
-    background: var(--panel-soft);
-    color: #334550;
-    font-size: 0.72rem;
-    font-weight: 720;
-}
-
 .tutorial-section {
     min-width: 0;
     margin-top: 20px;
@@ -714,6 +694,23 @@ h1 {
     margin-top: 9px;
 }
 
+.tutorial-media__button {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+    text-align: left;
+}
+
+.tutorial-media__button:focus-visible {
+    border-radius: 7px;
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
 .tutorial-media img,
 .tutorial-media video {
     display: block;
@@ -727,10 +724,39 @@ h1 {
     background: #ffffff;
 }
 
+.tutorial-media__button:hover img,
+.tutorial-media__button:focus-visible img {
+    border-color: var(--accent);
+}
+
 .tutorial-media figcaption {
     margin-top: 5px;
     color: var(--muted);
     font-size: 0.8rem;
+}
+
+.tutorial-lightbox {
+    width: fit-content;
+    max-width: calc(100vw - 32px);
+    height: fit-content;
+    max-height: calc(100vh - 32px);
+    padding: 0;
+    border: 0;
+    overflow: auto;
+    background: transparent;
+}
+
+.tutorial-lightbox::backdrop {
+    background: rgba(15, 24, 32, 0.62);
+}
+
+.tutorial-lightbox__image {
+    display: block;
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    cursor: zoom-out;
 }
 
 .download-list,
@@ -883,5 +909,10 @@ h1 {
     .action-button {
         width: 100%;
         text-align: center;
+    }
+
+    .tutorial-lightbox {
+        max-width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px);
     }
 }

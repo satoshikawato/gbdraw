@@ -1218,11 +1218,11 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gb" class="text-blue-600"> GenBank</label>
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gff" class="text-blue-600"> GFF3 + FASTA</label>
                         </div>
-                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
+                        <div data-capture="linear-blast-source" class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="losat" class="text-blue-600"> Run LOSAT</label>
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="upload" class="text-blue-600"> Upload BLAST TSV</label>
                         </div>
-                        <div v-if="blastSource === 'losat'" class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <div v-if="blastSource === 'losat'" data-capture="linear-losat-settings" class="p-3 bg-slate-50 rounded-lg border border-slate-200">
                             <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Mode</div>
                             <div class="flex gap-4 text-sm font-bold">
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="blastn" class="text-blue-600"> LOSATN</label>

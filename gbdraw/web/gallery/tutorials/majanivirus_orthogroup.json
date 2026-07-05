@@ -7,9 +7,7 @@
   "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "Large LOSATP orthogroup comparison",
-  "requirements": [
-    "Enough available memory for nine large viral GenBank records and LOSATP output."
-  ],
+  "requirements": ["Enough available memory for nine large viral GenBank records and LOSATP output."],
   "downloads": [
     {
       "label": "LC738868",
@@ -81,8 +79,6 @@
       "body": "Open gbdraw.app and select Linear mode before adding the viral GenBank records.",
       "operations": [
         {
-          "title": "Mode selector",
-          "body": "Select Linear.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
             "alt": "Mode selector with Linear selected.",
@@ -92,27 +88,28 @@
       ]
     },
     {
-      "title": "Upload the nine GenBank files",
-      "body": "Keep the records in the same order as the Gallery command so adjacent comparison tracks and labels match the published example.",
-      "items": [
-        "MjeNMV.gb",
-        "MelaMJNV.gb",
-        "PemoMJNVA.gb",
-        "PeseMJNV.gb",
-        "PemoMJNVB.gb",
-        "LvMJNV.gb",
-        "TrcuMJNV.gb",
-        "MeenMJNV.gb",
-        "MejoMJNV.gb"
-      ],
+      "title": "Upload the nine GenBank files and labels",
+      "body": "Keep the records and Organism / strain labels in the same order as the Gallery command so adjacent comparison tracks and labels match the published example.",
+      "table": {
+        "columns": ["Order", "GenBank file", "Organism / strain"],
+        "rows": [
+          ["1", "MjeNMV.gb", "Marsupenaeus japonicus endogenous nimavirus"],
+          ["2", "MelaMJNV.gb", "Melicertus latisulcatus majanivirus"],
+          ["3", "PemoMJNVA.gb", "Penaeus monodon majanivirus A"],
+          ["4", "PeseMJNV.gb", "Penaeus semisulcatus majanivirus"],
+          ["5", "PemoMJNVB.gb", "Penaeus monodon majanivirus B"],
+          ["6", "LvMJNV.gb", "Litopenaeus vannamei majanivirus"],
+          ["7", "TrcuMJNV.gb", "Trachysalambria curvirostris majanivirus"],
+          ["8", "MeenMJNV.gb", "Metapenaeus ensis majanivirus"],
+          ["9", "MejoMJNV.gb", "Metapenaeus joyneri majanivirus"]
+        ]
+      },
       "operations": [
         {
-          "title": "Linear GenBank uploader with nine viral files",
-          "body": "Upload the nine GenBank files in the tutorial order.",
           "media": {
-            "src": "./media/majanivirus_orthogroup/manual-02-01-nine-file-upload-order.webp",
-            "alt": "Linear GenBank upload rows showing the nine majanivirus files in order.",
-            "caption": "Upload the nine majanivirus GenBank files in order."
+            "src": "./media/majanivirus_orthogroup/manual-02-01-upload-row-label-context.webp",
+            "alt": "Linear GenBank input row 1 with MjeNMV.gb uploaded and its Organism / strain label in the same input card.",
+            "caption": "The first uploaded row shows MjeNMV.gb and its Organism / strain label in the real Linear input card; repeat the remaining rows from the table."
           }
         }
       ]
@@ -120,15 +117,18 @@
     {
       "title": "Configure browser LOSAT",
       "body": "In Pairwise Comparisons, choose Run LOSAT. Use LOSATP with protein blastp mode: Orthogroups.",
-      "items": [
-        "Execution: Auto",
-        "Total threads: Safe for normal browser use, or 32 when mirroring the Gallery command on a capable workstation",
-        "Threads per run: Auto",
-        "protein blastp mode: Orthogroups",
-        "Bitscore: 100",
-        "E-value: 1e-3",
-        "Identity: 20"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Execution", "Auto"],
+          ["Total threads", "Safe for normal browser use, or 32 when mirroring the Gallery command on a capable workstation"],
+          ["Threads per run", "Auto"],
+          ["protein blastp mode", "Orthogroups"],
+          ["Bitscore", "100"],
+          ["E-value", "1e-3"],
+          ["Identity", "20"]
+        ]
+      },
       "note": "This is a large browser workload. Start with Safe thread budgeting unless you know the browser and machine have enough memory.",
       "operations": [
         {
@@ -159,11 +159,7 @@
             },
             "openSelect": {
               "selectedLabel": "Orthogroups",
-              "options": [
-                "Orthogroups",
-                "Collinear blocks",
-                "Pairwise"
-              ],
+              "options": ["Orthogroups", "Collinear blocks", "Pairwise"],
               "label": "blastp mode"
             }
           }
@@ -182,16 +178,19 @@
     {
       "title": "Set the linear layout",
       "body": "Use a centered, compact layout so the long viral rows and many orthogroup ribbons stay comparable.",
-      "items": [
-        "Align to Center: on",
-        "Separate Strands: on",
-        "Pairwise match style: curve",
-        "Keep definitions left aligned: on",
-        "Comparison height: 25",
-        "Hide length: on",
-        "Definition font size: 18",
-        "Legend font size: 18"
-      ],
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Align to Center", "on"],
+          ["Separate Strands", "on"],
+          ["Pairwise match style", "curve"],
+          ["Keep definitions left aligned", "on"],
+          ["Comparison height", "25"],
+          ["Hide length", "on"],
+          ["Definition font size", "18"],
+          ["Legend font size", "18"]
+        ]
+      },
       "operations": [
         {
           "title": "Linear layout controls",
@@ -204,35 +203,7 @@
           "capture": {
             "source": "webapp",
             "cardTitle": "Layout",
-            "openDetails": [
-              "Layout"
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "title": "Set the record labels",
-      "body": "Use descriptive record labels rather than raw accessions so the figure can be read without opening the input files.",
-      "items": [
-        "Marsupenaeus japonicus endogenous nimavirus",
-        "Melicertus latisulcatus majanivirus",
-        "Penaeus monodon majanivirus A",
-        "Penaeus semisulcatus majanivirus",
-        "Penaeus monodon majanivirus B",
-        "Litopenaeus vannamei majanivirus",
-        "Trachysalambria curvirostris majanivirus",
-        "Metapenaeus ensis majanivirus",
-        "Metapenaeus joyneri majanivirus"
-      ],
-      "operations": [
-        {
-          "title": "Record label editor",
-          "body": "Enter the nine descriptive record labels.",
-          "media": {
-            "src": "./media/majanivirus_orthogroup/manual-05-01-record-labels.webp",
-            "alt": "Record label editor rows with nine descriptive majanivirus names.",
-            "caption": "Enter the nine descriptive record labels."
+            "openDetails": ["Layout"]
           }
         }
       ]
@@ -294,8 +265,6 @@
       "body": "Click Generate Diagram. The finished preview should show nine viral genome rows, many red identity-scaled orthogroup ribbons, and a right legend.",
       "operations": [
         {
-          "title": "Generated orthogroup preview",
-          "body": "Inspect the generated preview with nine rows + right legend.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-07-01-orthogroup-preview.webp",
             "alt": "Generated majanivirus orthogroup preview showing nine viral genome rows and the right legend.",
@@ -309,12 +278,44 @@
       "body": "Click a pairwise match ribbon to inspect the orthogroup ID, inferred display name, member count, record coverage, and member table.",
       "operations": [
         {
-          "title": "Orthogroup ribbon popup",
-          "body": "Click an orthogroup ribbon so the Orthogroup ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Zoomed majanivirus orthogroup ribbon crop with the orthogroup match popup open.",
             "caption": "The zoomed crop keeps the clicked orthogroup ribbon and popup readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-110px, -30px) scale(1.15)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "path[data-gbdraw-pairwise-match-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".pairwise-match-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = 520; app.clickedPairwiseMatchPos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".pairwise-match-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".pairwise-match-popup"
           }
         }
       ]
@@ -344,12 +345,44 @@
       "body": "Feature popups expose product, protein_id, locus_tag, sequence, and orthogroup membership; the Feature editor drawer shows label, color, and scope controls. Use those values before tightening feature color rules.",
       "operations": [
         {
-          "title": "CDS feature editor drawer",
-          "body": "Click a CDS feature to inspect product, label, and color controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-02-01-feature-popup.webp",
             "alt": "Majanivirus Feature editor drawer controls with product label, fill, stroke, and multi-target controls visible.",
             "caption": "The Feature editor drawer crop keeps product label, fill, stroke, and multi-target controls readable."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id]"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+              }
+            ],
+            "clipSelectors": [".feature-popup"],
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
           }
         }
       ]
@@ -359,8 +392,6 @@
       "body": "Download SVG for editable vector output. PNG and PDF export can take longer because the interactive SVG contains many features and match paths.",
       "operations": [
         {
-          "title": "Export controls",
-          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-04-01-export-controls.webp",
             "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
@@ -374,8 +405,6 @@
       "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSATP cache, settings, generated output, and SVG adjustments.",
       "operations": [
         {
-          "title": "Session save controls",
-          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-05-01-save-session.webp",
             "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
