@@ -196,6 +196,31 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   ).toBeVisible();
   const bgc0708MibigHref = 'https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk';
   await expect(tutorialPanel.locator(`a[href="${bgc0708MibigHref}"]`)).toHaveText('MIBiG repository');
+  const filenameCells = await tutorialPanel.locator('.tutorial-table').evaluateAll((tables) => {
+    const cells = tables.flatMap((table) => Array.from(table.querySelectorAll('td')));
+    return cells
+      .filter((cell) => /^BGC00007\d{2}\.gbk$/.test(cell.textContent.trim()))
+      .map((cell) => {
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        const lineCount = Array.from(range.getClientRects()).filter(
+          (rect) => rect.width > 0 && rect.height > 0
+        ).length;
+        range.detach();
+        return {
+          text: cell.textContent.trim(),
+          overflowWrap: getComputedStyle(cell).overflowWrap,
+          lineCount
+        };
+      });
+  });
+  expect(filenameCells).toEqual([
+    { text: 'BGC0000708.gbk', overflowWrap: 'normal', lineCount: 1 },
+    { text: 'BGC0000709.gbk', overflowWrap: 'normal', lineCount: 1 },
+    { text: 'BGC0000711.gbk', overflowWrap: 'normal', lineCount: 1 },
+    { text: 'BGC0000712.gbk', overflowWrap: 'normal', lineCount: 1 },
+    { text: 'BGC0000713.gbk', overflowWrap: 'normal', lineCount: 1 }
+  ]);
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(20);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);

@@ -74,6 +74,7 @@ Use the real UI the user operates.
 - Feature editor popup crops must keep the relevant affected item(s) or multi-target controls readable, including apply-to-all/scope icons or dialogs when they are the point of the operation. Crop or move the popup so these controls are not cut off at the image edge.
 - Judge readability at the rendered Gallery size, not at the source bitmap's full size. A source image that looks readable only when opened standalone is a `recrop` if Gallery CSS downscales it enough to make popup text, highlighted targets, or affected item(s) hard to read.
 - Generated preview crops are appropriate only for final result checks, visual inspection, legends, popups, or rendered-output comparisons.
+- Generated preview screenshots with floating controls must leave enough capture-time breathing room around the SVG content so zoom/original/search controls do not cover top records, labels, or legends, and bottom titles do not visually collide with legends. If the visible crop is cramped, recapture with a larger viewport or SVG canvas instead of accepting overlap.
 - Do not show the same generated preview or popup twice in immediate succession as both step-level media and operation media. If the operation already carries the result or popup crop, omit step-level media or make the two crops visibly different and purposeful.
 - More generally, omit step-level media when the operation media already shows the same UI state, Files tab, generated preview, or popup without adding new context.
 - When one operation crop already includes another operation's entire control area, keep the broader crop if it remains readable and remove the narrower duplicate. Prefer a single truthful panel crop over consecutive screenshots that repeat the same controls.
@@ -95,6 +96,7 @@ Capture standards:
 - For restored-session label or popup captures, assert representative label text in both `results[0].content` and the relevant feature/orthogroup metadata before saving. For qualifier-priority examples, check `qualifierPriorityRules`, feature `label`/`display_label`, and orthogroup overrides or candidates instead of trusting a visual crop alone.
 - For representative upload-row crops, assert both the file order and the row's metadata values in app state before capture; do not trust visible labels alone because input values may be clipped in the DOM text.
 - Use device scale factor 2 or higher; use 3 for dense forms and popup/detail screenshots. Treat requests such as "150 dpi" as a demand for a higher-density source bitmap: increase device scale factor or crop tighter, never upscale an existing low-resolution image.
+- When the request is only to improve resolution, preserve the same semantic crop. Increase device scale factor, capture density, or source viewport as needed, but do not include extra sibling slots, following sections, or unrelated context. For stack/list panels, compute the clip bottom from the same last visible row rather than from the whole container.
 - Save temporary PNGs under `/tmp` and commit WebP only.
 - Use WebP quality 92-95 for UI controls and dense forms.
 - Do not upscale a crop. Recapture at higher scale instead.
@@ -145,6 +147,7 @@ Use structured display when tutorial content has repeated fields.
 - Keep caveats such as regex specificity in a separate `note`; do not hide them inside a dense row.
 - If the Gallery renderer only supports bullet lists, add a small reusable renderer field such as `table: { columns, rows }` rather than encoding table markup in JSON strings.
 - Add compact CSS with horizontal overflow for narrow viewports and update focused browser tests to assert table headers and representative rows.
+- Do not allow table text to break inside short file names, accessions, extensions, or other atomic tokens such as `BGC0000708.gbk`. If a table is too narrow, preserve the token and rely on the table wrapper's horizontal overflow instead of using character-level wrapping.
 - Keep existing `items` bullets for simple one-column checklists where a table would add noise.
 
 ## Verification
@@ -162,5 +165,6 @@ If Node Playwright is unavailable, use Python Playwright for equivalent media an
 
 When adding or removing tutorial media references, update focused browser tests that assert image counts or exact `src` values.
 When removing a duplicate operation media reference, delete the now-unreferenced WebP and assert the removed `src` is absent if a focused test already covers that tutorial.
+When adding or changing tutorial tables, verify representative cells in browser rendering so short file names, accessions, extensions, and similar atomic tokens are not split across lines.
 
-Manual review must check desktop and mobile Gallery views, image readability, caption specificity, writing/section structure, table suitability, and that no input/edit operation is represented only by a generated preview.
+Manual review must check desktop and mobile Gallery views, image readability, caption specificity, writing/section structure, table suitability, preview toolbar/title/legend overlap, and that no input/edit operation is represented only by a generated preview.

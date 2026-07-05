@@ -578,7 +578,8 @@ h1 {
     border: 1px solid var(--line);
     text-align: left;
     vertical-align: top;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 .tutorial-table th {
