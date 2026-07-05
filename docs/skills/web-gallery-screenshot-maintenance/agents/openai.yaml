@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Gallery Screenshot Maintenance"
+  short_description: "Maintain Gallery screenshots and tutorial text"
+  default_prompt: "Use $web-gallery-screenshot-maintenance to audit gbdraw Web Gallery tutorial screenshots, captions, and structured tutorial text."

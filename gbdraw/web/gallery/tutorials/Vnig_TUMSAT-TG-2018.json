@@ -1,0 +1,303 @@
+{
+  "id": "Vnig_TUMSAT-TG-2018",
+  "version": 1,
+  "title": "Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app",
+  "summary": "Build a circular multi-record canvas for two chromosomes and four plasmids from a single RefSeq GBFF file, using automatic record sizing, explicit row placement, GC content, GC skew, and a left legend.",
+  "estimatedTime": "5-15 min after the input is available",
+  "difficulty": "Intermediate",
+  "appMode": "Circular",
+  "primaryWorkflow": "Circular multi-record canvas",
+  "downloads": [
+    {
+      "label": "GCF_015097735.1",
+      "source": "NCBI Assembly",
+      "accession": "GCF_015097735.1",
+      "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_015097735.1",
+      "targetName": "GCF_015097735.1_ASM1509773v1_genomic.gbff",
+      "note": "Download the RefSeq genomic GBFF and use it as the GenBank input."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Circular mode",
+      "body": "Open gbdraw.app and choose Circular before adding the GenBank file.",
+      "operations": [
+        {
+          "title": "Select Circular",
+          "body": "Select the Circular mode.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-01-01-circular-mode.webp",
+            "alt": "Circular mode selected in the web app header.",
+            "caption": "Select Circular."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Upload the GenBank file",
+      "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The app will detect the two chromosomes and four plasmids in the file.",
+      "operations": [
+        {
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-01-gbff-upload.webp",
+            "alt": "Circular input panel with the Vibrio GBFF file selected.",
+            "caption": "GCF_015097735.1_ASM1509773v1_genomic.gbff is selected as the GenBank file."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Set the circular layout",
+      "body": "Set Output Prefix to Vnig_TUMSAT-TG-2018, Track type to tuckin, Palette to orchid, Separate strands to on, Legend to left, and keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
+      "operations": [
+        {
+          "title": "Basic circular settings",
+          "body": "Set Output Prefix to Vnig_TUMSAT-TG-2018, Track Preset to Tuckin, and Separate Strands to on.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-00-circular-layout-settings.webp",
+            "alt": "Basic and Layout cards with Vnig_TUMSAT-TG-2018 as the output prefix, Tuckin as the track preset, and Separate Strands selected.",
+            "caption": "Set Output Prefix, Track Preset, and Separate Strands."
+          }
+        },
+        {
+          "title": "Palette selector",
+          "body": "Open the default color palette selector and choose orchid.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-01-palette-orchid.webp",
+            "alt": "Colors card with the default color palette menu open and the orchid option highlighted.",
+            "caption": "Open the default color palette selector in the Colors card and choose the highlighted orchid option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 80,
+              "right": 100,
+              "bottom": 40,
+              "left": 90
+            },
+            "openSelect": {
+              "selectedLabel": "orchid",
+              "options": [
+                "default",
+                "pastel",
+                "vivid",
+                "colorblind",
+                "grayscale",
+                "warm",
+                "cool",
+                "earth",
+                "marine",
+                "forest",
+                "sunset",
+                "berry",
+                "citrus",
+                "orchid",
+                "royal_gala",
+                "ajisai",
+                "orange"
+              ],
+              "cardTitle": "Colors",
+              "selectIndex": 1,
+              "minWidth": 150,
+              "placement": "right"
+            },
+            "openDetails": [
+              "Colors"
+            ]
+          }
+        },
+        {
+          "title": "Legend position selector",
+          "body": "Open Legend Position and choose Left.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-02-legend-position-left.webp",
+            "alt": "Title and Legend card with the Legend Position menu open and the Left option highlighted.",
+            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Left option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Left",
+              "options": [
+                "Right",
+                "Left",
+                "Top",
+                "Bottom",
+                "None"
+              ],
+              "label": "Legend Position"
+            },
+            "openDetails": [
+              "Title & Legend"
+            ]
+          }
+        },
+        {
+          "title": "Selected feature types",
+          "body": "Keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-03-selected-features.webp",
+            "alt": "Features card with CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
+            "caption": "Keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Enable Multi-record canvas",
+      "body": "Turn on Multi-record canvas. Use auto size mode, minimum radius ratio 0.55, column gap 0.1, row gap 0.05, and place records #1 and #2 in row 1 and #3 through #6 in row 2.",
+      "note": "The two large chromosomes sit in the top row. The four smaller plasmids share the second row.",
+      "operations": [
+        {
+          "title": "Multi-record canvas toggle",
+          "body": "Turn on Multi-record canvas.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-00-multirecord-toggle.webp",
+            "alt": "Layout card with the Multi-Record Canvas checkbox selected.",
+            "caption": "Turn on Multi-record canvas."
+          }
+        },
+        {
+          "title": "Multi-record canvas controls",
+          "body": "Set the multi-record canvas controls shown in the screenshot.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-01-multirecord-canvas.webp",
+            "alt": "Multi-record canvas controls with auto sizing, minimum radius ratio, gaps, and record order rows.",
+            "caption": "Set Multi-record canvas, automatic sizing, gaps, and record rows."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": "[data-capture=\"multi-record-canvas-controls\"]",
+            "openDetails": [
+              "Layout"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "() => new Promise((resolve, reject) => { const expected = '#1@1,#2@1,#3@2,#4@2,#5@2,#6@2'; const deadline = Date.now() + 30000; const check = () => { const app = window.__GBDRAW_APP__; const actual = (Array.isArray(app?.adv?.multi_record_positions) ? app.adv.multi_record_positions : []).map((entry) => `${entry.selector}@${entry.row}`).join(','); if (actual === expected) { resolve(); return; } if (Date.now() > deadline) { reject(new Error(`Expected Vnig multi-record positions ${expected}, got ${actual}`)); return; } setTimeout(check, 100); }; check(); })"
+              }
+            ],
+            "waitForSelector": "[data-capture=\"multi-record-canvas-controls\"]"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Add Title",
+      "body": "Set Plot Title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome. For this figure, choose Bottom in Plot Title Position.",
+      "operations": [
+        {
+          "title": "Plot title and bottom position",
+          "body": "Enter the plot title, then open Plot Title Position and choose Bottom.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
+            "alt": "Title and Legend card with the full Vibrio plot title visible and the Plot Title Position menu open with Bottom highlighted.",
+            "caption": "Enter the plot title and choose the highlighted Bottom option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "viewport": {
+              "width": 1700,
+              "height": 1000
+            },
+            "cropPadding": {
+              "top": 120,
+              "right": 620,
+              "bottom": 220,
+              "left": 240
+            },
+            "openSelect": {
+              "selectedLabel": "Bottom",
+              "options": [
+                "None (Default)",
+                "Top",
+                "Bottom"
+              ],
+              "label": "Plot Title Position"
+            },
+            "openDetails": [
+              "Title & Legend"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "() => { const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 500; }"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The preview should show chromosome 1 and chromosome 2 above plasmids pVNTG1 through pVNTG4, with GC content and GC skew rings inside each record.",
+      "operations": [
+        {
+          "title": "Generated multi-record preview",
+          "body": "Inspect the generated preview with two chromosomes and four plasmids.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
+            "alt": "Generated Vibrio multi-record preview with two chromosomes and four plasmids.",
+            "caption": "The generated preview uses automatic radius scaling for two chromosomes and four plasmids."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Inspect a CDS feature",
+      "body": "Click a CDS feature in the interactive SVG to inspect its label, record ID, location, protein_id, qualifiers, and sequence.",
+      "operations": [
+        {
+          "title": "CDS feature popup",
+          "body": "Click a CDS feature so the CDS feature popup is visible.",
+          "media": {
+            "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
+            "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",
+            "caption": "The zoomed crop keeps the clicked chromosome CDS and popup metadata readable."
+          }
+        }
+      ]
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "Only one record is shown",
+      "body": "Check that Multi-record canvas is enabled. Without that option, circular mode can render records separately instead of placing them in one canvas."
+    },
+    {
+      "title": "The plasmids are too small",
+      "body": "Raise the minimum radius ratio, or switch size mode if you need less proportional scaling between chromosomes and plasmids."
+    },
+    {
+      "title": "The rows differ from the Gallery figure",
+      "body": "Check record positions #1@1, #2@1, #3@2, #4@2, #5@2, and #6@2, plus column gap ratio 0.1 and row gap ratio 0.05."
+    },
+    {
+      "title": "The generated diagram differs from the Gallery image",
+      "body": "Check the GBFF input, tuckin track type, orchid palette, separate strands, left legend, bottom title, multi-record size mode auto, and minimum radius ratio 0.55."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#Vnig_TUMSAT-TG-2018"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    },
+    {
+      "label": "Read command-focused Gallery examples",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/GALLERY.md"
+    }
+  ]
+}

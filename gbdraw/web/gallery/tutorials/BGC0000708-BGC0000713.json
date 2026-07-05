@@ -1,0 +1,591 @@
+{
+  "id": "BGC0000708-BGC0000713",
+  "version": 1,
+  "title": "Reproduce the aminoglycoside BGC comparison in the web app",
+  "summary": "Build a five-cluster linear comparison with browser LOSATP orthogroups, antiSMASH gene-kind color rules, rotated labels, and a bottom legend.",
+  "estimatedTime": "10-20 min after inputs are available",
+  "difficulty": "Advanced",
+  "appMode": "Linear",
+  "primaryWorkflow": "LOSATP orthogroups with feature color rules",
+  "requirements": [
+    "GenBank features that retain antiSMASH qualifiers such as gene_kind."
+  ],
+  "downloads": [
+    {
+      "label": "BGC0000708",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000708.gbk",
+      "note": "Download the lividomycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "BGC0000709",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000709.gbk",
+      "note": "Download the neomycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "BGC0000711",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000711.gbk",
+      "note": "Download the second neomycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "BGC0000712",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000712.gbk",
+      "note": "Download the paromomycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "BGC0000713",
+      "source": "MIBiG repository",
+      "targetName": "BGC0000713.gbk",
+      "note": "Download the ribostamycin biosynthetic gene cluster as GenBank."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Switch to Linear mode",
+      "body": "Open gbdraw.app and select Linear mode before adding inputs.",
+      "operations": [
+        {
+          "title": "Mode selector",
+          "body": "Select Linear.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
+            "alt": "Mode selector with Linear selected.",
+            "caption": "Select Linear before adding inputs."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Upload the five GenBank files",
+      "body": "Keep the records in the same order as the Gallery command so adjacent orthogroup tracks and labels match the saved example.",
+      "items": [
+        "BGC0000708.gbk",
+        "BGC0000709.gbk",
+        "BGC0000711.gbk",
+        "BGC0000712.gbk",
+        "BGC0000713.gbk"
+      ],
+      "operations": [
+        {
+          "title": "Linear GenBank uploader with five BGC files",
+          "body": "Use the Linear upload rows to verify the file chips are in order.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-02-01-five-file-upload-order.webp",
+            "alt": "Linear Input Genomes uploader rows showing BGC0000708.gbk, BGC0000709.gbk, BGC0000711.gbk, BGC0000712.gbk, and BGC0000713.gbk in order.",
+            "caption": "The Linear GenBank upload rows show the five BGC files in the same order as the Gallery command."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Configure browser LOSAT",
+      "body": "In Pairwise Comparisons, choose Run LOSAT. Use LOSATP with blastp mode Orthogroups.",
+      "items": [
+        "Execution: Auto",
+        "Total threads: Safe",
+        "Threads per run: Auto",
+        "protein blastp max hits: 5",
+        "Identity: 30",
+        "Bitscore: 50",
+        "E-value: 1e-2"
+      ],
+      "note": "This example compares protein-coding genes across related biosynthetic gene clusters, so orthogroup-backed blastp matches are the useful comparison signal.",
+      "operations": [
+        {
+          "title": "Run LOSAT settings panel",
+          "body": "Open the Pairwise Comparisons panel before changing LOSAT settings.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
+            "alt": "Linear Run LOSAT settings panel with Run LOSAT selected, LOSATP selected, and execution and thread controls visible.",
+            "caption": "The LOSAT settings panel shows the Run LOSAT source, LOSATP mode, and browser execution controls."
+          }
+        },
+        {
+          "title": "LOSATP orthogroups mode",
+          "body": "Open the blastp mode selector and choose Orthogroups.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
+            "alt": "LOSAT Settings panel with the blastp mode menu open and the Orthogroups option highlighted.",
+            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Orthogroups option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 80,
+              "right": 80,
+              "bottom": 66,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Orthogroups",
+              "options": [
+                "Orthogroups",
+                "Collinear blocks",
+                "Pairwise"
+              ],
+              "label": "blastp mode"
+            }
+          }
+        },
+        {
+          "title": "Threshold controls",
+          "body": "Set the LOSATP thresholds directly in the LOSAT Settings panel.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-03-03-set-thresholds.webp",
+            "alt": "LOSATP settings panel with Orthogroups mode, bitscore 50, e-value 1e-2, identity 30, and minimum length 0.",
+            "caption": "Set LOSATP thresholds to bitscore 50, e-value 1e-2, identity 30, and minimum length 0."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Align the shared core",
+      "body": "Use orthogroup alignment around og_1 and reverse-complement BGC0000713 so the conserved biosynthetic core is visually comparable across all five rows.",
+      "items": [
+        "Align orthogroup feature: og_1",
+        "Reverse complement: BGC0000713 only",
+        "Track layout: middle",
+        "Pairwise match style: curve"
+      ],
+      "operations": [
+        {
+          "title": "Clicked og_1 feature Align button",
+          "body": "Click an og_1 CDS feature in the preview, then use Align in the feature popup.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-01-align-og1.webp",
+            "alt": "Feature popup for an og_1 CDS feature with the Align button highlighted.",
+            "caption": "The feature popup exposes the orthogroup action buttons; click Align for the selected og_1 feature."
+          }
+        },
+        {
+          "title": "Reverse-complement selector",
+          "body": "In the BGC0000713 input row, check Reverse complement.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-02-reverse-bgc0000713.webp",
+            "alt": "Fifth Linear input row for BGC0000713.gbk with the Region reverse complement checkbox checked.",
+            "caption": "Use the BGC0000713 row's Region controls and check Reverse complement for that record only."
+          }
+        },
+        {
+          "title": "Track layout selector",
+          "body": "Open the Track Layout selector and choose Middle.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-03-track-layout-middle.webp",
+            "alt": "Linear Layout card with the Track Layout menu open and the Middle option highlighted.",
+            "caption": "Open Track Layout in the Layout card and choose the highlighted Middle option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Middle",
+              "options": [
+                "Above",
+                "Middle",
+                "Below"
+              ],
+              "label": "Track Layout"
+            },
+            "openDetails": [
+              "Layout"
+            ]
+          }
+        },
+        {
+          "title": "Pairwise match style selector",
+          "body": "Open the Pairwise Match Style selector and choose Curve.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-04-04-pairwise-style-curve.webp",
+            "alt": "Pairwise Match card with the Pairwise Match Style menu open and the Curve option highlighted.",
+            "caption": "Open Pairwise Match Style in the Pairwise Match card and choose the highlighted Curve option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Curve",
+              "options": [
+                "Ribbon",
+                "Curve"
+              ],
+              "label": "Pairwise Match Style"
+            },
+            "openDetails": [
+              "Pairwise Match"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Set labels and figure layout",
+      "body": "Use the saved session values for a compact manuscript-style comparison.",
+      "items": [
+        "Show labels: first record",
+        "Label placement: above feature",
+        "Label rotation: 45",
+        "Scale style: ruler",
+        "Ruler on axis: on",
+        "Legend: bottom",
+        "Keep definitions left aligned: on"
+      ],
+      "operations": [
+        {
+          "title": "Show labels selector",
+          "body": "Open Show Labels and choose First Record Only.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-05-01-show-labels-first.webp",
+            "alt": "Labels card with the Show Labels menu open and the First Record Only option highlighted.",
+            "caption": "Open Show Labels in the Labels card and choose the highlighted First Record Only option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "First Record Only",
+              "options": [
+                "None",
+                "All Records",
+                "First Record Only",
+                "Top Orthogroup Record"
+              ],
+              "label": "Show Labels"
+            },
+            "openDetails": [
+              "Labels"
+            ]
+          }
+        },
+        {
+          "title": "Scale style selector",
+          "body": "Open Scale Style and choose Ruler.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-05-02-scale-style-ruler.webp",
+            "alt": "Axis and Scale card with the Scale Style menu open and the Ruler option highlighted.",
+            "caption": "Open Scale Style in the Axis & Scale card and choose the highlighted Ruler option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Ruler (Ticks)",
+              "options": [
+                "Bar (Simple)",
+                "Ruler (Ticks)"
+              ],
+              "label": "Scale Style"
+            },
+            "openDetails": [
+              "Axis & Scale"
+            ]
+          }
+        },
+        {
+          "title": "Legend position selector",
+          "body": "Open Legend Position and choose Bottom.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-05-03-legend-position-bottom.webp",
+            "alt": "Title and Legend card with the Legend Position menu open and the Bottom option highlighted.",
+            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Bottom option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Bottom",
+              "options": [
+                "Right",
+                "Left",
+                "Top",
+                "Bottom",
+                "None"
+              ],
+              "label": "Legend Position"
+            },
+            "openDetails": [
+              "Title & Legend"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Add the plot title and record text",
+      "body": "Set the plot title to Aminoglycoside biosynthetic gene clusters from Streptomyces spp. Use species-level record labels and cluster subtitles when you want the web output to match the Gallery session exactly.",
+      "operations": [
+        {
+          "title": "Title and record text controls",
+          "body": "Type the plot title in the Title & Legend controls and keep the saved definition text settings visible.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
+            "alt": "Title and Legend controls showing the aminoglycoside BGC plot title, bottom title position, definition font size, and definition line style settings.",
+            "caption": "Type the aminoglycoside BGC plot title in the Title & Legend controls before generating the figure."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Add feature color rules",
+      "body": "Create four CDS rules from the antiSMASH gene_kind qualifier before generating the final figure.",
+      "table": {
+        "columns": ["Feature", "Qualifier", "Value pattern", "Color", "Legend caption"],
+        "rows": [
+          ["CDS", "gene_kind", "biosynthetic$", "#d03535", "Core biosynthetic genes"],
+          ["CDS", "gene_kind", "biosynthetic-additional", "#f787a9", "Additional biosynthetic genes"],
+          ["CDS", "gene_kind", "transport", "#577edb", "Transport-related genes"],
+          ["CDS", "gene_kind", "regulatory", "#57b767", "Regulatory genes"]
+        ]
+      },
+      "note": "Use biosynthetic$ for the core category so it does not also catch biosynthetic-additional.",
+      "operations": [
+        {
+          "title": "All antiSMASH gene_kind color rules",
+          "body": "Enter the four antiSMASH gene_kind rules from the table in SPECIFIC RULES (-t), then generate the figure once after all rules are present.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-07-01-specific-rules-all.webp",
+            "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
+            "caption": "Enter all four antiSMASH gene_kind rules in the SPECIFIC RULES (-t) controls before clicking Generate Diagram."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Generate the diagram",
+      "body": "Click Generate Diagram. The generated preview should show five BGC rows, blue orthogroup ribbons, rotated first-record labels, and a bottom legend.",
+      "operations": [
+        {
+          "title": "Generated BGC comparison preview",
+          "body": "Inspect the generated preview with five rows and the bottom legend.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
+            "alt": "Generated aminoglycoside BGC comparison preview with five rows and the bottom legend.",
+            "caption": "After all four gene_kind rules are entered, generate the final BGC comparison once and check the five rows plus bottom legend."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Inspect an orthogroup ribbon",
+      "body": "Click a pairwise match ribbon to inspect the orthogroup ID, member count, record coverage, and member table.",
+      "operations": [
+        {
+          "title": "Orthogroup ribbon popup",
+          "body": "Click an orthogroup ribbon so the Orthogroup ribbon popup is visible.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-09-01-orthogroup-popup.webp",
+            "alt": "Zoomed aminoglycoside BGC orthogroup ribbon crop with the orthogroup match popup open.",
+            "caption": "The zoomed crop keeps the clicked orthogroup ribbon and popup readable."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Inspect a colored feature",
+      "body": "Click a CDS feature to inspect its label, product, orthogroup membership, and qualifier values before deciding whether to refine a color rule.",
+      "operations": [
+        {
+          "title": "Colored feature popup",
+          "body": "Click a colored CDS feature so the Colored feature popup metadata is visible.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-10-01-feature-popup.webp",
+            "alt": "Zoomed aminoglycoside BGC crop with the clicked CDS, its orthogroup ribbon context, and feature popup metadata.",
+            "caption": "The zoomed crop keeps the clicked CDS, orthogroup context, and gene_kind metadata readable."
+          }
+        }
+      ]
+    }
+  ],
+  "colorRules": [
+    {
+      "title": "Use gene_kind for antiSMASH categories",
+      "body": "These BGC records carry antiSMASH gene_kind qualifiers, which are more reliable for core, additional, transport, and regulatory categories than broad product text."
+    },
+    {
+      "title": "Use gene for label text",
+      "body": "Set the CDS qualifier priority to gene so rotated labels use concise gene names when available."
+    },
+    {
+      "title": "Keep regex values specific",
+      "body": "Specific rule values are matching patterns. Use biosynthetic$ for core biosynthetic genes and a separate biosynthetic-additional rule for the additional category."
+    },
+    {
+      "title": "Use product only as a fallback",
+      "body": "When gene_kind is absent, product can group functional categories, but terms such as protein, enzyme, or transporter may match more features than intended."
+    },
+    {
+      "title": "Let the legend caption explain the biology",
+      "body": "Use captions such as Core biosynthetic genes and Transport-related genes instead of raw qualifier values."
+    }
+  ],
+  "postGenerationEdits": [
+    {
+      "title": "Edit the legend",
+      "body": "Use the legend editor to adjust captions or ordering after generation. The pairwise match identity legend explains ribbon color.",
+      "operations": [
+        {
+          "title": "Legend editor",
+          "body": "Open the Legend drawer to adjust captions or ordering after generation.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/post-02-01-legend-editor.webp",
+            "alt": "BGC session Legend drawer with Core biosynthetic genes, Additional biosynthetic genes, Transport-related genes, Regulatory genes, and other proteins entries.",
+            "caption": "Open the Legend drawer after restoring the BGC session; the generated BGC color-rule entries are available for caption and order edits."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1440,
+              "height": 700
+            },
+            "actions": [
+              {
+                "type": "wait",
+                "ms": 3000
+              },
+              {
+                "type": "evaluate",
+                "script": "window.__GBDRAW_APP__?.openRightDrawerTab?.('legend')"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".right-drawer input[type=\"text\"]",
+                "state": "visible"
+              },
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important')"
+              },
+              {
+                "type": "wait",
+                "ms": 500
+              }
+            ],
+            "selector": ".right-drawer"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Export the figure",
+      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures.",
+      "operations": [
+        {
+          "title": "Export controls",
+          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/post-03-01-export-controls.webp",
+            "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
+            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Save a session",
+      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSATP cache, settings, generated output, and SVG adjustments.",
+      "operations": [
+        {
+          "title": "Session save controls",
+          "body": "Click Save Session in the web app header toolbar.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/post-04-01-save-session.webp",
+            "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
+          }
+        }
+      ]
+    }
+  ],
+  "losatTips": [
+    {
+      "title": "Start with Auto execution",
+      "body": "Auto uses threaded LOSAT only when the browser supports it and the workload justifies it."
+    },
+    {
+      "title": "Prefer Safe total threads",
+      "body": "Safe avoids consuming every logical CPU and is the best default for keeping the browser responsive."
+    },
+    {
+      "title": "Use orthogroups for protein-level BGC comparison",
+      "body": "Orthogroup mode keeps related proteins linked even when local gene order differs across clusters."
+    },
+    {
+      "title": "Tune Max hits and identity together",
+      "body": "Lower Max hits or raise identity when the figure has too many weak ribbons; raise Max hits only when expected homologs are missing."
+    },
+    {
+      "title": "Reuse the cache",
+      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so label, color, and legend changes should be faster after the first run."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "title": "The rows do not line up like the Gallery figure",
+      "body": "Check the input order, Align orthogroup feature og_1, and reverse-complement setting for BGC0000713."
+    },
+    {
+      "title": "Core genes are not red",
+      "body": "Check that the input GenBank files include gene_kind qualifiers and that the core rule uses biosynthetic$."
+    },
+    {
+      "title": "Labels are missing or too dense",
+      "body": "Use Show labels: first record, label placement above feature, and 45 degree label rotation. If needed, reduce labels by tightening the label filter."
+    },
+    {
+      "title": "Threaded LOSAT is unavailable",
+      "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
+    },
+    {
+      "title": "The generated diagram differs from the Gallery image",
+      "body": "Check orthogroup mode, identity and bitscore thresholds, max hits, track layout, legend position, label rotation, color rules, and record orientation."
+    }
+  ],
+  "related": [
+    {
+      "label": "Open this Gallery entry",
+      "href": "./#BGC0000708-BGC0000713"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    },
+    {
+      "label": "Compare with the Hepatoplasmataceae orthogroup example",
+      "href": "./#hepatoplasmataceae_orthogroup"
+    }
+  ]
+}

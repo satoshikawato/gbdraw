@@ -266,6 +266,48 @@ const safeDeepMerge = (target, source) => {
   });
 };
 
+const parseMultiRecordPositionToken = (value) => {
+  const raw = String(value ?? '').trim();
+  const separatorIndex = raw.lastIndexOf('@');
+  if (separatorIndex <= 0 || separatorIndex === raw.length - 1) return null;
+
+  const selector = raw.slice(0, separatorIndex).trim();
+  const row = Number(raw.slice(separatorIndex + 1).trim());
+  if (!selector || !Number.isInteger(row) || row <= 0) return null;
+  return { selector, row };
+};
+
+const multiRecordPositionsFromCliInvocation = (cliInvocation) => {
+  const args = Array.isArray(cliInvocation?.args) ? cliInvocation.args : [];
+  const positions = [];
+  const seenSelectors = new Set();
+
+  args.forEach((arg, index) => {
+    if (arg !== '--multi_record_position') return;
+    const position = parseMultiRecordPositionToken(args[index + 1]);
+    if (!position || seenSelectors.has(position.selector)) return;
+    seenSelectors.add(position.selector);
+    positions.push(position);
+  });
+
+  return positions;
+};
+
+const hydrateMissingMultiRecordPositionsFromCliInvocation = (config, cliInvocation) => {
+  if (!isPlainObject(config) || !isPlainObject(config.form) || config.form.multi_record_canvas !== true) {
+    return;
+  }
+
+  const adv = isPlainObject(config.adv) ? config.adv : {};
+  if (Array.isArray(adv.multi_record_positions)) return;
+
+  const positions = multiRecordPositionsFromCliInvocation(cliInvocation);
+  if (positions.length === 0) return;
+
+  adv.multi_record_positions = positions;
+  config.adv = adv;
+};
+
 const downloadJson = (data, filename, { pretty = true } = {}) => {
   const blob = new Blob([pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data)], {
     type: 'application/json'
@@ -1566,6 +1608,50 @@ const applyLosatDerivedCache = (entries) => {
 
 const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
+const enrichExtractedFeaturesWithOrthogroups = (index) => {
+  if (!(index instanceof Map) || !Array.isArray(state.extractedFeatures.value) || state.extractedFeatures.value.length === 0) {
+    return;
+  }
+  state.extractedFeatures.value = state.extractedFeatures.value.map((feature) => {
+    const ids = [
+      feature?.svg_id,
+      feature?.stable_svg_id,
+      feature?.stableFeatureSvgId,
+      feature?.stable_feature_id
+    ].map((value) => String(value || '').trim()).filter(Boolean);
+    const uniqueIds = Array.from(new Set(ids));
+    if (uniqueIds.length === 0) return feature;
+
+    const recordIndexes = [
+      feature?.fileIdx,
+      feature?.recordIndex,
+      feature?.record_index,
+      feature?.record_idx
+    ].map((value) => Number(value)).filter((value) => Number.isInteger(value));
+    let entry = null;
+    for (const recordIndex of recordIndexes) {
+      entry = uniqueIds
+        .map((id) => index.get(buildOrthogroupIndexKey(recordIndex, id)))
+        .find(Boolean);
+      if (entry) break;
+    }
+    entry = entry || uniqueIds.map((id) => index.get(id)).find(Boolean);
+    if (!entry) return feature;
+    return {
+      ...feature,
+      proteinId: entry.proteinId,
+      sourceProteinId: entry.sourceProteinId,
+      orthogroupId: entry.orthogroupId,
+      orthogroupMemberCount: entry.orthogroupMemberCount,
+      orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
+      orthogroupRepresentative: entry.orthogroupRepresentative,
+      orthogroupScope: entry.orthogroupScope,
+      orthogroupSourceRecordIndex: entry.orthogroupSourceRecordIndex,
+      orthogroupMember: entry.orthogroupMember
+    };
+  });
+};
+
 export const applyOrthogroupStateData = (orthogroupState = {}) => {
   const groups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
   const groupIds = groups
@@ -1605,6 +1691,7 @@ export const applyOrthogroupStateData = (orthogroupState = {}) => {
 
   state.orthogroups.value = groups;
   state.featureOrthogroupIndex.value = index;
+  enrichExtractedFeaturesWithOrthogroups(index);
   const selectedId = String(orthogroupState.selectedOrthogroupId || '').trim();
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
   state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
@@ -2467,6 +2554,7 @@ export const importSession = async (e, options = {}) => {
       : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
 
     if (data.config) {
+      hydrateMissingMultiRecordPositionsFromCliInvocation(data.config, data.cliInvocation);
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
       validateImportedCircularTrackSlots(data.config);
       validateImportedLinearTrackSlots(data.config);

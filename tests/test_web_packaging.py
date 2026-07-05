@@ -606,6 +606,12 @@ def test_public_web_html_entrypoints_are_not_gitignored() -> None:
             assert result.returncode == 1, f"{path} must be commit-visible for hosted builds"
 
 
+def test_gallery_csp_allows_same_origin_tutorial_media() -> None:
+    gallery_index = (WEB_ROOT / "gallery" / "index.html").read_text(encoding="utf-8")
+    assert "media-src 'self';" in gallery_index
+    assert "img-src 'self' data:;" in gallery_index
+
+
 def test_open_source_notices_are_generated() -> None:
     subprocess.run(
         [sys.executable, "tools/generate_open_source_notices.py", "--check"],
@@ -961,6 +967,33 @@ def test_gallery_sessions_ship_current_feature_metadata() -> None:
         assert rendered_feature_ids <= feature_ids, session_name
         if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
             assert pairwise_ids or collinearity_ids, session_name
+
+
+def test_vnig_gallery_session_multirecord_positions_are_restoreable() -> None:
+    session = json.loads(
+        (GALLERY_ROOT / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected_positions = ["#1@1", "#2@1", "#3@2", "#4@2", "#5@2", "#6@2"]
+    config_positions = session.get("config", {}).get("adv", {}).get("multi_record_positions")
+    if isinstance(config_positions, list) and config_positions:
+        actual_positions = [
+            f"{entry.get('selector')}@{entry.get('row')}"
+            for entry in config_positions
+        ]
+    else:
+        args = session.get("cliInvocation", {}).get("args", [])
+        actual_positions = [
+            str(args[index + 1])
+            for index, arg in enumerate(args[:-1])
+            if arg == "--multi_record_position"
+        ]
+
+    assert actual_positions == expected_positions
+
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    assert "hydrateMissingMultiRecordPositionsFromCliInvocation(data.config, data.cliInvocation)" in config_source
 
 
 def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path) -> None:
@@ -1794,6 +1827,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     assert "/gallery/examples/*" in headers
     assert "! Content-Security-Policy" in headers
     assert "frame-ancestors 'self'" in headers
+    assert "gallery/media/**/*" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     remote_assets = json.loads((bundle_path / "gallery" / "remote-assets.json").read_text(encoding="utf-8"))
     assert (
         remote_assets["gallery/examples/Vnig_TUMSAT-TG-2018.svg"]
@@ -1924,6 +1958,7 @@ def test_wrangler_uses_cloudflare_bundle_directory() -> None:
     assert 'not_found_handling = "single-page-application"' in wrangler_toml
     assert '"/gallery/examples/*"' in wrangler_toml
     assert '"/gallery/sessions/*"' in wrangler_toml
+    assert '"/gallery/media/*"' in wrangler_toml
 
 
 def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
@@ -1931,6 +1966,11 @@ def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
     assert "/gallery/remote-assets.json" in source
     assert "/gallery/examples/" in source
     assert "/gallery/sessions/" in source
+    assert "/gallery/media/" in source
+    assert "video/mp4" in source
+    assert "video/webm" in source
+    assert "video/ogg" in source
+    assert "image/webp" in source
     assert "env.ASSETS.fetch" in source
     assert "Content-Security-Policy" in source
     assert "Cross-Origin-Embedder-Policy" in source
@@ -3658,6 +3698,23 @@ def test_gallery_session_restore_smoke() -> None:
             assert summary["status"] == "summary-ready", session_name
             assert summary["featureExtractionError"] in (None, ""), session_name
             assert summary["extractedCount"] > 0, session_name
+
+            if session_name == "Vnig_TUMSAT-TG-2018.gbdraw-session.json":
+                multi_record_positions = page.evaluate(
+                    """() => {
+                        const app = window.__GBDRAW_APP__;
+                        return (Array.isArray(app?.adv?.multi_record_positions) ? app.adv.multi_record_positions : [])
+                            .map((entry) => `${entry.selector}@${entry.row}`);
+                    }"""
+                )
+                assert multi_record_positions == [
+                    "#1@1",
+                    "#2@1",
+                    "#3@2",
+                    "#4@2",
+                    "#5@2",
+                    "#6@2",
+                ]
 
             if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
                 target = page.evaluate(

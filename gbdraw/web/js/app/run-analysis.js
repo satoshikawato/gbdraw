@@ -983,8 +983,18 @@ export const createRunAnalysis = ({
   const enrichFeatureWithOrthogroup = (feature, recordIndex) => {
     const svgId = String(feature?.svg_id || '').trim();
     if (!svgId) return feature;
+    const stableSvgId = String(
+      feature?.stable_svg_id ||
+      feature?.stableFeatureSvgId ||
+      feature?.stable_feature_id ||
+      ''
+    ).trim();
     const index = featureOrthogroupIndex.value instanceof Map ? featureOrthogroupIndex.value : new Map();
-    const entry = index.get(buildOrthogroupIndexKey(recordIndex, svgId)) || index.get(svgId);
+    const entry =
+      index.get(buildOrthogroupIndexKey(recordIndex, svgId)) ||
+      index.get(svgId) ||
+      index.get(buildOrthogroupIndexKey(recordIndex, stableSvgId)) ||
+      index.get(stableSvgId);
     if (!entry) return feature;
     return {
       ...feature,

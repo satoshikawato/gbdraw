@@ -196,14 +196,16 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
     const svg =
       document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement ||
       document.querySelector('svg');
-    const featureIds = new Set(
-      (Array.isArray(app.extractedFeatures) ? app.extractedFeatures : [])
-        .map((feature) => String(feature?.svg_id || '').trim())
-        .filter(Boolean)
-    );
+    const features = Array.isArray(app.extractedFeatures) ? app.extractedFeatures : [];
+    const targetFeature = features.find((feature) => String(feature?.orthogroupId || '').trim() === 'og_1');
+    const targetFeatureId = String(targetFeature?.svg_id || '').trim();
     const element = Array.from(
       svg.querySelectorAll('[data-gbdraw-feature-id], path[id^="f"], polygon[id^="f"], rect[id^="f"]')
-    ).find((candidate) => featureIds.has(candidate.getAttribute('data-gbdraw-feature-id') || candidate.id || ''));
+    ).find((candidate) => {
+      const candidateId = candidate.getAttribute('data-gbdraw-feature-id') || candidate.id || '';
+      return targetFeatureId && candidateId === targetFeatureId;
+    });
+    if (!element) throw new Error('Rendered og_1 feature was not found');
     element.scrollIntoView({ block: 'center', inline: 'center' });
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const rect = element.getBoundingClientRect();
@@ -216,10 +218,14 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
 
   await page.mouse.click(target.x, target.y);
   await page.waitForFunction(
-    (featureId) => window.__GBDRAW_APP__?.clickedFeature?.svg_id === featureId,
+    (featureId) => {
+      const feature = window.__GBDRAW_APP__?.clickedFeature;
+      return feature?.svg_id === featureId && feature?.orthogroupId === 'og_1';
+    },
     target.id
   );
   await expect(page.locator('.feature-popup')).toBeVisible();
+  await expect(page.locator('.feature-popup').getByRole('button', { name: /Align/ })).toBeVisible();
 });
 
 test('BGC session selected feature Hide undo redo keeps visibility and legend stable', async ({ page }) => {
