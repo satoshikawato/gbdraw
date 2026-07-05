@@ -23,6 +23,7 @@ INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
 
 _FEATURE_PART_SUFFIX_RE = re.compile(r"__part\d+$")
+_FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
 _ASSET_IDS = {
     INTERACTIVE_METADATA_ID,
     INTERACTIVE_STYLE_ID,
@@ -81,6 +82,29 @@ def _element_feature_id(element: ET.Element) -> str:
     return _normalize_feature_id(
         element.get("data-gbdraw-feature-id") or element.get("id") or ""
     )
+
+
+def _feature_svg_id_candidates(feature: Mapping[str, object]) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for value in (
+        feature.get("svg_id"),
+        feature.get("svgId"),
+        feature.get("feature_svg_id"),
+        feature.get("featureSvgId"),
+        feature.get("stable_svg_id"),
+        feature.get("stableSvgId"),
+        feature.get("stable_feature_id"),
+        feature.get("stableFeatureId"),
+    ):
+        text = _normalize_feature_id(value)
+        if not text:
+            continue
+        for candidate in (text, _FEATURE_RECORD_SUFFIX_RE.sub("", text)):
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                candidates.append(candidate)
+    return candidates
 
 
 def _is_feature_candidate(element: ET.Element) -> bool:
@@ -608,7 +632,14 @@ def _feature_payloads(
         "simple" if context.popup_mode == "simple" else "rich"
     )
     for feature in context.features:
-        svg_id = str(feature.get("svg_id") or "").strip()
+        svg_id = next(
+            (
+                candidate
+                for candidate in _feature_svg_id_candidates(feature)
+                if candidate in rendered and candidate not in seen
+            ),
+            "",
+        )
         if not svg_id or svg_id not in rendered or svg_id in seen:
             continue
         seen.add(svg_id)
