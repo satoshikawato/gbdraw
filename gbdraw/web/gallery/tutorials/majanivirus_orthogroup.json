@@ -81,8 +81,6 @@
       "body": "Open gbdraw.app and select Linear mode before adding the viral GenBank records.",
       "operations": [
         {
-          "title": "Mode selector",
-          "body": "Select Linear.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
             "alt": "Mode selector with Linear selected.",
@@ -107,8 +105,6 @@
       ],
       "operations": [
         {
-          "title": "Linear GenBank uploader with nine viral files",
-          "body": "Upload the nine GenBank files in the tutorial order.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-02-01-nine-file-upload-order.webp",
             "alt": "Linear GenBank upload rows showing the nine majanivirus files in order.",
@@ -227,8 +223,6 @@
       ],
       "operations": [
         {
-          "title": "Record label editor",
-          "body": "Enter the nine descriptive record labels.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-05-01-record-labels.webp",
             "alt": "Record label editor rows with nine descriptive majanivirus names.",
@@ -294,8 +288,6 @@
       "body": "Click Generate Diagram. The finished preview should show nine viral genome rows, many red identity-scaled orthogroup ribbons, and a right legend.",
       "operations": [
         {
-          "title": "Generated orthogroup preview",
-          "body": "Inspect the generated preview with nine rows + right legend.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-07-01-orthogroup-preview.webp",
             "alt": "Generated majanivirus orthogroup preview showing nine viral genome rows and the right legend.",
@@ -309,8 +301,6 @@
       "body": "Click a pairwise match ribbon to inspect the orthogroup ID, inferred display name, member count, record coverage, and member table.",
       "operations": [
         {
-          "title": "Orthogroup ribbon popup",
-          "body": "Click an orthogroup ribbon so the Orthogroup ribbon popup is visible.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Zoomed majanivirus orthogroup ribbon crop with the orthogroup match popup open.",
@@ -344,8 +334,6 @@
       "body": "Feature popups expose product, protein_id, locus_tag, sequence, and orthogroup membership; the Feature editor drawer shows label, color, and scope controls. Use those values before tightening feature color rules.",
       "operations": [
         {
-          "title": "CDS feature editor drawer",
-          "body": "Click a CDS feature to inspect product, label, and color controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-02-01-feature-popup.webp",
             "alt": "Majanivirus Feature editor drawer controls with product label, fill, stroke, and multi-target controls visible.",
@@ -359,8 +347,6 @@
       "body": "Download SVG for editable vector output. PNG and PDF export can take longer because the interactive SVG contains many features and match paths.",
       "operations": [
         {
-          "title": "Export controls",
-          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-04-01-export-controls.webp",
             "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
@@ -374,8 +360,6 @@
       "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSATP cache, settings, generated output, and SVG adjustments.",
       "operations": [
         {
-          "title": "Session save controls",
-          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-05-01-save-session.webp",
             "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",

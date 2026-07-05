@@ -23,8 +23,6 @@
       "body": "Open gbdraw.app and choose Circular before adding the GenBank file.",
       "operations": [
         {
-          "title": "Select Circular",
-          "body": "Select the Circular mode.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-01-01-circular-mode.webp",
             "alt": "Circular mode selected in the web app header.",
@@ -242,8 +240,6 @@
       "body": "Click Generate Diagram. The preview should show chromosome 1 and chromosome 2 above plasmids pVNTG1 through pVNTG4, with GC content and GC skew rings inside each record.",
       "operations": [
         {
-          "title": "Generated multi-record preview",
-          "body": "Inspect the generated preview with two chromosomes and four plasmids.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
             "alt": "Generated Vibrio multi-record preview with two chromosomes and four plasmids.",
@@ -257,8 +253,6 @@
       "body": "Click a CDS feature in the interactive SVG to inspect its label, record ID, location, protein_id, qualifiers, and sequence.",
       "operations": [
         {
-          "title": "CDS feature popup",
-          "body": "Click a CDS feature so the CDS feature popup is visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
             "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",

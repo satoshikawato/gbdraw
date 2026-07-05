@@ -53,8 +53,6 @@
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
       "operations": [
         {
-          "title": "Mode selector",
-          "body": "Select Linear.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp",
             "alt": "Mode selector with Linear selected.",
@@ -75,8 +73,6 @@
       ],
       "operations": [
         {
-          "title": "Linear GenBank uploader with file order",
-          "body": "Upload the five GenBank files in the tutorial order.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-02-01-five-file-upload-order.webp",
             "alt": "Linear GenBank upload rows showing AP027078.gb, AP027131.gb, AP027133.gb, AP027132.gb, and NZ_CP006932.gb in order.",
@@ -96,8 +92,6 @@
       ],
       "operations": [
         {
-          "title": "LOSAT run settings",
-          "body": "Open Pairwise Comparisons, select Run LOSAT, and set LOSAT Mode to LOSATP.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-01-open-pairwise.webp",
             "alt": "Pairwise Comparisons panel with Run LOSAT and LOSATP selected.",
@@ -225,8 +219,6 @@
       "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache.",
       "operations": [
         {
-          "title": "Generate button and processing context",
-          "body": "Click Generate Diagram after the LOSATP and layout settings are set.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-06-01-generate.webp",
             "alt": "Generate Diagram button in the processing panel.",
@@ -240,8 +232,6 @@
       "body": "Use the generated SVG preview to inspect the curved block ribbons between adjacent genomes. Orientation + identity colors separate forward and reverse orientation while retaining identity information.",
       "operations": [
         {
-          "title": "Collinear block popup",
-          "body": "Click a collinear block ribbon so the Collinear block popup is visible.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae collinear crop with the highlighted collinear block ribbon and popup.",
@@ -257,8 +247,6 @@
       "body": "Feature clicks expose qualifiers and sequence details, while the Feature editor drawer shows label, visibility, color, and scope controls. Use these views to verify gene, locus_tag, product, and protein_id values.",
       "operations": [
         {
-          "title": "Feature editor drawer",
-          "body": "Select a feature and use the Feature editor drawer to inspect label, visibility, fill, stroke, and scope controls.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
             "alt": "Hepatoplasmataceae Feature editor drawer controls with label, visibility, fill, stroke, and multi-target controls visible.",
@@ -272,8 +260,6 @@
       "body": "Use the legend editor to rename, reorder, or remove feature legend entries after the SVG has been generated.",
       "operations": [
         {
-          "title": "Legend editor",
-          "body": "Open the Legend drawer to rename, reorder, or remove legend entries.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-02-01-legend-editor.webp",
             "alt": "Legend editor drawer for the Hepatoplasmataceae collinear comparison.",
@@ -287,8 +273,6 @@
       "body": "Download SVG for editable vector output. Use PNG or PDF when you need quick sharing or manuscript draft assets.",
       "operations": [
         {
-          "title": "Export controls",
-          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-03-01-export-controls.webp",
             "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
@@ -302,8 +286,6 @@
       "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, settings, generated output, and post-generation SVG adjustments.",
       "operations": [
         {
-          "title": "Session save controls",
-          "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-04-01-save-session.webp",
             "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",

@@ -227,9 +227,11 @@ test('Gallery renders the WSSV conservation tutorial and media', async ({ page }
       name: '20 Angostura2013 #c6bebb'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByText('MG18PR-0187-N40S.fa')).toBeVisible();
+  await expect(tutorialPanel.getByRole('cell', { name: 'MG18PR-0187-N40S.fa' })).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(15);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-comparison-fasta-series.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-upload-fasta-comparisons.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-conservation-rings.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-files-tab.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-11-01-feature-popup.webp"]')).toHaveCount(1);

@@ -7,11 +7,11 @@ description: Maintain gbdraw Web Gallery tutorial screenshots, manual text, and 
 
 ## Overview
 
-Use this skill to keep `gbdraw` Web Gallery tutorials visually truthful: every operation screenshot should show the actual UI the reader operates, and every caption should name the action or selected value.
+Use this skill to keep `gbdraw` Web Gallery tutorials visually and textually truthful: every operation screenshot should show the actual UI the reader operates, every caption should name the action or selected value, tutorial text should match the real workflow, and repeated-field content should use structured display.
 
 ## Read First
 
-Before editing or reviewing Gallery tutorial screenshots, read:
+Before editing or reviewing Gallery tutorial screenshots, writing, or structured content, read:
 
 - `CLAUDE.md`
 - `gbdraw/web/CLAUDE.md`
@@ -28,19 +28,22 @@ Then inspect the target tutorial JSON and media directory:
 
 ## Audit Workflow
 
-1. Enumerate only media referenced by tutorial JSON first. Treat unreferenced media as cleanup candidates after visible screenshots are fixed.
-2. Compare each referenced screenshot with its operation text and caption.
-3. Check adjacent operation screenshots for parent/child duplication. If a broader crop already shows the child controls clearly and the child crop adds no new action context, remove the child operation/media instead of recropping the broader image.
-4. Hash or otherwise compare referenced screenshots after the visual pass. Pixel-identical screenshots inside the same tutorial are acceptable only when they are intentionally reused across non-adjacent, clearly different contexts; otherwise consolidate the operation, recrop one image, or delete the duplicate media.
-5. Classify each screenshot as:
+1. Audit screenshots, tutorial writing, and structured content together. Do not treat a screenshot pass as complete until the tutorial also satisfies the Writing Rules and Structured Content Rules below.
+2. Enumerate only media referenced by tutorial JSON first. Treat unreferenced media as cleanup candidates after visible screenshots are fixed.
+3. Compare each referenced screenshot with its operation text and caption.
+4. Check adjacent operation screenshots for parent/child duplication. If a broader crop already shows the child controls clearly and the child crop adds no new action context, remove the child operation/media instead of recropping the broader image.
+5. Hash or otherwise compare referenced screenshots after the visual pass. Pixel-identical screenshots inside the same tutorial are acceptable only when they are intentionally reused across non-adjacent, clearly different contexts; otherwise consolidate the operation, recrop one image, or delete the duplicate media.
+6. Classify each screenshot as:
    - `keep`: real UI/result crop, readable, caption matches.
    - `recrop`: correct state but poor extent, blurry text, missing context, or too much page.
    - `replace`: final preview or stale/empty crop used for an input/edit/upload/setting operation.
    - `add`: operation needs an extra crop to avoid one overloaded screenshot.
-6. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
-7. Record the result in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
-8. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
-9. Keep batches small. Do not migrate every tutorial in one risky change.
+7. Review tutorial writing and structure: remove generic Requirements, avoid unnecessary Files tab steps, keep pre-generation setup, generated-result inspection, and post-generation edits separate, and omit redundant operation `title`/`body` when a clear step plus media caption already conveys the action.
+8. Review structured content: convert repeated-field setup lists, file mappings, record metadata, track recipes, and color rules to tables when rows share the same fields; keep simple one-column checklists as bullets.
+9. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
+10. Record screenshot, writing, and structured-content decisions in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
+11. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
+12. Keep batches small. Do not migrate every tutorial in one risky change.
 
 ## Screenshot Rules
 
@@ -152,4 +155,4 @@ If Node Playwright is unavailable, use Python Playwright for equivalent media an
 When adding or removing tutorial media references, update focused browser tests that assert image counts or exact `src` values.
 When removing a duplicate operation media reference, delete the now-unreferenced WebP and assert the removed `src` is absent if a focused test already covers that tutorial.
 
-Manual review must check desktop and mobile Gallery views, image readability, caption specificity, and that no input/edit operation is represented only by a generated preview.
+Manual review must check desktop and mobile Gallery views, image readability, caption specificity, writing/section structure, table suitability, and that no input/edit operation is represented only by a generated preview.
