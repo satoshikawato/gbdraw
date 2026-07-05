@@ -404,6 +404,10 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
             "fileSizeLabel": _format_size(example.gallery_svg_path.stat().st_size),
             "command": _example_command(example, session),
         }
+        tutorial_path = GALLERY_ROOT / "tutorials" / f"{example.id}.json"
+        if tutorial_path.exists():
+            entry["tutorial"] = f"./tutorials/{example.id}.json"
+            entry["tutorialStatus"] = "ready"
         if example.description:
             entry["description"] = example.description
         if example.interactive_step:

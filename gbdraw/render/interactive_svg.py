@@ -686,8 +686,14 @@ def _feature_payloads(
                 {
                     "qualifiers": _normalize_qualifier_map(feature.get("qualifiers")),
                     "location_parts": _normalize_location_parts(feature.get("location_parts")),
-                    "nucleotide_sequence": _first_text(feature.get("nucleotide_sequence")),
-                    "amino_acid_sequence": _first_text(feature.get("amino_acid_sequence")),
+                    "nucleotide_sequence": _first_text(
+                        feature.get("nucleotide_sequence"),
+                        feature.get("nucleotideSequence"),
+                    ),
+                    "amino_acid_sequence": _first_text(
+                        feature.get("amino_acid_sequence"),
+                        feature.get("aminoAcidSequence"),
+                    ),
                     "sequence_warnings": _normalize_string_array(feature.get("sequence_warnings")),
                     "nucleotide_fasta": sequence_fastas["nucleotideFasta"],
                     "amino_acid_fasta": sequence_fastas["aminoAcidFasta"],

@@ -135,6 +135,39 @@ def test_enrich_svg_generates_fallback_feature_payload() -> None:
     assert payload["features"][0]["fill_color"] == "#54bcf8"
 
 
+def test_enrich_svg_embeds_feature_sequences_and_fastas() -> None:
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
+      <path id="fseq" data-gbdraw-feature-id="fseq" fill="#54bcf8" d="M 1 1 L 2 2" />
+    </svg>"""
+
+    enriched = enrich_svg(
+        svg,
+        InteractiveSvgContext(
+            features=[
+                {
+                    "svg_id": "fseq",
+                    "record_id": "rec1",
+                    "type": "CDS",
+                    "start": 0,
+                    "end": 9,
+                    "strand": "+",
+                    "product": "protein A",
+                    "qualifiers": {"protein_id": ["WP_000001.1"]},
+                    "nucleotide_sequence": "ATGAAATAA",
+                    "amino_acid_sequence": "MK",
+                }
+            ]
+        ),
+    )
+
+    feature = _metadata_payload(enriched)["features"][0]
+
+    assert feature["nucleotide_sequence"] == "ATGAAATAA"
+    assert feature["amino_acid_sequence"] == "MK"
+    assert feature["nucleotide_fasta"] == ">rec1:1-9 protein A\nATGAAATAA"
+    assert feature["amino_acid_fasta"] == ">WP_000001.1 protein A\nMK"
+
+
 def test_enrich_svg_rejects_malformed_svg() -> None:
     with pytest.raises(GbdrawError, match="Malformed SVG source"):
         enrich_svg("<svg><path></svg")

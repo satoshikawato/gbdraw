@@ -9,8 +9,6 @@
     "svg": "./examples/HmmtDNA_ATskew.svg",
     "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
     "thumbnail": "./thumbnails/HmmtDNA_ATskew.webp",
-    "tutorial": "./tutorials/HmmtDNA_ATskew.json",
-    "tutorialStatus": "ready",
     "sourceSession": "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json",
     "sourceOutput": "gbdraw/web/gallery/examples/HmmtDNA_ATskew.svg",
     "sourceFigure": "gbdraw/web/gallery/sources/HmmtDNA_ATskew.svg",
@@ -18,35 +16,10 @@
     "featureSources": [
       "HmmtDNA.gbk"
     ],
-    "fileSizeLabel": "317 KB",
-    "command": "gbdraw circular -o HmmtDNA_ATskew --species '<i>Homo sapiens</i>' -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p ajisai --window 500 --step 50 --definition_font_size 28 --label_font_size 20 --track_type middle -l left --labels --qualifier_priority HmmtDNA_qualifier_priority.tsv --circular_track_axis_index 0 --circular_track_slot features:features@lane_direction=split --circular_track_slot gc_content:dinucleotide_content@w=0.1 --circular_track_slot gc_skew:dinucleotide_skew@w=0.1 --circular_track_slot 'a_skew_2:dinucleotide_skew@w=0.1,nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew' --circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out --gbk HmmtDNA.gbk -f interactive_svg"
-  },
-  {
-    "id": "BGC0000708-BGC0000713",
-    "title": "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
-    "tags": [
-      "Linear",
-      "LOSAT",
-      "Orthogroup"
-    ],
-    "svg": "./examples/BGC0000708-BGC0000713.svg",
-    "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-    "thumbnail": "./thumbnails/BGC0000708-BGC0000713.webp",
-    "tutorial": "./tutorials/BGC0000708-BGC0000713.json",
-    "tutorialStatus": "ready",
-    "sourceSession": "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-    "sourceOutput": "gbdraw/web/gallery/examples/BGC0000708-BGC0000713.svg",
-    "sourceFigure": "gbdraw/web/gallery/sources/BGC0000708-BGC0000713.svg",
-    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
-    "featureSources": [
-      "BGC0000708.gbk",
-      "BGC0000709.gbk",
-      "BGC0000711.gbk",
-      "BGC0000712.gbk",
-      "BGC0000713.gbk"
-    ],
-    "fileSizeLabel": "906 KB",
-    "command": "gbdraw linear --protein_blastp_mode orthogroup -f interactive_svg --gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange -d BGC0000708-BGC0000713_default_colors.tsv -t BGC0000708-BGC0000713_specific_colors.tsv --qualifier_priority BGC0000708-BGC0000713_qualifier_priority.tsv --show_labels first --label_placement above_feature --label_rotation 45 --pairwise_match_style curve --scale_style ruler --plot_title 'Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.' --keep_definition_left_aligned --identity 30 --block_stroke_width 2 --block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 --legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 --ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold --definition_line_style subtitle:size=20 --definition_line_style 'accession:size=20,color=#7b7c7d' --definition_line_style 'length:size=20,color=#7b7c7d' -l bottom -o BGC0000708-BGC0000713"
+    "fileSizeLabel": "331 KB",
+    "command": "gbdraw circular -o HmmtDNA_ATskew --species '<i>Homo sapiens</i>' -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p ajisai --window 500 --step 50 --definition_font_size 28 --label_font_size 20 --track_type middle -l left --labels --qualifier_priority HmmtDNA_qualifier_priority.tsv --circular_track_axis_index 0 --circular_track_slot features:features@lane_direction=split --circular_track_slot gc_content:dinucleotide_content@w=0.1 --circular_track_slot gc_skew:dinucleotide_skew@w=0.1 --circular_track_slot 'a_skew_2:dinucleotide_skew@w=0.1,nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew' --circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out --gbk HmmtDNA.gbk -f interactive_svg",
+    "tutorial": "./tutorials/HmmtDNA_ATskew.json",
+    "tutorialStatus": "ready"
   },
   {
     "id": "WSSV_genome_comparison",
@@ -59,8 +32,6 @@
     "svg": "./examples/WSSV_genome_comparison.svg",
     "session": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
     "thumbnail": "./thumbnails/WSSV_genome_comparison.webp",
-    "tutorial": "./tutorials/WSSV_genome_comparison.json",
-    "tutorialStatus": "ready",
     "sourceSession": "gbdraw/web/gallery/sessions/WSSV_genome_comparison.gbdraw-session.json",
     "sourceOutput": "gbdraw/web/gallery/examples/WSSV_genome_comparison.svg",
     "sourceFigure": "gbdraw/web/gallery/sources/WSSV_genome_comparison.svg",
@@ -68,8 +39,37 @@
     "featureSources": [
       "AP027280.gb"
     ],
-    "fileSizeLabel": "3.6 MB",
-    "command": "gbdraw circular -o WSSV_genome_comparison --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p royal_gala --qualifier_priority WSSV_qualifier_priority.tsv --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 12 --legend_font_size 12 --suppress_gc --suppress_skew --track_type spreadout -l left --feature_width 10 --outer_label_x_radius_offset 1 --outer_label_y_radius_offset 1 --conservation_blast CN01.circular_conservation.losatn.tsv WSSV-TW.circular_conservation.losatn.tsv WSSV-CN.circular_conservation.losatn.tsv WSSV-TH.circular_conservation.losatn.tsv JP01A.circular_conservation.losatn.tsv JP01B.circular_conservation.losatn.tsv Pc2020.circular_conservation.losatn.tsv E1.circular_conservation.losatn.tsv 0722-1.circular_conservation.losatn.tsv CN03.circular_conservation.losatn.tsv CN04.circular_conservation.losatn.tsv WSSV-AU.circular_conservation.losatn.tsv EU129.circular_conservation.losatn.tsv GCF7.circular_conservation.losatn.tsv MES-753.circular_conservation.losatn.tsv Shantou2019.circular_conservation.losatn.tsv POMZ1.circular_conservation.losatn.tsv POMZ4.circular_conservation.losatn.tsv MG18PR-0187-N40S.circular_conservation.losatn.tsv Angostura2013.circular_conservation.losatn.tsv --conservation_reference subject --conservation_labels CN01 WSSV-TW WSSV-CN WSSV-TH JP01A JP01B Pc2020 E1 0722-1 CN03 CN04 WSSV-AU EU129 GCF7 MES-753 Shantou2019 POMZ1 POMZ4 MG18PR-0187-N40S Angostura2013 --conservation_colors '#6e91b7' '#f4a251' '#77b26f' '#e67577' '#8fc4c0' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb' '#6e91b7' '#f4a251' '#e67577' '#8fc4c0' '#bcb4ca' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb' --conservation_ring_width 5 --conservation_ring_gap 2 --bitscore 100 --evalue 1e-30 --identity 90 --alignment_length 100 --gbk AP027280.gb -f interactive_svg"
+    "fileSizeLabel": "1.3 MB",
+    "command": "gbdraw circular -o WSSV_genome_comparison --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p royal_gala --qualifier_priority WSSV_qualifier_priority.tsv --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 12 --legend_font_size 12 --suppress_gc --suppress_skew --track_type spreadout -l left --feature_width 10 --outer_label_x_radius_offset 1 --outer_label_y_radius_offset 1 --conservation_blast CN01.circular_conservation.losatn.tsv WSSV-TW.circular_conservation.losatn.tsv WSSV-CN.circular_conservation.losatn.tsv WSSV-TH.circular_conservation.losatn.tsv JP01A.circular_conservation.losatn.tsv JP01B.circular_conservation.losatn.tsv Pc2020.circular_conservation.losatn.tsv E1.circular_conservation.losatn.tsv 0722-1.circular_conservation.losatn.tsv CN03.circular_conservation.losatn.tsv CN04.circular_conservation.losatn.tsv WSSV-AU.circular_conservation.losatn.tsv EU129.circular_conservation.losatn.tsv GCF7.circular_conservation.losatn.tsv MES-753.circular_conservation.losatn.tsv Shantou2019.circular_conservation.losatn.tsv POMZ1.circular_conservation.losatn.tsv POMZ4.circular_conservation.losatn.tsv MG18PR-0187-N40S.circular_conservation.losatn.tsv Angostura2013.circular_conservation.losatn.tsv --conservation_reference subject --conservation_labels CN01 WSSV-TW WSSV-CN WSSV-TH JP01A JP01B Pc2020 E1 0722-1 CN03 CN04 WSSV-AU EU129 GCF7 MES-753 Shantou2019 POMZ1 POMZ4 MG18PR-0187-N40S Angostura2013 --conservation_colors '#6e91b7' '#f4a251' '#77b26f' '#e67577' '#8fc4c0' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb' '#6e91b7' '#f4a251' '#e67577' '#8fc4c0' '#bcb4ca' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb' --conservation_ring_width 5 --conservation_ring_gap 2 --bitscore 100 --evalue 1e-30 --identity 90 --alignment_length 100 --gbk AP027280.gb -f interactive_svg",
+    "tutorial": "./tutorials/WSSV_genome_comparison.json",
+    "tutorialStatus": "ready"
+  },
+  {
+    "id": "BGC0000708-BGC0000713",
+    "title": "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
+    "tags": [
+      "Linear",
+      "LOSAT",
+      "Orthogroup"
+    ],
+    "svg": "./examples/BGC0000708-BGC0000713.svg",
+    "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+    "thumbnail": "./thumbnails/BGC0000708-BGC0000713.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/BGC0000708-BGC0000713.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/BGC0000708-BGC0000713.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "BGC0000708.gbk",
+      "BGC0000709.gbk",
+      "BGC0000711.gbk",
+      "BGC0000712.gbk",
+      "BGC0000713.gbk"
+    ],
+    "fileSizeLabel": "1.4 MB",
+    "command": "gbdraw linear --protein_blastp_mode orthogroup -f interactive_svg --gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange -d BGC0000708-BGC0000713_default_colors.tsv -t BGC0000708-BGC0000713_specific_colors.tsv --qualifier_priority BGC0000708-BGC0000713_qualifier_priority.tsv --show_labels first --label_placement above_feature --label_rotation 45 --pairwise_match_style curve --scale_style ruler --plot_title 'Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.' --keep_definition_left_aligned --identity 30 --block_stroke_width 2 --block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 --legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 --ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold --definition_line_style subtitle:size=20 --definition_line_style 'accession:size=20,color=#7b7c7d' --definition_line_style 'length:size=20,color=#7b7c7d' -l bottom -o BGC0000708-BGC0000713",
+    "tutorial": "./tutorials/BGC0000708-BGC0000713.json",
+    "tutorialStatus": "ready"
   },
   {
     "id": "majanivirus_orthogroup",
@@ -82,8 +82,6 @@
     "svg": "./examples/majanivirus_orthogroup.svg",
     "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
     "thumbnail": "./thumbnails/majanivirus_orthogroup.webp",
-    "tutorial": "./tutorials/majanivirus_orthogroup.json",
-    "tutorialStatus": "ready",
     "sourceSession": "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json",
     "sourceOutput": "gbdraw/web/gallery/examples/majanivirus_orthogroup.svg",
     "sourceFigure": "gbdraw/web/gallery/sources/majanivirus_orthogroup.svg",
@@ -99,57 +97,10 @@
       "MeenMJNV.gb",
       "MejoMJNV.gb"
     ],
-    "fileSizeLabel": "11.9 MB",
-    "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup"
-  },
-  {
-    "id": "hepatoplasmataceae_orthogroup",
-    "title": "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
-    "tags": [
-      "Linear",
-      "LOSAT",
-      "Orthogroup"
-    ],
-    "svg": "./examples/hepatoplasmataceae_orthogroup.svg",
-    "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
-    "thumbnail": "./thumbnails/hepatoplasmataceae_orthogroup.webp",
-    "tutorial": "./tutorials/hepatoplasmataceae_orthogroup.json",
-    "tutorialStatus": "ready",
-    "sourceSession": "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
-    "sourceOutput": "gbdraw/web/gallery/examples/hepatoplasmataceae_orthogroup.svg",
-    "sourceFigure": "gbdraw/web/gallery/sources/hepatoplasmataceae_orthogroup.svg",
-    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
-    "featureSources": [
-      "AP027078.gb",
-      "AP027131.gb",
-      "AP027133.gb",
-      "AP027132.gb",
-      "NZ_CP006932.gb"
-    ],
-    "fileSizeLabel": "26.6 MB",
-    "command": "gbdraw linear --protein_blastp_mode orthogroup --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai -o hepatoplasmataceae_orthogroup"
-  },
-  {
-    "id": "Vnig_TUMSAT-TG-2018",
-    "title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
-    "tags": [
-      "Circular",
-      "Multi-record"
-    ],
-    "svg": "./examples/Vnig_TUMSAT-TG-2018.svg",
-    "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
-    "thumbnail": "./thumbnails/Vnig_TUMSAT-TG-2018.webp",
-    "tutorial": "./tutorials/Vnig_TUMSAT-TG-2018.json",
-    "tutorialStatus": "ready",
-    "sourceSession": "gbdraw/web/gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
-    "sourceOutput": "gbdraw/web/gallery/examples/Vnig_TUMSAT-TG-2018.svg",
-    "sourceFigure": "gbdraw/web/gallery/sources/Vnig_TUMSAT-TG-2018.svg",
-    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
-    "featureSources": [
-      "GCF_015097735.1_ASM1509773v1_genomic.gbff"
-    ],
-    "fileSizeLabel": "30.6 MB",
-    "command": "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left --plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' --plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto --multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 --multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' --multi_record_position '#2@1' --multi_record_position '#3@2' --multi_record_position '#4@2' --multi_record_position '#5@2' --multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff -f interactive_svg"
+    "fileSizeLabel": "11.8 MB",
+    "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup",
+    "tutorial": "./tutorials/majanivirus_orthogroup.json",
+    "tutorialStatus": "ready"
   },
   {
     "id": "hepatoplasmataceae_collinear",
@@ -162,8 +113,6 @@
     "svg": "./examples/hepatoplasmataceae_collinear.svg",
     "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
     "thumbnail": "./thumbnails/hepatoplasmataceae_collinear.webp",
-    "tutorial": "./tutorials/hepatoplasmataceae_collinear.json",
-    "tutorialStatus": "ready",
     "sourceSession": "gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
     "sourceOutput": "gbdraw/web/gallery/examples/hepatoplasmataceae_collinear.svg",
     "sourceFigure": "gbdraw/web/gallery/sources/hepatoplasmataceae_collinear.svg",
@@ -175,7 +124,58 @@
       "AP027132.gb",
       "NZ_CP006932.gb"
     ],
-    "fileSizeLabel": "33.2 MB",
-    "command": "gbdraw linear --losatp_threads 32 --protein_blastp_mode collinear --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai --collinear_color_mode orientation_identity -o hepatoplasmataceae_collinear"
+    "fileSizeLabel": "25.7 MB",
+    "command": "gbdraw linear --losatp_threads 32 --protein_blastp_mode collinear --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai --collinear_color_mode orientation_identity -o hepatoplasmataceae_collinear",
+    "tutorial": "./tutorials/hepatoplasmataceae_collinear.json",
+    "tutorialStatus": "ready"
+  },
+  {
+    "id": "hepatoplasmataceae_orthogroup",
+    "title": "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
+    "tags": [
+      "Linear",
+      "LOSAT",
+      "Orthogroup"
+    ],
+    "svg": "./examples/hepatoplasmataceae_orthogroup.svg",
+    "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+    "thumbnail": "./thumbnails/hepatoplasmataceae_orthogroup.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/hepatoplasmataceae_orthogroup.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/hepatoplasmataceae_orthogroup.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "AP027078.gb",
+      "AP027131.gb",
+      "AP027133.gb",
+      "AP027132.gb",
+      "NZ_CP006932.gb"
+    ],
+    "fileSizeLabel": "26.5 MB",
+    "command": "gbdraw linear --protein_blastp_mode orthogroup --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai -o hepatoplasmataceae_orthogroup",
+    "tutorial": "./tutorials/hepatoplasmataceae_orthogroup.json",
+    "tutorialStatus": "ready"
+  },
+  {
+    "id": "Vnig_TUMSAT-TG-2018",
+    "title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
+    "tags": [
+      "Circular",
+      "Multi-record"
+    ],
+    "svg": "./examples/Vnig_TUMSAT-TG-2018.svg",
+    "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
+    "thumbnail": "./thumbnails/Vnig_TUMSAT-TG-2018.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/Vnig_TUMSAT-TG-2018.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/Vnig_TUMSAT-TG-2018.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "GCF_015097735.1_ASM1509773v1_genomic.gbff"
+    ],
+    "fileSizeLabel": "30.8 MB",
+    "command": "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left --plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' --plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto --multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 --multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' --multi_record_position '#2@1' --multi_record_position '#3@2' --multi_record_position '#4@2' --multi_record_position '#5@2' --multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff -f interactive_svg",
+    "tutorial": "./tutorials/Vnig_TUMSAT-TG-2018.json",
+    "tutorialStatus": "ready"
   }
 ]
