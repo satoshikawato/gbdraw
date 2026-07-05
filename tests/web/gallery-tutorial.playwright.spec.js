@@ -174,9 +174,11 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await expect(tutorialPanel.getByRole('heading', { name: 'Color rule basics' })).toBeVisible();
   await expect(tutorialPanel.getByText('CDS / gene / dnaA / #d95f02 / DnaA')).toBeVisible();
   await expect(page.getByText('antiSMASH gene-kind color rules')).toBeVisible();
+  await expect(tutorialPanel.getByRole('columnheader', { name: 'Feature' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('columnheader', { name: 'Qualifier' })).toBeVisible();
   await expect(
-    tutorialPanel.getByText('CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes', {
-      exact: true
+    tutorialPanel.getByRole('row', {
+      name: 'CDS gene_kind biosynthetic$ #d03535 Core biosynthetic genes'
     })
   ).toBeVisible();
   await expect(page.getByText('Reverse complement: BGC0000713 only')).toBeVisible();

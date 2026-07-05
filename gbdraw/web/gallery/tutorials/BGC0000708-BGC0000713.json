@@ -358,12 +358,15 @@
     {
       "title": "Add feature color rules",
       "body": "Create four CDS rules from the antiSMASH gene_kind qualifier before generating the final figure.",
-      "items": [
-        "CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes",
-        "CDS / gene_kind / biosynthetic-additional / #f787a9 / Additional biosynthetic genes",
-        "CDS / gene_kind / transport / #577edb / Transport-related genes",
-        "CDS / gene_kind / regulatory / #57b767 / Regulatory genes"
-      ],
+      "table": {
+        "columns": ["Feature", "Qualifier", "Value pattern", "Color", "Legend caption"],
+        "rows": [
+          ["CDS", "gene_kind", "biosynthetic$", "#d03535", "Core biosynthetic genes"],
+          ["CDS", "gene_kind", "biosynthetic-additional", "#f787a9", "Additional biosynthetic genes"],
+          ["CDS", "gene_kind", "transport", "#577edb", "Transport-related genes"],
+          ["CDS", "gene_kind", "regulatory", "#57b767", "Regulatory genes"]
+        ]
+      },
       "note": "Use biosynthetic$ for the core category so it does not also catch biosynthetic-additional.",
       "operations": [
         {

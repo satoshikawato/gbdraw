@@ -565,6 +565,47 @@ h1 {
     margin-top: 5px;
 }
 
+.tutorial-table-wrap {
+    max-width: 100%;
+    margin-top: 8px;
+    overflow-x: auto;
+}
+
+.tutorial-table {
+    width: 100%;
+    min-width: 620px;
+    border-collapse: collapse;
+    color: var(--text);
+    font-size: 0.86rem;
+}
+
+.tutorial-table caption {
+    margin-bottom: 5px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-align: left;
+}
+
+.tutorial-table th,
+.tutorial-table td {
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+.tutorial-table th {
+    background: #f6faf9;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 760;
+}
+
+.tutorial-table tbody tr:nth-child(even) {
+    background: #fafdfd;
+}
+
 .tutorial-step-list {
     display: grid;
     gap: 12px;

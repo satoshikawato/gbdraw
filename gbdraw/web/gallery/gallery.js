@@ -117,6 +117,45 @@ const appendList = (parent, items, className = 'tutorial-list') => {
   return list;
 };
 
+const appendTable = (parent, tableData) => {
+  if (!tableData || typeof tableData !== 'object' || Array.isArray(tableData)) return null;
+  const columns = asArray(tableData.columns).map(asText).filter(Boolean);
+  const rows = asArray(tableData.rows)
+    .map((row) => asArray(row).map(asText))
+    .filter((row) => row.some(Boolean));
+  if (!columns.length || !rows.length) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'tutorial-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'tutorial-table';
+
+  const caption = asText(tableData.caption);
+  if (caption) appendText(table, 'caption', '', caption);
+
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  columns.forEach((column) => {
+    const cell = appendText(headerRow, 'th', '', column);
+    cell.scope = 'col';
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  rows.forEach((row) => {
+    const tr = document.createElement('tr');
+    columns.forEach((_, columnIndex) => {
+      appendText(tr, 'td', '', row[columnIndex] || '');
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  parent.appendChild(wrap);
+  return table;
+};
+
 const appendSection = (parent, title) => {
   const section = document.createElement('section');
   section.className = 'tutorial-section';
@@ -243,6 +282,7 @@ const renderOperationList = (parent, operations) => {
     const body = asText(operationObject.body);
     if (body) appendText(item, 'p', 'tutorial-operation__body', body);
     appendList(item, operationObject.items, 'tutorial-operation__list');
+    appendTable(item, operationObject.table);
 
     const note = asText(operationObject.note);
     if (note) appendText(item, 'p', 'tutorial-operation__note', note);
@@ -280,6 +320,7 @@ const renderStepSection = (parent, title, steps, { numbered = false } = {}) => {
     const body = asText(stepObject.body);
     if (body) appendText(item, 'p', 'tutorial-step__body', body);
     appendList(item, stepObject.items);
+    appendTable(item, stepObject.table);
 
     const note = asText(stepObject.note);
     if (note) appendText(item, 'p', 'tutorial-step__note', note);

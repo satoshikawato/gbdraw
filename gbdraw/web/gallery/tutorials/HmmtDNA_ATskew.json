@@ -363,16 +363,16 @@
       ]
     },
     {
-      "title": "Edit the legend",
-      "body": "Use the legend editor to adjust captions or order after generation. Keep both AT skew entries visible because the two colors encode positive and negative skew.",
+      "title": "Review the generated legend",
+      "body": "Generate Diagram already adds AT skew (+) and AT skew (-) to the legend. Use the legend editor only for optional caption/order tweaks; the two entries represent positive and negative skew.",
       "operations": [
         {
-          "title": "Legend editor",
-          "body": "Open the Legend drawer and keep both AT skew entries visible.",
+          "title": "Generated legend entries",
+          "body": "Open the Legend drawer to review the generated AT skew entries.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-02-01-legend-editor.webp",
             "alt": "Legend editor drawer with AT skew legend entries visible.",
-            "caption": "Open the Legend drawer and review the AT skew legend entries."
+            "caption": "The Legend drawer shows the AT skew entries generated with the diagram."
           }
         }
       ]

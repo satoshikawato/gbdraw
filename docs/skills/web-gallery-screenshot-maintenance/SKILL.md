@@ -1,6 +1,6 @@
 ---
 name: web-gallery-screenshot-maintenance
-description: Maintain gbdraw Web Gallery tutorial screenshots and manual text. Use when auditing, planning, capturing, replacing, or reviewing screenshots, captions, alt text, tutorial JSON, operation registers, or documentation for `gbdraw/web/gallery`, especially operation crops for dropdowns, segmented controls, file uploads, text/number inputs, track slots, color rules, toolbars, popups, and generated previews.
+description: Maintain gbdraw Web Gallery tutorial screenshots, manual text, and structured tutorial content. Use when auditing, planning, capturing, replacing, or reviewing screenshots, captions, alt text, tutorial JSON, operation registers, or documentation for `gbdraw/web/gallery`, especially operation crops for dropdowns, segmented controls, file uploads, text/number inputs, track slots, color rules, tables, toolbars, popups, generated previews, and post-generation editor instructions.
 ---
 
 # Web Gallery Screenshot Maintenance
@@ -73,6 +73,12 @@ Capture standards:
 
 ## Writing Rules
 
+Keep tutorial text aligned with the actual workflow.
+
+- Do not describe automatically generated output as a manual editor task. If `Generate Diagram` creates legend entries, tracks, labels, or previews, say they are generated and reserve drawers/editors for review or optional tweaks.
+- Use action text for operations and state text for generated results. Avoid vague instructions such as `keep visible` when the UI already produced the state.
+- Keep pre-generation setup, generated-result inspection, and post-generation edits as separate concepts.
+
 Write captions and alt text as action/state descriptions:
 
 - Good: `Select Circular in the mode segmented control.`
@@ -83,6 +89,17 @@ Write captions and alt text as action/state descriptions:
 - Bad: `Web app session view.`
 
 When replacing a screenshot, update the caption and alt text in the same change unless they are already concrete and accurate.
+
+## Structured Content Rules
+
+Use structured display when tutorial content has repeated fields.
+
+- Prefer a table over slash-delimited bullets for color rules, track-slot recipes, file mappings, record metadata, or any list where each row shares the same fields.
+- Use clear column headers that match the UI or data model, such as `Feature`, `Qualifier`, `Value pattern`, `Color`, and `Legend caption`.
+- Keep caveats such as regex specificity in a separate `note`; do not hide them inside a dense row.
+- If the Gallery renderer only supports bullet lists, add a small reusable renderer field such as `table: { columns, rows }` rather than encoding table markup in JSON strings.
+- Add compact CSS with horizontal overflow for narrow viewports and update focused browser tests to assert table headers and representative rows.
+- Keep existing `items` bullets for simple one-column checklists where a table would add noise.
 
 ## Verification
 
