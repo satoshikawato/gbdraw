@@ -7,11 +7,6 @@
   "difficulty": "Intermediate",
   "appMode": "Circular",
   "primaryWorkflow": "Circular multi-record canvas",
-  "requirements": [
-    "A browser with WebAssembly support.",
-    "The multi-record Vibrio nigripulchritudo GBFF file listed below.",
-    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
-  ],
   "downloads": [
     {
       "label": "GCF_015097735.1",
@@ -19,71 +14,41 @@
       "accession": "GCF_015097735.1",
       "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_015097735.1",
       "targetName": "GCF_015097735.1_ASM1509773v1_genomic.gbff",
-      "note": "Download the RefSeq genomic GBFF. The Gallery session uses six records from this file: NZ_AP024087.1 through NZ_AP024092.1."
+      "note": "Download the RefSeq genomic GBFF and use it as the GenBank input."
     }
   ],
   "manualSteps": [
     {
       "title": "Switch to Circular mode",
-      "body": "Open gbdraw.app and select Circular mode before adding the RefSeq GBFF input.",
+      "body": "Open gbdraw.app and choose Circular before adding the GenBank file.",
       "operations": [
         {
-          "title": "Mode segmented control",
-          "body": "Select Circular in the mode segmented control.",
+          "title": "Select Circular",
+          "body": "Select the Circular mode.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-01-01-circular-mode.webp",
-            "alt": "Mode segmented control with Circular selected.",
-            "caption": "Select Circular in the mode segmented control."
+            "alt": "Circular mode selected in the web app header.",
+            "caption": "Select Circular."
           }
         }
       ]
     },
     {
-      "title": "Upload the multi-record GBFF",
-      "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The file contains two chromosomes and four plasmids.",
-      "table": {
-        "columns": ["Record accession", "Replicon"],
-        "rows": [
-          ["NZ_AP024087.1", "chromosome 1"],
-          ["NZ_AP024088.1", "chromosome 2"],
-          ["NZ_AP024089.1", "plasmid pVNTG1"],
-          ["NZ_AP024090.1", "plasmid pVNTG2"],
-          ["NZ_AP024091.1", "plasmid pVNTG3"],
-          ["NZ_AP024092.1", "plasmid pVNTG4"]
-        ]
-      },
+      "title": "Upload the GenBank file",
+      "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The app will detect the two chromosomes and four plasmids in the file.",
       "operations": [
         {
-          "title": "Multi-record GBFF uploader",
-          "body": "Upload the multi-record GBFF so the file chip is visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-01-gbff-upload.webp",
-            "alt": "Circular GenBank uploader with the multi-record GBFF file chip.",
-            "caption": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff in the Circular GenBank uploader."
-          }
-        },
-        {
-          "title": "Detected record list",
-          "body": "Review the detected Record Order list for the two chromosomes and four plasmids.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-02-record-list.webp",
-            "alt": "Record Order list showing the six detected Vibrio records.",
-            "caption": "Review the detected Record Order list for chromosomes and plasmids."
+            "alt": "Circular input panel with the Vibrio GBFF file selected.",
+            "caption": "GCF_015097735.1_ASM1509773v1_genomic.gbff is selected as the GenBank file."
           }
         }
       ]
     },
     {
-      "title": "Set the basic circular layout",
-      "body": "Use the compact circular settings from the Gallery session.",
-      "items": [
-        "Output prefix: Vnig_TUMSAT-TG-2018",
-        "Track type: tuckin",
-        "Palette: orchid",
-        "Separate strands: on",
-        "Legend: left",
-        "Features: CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"
-      ],
+      "title": "Set the circular layout",
+      "body": "Set Output Prefix to Vnig_TUMSAT-TG-2018, Track type to tuckin, Palette to orchid, Separate strands to on, Legend to left, and keep CDS, rRNA, tRNA, tmRNA, ncRNA, and repeat_region selected.",
       "operations": [
         {
           "title": "Palette selector",
@@ -170,24 +135,16 @@
     },
     {
       "title": "Enable Multi-record canvas",
-      "body": "Turn on Multi-record canvas so all six records are drawn into one figure instead of separate output files.",
-      "items": [
-        "Multi-record canvas: on",
-        "Multi-record size mode: auto",
-        "Minimum radius ratio: 0.55",
-        "Column gap ratio: 0.1",
-        "Row gap ratio: 0.05",
-        "Record positions: #1@1, #2@1, #3@2, #4@2, #5@2, #6@2"
-      ],
+      "body": "Turn on Multi-record canvas. Use auto size mode, minimum radius ratio 0.55, column gap 0.1, row gap 0.05, and place records #1 and #2 in row 1 and #3 through #6 in row 2.",
       "note": "The two large chromosomes sit in the top row. The four smaller plasmids share the second row.",
       "operations": [
         {
           "title": "Multi-record canvas controls",
-          "body": "Turn on the multi-record canvas and keep auto sizing, radius, and gap controls visible.",
+          "body": "Set the multi-record canvas controls shown in the screenshot.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-01-multirecord-canvas.webp",
             "alt": "Multi-record canvas controls with auto sizing, minimum radius ratio, gaps, and record order rows.",
-            "caption": "Turn on the multi-record canvas and keep automatic sizing controls visible."
+            "caption": "Set Multi-record canvas, automatic sizing, gaps, and record rows."
           },
           "capture": {
             "source": "webapp",
@@ -207,11 +164,11 @@
       ]
     },
     {
-      "title": "Add the bottom title",
-      "body": "Set the plot title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome and place it at the bottom.",
+      "title": "Add Title",
+      "body": "Set Plot Title to Vibrio nigripulchritudo TUMSAT-TG-2018, complete genome. For this figure, choose Bottom in Plot Title Position.",
       "operations": [
         {
-          "title": "Bottom title position selector",
+          "title": "Plot Title Position",
           "body": "Open Plot Title Position and choose Bottom.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
@@ -259,21 +216,6 @@
       ]
     },
     {
-      "title": "Check the Files tab",
-      "body": "Use the Gallery Files tab to review the required GBFF input, assembly source, session JSON, interactive SVG, and thumbnail.",
-      "operations": [
-        {
-          "title": "Files tab inputs",
-          "body": "Open the Gallery Files tab; the selected tab remains visible above the file list.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/manual-07-01-files-tab.webp",
-            "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
-            "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
-          }
-        }
-      ]
-    },
-    {
       "title": "Inspect a CDS feature",
       "body": "Click a CDS feature in the interactive SVG to inspect its label, record ID, location, protein_id, qualifiers, and sequence.",
       "operations": [
@@ -284,86 +226,6 @@
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
             "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",
             "caption": "The zoomed crop keeps the clicked chromosome CDS and popup metadata readable."
-          }
-        }
-      ]
-    }
-  ],
-  "colorRules": [
-    {
-      "title": "This example uses palette defaults",
-      "body": "The main tutorial point is the multi-record layout. Feature colors use the orchid palette defaults."
-    },
-    {
-      "title": "Use record layout before adding color complexity",
-      "body": "Set up the six-record canvas, automatic sizing, and row placement before adding feature-specific colors or label changes."
-    },
-    {
-      "title": "Choose qualifiers from feature clicks",
-      "body": "If you add feature color rules, click representative CDS features first and inspect gene, locus_tag, product, protein_id, and note values."
-    },
-    {
-      "title": "Keep plasmid categories specific",
-      "body": "Use narrow product or locus_tag patterns when highlighting plasmid genes so chromosome annotations are not colored unintentionally."
-    }
-  ],
-  "postGenerationEdits": [
-    {
-      "title": "Click features to verify record ownership",
-      "body": "Feature popups show record ID and location, which is important when the same canvas contains chromosomes and plasmids.",
-      "operations": [
-        {
-          "title": "Feature popup with record ownership",
-          "body": "Click a chromosome CDS feature so the Feature popup with record ownership is visible.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/post-01-01-record-feature-popup.webp",
-            "alt": "Zoomed Vibrio multi-record crop with the clicked chromosome CDS and record ID visible in the feature popup.",
-            "caption": "The zoomed crop keeps the clicked chromosome CDS and record ownership metadata readable."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Keep the left legend compact",
-      "body": "The multi-record canvas already uses most of the width. If you edit the legend, keep it narrow enough that it does not cover chromosome 1.",
-      "operations": [
-        {
-          "title": "Compact left legend",
-          "body": "Inspect the generated preview with legend + chromosome 1 edge.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/post-02-01-left-legend-compactness.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Compact left legend with legend + chromosome 1 edge.",
-            "caption": "The preview keeps the compact left legend and chromosome 1 edge visible."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Export SVG first",
-      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures.",
-      "operations": [
-        {
-          "title": "Export controls",
-          "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/post-03-01-export-controls.webp",
-            "alt": "Actual Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Save a session",
-      "body": "Save a .gbdraw-session.json after edits so the web app can restore the GBFF input, multi-record placement, generated output, and SVG adjustments.",
-      "operations": [
-        {
-          "title": "Session save controls",
-          "body": "Click Save Session in the web app header toolbar.",
-          "media": {
-            "src": "./media/Vnig_TUMSAT-TG-2018/post-04-01-save-session.webp",
-            "alt": "Actual Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }
       ]

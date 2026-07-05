@@ -259,6 +259,7 @@ const renderMedia = (parent, media) => {
 const renderOperationList = (parent, operations) => {
   const entries = asArray(operations);
   if (!entries.length) return;
+  const numbered = entries.length > 1;
 
   const list = document.createElement('div');
   list.className = 'tutorial-operation-list';
@@ -274,7 +275,7 @@ const renderOperationList = (parent, operations) => {
     if (title) {
       const titleRow = document.createElement('div');
       titleRow.className = 'tutorial-operation__title';
-      appendText(titleRow, 'span', 'tutorial-operation__number', `${index + 1}.`);
+      if (numbered) appendText(titleRow, 'span', 'tutorial-operation__number', `${index + 1}.`);
       appendText(titleRow, 'span', '', title);
       item.appendChild(titleRow);
     }
@@ -513,7 +514,7 @@ const renderTutorial = (tutorial, sample) => {
     const downloads = appendSection(tutorialContent, 'Input downloads');
     renderDownloads(downloads, tutorial.downloads);
   }
-  renderStepSection(tutorialContent, 'Manual rebuild', tutorial.manualSteps, { numbered: true });
+  renderStepSection(tutorialContent, 'Web app steps', tutorial.manualSteps, { numbered: true });
   renderStepSection(
     tutorialContent,
     asText(tutorial.commonColorRuleGuide?.title) || 'Color rule basics',

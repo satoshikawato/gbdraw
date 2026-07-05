@@ -44,7 +44,7 @@ Then inspect the target tutorial JSON and media directory:
 
 Use the real UI the user operates.
 
-- Mode segmented controls must show the real Circular/Linear control with the active segment readable.
+- Mode selector screenshots must show the real Circular/Linear control with the active choice readable.
 - File uploads must show the uploader and uploaded file rows/chips in the correct order.
 - Dropdown/select operations must show the select in context plus a capture-only opened-option overlay with the chosen option highlighted.
 - Text and number inputs must show labels, values, units, and nearby related controls. Highlight changed fields when multiple inputs are visible.
@@ -93,6 +93,11 @@ Capture standards:
 
 Keep tutorial text aligned with the actual workflow.
 
+- Use user-facing labels in tutorial text. Avoid implementation/UI-pattern jargon such as `segmented control`; write the action the reader should take, such as `Select Circular`.
+- Omit generic Requirements sections when they only restate that the reader needs a browser or the listed input file.
+- Do not add a Files tab step unless checking Gallery artifacts is part of the workflow. Input filenames can usually live in `downloads` or the upload step.
+- Do not add Color rules or Post-generation edits sections when the example does not require color-rule setup or real post-generation editing.
+- Prefer screenshots over dense setup lists when the UI can show the values clearly. Keep any remaining text to the values the reader must type or choose.
 - Do not describe automatically generated output as a manual editor task. If `Generate Diagram` creates legend entries, tracks, labels, or previews, say they are generated and reserve drawers/editors for review or optional tweaks.
 - Use action text for operations and state text for generated results. Avoid vague instructions such as `keep visible` when the UI already produced the state.
 - Keep pre-generation setup, generated-result inspection, and post-generation edits as separate concepts.
@@ -100,7 +105,7 @@ Keep tutorial text aligned with the actual workflow.
 
 Write captions and alt text as action/state descriptions:
 
-- Good: `Select Circular in the mode segmented control.`
+- Good: `Select Circular.`
 - Good: `Set Dinucleotide to GC, Window to 500, and Step to 50.`
 - Good: `Enter CDS / product / tyrosine recombinase in the SPECIFIC RULES (-t) row.`
 - Bad: `The rendered web app crop shows ...`

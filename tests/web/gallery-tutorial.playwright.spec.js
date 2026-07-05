@@ -103,7 +103,7 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   await expect(
     page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app' })
   ).toBeVisible();
-  await expect(page.getByText('Manual rebuild')).toBeVisible();
+  await expect(page.getByText('Web app steps')).toBeVisible();
   await expect(page.getByText('Use browser LOSAT')).toBeVisible();
   await expect(page.getByText('Use Orientation + identity for Color mode.')).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
@@ -349,20 +349,23 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
     })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(tutorialPanel.getByRole('heading', { name: 'Requirements' })).toHaveCount(0);
+  await expect(tutorialPanel.getByRole('heading', { name: 'Color rule basics' })).toHaveCount(0);
+  await expect(tutorialPanel.getByRole('heading', { name: 'Color rules' })).toHaveCount(0);
+  await expect(tutorialPanel.getByRole('heading', { name: 'Post-generation edits' })).toHaveCount(0);
   await expect(tutorialPanel.getByText('Enable Multi-record canvas')).toBeVisible();
-  await expect(
-    tutorialPanel.getByRole('row', {
-      name: 'NZ_AP024087.1 chromosome 1'
-    })
-  ).toBeVisible();
-  await expect(tutorialPanel.getByText('Record positions: #1@1, #2@1, #3@2, #4@2, #5@2, #6@2')).toBeVisible();
+  await expect(tutorialPanel.getByText('Upload the GenBank file')).toBeVisible();
+  await expect(tutorialPanel.getByText('Set the circular layout')).toBeVisible();
+  await expect(tutorialPanel.getByText('Track type to tuckin')).toBeVisible();
+  await expect(tutorialPanel.getByText('records #1 and #2 in row 1 and #3 through #6 in row 2')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(14);
+  await expect(mediaImages).toHaveCount(8);
   const multiRecordControlsImage = tutorialPanel.locator('img[src$="manual-04-01-multirecord-canvas.webp"]');
   await expect(tutorialPanel.locator('img[src$="manual-06-01-multirecord-preview.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-07-01-files-tab.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-07-01-files-tab.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(multiRecordControlsImage).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src*="/post-"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-record-positions.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
@@ -415,7 +418,7 @@ test('Gallery shows an inline fallback when tutorial media fails to load', async
   await expect(
     page.getByText('Media unavailable: ./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp')
   ).toBeVisible();
-  await expect(page.getByText('Manual rebuild')).toBeVisible();
+  await expect(page.getByText('Web app steps')).toBeVisible();
 });
 
 test('Gallery renders operation media and keeps it inside a mobile viewport', async ({ page }) => {
