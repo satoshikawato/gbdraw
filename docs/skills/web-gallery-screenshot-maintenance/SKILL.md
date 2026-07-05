@@ -56,6 +56,7 @@ Use the real UI the user operates.
 - Track slots, conservation rings, record labels, record positions, and color rules must show the actual row/panel where values are typed or edited.
 - Feature-specific color rule operations must show the real `SPECIFIC RULES (-t)` controls, not a generated plot preview.
 - When several color rules are entered before one final generation, use one focused crop showing all entered rule rows if it is readable; otherwise use focused per-row input crops. Do not place a full-plot screenshot after each rule.
+- If a control screenshot looks too wide because rows have large unused horizontal gaps, treat the capture source as wrong. Compare sibling operation images in the same example, then recapture the real UI with a compact sidebar/panel width that matches their density. Do not fix this by changing Gallery display CSS or by cropping only the already-wide bitmap.
 - Show the generated plot only once after all required pre-generation inputs and rules have been entered, unless a later step is explicitly about inspecting a popup or visual result.
 - Toolbar actions must show the actual toolbar, not an isolated or reconstructed button.
 - Crops with highlighted toolbar buttons, track slots, drawer rows, or other position-sensitive controls must include enough surrounding controls above, below, left, or right for the highlight to convey where the target sits. Do not crop exactly to only the highlighted box when neighboring items define the action context.
@@ -88,6 +89,8 @@ Capture standards:
 - Use WebP quality 92-95 for UI controls and dense forms.
 - Do not upscale a crop. Recapture at higher scale instead.
 - Keep labels and selected values readable at the rendered Gallery size.
+- For multi-row form captures such as `SPECIFIC RULES (-t)`, preserve the intended vertical scope when recapturing. If the previous screenshot included the surrounding uploader rows and whitespace, keep that top/bottom extent, but reduce excess horizontal whitespace by changing the source panel width before capture.
+- Use temporary capture-only CSS or DOM changes to hide unrelated fixed bars, footers, or following cards only when they intrude into the preserved crop area. Do not commit those UI changes unless the app itself is wrong.
 - For highlighted track-slot rows or toolbar buttons, prefer a selector crop with asymmetric padding or a broader panel crop so adjacent relevant items stay readable.
 - When a replacement screenshot must be reviewed immediately in a running Gallery tab or hosted static cache, change the media filename or add a deliberate cache-bust path change; do not rely on same-URL image replacement being visible after a normal refresh.
 - Prefer multiple focused crops over one tall unreadable crop.
