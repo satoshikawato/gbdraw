@@ -689,7 +689,7 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
     assert "style-src 'self';" in gallery_html
     assert "frame-src 'self';" in gallery_html
     assert '<script type="module" src="./gallery.js"></script>' in gallery_html
-    assert 'sandbox="allow-scripts"' in gallery_html
+    assert 'sandbox="allow-scripts allow-downloads"' in gallery_html
     assert "allow-same-origin" not in gallery_html
     assert 'id="demo-frame"' in gallery_html
     assert 'id="session-link"' in gallery_html
@@ -720,12 +720,12 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
 def test_interactive_gallery_examples_are_wired() -> None:
     expected_ids = [
         "HmmtDNA_ATskew",
-        "BGC0000708-BGC0000713",
         "WSSV_genome_comparison",
+        "BGC0000708-BGC0000713",
         "majanivirus_orthogroup",
+        "hepatoplasmataceae_collinear",
         "hepatoplasmataceae_orthogroup",
         "Vnig_TUMSAT-TG-2018",
-        "hepatoplasmataceae_collinear",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
 
@@ -737,12 +737,12 @@ def test_interactive_gallery_examples_are_wired() -> None:
     assert gallery_svg_sizes == sorted(gallery_svg_sizes)
     assert [entry["title"] for entry in examples] == [
         "<i>Homo sapiens</i> mitochondrion (AT skew)",
-        "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "White spot syndrome virus genome comparison",
+        "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "Large dsDNA viruses (<i>Nimaviridae</i>)",
+        "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
         "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
-        "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
     ]
     for entry in examples:
         assert entry["title"]
@@ -756,6 +756,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert entry["svg"].startswith("./examples/")
         assert entry["session"].startswith("./sessions/")
         assert entry["thumbnail"].startswith("./thumbnails/")
+        assert entry["tutorial"].startswith("./tutorials/")
+        assert entry["tutorialStatus"] == "ready"
         assert entry["sourceSession"].startswith("gbdraw/web/gallery/sessions/")
         assert entry["sourceOutput"].startswith("gbdraw/web/gallery/examples/")
         assert entry["sourceFigure"].startswith("gbdraw/web/gallery/sources/")

@@ -2989,7 +2989,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     link.href = url;
     link.download = safeFilename;
     link.style.display = 'none';
-    var parent = document.body || document.documentElement;
+    var parent = popup && popup.querySelector ? popup.querySelector('div') : null;
+    if (!parent) parent = document.body || document.documentElement;
     parent.appendChild(link);
     link.addEventListener('click', function (event) {
       event.stopPropagation();

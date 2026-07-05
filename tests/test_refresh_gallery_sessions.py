@@ -120,3 +120,5 @@ def test_prepare_gallery_assets_rewrites_existing_example_svgs() -> None:
     assert "def _write_gallery_svg(" in source
     assert "_write_gallery_svg(example, session)" in source
     assert "if example.gallery_svg_path.exists()" not in source
+    assert 'entry["tutorial"] = f"./tutorials/{example.id}.json"' in source
+    assert 'entry["tutorialStatus"] = "ready"' in source
