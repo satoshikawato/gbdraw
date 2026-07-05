@@ -31,14 +31,16 @@ Then inspect the target tutorial JSON and media directory:
 1. Enumerate only media referenced by tutorial JSON first. Treat unreferenced media as cleanup candidates after visible screenshots are fixed.
 2. Compare each referenced screenshot with its operation text and caption.
 3. Check adjacent operation screenshots for parent/child duplication. If a broader crop already shows the child controls clearly and the child crop adds no new action context, remove the child operation/media instead of recropping the broader image.
-4. Classify each screenshot as:
+4. Hash or otherwise compare referenced screenshots after the visual pass. Pixel-identical screenshots inside the same tutorial are acceptable only when they are intentionally reused across non-adjacent, clearly different contexts; otherwise consolidate the operation, recrop one image, or delete the duplicate media.
+5. Classify each screenshot as:
    - `keep`: real UI/result crop, readable, caption matches.
    - `recrop`: correct state but poor extent, blurry text, missing context, or too much page.
    - `replace`: final preview or stale/empty crop used for an input/edit/upload/setting operation.
    - `add`: operation needs an extra crop to avoid one overloaded screenshot.
-5. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
-6. Record the result in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
-7. Keep batches small. Do not migrate every tutorial in one risky change.
+6. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
+7. Record the result in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
+8. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
+9. Keep batches small. Do not migrate every tutorial in one risky change.
 
 ## Screenshot Rules
 

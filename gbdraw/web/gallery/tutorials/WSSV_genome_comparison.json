@@ -8,10 +8,7 @@
   "appMode": "Circular",
   "primaryWorkflow": "Circular conservation rings with browser LOSAT blastn",
   "requirements": [
-    "A browser with WebAssembly support.",
-    "Enough available memory for one WSSV GenBank record, 20 comparison FASTA files, and LOSAT blastn output.",
-    "The reference GenBank file and comparison FASTA files listed below.",
-    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+    "Enough available memory for one WSSV GenBank record, 20 comparison FASTA files, and LOSAT blastn output."
   ],
   "downloads": [
     {
@@ -148,12 +145,12 @@
       "body": "Open gbdraw.app and select Circular mode before adding the WSSV reference record.",
       "operations": [
         {
-          "title": "Mode segmented control",
-          "body": "Select Circular in the mode segmented control.",
+          "title": "Mode selector",
+          "body": "Select Circular.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-01-01-circular-mode.webp",
-            "alt": "Mode segmented control with Circular selected.",
-            "caption": "Select Circular in the mode segmented control."
+            "alt": "Mode selector with Circular selected.",
+            "caption": "Select Circular."
           }
         }
       ]
@@ -327,8 +324,8 @@
           "body": "Enter the short ring labels for the comparison FASTA rows.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-05-01-ring-labels.webp",
-            "alt": "Comparison FASTA rows with short ring labels such as CN01, WSSV-TW, and WSSV-CN.",
-            "caption": "Enter short ring labels for the comparison FASTA rows."
+            "alt": "Comparison FASTA label rows with short labels such as CN01, WSSV-TW, and WSSV-CN.",
+            "caption": "Enter the short ring labels listed in the table."
           }
         }
       ]
@@ -367,8 +364,8 @@
           "body": "Set the per-ring color swatches for the conservation rows.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-06-01-ring-colors.webp",
-            "alt": "Comparison FASTA rows with per-ring color swatches.",
-            "caption": "Set distinct colors for the conservation ring rows."
+            "alt": "Comparison FASTA color swatches for the conservation ring rows.",
+            "caption": "Set the conservation ring colors listed in the table."
           }
         }
       ]
@@ -424,23 +421,8 @@
           "body": "Inspect the generated preview with 20 conservation rings and the left identity legend.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-09-01-conservation-rings.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing the generated diagram with 20 conservation rings and the left identity legend.",
+            "alt": "Generated WSSV conservation diagram with 20 conservation rings and the left identity legend.",
             "caption": "The generated preview stacks 20 conservation rings inside the reference CDS feature ring."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Check the Files tab",
-      "body": "Use the Gallery Files tab to review the required input names, session JSON, interactive SVG, and thumbnail for this example.",
-      "operations": [
-        {
-          "title": "Files tab inputs",
-          "body": "Open the Gallery Files tab; the selected tab remains visible above the file list.",
-          "media": {
-            "src": "./media/WSSV_genome_comparison/manual-10-01-files-tab.webp",
-            "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
-            "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
           }
         }
       ]
@@ -461,24 +443,6 @@
       ]
     }
   ],
-  "colorRules": [
-    {
-      "title": "Feature colors and ring colors are separate",
-      "body": "The CDS ring uses the royal_gala feature palette. Conservation ring colors are configured per comparison FASTA and are not feature color rules."
-    },
-    {
-      "title": "Use the identity gradient legend",
-      "body": "Each conservation ring uses a light-to-strong gradient for nucleotide identity. In this Gallery figure the useful displayed range is 90% to 100%."
-    },
-    {
-      "title": "Keep ring labels short",
-      "body": "Short labels such as CN01 or WSSV-TW keep the 20-row legend readable. Put longer isolate details in your notes or figure caption."
-    },
-    {
-      "title": "Use feature rules only for reference annotations",
-      "body": "If you add feature-specific colors, make them from AP027280 qualifiers such as note, product, locus_tag, or protein_id. They will not recolor the conservation rings."
-    }
-  ],
   "postGenerationEdits": [
     {
       "title": "Use zoom before editing",
@@ -489,38 +453,8 @@
           "body": "Use the floating preview toolbar for zoom, reset, layout editing, or canvas padding.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-01-01-zoom-controls.webp",
-            "alt": "Actual WSSV web app floating preview controls with Reset Layout, Layout edit, Canvas padding, and zoom buttons visible.",
+            "alt": "WSSV web app floating preview controls with Reset Layout, Layout edit, Canvas padding, and zoom buttons visible.",
             "caption": "The floating preview toolbar shows zoom together with reset, layout edit, and canvas padding controls."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Click features to verify annotations",
-      "body": "Use the feature popup to inspect note, product, protein_id, location, and sequence metadata before changing feature color or label settings.",
-      "operations": [
-        {
-          "title": "CDS feature popup",
-          "body": "Click an outer CDS feature so the CDS feature popup metadata is visible.",
-          "media": {
-            "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
-            "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and feature popup metadata.",
-            "caption": "The clicked CDS, ring context, and popup metadata identify the annotation fields behind labels and colors."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Keep the conservation legend visible",
-      "body": "The left legend explains ring order and the identity gradient. If you move or edit the legend, keep the 90% and 100% endpoints visible.",
-      "operations": [
-        {
-          "title": "Conservation legend",
-          "body": "Inspect the generated preview with identity endpoints visible.",
-          "media": {
-            "src": "./media/WSSV_genome_comparison/post-03-01-conservation-legend.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Conservation legend with identity endpoints visible.",
-            "caption": "The preview keeps the conservation identity endpoints visible."
           }
         }
       ]
@@ -534,7 +468,7 @@
           "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-04-01-export-controls.webp",
-            "alt": "Actual Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
+            "alt": "Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
             "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
           }
         }
@@ -549,7 +483,7 @@
           "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/WSSV_genome_comparison/post-05-01-save-session.webp",
-            "alt": "Actual Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "alt": "Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
             "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }

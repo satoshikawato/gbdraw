@@ -246,7 +246,7 @@
           "body": "Inspect the generated preview with two chromosomes and four plasmids.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing the generated multi-record preview with two chromosomes and four plasmids.",
+            "alt": "Generated Vibrio multi-record preview with two chromosomes and four plasmids.",
             "caption": "The generated preview uses automatic radius scaling for two chromosomes and four plasmids."
           }
         }

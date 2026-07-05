@@ -8,10 +8,7 @@
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP orthogroups with feature color rules",
   "requirements": [
-    "A browser with WebAssembly support.",
-    "The five MIBiG GenBank flat files listed below.",
-    "GenBank features that retain antiSMASH qualifiers such as gene_kind.",
-    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+    "GenBank features that retain antiSMASH qualifiers such as gene_kind."
   ],
   "downloads": [
     {
@@ -51,12 +48,12 @@
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
       "operations": [
         {
-          "title": "Mode segmented control",
-          "body": "Select Linear in the mode segmented control.",
+          "title": "Mode selector",
+          "body": "Select Linear.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
-            "alt": "Web app header mode segmented control with Linear selected.",
-            "caption": "Select Linear in the mode segmented control before adding inputs."
+            "alt": "Mode selector with Linear selected.",
+            "caption": "Select Linear before adding inputs."
           }
         }
       ]
@@ -77,7 +74,7 @@
           "body": "Use the Linear upload rows to verify the file chips are in order.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-02-01-five-file-upload-order.webp",
-            "alt": "Actual Linear Input Genomes uploader rows showing BGC0000708.gbk, BGC0000709.gbk, BGC0000711.gbk, BGC0000712.gbk, and BGC0000713.gbk in order.",
+            "alt": "Linear Input Genomes uploader rows showing BGC0000708.gbk, BGC0000709.gbk, BGC0000711.gbk, BGC0000712.gbk, and BGC0000713.gbk in order.",
             "caption": "The Linear GenBank upload rows show the five BGC files in the same order as the Gallery command."
           }
         }
@@ -102,7 +99,7 @@
           "body": "Open the Pairwise Comparisons panel before changing LOSAT settings.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
-            "alt": "Actual Linear Run LOSAT settings panel with Run LOSAT selected, LOSATP selected, and execution and thread controls visible.",
+            "alt": "Linear Run LOSAT settings panel with Run LOSAT selected, LOSATP selected, and execution and thread controls visible.",
             "caption": "The LOSAT settings panel shows the Run LOSAT source, LOSATP mode, and browser execution controls."
           }
         },
@@ -160,7 +157,7 @@
           "body": "Click an og_1 CDS feature in the preview, then use Align in the feature popup.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-01-align-og1.webp",
-            "alt": "Actual feature popup for an og_1 CDS feature with the Align button highlighted.",
+            "alt": "Feature popup for an og_1 CDS feature with the Align button highlighted.",
             "caption": "The feature popup exposes the orthogroup action buttons; click Align for the selected og_1 feature."
           }
         },
@@ -169,7 +166,7 @@
           "body": "In the BGC0000713 input row, check Reverse complement.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-02-reverse-bgc0000713.webp",
-            "alt": "Actual fifth Linear input row for BGC0000713.gbk with the Region reverse complement checkbox checked.",
+            "alt": "Fifth Linear input row for BGC0000713.gbk with the Region reverse complement checkbox checked.",
             "caption": "Use the BGC0000713 row's Region controls and check Reverse complement for that record only."
           }
         },
@@ -395,7 +392,7 @@
           "body": "Inspect the generated preview with five rows and the bottom legend.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
-            "alt": "Actual aminoglycoside BGC tutorial UI showing Generated BGC comparison preview with five rows + bottom legend.",
+            "alt": "Generated aminoglycoside BGC comparison preview with five rows and the bottom legend.",
             "caption": "After all four gene_kind rules are entered, generate the final BGC comparison once and check the five rows plus bottom legend."
           }
         }
@@ -456,30 +453,15 @@
   ],
   "postGenerationEdits": [
     {
-      "title": "Click features before changing colors",
-      "body": "Use the feature popup to inspect gene, product, note, gene_kind, and orthogroup metadata. Then add or edit a rule only when the qualifier and value are specific enough.",
-      "operations": [
-        {
-          "title": "Colored feature popup",
-          "body": "Click a colored CDS feature so the Colored feature popup metadata is visible.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-10-01-feature-popup.webp",
-            "alt": "Zoomed aminoglycoside BGC crop with the clicked CDS, its orthogroup ribbon context, and feature popup metadata.",
-            "caption": "The clicked CDS, orthogroup context, and popup metadata explain which qualifier values should drive color rules."
-          }
-        }
-      ]
-    },
-    {
       "title": "Edit the legend",
-      "body": "Use the legend editor to adjust captions or ordering after generation. Keep the pairwise match identity legend visible because ribbon color encodes identity.",
+      "body": "Use the legend editor to adjust captions or ordering after generation. The pairwise match identity legend explains ribbon color.",
       "operations": [
         {
           "title": "Legend editor",
           "body": "Open the Legend drawer to adjust captions or ordering after generation.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/post-02-01-legend-editor.webp",
-            "alt": "Actual BGC session Legend drawer with Core biosynthetic genes, Additional biosynthetic genes, Transport-related genes, Regulatory genes, and other proteins entries.",
+            "alt": "BGC session Legend drawer with Core biosynthetic genes, Additional biosynthetic genes, Transport-related genes, Regulatory genes, and other proteins entries.",
             "caption": "Open the Legend drawer after restoring the BGC session; the generated BGC color-rule entries are available for caption and order edits."
           },
           "capture": {
@@ -526,7 +508,7 @@
           "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/post-03-01-export-controls.webp",
-            "alt": "Actual Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
+            "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
             "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
           }
         }
@@ -541,7 +523,7 @@
           "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/post-04-01-save-session.webp",
-            "alt": "Actual Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
             "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }

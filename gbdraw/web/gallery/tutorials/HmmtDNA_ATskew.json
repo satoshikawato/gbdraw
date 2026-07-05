@@ -7,11 +7,6 @@
   "difficulty": "Intermediate",
   "appMode": "Circular",
   "primaryWorkflow": "Circular custom track slots with AT skew",
-  "requirements": [
-    "A browser with WebAssembly support.",
-    "The human mitochondrial GenBank flat file listed below.",
-    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
-  ],
   "downloads": [
     {
       "label": "NC_012920",
@@ -27,12 +22,12 @@
       "body": "Open gbdraw.app and select Circular mode before adding the mitochondrial GenBank input.",
       "operations": [
         {
-          "title": "Mode segmented control",
-          "body": "Select Circular in the mode segmented control.",
+          "title": "Mode selector",
+          "body": "Select Circular.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-01-01-circular-mode.webp",
-            "alt": "Mode segmented control with Circular selected.",
-            "caption": "Select Circular in the mode segmented control."
+            "alt": "Mode selector with Circular selected.",
+            "caption": "Select Circular."
           }
         }
       ]
@@ -329,7 +324,7 @@
           "body": "Inspect the generated preview with the custom track stack and left legend.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing the generated AT skew preview with the custom track stack and left legend.",
+            "alt": "Generated human mitochondrial AT skew preview with the custom track stack and left legend.",
             "caption": "The generated preview includes the custom track stack and left legend."
           }
         }
@@ -351,40 +346,7 @@
       ]
     }
   ],
-  "colorRules": [
-    {
-      "title": "This example does not need feature color rules",
-      "body": "The main tutorial point is the custom numeric track stack. Feature colors use the ajisai palette defaults."
-    },
-    {
-      "title": "Use gene for compact labels",
-      "body": "For mitochondrial CDS labels, gene is usually more readable than product because product names are long and repetitive."
-    },
-    {
-      "title": "Separate feature colors from skew colors",
-      "body": "Feature color rules affect CDS, rRNA, tRNA, and other genome features. GC skew and AT skew colors are set on the Dinucleotide skew slot rows."
-    },
-    {
-      "title": "Name custom numeric tracks through legend labels",
-      "body": "Use the slot legend label AT skew so the legend shows AT skew (+) and AT skew (-) instead of another generic skew entry."
-    }
-  ],
   "postGenerationEdits": [
-    {
-      "title": "Click features before changing labels",
-      "body": "Use the feature popup to inspect gene, product, note, and db_xref values before changing qualifier priority or label overrides.",
-      "operations": [
-        {
-          "title": "Feature popup",
-          "body": "Click the RNR2 rRNA feature so the Feature popup metadata is visible.",
-          "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
-            "alt": "Zoomed human mitochondrial AT skew crop with the clicked RNR2 rRNA feature and feature popup metadata.",
-            "caption": "The clicked RNR2 feature and popup metadata support label and qualifier-priority checks."
-          }
-        }
-      ]
-    },
     {
       "title": "Review the generated legend",
       "body": "Generate Diagram already adds AT skew (+) and AT skew (-) to the legend. Use the legend editor only for optional caption/order tweaks; the two entries represent positive and negative skew.",
@@ -409,7 +371,7 @@
           "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-03-01-export-controls.webp",
-            "alt": "Actual Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
+            "alt": "Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
             "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
           }
         }
@@ -424,7 +386,7 @@
           "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-04-01-save-session.webp",
-            "alt": "Actual Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "alt": "Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
             "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }

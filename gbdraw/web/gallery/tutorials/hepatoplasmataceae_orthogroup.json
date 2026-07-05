@@ -8,10 +8,7 @@
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP orthogroups",
   "requirements": [
-    "A browser with WebAssembly support.",
-    "Enough available memory for five bacterial GenBank records and LOSATP output.",
-    "The five GenBank flat files listed below.",
-    "Use a local copy of gbdraw.app or the hosted web app; genome processing runs in the browser."
+    "Enough available memory for five bacterial GenBank records and LOSATP output."
   ],
   "downloads": [
     {
@@ -56,12 +53,12 @@
       "body": "Open gbdraw.app and select Linear mode before adding inputs.",
       "operations": [
         {
-          "title": "Mode segmented control",
-          "body": "Select Linear in the mode segmented control.",
+          "title": "Mode selector",
+          "body": "Select Linear.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-01-01-linear-mode.webp",
-            "alt": "Web app header mode segmented control with Linear selected.",
-            "caption": "Select Linear in the mode segmented control before adding inputs."
+            "alt": "Mode selector with Linear selected.",
+            "caption": "Select Linear before adding inputs."
           }
         }
       ]
@@ -227,7 +224,7 @@
           "body": "Inspect the generated preview around the ribbon-dense region.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-07-01-orthogroup-overview.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing the generated preview around a ribbon-dense region.",
+            "alt": "Generated Hepatoplasmataceae orthogroup preview around a ribbon-dense region.",
             "caption": "The generated preview keeps the dense orthogroup ribbon region visible."
           }
         }
@@ -249,40 +246,7 @@
       ]
     }
   ],
-  "colorRules": [
-    {
-      "title": "This example uses default feature colors",
-      "body": "The main visual signal is the orthogroup ribbon identity gradient, while genome features use the ajisai palette defaults."
-    },
-    {
-      "title": "Choose feature rules separately from orthogroups",
-      "body": "Feature color rules affect CDS, rRNA, tRNA, and other genome features. Orthogroup ribbon colors come from pairwise match identity and comparison style settings."
-    },
-    {
-      "title": "Use feature clicks to discover qualifiers",
-      "body": "After generation, click a CDS and inspect gene, locus_tag, product, protein_id, and orthogroup values before adding a specific feature color rule."
-    },
-    {
-      "title": "Keep value patterns specific",
-      "body": "Specific rule values are treated as matching patterns, so avoid broad words such as protein unless you intentionally want many features to share one color."
-    }
-  ],
   "postGenerationEdits": [
-    {
-      "title": "Click a pairwise ribbon",
-      "body": "Use the pairwise match popup to inspect the orthogroup ID, member count, record coverage, identity, and linked query and subject features.",
-      "operations": [
-        {
-          "title": "Pairwise ribbon popup",
-          "body": "Click a pairwise ribbon so the Pairwise ribbon popup is visible.",
-          "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/post-01-01-match-popup.webp",
-            "alt": "Zoomed Hepatoplasmataceae orthogroup crop with the highlighted pairwise ribbon and popup.",
-            "caption": "The zoomed crop keeps the highlighted pairwise ribbon and popup readable."
-          }
-        }
-      ]
-    },
     {
       "title": "Click a CDS feature",
       "body": "Feature clicks show qualifiers, sequences, and orthogroup membership details; the Feature editor drawer shows label, visibility, color, and scope controls. This is useful when you need to decide whether to add feature-specific colors.",
@@ -322,7 +286,7 @@
           "body": "Use the Preview export toolbar to choose SVG, Interactive SVG, PNG, or PDF.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-04-01-export-controls.webp",
-            "alt": "Actual Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
+            "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
             "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
           }
         }
@@ -337,7 +301,7 @@
           "body": "Click Save Session in the web app header toolbar.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-05-01-save-session.webp",
-            "alt": "Actual Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
+            "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
             "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }
