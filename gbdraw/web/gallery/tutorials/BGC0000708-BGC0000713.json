@@ -60,7 +60,7 @@
     },
     {
       "title": "Upload the five GenBank files",
-      "body": "Keep the records in the same order as the Gallery command so adjacent orthogroup tracks and labels match the saved example.",
+      "body": "Add the GenBank files in this order, then fill the organism/strain and subtitle/title fields for each record to match the Gallery session.",
       "items": [
         "BGC0000708.gbk",
         "BGC0000709.gbk",
@@ -70,12 +70,10 @@
       ],
       "operations": [
         {
-          "title": "Linear GenBank uploader with five BGC files",
-          "body": "Use the Linear upload rows to verify the file chips are in order.",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-02-01-five-file-upload-order.webp",
-            "alt": "Linear Input Genomes uploader rows showing BGC0000708.gbk, BGC0000709.gbk, BGC0000711.gbk, BGC0000712.gbk, and BGC0000713.gbk in order.",
-            "caption": "The Linear GenBank upload rows show the five BGC files in the same order as the Gallery command."
+            "src": "./media/BGC0000708-BGC0000713/manual-02-01-record-text-row.webp",
+            "alt": "Linear GenBank row 1 with BGC0000708.gbk selected and organism/strain, subtitle/title, region, and LOSAT filename fields visible.",
+            "caption": "Fill row 1 with BGC0000708.gbk, the organism/strain label, and the BGC subtitle; repeat for the remaining files in the listed order."
           }
         }
       ]
@@ -345,15 +343,15 @@
     },
     {
       "title": "Add the plot title and record text",
-      "body": "Set the plot title to Aminoglycoside biosynthetic gene clusters from Streptomyces spp. Use species-level record labels and cluster subtitles when you want the web output to match the Gallery session exactly.",
+      "body": "Set the plot title to Aminoglycoside biosynthetic gene clusters from Streptomyces spp. Use the shown title and definition font settings when you want the web output to match the Gallery session exactly.",
       "operations": [
         {
           "title": "Title and record text controls",
-          "body": "Type the plot title in the Title & Legend controls and keep the saved definition text settings visible.",
+          "body": "Type the plot title in the Title & Legend controls, set the title position, and keep the saved definition font and line-style settings visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
             "alt": "Title and Legend controls showing the aminoglycoside BGC plot title, bottom title position, definition font size, and definition line style settings.",
-            "caption": "Type the aminoglycoside BGC plot title in the Title & Legend controls before generating the figure."
+            "caption": "Set the plot title, title position, definition font size, and definition line-style values before generating the figure."
           }
         }
       ]

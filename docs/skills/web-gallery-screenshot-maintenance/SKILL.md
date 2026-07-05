@@ -47,7 +47,8 @@ Then inspect the target tutorial JSON and media directory:
 Use the real UI the user operates.
 
 - Mode selector screenshots must show the real Circular/Linear control with the active choice readable.
-- File uploads must show the uploader and uploaded file rows/chips in the correct order.
+- File uploads must show the uploader and uploaded file rows/chips in the correct order. When the same upload row also contains metadata fields that affect the figure, such as organism/strain, subtitle/title, region, reverse complement, or LOSAT filename, include those fields instead of cropping only the file chip.
+- For tall multi-file upload workflows, keep the full file order as a tutorial list or table and use one representative row crop with the file chip and relevant metadata fields, rather than one unreadable crop of every row.
 - Dropdown/select operations must show the select in context plus a capture-only opened-option overlay with the chosen option highlighted.
 - Text and number inputs must show labels, values, units, and nearby related controls. Highlight changed fields when multiple inputs are visible.
 - When one operation sentence lists several pre-generation settings, include an overview crop that shows the actual text inputs, selects, toggles, or selected chips, even if separate dropdown crops also show individual menu choices.
@@ -84,6 +85,7 @@ Use Playwright against the current app or Gallery state. If `@playwright/test` i
 Capture standards:
 
 - For restored-session captures, assert critical control values in the browser before saving the crop when the operation depends on exact row/order/selector state. Multi-record Record Order crops, for example, should verify `#1@1, #2@1, #3@2, #4@2, #5@2, #6@2` rather than trusting the restored page by sight.
+- For representative upload-row crops, assert both the file order and the row's metadata values in app state before capture; do not trust visible labels alone because input values may be clipped in the DOM text.
 - Use device scale factor 2 or higher; use 3 for dense forms.
 - Save temporary PNGs under `/tmp` and commit WebP only.
 - Use WebP quality 92-95 for UI controls and dense forms.
@@ -107,6 +109,7 @@ Keep tutorial text aligned with the actual workflow.
 - Prefer screenshots over dense setup lists when the UI can show the values clearly. Keep any remaining text to the values the reader must type or choose.
 - Do not describe automatically generated output as a manual editor task. If `Generate Diagram` creates legend entries, tracks, labels, or previews, say they are generated and reserve drawers/editors for review or optional tweaks.
 - Use action text for operations and state text for generated results. Avoid vague instructions such as `keep visible` when the UI already produced the state.
+- Omit operation `title` and `body` when a single media item already sits under a clear step title/body and the extra operation text would only create a redundant bold subheading.
 - Keep pre-generation setup, generated-result inspection, and post-generation edits as separate concepts.
 - When a step already has a `table`, do not repeat the same fields as slash-delimited operation text or captions. Refer to the table row or category instead.
 
