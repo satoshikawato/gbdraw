@@ -418,31 +418,21 @@
     {
       "title": "Generate the diagram",
       "body": "Click Generate Diagram. The preview should show the AP027280 feature ring, 20 conservation rings, the position scale, and a left legend with an identity gradient for each comparison genome.",
-      "media": {
-        "src": "./media/WSSV_genome_comparison/03-conservation-rings.webp",
-        "alt": "Generated WSSV circular diagram with 20 colored conservation rings and a left identity legend.",
-        "caption": "The finished figure stacks 20 blastn-backed conservation rings inside the reference CDS feature ring."
-      },
       "operations": [
         {
           "title": "Generated conservation rings",
-          "body": "Inspect the generated preview with 20 rings + legend.",
+          "body": "Inspect the generated preview with 20 conservation rings and the left identity legend.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-09-01-conservation-rings.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Generated conservation rings with 20 rings + legend.",
-            "caption": "The generated preview crop shows 20 rings + legend."
+            "alt": "Actual WSSV conservation tutorial UI showing the generated diagram with 20 conservation rings and the left identity legend.",
+            "caption": "The generated preview stacks 20 conservation rings inside the reference CDS feature ring."
           }
         }
       ]
     },
     {
       "title": "Check the Files tab",
-      "body": "Use the Gallery Files tab to confirm the required input names, session JSON, interactive SVG, and thumbnail for this example.",
-      "media": {
-        "src": "./media/WSSV_genome_comparison/02-input-files.webp",
-        "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
-        "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
-      },
+      "body": "Use the Gallery Files tab to review the required input names, session JSON, interactive SVG, and thumbnail for this example.",
       "operations": [
         {
           "title": "Files tab inputs",
@@ -507,7 +497,7 @@
     },
     {
       "title": "Click features to verify annotations",
-      "body": "Use the feature popup to confirm note, product, protein_id, location, and sequence metadata before changing feature color or label settings.",
+      "body": "Use the feature popup to inspect note, product, protein_id, location, and sequence metadata before changing feature color or label settings.",
       "operations": [
         {
           "title": "CDS feature popup",
@@ -522,7 +512,7 @@
     },
     {
       "title": "Keep the conservation legend visible",
-      "body": "The left legend explains ring order and the identity gradient. If you move or edit the legend, confirm that the 90% and 100% endpoints remain visible.",
+      "body": "The left legend explains ring order and the identity gradient. If you move or edit the legend, keep the 90% and 100% endpoints visible.",
       "operations": [
         {
           "title": "Conservation legend",
@@ -530,7 +520,7 @@
           "media": {
             "src": "./media/WSSV_genome_comparison/post-03-01-conservation-legend.webp",
             "alt": "Actual WSSV conservation tutorial UI showing Conservation legend with identity endpoints visible.",
-            "caption": "The generated preview crop shows identity endpoints visible."
+            "caption": "The preview keeps the conservation identity endpoints visible."
           }
         }
       ]

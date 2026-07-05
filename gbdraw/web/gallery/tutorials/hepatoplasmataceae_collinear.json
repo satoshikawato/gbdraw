@@ -97,11 +97,6 @@
         "Parallel runs: Auto",
         "Threads per run: Auto unless you need to reproduce a fixed thread count"
       ],
-      "media": {
-        "src": "./media/hepatoplasmataceae_collinear/02-web-linear-losat-settings.webp",
-        "alt": "Web app Linear mode input panel with Run LOSAT, LOSATP, Collinear blocks, and Orientation plus identity selected.",
-        "caption": "The Linear input panel exposes LOSATP execution settings and the collinear reduction controls before generation."
-      },
       "operations": [
         {
           "title": "Pairwise Comparisons panel",

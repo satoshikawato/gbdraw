@@ -209,7 +209,7 @@
       "operations": [
         {
           "title": "Custom Track Slots panel",
-          "body": "Open Custom Track Slots and confirm the Middle stack controls are visible.",
+          "body": "Open Custom Track Slots so the Middle stack controls are visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-05-01-open-custom-track-slots.webp",
             "alt": "Custom Track Slots panel open in the circular Layout card.",
@@ -239,11 +239,6 @@
         "Positive color: #deaf6e",
         "Negative color: #7294e3"
       ],
-      "media": {
-        "src": "./media/HmmtDNA_ATskew/02-atskew-preview.webp",
-        "alt": "Generated circular human mitochondrial diagram with GC content, GC skew, and AT skew rings.",
-        "caption": "The finished diagram adds an AT skew ring inside the standard GC content and GC skew rings."
-      },
       "operations": [
         {
           "title": "Add AT skew slot",
@@ -267,10 +262,10 @@
       "operations": [
         {
           "title": "Tick track slot",
-          "body": "Keep the tick slot in the custom stack and set labels inside / ticks outside.",
+          "body": "Keep the tick slot in the custom stack and set the tick layout to Labels inside and ticks outside.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-07-01-tick-track-slot.webp",
-            "alt": "Custom circular tick slot set to Labels inside / ticks outside.",
+            "alt": "Custom circular tick slot set to Labels inside and ticks outside.",
             "caption": "Keep the tick slot in the custom circular track stack."
           }
         }
@@ -301,18 +296,18 @@
       "operations": [
         {
           "title": "Generated AT skew preview",
-          "body": "Inspect the generated preview with track stack + left legend.",
+          "body": "Inspect the generated preview with the custom track stack and left legend.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Generated AT skew preview with track stack + left legend.",
-            "caption": "The generated preview crop shows track stack + left legend."
+            "alt": "Actual human mitochondrial AT skew tutorial UI showing the generated AT skew preview with the custom track stack and left legend.",
+            "caption": "The generated preview includes the custom track stack and left legend."
           }
         }
       ]
     },
     {
       "title": "Inspect a feature",
-      "body": "Click a CDS or RNA feature in the interactive SVG to confirm its gene, product, location, and sequence metadata.",
+      "body": "Click a CDS or RNA feature in the interactive SVG to inspect its gene, product, location, and sequence metadata.",
       "operations": [
         {
           "title": "Feature popup",

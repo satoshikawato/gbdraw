@@ -377,7 +377,7 @@
       "operations": [
         {
           "title": "All antiSMASH gene_kind color rules",
-          "body": "Enter the four CDS / gene_kind rules in SPECIFIC RULES (-t), then generate the figure once after all rules are present.",
+          "body": "Enter the four antiSMASH gene_kind rules from the table in SPECIFIC RULES (-t), then generate the figure once after all rules are present.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-07-01-specific-rules-all.webp",
             "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
@@ -392,7 +392,7 @@
       "operations": [
         {
           "title": "Generated BGC comparison preview",
-          "body": "Inspect the generated preview with five rows + bottom legend.",
+          "body": "Inspect the generated preview with five rows and the bottom legend.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
             "alt": "Actual aminoglycoside BGC tutorial UI showing Generated BGC comparison preview with five rows + bottom legend.",
@@ -418,7 +418,7 @@
     },
     {
       "title": "Inspect a colored feature",
-      "body": "Click a CDS feature to confirm its label, product, orthogroup membership, and qualifier values before deciding whether to refine a color rule.",
+      "body": "Click a CDS feature to inspect its label, product, orthogroup membership, and qualifier values before deciding whether to refine a color rule.",
       "operations": [
         {
           "title": "Colored feature popup",

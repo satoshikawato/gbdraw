@@ -221,19 +221,14 @@
     {
       "title": "Inspect the orthogroup overview",
       "body": "The generated preview should show many individual green pairwise ribbons instead of the larger orientation-colored collinear blocks.",
-      "media": {
-        "src": "./media/hepatoplasmataceae_orthogroup/02-orthogroup-preview.webp",
-        "alt": "Generated Hepatoplasmataceae orthogroup comparison in the Gallery preview.",
-        "caption": "Orthogroup mode keeps individual orthogroup-backed match ribbons visible between adjacent genomes."
-      },
       "operations": [
         {
           "title": "Orthogroup overview in preview",
-          "body": "Inspect the generated preview with ribbon-dense region.",
+          "body": "Inspect the generated preview around the ribbon-dense region.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-07-01-orthogroup-overview.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Orthogroup overview in preview with ribbon-dense region.",
-            "caption": "The generated preview crop shows ribbon-dense region."
+            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing the generated preview around a ribbon-dense region.",
+            "caption": "The generated preview keeps the dense orthogroup ribbon region visible."
           }
         }
       ]
@@ -275,7 +270,7 @@
   "postGenerationEdits": [
     {
       "title": "Click a pairwise ribbon",
-      "body": "Use the pairwise match popup to confirm the orthogroup ID, member count, record coverage, identity, and linked query and subject features.",
+      "body": "Use the pairwise match popup to inspect the orthogroup ID, member count, record coverage, identity, and linked query and subject features.",
       "operations": [
         {
           "title": "Pairwise ribbon popup",

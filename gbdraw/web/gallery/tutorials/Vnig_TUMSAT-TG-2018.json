@@ -269,31 +269,21 @@
     {
       "title": "Generate the diagram",
       "body": "Click Generate Diagram. The preview should show chromosome 1 and chromosome 2 above plasmids pVNTG1 through pVNTG4, with GC content and GC skew rings inside each record.",
-      "media": {
-        "src": "./media/Vnig_TUMSAT-TG-2018/02-multirecord-preview.webp",
-        "alt": "Generated Vibrio nigripulchritudo multi-record circular diagram in the Gallery preview.",
-        "caption": "The finished figure uses automatic radius scaling so chromosomes and plasmids remain readable in one canvas."
-      },
       "operations": [
         {
           "title": "Generated multi-record preview",
-          "body": "Inspect the generated preview with two chromosomes + plasmids.",
+          "body": "Inspect the generated preview with two chromosomes and four plasmids.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Generated multi-record preview with two chromosomes + plasmids.",
-            "caption": "The generated preview crop shows two chromosomes + plasmids."
+            "alt": "Actual Vibrio multi-record tutorial UI showing the generated multi-record preview with two chromosomes and four plasmids.",
+            "caption": "The generated preview uses automatic radius scaling for two chromosomes and four plasmids."
           }
         }
       ]
     },
     {
       "title": "Check the Files tab",
-      "body": "Use the Gallery Files tab to confirm the required GBFF input, assembly source, session JSON, interactive SVG, and thumbnail.",
-      "media": {
-        "src": "./media/Vnig_TUMSAT-TG-2018/03-files.webp",
-        "alt": "Actual Circular Gallery tab bar with Files selected above the Files panel.",
-        "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
-      },
+      "body": "Use the Gallery Files tab to review the required GBFF input, assembly source, session JSON, interactive SVG, and thumbnail.",
       "operations": [
         {
           "title": "Files tab inputs",
@@ -366,7 +356,7 @@
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/post-02-01-left-legend-compactness.webp",
             "alt": "Actual Vibrio multi-record tutorial UI showing Compact left legend with legend + chromosome 1 edge.",
-            "caption": "The generated preview crop shows legend + chromosome 1 edge."
+            "caption": "The preview keeps the compact left legend and chromosome 1 edge visible."
           }
         }
       ]

@@ -198,11 +198,11 @@
       "operations": [
         {
           "title": "Linear layout controls",
-          "body": "Use the Layout card crop to confirm Align to Center and compact row options.",
+          "body": "Set Align to Center and compact row options in the Layout card.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-04-01-linear-layout.webp",
             "alt": "Linear Layout card showing Align to Center and compact layout-related controls.",
-            "caption": "Use the Layout card to confirm Align to Center and compact layout-related controls."
+            "caption": "The Layout card shows Align to Center and compact layout-related controls."
           },
           "capture": {
             "source": "webapp",
@@ -256,29 +256,29 @@
       "operations": [
         {
           "title": "Rule 1: WSSV-like proteins",
-          "body": "Enter CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins.",
+          "body": "Enter the WSSV-like proteins rule from the table in SPECIFIC RULES (-t).",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-01-color-rule-wssv-like.webp",
             "alt": "SPECIFIC RULES row for CDS product wsv.*-like protein with WSSV-like proteins caption.",
-            "caption": "Enter CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins."
+            "caption": "Enter the WSSV-like proteins rule in SPECIFIC RULES (-t)."
           }
         },
         {
           "title": "Rule 2: BIRP",
-          "body": "Enter CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP.",
+          "body": "Enter the BIRP rule from the table in SPECIFIC RULES (-t).",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-02-color-rule-birp.webp",
             "alt": "SPECIFIC RULES row for CDS product baculoviral IAP repeat-containing protein with BIRP caption.",
-            "caption": "Enter CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP."
+            "caption": "Enter the BIRP rule in SPECIFIC RULES (-t)."
           }
         },
         {
           "title": "Rule 3: tyrosine recombinase",
-          "body": "Enter CDS / product / tyrosine recombinase / red / tyrosine recombinase.",
+          "body": "Enter the tyrosine recombinase rule from the table in SPECIFIC RULES (-t).",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-03-color-rule-recombinase.webp",
             "alt": "SPECIFIC RULES row for CDS product tyrosine recombinase with tyrosine recombinase caption.",
-            "caption": "Enter CDS / product / tyrosine recombinase / red / tyrosine recombinase."
+            "caption": "Enter the tyrosine recombinase rule in SPECIFIC RULES (-t)."
           }
         },
         {
@@ -302,7 +302,7 @@
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-07-01-orthogroup-preview.webp",
             "alt": "Generated majanivirus orthogroup preview showing nine viral genome rows and the right legend.",
-            "caption": "The generated preview crop shows nine rows + right legend."
+            "caption": "The generated preview includes nine rows and the right legend."
           }
         }
       ]
@@ -324,12 +324,7 @@
     },
     {
       "title": "Check the Files tab",
-      "body": "Use the Gallery Files tab to confirm the required input filenames, accession sources, session JSON, interactive SVG, and thumbnail.",
-      "media": {
-        "src": "./media/majanivirus_orthogroup/04-files.webp",
-        "alt": "Actual Linear Gallery tab bar with Files selected above the Files panel.",
-        "caption": "The Gallery tab bar stays visible with Files selected above the file and artifact list."
-      },
+      "body": "Use the Gallery Files tab to review the required input filenames, accession sources, session JSON, interactive SVG, and thumbnail.",
       "operations": [
         {
           "title": "Files tab artifacts",
@@ -364,7 +359,7 @@
   "postGenerationEdits": [
     {
       "title": "Click match ribbons first",
-      "body": "In dense large-genome comparisons, pairwise match popups are the fastest way to confirm which orthogroup and proteins support a ribbon.",
+      "body": "In dense large-genome comparisons, pairwise match popups identify which orthogroup and proteins support a ribbon.",
       "operations": [
         {
           "title": "Match ribbon popup",
@@ -402,7 +397,7 @@
           "media": {
             "src": "./media/majanivirus_orthogroup/post-03-01-identity-legend.webp",
             "alt": "Actual majanivirus orthogroup tutorial UI showing Identity legend in preview with identity legend.",
-            "caption": "The generated preview crop shows identity legend."
+            "caption": "The preview keeps the identity legend visible."
           }
         }
       ]
