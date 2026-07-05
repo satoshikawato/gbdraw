@@ -105,11 +105,11 @@
       "operations": [
         {
           "title": "Linear GenBank uploader with nine viral files",
-          "body": "Use the rendered upload rows so file chips in order is visible.",
+          "body": "Upload the nine GenBank files in the tutorial order.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-02-01-nine-file-upload-order.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Linear GenBank uploader with nine viral files with file chips in the tutorial order.",
-            "caption": "The rendered web app crop shows Linear GenBank uploader with nine viral files; File chips in order."
+            "alt": "Linear GenBank upload rows showing the nine majanivirus files in order.",
+            "caption": "Upload the nine majanivirus GenBank files in order."
           }
         }
       ]
@@ -130,11 +130,11 @@
       "operations": [
         {
           "title": "Pairwise Comparisons panel",
-          "body": "Use the rendered Pairwise Comparisons panel with expanded panel.",
+          "body": "Open Pairwise Comparisons and choose Run LOSAT with LOSATP Orthogroups.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-01-open-pairwise.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Pairwise Comparisons panel with expanded panel.",
-            "caption": "The rendered web app crop shows Pairwise Comparisons panel; Expanded panel."
+            "alt": "Pairwise Comparisons controls with Run LOSAT, LOSATP, and Orthogroups mode selected.",
+            "caption": "Open Pairwise Comparisons and choose Run LOSAT with LOSATP Orthogroups."
           }
         },
         {
@@ -167,11 +167,11 @@
         },
         {
           "title": "Large-session thread and threshold settings",
-          "body": "Use the rendered Large-session thread and threshold settings with threads, bitscore, e-value, identity.",
+          "body": "Set Safe thread budgeting, 32 threads per run, bitscore 100, e-value 1e-3, and identity 20.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-03-thread-threshold-settings.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Large-session thread and threshold settings with threads, bitscore, e-value, identity.",
-            "caption": "The rendered web app crop shows Large-session thread and threshold settings; Threads, bitscore, e-value, identity."
+            "alt": "Large-session LOSATP settings with Safe threads, 32 threads per run, bitscore 100, e-value 1e-3, and identity 20.",
+            "caption": "Set Safe thread budgeting, 32 threads per run, bitscore 100, e-value 1e-3, and identity 20."
           }
         }
       ]
@@ -225,11 +225,11 @@
       "operations": [
         {
           "title": "Record label editor",
-          "body": "Use the rendered Record label editor with nine descriptive labels.",
+          "body": "Enter the nine descriptive record labels.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-05-01-record-labels.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing Record label editor with nine descriptive labels.",
-            "caption": "The rendered web app crop shows Record label editor; Nine descriptive labels."
+            "alt": "Record label editor rows with nine descriptive majanivirus names.",
+            "caption": "Enter the nine descriptive record labels."
           }
         }
       ]
@@ -247,38 +247,38 @@
       "operations": [
         {
           "title": "Rule 1: WSSV-like proteins",
-          "body": "Enter CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins in the rendered SPECIFIC RULES (-t) controls.",
+          "body": "Enter CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-01-color-rule-wssv-like.webp",
-            "alt": "Actual majanivirus orthogroup SPECIFIC RULES (-t) controls showing CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins.",
-            "caption": "Enter CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins in the rendered SPECIFIC RULES (-t) row."
+            "alt": "SPECIFIC RULES row for CDS product wsv.*-like protein with WSSV-like proteins caption.",
+            "caption": "Enter CDS / product / wsv.*-like protein / #89d1fa / WSSV-like proteins."
           }
         },
         {
           "title": "Rule 2: BIRP",
-          "body": "Enter CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP in the rendered SPECIFIC RULES (-t) controls.",
+          "body": "Enter CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-02-color-rule-birp.webp",
-            "alt": "Actual majanivirus orthogroup SPECIFIC RULES (-t) controls showing CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP.",
-            "caption": "Enter CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP in the rendered SPECIFIC RULES (-t) row."
+            "alt": "SPECIFIC RULES row for CDS product baculoviral IAP repeat-containing protein with BIRP caption.",
+            "caption": "Enter CDS / product / baculoviral IAP repeat-containing protein / yellow / BIRP."
           }
         },
         {
           "title": "Rule 3: tyrosine recombinase",
-          "body": "Enter CDS / product / tyrosine recombinase / red / tyrosine recombinase in the rendered SPECIFIC RULES (-t) controls.",
+          "body": "Enter CDS / product / tyrosine recombinase / red / tyrosine recombinase.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-03-color-rule-recombinase.webp",
-            "alt": "Actual majanivirus orthogroup SPECIFIC RULES (-t) controls showing CDS / product / tyrosine recombinase / red / tyrosine recombinase.",
-            "caption": "Enter CDS / product / tyrosine recombinase / red / tyrosine recombinase in the rendered SPECIFIC RULES (-t) row."
+            "alt": "SPECIFIC RULES row for CDS product tyrosine recombinase with tyrosine recombinase caption.",
+            "caption": "Enter CDS / product / tyrosine recombinase / red / tyrosine recombinase."
           }
         },
         {
           "title": "Default CDS color",
-          "body": "Set Default CDS color: #d3d3d3 / other proteins in the rendered default CDS color controls.",
+          "body": "Set the default CDS color to #d3d3d3 for other proteins.",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-04-default-cds-color.webp",
-            "alt": "Actual majanivirus orthogroup default CDS color controls showing Default CDS color: #d3d3d3 / other proteins.",
-            "caption": "Set Default CDS color: #d3d3d3 / other proteins in the rendered default CDS color controls."
+            "alt": "DEFAULT COLORS grid with the CDS swatch set to #d3d3d3.",
+            "caption": "Set the default CDS color to #d3d3d3."
           }
         }
       ]
@@ -384,11 +384,11 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Click the rendered feature or match so the CDS feature popup is visible.",
+          "body": "Click a CDS feature to inspect product, label, and color controls.",
           "media": {
             "src": "./media/majanivirus_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "Actual majanivirus orthogroup tutorial UI showing CDS feature popup with feature + popup.",
-            "caption": "The real clicked popup crop shows CDS feature popup with feature + popup."
+            "alt": "CDS feature popup opened from the majanivirus comparison preview.",
+            "caption": "Click a CDS feature to inspect product, label, and color controls."
           }
         }
       ]

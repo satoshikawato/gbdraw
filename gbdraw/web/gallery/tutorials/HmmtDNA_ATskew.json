@@ -28,11 +28,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Select Circular in the rendered mode segmented control.",
+          "body": "Select Circular in the mode segmented control.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-01-01-circular-mode.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Mode segmented control with Circular selected.",
-            "caption": "Select Circular in the rendered mode segmented control."
+            "alt": "Mode segmented control with Circular selected.",
+            "caption": "Select Circular in the mode segmented control."
           }
         }
       ]
@@ -49,11 +49,11 @@
       "operations": [
         {
           "title": "Circular GenBank uploader",
-          "body": "Use the rendered upload rows so HmmtDNA.gbk file chip is visible.",
+          "body": "Upload HmmtDNA.gbk so the file chip is visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-02-01-genbank-upload.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Circular GenBank uploader with HmmtDNA.gbk file chip.",
-            "caption": "The rendered web app crop shows Circular GenBank uploader; HmmtDNA.gbk file chip."
+            "alt": "Circular GenBank uploader with the HmmtDNA.gbk file chip.",
+            "caption": "Upload HmmtDNA.gbk in the Circular GenBank uploader."
           }
         }
       ]
@@ -185,11 +185,11 @@
       "operations": [
         {
           "title": "Dinucleotide window controls",
-          "body": "Use the rendered Dinucleotide window controls with GC, 500, 50.",
+          "body": "Set Dinucleotide to GC, Window to 500, and Step to 50.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-04-01-window-step.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Dinucleotide window controls with GC, 500, 50.",
-            "caption": "The rendered web app crop shows Dinucleotide window controls; GC, 500, 50."
+            "alt": "Dinucleotide content/skew controls set to Window 500, Step 50, and Dinucleotide GC.",
+            "caption": "Set Dinucleotide to GC, Window to 500, and Step to 50."
           }
         }
       ]
@@ -206,20 +206,20 @@
       "operations": [
         {
           "title": "Custom Track Slots panel",
-          "body": "Use the rendered Custom Track Slots panel with panel expanded.",
+          "body": "Open Custom Track Slots and confirm the Middle stack controls are visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-05-01-open-custom-track-slots.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Custom Track Slots panel with panel expanded.",
-            "caption": "The rendered web app crop shows Custom Track Slots panel; Panel expanded."
+            "alt": "Custom Track Slots panel open in the circular Layout card.",
+            "caption": "Open Custom Track Slots in the Layout card."
           }
         },
         {
           "title": "Middle template slot stack",
-          "body": "Use the rendered Middle template slot stack with features, GC, GC skew slots.",
+          "body": "Use the Middle template stack with the feature, GC content, and GC skew slots visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-05-02-middle-template-stack.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Middle template slot stack with features, GC, GC skew slots.",
-            "caption": "The rendered web app crop shows Middle template slot stack; Features, GC, GC skew slots."
+            "alt": "Radial track stack showing feature, GC content, and GC skew slots from the Middle template.",
+            "caption": "Use the Middle template radial track stack with feature, GC content, and GC skew slots visible."
           }
         }
       ]
@@ -244,11 +244,11 @@
       "operations": [
         {
           "title": "Add AT skew slot",
-          "body": "Use the rendered Add AT skew slot with AT, label, width, colors.",
+          "body": "Set the added dinucleotide skew slot to AT, label it AT skew, and keep the two custom colors.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-06-01-at-skew-slot-values.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Add AT skew slot with AT, label, width, colors.",
-            "caption": "The rendered web app crop shows Add AT skew slot; AT, label, width, colors."
+            "alt": "Custom circular track slot a_skew_2 set to dinucleotide AT with AT skew legend colors.",
+            "caption": "Set the added dinucleotide skew slot to AT and label it AT skew."
           }
         }
       ]
@@ -264,11 +264,11 @@
       "operations": [
         {
           "title": "Tick track slot",
-          "body": "Use the rendered Tick track slot with ticks renderer and layout.",
+          "body": "Keep the tick slot in the custom stack and set labels inside / ticks outside.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-07-01-tick-track-slot.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Tick track slot with ticks renderer and layout.",
-            "caption": "The rendered web app crop shows Tick track slot; Ticks renderer and layout."
+            "alt": "Custom circular tick slot set to Labels inside / ticks outside.",
+            "caption": "Keep the tick slot in the custom circular track stack."
           }
         }
       ]
@@ -283,11 +283,11 @@
       "operations": [
         {
           "title": "CDS label priority controls",
-          "body": "Use the rendered CDS label priority controls with CDS, gene.",
+          "body": "Set the CDS qualifier priority rule to gene in the Labels card.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-08-01-cds-label-priority.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing CDS label priority controls with CDS, gene.",
-            "caption": "The rendered web app crop shows CDS label priority controls; CDS, gene."
+            "alt": "Qualifier Priority controls with a CDS rule prioritizing gene.",
+            "caption": "Set CDS label priority to gene in the Labels card."
           }
         }
       ]
@@ -368,11 +368,11 @@
       "operations": [
         {
           "title": "Legend editor",
-          "body": "Use the rendered Legend editor with AT skew entries visible.",
+          "body": "Open the Legend drawer and keep both AT skew entries visible.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/post-02-01-legend-editor.webp",
-            "alt": "Actual human mitochondrial AT skew tutorial UI showing Legend editor with AT skew entries visible.",
-            "caption": "The rendered web app crop shows Legend editor; AT skew entries visible."
+            "alt": "Legend editor drawer with AT skew legend entries visible.",
+            "caption": "Open the Legend drawer and review the AT skew legend entries."
           }
         }
       ]

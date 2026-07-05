@@ -73,11 +73,11 @@
       "operations": [
         {
           "title": "Linear GenBank uploader with file order",
-          "body": "Use the rendered upload rows so file chips in order is visible.",
+          "body": "Upload the five GenBank files in the tutorial order.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-02-01-five-file-upload-order.webp",
-            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Linear GenBank uploader with file order with file chips in the tutorial order.",
-            "caption": "The rendered web app crop shows Linear GenBank uploader with file order; File chips in order."
+            "alt": "Linear GenBank upload rows showing AP027078.gb, AP027131.gb, AP027133.gb, AP027132.gb, and NZ_CP006932.gb in order.",
+            "caption": "Upload the five Hepatoplasmataceae GenBank files in order."
           }
         }
       ]
@@ -103,7 +103,7 @@
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-01-open-pairwise.webp",
             "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Pairwise Comparisons panel with expanded Pairwise Comparisons.",
-            "caption": "The rendered web app crop shows Pairwise Comparisons panel; Expanded Pairwise Comparisons."
+            "caption": "Open the Pairwise Comparisons panel before choosing the LOSAT run settings."
           }
         },
         {
@@ -112,7 +112,7 @@
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-02-browser-losat.webp",
             "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing LOSAT run settings with Run LOSAT, LOSATP.",
-            "caption": "The rendered web app crop shows LOSAT run settings; Run LOSAT, LOSATP."
+            "caption": "Select Run LOSAT and set LOSAT Mode to LOSATP."
           }
         }
       ]
@@ -237,11 +237,11 @@
       "operations": [
         {
           "title": "Generate button and processing context",
-          "body": "Use the rendered Generate Diagram button in its panel context.",
+          "body": "Click Generate Diagram after the LOSATP and layout settings are set.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-06-01-generate.webp",
-            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Generate button and processing context with Generate Diagram button.",
-            "caption": "The rendered web app crop shows Generate button and processing context; Generate Diagram button."
+            "alt": "Generate Diagram button in the processing panel.",
+            "caption": "Click Generate Diagram after LOSATP and layout settings are set."
           }
         }
       ]
@@ -292,11 +292,11 @@
       "operations": [
         {
           "title": "Feature popup",
-          "body": "Click the rendered feature or match so the Feature popup is visible.",
+          "body": "Click a feature in the generated SVG to inspect its qualifiers and color controls.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
-            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Feature popup with feature + popup.",
-            "caption": "The real clicked popup crop shows Feature popup with feature + popup."
+            "alt": "Feature popup opened from a clicked Hepatoplasmataceae feature.",
+            "caption": "Click a feature in the generated SVG to inspect its qualifiers and color controls."
           }
         }
       ]
@@ -307,11 +307,11 @@
       "operations": [
         {
           "title": "Legend editor",
-          "body": "Use the rendered Legend editor with legend editor drawer.",
+          "body": "Open the Legend drawer to rename, reorder, or remove legend entries.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-02-01-legend-editor.webp",
-            "alt": "Actual Hepatoplasmataceae collinear tutorial UI showing Legend editor with legend editor drawer.",
-            "caption": "The rendered web app crop shows Legend editor; Legend editor drawer."
+            "alt": "Legend editor drawer for the Hepatoplasmataceae collinear comparison.",
+            "caption": "Open the Legend drawer to rename, reorder, or remove legend entries."
           }
         }
       ]

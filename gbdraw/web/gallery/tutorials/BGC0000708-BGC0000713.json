@@ -130,11 +130,11 @@
         },
         {
           "title": "Threshold controls",
-          "body": "Use the rendered Threshold controls with identity, bitscore, e-value.",
+          "body": "Set the LOSATP thresholds directly in the LOSAT Settings panel.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-03-set-thresholds.webp",
-            "alt": "Actual LOSATP threshold controls showing bitscore 50, e-value 1e-2, minimum identity 30, and minimum length 0.",
-            "caption": "Set the LOSATP thresholds directly in the LOSAT settings panel."
+            "alt": "LOSATP settings panel with Orthogroups mode, bitscore 50, e-value 1e-2, identity 30, and minimum length 0.",
+            "caption": "Set LOSATP thresholds to bitscore 50, e-value 1e-2, identity 30, and minimum length 0."
           }
         }
       ]
@@ -346,11 +346,11 @@
       "operations": [
         {
           "title": "Title and record text controls",
-          "body": "Use the rendered Title and record text controls with plot title and labels.",
+          "body": "Type the plot title in the Title & Legend controls and keep the saved definition text settings visible.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
-            "alt": "Actual aminoglycoside BGC tutorial UI showing Title and record text controls with plot title and labels.",
-            "caption": "The rendered web app crop shows Title and record text controls; Plot title and labels."
+            "alt": "Title and Legend controls showing the aminoglycoside BGC plot title, bottom title position, definition font size, and definition line style settings.",
+            "caption": "Type the aminoglycoside BGC plot title in the Title & Legend controls before generating the figure."
           }
         }
       ]
@@ -367,39 +367,12 @@
       "note": "Use biosynthetic$ for the core category so it does not also catch biosynthetic-additional.",
       "operations": [
         {
-          "title": "Rule 1: core biosynthetic genes",
-          "body": "Enter CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes in the rendered SPECIFIC RULES (-t) controls.",
+          "title": "All antiSMASH gene_kind color rules",
+          "body": "Enter the four CDS / gene_kind rules in SPECIFIC RULES (-t), then generate the figure once after all rules are present.",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-07-01-color-rule-core.webp",
-            "alt": "Actual aminoglycoside BGC SPECIFIC RULES (-t) controls showing CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes.",
-            "caption": "Enter CDS / gene_kind / biosynthetic$ / #d03535 / Core biosynthetic genes in the rendered SPECIFIC RULES (-t) row."
-          }
-        },
-        {
-          "title": "Rule 2: additional biosynthetic genes",
-          "body": "Enter CDS / gene_kind / biosynthetic-additional / #f787a9 / Additional biosynthetic genes in the rendered SPECIFIC RULES (-t) controls.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-07-02-color-rule-additional.webp",
-            "alt": "Actual aminoglycoside BGC SPECIFIC RULES (-t) controls showing CDS / gene_kind / biosynthetic-additional / #f787a9 / Additional biosynthetic genes.",
-            "caption": "Enter CDS / gene_kind / biosynthetic-additional / #f787a9 / Additional biosynthetic genes in the rendered SPECIFIC RULES (-t) row."
-          }
-        },
-        {
-          "title": "Rule 3: transport genes",
-          "body": "Enter CDS / gene_kind / transport / #577edb / Transport-related genes in the rendered SPECIFIC RULES (-t) controls.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-07-03-color-rule-transport.webp",
-            "alt": "Actual aminoglycoside BGC SPECIFIC RULES (-t) controls showing CDS / gene_kind / transport / #577edb / Transport-related genes.",
-            "caption": "Enter CDS / gene_kind / transport / #577edb / Transport-related genes in the rendered SPECIFIC RULES (-t) row."
-          }
-        },
-        {
-          "title": "Rule 4: regulatory genes",
-          "body": "Enter CDS / gene_kind / regulatory / #57b767 / Regulatory genes in the rendered SPECIFIC RULES (-t) controls.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-07-04-color-rule-regulatory.webp",
-            "alt": "Actual aminoglycoside BGC SPECIFIC RULES (-t) controls showing CDS / gene_kind / regulatory / #57b767 / Regulatory genes.",
-            "caption": "Enter CDS / gene_kind / regulatory / #57b767 / Regulatory genes in the rendered SPECIFIC RULES (-t) row."
+            "src": "./media/BGC0000708-BGC0000713/manual-07-01-specific-rules-all.webp",
+            "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
+            "caption": "Enter all four antiSMASH gene_kind rules in the SPECIFIC RULES (-t) controls before clicking Generate Diagram."
           }
         }
       ]
@@ -407,11 +380,6 @@
     {
       "title": "Generate the diagram",
       "body": "Click Generate Diagram. The generated preview should show five BGC rows, blue orthogroup ribbons, rotated first-record labels, and a bottom legend.",
-      "media": {
-        "src": "./media/BGC0000708-BGC0000713/02-bgc-preview.webp",
-        "alt": "Generated aminoglycoside biosynthetic gene cluster comparison in the Gallery preview.",
-        "caption": "The finished web figure combines antiSMASH gene-kind feature colors with orthogroup identity ribbons."
-      },
       "operations": [
         {
           "title": "Generated BGC comparison preview",
@@ -419,7 +387,7 @@
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
             "alt": "Actual aminoglycoside BGC tutorial UI showing Generated BGC comparison preview with five rows + bottom legend.",
-            "caption": "The generated preview crop shows five rows + bottom legend."
+            "caption": "After all four gene_kind rules are entered, generate the final BGC comparison once and check the five rows plus bottom legend."
           }
         }
       ]
@@ -509,11 +477,11 @@
       "operations": [
         {
           "title": "Legend editor",
-          "body": "Use the rendered Legend editor with legend editor drawer.",
+          "body": "Open the Legend drawer to adjust captions or ordering after generation.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/post-02-01-legend-editor.webp",
-            "alt": "Actual aminoglycoside BGC tutorial UI showing Legend editor with legend editor drawer.",
-            "caption": "The rendered web app crop shows Legend editor; Legend editor drawer."
+            "alt": "Legend editor drawer with the BGC legend entries.",
+            "caption": "Open the Legend drawer for the generated BGC comparison."
           }
         }
       ]

@@ -48,6 +48,9 @@ Use the real UI the user operates.
 - Text and number inputs must show labels, values, units, and nearby related controls. Highlight changed fields when multiple inputs are visible.
 - Checkboxes, toggles, and radio groups must show selected state in context.
 - Track slots, conservation rings, record labels, record positions, and color rules must show the actual row/panel where values are typed or edited.
+- Feature-specific color rule operations must show the real `SPECIFIC RULES (-t)` controls, not a generated plot preview.
+- When several color rules are entered before one final generation, use one focused crop showing all entered rule rows if it is readable; otherwise use focused per-row input crops. Do not place a full-plot screenshot after each rule.
+- Show the generated plot only once after all required pre-generation inputs and rules have been entered, unless a later step is explicitly about inspecting a popup or visual result.
 - Toolbar actions must show the actual toolbar, not an isolated or reconstructed button.
 - Popups must come from real clicks in the restored session whenever possible.
 - Generated preview crops are appropriate only for final result checks, visual inspection, legends, popups, or rendered-output comparisons.

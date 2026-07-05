@@ -149,11 +149,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Select Circular in the rendered mode segmented control.",
+          "body": "Select Circular in the mode segmented control.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-01-01-circular-mode.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Mode segmented control with Circular selected.",
-            "caption": "Select Circular in the rendered mode segmented control."
+            "alt": "Mode segmented control with Circular selected.",
+            "caption": "Select Circular in the mode segmented control."
           }
         }
       ]
@@ -170,11 +170,11 @@
       "operations": [
         {
           "title": "Circular GenBank uploader",
-          "body": "Use the rendered upload rows so AP027280.gb file chip is visible.",
+          "body": "Upload AP027280.gb so the reference file chip is visible.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-02-01-reference-genbank-upload.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Circular GenBank uploader with AP027280.gb file chip.",
-            "caption": "The rendered web app crop shows Circular GenBank uploader; AP027280.gb file chip."
+            "alt": "Circular GenBank uploader with the AP027280.gb file chip.",
+            "caption": "Upload AP027280.gb in the Circular GenBank uploader."
           }
         }
       ]
@@ -275,20 +275,20 @@
       "operations": [
         {
           "title": "Circular Conservation panel",
-          "body": "Use the rendered Circular Conservation panel with panel expanded.",
+          "body": "Open Pairwise Comparisons and choose Run LOSAT with LOSATN.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-04-01-open-conservation-panel.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Circular Conservation panel with panel expanded.",
-            "caption": "The rendered web app crop shows Circular Conservation panel; Panel expanded."
+            "alt": "Pairwise Comparisons panel open with Run LOSAT, LOSATN, thresholds, and comparison FASTA controls.",
+            "caption": "Open Pairwise Comparisons and choose Run LOSAT with LOSATN."
           }
         },
         {
           "title": "Conservation FASTA uploader",
-          "body": "Use the rendered upload rows so comparison FASTA list is visible.",
+          "body": "Add the comparison FASTA rows in the tutorial order.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-04-02-upload-fasta-comparisons.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Conservation FASTA uploader with comparison FASTA list.",
-            "caption": "The rendered web app crop shows Conservation FASTA uploader; Comparison FASTA list."
+            "alt": "Comparison FASTA file rows listed in Pairwise Comparisons.",
+            "caption": "Add the comparison FASTA rows in the tutorial order."
           }
         }
       ]
@@ -303,11 +303,11 @@
       "operations": [
         {
           "title": "Ring label controls",
-          "body": "Use the rendered Ring label controls with labels textarea/list.",
+          "body": "Enter the short ring labels for the comparison FASTA rows.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-05-01-ring-labels.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Ring label controls with labels textarea/list.",
-            "caption": "The rendered web app crop shows Ring label controls; Labels textarea/list."
+            "alt": "Comparison FASTA rows with short ring labels such as CN01, WSSV-TW, and WSSV-CN.",
+            "caption": "Enter short ring labels for the comparison FASTA rows."
           }
         }
       ]
@@ -322,11 +322,11 @@
       "operations": [
         {
           "title": "Ring color controls",
-          "body": "Use the rendered Ring color controls with color swatches.",
+          "body": "Set the per-ring color swatches for the conservation rows.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-06-01-ring-colors.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Ring color controls with color swatches.",
-            "caption": "The rendered web app crop shows Ring color controls; Color swatches."
+            "alt": "Comparison FASTA rows with per-ring color swatches.",
+            "caption": "Set distinct colors for the conservation ring rows."
           }
         }
       ]
@@ -343,11 +343,11 @@
       "operations": [
         {
           "title": "Conservation thresholds",
-          "body": "Use the rendered Conservation thresholds with bitscore, e-value, identity, length.",
+          "body": "Set bitscore 100, e-value 1e-30, identity 90, and minimum length 100.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-07-01-thresholds.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Conservation thresholds with bitscore, e-value, identity, length.",
-            "caption": "The rendered web app crop shows Conservation thresholds; Bitscore, e-value, identity, length."
+            "alt": "LOSAT Settings thresholds with bitscore 100, e-value 1e-30, identity 90, and minimum length 100.",
+            "caption": "Set bitscore 100, e-value 1e-30, identity 90, and minimum length 100."
           }
         }
       ]
@@ -364,11 +364,11 @@
       "operations": [
         {
           "title": "Browser LOSAT execution controls",
-          "body": "Use the rendered Browser LOSAT execution controls with Auto, Safe, blastn megablast.",
+          "body": "Use Auto execution, Safe threads, and LOSATN megablast before generating.",
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-08-01-browser-losat-run.webp",
-            "alt": "Actual WSSV conservation tutorial UI showing Browser LOSAT execution controls with Auto, Safe, blastn megablast.",
-            "caption": "The rendered web app crop shows Browser LOSAT execution controls; Auto, Safe, blastn megablast."
+            "alt": "Browser LOSAT controls with LOSATN megablast, Safe threads, and strict thresholds.",
+            "caption": "Use Auto execution, Safe threads, and LOSATN megablast."
           }
         }
       ]

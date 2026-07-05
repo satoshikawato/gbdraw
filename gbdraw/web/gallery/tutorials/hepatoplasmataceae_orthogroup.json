@@ -73,11 +73,11 @@
       "operations": [
         {
           "title": "Linear GenBank uploader with file order",
-          "body": "Use the rendered upload rows so file chips in order is visible.",
+          "body": "Upload the five GenBank files in the tutorial order.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-02-01-five-file-upload-order.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Linear GenBank uploader with file order with file chips in the tutorial order.",
-            "caption": "The rendered web app crop shows Linear GenBank uploader with file order; File chips in order."
+            "alt": "Linear GenBank upload rows showing AP027078.gb, AP027131.gb, AP027133.gb, AP027132.gb, and NZ_CP006932.gb in order.",
+            "caption": "Upload the five Hepatoplasmataceae GenBank files in order."
           }
         }
       ]
@@ -94,11 +94,11 @@
       "operations": [
         {
           "title": "Pairwise Comparisons panel",
-          "body": "Use the rendered Pairwise Comparisons panel with Run LOSAT, LOSATP.",
+          "body": "Choose Run LOSAT, LOSATP, and Orthogroups in Pairwise Comparisons.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-03-01-browser-losat.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Pairwise Comparisons panel with Run LOSAT, LOSATP.",
-            "caption": "The rendered web app crop shows Pairwise Comparisons panel; Run LOSAT, LOSATP."
+            "alt": "LOSAT settings panel with Run LOSAT, LOSATP, Orthogroups mode, and browser thread controls.",
+            "caption": "Choose Run LOSAT, LOSATP, and Orthogroups in Pairwise Comparisons."
           }
         }
       ]
@@ -108,9 +108,8 @@
       "body": "Use Orthogroups when you want each ribbon to represent an orthogroup-backed protein relationship rather than a merged collinear block.",
       "items": [
         "blastp mode: Orthogroups",
-        "Membership mode: Anchor core v1",
-        "Max hits: 5",
-        "Pairwise evidence: adjacent genome pairs"
+        "Pairwise evidence: adjacent genome pairs",
+        "Keep the LOSATP thresholds visible for review"
       ],
       "note": "The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks.",
       "operations": [
@@ -143,12 +142,12 @@
           }
         },
         {
-          "title": "Orthogroup membership and hit settings",
-          "body": "Use the rendered Orthogroup membership and hit settings with membership, max hits.",
+          "title": "Orthogroups threshold settings",
+          "body": "Use Orthogroups mode with the visible LOSATP threshold settings.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-04-02-orthogroup-settings.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Orthogroup membership and hit settings with membership, max hits.",
-            "caption": "The rendered web app crop shows Orthogroup membership and hit settings; Membership, max hits."
+            "alt": "LOSAT Settings panel with Orthogroups mode and the visible threshold controls.",
+            "caption": "Use Orthogroups mode with the visible LOSATP threshold settings."
           }
         }
       ]
@@ -204,11 +203,11 @@
       "operations": [
         {
           "title": "Generate button and processing context",
-          "body": "Use the rendered Generate Diagram button in its panel context.",
+          "body": "Click Generate Diagram after the LOSATP and layout settings are set.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-06-01-generate.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Generate button and processing context with Generate Diagram button.",
-            "caption": "The rendered web app crop shows Generate button and processing context; Generate Diagram button."
+            "alt": "Generate Diagram button in the processing panel.",
+            "caption": "Click Generate Diagram after LOSATP and layout settings are set."
           }
         }
       ]
@@ -294,11 +293,11 @@
       "operations": [
         {
           "title": "CDS feature popup",
-          "body": "Click the rendered feature or match so the CDS feature popup is visible.",
+          "body": "Click a CDS feature to inspect qualifiers, label text, and color controls.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing CDS feature popup with feature + popup.",
-            "caption": "The real clicked popup crop shows CDS feature popup with feature + popup."
+            "alt": "CDS feature popup opened from the orthogroup comparison preview.",
+            "caption": "Click a CDS feature to inspect qualifiers, label text, and color controls."
           }
         }
       ]
@@ -309,11 +308,11 @@
       "operations": [
         {
           "title": "Legend editor",
-          "body": "Use the rendered Legend editor with legend editor drawer.",
+          "body": "Open the Legend drawer to review feature legend entries.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-03-01-legend-editor.webp",
-            "alt": "Actual Hepatoplasmataceae orthogroup tutorial UI showing Legend editor with legend editor drawer.",
-            "caption": "The rendered web app crop shows Legend editor; Legend editor drawer."
+            "alt": "Legend editor drawer for the Hepatoplasmataceae orthogroup comparison.",
+            "caption": "Open the Legend drawer to review feature legend entries."
           }
         }
       ]

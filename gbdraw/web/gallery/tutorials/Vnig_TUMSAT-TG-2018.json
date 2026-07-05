@@ -29,11 +29,11 @@
       "operations": [
         {
           "title": "Mode segmented control",
-          "body": "Select Circular in the rendered mode segmented control.",
+          "body": "Select Circular in the mode segmented control.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-01-01-circular-mode.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Mode segmented control with Circular selected.",
-            "caption": "Select Circular in the rendered mode segmented control."
+            "alt": "Mode segmented control with Circular selected.",
+            "caption": "Select Circular in the mode segmented control."
           }
         }
       ]
@@ -52,20 +52,20 @@
       "operations": [
         {
           "title": "Multi-record GBFF uploader",
-          "body": "Use the rendered upload rows so GBFF file chip is visible.",
+          "body": "Upload the multi-record GBFF so the file chip is visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-01-gbff-upload.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Multi-record GBFF uploader with GBFF file chip.",
-            "caption": "The rendered web app crop shows Multi-record GBFF uploader; GBFF file chip."
+            "alt": "Circular GenBank uploader with the multi-record GBFF file chip.",
+            "caption": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff in the Circular GenBank uploader."
           }
         },
         {
           "title": "Detected record list",
-          "body": "Use the rendered Detected record list with chromosomes and plasmids.",
+          "body": "Review the detected Record Order list for the two chromosomes and four plasmids.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-02-record-list.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Detected record list with chromosomes and plasmids.",
-            "caption": "The rendered web app crop shows Detected record list; Chromosomes and plasmids."
+            "alt": "Record Order list showing the six detected Vibrio records.",
+            "caption": "Review the detected Record Order list for chromosomes and plasmids."
           }
         }
       ]
@@ -180,20 +180,20 @@
       "operations": [
         {
           "title": "Multi-record canvas controls",
-          "body": "Use the rendered Multi-record canvas controls with enabled, auto size.",
+          "body": "Turn on the multi-record canvas and keep auto sizing, radius, and gap controls visible.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-01-multirecord-canvas.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Multi-record canvas controls with enabled, auto size.",
-            "caption": "The rendered web app crop shows Multi-record canvas controls; Enabled, auto size."
+            "alt": "Multi-record canvas controls with auto sizing, minimum radius ratio, gaps, and record order rows.",
+            "caption": "Turn on the multi-record canvas and keep automatic sizing controls visible."
           }
         },
         {
           "title": "Record position controls",
-          "body": "Use the rendered Record position controls with #1@1 through #6@2.",
+          "body": "Assign record positions #1@1, #2@1, and #3@2 through #6@2.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-04-02-record-positions.webp",
-            "alt": "Actual Vibrio multi-record tutorial UI showing Record position controls with #1@1 through #6@2.",
-            "caption": "The rendered web app crop shows Record position controls; #1@1 through #6@2."
+            "alt": "Record Order controls assigning records #1 and #2 to row 1 and records #3 through #6 to row 2.",
+            "caption": "Assign record positions #1@1, #2@1, and #3@2 through #6@2."
           }
         }
       ]
