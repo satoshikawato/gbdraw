@@ -15,30 +15,35 @@
       "label": "BGC0000708",
       "source": "MIBiG repository",
       "targetName": "BGC0000708.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk",
       "note": "Download the lividomycin biosynthetic gene cluster as GenBank."
     },
     {
       "label": "BGC0000709",
       "source": "MIBiG repository",
       "targetName": "BGC0000709.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk",
       "note": "Download the neomycin biosynthetic gene cluster as GenBank."
     },
     {
       "label": "BGC0000711",
       "source": "MIBiG repository",
       "targetName": "BGC0000711.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk",
       "note": "Download the second neomycin biosynthetic gene cluster as GenBank."
     },
     {
       "label": "BGC0000712",
       "source": "MIBiG repository",
       "targetName": "BGC0000712.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk",
       "note": "Download the paromomycin biosynthetic gene cluster as GenBank."
     },
     {
       "label": "BGC0000713",
       "source": "MIBiG repository",
       "targetName": "BGC0000713.gbk",
+      "href": "https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk",
       "note": "Download the ribostamycin biosynthetic gene cluster as GenBank."
     }
   ],

@@ -194,6 +194,8 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
       name: 'Reverse complement BGC0000713 only'
     })
   ).toBeVisible();
+  const bgc0708MibigHref = 'https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk';
+  await expect(tutorialPanel.locator(`a[href="${bgc0708MibigHref}"]`)).toHaveText('MIBiG repository');
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(20);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
@@ -210,6 +212,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('BGC0000708.gbk')).toBeVisible();
+  await expect(filesPanel.locator(`a[href="${bgc0708MibigHref}"]`)).toHaveText('MIBiG repository');
   await expect(filesPanel.getByText('BGC0000713.gbk')).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
 

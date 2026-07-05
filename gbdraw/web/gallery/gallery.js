@@ -496,19 +496,6 @@ const renderTutorial = (tutorial, sample) => {
   const summary = asText(tutorial.summary);
   if (summary) appendText(tutorialContent, 'p', 'tutorial-summary', summary);
 
-  const metaItems = [
-    asText(tutorial.estimatedTime),
-    asText(tutorial.difficulty),
-    asText(tutorial.appMode),
-    asText(tutorial.primaryWorkflow)
-  ].filter(Boolean);
-  if (metaItems.length) {
-    const meta = document.createElement('div');
-    meta.className = 'tutorial-meta';
-    metaItems.forEach((item) => appendText(meta, 'span', 'tutorial-meta__item', item));
-    tutorialContent.appendChild(meta);
-  }
-
   renderTextListSection(tutorialContent, 'Requirements', tutorial.requirements);
   if (asArray(tutorial.downloads).length) {
     const downloads = appendSection(tutorialContent, 'Input downloads');

@@ -521,26 +521,6 @@ h1 {
     font-size: 0.93rem;
 }
 
-.tutorial-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 10px;
-}
-
-.tutorial-meta__item {
-    display: inline-flex;
-    align-items: center;
-    min-height: 22px;
-    padding: 2px 8px;
-    border: 1px solid #cbd9dc;
-    border-radius: 999px;
-    background: var(--panel-soft);
-    color: #334550;
-    font-size: 0.72rem;
-    font-weight: 720;
-}
-
 .tutorial-section {
     min-width: 0;
     margin-top: 20px;
