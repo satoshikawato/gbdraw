@@ -1225,6 +1225,7 @@ export const createRunAnalysis = ({
         hide_accession: false,
         hide_length: false,
         record_subtitle: false,
+        records_table: false,
         orthogroup_alignment: false,
         pairwise_match_style: false,
         keep_definition_left_aligned: false,
@@ -1255,6 +1256,7 @@ json.dumps({
   "hide_accession": "--hide_accession" in _source,
   "hide_length": "--hide_length" in _source,
   "record_subtitle": "--record_subtitle" in _source,
+  "records_table": "--records_table" in _source,
   "orthogroup_alignment": "--align_orthogroup_feature" in _source,
   "pairwise_match_style": "--pairwise_match_style" in _source,
   "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
@@ -1281,6 +1283,7 @@ json.dumps({
         hide_accession: false,
         hide_length: false,
         record_subtitle: false,
+        records_table: false,
         orthogroup_alignment: false,
         pairwise_match_style: false,
         keep_definition_left_aligned: false,
@@ -1354,12 +1357,15 @@ json.dumps({
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
+        records_table: false,
         conservation_blast: false,
+        conservation_table: false,
         conservation_reference: false,
         conservation_labels: false,
         conservation_colors: false,
         conservation_ring_width: false,
-        conservation_ring_gap: false
+        conservation_ring_gap: false,
+        circular_track_table: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -1385,12 +1391,15 @@ json.dumps({
   "label_rendering": "--label_rendering" in _source,
   "circular_track_slot": "--circular_track_slot" in _source,
   "circular_track_axis_index": "--circular_track_axis_index" in _source,
+  "records_table": "--records_table" in _source,
   "conservation_blast": "--conservation_blast" in _source,
+  "conservation_table": "--conservation_table" in _source,
   "conservation_reference": "--conservation_reference" in _source,
   "conservation_labels": "--conservation_labels" in _source,
   "conservation_colors": "--conservation_colors" in _source,
   "conservation_ring_width": "--conservation_ring_width" in _source,
   "conservation_ring_gap": "--conservation_ring_gap" in _source,
+  "circular_track_table": "--circular_track_table" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -1412,12 +1421,15 @@ json.dumps({
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
+        records_table: false,
         conservation_blast: false,
+        conservation_table: false,
         conservation_reference: false,
         conservation_labels: false,
         conservation_colors: false,
         conservation_ring_width: false,
-        conservation_ring_gap: false
+        conservation_ring_gap: false,
+        circular_track_table: false
       };
     }
     return circularMultiRecordCanvasSupportCache;

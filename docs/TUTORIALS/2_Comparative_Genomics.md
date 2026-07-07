@@ -110,6 +110,24 @@ gbdraw linear \
 
 If you use `--region` or `--reverse_complement` together with BLAST, make sure the BLAST coordinates still match the selected inputs.
 
+For larger comparisons, put row-specific selectors and crops in a records table instead of repeating several order-sensitive CLI options.
+
+```tsv
+gbk	record_label	record_id	region	reverse_complement	order
+Genome1.gbk	Genome 1	#1		0	1
+Genome2.gbk	Genome 2	#1	50000-180000	1	2
+```
+
+```bash
+gbdraw linear \
+  --records_table records.tsv \
+  -b Genome1_vs_Genome2.blast.outfmt7.txt \
+  -o Genome1_Genome2_table \
+  -f svg
+```
+
+`--records_table` is an alternative input source, so do not combine it with `--gbk`, `--gff`, or `--fasta`.
+
 ## 6. Compare More Than Two Genomes
 
 For `A -> B -> C -> D`, provide BLAST files for `A vs B`, `B vs C`, and `C vs D`.

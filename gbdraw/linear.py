@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 from typing import Any, Mapping, Optional, Sequence
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
+from .io.cli_tables import RecordsTable, read_records_table
 from .io.genome import load_gbks, load_gff_fasta
 from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
@@ -515,6 +516,65 @@ def _parse_definition_line_style_arg(value: str) -> str:
     return value
 
 
+def _load_records_table_records(
+    records_table: RecordsTable,
+    *,
+    mode: str,
+    selected_features_set: Sequence[str],
+    color_table: Optional[DataFrame],
+    feature_table: Optional[DataFrame],
+) -> list:
+    records: list = []
+    if records_table.input_kind == "gbk":
+        for row in records_table.rows:
+            loaded = load_gbks(
+                [row.gbk],
+                mode,
+                False,
+                record_selectors=[row.record_id],
+                reverse_flags=[row.reverse_complement],
+            )
+            records.append(_require_one_records_table_record(records_table, row, loaded))
+        return records
+
+    candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
+        selected_features_set,
+        color_table=color_table,
+        feature_visibility_table=feature_table,
+    )
+    for row in records_table.rows:
+        loaded = load_gff_fasta(
+            [row.gff],
+            [row.fasta],
+            mode,
+            candidate_feature_types,
+            keep_all_features=keep_all_features,
+            load_comparison=False,
+            record_selectors=[row.record_id],
+            reverse_flags=[row.reverse_complement],
+        )
+        records.append(_require_one_records_table_record(records_table, row, loaded))
+    return records
+
+
+def _require_one_records_table_record(
+    records_table: RecordsTable,
+    row,
+    loaded: Sequence,
+):
+    if len(loaded) == 1:
+        return loaded[0]
+    if len(loaded) > 1 and not row.record_id:
+        raise ValidationError(
+            f"{records_table.table_path}: row {row.row_number} loaded {len(loaded)} records; "
+            "add record_id so the row selects exactly one displayed record."
+        )
+    raise ValidationError(
+        f"{records_table.table_path}: row {row.row_number} must load exactly one displayed record; "
+        f"loaded {len(loaded)}."
+    )
+
+
 def _get_args(args) -> argparse.Namespace:
     """
     Parses command-line arguments for generating linear genome diagrams.
@@ -553,6 +613,11 @@ def _get_args(args) -> argparse.Namespace:
         help="FASTA file (required with --gff)",
         type=str,
         nargs='*')
+    parser.add_argument(
+        "--records_table",
+        metavar="TSV",
+        help="TSV manifest for row-coupled input records and per-record options.",
+        type=str)
     parser.add_argument(
         '-b',
         '--blast',
@@ -1276,6 +1341,19 @@ def _get_args(args) -> argparse.Namespace:
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if args.records_table:
+        for option_name in (
+            "record_label",
+            "record_subtitle",
+            "record_id",
+            "reverse_complement",
+            "region",
+        ):
+            if getattr(args, option_name):
+                parser.error(
+                    f"--records_table cannot be combined with --{option_name}; "
+                    f"use the records table {option_name} column instead."
+                )
     if args.protein_blastp_mode != "none" and args.blast:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
     if args.protein_blastp_max_hits <= 0:
@@ -1751,8 +1829,40 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         logger.error("ERROR: Invalid reverse_complement value: %s", value)
         raise ValidationError(f"Invalid reverse_complement value: {value}")
 
+    records_table = read_records_table(args.records_table) if args.records_table else None
     linear_source_paths: list[str]
-    if args.gbk:
+    record_label_values: list[str]
+    record_subtitle_values: list[str]
+    region_arg_values: list[str]
+    if records_table:
+        if records_table.has_multi_record_placement:
+            logger.info("Ignoring records table row/column values in linear mode.")
+        if records_table.input_kind == "gbk":
+            args.gbk = records_table.gbk_files
+            args.gff = None
+            args.fasta = None
+            linear_source_paths = records_table.gbk_files
+        else:
+            args.gbk = None
+            args.gff = records_table.gff_files
+            args.fasta = records_table.fasta_files
+            linear_source_paths = records_table.gff_files
+        args.record_id = records_table.record_ids
+        args.reverse_complement = [
+            "1" if flag else "0" for flag in records_table.reverse_flags
+        ]
+        args.region = records_table.row_scoped_region_specs()
+        records = _load_records_table_records(
+            records_table,
+            mode="linear",
+            selected_features_set=selected_features_set,
+            color_table=color_table,
+            feature_table=feature_table,
+        )
+        record_label_values = records_table.record_labels
+        record_subtitle_values = records_table.record_subtitles
+        region_arg_values = args.region
+    elif args.gbk:
         file_count = len(args.gbk)
         linear_source_paths = list(args.gbk)
         record_selectors = _normalize_list(args.record_id, file_count, "")
@@ -1765,6 +1875,9 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,
         )
+        record_label_values = list(args.record_label or [])
+        record_subtitle_values = list(args.record_subtitle or [])
+        region_arg_values = list(args.region or [])
     elif args.gff and args.fasta:
         file_count = len(args.gff)
         linear_source_paths = list(args.gff)
@@ -1786,10 +1899,13 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,
         )
+        record_label_values = list(args.record_label or [])
+        record_subtitle_values = list(args.record_subtitle or [])
+        region_arg_values = list(args.region or [])
     else:
         logger.error("A critical error occurred with input file arguments.")
         raise ValidationError("Invalid input file arguments.")
-    record_labels = args.record_label or []
+    record_labels = record_label_values
     if record_labels:
         if len(record_labels) > len(records):
             logger.warning(
@@ -1804,7 +1920,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             if getattr(records[idx], "annotations", None) is None:
                 records[idx].annotations = {}
             records[idx].annotations["gbdraw_record_label"] = label
-    record_subtitles = args.record_subtitle or []
+    record_subtitles = record_subtitle_values
     if record_subtitles:
         if len(record_subtitles) > len(records):
             logger.warning(
@@ -1819,7 +1935,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             if getattr(records[idx], "annotations", None) is None:
                 records[idx].annotations = {}
             records[idx].annotations["gbdraw_record_subtitle"] = subtitle
-    region_specs = parse_region_specs(args.region)
+    region_specs = parse_region_specs(region_arg_values)
     if region_specs:
         try:
             records = apply_region_specs(records, region_specs, log=logger)

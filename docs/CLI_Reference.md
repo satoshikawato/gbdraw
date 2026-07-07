@@ -35,7 +35,10 @@ Options (examples):
   --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)
   -o, --output         Output file prefix (optional)
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
+  --records_table      TSV manifest for row-coupled input records
   --conservation_blast BLAST result file(s) for circular conservation rings (-outfmt 6 or 7)
+  --conservation_table TSV manifest for circular conservation BLAST rings
+  --circular_track_table TSV manifest for circular track slots
 
 Additional Information:
   - For full documentation, visit: https://github.com/satoshikawato/gbdraw/
@@ -49,7 +52,7 @@ Additional Information:
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [-o OUTPUT] [-p PALETTE] [-t TABLE]
+              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-o OUTPUT] [-p PALETTE] [-t TABLE]
               [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
               [--species SPECIES] [--strain STRAIN] [-k FEATURES]
               [--feature_shape TYPE=SHAPE]
@@ -67,6 +70,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
               [--suppress_skew]
               [--conservation_blast BLAST [BLAST ...]]
+              [--conservation_table TSV]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
@@ -96,6 +100,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--feature_width FEATURE_WIDTH]
               [--circular_track_order CIRCULAR_TRACK_ORDER]
               [--circular_track_slot CIRCULAR_TRACK_SLOT]
+              [--circular_track_table TSV]
               [--gc_content_width GC_CONTENT_WIDTH]
               [--gc_content_radius GC_CONTENT_RADIUS]
               [--gc_content_mode {deviation,percent}]
@@ -123,6 +128,8 @@ options:
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
+  --records_table TSV   TSV manifest for row-coupled input records and
+                        circular placement metadata.
   -o, --output OUTPUT   output file prefix (default: accession number of the
                         sequence)
   -p, --palette PALETTE
@@ -185,6 +192,9 @@ options:
   --conservation_blast BLAST [BLAST ...]
                         Precomputed BLAST outfmt 6/7 file(s) for circular
                         conservation rings.
+  --conservation_table TSV
+                        TSV manifest with conservation BLAST files, labels,
+                        and colors.
   --conservation_reference {query,subject,auto}
                         BLAST side containing displayed circular reference
                         coordinates. Use "subject" for BLAST generated as
@@ -193,6 +203,9 @@ options:
   --conservation_labels LABEL [LABEL ...]
                         Labels for conservation rings, aligned by logical
                         source index.
+  --conservation_colors COLOR [COLOR ...]
+                        Colors for conservation rings, aligned by logical
+                        source index. Accepts SVG color names or #RRGGBB.
   --conservation_ring_width CONSERVATION_RING_WIDTH
                         Conservation ring width for circular mode (in px; must
                         be > 0).
@@ -305,6 +318,9 @@ options:
                         slots with no explicit r or w auto-compress when needed
                         and never move outside automatically. z only controls
                         SVG layering.
+  --circular_track_table TSV
+                        TSV manifest for circular track slots and axis
+                        placement.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).
@@ -366,6 +382,49 @@ options:
 
 Circular conservation rings use one ring per `--conservation_blast` source and a shared identity gradient legend. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for conservation rings, so provide precomputed BLAST output.
 
+## TSV Manifest Inputs
+
+Use `--records_table` in circular or linear mode when each displayed record needs its own input path, selector, crop, orientation, label, or circular grid placement. It is an alternative to `--gbk` or `--gff` plus `--fasta`, and cannot be combined with those input options. Relative paths resolve against the table file.
+
+GenBank records table:
+
+```tsv
+gbk	record_label	record_subtitle	record_id	region	reverse_complement	order	row	column
+a.gbk	Strain A		#1		0	1	1	1
+b.gbk	Strain B		#1		0	2	1	2
+c.gbk	Strain C		#1	1000-9000	1	3	2	1
+```
+
+GFF3 plus FASTA records table:
+
+```tsv
+gff	fasta	record_label	record_subtitle	record_id	region	reverse_complement	order	row	column
+a.gff3	a.fna	Strain A		chr1	1000-9000	0	1	1	1
+b.gff3	b.fna	Strain B		chr1		0	2	1	2
+```
+
+One row represents one displayed record. If a source file contains multiple records, set `record_id` so the row selects exactly one. Tables must use either all GenBank rows or all GFF3/FASTA rows. `order`, `row`, and `column` must be positive integers when present; `row` and `column` generate circular multi-record placement when `--multi_record_canvas` is used.
+
+Use `--conservation_table` in circular mode to keep BLAST paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
+
+```tsv
+blast	label	color
+ref_a.blast.tsv	Reference A	#E15759
+ref_b.blast.tsv	Reference B	#4E79A7
+```
+
+Use `--circular_track_table` in circular mode to describe slot order and axis placement. It cannot be combined with `--circular_track_order`, `--circular_track_slot`, or `--circular_track_axis_index`.
+
+```tsv
+id	renderer	side	r	w	params
+features	features	axis
+gc_content	dinucleotide_content	inside		0.1	nt=GC
+gc_skew	dinucleotide_skew	inside		0.1	nt=GC
+ticks	ticks	inside			tick_label_layout=label_in_tick_out
+```
+
+For track tables, `side` is `outside`, `axis`, or `inside`. A single `side=axis` row is allowed and must use the `features` renderer; it defines the circular axis boundary. Optional columns include `spacing`, `inner_gap_px`, `outer_gap_px`, `z`, and comma-separated `params` values in `key=value` form.
+
 Depth tracks can be supplied with the legacy `--depth` option or the repeatable
 `--depth_track` option. `--depth` keeps the single-track SVG IDs `depth` and
 `depth_axis`. Multiple `--depth_track` groups render as `depth_1`,
@@ -376,7 +435,7 @@ one file to reuse it for every record, or one file per record.
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [-b [BLAST ...]] [-t TABLE]
+              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-b [BLAST ...]] [-t TABLE]
               [--losatp_bin LOSATP_BIN]
               [--ncbi_blastp_bin NCBI_BLASTP_BIN]
               [--losatp_threads LOSATP_THREADS]
@@ -449,6 +508,8 @@ options:
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
+  --records_table TSV   TSV manifest for row-coupled input records and per-
+                        record options.
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)

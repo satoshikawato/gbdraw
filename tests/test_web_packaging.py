@@ -2315,6 +2315,9 @@ def test_web_wires_circular_conservation_options() -> None:
     assert ":multiple=\"true\"" in index_html
     assert "props: ['label', 'accept', 'modelValue', 'small', 'multiple']" in components_source
     assert '"conservation_blast": "--conservation_blast" in _source' in run_source
+    assert '"records_table": "--records_table" in _source' in run_source
+    assert '"conservation_table": "--conservation_table" in _source' in run_source
+    assert '"circular_track_table": "--circular_track_table" in _source' in run_source
     assert '"conservation_colors": "--conservation_colors" in _source' in run_source
     assert "runCircularLosatConservation" in run_source
     assert "buildConservationSeries" in run_source

@@ -256,7 +256,10 @@ For linear plots, the main selectors are:
 - `--reverse_complement`
 - `--region`
 
-See [Tutorial 2](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for the full syntax.
+When each input needs its own selector, crop, label, or orientation, use a
+`--records_table` TSV manifest instead of parallel option lists. See
+[Tutorial 2](./2_Comparative_Genomics.md) and the
+[CLI Reference](../CLI_Reference.md) for the full syntax.
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 2](./2_Comparative_Genomics.md)

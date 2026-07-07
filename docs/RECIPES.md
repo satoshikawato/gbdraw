@@ -156,6 +156,25 @@ gbdraw linear \
   -f svg
 ```
 
+### Use a records table for row-specific inputs
+
+Create `records.tsv`:
+
+```tsv
+gbk	record_label	record_id	region	reverse_complement	order
+genome1.gb	Genome 1	#1		0	1
+genome2.gb	Genome 2	#1	101-20000	1	2
+```
+
+Then run:
+
+```bash
+gbdraw linear \
+  --records_table records.tsv \
+  -o output \
+  -f svg
+```
+
 ## Comparative Genomics
 
 ### Two-genome comparison
