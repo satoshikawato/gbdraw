@@ -384,9 +384,31 @@ Circular conservation rings use one ring per `--conservation_blast` source and a
 
 ## TSV Manifest Inputs
 
-Use `--records_table` in circular or linear mode when each displayed record needs its own input path, selector, crop, orientation, label, or circular grid placement. It is an alternative to `--gbk` or `--gff` plus `--fasta`, and cannot be combined with those input options. Relative paths resolve against the table file.
+The table options accept UTF-8, tab-separated files with a header row. Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
 
-GenBank records table:
+### `--records_table`
+
+Use `--records_table` in circular or linear mode when each displayed record needs its own input path, selector, crop, orientation, label, or circular grid placement. It is an alternative to `--gbk` or `--gff` plus `--fasta`, and cannot be combined with those input options.
+
+Allowed columns:
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `gbk` | required for GenBank rows | GenBank/GBFF path. |
+| `gff` | required for GFF3/FASTA rows | GFF3 path. |
+| `fasta` | required for GFF3/FASTA rows | FASTA path paired with `gff`. |
+| `record_label` | optional | Linear record label, equivalent to one repeated `--record_label` value. |
+| `record_subtitle` | optional | Linear subtitle line, equivalent to one repeated `--record_subtitle` value. |
+| `record_id` | optional | Record selector for this row, such as a record ID or `#1`. Required when the source file would otherwise load more than one displayed record. |
+| `region` | optional | Row-scoped crop such as `1000-9000`, `1000..9000`, or `1000-9000:rc`. Unqualified regions apply to this row's selected record. |
+| `reverse_complement` | optional | Row-scoped reverse-complement flag. True values include `1`, `true`, `yes`, `y`, `on`; false values include blank, `0`, `false`, `no`, `n`, `off`, `none`, `null`, `-`. |
+| `order` | optional | Positive integer used to sort rows before loading. |
+| `row` | optional | Circular multi-record canvas row, used with `--multi_record_canvas`. |
+| `column` | optional | Positive integer used to order records within a multi-record row. |
+
+One row represents one displayed record. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. In circular mode, put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
+
+Minimal GenBank records table:
 
 ```tsv
 gbk	record_label	record_subtitle	record_id	region	reverse_complement	order	row	column
@@ -395,7 +417,7 @@ b.gbk	Strain B		#1		0	2	1	2
 c.gbk	Strain C		#1	1000-9000	1	3	2	1
 ```
 
-GFF3 plus FASTA records table:
+Minimal GFF3 plus FASTA records table:
 
 ```tsv
 gff	fasta	record_label	record_subtitle	record_id	region	reverse_complement	order	row	column
@@ -403,9 +425,70 @@ a.gff3	a.fna	Strain A		chr1	1000-9000	0	1	1	1
 b.gff3	b.fna	Strain B		chr1		0	2	1	2
 ```
 
-One row represents one displayed record. If a source file contains multiple records, set `record_id` so the row selects exactly one. Tables must use either all GenBank rows or all GFF3/FASTA rows. `order`, `row`, and `column` must be positive integers when present; `row` and `column` generate circular multi-record placement when `--multi_record_canvas` is used.
+Gallery-style linear example: the BGC Gallery session uses five GenBank files, custom record labels, subtitles, and reverse-complements the fifth record. Put that row-coupled part in `bgc_records.tsv`:
+
+```tsv
+gbk	record_label	record_subtitle	reverse_complement	order
+BGC0000708.gbk	<i>Streptomyces lividus</i> CBS 844.73	Lividomycin biosynthetic gene cluster	0	1
+BGC0000709.gbk	<i>Streptomyces fradiae</i> ATCC 10745	Neomycin biosynthetic gene cluster	0	2
+BGC0000711.gbk	<i>Streptomyces fradiae</i> MCIMB 8233	Neomycin biosynthetic gene cluster	0	3
+BGC0000712.gbk	<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455	Paromomycin biosynthetic gene cluster	0	4
+BGC0000713.gbk	<i>Streptomyces ribosidificus</i> ATCC 21294	Ribostamycin biosynthetic gene	1	5
+```
+
+Then keep the other Gallery options, but replace `--gbk ...`, repeated `--record_label`, repeated `--record_subtitle`, and repeated `--reverse_complement` with:
+
+```bash
+gbdraw linear \
+  --records_table bgc_records.tsv \
+  --protein_blastp_mode orthogroup \
+  --show_labels first \
+  --pairwise_match_style curve \
+  -o BGC0000708-BGC0000713 \
+  -f interactive_svg
+```
+
+Gallery-style circular multi-record example: the `Vnig_TUMSAT-TG-2018` entry places six records from one GBFF file on two rows. Repeat the file path and select each record by `record_id`:
+
+```tsv
+gbk	record_id	order	row	column
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#1	1	1	1
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#2	2	1	2
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#3	3	2	1
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#4	4	2	2
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#5	5	2	3
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#6	6	2	4
+```
+
+Use it with `--multi_record_canvas`; do not also pass `--multi_record_position`:
+
+```bash
+gbdraw circular \
+  --records_table vnig_records.tsv \
+  --multi_record_canvas \
+  --multi_record_size_mode auto \
+  --multi_record_min_radius_ratio 0.55 \
+  --multi_record_column_gap_ratio 0.1 \
+  --multi_record_row_gap_ratio 0.05 \
+  -p orchid \
+  --track_type tuckin \
+  -o Vnig_TUMSAT-TG-2018 \
+  -f interactive_svg
+```
+
+### `--conservation_table`
 
 Use `--conservation_table` in circular mode to keep BLAST paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
+
+Allowed columns:
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `blast` | yes | Path to a precomputed BLAST outfmt 6 or 7 file. |
+| `label` | optional | Conservation ring label. If the column is present, row order supplies the label list. |
+| `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list. |
+
+The row order defines the ring order. Thresholds and geometry still stay on the CLI, for example `--conservation_reference`, `--bitscore`, `--evalue`, `--identity`, `--alignment_length`, `--conservation_ring_width`, and `--conservation_ring_gap`.
 
 ```tsv
 blast	label	color
@@ -413,7 +496,70 @@ ref_a.blast.tsv	Reference A	#E15759
 ref_b.blast.tsv	Reference B	#4E79A7
 ```
 
+Gallery-style WSSV example: the `WSSV_genome_comparison` command has 20 `--conservation_blast`, 20 `--conservation_labels`, and 20 `--conservation_colors` values. The equivalent `wssv_conservation.tsv` is:
+
+```tsv
+blast	label	color
+CN01.circular_conservation.losatn.tsv	CN01	#6e91b7
+WSSV-TW.circular_conservation.losatn.tsv	WSSV-TW	#f4a251
+WSSV-CN.circular_conservation.losatn.tsv	WSSV-CN	#77b26f
+WSSV-TH.circular_conservation.losatn.tsv	WSSV-TH	#e67577
+JP01A.circular_conservation.losatn.tsv	JP01A	#8fc4c0
+JP01B.circular_conservation.losatn.tsv	JP01B	#f0d369
+Pc2020.circular_conservation.losatn.tsv	Pc2020	#be92b2
+E1.circular_conservation.losatn.tsv	E1	#ffafb7
+0722-1.circular_conservation.losatn.tsv	0722-1	#ae8e7c
+CN03.circular_conservation.losatn.tsv	CN03	#c6bebb
+CN04.circular_conservation.losatn.tsv	CN04	#6e91b7
+WSSV-AU.circular_conservation.losatn.tsv	WSSV-AU	#f4a251
+EU129.circular_conservation.losatn.tsv	EU129	#e67577
+GCF7.circular_conservation.losatn.tsv	GCF7	#8fc4c0
+MES-753.circular_conservation.losatn.tsv	MES-753	#bcb4ca
+Shantou2019.circular_conservation.losatn.tsv	Shantou2019	#f0d369
+POMZ1.circular_conservation.losatn.tsv	POMZ1	#be92b2
+POMZ4.circular_conservation.losatn.tsv	POMZ4	#ffafb7
+MG18PR-0187-N40S.circular_conservation.losatn.tsv	MG18PR-0187-N40S	#ae8e7c
+Angostura2013.circular_conservation.losatn.tsv	Angostura2013	#c6bebb
+```
+
+Then use:
+
+```bash
+gbdraw circular \
+  --gbk AP027280.gb \
+  --conservation_table wssv_conservation.tsv \
+  --conservation_reference subject \
+  --bitscore 100 \
+  --evalue 1e-30 \
+  --identity 90 \
+  --alignment_length 100 \
+  --suppress_gc \
+  --suppress_skew \
+  --track_type spreadout \
+  -o WSSV_genome_comparison \
+  -f interactive_svg
+```
+
+### `--circular_track_table`
+
 Use `--circular_track_table` in circular mode to describe slot order and axis placement. It cannot be combined with `--circular_track_order`, `--circular_track_slot`, or `--circular_track_axis_index`.
+
+Allowed columns:
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `id` | yes | Unique slot ID, for example `features`, `gc_content`, or `a_skew_2`. |
+| `renderer` | yes | Renderer name. Supported values are `features`, `ticks`, `dinucleotide_content`, `dinucleotide_skew`, `depth`, `sequence_conservation`, and `spacer`; aliases such as `gc_content`, `gc_skew`, `skew`, and `conservation` are accepted. |
+| `side` | optional | `outside`, `axis`, or `inside`. If omitted, rows default to `inside`, except the first `features` row may become `axis` when no explicit axis row exists. |
+| `r` | optional | Slot radius scalar. Values may be ratios such as `0.8`, percentages such as `80%`, or pixels such as `200px`. |
+| `w` | optional | Slot width scalar, using the same scalar syntax as `r`. |
+| `spacing` | optional | Compatibility scalar for both circular gaps. Do not combine with `inner_gap_px` or `outer_gap_px`. |
+| `inner_gap_px` | optional | Numeric inner gap in pixels, without a unit. |
+| `outer_gap_px` | optional | Numeric outer gap in pixels, without a unit. |
+| `z` | optional | Integer SVG layering order. |
+| `params` | optional | Comma-separated renderer parameters in `key=value` form, for example `nt=AT,legend_label=AT skew`. |
+
+Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary; it is converted internally to a split feature slot, so do not add `side`, `lane_direction`, or `lanes` again in that row's `params`. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
 
 ```tsv
 id	renderer	side	r	w	params
@@ -423,7 +569,32 @@ gc_skew	dinucleotide_skew	inside		0.1	nt=GC
 ticks	ticks	inside			tick_label_layout=label_in_tick_out
 ```
 
-For track tables, `side` is `outside`, `axis`, or `inside`. A single `side=axis` row is allowed and must use the `features` renderer; it defines the circular axis boundary. Optional columns include `spacing`, `inner_gap_px`, `outer_gap_px`, `z`, and comma-separated `params` values in `key=value` form.
+Gallery-style HmmtDNA AT-skew example: the `HmmtDNA_ATskew` entry adds an AT-skew ring to the standard GC content, GC skew, feature, and tick slots. The equivalent `hmmt_tracks.tsv` is:
+
+```tsv
+id	renderer	side	r	w	params
+features	features	axis
+gc_content	dinucleotide_content	inside		0.1	nt=GC
+gc_skew	dinucleotide_skew	inside		0.1	nt=GC
+a_skew_2	dinucleotide_skew	inside		0.1	nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew
+ticks	ticks	inside			tick_label_layout=label_in_tick_out
+```
+
+Use it like this:
+
+```bash
+gbdraw circular \
+  --gbk HmmtDNA.gbk \
+  --circular_track_table hmmt_tracks.tsv \
+  --track_type middle \
+  --window 500 \
+  --step 50 \
+  --species '<i>Homo sapiens</i>' \
+  --labels out \
+  -l left \
+  -o HmmtDNA_ATskew \
+  -f interactive_svg
+```
 
 Depth tracks can be supplied with the legacy `--depth` option or the repeatable
 `--depth_track` option. `--depth` keeps the single-track SVG IDs `depth` and
