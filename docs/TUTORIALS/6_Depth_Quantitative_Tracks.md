@@ -14,27 +14,44 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738874.1&rettype=gbwithparts&retmode=text" -O MelaMJNV.gb
 ```
 
-Depth TSV files use three tab-separated columns: `reference`, `position`, and `depth`. A header is optional; the parser normalizes the first three columns to `reference_name`, `position`, and `depth`.
+In a source checkout, both files are also available under `examples/`.
 
-Create two small depth files:
+Depth TSV files use the first three columns of samtools depth output: `reference`, 1-based `position`, and non-negative `depth`. A header is optional; gbdraw normalizes these columns to `reference_name`, `position`, and `depth`.
+
+Create two compact synthetic depth files. They contain one sample every 25,000 bp, so the commands below use `--depth_window 1 --depth_step 25000`. For ordinary per-base samtools depth output, omit those two options or choose aggregation values that fit your data.
 
 ```bash
 cat > MjeNMV.depth.tsv <<'EOF'
 reference	position	depth
 LC738868.1	1	18
-LC738868.1	5000	24
-LC738868.1	10000	42
-LC738868.1	20000	8
-LC738868.1	40000	60
+LC738868.1	25001	24
+LC738868.1	50001	42
+LC738868.1	75001	8
+LC738868.1	100001	60
+LC738868.1	125001	35
+LC738868.1	150001	22
+LC738868.1	175001	48
+LC738868.1	200001	30
+LC738868.1	225001	70
+LC738868.1	250001	40
+LC738868.1	275001	28
+LC738868.1	300001	55
 EOF
 
 cat > MelaMJNV.depth.tsv <<'EOF'
 reference	position	depth
 LC738874.1	1	12
-LC738874.1	5000	20
-LC738874.1	10000	35
-LC738874.1	20000	16
-LC738874.1	40000	55
+LC738874.1	25001	20
+LC738874.1	50001	35
+LC738874.1	75001	16
+LC738874.1	100001	55
+LC738874.1	125001	31
+LC738874.1	150001	18
+LC738874.1	175001	44
+LC738874.1	200001	27
+LC738874.1	225001	63
+LC738874.1	250001	38
+LC738874.1	275001	50
 EOF
 ```
 
@@ -47,6 +64,8 @@ gbdraw circular \
   --gbk MjeNMV.gb \
   --depth MjeNMV.depth.tsv \
   --depth_width 45 \
+  --depth_window 1 \
+  --depth_step 25000 \
   --show_depth_axis \
   --show_depth_ticks \
   --depth_large_tick_interval 20 \
@@ -55,7 +74,7 @@ gbdraw circular \
   -f svg
 ```
 
-Circular mode uses `--depth_width` for the radial thickness of the depth track.
+This writes `MjeNMV_depth_circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. Because this record is annotated as linear, gbdraw also prints the expected topology warning for this circular-only example.
 
 ## 3. Add Multiple Logical Depth Tracks
 
@@ -69,6 +88,8 @@ gbdraw linear \
   --depth_track_label "Run A" "Run B" \
   --depth_track_color "#4E79A7" "#E15759" \
   --depth_height 36 \
+  --depth_window 1 \
+  --depth_step 25000 \
   --show_depth_axis \
   --show_depth_ticks \
   --share_depth_axis \
@@ -76,9 +97,11 @@ gbdraw linear \
   -f svg
 ```
 
-Linear mode uses `--depth_height` for the vertical height of depth tracks. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
+This writes `majani_depth_tracks.svg`. The repeated input groups keep the example setup short; replace the second `--depth_track` group with another sample's files in a real comparison.
 
-Track-specific overrides are available when each logical track needs its own axis styling:
+Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same automatically determined y-axis maximum across records for each logical track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
+
+Use `--depth_track_height` when each logical track needs its own height. Track-specific axis overrides are also available:
 
 - `--depth_track_large_tick_interval`
 - `--depth_track_small_tick_interval`
@@ -93,13 +116,19 @@ gbdraw linear \
   --gbk MjeNMV.gb \
   --depth MjeNMV.depth.tsv \
   --depth_height 40 \
+  --depth_window 1 \
+  --depth_step 25000 \
   --depth_log_scale \
   --depth_min 1 \
   --depth_max 100 \
   --show_depth_axis \
-  -o MjeNMV_depth_log \
+  -o tutorial-depth-log-axis \
   -f svg
 ```
+
+This writes `tutorial-depth-log-axis.svg`, with a log-scaled depth axis spanning the requested 1x to 100x range.
+
+![Linear majanivirus diagram with a blue log-scaled depth track and quantitative axis](../../examples/tutorial-depth-log-axis.svg)
 
 Use `--no_depth_log_scale` to force linear scaling when a config file or saved session enables log scaling.
 
@@ -122,6 +151,8 @@ gbdraw linear \
   -f svg
 ```
 
+This writes `MjeNMV_gc_percent.svg`.
+
 The same percent-mode options are available in circular mode, together with circular track geometry such as `--gc_content_width` and `--gc_content_radius`.
 
 ## 6. Add Another Skew Track
@@ -132,13 +163,15 @@ Custom track slots can add a second skew track with a different dinucleotide. Th
 gbdraw linear \
   --gbk MjeNMV.gb \
   --show_skew \
-  --linear_track_slot features:features@side=overlay \
-  --linear_track_slot gc_skew:gc_skew@side=below,h=24px,spacing=8px \
-  --linear_track_slot at_skew:dinucleotide_skew@side=below,h=24px,spacing=8px,nt=AT,positive_color=#deaf6e,negative_color=#7294e3 \
+  --linear_track_slot 'features:features@side=overlay' \
+  --linear_track_slot 'gc_skew:gc_skew@side=below,h=24px,spacing=8px' \
+  --linear_track_slot 'at_skew:dinucleotide_skew@side=below,h=24px,spacing=8px,nt=AT,positive_color=#deaf6e,negative_color=#7294e3' \
   --linear_track_axis_index 0 \
   -o MjeNMV_two_skew_tracks \
   -f svg
 ```
+
+This writes `MjeNMV_two_skew_tracks.svg`.
 
 Use the same `nt=AT` pattern in circular track tables or circular track slots when you need an additional circular skew ring.
 

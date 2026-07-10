@@ -34,7 +34,7 @@
 | [Full documentation](./docs/DOCS.md) | Main entry point for the published docs set. |
 | [Installation](./docs/INSTALL.md) | Hosted app, Bioconda, and local development installation. |
 | [Quickstart](./docs/QUICKSTART.md) | First circular plot in a few minutes. |
-| [Tutorials](./docs/TUTORIALS/TUTORIALS.md) | Step-by-step guides for styling, comparisons, and advanced customization. |
+| [Tutorials](./docs/TUTORIALS/TUTORIALS.md) | Step-by-step guides for styling, comparisons, table-driven inputs, quantitative tracks, and interactive workflows. |
 | [Recipes](./docs/RECIPES.md) | Copy-paste command patterns for common tasks. |
 | [CLI Reference](./docs/CLI_Reference.md) | Current command help for the CLI. |
 | [Gallery](./docs/GALLERY.md) | Example plots and commands. |

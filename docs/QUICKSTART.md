@@ -94,8 +94,10 @@ If you need an index selector in the shell, quote it:
 ```bash
 gbdraw linear \
   --gbk Genome1.gbk Genome2.gbk \
-  --record_id Genome1_Chr1 '#0' \
-  --reverse_complement false true \
+  --record_id Genome1_Chr1 \
+  --record_id '#0' \
+  --reverse_complement false \
+  --reverse_complement true \
   -o genome_pair_selected \
   -f svg
 ```

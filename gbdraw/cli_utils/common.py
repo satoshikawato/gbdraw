@@ -155,7 +155,7 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
         default="")
     label_list_group.add_argument(
         '--label_blacklist',
-        help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
+        help='Comma-separated keywords for label blacklisting (optional); mutually exclusive with --label_whitelist',
         type=str,
         default="")
     parser.add_argument(

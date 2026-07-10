@@ -270,9 +270,8 @@ options:
                         pattern (optional); mutually exclusive with
                         --label_blacklist
   --label_blacklist LABEL_BLACKLIST
-                        Comma-separated keywords or path to a file for label
-                        blacklisting (optional); mutually exclusive with
-                        --label_whitelist
+                        Comma-separated keywords for label blacklisting
+                        (optional); mutually exclusive with --label_whitelist
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for
                         labels (optional)
@@ -849,9 +848,8 @@ options:
                         pattern (optional); mutually exclusive with
                         --label_blacklist
   --label_blacklist LABEL_BLACKLIST
-                        Comma-separated keywords or path to a file for label
-                        blacklisting (optional); mutually exclusive with
-                        --label_whitelist
+                        Comma-separated keywords for label blacklisting
+                        (optional); mutually exclusive with --label_whitelist
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for
                         labels (optional)

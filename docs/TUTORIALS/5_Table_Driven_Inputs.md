@@ -15,7 +15,10 @@ Relative paths in table files resolve against the table file, not against the sh
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gb
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738874.1&rettype=gbwithparts&retmode=text" -O MelaMJNV.gb
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738870.1&rettype=gbwithparts&retmode=text" -O PemoMJNVA.gb
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text" -O HmmtDNA.gbk
 ```
+
+In a source checkout, the majanivirus files are also available under `examples/`, and `HmmtDNA.gbk` is available under `tests/test_inputs/`.
 
 ## 2. Linear `--records_table` for GenBank Rows
 
@@ -33,11 +36,11 @@ Then run:
 ```bash
 gbdraw linear \
   --records_table linear_records.tsv \
-  --protein_blastp_mode pairwise \
-  --pairwise_match_style curve \
   -o majani_records_table \
   -f svg
 ```
+
+This writes `majani_records_table.svg`.
 
 `--records_table` replaces `--gbk`, `--gff`, and `--fasta`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
 
@@ -53,7 +56,7 @@ EOF
 
 cat > toy_a.gff3 <<'EOF'
 ##gff-version 3
-toyA	gbdraw	CDS	1	90	.	+	0	ID=toyA_cds1;product=toy protein A
+toyA	gbdraw	CDS	1	87	.	+	0	ID=toyA_cds1;product=toy protein A
 EOF
 
 cat > toy_b.fna <<'EOF'
@@ -63,7 +66,7 @@ EOF
 
 cat > toy_b.gff3 <<'EOF'
 ##gff-version 3
-toyB	gbdraw	CDS	1	90	.	+	0	ID=toyB_cds1;product=toy protein B
+toyB	gbdraw	CDS	1	87	.	+	0	ID=toyB_cds1;product=toy protein B
 EOF
 ```
 
@@ -72,7 +75,7 @@ Create `gff_records.tsv`:
 ```tsv
 gff	fasta	record_label	record_id	region	reverse_complement	order
 toy_a.gff3	toy_a.fna	Toy A	toyA		0	1
-toy_b.gff3	toy_b.fna	Toy B	toyB	1-90	0	2
+toy_b.gff3	toy_b.fna	Toy B	toyB	1-87	0	2
 ```
 
 ```bash
@@ -82,9 +85,13 @@ gbdraw linear \
   -f svg
 ```
 
+This writes `toy_gff_records_table.svg`.
+
 A table must use either all GenBank rows or all GFF3/FASTA rows. Do not mix `gbk` with `gff`/`fasta` in the same table.
 
 ## 4. Circular Multi-Record Placement
+
+The majanivirus records are annotated as linear. Sections 4 and 5 intentionally reuse them to keep the setup compact, so gbdraw prints a topology warning when drawing the circular examples.
 
 Create `circular_records.tsv`:
 
@@ -103,6 +110,8 @@ gbdraw circular \
   -o majani_circular_grid \
   -f svg
 ```
+
+This writes `majani_circular_grid.svg`.
 
 When a records table provides `row` and `column`, do not also use `--multi_record_position`.
 
@@ -136,6 +145,8 @@ gbdraw circular \
   -f svg
 ```
 
+This writes `MjeNMV_conservation_table.svg`.
+
 `--conservation_table` cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
 
 ## 6. Circular Track Slots with `--circular_track_table`
@@ -153,14 +164,20 @@ ticks	ticks	inside			tick_label_layout=label_in_tick_out
 
 ```bash
 gbdraw circular \
-  --gbk MjeNMV.gb \
+  --gbk HmmtDNA.gbk \
   --circular_track_table circular_tracks.tsv \
   --track_type middle \
   --window 500 \
   --step 50 \
-  -o MjeNMV_track_table \
+  --species '<i>Homo sapiens</i>' \
+  -l left \
+  -o tutorial-circular-track-table \
   -f svg
 ```
+
+This writes `tutorial-circular-track-table.svg`. The result places GC content, GC skew, and the added AT skew ring inside the mitochondrial feature ring.
+
+![Human mitochondrial circular diagram with GC content, GC skew, and custom AT skew rings](../../examples/tutorial-circular-track-table.svg)
 
 `--circular_track_table` cannot be combined with inline circular track slot options such as `--circular_track_order`, `--circular_track_slot`, or `--circular_track_axis_index`.
 

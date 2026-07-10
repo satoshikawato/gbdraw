@@ -151,7 +151,8 @@ gbdraw linear \
 ```bash
 gbdraw linear \
   --gbk genome1.gb genome2.gb \
-  --reverse_complement false true \
+  --reverse_complement false \
+  --reverse_complement true \
   -o output \
   -f svg
 ```

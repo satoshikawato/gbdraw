@@ -30,7 +30,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027131.1&rettype=fasta&retmode=text" -O AP027131.fasta
 ```
 
-Run TBLASTX:
+Install NCBI BLAST+ so that `tblastx` is available on `PATH`, then create an outfmt 7 comparison table:
 
 ```bash
 tblastx \
@@ -54,7 +54,7 @@ gbdraw linear \
 
 The default pairwise link style is `ribbon`, which draws straight filled ribbons and is best when the exact BLAST alignment span is the main signal. Use `--pairwise_match_style curve` for curved filled ribbons in dense synteny-style views; the curve style still preserves each match span from `qstart/qend` and `sstart/send`.
 
-For generated collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients. Collinear blocks use RBH anchors. In the web UI, Evidence scope controls which record pairs provide collinearity evidence; Adjacent pairs produces local collinear gene groups, while All records can provide collinearity-backed global metadata. Ribbons are still drawn for adjacent display pairs.
+For generated collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients. Collinear blocks use RBH anchors. In the web app, `Evidence scope` controls which record pairs provide collinearity evidence. `Adjacent pairs` uses only neighboring records; `All records` uses every record pair for grouping and block support. Both settings draw ribbons only for adjacent display pairs.
 
 ## 4. Generate Protein Comparisons Without BLAST Tables
 
@@ -115,7 +115,7 @@ In evolutionary genomics, an orthogroup is a set of genes descended from a singl
 
 ### Collinear Blocks
 
-An anchor is a protein-supported gene pair associated with the same gbdraw orthogroup. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed and suggest an inversion.
+An anchor is a protein-supported gene pair associated with the same gbdraw orthogroup. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed, which suggests an inversion.
 
 Multi-anchor blocks combine protein similarity with conserved local gene order. They can highlight conserved gene neighborhoods, including candidate operons or gene clusters, but they do not by themselves establish shared function or cotranscription. Genes lying between anchors are not automatically homologous or members of the same orthogroup.
 
@@ -125,9 +125,9 @@ The default `--collinear_min_anchors 1` retains singleton links. Set it to `2` t
 
 Linear mode supports three selectors:
 
-- `--record_id`: choose a record by ID or `#index` for each input file
-- `--reverse_complement`: reverse-complement selected inputs
-- `--region`: crop a region with `record_id:start-end[:rc]`
+- `--record_id`: choose one record by ID or `#index`; repeat the option for multiple input files
+- `--reverse_complement`: set one Boolean orientation value per occurrence; repeat the option in input-file order
+- `--region`: crop a region with `record_id:start-end[:rc]`; repeat the option for multiple regions
 
 Example: select one record and crop a region.
 
@@ -144,29 +144,33 @@ Example: reverse-complement the second input.
 
 ```bash
 gbdraw linear \
-  --gbk Genome1.gbk Genome2.gbk \
-  --reverse_complement false true \
-  -o Genome1_Genome2_rc \
+  --gbk AP027078.gb AP027131.gb \
+  --reverse_complement false \
+  --reverse_complement true \
+  -o hepatoplasmataceae_second_rc \
   -f svg
 ```
 
+Each occurrence of `--record_id` and `--reverse_complement` accepts one value. Repeat the option rather than placing several values after a single occurrence.
+
 If you use `--region` or `--reverse_complement` together with BLAST, make sure the BLAST coordinates still match the selected inputs.
 
-For larger comparisons, put row-specific selectors and crops in a records table instead of repeating several order-sensitive CLI options.
+For larger comparisons, put row-specific selectors and crops in a records table instead of repeating several order-sensitive CLI options. Create `records.tsv`:
 
 ```tsv
 gbk	record_label	record_id	region	reverse_complement	order
-Genome1.gbk	Genome 1	#1		0	1
-Genome2.gbk	Genome 2	#1	50000-180000	1	2
+AP027078.gb	T. litorale	AP027078.1	100000-250000	0	1
+AP027131.gb	H. vulgare	AP027131.1	50000-180000	1	2
 ```
 
 ```bash
 gbdraw linear \
   --records_table records.tsv \
-  -b Genome1_vs_Genome2.blast.outfmt7.txt \
-  -o Genome1_Genome2_table \
+  -o hepatoplasmataceae_regions \
   -f svg
 ```
+
+This selector-only example intentionally omits `-b/--blast`; a full-record BLAST table does not automatically acquire coordinates for cropped or reverse-complemented records.
 
 `--records_table` is an alternative input source, so do not combine it with `--gbk`, `--gff`, or `--fasta`.
 
@@ -208,7 +212,9 @@ gbdraw linear \
 
 Add `--evalue`, `--bitscore`, or `--alignment_length` when you want to filter the comparison tables before drawing the ribbons.
 
-![Five-genome Hepatoplasmataceae comparison](../../examples/hepatoplasmataceae_default.svg)
+Inspect the result for four ribbon bands, each connecting one adjacent pair in the five-genome input order.
+
+![Five aligned Hepatoplasmataceae genomes connected by four adjacent BLAST ribbon tracks](../../examples/hepatoplasmataceae_default.svg)
 
 > [!IMPORTANT]
 > BLAST files must follow the same order as the genome list.
@@ -235,7 +241,7 @@ gbdraw circular \
 
 Use one `--conservation_blast` file per ring. If gbdraw can identify the displayed reference IDs on only one BLAST side, `--conservation_reference auto` works; otherwise set `query` or `subject` explicitly. BLAST rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
 
-In the web app, circular mode also supports Conservation Rings from uploaded BLAST outfmt 6/7 files or browser LOSAT `blastn`. LOSAT mode uses each comparison FASTA as the query and the displayed circular genome as the subject, so the generated BLAST results are passed to gbdraw with `conservation_reference=subject`.
+In the web app, open `Pairwise Comparisons` in circular mode. You can upload BLAST outfmt 6/7 files or choose `Run LOSAT` with LOSATN (`blastn`) or TLOSATX comparison FASTA files. The browser uses each comparison FASTA as the query and the displayed circular genome as the subject, so generated results are passed to gbdraw with `conservation_reference=subject`.
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 1](./1_Customizing_Plots.md) | [Go to Tutorial 3 >](./3_Advanced_Customization.md)

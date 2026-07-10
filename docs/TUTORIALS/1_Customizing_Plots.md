@@ -12,6 +12,12 @@
 
 `gbdraw` ships with many built-in palettes. Use `-p` or `--palette` to select one.
 
+If you did not complete the [Quickstart](../QUICKSTART.md), download the *Escherichia coli* K-12 record first:
+
+```bash
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O NC_000913.gbk
+```
+
 ```bash
 gbdraw circular \
   --gbk NC_000913.gbk \
@@ -21,9 +27,11 @@ gbdraw circular \
   -p orchid
 ```
 
-![ecoli_orchid.svg](../../examples/ecoli_orchid.svg)
+The resulting SVG uses the orchid palette while keeping forward- and reverse-strand features on separate tracks.
 
-See [color_palette_examples.md](../../examples/color_palette_examples.md) for the full palette list.
+![Circular E. coli K-12 diagram in the orchid palette with separate strand tracks](../../examples/ecoli_orchid.svg)
+
+See the [built-in palette examples](../../examples/color_palette_examples.md) for the full palette list.
 
 ## 2. Choose a Circular Preset
 
@@ -36,7 +44,9 @@ Two options control the overall look of a circular plot:
 
 The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular track slot.
 
-![track_layout_separate_strands.png](../../examples/track_layout_separate_strands.png)
+The montage compares `tuckin`, `middle`, and `spreadout` from left to right. All three plots use `--separate_strands`.
+
+![Circular WSSV diagrams comparing tuckin, middle, and spreadout presets with separate strand tracks](../../examples/track_layout_separate_strands.png)
 
 ## 3. Add Centered Organism Text or a Plot Title
 
@@ -52,7 +62,9 @@ gbdraw circular \
   --strain "K-12"
 ```
 
-![ecoli_with_title.svg](../../examples/ecoli_with_title.svg)
+The species name is italicized and shown with the strain in the centered definition text.
+
+![Circular E. coli K-12 diagram with an italic species name and centered strain text](../../examples/ecoli_with_title.svg)
 
 If you want a title above or below the plot, use `--plot_title` together with `--plot_title_position top` or `bottom`.
 
@@ -79,7 +91,9 @@ gbdraw circular \
   --labels
 ```
 
-![WSSV_with_labels.svg](../../examples/WSSV_with_labels.svg)
+Inspect the SVG for readable feature labels placed within or around the circular map.
+
+![Circular white spot syndrome virus genome with feature labels placed within and around the map](../../examples/WSSV_with_labels.svg)
 
 > [!WARNING]
 > Avoid `--labels` or `--labels both` on feature-dense genomes unless you also filter labels with `--label_blacklist` or `--label_whitelist`.
@@ -101,7 +115,9 @@ gbdraw circular \
   --legend none
 ```
 
-![WSSV_filtered.svg](../../examples/WSSV_filtered.svg)
+Compared with the preceding plot, this result removes the GC content track, GC skew track, and legend while retaining the labeled, strand-separated feature map.
+
+![Simplified circular white spot syndrome virus map without GC tracks, GC skew, or a legend](../../examples/WSSV_filtered.svg)
 
 ## 6. When You Move to Linear Mode
 

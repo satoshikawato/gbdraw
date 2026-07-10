@@ -23,13 +23,13 @@ If you are working from a source checkout, the same files are also available und
 
 ## 2. Runtime Selection
 
-For `--protein_blastp_mode pairwise`, `orthogroup`, and `collinear`, gbdraw resolves the protein search runtime in this order:
+Unless you pass an explicit executable path, `--protein_blastp_mode pairwise`, `orthogroup`, and `collinear` resolve the protein search runtime in this order:
 
 1. bundled native LOSAT on Linux x86_64 when available
 2. `losat` on `PATH`
 3. NCBI BLAST+ `blastp` on `PATH`
 
-Use explicit paths when you need to control the runtime:
+Use an explicit path when you need to control the runtime:
 
 ```bash
 gbdraw linear \
@@ -54,6 +54,8 @@ gbdraw linear \
 
 NCBI BLAST+ output is compatible with the workflow, but it may not produce exactly the same hit set as LOSAT.
 
+Pass only one of `--losatp_bin` and `--ncbi_blastp_bin` in a command.
+
 ## 3. Pairwise Protein Ribbons
 
 `pairwise` runs adjacent protein searches and draws pairwise ribbons from the resulting matches.
@@ -64,9 +66,13 @@ gbdraw linear \
   --protein_blastp_mode pairwise \
   --align_center \
   --pairwise_match_style curve \
-  -o MjeNMV_MelaMJNV_pairwise_protein \
+  -o tutorial-protein-pairwise \
   -f svg
 ```
+
+This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-derived protein hits between the two adjacent records.
+
+![Pairwise majanivirus protein comparison with curved ribbons between two linear records](../../examples/tutorial-protein-pairwise.svg)
 
 ## 4. Orthogroup Ribbons
 
@@ -82,6 +88,8 @@ gbdraw linear \
   -o majani_orthogroup \
   -f svg
 ```
+
+This writes `majani_orthogroup.svg`.
 
 `--show_labels orthogroup_top` labels the topmost displayed member of each orthogroup, which is useful when the same group appears in multiple records.
 
@@ -100,6 +108,8 @@ gbdraw linear \
   -o majani_collinear \
   -f svg
 ```
+
+This writes `majani_collinear.svg`.
 
 `--collinear_min_anchors 2` removes singleton blocks. `--collinear_color_mode orientation_identity` separates forward and inverted blocks while still encoding identity.
 

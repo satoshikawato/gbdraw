@@ -17,6 +17,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) if you want the fastest path to a
 - [Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md)
 - [Tutorial 2: Comparative Genomics](./TUTORIALS/2_Comparative_Genomics.md)
 - [Tutorial 3: Advanced Customization](./TUTORIALS/3_Advanced_Customization.md)
+- [Advanced workflows (Tutorials 4-9)](./TUTORIALS/TUTORIALS.md#advanced-workflows): generated protein comparisons, table-driven inputs, quantitative tracks, linear layout, interactive SVG sessions, and feature visibility.
 
 ## Reference
 
@@ -32,6 +33,6 @@ Use [https://gbdraw.app/](https://gbdraw.app/) if you want the fastest path to a
 - Hosted interactive SVG gallery and web tutorials: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
-- Protein blastp comparisons: `--protein_blastp_mode pairwise` draws adjacent protein matches, `orthogroup` adds all-record gene-family metadata, and `collinear` summarizes orthogroup-backed anchors as gene-order-preserving blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`; see [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#4-what-orthogroups-and-collinear-blocks-mean) for the biological meaning of Orthogroups and Collinear blocks.
+- Protein blastp comparisons: `--protein_blastp_mode pairwise` draws adjacent protein matches, `orthogroup` adds all-record gene-family metadata, and `collinear` summarizes orthogroup-backed anchors as gene-order-preserving blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`; see [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#5-interpreting-orthogroups-and-collinear-blocks) for the biological meaning of orthogroups and collinear blocks.
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

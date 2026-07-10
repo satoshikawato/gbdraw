@@ -41,7 +41,9 @@ gbdraw circular \
   -o MjeNMV_modified_default_colors
 ```
 
-![MjeNMV_modified_default_colors.svg](../../examples/MjeNMV_modified_default_colors.svg)
+The CDS features should now use the light-gray override instead of the built-in CDS color.
+
+![Circular MjeNMV diagram with CDS features recolored light gray by a default-color override](../../examples/MjeNMV_modified_default_colors.svg)
 
 ### 2. Highlight Specific Features
 
@@ -68,7 +70,9 @@ gbdraw circular \
   -o MjeNMV_feature_specific_colors_with_labels
 ```
 
-![MjeNMV_feature_specifc_colors_with_labels.svg](../../examples/MjeNMV_feature_specifc_colors_with_labels.svg)
+Inspect the result for blue WSSV-like proteins, yellow BIRP features, and a red tyrosine recombinase against the light-gray CDS background.
+
+![Labeled circular MjeNMV diagram with blue WSSV-like proteins, yellow BIRP features, and a red tyrosine recombinase](../../examples/MjeNMV_feature_specifc_colors_with_labels.svg)
 
 ## Part 2: Advanced Label Control
 
@@ -88,9 +92,11 @@ gbdraw circular \
   -o MjeNMV_feature_specific_colors_with_labels_blacklist
 ```
 
-![MjeNMV_feature_specifc_colors_with_labels_blacklist.svg](../../examples/MjeNMV_feature_specifc_colors_with_labels_blacklist.svg)
+The highlighted features remain, but labels containing `hypothetical` are removed.
 
-You can also pass a file to `--label_blacklist`, with one term per line.
+![Labeled circular MjeNMV diagram with hypothetical-protein labels removed](../../examples/MjeNMV_feature_specifc_colors_with_labels_blacklist.svg)
+
+To remove several label terms, pass one comma-separated value, for example `--label_blacklist "hypothetical,putative"`. Matching is case-insensitive substring matching.
 
 ### 2. Whitelist Only the Labels You Need
 
@@ -125,7 +131,9 @@ gbdraw circular \
   -f svg
 ```
 
-![O157_H7_stx_whitelist.svg](../../examples/O157_H7_stx_whitelist.svg)
+Only CDS features whose `gene` qualifier matches one of the four whitelist patterns receive labels.
+
+![Circular E. coli O157:H7 Sakai diagram labeled only for stx1A, stx1B, stx2A, and stx2B CDS features](../../examples/O157_H7_stx_whitelist.svg)
 
 ### 3. Change Which Qualifier Supplies the Label
 
@@ -157,11 +165,13 @@ gbdraw circular \
   -o HmmtDNA_qualifier_priority_soft_pastels
 ```
 
-![HmmtDNA_qualifier_priority_soft_pastels.svg](../../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
+The mitochondrial CDS labels now come from the `gene` qualifier and use the soft-pastels palette.
+
+![Human mitochondrial diagram with CDS labels taken from gene qualifiers and drawn in the soft-pastels palette](../../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
 
 ### 4. Override Label Text After Filtering
 
-`--label_table` runs after whitelist, blacklist, and qualifier-priority processing.
+Most `--label_table` rules run after whitelist, blacklist, and qualifier-priority processing. A rule whose qualifier is `hash` targets one exact feature at the highest priority and can bypass whitelist or blacklist filtering.
 
 Create `label_override.tsv`:
 
@@ -255,11 +265,17 @@ gbdraw circular \
   -f svg
 ```
 
-Reference images:
+The first montage compares centered definition text at 20, 28, and 36 pt from left to right.
 
-- ![definition_font_size_comparison.png](../../examples/definition_font_size_comparison.png)
-- ![label_font_size_comparison.png](../../examples/label_font_size_comparison.png)
-- ![outer_label_offset_comparison.png](../../examples/outer_label_offset_comparison.png)
+![Human mitochondrial diagrams comparing 20, 28, and 36 pt centered definition text](../../examples/definition_font_size_comparison.png)
+
+The second montage compares circular feature labels at 8, 12, and 16 pt from left to right.
+
+![Circular WSSV diagrams comparing 8, 12, and 16 pt feature labels](../../examples/label_font_size_comparison.png)
+
+The final montage compares paired x/y outer-label offsets of 0.95, 1.00, 1.05, and 1.10 from top left to bottom right.
+
+![Circular WSSV diagrams comparing outer-label radius offsets from 0.95 through 1.10](../../examples/outer_label_offset_comparison.png)
 
 ## Part 4: Linear Mode Input Selectors
 
