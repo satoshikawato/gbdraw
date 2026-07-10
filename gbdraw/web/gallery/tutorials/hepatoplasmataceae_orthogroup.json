@@ -7,7 +7,6 @@
   "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP orthogroups",
-  "requirements": ["Enough available memory for five bacterial GenBank records and LOSATP output."],
   "downloads": [
     {
       "label": "AP027078",
@@ -84,7 +83,7 @@
     },
     {
       "title": "Use browser LOSAT",
-      "body": "In Pairwise Comparisons, choose Run LOSAT. Set LOSAT Mode to LOSATP and set blastp mode to Orthogroups.",
+      "body": "In Pairwise Comparisons, choose Run LOSAT and set LOSAT Mode to LOSATP.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -98,8 +97,8 @@
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-03-01-browser-losat.webp",
-            "alt": "LOSAT settings panel with Run LOSAT, LOSATP, Orthogroups mode, and browser thread controls.",
-            "caption": "Choose Run LOSAT, LOSATP, and Orthogroups in Pairwise Comparisons."
+            "alt": "LOSAT settings panel with Run LOSAT, LOSATP, and browser thread controls.",
+            "caption": "Choose Run LOSAT and LOSATP, then use the thread settings in the table."
           }
         }
       ]
@@ -111,11 +110,13 @@
         "columns": ["Setting", "Value"],
         "rows": [
           ["blastp mode", "Orthogroups"],
-          ["Pairwise evidence", "adjacent genome pairs"],
-          ["LOSATP thresholds", "Bitscore 50, e-value 1e-2, identity 30, minimum length 0"]
+          ["Bitscore", "50"],
+          ["E-value", "1e-2"],
+          ["Minimum Identity", "0"],
+          ["Minimum Length", "0"]
         ]
       },
-      "note": "The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks.",
+      "note": "Orthogroup evidence is built from all record pairs; the diagram draws ribbons between adjacent displayed records. The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks.",
       "operations": [
         {
           "title": "Orthogroups mode controls",
@@ -143,11 +144,11 @@
         },
         {
           "title": "Orthogroups threshold settings",
-          "body": "Use Orthogroups mode with bitscore 50, e-value 1e-2, identity 30, and minimum length 0.",
+          "body": "Use the LOSATP threshold values in the table.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-04-02-orthogroup-settings.webp",
             "alt": "LOSAT Settings panel with Orthogroups mode and the visible threshold controls.",
-            "caption": "Use Orthogroups mode with bitscore 50, e-value 1e-2, identity 30, and minimum length 0."
+            "caption": "Set Bitscore to 50, E-value to 1e-2, Minimum Identity to 0, and Minimum Length to 0."
           }
         }
       ]
@@ -158,12 +159,13 @@
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Align to Center", "on"],
-          ["Separate Strands", "on"],
-          ["Scale Style", "ruler"],
-          ["Show GC", "on"],
-          ["Show skew", "on"],
-          ["Pairwise match style", "curve"],
+          ["Track Layout", "Middle"],
+          ["Align to Center", "On"],
+          ["Separate Strands", "On"],
+          ["Scale Style", "Ruler (Ticks)"],
+          ["Show GC Content", "On"],
+          ["Show GC Skew", "On"],
+          ["Pairwise Match Style", "Curve"],
           ["Palette", "ajisai"]
         ]
       },
@@ -192,44 +194,55 @@
             },
             "openDetails": ["Axis & Scale"]
           }
-        }
-      ]
-    },
-    {
-      "title": "Generate the diagram",
-      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache.",
-      "operations": [
+        },
         {
           "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/manual-06-01-generate.webp",
-            "alt": "Generate Diagram button in the processing panel.",
-            "caption": "Click Generate Diagram after LOSATP and layout settings are set."
+            "src": "./media/hepatoplasmataceae_orthogroup/manual-05-02-layout-overview.webp",
+            "alt": "Layout card with Middle track layout and the center alignment, separate strands, GC content, and GC skew options selected.",
+            "caption": "Set Track Layout to Middle and select Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
+            "openDetails": ["Layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const content = card?.querySelector('details > div'); const track = content?.children?.[0]; const options = content?.children?.[1]; if (!app || !summary || !track || !options) throw new Error('Layout controls are unavailable.'); const matches = app.form?.linear_track_layout === 'middle' && app.form?.align_center === true && app.form?.separate_strands === true && app.form?.show_gc === true && app.form?.show_skew === true && app.adv?.pairwise_match_style === 'curve' && String(app.selectedPalette || '') === 'ajisai'; if (!matches) throw new Error('Restored layout settings do not match the tutorial.'); summary.setAttribute('data-capture-tutorial-layout-summary', 'true'); track.setAttribute('data-capture-tutorial-layout-track', 'true'); options.setAttribute('data-capture-tutorial-layout-options', 'true'); track.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": ["[data-capture-tutorial-layout-summary='true']", "[data-capture-tutorial-layout-track='true']", "[data-capture-tutorial-layout-options='true']"],
+            "cropPadding": 12
           }
         }
       ]
     },
     {
-      "title": "Inspect the orthogroup overview",
-      "body": "The generated preview should show many individual green pairwise ribbons instead of the larger orientation-colored collinear blocks.",
+      "title": "Generate and inspect the orthogroup overview",
+      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache. The generated preview should show many individual green pairwise ribbons instead of larger orientation-colored collinear blocks.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-07-01-orthogroup-overview.webp",
-            "alt": "Generated Hepatoplasmataceae orthogroup preview around a ribbon-dense region.",
-            "caption": "The generated preview keeps the dense orthogroup ribbon region visible."
+            "alt": "Generated five-genome Hepatoplasmataceae preview with dense green orthogroup ribbons, GC content and skew tracks, a ruler, and the legend.",
+            "caption": "The generated preview shows five genome records connected by dense green orthogroup ribbons."
           }
         }
       ]
     },
     {
       "title": "Open an orthogroup match popup",
-      "body": "Click a pairwise ribbon in the interactive SVG to inspect the orthogroup ID, display name, member count, record coverage, and member table.",
+      "body": "Click a pairwise ribbon in the interactive SVG to inspect the orthogroup ID, display name, member count, and record coverage. The member table remains available below the summary.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-08-01-orthogroup-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae orthogroup crop with the highlighted match ribbon and popup.",
-            "caption": "The zoomed crop keeps the highlighted orthogroup ribbon and popup readable."
+            "caption": "The highlighted og_244 ribbon remains visible beside its compact 30S ribosomal protein S11 summary."
           },
           "capture": {
             "source": "webapp",
@@ -240,12 +253,17 @@
             },
             "actions": [
               {
+                "type": "waitForSelector",
+                "selector": "[data-gbdraw-pairwise-match-id='comparison1_match331']",
+                "state": "attached"
+              },
+              {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-110px, -30px) scale(1.15)'; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\")) throw new Error('Orthogroup target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; app.svgContainer.style.transform = 'translate(-110px, -30px) scale(1.15)';"
               },
               {
                 "type": "click",
-                "selector": "path[data-gbdraw-pairwise-match-id]",
+                "selector": "[data-gbdraw-pairwise-match-id='comparison1_match331']",
                 "force": true
               },
               {
@@ -254,15 +272,21 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = 520; app.clickedPairwiseMatchPos.y = 260; }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['og_244', '30s ribosomal protein s11', 'orthogroup id', 'members', 'record coverage', 'ap027078.1']) { if (!text.includes(expected)) throw new Error(`Orthogroup popup is missing: ${expected}`); } if (!rect || !popup) throw new Error('Orthogroup target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
+              },
+              {"type": "wait", "ms": 250},
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const section = popup?.querySelector('.pairwise-match-popup-section'); const title = section?.querySelector('.pairwise-match-popup-section-title'); const rows = Array.from(section?.querySelectorAll('.pairwise-match-popup-row') || []).slice(0, 4); if (!popup || !title || rows.length !== 4) throw new Error('Compact orthogroup summary not found.'); popup.children[0]?.setAttribute('data-capture', 'hepat-og-popup-header'); title.setAttribute('data-capture', 'hepat-og-popup-summary-title'); rows.forEach((row, index) => row.setAttribute('data-capture', `hepat-og-popup-summary-row-${index + 1}`));"
               }
             ],
-            "clipSelectors": [".pairwise-match-popup"],
+            "highlightSelector": "[data-gbdraw-pairwise-match-id='comparison1_match331']",
+            "clipSelectors": ["[data-capture='hepat-og-popup-header']", "[data-capture='hepat-og-popup-summary-title']", "[data-capture^='hepat-og-popup-summary-row-']"],
             "cropPadding": {
-              "top": 24,
-              "right": 24,
-              "bottom": 24,
-              "left": 24
+              "top": 18,
+              "right": 180,
+              "bottom": 18,
+              "left": 18
             },
             "waitForSelector": ".pairwise-match-popup"
           }
@@ -272,14 +296,14 @@
   ],
   "postGenerationEdits": [
     {
-      "title": "Click a CDS feature",
-      "body": "Feature clicks show qualifiers, sequences, and orthogroup membership details; the Feature editor drawer shows label, visibility, color, and scope controls. This is useful when you need to decide whether to add feature-specific colors.",
+      "title": "Inspect a CDS feature",
+      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, orthogroup membership, and protein ID.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "Hepatoplasmataceae Feature editor drawer controls with label, visibility, fill, stroke, and multi-target controls visible.",
-            "caption": "The Feature editor drawer crop keeps label, visibility, fill, stroke, and multi-target controls readable."
+            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, orthogroup ID, and protein ID.",
+            "caption": "The Details tab identifies the DnaA CDS as orthogroup og_1 in AP027078.1."
           },
           "capture": {
             "source": "webapp",
@@ -291,11 +315,12 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)'; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector('[data-gbdraw-feature-id=fe826bac7]')) throw new Error('DnaA feature target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)';"
               },
               {
                 "type": "click",
-                "selector": "[data-gbdraw-feature-id]"
+                "selector": "[data-gbdraw-feature-id='fe826bac7']",
+                "force": true
               },
               {
                 "type": "waitForSelector",
@@ -303,56 +328,26 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 70; }"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              },
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Orthogroup ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`));"
               }
             ],
-            "clipSelectors": [".feature-popup"],
+            "highlightSelector": "[data-gbdraw-feature-id='fe826bac7']",
+            "clipSelectors": ["[data-capture='dnaa-popup-header']", "[data-capture='dnaa-popup-tabs']", "[data-capture^='dnaa-popup-row-']"],
             "cropPadding": {
-              "top": 24,
-              "right": 24,
-              "bottom": 24,
-              "left": 24
+              "top": 18,
+              "right": 180,
+              "bottom": 18,
+              "left": 18
             },
             "waitForSelector": ".feature-popup"
-          }
-        }
-      ]
-    },
-    {
-      "title": "Edit the legend",
-      "body": "Use the legend editor to rename, reorder, or remove feature legend entries after the SVG has been generated.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/post-03-01-legend-editor.webp",
-            "alt": "Legend editor drawer for the Hepatoplasmataceae orthogroup comparison.",
-            "caption": "Open the Legend drawer to review feature legend entries."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Export the figure",
-      "body": "Download SVG for editable vector output. Use PNG or PDF when you need quick sharing or manuscript draft assets.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/post-04-01-export-controls.webp",
-            "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Save a session",
-      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, settings, generated output, and post-generation SVG adjustments.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/hepatoplasmataceae_orthogroup/post-05-01-save-session.webp",
-            "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }
       ]
@@ -391,11 +386,11 @@
     },
     {
       "title": "The output is too dense",
-      "body": "Raise identity, bitscore, or match length thresholds, reduce Max hits, or use the collinear tutorial when you want larger block-level summaries."
+      "body": "Raise identity, bitscore, or match length thresholds, lower the E-value cutoff, or use the collinear tutorial when you want larger block-level summaries."
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check input order, blastp mode Orthogroups, Pairwise match style, Align to Center, Separate Strands, Show GC, and Show skew settings."
+      "body": "Check input order, blastp mode Orthogroups, Pairwise Match Style, Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
     }
   ],
   "related": [

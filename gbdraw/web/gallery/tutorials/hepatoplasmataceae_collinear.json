@@ -7,7 +7,6 @@
   "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP collinear blocks",
-  "requirements": ["Enough available memory for five bacterial GenBank records and LOSATP output."],
   "downloads": [
     {
       "label": "AP027078",
@@ -110,10 +109,17 @@
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
+          ["blastp mode", "Collinear blocks"],
           ["Max unit gap", "0"],
           ["Min block genes", "1"],
+          ["Color mode", "Orientation + identity"],
           ["Evidence scope", "Adjacent pairs"],
-          ["Merge conflicts", "1"]
+          ["Diagonal drift", "0"],
+          ["Merge conflicts", "1"],
+          ["Bitscore", "50"],
+          ["E-value", "1e-2"],
+          ["Minimum Identity", "0"],
+          ["Minimum Length", "0"]
         ]
       },
       "note": "These settings summarize orthogroup-backed protein anchors as gene-order-preserving ribbons.",
@@ -174,12 +180,13 @@
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Align to Center", "on"],
-          ["Separate Strands", "on"],
-          ["Scale Style", "ruler"],
-          ["Show GC", "on"],
-          ["Show skew", "on"],
-          ["Pairwise match style", "curve"],
+          ["Track Layout", "Middle"],
+          ["Align to Center", "On"],
+          ["Separate Strands", "On"],
+          ["Scale Style", "Ruler (Ticks)"],
+          ["Show GC Content", "On"],
+          ["Show GC Skew", "On"],
+          ["Pairwise Match Style", "Curve"],
           ["Palette", "ajisai"]
         ]
       },
@@ -208,31 +215,66 @@
             },
             "openDetails": ["Axis & Scale"]
           }
+        },
+        {
+          "media": {
+            "src": "./media/hepatoplasmataceae_collinear/manual-05-02-layout-overview.webp",
+            "alt": "Layout card with Middle track layout and the center alignment, separate strands, GC content, and GC skew options selected.",
+            "caption": "Set Track Layout to Middle and select Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
+            "viewport": {"width": 1280, "height": 1000},
+            "openDetails": ["Layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const content = card?.querySelector('details > div'); const track = content?.children?.[0]; const options = content?.children?.[1]; if (!app || !summary || !track || !options) throw new Error('Layout controls are unavailable.'); const matches = app.form?.linear_track_layout === 'middle' && app.form?.align_center === true && app.form?.separate_strands === true && app.form?.show_gc === true && app.form?.show_skew === true && app.adv?.pairwise_match_style === 'curve' && String(app.selectedPalette || '') === 'ajisai'; if (!matches) throw new Error('Restored layout settings do not match the tutorial.'); summary.setAttribute('data-capture-tutorial-layout-summary', 'true'); track.setAttribute('data-capture-tutorial-layout-track', 'true'); options.setAttribute('data-capture-tutorial-layout-options', 'true'); track.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": ["[data-capture-tutorial-layout-summary='true']", "[data-capture-tutorial-layout-track='true']", "[data-capture-tutorial-layout-options='true']"],
+            "cropPadding": 12
+          }
         }
       ]
     },
     {
-      "title": "Generate the diagram",
-      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache.",
+      "title": "Generate and inspect the diagram",
+      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache. The preview should show orientation-colored collinear blocks between adjacent records.",
       "operations": [
         {
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-06-01-generate.webp",
-            "alt": "Generate Diagram button in the processing panel.",
-            "caption": "Click Generate Diagram after LOSATP and layout settings are set."
+            "src": "./media/hepatoplasmataceae_collinear/manual-06-01-collinear-overview.webp",
+            "alt": "Generated five-genome Hepatoplasmataceae preview with red and blue collinear blocks, GC content and skew tracks, a ruler, and the legend.",
+            "caption": "The generated preview shows orientation-colored collinear blocks between five genome records."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
+            "viewport": {"width": 1600, "height": 1000},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('block_0024') || !content.includes('data-collinearity-block-id')) throw new Error('Restored collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 0.5; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } svg.setAttribute('data-capture-tutorial-overview', 'true');"
+              },
+              {"type": "wait", "ms": 100}
+            ],
+            "selector": "svg[data-capture-tutorial-overview='true']",
+            "cropPadding": 12
           }
         }
       ]
     },
     {
       "title": "Check collinear blocks",
-      "body": "Use the generated SVG preview to inspect the curved block ribbons between adjacent genomes. Orientation + identity colors separate forward and reverse orientation while retaining identity information.",
+      "body": "Click a curved block ribbon between adjacent genomes to inspect its two records, intervals, orientation, and orthogroup count. Orientation + identity colors separate forward and reverse blocks while retaining identity information.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae collinear crop with the highlighted collinear block ribbon and popup.",
-            "caption": "The zoomed crop keeps the highlighted collinear block ribbon and popup readable."
+            "caption": "The highlighted block_0024 ribbon remains visible beside its compact plus-orientation summary covering 15 orthogroups."
           },
           "capture": {
             "source": "webapp",
@@ -243,12 +285,17 @@
             },
             "actions": [
               {
-                "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-110px, -30px) scale(1.15)'; }"
+                "type": "waitForSelector",
+                "selector": "[data-gbdraw-pairwise-match-id='comparison1_match1']",
+                "state": "attached"
               },
               {
-                "type": "click",
-                "selector": "path[data-gbdraw-pairwise-match-id]"
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector(\"[data-collinearity-block-id='block_0024']\")) throw new Error('Collinear block target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; app.svgContainer.style.transform = 'translate(-110px, -30px) scale(1.15)';"
+              },
+              {
+                "type": "evaluate",
+                "script": "const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match1']\"); const rect = target?.getBoundingClientRect(); if (!target || !rect) throw new Error('Collinear click target is unavailable.'); target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2, view: window }));"
               },
               {
                 "type": "waitForSelector",
@@ -256,15 +303,21 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = 520; app.clickedPairwiseMatchPos.y = 260; }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match1']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['collinearity block', 'block_0024', 'ap027078.1', 'ap027131.1', 'plus', '15']) { if (!text.includes(expected)) throw new Error(`Collinear popup is missing: ${expected}`); } if (!popup || !rect) throw new Error('Collinear target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 600, rect.top - 80)); }"
+              },
+              {"type": "wait", "ms": 250},
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const sections = Array.from(popup?.querySelectorAll('.pairwise-match-popup-section') || []); const summaryTitle = sections[0]?.querySelector('.pairwise-match-popup-section-title'); const summaryRows = Array.from(sections[0]?.querySelectorAll('.pairwise-match-popup-row') || []).slice(0, 5); const coveredTitle = sections[1]?.querySelector('.pairwise-match-popup-section-title'); const coveredRow = sections[1]?.querySelector('.pairwise-match-popup-row'); if (!popup || !summaryTitle || summaryRows.length !== 5 || !coveredTitle || !coveredRow) throw new Error('Compact collinear summary not found.'); popup.children[0]?.setAttribute('data-capture', 'collinear-popup-header'); summaryTitle.setAttribute('data-capture', 'collinear-summary-title'); summaryRows.forEach((row, index) => row.setAttribute('data-capture', `collinear-summary-row-${index + 1}`)); coveredTitle.setAttribute('data-capture', 'collinear-covered-title'); coveredRow.setAttribute('data-capture', 'collinear-covered-row');"
               }
             ],
-            "clipSelectors": [".pairwise-match-popup"],
+            "highlightSelector": "[data-gbdraw-pairwise-match-id='comparison1_match1']",
+            "clipSelectors": ["[data-capture='collinear-popup-header']", "[data-capture='collinear-summary-title']", "[data-capture^='collinear-summary-row-']", "[data-capture='collinear-covered-title']", "[data-capture='collinear-covered-row']"],
             "cropPadding": {
-              "top": 24,
-              "right": 24,
-              "bottom": 24,
-              "left": 24
+              "top": 18,
+              "right": 180,
+              "bottom": 18,
+              "left": 18
             },
             "waitForSelector": ".pairwise-match-popup"
           }
@@ -274,14 +327,14 @@
   ],
   "postGenerationEdits": [
     {
-      "title": "Click a feature",
-      "body": "Feature clicks expose qualifiers and sequence details, while the Feature editor drawer shows label, visibility, color, and scope controls. Use these views to verify gene, locus_tag, product, and protein_id values.",
+      "title": "Inspect a CDS feature",
+      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, orthogroup membership, and protein ID.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
-            "alt": "Hepatoplasmataceae Feature editor drawer controls with label, visibility, fill, stroke, and multi-target controls visible.",
-            "caption": "The Feature editor drawer crop keeps label, visibility, fill, stroke, and multi-target controls readable."
+            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, orthogroup ID, and protein ID.",
+            "caption": "The Details tab identifies the DnaA CDS as orthogroup og_1 in AP027078.1."
           },
           "capture": {
             "source": "webapp",
@@ -293,11 +346,12 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)'; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector('[data-gbdraw-feature-id=fe826bac7]')) throw new Error('DnaA feature target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)';"
               },
               {
                 "type": "click",
-                "selector": "[data-gbdraw-feature-id]"
+                "selector": "[data-gbdraw-feature-id='fe826bac7']",
+                "force": true
               },
               {
                 "type": "waitForSelector",
@@ -305,56 +359,23 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 70; }"
+              },
+              {"type": "wait", "ms": 250},
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Orthogroup ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`));"
               }
             ],
-            "clipSelectors": [".feature-popup"],
+            "highlightSelector": "[data-gbdraw-feature-id='fe826bac7']",
+            "clipSelectors": ["[data-capture='dnaa-popup-header']", "[data-capture='dnaa-popup-tabs']", "[data-capture^='dnaa-popup-row-']"],
             "cropPadding": {
-              "top": 24,
-              "right": 24,
-              "bottom": 24,
-              "left": 24
+              "top": 18,
+              "right": 180,
+              "bottom": 18,
+              "left": 18
             },
             "waitForSelector": ".feature-popup"
-          }
-        }
-      ]
-    },
-    {
-      "title": "Edit the legend",
-      "body": "Use the legend editor to rename, reorder, or remove feature legend entries after the SVG has been generated.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/hepatoplasmataceae_collinear/post-02-01-legend-editor.webp",
-            "alt": "Legend editor drawer for the Hepatoplasmataceae collinear comparison.",
-            "caption": "Open the Legend drawer to rename, reorder, or remove legend entries."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Export the figure",
-      "body": "Download SVG for editable vector output. Use PNG or PDF when you need quick sharing or manuscript draft assets.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/hepatoplasmataceae_collinear/post-03-01-export-controls.webp",
-            "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Save a session",
-      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, settings, generated output, and post-generation SVG adjustments.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/hepatoplasmataceae_collinear/post-04-01-save-session.webp",
-            "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
           }
         }
       ]
@@ -397,7 +418,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check input order, Collinear Color mode, Pairwise match style, Align to Center, Separate Strands, Show GC, and Show skew settings."
+      "body": "Check input order, Color mode, Pairwise Match Style, Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
     }
   ],
   "related": [

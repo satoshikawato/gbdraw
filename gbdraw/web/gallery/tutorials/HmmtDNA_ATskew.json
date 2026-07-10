@@ -32,14 +32,14 @@
     },
     {
       "title": "Upload the GenBank file",
-      "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1.",
+      "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1. Type the <i> tags in the Species field literally so the generated definition is italicized.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
           ["Input type", "GenBank"],
           ["File", "HmmtDNA.gbk"],
           ["Output prefix", "HmmtDNA_ATskew"],
-          ["Species", "Homo sapiens"]
+          ["Species", "<i>Homo sapiens</i>"]
         ]
       },
       "operations": [
@@ -58,9 +58,9 @@
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Track type", "middle"],
-          ["Legend", "left"],
-          ["Labels", "out"],
+          ["Track Preset", "Middle"],
+          ["Legend Position", "Left"],
+          ["Label Mode", "Out"],
           ["Palette", "ajisai"],
           ["Definition font size", "28"],
           ["Label font size", "20"],
@@ -158,8 +158,8 @@
         "columns": ["Setting", "Value"],
         "rows": [
           ["Dinucleotide", "GC"],
-          ["Window size", "500"],
-          ["Step size", "50"]
+          ["Window", "500"],
+          ["Step", "50"]
         ]
       },
       "operations": [
@@ -179,28 +179,42 @@
         "columns": ["Slot", "Renderer", "Position", "Key settings"],
         "rows": [
           ["features", "Features", "on the axis", "Lane direction: split"],
+          ["ticks", "Ticks", "inside", "Labels inside / ticks outside"],
           ["gc_content", "Dinucleotide content", "inside", "Width: 0.1"],
           ["gc_skew", "Dinucleotide skew", "inside", "Width: 0.1"]
         ]
       },
-      "note": "Axis index 0 keeps all listed slots on the single circular axis.",
       "operations": [
         {
-          "title": "Custom Track Slots panel",
-          "body": "Open Custom Track Slots so the Middle stack controls are visible.",
-          "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-05-01-open-custom-track-slots.webp",
-            "alt": "Custom Track Slots panel open in the circular Layout card.",
-            "caption": "Open Custom Track Slots in the Layout card."
-          }
-        },
-        {
           "title": "Middle template slot stack",
-          "body": "Use the Middle template stack with the feature, GC content, and GC skew slots visible.",
+          "body": "Open Custom Track Slots and reset the stack to the Middle template before adding the AT skew track.",
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-05-02-middle-template-stack.webp",
-            "alt": "Radial track stack showing feature, GC content, and GC skew slots from the Middle template.",
-            "caption": "Use the Middle template radial track stack with feature, GC content, and GC skew slots visible."
+            "src": "./media/HmmtDNA_ATskew/manual-05-01-middle-template.webp",
+            "alt": "Compact Custom Track Slots controls with Reset to Middle highlighted and the Middle preset summary visible.",
+            "caption": "Choose Reset to Middle; the template contains features, ticks, GC content, and GC skew."
+          },
+          "capture": {
+            "source": "webapp",
+            "openDetails": ["Layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) { app.adv.circular_track_slots_enabled = true; app.resetCircularTrackSlotsToPreset?.('middle'); }"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const app = window.__GBDRAW_APP__; const slots = app?.adv?.circular_track_slots; return app?.adv?.circular_track_slots_enabled === true && Array.isArray(slots) && slots.length === 4 && slots.map((slot) => slot.id).join(',') === 'features,ticks,gc_content,gc_skew'; }"
+              }
+            ],
+            "clipSelectors": ["#circular-custom-track-slots-panel > .grid.grid-cols-3", "#circular-custom-track-slots-panel > .rounded.border.border-sky-200"],
+            "highlightSelector": "button[title='Replace the current custom stack with the Middle template']",
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "waitForSelector": "button[title='Replace the current custom stack with the Middle template']"
           }
         }
       ]
@@ -233,6 +247,12 @@
             "source": "webapp",
             "selector": "[data-capture='circular-track-slot-a_skew_2']",
             "highlightSelector": "[data-capture='circular-track-slot-a_skew_2']",
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320;"
+              }
+            ],
             "cropPadding": {
               "top": 200,
               "right": 8,
@@ -246,29 +266,40 @@
       ]
     },
     {
-      "title": "Add the tick track",
-      "body": "Keep a Ticks row inside the axis so position labels sit inside the tick marks.",
+      "title": "Move and configure the tick track",
+      "body": "After adding the AT skew row, use Move inward on the Middle template's Ticks row until it is last in the stack, immediately after a_skew_2. Keep it inside the axis so position labels sit inside the tick marks.",
       "table": {
         "columns": ["Slot setting", "Value"],
         "rows": [
           ["Slot id", "ticks"],
           ["Renderer", "Ticks"],
+          ["Stack position", "Last, after a_skew_2"],
           ["Tick label layout", "label_in_tick_out"]
         ]
       },
       "operations": [
         {
           "title": "Tick track slot",
-          "body": "Keep the tick slot in the custom stack and set the tick layout to Labels inside and ticks outside.",
+          "body": "Move the tick slot inward to the end of the custom stack and set the tick layout to Labels inside and ticks outside.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-07-01-tick-track-context.webp",
             "alt": "Custom circular tick slot set to Labels inside and ticks outside.",
-            "caption": "Keep the tick slot in the custom circular track stack."
+            "caption": "Place ticks after the AT skew slot and keep Labels inside / ticks outside."
           },
           "capture": {
             "source": "webapp",
             "selector": "[data-capture='circular-track-slot-ticks']",
             "highlightSelector": "[data-capture='circular-track-slot-ticks']",
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320;"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const slots = window.__GBDRAW_APP__?.adv?.circular_track_slots; return Array.isArray(slots) && slots.map((slot) => slot.id).join(',') === 'features,gc_content,gc_skew,a_skew_2,ticks' && slots[4]?.params?.tick_label_layout === 'label_in_tick_out'; }"
+              }
+            ],
             "cropPadding": {
               "top": 224,
               "right": 8,
@@ -297,6 +328,28 @@
             "src": "./media/HmmtDNA_ATskew/manual-08-01-cds-label-priority.webp",
             "alt": "Qualifier Priority controls with a CDS rule prioritizing gene.",
             "caption": "Set CDS label priority to gene in the Labels card."
+          },
+          "capture": {
+            "source": "webapp",
+            "openDetails": ["Labels"],
+            "actions": [
+              {
+                "type": "waitForFunction",
+                "script": "() => { const rules = window.__GBDRAW_APP__?.manualPriorityRules; return Array.isArray(rules) && rules.some((rule) => rule.feat === 'CDS' && rule.order === 'gene'); }"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent.includes('QUALIFIER PRIORITY')); const section = heading?.parentElement; const row = section?.querySelector('.space-y-1 > div'); if (!heading || !row) throw new Error('CDS qualifier-priority row not found.'); heading.dataset.capture = 'qualifier-priority-heading'; row.dataset.capture = 'qualifier-priority-cds-gene'; row.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": ["[data-capture='qualifier-priority-heading']", "[data-capture='qualifier-priority-cds-gene']"],
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "waitForSelector": "[data-capture='qualifier-priority-cds-gene']"
           }
         }
       ]
@@ -316,13 +369,13 @@
     },
     {
       "title": "Inspect a feature",
-      "body": "Click a CDS or RNA feature in the interactive SVG to inspect its gene, product, location, and sequence metadata.",
+      "body": "Click the RNR2 l-rRNA feature in the interactive SVG and open Details to inspect its label, record, feature type, and location.",
       "operations": [
         {
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
-            "alt": "Zoomed human mitochondrial AT skew crop with the clicked RNR2 rRNA feature and feature popup metadata.",
-            "caption": "The zoomed crop keeps the clicked RNR2 feature and its gene, product, and db_xref metadata readable."
+            "alt": "RNR2 Details popup beside the highlighted l-rRNA feature in the human mitochondrial AT skew diagram.",
+            "caption": "The highlighted RNR2 l-rRNA remains fully visible beside its Details popup."
           },
           "capture": {
             "source": "webapp",
@@ -334,7 +387,11 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-120px, -40px) scale(1.35)'; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.canvasPan) { app.canvasPan.x = -120; app.canvasPan.y = -40; } }"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const app = window.__GBDRAW_APP__; const feature = app?.extractedFeatures?.find((entry) => entry.svg_id === 'fbdb78069'); return Boolean(app?.results?.[0]?.content?.includes(\"data-gbdraw-feature-id=\\\"fbdb78069\\\"\") && feature?.gene === 'RNR2' && feature?.product === 'l-rRNA' && feature?.qualifiers?.db_xref?.includes('GeneID:4550')); }"
               },
               {
                 "type": "click",
@@ -346,15 +403,20 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; }"
+                "script": "const app = window.__GBDRAW_APP__; const popup = document.querySelector('.feature-popup'); if (!app || !popup) throw new Error('RNR2 feature popup is unavailable.'); if (app.clickedFeature) app.clickedFeature.activeTab = 'details'; popup.style.width = '580px'; if (app.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 300; }"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-feature-id='fbdb78069']\"); const text = popup?.textContent || ''; if (!popup || !target || !text.includes('RNR2') || !text.includes('l-rRNA')) return false; const popupRect = popup.getBoundingClientRect(); const targetRect = target.getBoundingClientRect(); return popupRect.left >= 0 && popupRect.bottom <= window.innerHeight && targetRect.left >= 0 && targetRect.right <= window.innerWidth && popupRect.right <= targetRect.left; }"
               }
             ],
             "clipSelectors": ["[data-gbdraw-feature-id='fbdb78069']", ".feature-popup"],
+            "highlightSelector": "[data-gbdraw-feature-id='fbdb78069']",
             "cropPadding": {
-              "top": 150,
-              "right": 28,
-              "bottom": 24,
-              "left": 150
+              "top": 16,
+              "right": 16,
+              "bottom": 16,
+              "left": 16
             },
             "waitForSelector": ".feature-popup"
           }
@@ -375,32 +437,6 @@
           }
         }
       ]
-    },
-    {
-      "title": "Export the figure",
-      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/HmmtDNA_ATskew/post-03-01-export-controls.webp",
-            "alt": "Circular Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Save a session",
-      "body": "Save a .gbdraw-session.json after edits so the web app can restore the input, custom track slots, generated output, and SVG adjustments.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/HmmtDNA_ATskew/post-04-01-save-session.webp",
-            "alt": "Circular web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
-          }
-        }
-      ]
     }
   ],
   "troubleshooting": [
@@ -418,7 +454,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check input record NC_012920.1, track type middle, labels out, legend left, window 500, step 50, AT skew colors, and the tick label layout."
+      "body": "Check input record NC_012920.1, Track Preset Middle, Label Mode Out, Legend Position Left, Window 500, Step 50, AT skew colors, and the tick label layout."
     }
   ],
   "related": [

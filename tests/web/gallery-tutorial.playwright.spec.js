@@ -109,11 +109,15 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('heading', { name: 'Quick reproduce' })).toHaveCount(0);
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(12);
+  await expect(mediaImages).toHaveCount(10);
   await expect(mediaImages.first()).toHaveAttribute('src', /manual-01-01-linear-mode\.webp$/);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-05-02-layout-overview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-06-01-collinear-overview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-collinear-block-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="post-01-01-feature-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-06-01-generate.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -140,15 +144,25 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   await expect(
     page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae orthogroup comparison in the web app' })
   ).toBeVisible();
-  await expect(page.getByText('blastp mode to Orthogroups')).toBeVisible();
-  await expect(page.getByText('orthogroup ID, display name, member count')).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(tutorialPanel.getByRole('row', { name: 'blastp mode Orthogroups' })).toBeVisible();
+  await expect(
+    tutorialPanel.getByText(
+      'Orthogroup evidence is built from all record pairs; the diagram draws ribbons between adjacent displayed records.'
+    )
+  ).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Minimum Identity 0' })).toBeVisible();
+  await expect(page.getByText('orthogroup ID, display name, member count')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(13);
+  await expect(mediaImages).toHaveCount(10);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-05-02-layout-overview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-orthogroup-overview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-08-01-orthogroup-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="post-02-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-01-orthogroups-mode.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-06-01-generate.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -178,7 +192,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   await expect(tutorialPanel.getByRole('heading', { name: 'Color rule basics' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'CDS gene dnaA #d95f02 DnaA'
+      name: 'CDS gene ^dnaA$ #d95f02 DnaA'
     })
   ).toBeVisible();
   await expect(page.getByText('antiSMASH gene-kind color rules')).toBeVisible();
@@ -188,6 +202,11 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     tutorialPanel.getByRole('row', {
       name: 'CDS gene_kind biosynthetic$ #d03535 Core biosynthetic genes'
     })
+  ).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Palette orange' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Default CDS color #dddddd' })).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', { name: 'Definition line: Accession 20; Normal; #7b7c7d' })
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
@@ -222,12 +241,15 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     { text: 'BGC0000713.gbk', overflowWrap: 'normal', lineCount: 1 }
   ]);
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(20);
+  await expect(mediaImages).toHaveCount(16);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-track-layout-middle.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-04-pairwise-style-curve.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-specific-rules-all.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-08-01-align-og1.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-03-03-set-thresholds.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-04-01-align-og1.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -259,23 +281,27 @@ test('Gallery renders the WSSV conservation tutorial and media', async ({ page }
   await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'Ring width 5'
+      name: 'Ring Width 5'
     })
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: '20 Angostura2013 #c6bebb'
+      name: '20 Angostura2013.fa Angostura2013 #c6bebb'
     })
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('cell', { name: 'MG18PR-0187-N40S.fa' })).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(15);
+  await expect(mediaImages).toHaveCount(10);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-comparison-fasta-series.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-upload-fasta-comparisons.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-conservation-rings.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-files-tab.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-11-01-feature-popup.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-08-01-browser-losat-run.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-10-01-zoom-controls.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="post-01-01-zoom-controls.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-08-01-browser-losat-run.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-05-01-ring-labels.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-06-01-ring-colors.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -286,7 +312,7 @@ test('Gallery renders the WSSV conservation tutorial and media', async ({ page }
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('AP027280.gb')).toBeVisible();
   await expect(filesPanel.getByText('CN01.fasta')).toBeVisible();
-  await expect(filesPanel.getByText('Angostura2013.fa')).toBeVisible();
+  await expect(filesPanel.getByText('Angostura2013.fa', { exact: true })).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
@@ -320,16 +346,26 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
       name: 'Legend label AT skew'
     })
   ).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Stack position Last, after a_skew_2' })).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(16);
+  await expect(mediaImages).toHaveCount(13);
+  await expect(tutorialPanel.locator('img[src$="manual-05-01-middle-template.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-05-01-open-custom-track-slots.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-05-02-middle-template-stack.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-atskew-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveAttribute(
+    'alt',
+    /highlighted l-rRNA feature/
+  );
   const atSkewSlotImage = tutorialPanel.locator('img[src$="manual-06-01-at-skew-slot-context.webp"]');
   const tickTrackImage = tutorialPanel.locator('img[src$="manual-07-01-tick-track-context.webp"]');
   await expect(atSkewSlotImage).toHaveCount(1);
   await expect(tickTrackImage).toHaveCount(1);
   await expect.poll(() => atSkewSlotImage.evaluate((element) => element.naturalHeight)).toBeGreaterThan(1000);
   await expect.poll(() => tickTrackImage.evaluate((element) => element.naturalHeight)).toBeGreaterThan(800);
+  await expect.poll(() => atSkewSlotImage.evaluate((element) => element.naturalWidth)).toBeLessThanOrEqual(1000);
+  await expect.poll(() => tickTrackImage.evaluate((element) => element.naturalWidth)).toBeLessThanOrEqual(1000);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -358,7 +394,7 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'protein blastp mode Orthogroups'
+      name: 'blastp mode Orthogroups'
     })
   ).toBeVisible();
   await expect(
@@ -366,22 +402,33 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
       name: 'Specific rule CDS product wsv.*-like protein #89d1fa WSSV-like proteins'
     })
   ).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'Specific rule CDS product baculoviral IAP repeat-containing protein #ffff00 BIRP'
+    })
+  ).toBeVisible();
   await expect(tutorialPanel.getByRole('cell', { name: 'unmatched CDS' })).toBeVisible();
-  await expect(tutorialPanel.getByText('Use 32 threads only deliberately')).toBeVisible();
+  await expect(tutorialPanel.getByText('Treat 32 as a requested maximum')).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
       name: '1 MjeNMV.gb Marsupenaeus japonicus endogenous nimavirus'
     })
   ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(15);
+  await expect(mediaImages).toHaveCount(11);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-label-context.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-nine-file-upload-order.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-05-01-record-labels.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-orthogroup-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-files-tab.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-03-03-thread-threshold-settings.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-03-03-thread-threshold-settings.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-04-02-legend-position-right.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-03-pairwise-match.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-06-01-specific-rules-all.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-06-01-color-rule-wssv-like.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-06-02-color-rule-birp.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-06-03-color-rule-recombinase.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -420,24 +467,23 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await expect(tutorialPanel.getByText('Set the circular layout')).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'Track type tuckin'
+      name: 'Track Preset Tuckin'
     })
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'Record rows #1@1, #2@1, #3@2, #4@2, #5@2, #6@2'
+      name: 'Record Order #1@1, #2@1, #3@2, #4@2, #5@2, #6@2'
     })
   ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(11);
+  await expect(mediaImages).toHaveCount(10);
   await expect(tutorialPanel.locator('img[src$="manual-03-00-circular-layout-settings.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-selected-features.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-00-multirecord-toggle.webp"]')).toHaveCount(1);
-  const multiRecordControlsImage = tutorialPanel.locator('img[src$="manual-04-01-multirecord-canvas.webp"]');
+  await expect(tutorialPanel.locator('img[src$="manual-04-01-multirecord-canvas.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-06-01-multirecord-preview.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-files-tab.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-feature-popup.webp"]')).toHaveCount(1);
-  await expect(multiRecordControlsImage).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src*="/post-"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-record-positions.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
@@ -633,7 +679,7 @@ test('Gallery tutorial media fits a mobile viewport', async ({ page }) => {
   await page.getByRole('tab', { name: 'Tutorial' }).click();
 
   const mediaImages = page.locator('#tutorial-panel .tutorial-media img');
-  await expect(mediaImages).toHaveCount(12);
+  await expect(mediaImages).toHaveCount(10);
   await mediaImages.last().scrollIntoViewIfNeeded();
   const overflowingImages = await mediaImages.evaluateAll((images) =>
     images

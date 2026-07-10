@@ -61,23 +61,23 @@
     },
     {
       "title": "Upload the five GenBank files",
-      "body": "Add the GenBank files in this order, then fill the organism/strain and subtitle/title fields for each record to match the Gallery session.",
+      "body": "Add the GenBank files in this order, then fill the Organism / strain and Subtitle / title fields exactly as shown. Type the <i> tags literally; the generated SVG uses them to italicize taxon names.",
       "table": {
         "columns": ["Order", "GenBank file", "Organism / strain", "Subtitle", "Reverse complement"],
         "rows": [
-          ["1", "BGC0000708.gbk", "Streptomyces lividus CBS 844.73", "Lividomycin biosynthetic gene cluster", "off"],
-          ["2", "BGC0000709.gbk", "Streptomyces fradiae ATCC 10745", "Neomycin biosynthetic gene cluster", "off"],
-          ["3", "BGC0000711.gbk", "Streptomyces fradiae MCIMB 8233", "Neomycin biosynthetic gene cluster", "off"],
-          ["4", "BGC0000712.gbk", "Streptomyces rimosus subsp. paromomycinus NRRL 2455", "Paromomycin biosynthetic gene cluster", "off"],
-          ["5", "BGC0000713.gbk", "Streptomyces ribosidificus ATCC 21294", "Ribostamycin biosynthetic gene", "on"]
+          ["1", "BGC0000708.gbk", "<i>Streptomyces lividus</i> CBS 844.73", "Lividomycin biosynthetic gene cluster", "Off"],
+          ["2", "BGC0000709.gbk", "<i>Streptomyces fradiae</i> ATCC 10745", "Neomycin biosynthetic gene cluster", "Off"],
+          ["3", "BGC0000711.gbk", "<i>Streptomyces fradiae</i> MCIMB 8233", "Neomycin biosynthetic gene cluster", "Off"],
+          ["4", "BGC0000712.gbk", "<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455", "Paromomycin biosynthetic gene cluster", "Off"],
+          ["5", "BGC0000713.gbk", "<i>Streptomyces ribosidificus</i> ATCC 21294", "Ribostamycin biosynthetic gene", "On"]
         ]
       },
       "operations": [
         {
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-02-01-record-text-row.webp",
-            "alt": "Linear GenBank row 1 with BGC0000708.gbk selected and organism/strain, subtitle/title, region, and LOSAT filename fields visible.",
-            "caption": "Fill row 1 with BGC0000708.gbk, the organism/strain label, and the BGC subtitle; repeat for the remaining files in the listed order."
+            "alt": "Linear GenBank row 1 with BGC0000708.gbk and its exact Organism / strain and Subtitle / title values.",
+            "caption": "Enter the row 1 values exactly, including the literal <i>Streptomyces lividus</i> markup, then repeat the table rows in order."
           }
         }
       ]
@@ -90,26 +90,31 @@
         "rows": [
           ["Execution", "Auto"],
           ["Total threads", "Safe"],
+          ["Parallel runs", "Auto"],
           ["Threads per run", "Auto"],
-          ["protein blastp max hits", "5"],
-          ["Identity", "30"],
+          ["blastp mode", "Orthogroups"],
           ["Bitscore", "50"],
-          ["E-value", "1e-2"]
+          ["E-value", "1e-2"],
+          ["Minimum Identity", "30"],
+          ["Minimum Length", "0"]
         ]
       },
       "note": "This example compares protein-coding genes across related biosynthetic gene clusters, so orthogroup-backed blastp matches are the useful comparison signal.",
       "operations": [
         {
           "title": "Run LOSAT settings panel",
-          "body": "Open the Pairwise Comparisons panel before changing LOSAT settings.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
-            "alt": "Linear Run LOSAT settings panel with Run LOSAT selected, LOSATP selected, and execution and thread controls visible.",
-            "caption": "The LOSAT settings panel shows the Run LOSAT source, LOSATP mode, and browser execution controls."
+            "alt": "Run LOSAT settings with LOSATP Orthogroups, Auto execution, Safe total threads, and the 50, 1e-2, 30, and 0 thresholds.",
+            "caption": "Set LOSATP Orthogroups with Auto execution, Safe total threads, and thresholds 50 / 1e-2 / 30 / 0."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
             "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
             "cropPadding": {
               "top": 12,
@@ -122,7 +127,6 @@
         },
         {
           "title": "LOSATP orthogroups mode",
-          "body": "Open the blastp mode selector and choose Orthogroups.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
             "alt": "LOSAT Settings panel with the blastp mode menu open and the Orthogroups option highlighted.",
@@ -143,43 +147,23 @@
               "label": "blastp mode"
             }
           }
-        },
-        {
-          "title": "Threshold controls",
-          "body": "Set the LOSATP thresholds directly in the LOSAT Settings panel.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-03-03-set-thresholds.webp",
-            "alt": "LOSATP settings panel with Orthogroups mode, bitscore 50, e-value 1e-2, identity 30, and minimum length 0.",
-            "caption": "Set LOSATP thresholds to bitscore 50, e-value 1e-2, identity 30, and minimum length 0."
-          }
         }
       ]
     },
     {
-      "title": "Align the shared core",
-      "body": "Use orthogroup alignment around og_1 and reverse-complement BGC0000713 so the conserved biosynthetic core is visually comparable across all five rows.",
+      "title": "Set record orientation and comparison layout",
+      "body": "Reverse-complement BGC0000713, keep features in the middle of each axis, and draw curved pairwise matches before the first generation.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Align orthogroup feature", "og_1"],
           ["Reverse complement", "BGC0000713 only"],
-          ["Track layout", "middle"],
-          ["Pairwise match style", "curve"]
+          ["Track Layout", "Middle"],
+          ["Pairwise Match Style", "Curve"]
         ]
       },
       "operations": [
         {
-          "title": "Clicked og_1 feature Align button",
-          "body": "Click an og_1 CDS feature in the preview, then use Align in the feature popup.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-04-01-align-og1.webp",
-            "alt": "Feature popup for an og_1 CDS feature with the Align button highlighted.",
-            "caption": "The feature popup exposes the orthogroup action buttons; click Align for the selected og_1 feature."
-          }
-        },
-        {
           "title": "Reverse-complement selector",
-          "body": "In the BGC0000713 input row, check Reverse complement.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-02-reverse-bgc0000713.webp",
             "alt": "Fifth Linear input row for BGC0000713.gbk with the Region reverse complement checkbox checked.",
@@ -188,7 +172,6 @@
         },
         {
           "title": "Track layout selector",
-          "body": "Open the Track Layout selector and choose Middle.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-03-track-layout-middle.webp",
             "alt": "Linear Layout card with the Track Layout menu open and the Middle option highlighted.",
@@ -213,7 +196,6 @@
         },
         {
           "title": "Pairwise match style selector",
-          "body": "Open the Pairwise Match Style selector and choose Curve.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-04-pairwise-style-curve.webp",
             "alt": "Pairwise Match card with the Pairwise Match Style menu open and the Curve option highlighted.",
@@ -239,28 +221,29 @@
       ]
     },
     {
-      "title": "Set labels and figure layout",
-      "body": "Use the saved session values for a compact manuscript-style comparison.",
+      "title": "Set labels, colors, and figure layout",
+      "body": "Use the saved session values for a compact manuscript-style comparison, including the orange palette and gray fallback for unmatched CDS features.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Show labels", "first record"],
-          ["Label placement", "above feature"],
-          ["Label rotation", "45"],
-          ["Scale style", "ruler"],
-          ["Ruler on axis", "on"],
-          ["Legend", "bottom"],
-          ["Keep definitions left aligned", "on"]
+          ["Show Labels", "First Record Only"],
+          ["CDS qualifier priority", "gene"],
+          ["Label Placement", "Above Feature"],
+          ["Label Rotation", "45"],
+          ["Palette", "orange"],
+          ["Default CDS color", "#dddddd"],
+          ["Scale Style", "Ruler (Ticks)"],
+          ["Legend Position", "Bottom"],
+          ["Lock Definition Column", "On"]
         ]
       },
       "operations": [
         {
           "title": "Show labels selector",
-          "body": "Open Show Labels and choose First Record Only.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-05-01-show-labels-first.webp",
-            "alt": "Labels card with the Show Labels menu open and the First Record Only option highlighted.",
-            "caption": "Open Show Labels in the Labels card and choose the highlighted First Record Only option."
+            "alt": "Labels card with the Show Labels menu open and First Record Only highlighted.",
+            "caption": "Open Show Labels and choose First Record Only; keep the CDS qualifier priority set to gene as listed in the table."
           },
           "capture": {
             "source": "webapp",
@@ -281,7 +264,6 @@
         },
         {
           "title": "Scale style selector",
-          "body": "Open Scale Style and choose Ruler.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-05-02-scale-style-ruler.webp",
             "alt": "Axis and Scale card with the Scale Style menu open and the Ruler option highlighted.",
@@ -306,7 +288,6 @@
         },
         {
           "title": "Legend position selector",
-          "body": "Open Legend Position and choose Bottom.",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-05-03-legend-position-bottom.webp",
             "alt": "Title and Legend card with the Legend Position menu open and the Bottom option highlighted.",
@@ -333,20 +314,57 @@
     },
     {
       "title": "Add the plot title and record text",
-      "body": "Set the plot title to Aminoglycoside biosynthetic gene clusters from Streptomyces spp. Use the shown title and definition font settings when you want the web output to match the Gallery session exactly.",
+      "body": "Type the Plot Title exactly as shown, including the literal <i>Streptomyces</i> markup, and keep Plot Title Position at Bottom (Default).",
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Plot Title", "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."],
+          ["Plot Title Position", "Bottom (Default)"],
+          ["Definition Font Size", "Auto"],
+          ["Show Replicon", "Off"],
+          ["Show Accession", "On"],
+          ["Show Length / Coordinates", "On"],
+          ["Definition line: Name", "20; Bold; default color"],
+          ["Definition line: Subtitle", "20; Normal; default color"],
+          ["Definition line: Accession", "20; Normal; #7b7c7d"],
+          ["Definition line: Length / Coordinates", "20; Normal; #7b7c7d"]
+        ]
+      },
       "operations": [
         {
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
-            "alt": "Title and Legend controls showing the aminoglycoside BGC plot title, bottom title position, definition font size, and definition line style settings.",
-            "caption": "Set the plot title, title position, definition font size, and definition line-style values before generating the figure."
+            "alt": "Compact Title and Legend controls with the Plot Title input, Bottom position, and linear definition-text settings.",
+            "caption": "Use the Plot Title field for the exact title in the table and keep the listed position and definition-text settings."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": ["Title & Legend"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Title & Legend')); const content = card?.querySelector('details > div'); const controls = Array.from(content?.children || []).slice(0, 3); if (controls.length === 0) throw new Error('BGC title controls not found.'); controls.forEach((node) => node.setAttribute('data-capture', 'bgc-title-controls')); controls[0].scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": ["[data-capture='bgc-title-controls']"],
+            "cropPadding": {
+              "top": 16,
+              "right": 16,
+              "bottom": 16,
+              "left": 16
+            }
           }
         }
       ]
     },
     {
       "title": "Add feature color rules",
-      "body": "Create four CDS rules from the antiSMASH gene_kind qualifier before generating the final figure.",
+      "body": "After choosing the orange palette and setting the default CDS color to #dddddd, create four CDS rules from the antiSMASH gene_kind qualifier before generating the final figure.",
       "table": {
         "columns": ["Feature", "Qualifier", "Value pattern", "Color", "Legend caption"],
         "rows": [
@@ -363,19 +381,97 @@
             "src": "./media/BGC0000708-BGC0000713/manual-07-01-specific-rules-all.webp",
             "alt": "SPECIFIC RULES (-t) controls showing four CDS gene_kind rules for biosynthetic$, biosynthetic-additional, transport, and regulatory categories.",
             "caption": "Enter all four antiSMASH gene_kind rules in the SPECIFIC RULES (-t) controls before clicking Generate Diagram."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": ["Colors"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.nextElementSibling; if (!header || !rows) throw new Error('BGC specific-rules rows not found.'); header.setAttribute('data-capture', 'bgc-specific-rules-header'); rows.setAttribute('data-capture', 'bgc-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": ["[data-capture='bgc-specific-rules-header']", "[data-capture='bgc-specific-rules-rows']"],
+            "cropPadding": {
+              "top": 16,
+              "right": 16,
+              "bottom": 16,
+              "left": 16
+            }
           }
         }
       ]
     },
     {
-      "title": "Generate the diagram",
-      "body": "Click Generate Diagram. The generated preview should show five BGC rows, blue orthogroup ribbons, rotated first-record labels, and a bottom legend.",
+      "title": "Generate and align to og_1",
+      "body": "Click Generate Diagram to create the initial comparison. In the preview, click the livE CDS assigned to og_1 and choose Align; the web app regenerates the diagram with the cached LOSATP results.",
       "operations": [
         {
+          "title": "Align the og_1 feature",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-08-01-align-og1.webp",
+            "alt": "The livE feature assigned to og_1 beside its feature popup with Align available.",
+            "caption": "Click the livE CDS in og_1, then choose Align to regenerate around the shared core."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-130px, -40px) scale(1.35)'; }"
+              },
+              {
+                "type": "click",
+                "selector": "[data-gbdraw-feature-id='fed46a3a6']"
+              },
+              {
+                "type": "waitForSelector",
+                "selector": ".feature-popup"
+              },
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='fed46a3a6']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'edit'; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 744, rect.right + 32); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const app = window.__GBDRAW_APP__; const text = document.querySelector('.feature-popup')?.textContent || ''; return app?.clickedFeature?.svg_id === 'fed46a3a6' && text.includes('livE') && text.includes('Align'); }"
+              },
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.feature-popup'); const body = popup?.querySelector('.feature-popup-body'); const actions = body?.querySelector('.feature-popup-grid > .space-y-3 > .grid.grid-cols-2.gap-2'); if (!popup || !actions) throw new Error('Compact Align popup controls not found.'); popup.children[0]?.setAttribute('data-capture', 'align-popup-header'); popup.children[1]?.setAttribute('data-capture', 'align-popup-tabs'); actions.setAttribute('data-capture', 'align-popup-actions');"
+              }
+            ],
+            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6']", "[data-capture='align-popup-header']", "[data-capture='align-popup-tabs']", "[data-capture='align-popup-actions']"],
+            "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6']",
+            "cropPadding": {
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
+            },
+            "waitForSelector": ".feature-popup"
+          }
+        },
+        {
+          "title": "Final aligned preview",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
-            "alt": "Generated aminoglycoside BGC comparison preview with five rows and the bottom legend.",
-            "caption": "After all four gene_kind rules are entered, generate the final BGC comparison once and check the five rows plus bottom legend."
+            "alt": "Final og_1-aligned aminoglycoside BGC comparison with five rows, curved orthogroup matches, rotated first-record labels, and a bottom legend.",
+            "caption": "Check the final og_1-aligned result for five BGC rows, curved matches, rotated first-record labels, and the bottom legend."
           }
         }
       ]
@@ -387,8 +483,8 @@
         {
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-09-01-orthogroup-popup.webp",
-            "alt": "Zoomed aminoglycoside BGC orthogroup ribbon crop with the orthogroup match popup open.",
-            "caption": "The zoomed crop keeps the clicked orthogroup ribbon and popup readable."
+            "alt": "Selected og_18 pairwise ribbon beside the orthogroup popup for livA.",
+            "caption": "Click the og_18 ribbon; the popup shows livA, 6 members, coverage across 5 records, and the member table."
           },
           "capture": {
             "source": "webapp",
@@ -428,14 +524,14 @@
       ]
     },
     {
-      "title": "Inspect a colored feature",
-      "body": "Click a CDS feature to inspect its label, product, orthogroup membership, and qualifier values before deciding whether to refine a color rule.",
+      "title": "Inspect the feature qualifiers",
+      "body": "Click the livE CDS and open Qualifiers to inspect the gene and gene_kind values. In this example, gene supplies the livE label and gene_kind=biosynthetic matches the core biosynthetic color rule.",
       "operations": [
         {
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-10-01-feature-popup.webp",
-            "alt": "Zoomed aminoglycoside BGC crop with the clicked CDS, its orthogroup ribbon context, and feature popup metadata.",
-            "caption": "The zoomed crop keeps the clicked CDS, orthogroup context, and gene_kind metadata readable."
+            "alt": "Selected livE CDS beside the Qualifiers tab showing gene and gene_kind metadata.",
+            "caption": "For livE, gene supplies the label and gene_kind=biosynthetic explains the core biosynthetic color."
           },
           "capture": {
             "source": "webapp",
@@ -451,7 +547,7 @@
               },
               {
                 "type": "click",
-                "selector": "[data-gbdraw-feature-id='fa7a0b1fc']"
+                "selector": "[data-gbdraw-feature-id='fed46a3a6']"
               },
               {
                 "type": "waitForSelector",
@@ -459,10 +555,31 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) { app.clickedFeature.activeTab = 'details'; } if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 520; app.clickedFeaturePos.y = 260; }"
+                "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='fed46a3a6']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'qualifiers'; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 744, rect.right + 32); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const app = window.__GBDRAW_APP__; const feature = app?.clickedFeature; const text = document.querySelector('.feature-popup')?.textContent || ''; return feature?.svg_id === 'fed46a3a6' && feature?.feat?.gene === 'livE' && feature?.feat?.qualifiers?.gene_kind?.includes('biosynthetic') && text.includes('gene_kind'); }"
+              },
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.feature-popup'); const target = Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === 'gene_kind'); target?.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              },
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneRow = leaf('gene')?.closest('.border-b'); const geneKindRow = leaf('gene_kind')?.closest('.border-b'); if (!popup || !geneRow || !geneKindRow) throw new Error('Compact qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneRow.setAttribute('data-capture', 'qualifier-gene-row'); geneKindRow.setAttribute('data-capture', 'qualifier-gene-kind-row');"
               }
             ],
-            "clipSelectors": [".feature-popup"],
+            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6']", "[data-capture='qualifier-popup-header']", "[data-capture='qualifier-popup-tabs']", "[data-capture='qualifier-gene-row']", "[data-capture='qualifier-gene-kind-row']"],
+            "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6']",
             "cropPadding": {
               "top": 24,
               "right": 24,
@@ -497,80 +614,6 @@
       "body": "Use captions such as Core biosynthetic genes and Transport-related genes instead of raw qualifier values."
     }
   ],
-  "postGenerationEdits": [
-    {
-      "title": "Edit the legend",
-      "body": "Use the legend editor to adjust captions or ordering after generation. The pairwise match identity legend explains ribbon color.",
-      "operations": [
-        {
-          "title": "Legend editor",
-          "body": "Open the Legend drawer to adjust captions or ordering after generation.",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/post-02-01-legend-editor.webp",
-            "alt": "BGC session Legend drawer with Core biosynthetic genes, Additional biosynthetic genes, Transport-related genes, Regulatory genes, and other proteins entries.",
-            "caption": "Open the Legend drawer after restoring the BGC session; the generated BGC color-rule entries are available for caption and order edits."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
-            "viewport": {
-              "width": 1440,
-              "height": 700
-            },
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "() => { const app = window.__GBDRAW_APP__; if (!app) return; app.legendEntries = [{ caption: 'Core biosynthetic genes', originalCaption: 'Core biosynthetic genes', color: '#d03535', xPos: 31.428571428571427, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Additional biosynthetic genes', originalCaption: 'Additional biosynthetic genes', color: '#f787a9', xPos: 390.28571428571433, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Transport-related genes', originalCaption: 'Transport-related genes', color: '#577edb', xPos: 821.1428571428572, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'Regulatory genes', originalCaption: 'Regulatory genes', color: '#57b767', xPos: 1180, yPos: 10, showStroke: false, featureIds: [] }, { caption: 'other proteins', originalCaption: 'other proteins', color: '#dddddd', xPos: 1454.857142857143, yPos: 10, showStroke: false, featureIds: [] }]; }"
-              },
-              {
-                "type": "evaluate",
-                "script": "() => { window.__GBDRAW_APP__?.openRightDrawerTab?.('legend'); }"
-              },
-              {
-                "type": "wait",
-                "ms": 1000
-              },
-              {
-                "type": "evaluate",
-                "script": "document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important')"
-              },
-              {
-                "type": "wait",
-                "ms": 500
-              }
-            ],
-            "selector": ".right-drawer"
-          }
-        }
-      ]
-    },
-    {
-      "title": "Export the figure",
-      "body": "Download SVG for editable vector output. Use PNG or PDF for quick sharing or draft figures.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/post-03-01-export-controls.webp",
-            "alt": "Linear Preview export toolbar with the DPI selector and SVG, Interactive SVG, PNG, and PDF export buttons visible.",
-            "caption": "The Preview export toolbar shows DPI plus SVG, Interactive SVG, PNG, and PDF export controls."
-          }
-        }
-      ]
-    },
-    {
-      "title": "Save a session",
-      "body": "Save a .gbdraw-session.json after edits so the web app can restore inputs, LOSATP cache, settings, generated output, and SVG adjustments.",
-      "operations": [
-        {
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/post-04-01-save-session.webp",
-            "alt": "Linear web app header toolbar with Save Session, Load Session, Reset Settings, undo and redo, the session title, and mode controls visible.",
-            "caption": "The app header toolbar shows Save Session in the same toolbar used to load sessions."
-          }
-        }
-      ]
-    }
-  ],
   "losatTips": [
     {
       "title": "Start with Auto execution",
@@ -585,8 +628,8 @@
       "body": "Orthogroup mode keeps related proteins linked even when local gene order differs across clusters."
     },
     {
-      "title": "Tune Max hits and identity together",
-      "body": "Lower Max hits or raise identity when the figure has too many weak ribbons; raise Max hits only when expected homologs are missing."
+      "title": "Tune the match thresholds together",
+      "body": "Raise identity, bitscore, or minimum length, or lower the E-value cutoff, when the figure has too many weak ribbons. Relax those thresholds when expected homologs are missing."
     },
     {
       "title": "Reuse the cache",
@@ -612,7 +655,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check orthogroup mode, identity and bitscore thresholds, max hits, track layout, legend position, label rotation, color rules, and record orientation."
+      "body": "Check orthogroup mode, identity, bitscore, E-value, and minimum-length thresholds, track layout, legend position, label rotation, color rules, and record orientation."
     }
   ],
   "related": [
