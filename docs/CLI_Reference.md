@@ -445,7 +445,7 @@ gbdraw linear \
   --show_labels first \
   --pairwise_match_style curve \
   -o BGC0000708-BGC0000713 \
-  -f interactive_svg
+  -f interactive-svg
 ```
 
 Gallery-style circular multi-record example: the `Vnig_TUMSAT-TG-2018` entry places six records from one GBFF file on two rows. Repeat the file path and select each record by `record_id`:
@@ -473,7 +473,7 @@ gbdraw circular \
   -p orchid \
   --track_type tuckin \
   -o Vnig_TUMSAT-TG-2018 \
-  -f interactive_svg
+  -f interactive-svg
 ```
 
 ### `--conservation_table`
@@ -537,7 +537,7 @@ gbdraw circular \
   --suppress_skew \
   --track_type spreadout \
   -o WSSV_genome_comparison \
-  -f interactive_svg
+  -f interactive-svg
 ```
 
 ### `--circular_track_table`
@@ -593,7 +593,7 @@ gbdraw circular \
   --labels out \
   -l left \
   -o HmmtDNA_ATskew \
-  -f interactive_svg
+  -f interactive-svg
 ```
 
 Depth tracks can be supplied with the legacy `--depth` option or the repeatable
@@ -650,7 +650,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--linear_track_slot SLOT]
               [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
               [--ruler_on_axis] [-f FORMAT] [-l LEGEND]
-              [--show_labels [{all,first,none}]] [--resolve_overlaps]
+              [--show_labels [{all,first,orthogroup_top,none}]] [--resolve_overlaps]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
@@ -838,10 +838,11 @@ options:
                         PNG/PDF/EPS/PS require CairoSVG.
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
                         "top", "bottom", "none")
-  --show_labels [{all,first,none}]
+  --show_labels [{all,first,orthogroup_top,none}]
                         Show labels: no argument or 'all' (all records),
-                        'first' (first record only), 'none' (no labels).
-                        Default: 'none'
+                        'first' (first record only), 'orthogroup_top' (topmost
+                        record containing each orthogroup), 'none' (no
+                        labels). Default: 'none'
   --resolve_overlaps    Resolve overlaps (experimental; default: False).
   --label_whitelist LABEL_WHITELIST
                         Path to a TSV file for label whitelisting by regex
@@ -949,5 +950,7 @@ hit set is not guaranteed to be identical to LOSAT.
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
 - [Tutorials](./TUTORIALS/TUTORIALS.md)
+- [Tutorial 4: Protein Comparisons Without Precomputed BLAST](./TUTORIALS/4_Protein_Comparisons.md)
+- [Tutorial 5: Table-Driven CLI Inputs](./TUTORIALS/5_Table_Driven_Inputs.md)
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

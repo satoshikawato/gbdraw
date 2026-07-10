@@ -103,6 +103,8 @@ gbdraw linear \
 ## Next Steps
 
 - Continue to [Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md)
+- Use [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) for generated protein comparisons without precomputed BLAST tables
+- Use [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for row-coupled records, selectors, and table manifests
 - Browse [Recipes](./RECIPES.md) for common command patterns
 - Use the [CLI Reference](./CLI_Reference.md) for the full option list
 - Explore more figures in the [Gallery](./GALLERY.md)

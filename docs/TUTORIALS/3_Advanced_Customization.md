@@ -1,7 +1,7 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 2](./2_Comparative_Genomics.md)
+[< Back to Tutorial 2](./2_Comparative_Genomics.md) | [Go to Tutorial 4 >](./4_Protein_Comparisons.md)
 
 # Tutorial 3: Advanced Customization
 
@@ -106,6 +106,12 @@ CDS	gene	^stx2B$
 Whitelist patterns use the same case-insensitive Python regex `search(...)` matching as `-t`.
 Use `^...$` for exact matches, or broader patterns such as `wsv.*-like protein` when you want to keep a label family.
 
+Download the O157:H7 Sakai GenBank file used by this example:
+
+```bash
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_002695.2&rettype=gbwithparts&retmode=text" -O O157_H7.gbk
+```
+
 ```bash
 gbdraw circular \
   --gbk O157_H7.gbk \
@@ -127,6 +133,12 @@ Create `qualifier_priority.tsv`:
 
 ```tsv
 CDS	gene
+```
+
+Download the human mitochondrial GenBank file used by this example:
+
+```bash
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text" -O HmmtDNA.gbk
 ```
 
 ```bash
@@ -151,10 +163,10 @@ gbdraw circular \
 
 `--label_table` runs after whitelist, blacklist, and qualifier-priority processing.
 
-Example table:
+Create `label_override.tsv`:
 
 ```tsv
-NC_010162.1	CDS	label	^ATP synthase subunit alpha$	ATP synthase alpha
+LC738868.1	CDS	label	^protein gustavus-like protein$	gustavus-like protein
 *	*	label	^hypothetical protein$	HP
 ```
 
@@ -199,7 +211,8 @@ gbdraw linear \
 ```
 
 For slanted labels above linear features, use `--label_placement above_feature`
-without `--label_rendering`:
+with the default `--label_rendering auto`. Do not combine this placement mode
+with `--label_rendering embedded_only` or `--label_rendering external_only`.
 
 ```bash
 gbdraw linear \
@@ -262,6 +275,6 @@ When each input needs its own selector, crop, label, or orientation, use a
 [CLI Reference](../CLI_Reference.md) for the full syntax.
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 2](./2_Comparative_Genomics.md)
+[< Back to Tutorial 2](./2_Comparative_Genomics.md) | [Go to Tutorial 4 >](./4_Protein_Comparisons.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
