@@ -20,39 +20,37 @@ For generated protein comparisons, do not supply BLAST tables. Use `--protein_bl
 
 ## 2. Prepare a Pairwise Example
 
-This example compares *Escherichia coli* and *Shigella dysenteriae*.
+This example uses the first two sequences from the [Hepatoplasmataceae five-genome comparison](../GALLERY.md#hepatoplasmataceae-five-genome-comparison): *Candidatus Tyloplasma litorale* (AP027078.1) and *Candidatus Hepatoplasma vulgare* (AP027131.1).
 
 ```bash
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O Escherichia_coli.gbk
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=fasta&retmode=text" -O Escherichia_coli.fasta
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027078.1&rettype=gbwithparts&retmode=text" -O AP027078.gb
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027078.1&rettype=fasta&retmode=text" -O AP027078.fasta
 
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP055055.1&rettype=gbwithparts&retmode=text" -O Shigella_dysenteriae.gbk
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP055055.1&rettype=fasta&retmode=text" -O Shigella_dysenteriae.fasta
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027131.1&rettype=gbwithparts&retmode=text" -O AP027131.gb
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027131.1&rettype=fasta&retmode=text" -O AP027131.fasta
 ```
 
-Run BLAST:
+Run TBLASTX:
 
 ```bash
-blastn \
-  -query Escherichia_coli.fasta \
-  -subject Shigella_dysenteriae.fasta \
+tblastx \
+  -query AP027078.fasta \
+  -subject AP027131.fasta \
   -outfmt 7 \
-  -out Escherichia_coli-Shigella_dysenteriae.blastn.out
+  -out AP027078_AP027131.tblastx.out
 ```
 
 ## 3. Generate the Pairwise Plot
 
 ```bash
 gbdraw linear \
-  --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk \
-  -b Escherichia_coli-Shigella_dysenteriae.blastn.out \
+  --gbk AP027078.gb AP027131.gb \
+  -b AP027078_AP027131.tblastx.out \
   --align_center \
   --separate_strands \
-  -o Escherichia_Shigella_pair \
+  -o hepatoplasmataceae_pair \
   -f svg
 ```
-
-![Escherichia_Shigella_pair.svg](../../examples/Escherichia_Shigella_pair.svg)
 
 The default pairwise link style is `ribbon`, which draws straight filled ribbons and is best when the exact BLAST alignment span is the main signal. Use `--pairwise_match_style curve` for curved filled ribbons in dense synteny-style views; the curve style still preserves each match span from `qstart/qend` and `sstart/send`.
 
@@ -66,10 +64,10 @@ Pairwise protein ribbons:
 
 ```bash
 gbdraw linear \
-  --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk \
+  --gbk AP027078.gb AP027131.gb \
   --protein_blastp_mode pairwise \
   --align_center \
-  -o Escherichia_Shigella_protein_pairwise \
+  -o hepatoplasmataceae_protein_pairwise \
   -f svg
 ```
 
@@ -77,11 +75,11 @@ Orthogroup-supported ribbons:
 
 ```bash
 gbdraw linear \
-  --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk \
+  --gbk AP027078.gb AP027131.gb \
   --protein_blastp_mode orthogroup \
   --show_labels orthogroup_top \
   --pairwise_match_style curve \
-  -o Escherichia_Shigella_orthogroup \
+  -o hepatoplasmataceae_orthogroup \
   -f svg
 ```
 
@@ -89,12 +87,12 @@ Collinear blocks:
 
 ```bash
 gbdraw linear \
-  --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk \
+  --gbk AP027078.gb AP027131.gb \
   --protein_blastp_mode collinear \
   --collinear_min_anchors 2 \
   --collinear_color_mode orientation_identity \
   --pairwise_match_style curve \
-  -o Escherichia_Shigella_collinear \
+  -o hepatoplasmataceae_collinear \
   -f svg
 ```
 
@@ -135,10 +133,10 @@ Example: select one record and crop a region.
 
 ```bash
 gbdraw linear \
-  --gbk Escherichia_coli.gbk \
-  --record_id NC_000913.3 \
-  --region NC_000913.3:100000-250000 \
-  -o Escherichia_coli_region \
+  --gbk AP027078.gb \
+  --record_id AP027078.1 \
+  --region AP027078.1:100000-250000 \
+  -o AP027078_region \
   -f svg
 ```
 
@@ -174,37 +172,43 @@ gbdraw linear \
 
 ## 7. Compare More Than Two Genomes
 
-For `A -> B -> C -> D`, provide BLAST files for `A vs B`, `B vs C`, and `C vs D`.
+The Gallery comparison extends the pair above to five genomes. Download the remaining three GenBank and FASTA records:
 
 ```bash
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_004337.2&rettype=gbwithparts&retmode=text" -O Shigella_flexneri.gbk
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_004337.2&rettype=fasta&retmode=text" -O Shigella_flexneri.fasta
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027133.1&rettype=gbwithparts&retmode=text" -O AP027133.gb
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027133.1&rettype=fasta&retmode=text" -O AP027133.fasta
 
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP026802.1&rettype=gbwithparts&retmode=text" -O Shigella_sonnei.gbk
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP026802.1&rettype=fasta&retmode=text" -O Shigella_sonnei.fasta
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027132.1&rettype=gbwithparts&retmode=text" -O AP027132.gb
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027132.1&rettype=fasta&retmode=text" -O AP027132.fasta
+
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP006932.1&rettype=gbwithparts&retmode=text" -O NZ_CP006932.gb
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP006932.1&rettype=fasta&retmode=text" -O NZ_CP006932.fasta
 ```
 
+The first adjacent comparison table was created in Section 2. Generate the remaining three in the same order as the genome list:
+
 ```bash
-blastn -query Shigella_dysenteriae.fasta -subject Shigella_flexneri.fasta -outfmt 7 -out Shigella_dysenteriae-Shigella_flexneri.blastn.out
-blastn -query Shigella_flexneri.fasta -subject Shigella_sonnei.fasta -outfmt 7 -out Shigella_flexneri-Shigella_sonnei.blastn.out
+tblastx -query AP027131.fasta -subject AP027133.fasta -outfmt 7 -out AP027131_AP027133.tblastx.out
+tblastx -query AP027133.fasta -subject AP027132.fasta -outfmt 7 -out AP027133_AP027132.tblastx.out
+tblastx -query AP027132.fasta -subject NZ_CP006932.fasta -outfmt 7 -out AP027132_NZ_CP006932.tblastx.out
 ```
 
 ```bash
 gbdraw linear \
-  --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk Shigella_flexneri.gbk Shigella_sonnei.gbk \
-  -b Escherichia_coli-Shigella_dysenteriae.blastn.out Shigella_dysenteriae-Shigella_flexneri.blastn.out Shigella_flexneri-Shigella_sonnei.blastn.out \
+  --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb \
+  -b AP027078_AP027131.tblastx.out AP027131_AP027133.tblastx.out AP027133_AP027132.tblastx.out AP027132_NZ_CP006932.tblastx.out \
   --align_center \
   --separate_strands \
-  --evalue 1e-99 \
-  --bitscore 5000 \
-  --alignment_length 1000 \
-  -o Escherichia_Shigella_multi \
+  --block_stroke_width 1 \
+  --block_stroke_color gray \
+  --palette default \
+  -o hepatoplasmataceae_default \
   -f svg
 ```
 
-Use `--alignment_length` when you want to hide very short BLAST hits and keep only longer ribbons.
+Add `--evalue`, `--bitscore`, or `--alignment_length` when you want to filter the comparison tables before drawing the ribbons.
 
-![Escherichia_Shigella_multi.svg](../../examples/Escherichia_Shigella_multi.svg)
+![Five-genome Hepatoplasmataceae comparison](../../examples/hepatoplasmataceae_default.svg)
 
 > [!IMPORTANT]
 > BLAST files must follow the same order as the genome list.
@@ -213,27 +217,19 @@ Use `--alignment_length` when you want to hide very short BLAST hits and keep on
 
 Circular mode can draw BLAST HSPs as concentric conservation rings around each displayed record. This is useful when one annotated reference genome should be compared against one or more unannotated FASTA sequences.
 
-Generate BLAST with the displayed circular genome as the subject:
-
-```bash
-blastn \
-  -query Shigella_dysenteriae.fasta \
-  -subject Escherichia_coli.fasta \
-  -outfmt 7 \
-  -out Shigella_vs_Escherichia.blastn.out
-```
+Reuse `AP027078_AP027131.tblastx.out` from Section 2. AP027131 is the subject in that table, so use it as the displayed circular genome.
 
 Then render the circular reference with a conservation ring:
 
 ```bash
 gbdraw circular \
-  --gbk Escherichia_coli.gbk \
-  --conservation_blast Shigella_vs_Escherichia.blastn.out \
+  --gbk AP027131.gb \
+  --conservation_blast AP027078_AP027131.tblastx.out \
   --conservation_reference subject \
-  --conservation_labels "Shigella dysenteriae" \
-  --identity 75 \
+  --conservation_labels "Candidatus Tyloplasma litorale" \
+  --identity 60 \
   --alignment_length 500 \
-  -o Escherichia_conservation \
+  -o AP027131_conservation \
   -f svg
 ```
 
