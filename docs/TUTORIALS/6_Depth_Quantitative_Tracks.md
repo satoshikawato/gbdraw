@@ -9,51 +9,26 @@
 
 ## 1. Prepare Inputs
 
+Sections 2-4 use Hepatoplasmataceae genomes and matching per-base depth files. A fourth matching file is listed for completeness but is not plotted because all of its depth values are 0. In a source checkout, the files are available under [`tests/test_inputs`](../../tests/test_inputs/):
+
+| Record | GenBank | Depth TSV | Sequencing run | Tutorial use |
+|---|---|---|---|---|
+| AP027078.1 | `AP027078.gb` | `AP027078.DRR394944.depth.tsv` | DRR394944 | Section 4 |
+| AP027131.1 | `AP027131.gb` | `AP027131.DRR394921.depth.tsv` | DRR394921 | Section 3 |
+| AP027133.1 | `AP027133.gb` | `AP027133.DRR394922.depth.tsv` | DRR394922 | Not plotted (all values are 0) |
+| AP027132.1 | `AP027132.gb` | `AP027132.DRR394921.depth.tsv` | DRR394921 | Sections 2 and 3 |
+
+Run the depth examples from the repository root so the `tests/test_inputs/` paths resolve. If you copy the relevant GenBank and TSV files to another working directory, remove that prefix from the commands.
+
+Depth TSV files use the first three columns of samtools depth output: `reference`, 1-based `position`, and non-negative `depth`. A header is optional; gbdraw normalizes these columns to `reference_name`, `position`, and `depth`. The supplied files are headerless and contain one row per base. The examples use non-overlapping 100 nt mean-depth windows to retain local depth structure without producing oversized SVG files.
+
+Sections 5 and 6 use the MjeNMV GenBank record:
+
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gb
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738874.1&rettype=gbwithparts&retmode=text" -O MelaMJNV.gb
 ```
 
-In a source checkout, both files are also available under `examples/`.
-
-Depth TSV files use the first three columns of samtools depth output: `reference`, 1-based `position`, and non-negative `depth`. A header is optional; gbdraw normalizes these columns to `reference_name`, `position`, and `depth`.
-
-Create two compact synthetic depth files. They contain one sample every 25,000 bp, so the commands below use `--depth_window 1 --depth_step 25000`. For ordinary per-base samtools depth output, omit those two options or choose aggregation values that fit your data.
-
-```bash
-cat > MjeNMV.depth.tsv <<'EOF'
-reference	position	depth
-LC738868.1	1	18
-LC738868.1	25001	24
-LC738868.1	50001	42
-LC738868.1	75001	8
-LC738868.1	100001	60
-LC738868.1	125001	35
-LC738868.1	150001	22
-LC738868.1	175001	48
-LC738868.1	200001	30
-LC738868.1	225001	70
-LC738868.1	250001	40
-LC738868.1	275001	28
-LC738868.1	300001	55
-EOF
-
-cat > MelaMJNV.depth.tsv <<'EOF'
-reference	position	depth
-LC738874.1	1	12
-LC738874.1	25001	20
-LC738874.1	50001	35
-LC738874.1	75001	16
-LC738874.1	100001	55
-LC738874.1	125001	31
-LC738874.1	150001	18
-LC738874.1	175001	44
-LC738874.1	200001	27
-LC738874.1	225001	63
-LC738874.1	250001	38
-LC738874.1	275001	50
-EOF
-```
+In a source checkout, this file is also available as `examples/MjeNMV.gb`.
 
 ## 2. Add One Logical Depth Track
 
@@ -61,49 +36,55 @@ Use `--depth` when you need one logical depth track.
 
 ```bash
 gbdraw circular \
-  --gbk MjeNMV.gb \
-  --depth MjeNMV.depth.tsv \
+  --gbk tests/test_inputs/AP027132.gb \
+  --depth tests/test_inputs/AP027132.DRR394921.depth.tsv \
   --depth_width 45 \
-  --depth_window 1 \
-  --depth_step 25000 \
+  --depth_window 100 \
+  --depth_step 100 \
+  --depth_max 1000 \
   --show_depth_axis \
   --show_depth_ticks \
-  --depth_large_tick_interval 20 \
-  --depth_small_tick_interval 10 \
-  -o MjeNMV_depth_circular \
+  --depth_large_tick_interval 200 \
+  --depth_small_tick_interval 100 \
+  -o tutorial-6-depth-circular \
   -f svg
 ```
 
-This writes `MjeNMV_depth_circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. Because this record is annotated as linear, gbdraw also prints the expected topology warning for this circular-only example.
+This writes `tutorial-6-depth-circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. The 1,000x maximum does not clip the observed 100 nt mean depths and produces evenly spaced 200x tick labels.
 
-![Circular MjeNMV diagram with a blue depth ring and quantitative depth ticks](../../examples/tutorial-6-depth-circular.svg)
+![Circular AP027132.1 genome diagram with a blue DRR394921 depth ring and quantitative ticks up to 1,000x](../../examples/tutorial-6-depth-circular.svg)
 
-## 3. Add Multiple Logical Depth Tracks
+## 3. Compare a Logical Depth Track Across Records
 
-Use repeatable `--depth_track` when you need multiple logical depth tracks. Each `--depth_track` group accepts one shared file or one file per displayed record.
+Use one `--depth_track` group with one matching file per displayed record. AP027131.1 and AP027132.1 both use reads from DRR394921, so their coverage can be compared on one shared axis.
 
 ```bash
 gbdraw linear \
-  --gbk MjeNMV.gb MelaMJNV.gb \
-  --depth_track MjeNMV.depth.tsv MelaMJNV.depth.tsv \
-  --depth_track MjeNMV.depth.tsv MelaMJNV.depth.tsv \
-  --depth_track_label "Run A" "Run B" \
-  --depth_track_color "#4E79A7" "#E15759" \
+  --gbk tests/test_inputs/AP027131.gb tests/test_inputs/AP027132.gb \
+  --depth_track tests/test_inputs/AP027131.DRR394921.depth.tsv tests/test_inputs/AP027132.DRR394921.depth.tsv \
+  --depth_track_label "DRR394921" \
+  --depth_track_color "#4E79A7" \
   --depth_height 36 \
-  --depth_window 1 \
-  --depth_step 25000 \
+  --depth_window 100 \
+  --depth_step 100 \
+  --depth_min 0 \
+  --depth_max 1000 \
+  --depth_large_tick_interval 500 \
+  --depth_small_tick_interval 250 \
   --show_depth_axis \
   --show_depth_ticks \
   --share_depth_axis \
-  -o majani_depth_tracks \
+  -o tutorial-6-depth-tracks \
   -f svg
 ```
 
-This writes `majani_depth_tracks.svg`. The repeated input groups keep the example setup short; replace the second `--depth_track` group with another sample's files in a real comparison.
+This writes `tutorial-6-depth-tracks.svg`. The common 0x to 1,000x scale makes the lower AP027131.1 coverage and higher AP027132.1 coverage directly comparable.
 
-![Two majanivirus records with blue Run A and red Run B depth tracks on shared axes](../../examples/tutorial-6-depth-tracks.svg)
+![AP027131.1 and AP027132.1 linear diagrams with DRR394921 depth tracks on shared axes ranging from 0x to 1,000x](../../examples/tutorial-6-depth-tracks.svg)
 
-Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same automatically determined y-axis maximum across records for each logical track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
+Repeat `--depth_track` only when another matched dataset is available. A second logical track is intentionally omitted here because the example data do not include a second matching depth file for both records.
+
+Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same y-axis range across records for each logical track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
 
 Use `--depth_track_height` when each logical track needs its own height. Track-specific axis overrides are also available:
 
@@ -117,22 +98,23 @@ Log scaling is useful when a few high-depth bins would otherwise flatten the res
 
 ```bash
 gbdraw linear \
-  --gbk MjeNMV.gb \
-  --depth MjeNMV.depth.tsv \
+  --gbk tests/test_inputs/AP027078.gb \
+  --depth tests/test_inputs/AP027078.DRR394944.depth.tsv \
   --depth_height 40 \
-  --depth_window 1 \
-  --depth_step 25000 \
+  --depth_window 100 \
+  --depth_step 100 \
   --depth_log_scale \
   --depth_min 1 \
-  --depth_max 100 \
+  --depth_max 250000 \
   --show_depth_axis \
+  --show_depth_ticks \
   -o tutorial-depth-log-axis \
   -f svg
 ```
 
-This writes `tutorial-depth-log-axis.svg`, with a log-scaled depth axis spanning the requested 1x to 100x range.
+This writes `tutorial-depth-log-axis.svg`, with a log-scaled depth axis spanning the requested 1x to 250,000x range. AP027078.1 contains a high local coverage peak, and log scaling keeps the background coverage visible without clipping the 100 nt mean depths.
 
-![Linear majanivirus diagram with a blue log-scaled depth track and quantitative axis](../../examples/tutorial-depth-log-axis.svg)
+![Linear AP027078.1 genome diagram with a blue log-scaled DRR394944 depth track and an axis from 1x to 250,000x](../../examples/tutorial-depth-log-axis.svg)
 
 Use `--no_depth_log_scale` to force linear scaling when a config file or saved session enables log scaling.
 
