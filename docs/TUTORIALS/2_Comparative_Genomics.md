@@ -5,7 +5,7 @@
 
 # Tutorial 2: Comparative Genomics with BLAST
 
-**Goal:** use `gbdraw linear` to visualize sequence similarity between genomes with precomputed BLAST tables or generated protein blastp comparisons.
+**Goal:** visualize sequence similarity with linear BLAST comparisons, generated protein comparisons, and circular LOSATN/TLOSATX homology rings.
 
 ## 1. Required Inputs
 
@@ -229,48 +229,78 @@ Inspect the result for four ribbon bands, each connecting one adjacent pair in t
 > [!IMPORTANT]
 > BLAST files must follow the same order as the genome list.
 
-## 8. Circular Conservation Rings
+## 8. Circular Homology Rings: LOSATN vs TLOSATX
 
-Circular mode can draw BLAST HSPs as concentric conservation rings around each displayed record. This is useful when one annotated reference genome should be compared against one or more unannotated FASTA sequences.
+Circular mode can place one pairwise comparison ring per query sequence around an annotated reference. This example uses MjeNMV as the reference and the other nine majaniviruses as queries for both LOSATN and TLOSATX. Comparing the two diagrams reveals homology that is weak at the nucleotide level but retained at the translated protein level.
 
-This example compares MjeNMV (LC738868.1) with MelaMJNV (LC738874.1). Download the two records and create an outfmt 7 TBLASTX table:
+### 8.1 Download the reference and queries
 
-```bash
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=fasta&retmode=text" -O MjeNMV.fasta
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738874.1&rettype=gbwithparts&retmode=text" -O MelaMJNV.gb
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738874.1&rettype=fasta&retmode=text" -O MelaMJNV.fasta
-
-tblastx \
-  -query MjeNMV.fasta \
-  -subject MelaMJNV.fasta \
-  -outfmt 7 \
-  -out MjeNMV.MelaMJNV.tblastx.out
-```
-
-If you are working from a source checkout, these files are available under `examples/`. MelaMJNV is the subject in the table, so use it as the displayed circular genome.
-
-Then render the circular reference with a conservation ring:
+Download MjeNMV as the annotated GenBank reference:
 
 ```bash
-gbdraw circular \
-  --gbk MelaMJNV.gb \
-  --conservation_blast MjeNMV.MelaMJNV.tblastx.out \
-  --conservation_reference subject \
-  --conservation_labels MjeNMV \
-  --identity 60 \
-  --alignment_length 500 \
-  -o tutorial-2-conservation-ring \
-  -f svg
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gb
 ```
 
-![Circular MelaMJNV genome with an MjeNMV conservation ring](../../examples/tutorial-2-conservation-ring.svg)
+Download the nine comparison genomes as FASTA queries:
+
+```bash
+while read -r name accession; do
+  wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=${accession}&rettype=fasta&retmode=text" -O "${name}.fasta"
+done <<'EOF'
+MelaMJNV LC738874.1
+PemoMJNVA LC738870.1
+PeseMJNV LC738873.1
+PemoMJNVB LC738871.1
+LvMJNV LC738872.1
+TrcuMJNV LC738879.1
+MellatMJNV AP027153.1
+MeenMJNV LC738876.1
+MejoMJNV LC738878.1
+EOF
+```
+
+The same GenBank and FASTA files are available under `examples/` in a source checkout.
+
+### 8.2 Configure the shared circular plot
+
+Open the [gbdraw web app](https://gbdraw.app/), select `Circular`, and upload `MjeNMV.gb` as the input genome. Use these settings for both comparisons:
+
+| Setting | Value |
+|---|---|
+| Track Preset | Spreadout |
+| Hide GC Content | Selected |
+| Hide GC Skew | Selected |
+| Legend Position | Left |
+| Pairwise Comparisons | Run LOSAT |
+| Ring Width | 8 |
+| Ring Gap | 2 |
+| Bitscore | 50 |
+| E-value | `1e-5` |
+
+In `Pairwise Comparisons`, click `Add Seq` and add the nine FASTA files in the order shown in the download block. Each FASTA is a query; the displayed MjeNMV genome is the subject and the coordinate reference for every ring.
+
+### 8.3 Generate the nucleotide-level LOSATN rings
+
+Select `LOSATN`, set `Task` to `blastn`, `Minimum Identity` to `75`, and `Minimum Length` to `100`. Click `Generate Diagram`.
+
+![MjeNMV reference with nine majanivirus LOSATN rings; most nucleotide-level rings are sparse](../../examples/tutorial-2-majanivirus-losatn.svg)
+
+Most rings contain only isolated nucleotide matches. MelaMJNV is the clear exception: its outer ring remains dense because it is much more similar to MjeNMV at the nucleotide level than the other queries.
+
+### 8.4 Generate the translated TLOSATX rings
+
+Keep the same reference, query order, colors, and layout. Change `LOSAT Mode` to `TLOSATX`, then set `Minimum Identity` to `30` and `Minimum Length` to `30`. Keep `Reference gencode` and each query `Subject gencode` at `1`, then click `Generate Diagram` again.
+
+![MjeNMV reference with nine majanivirus TLOSATX rings showing broader translated-protein homology](../../examples/tutorial-2-majanivirus-tlosatx.svg)
+
+The eight nucleotide-divergent queries cover substantially more of MjeNMV in the TLOSATX plot, while MelaMJNV remains dense in both plots. The contrast indicates that much of the shared protein-coding content remains detectable after translation even where synonymous substitutions and other nucleotide changes make direct DNA matches sparse.
+
+After merging overlapping HSP spans on the MjeNMV reference, the eight divergent queries individually cover only about 0.6–9.1% in the LOSATN result but about 28.5–44.0% in the TLOSATX result. MelaMJNV covers about 94% with LOSATN and 91% with TLOSATX, which explains its dense ring in both diagrams.
 
 > [!NOTE]
-> The MelaMJNV record is annotated as linear, so gbdraw prints a topology warning. This example intentionally uses a circular view to demonstrate a conservation ring; use linear mode when the displayed topology must match the record annotation.
+> MjeNMV is annotated as linear, so gbdraw reports a topology warning. This tutorial intentionally uses a circular view to compare homology rings; use linear mode when the displayed topology must match the record annotation.
 
-Use one `--conservation_blast` file per ring. If gbdraw can identify the displayed reference IDs on only one BLAST side, `--conservation_reference auto` works; otherwise set `query` or `subject` explicitly. BLAST rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
-
-In the web app, open `Pairwise Comparisons` in circular mode. You can upload BLAST outfmt 6/7 files or choose `Run LOSAT` with LOSATN (`blastn`) or TLOSATX comparison FASTA files. The browser uses each comparison FASTA as the query and the displayed circular genome as the subject, so generated results are passed to gbdraw with `conservation_reference=subject`.
+The web app can save the raw LOSAT tables with `Save Raw LOSAT TSV`. To draw the same rings from the CLI, pass one saved outfmt 6/7 file per ring with `--conservation_blast` and select `--conservation_reference subject`. BLAST rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 1](./1_Customizing_Plots.md) | [Go to Tutorial 3 >](./3_Advanced_Customization.md)

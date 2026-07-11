@@ -9,7 +9,7 @@ Step-by-step guides for the main `gbdraw` workflows.
 - [Tutorial 1: Customizing Your Plot](./1_Customizing_Plots.md)
   Learn palettes, circular track layout, centered definitions, titles, and labels.
 - [Tutorial 2: Comparative Genomics](./2_Comparative_Genomics.md)
-  Build linear comparison plots from precomputed BLAST output or generated protein comparisons, and control record/region selection.
+  Build linear comparison plots, control record/region selection, and contrast nucleotide- and translated-protein homology with circular LOSATN/TLOSATX rings.
 - [Tutorial 3: Advanced Customization](./3_Advanced_Customization.md)
   Use color tables, label filters, qualifier priority, manual label overrides, and styling options.
 
