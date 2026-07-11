@@ -9,14 +9,14 @@
 
 ## 1. Prepare Inputs
 
-Sections 2-4 use Hepatoplasmataceae genomes and matching per-base depth files. A fourth matching file is listed for completeness but is not plotted because all of its depth values are 0. In a source checkout, the files are available under [`tests/test_inputs`](../../tests/test_inputs/):
+Sections 2-4 use Hepatoplasmataceae genomes and matching per-base depth files. In a source checkout, the files are available under [`tests/test_inputs`](../../tests/test_inputs/):
 
 | Record | GenBank | Depth TSV | Sequencing run | Tutorial use |
 |---|---|---|---|---|
 | AP027078.1 | `AP027078.gb` | `AP027078.DRR394944.depth.tsv` | DRR394944 | Section 4 |
 | AP027131.1 | `AP027131.gb` | `AP027131.DRR394921.depth.tsv` | DRR394921 | Section 3 |
-| AP027133.1 | `AP027133.gb` | `AP027133.DRR394922.depth.tsv` | DRR394922 | Not plotted (all values are 0) |
-| AP027132.1 | `AP027132.gb` | `AP027132.DRR394921.depth.tsv` | DRR394921 | Sections 2 and 3 |
+| AP027133.1 | `AP027133.gb` | `AP027133.DRR394922.depth.tsv` | DRR394922 | Section 2 |
+| AP027132.1 | `AP027132.gb` | `AP027132.DRR394921.depth.tsv` | DRR394921 | Section 3 |
 
 Run the depth examples from the repository root so the `tests/test_inputs/` paths resolve. If you copy the relevant GenBank and TSV files to another working directory, remove that prefix from the commands.
 
@@ -36,23 +36,23 @@ Use `--depth` when you need one logical depth track.
 
 ```bash
 gbdraw circular \
-  --gbk tests/test_inputs/AP027132.gb \
-  --depth tests/test_inputs/AP027132.DRR394921.depth.tsv \
+  --gbk tests/test_inputs/AP027133.gb \
+  --depth tests/test_inputs/AP027133.DRR394922.depth.tsv \
   --depth_width 45 \
   --depth_window 100 \
   --depth_step 100 \
-  --depth_max 1000 \
+  --depth_max 150 \
   --show_depth_axis \
   --show_depth_ticks \
-  --depth_large_tick_interval 200 \
-  --depth_small_tick_interval 100 \
+  --depth_large_tick_interval 50 \
+  --depth_small_tick_interval 25 \
   -o tutorial-6-depth-circular \
   -f svg
 ```
 
-This writes `tutorial-6-depth-circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. The 1,000x maximum does not clip the observed 100 nt mean depths and produces evenly spaced 200x tick labels.
+This writes `tutorial-6-depth-circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. The 150x maximum does not clip the observed 100 nt mean depths and produces evenly spaced 50x tick labels.
 
-![Circular AP027132.1 genome diagram with a blue DRR394921 depth ring and quantitative ticks up to 1,000x](../../examples/tutorial-6-depth-circular.svg)
+![Circular AP027133.1 genome diagram with a blue DRR394922 depth ring and quantitative ticks up to 150x](../../examples/tutorial-6-depth-circular.svg)
 
 ## 3. Compare a Logical Depth Track Across Records
 
