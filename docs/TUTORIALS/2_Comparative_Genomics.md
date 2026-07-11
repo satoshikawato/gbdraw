@@ -73,6 +73,8 @@ gbdraw linear \
   -f svg
 ```
 
+![Pairwise protein comparison between two Hepatoplasmataceae genomes](../../examples/tutorial-2-protein-pairwise.svg)
+
 Orthogroup-supported ribbons:
 
 ```bash
@@ -84,6 +86,8 @@ gbdraw linear \
   -o hepatoplasmataceae_orthogroup \
   -f svg
 ```
+
+![Orthogroup-supported protein ribbons between two Hepatoplasmataceae genomes](../../examples/tutorial-2-protein-orthogroup.svg)
 
 Collinear blocks:
 
@@ -97,6 +101,8 @@ gbdraw linear \
   -o hepatoplasmataceae_collinear \
   -f svg
 ```
+
+![Collinear protein blocks between two Hepatoplasmataceae genomes](../../examples/tutorial-2-protein-collinear.svg)
 
 See [Tutorial 4](./4_Protein_Comparisons.md) for runtime selection, labels, and collinear tuning.
 
@@ -227,23 +233,40 @@ Inspect the result for four ribbon bands, each connecting one adjacent pair in t
 
 Circular mode can draw BLAST HSPs as concentric conservation rings around each displayed record. This is useful when one annotated reference genome should be compared against one or more unannotated FASTA sequences.
 
-Reuse `AP027078_AP027131.tblastx.out` from Section 2. AP027131 is the subject in that table, so use it as the displayed circular genome.
+This example compares MjeNMV (LC738868.1) with MelaMJNV (LC738874.1). Download the two records and create an outfmt 7 TBLASTX table:
+
+```bash
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=fasta&retmode=text" -O MjeNMV.fasta
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738874.1&rettype=gbwithparts&retmode=text" -O MelaMJNV.gb
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738874.1&rettype=fasta&retmode=text" -O MelaMJNV.fasta
+
+tblastx \
+  -query MjeNMV.fasta \
+  -subject MelaMJNV.fasta \
+  -outfmt 7 \
+  -out MjeNMV.MelaMJNV.tblastx.out
+```
+
+If you are working from a source checkout, these files are available under `examples/`. MelaMJNV is the subject in the table, so use it as the displayed circular genome.
 
 Then render the circular reference with a conservation ring:
 
 ```bash
 gbdraw circular \
-  --gbk AP027131.gb \
-  --conservation_blast AP027078_AP027131.tblastx.out \
+  --gbk MelaMJNV.gb \
+  --conservation_blast MjeNMV.MelaMJNV.tblastx.out \
   --conservation_reference subject \
-  --conservation_labels "Candidatus Tyloplasma litorale" \
+  --conservation_labels MjeNMV \
   --identity 60 \
   --alignment_length 500 \
-  -o AP027131_conservation \
+  -o tutorial-2-conservation-ring \
   -f svg
 ```
 
-![Circular Candidatus Hepatoplasma vulgare genome with a Candidatus Tyloplasma litorale conservation ring](../../examples/tutorial-2-conservation-ring.svg)
+![Circular MelaMJNV genome with an MjeNMV conservation ring](../../examples/tutorial-2-conservation-ring.svg)
+
+> [!NOTE]
+> The MelaMJNV record is annotated as linear, so gbdraw prints a topology warning. This example intentionally uses a circular view to demonstrate a conservation ring; use linear mode when the displayed topology must match the record annotation.
 
 Use one `--conservation_blast` file per ring. If gbdraw can identify the displayed reference IDs on only one BLAST side, `--conservation_reference auto` works; otherwise set `query` or `subject` explicitly. BLAST rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
 

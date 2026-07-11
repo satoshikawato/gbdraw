@@ -93,6 +93,8 @@ This writes `majani_orthogroup.svg`.
 
 `--show_labels orthogroup_top` labels the topmost displayed member of each orthogroup, which is useful when the same group appears in multiple records.
 
+![Orthogroup-supported protein ribbons across three majanivirus records](../../examples/majani_orthogroup.svg)
+
 ## 5. Collinear Blocks
 
 `collinear` keeps protein-supported matches that occur in compatible local order.
@@ -112,6 +114,8 @@ gbdraw linear \
 This writes `majani_collinear.svg`.
 
 `--collinear_min_anchors 2` removes singleton blocks. `--collinear_color_mode orientation_identity` separates forward and inverted blocks while still encoding identity.
+
+![Collinear protein blocks across three majanivirus records](../../examples/majani_collinear.svg)
 
 ## 6. When to Prefer Precomputed `-b/--blast`
 
