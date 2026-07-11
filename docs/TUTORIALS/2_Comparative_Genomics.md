@@ -281,7 +281,7 @@ In `Pairwise Comparisons`, click `Add Seq` and add the nine FASTA files in the o
 
 ### 8.3 Generate the nucleotide-level LOSATN rings
 
-Select `LOSATN`, set `Task` to `blastn`, `Minimum Identity` to `75`, and `Minimum Length` to `100`. Click `Generate Diagram`.
+Select `LOSATN`, set `Task` to `blastn`, `Minimum Identity` to `50`, and `Minimum Length` to `100`. Click `Generate Diagram`.
 
 ![MjeNMV reference with nine majanivirus LOSATN rings; most nucleotide-level rings are sparse](../../examples/tutorial-2-majanivirus-losatn.svg)
 
@@ -293,9 +293,9 @@ Keep the same reference, query order, colors, and layout. Change `LOSAT Mode` to
 
 ![MjeNMV reference with nine majanivirus TLOSATX rings showing broader translated-protein homology](../../examples/tutorial-2-majanivirus-tlosatx.svg)
 
-The eight nucleotide-divergent queries cover substantially more of MjeNMV in the TLOSATX plot, while MelaMJNV remains dense in both plots. The contrast indicates that much of the shared protein-coding content remains detectable after translation even where synonymous substitutions and other nucleotide changes make direct DNA matches sparse.
+The eight nucleotide-divergent queries produce much denser rings in the TLOSATX plot, while MelaMJNV remains dense in both plots. The contrast indicates that much of the shared protein-coding content remains detectable after translation even where synonymous substitutions and other nucleotide changes reduce direct DNA similarity.
 
-After merging overlapping HSP spans on the MjeNMV reference, the eight divergent queries individually cover only about 0.6–9.1% in the LOSATN result but about 28.5–44.0% in the TLOSATX result. MelaMJNV covers about 94% with LOSATN and 91% with TLOSATX, which explains its dense ring in both diagrams.
+After applying the displayed thresholds, each of the eight divergent queries yields 108–177 LOSATN HSPs but 769–2,000 TLOSATX HSPs. MelaMJNV is the close nucleotide-level match and remains dense in both diagrams.
 
 > [!NOTE]
 > MjeNMV is annotated as linear, so gbdraw reports a topology warning. This tutorial intentionally uses a circular view to compare homology rings; use linear mode when the displayed topology must match the record annotation.
