@@ -190,6 +190,10 @@ gbdraw circular \
   -o MjeNMV_label_override
 ```
 
+The circular result shortens the exact gustavus-like label and renders matching hypothetical-protein labels as `HP`:
+
+![Circular MjeNMV diagram with a shortened gustavus-like label and hypothetical-protein labels replaced by HP](../../examples/tutorial-3-label-override.svg)
+
 Linear mode:
 
 ```bash
@@ -220,6 +224,10 @@ gbdraw linear \
   -o MjeNMV_external_labels
 ```
 
+The circular `embedded_only` result keeps only labels that fit inside their feature bodies:
+
+![Circular MjeNMV diagram showing only labels that fit inside feature bodies](../../examples/tutorial-3-embedded-labels.svg)
+
 For slanted labels above linear features, use `--label_placement above_feature`
 with the default `--label_rendering auto`. Do not combine this placement mode
 with `--label_rendering embedded_only` or `--label_rendering external_only`.
@@ -232,6 +240,10 @@ gbdraw linear \
   --label_rotation 45 \
   -o MjeNMV_above_feature_labels
 ```
+
+The linear result places the 45-degree labels above their features:
+
+![Linear MjeNMV diagram with feature labels rotated 45 degrees above the feature track](../../examples/tutorial-3-above-feature-labels.svg)
 
 ## Part 3: Fine-Tune Plot Appearance
 

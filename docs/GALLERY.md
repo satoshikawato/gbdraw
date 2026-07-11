@@ -118,6 +118,8 @@ AP027133_AP027132.tblastx.out \
 AP027132_NZ_CP006932.tblastx.out \
 --align_center \
 --separate_strands \
+--show_gc \
+--show_skew \
 --block_stroke_width 1 \
 --block_stroke_color gray \
 --palette default \

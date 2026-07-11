@@ -33,6 +33,8 @@ gbdraw circular \
 
 Shape overrides apply by feature type. In this result, blue CDS features are rectangles while yellow tRNAs retain arrowheads. Shape overrides do not change colors, labels, or feature selection by themselves.
 
+![Human mitochondrial genome with rectangular blue CDS features and arrow-shaped yellow tRNA features](../../examples/tutorial-9-feature-shapes.svg)
+
 ## 3. Create a Feature Visibility Table
 
 Create `feature_visibility.tsv`:

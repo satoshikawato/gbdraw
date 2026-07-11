@@ -42,6 +42,8 @@ gbdraw linear \
 
 This writes `majani_records_table.svg`.
 
+![Three majanivirus records using table-defined labels, subtitles, cropped regions, and reverse-complement orientation](../../examples/tutorial-5-records-table.svg)
+
 `--records_table` replaces `--gbk`, `--gff`, and `--fasta`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
 
 ## 3. Linear `--records_table` for GFF3 + FASTA Rows
@@ -113,17 +115,19 @@ gbdraw circular \
 
 This writes `majani_circular_grid.svg`.
 
+![Three majanivirus circular diagrams arranged in the table-defined two-row grid](../../examples/tutorial-5-circular-grid.svg)
+
 When a records table provides `row` and `column`, do not also use `--multi_record_position`.
 
 ## 5. Circular Conservation Rings with `--conservation_table`
 
-Create a minimal BLAST outfmt 6 file and `conservation.tsv`:
+Use the precomputed BLAST outfmt 7 table maintained in `examples/`. From a source checkout, copy it into the tutorial working directory:
 
 ```bash
-cat > MjeNMV.MelaMJNV.tblastx.out <<'EOF'
-LC738868.1	LC738874.1	91.2	1000	88	0	15000	16000	14800	15800	1e-80	300
-EOF
+cp examples/MjeNMV.MelaMJNV.tblastx.out .
 ```
+
+You can also download [the same existing BLAST table](../../examples/MjeNMV.MelaMJNV.tblastx.out) directly.
 
 Create `conservation.tsv`:
 
@@ -139,13 +143,15 @@ gbdraw circular \
   --gbk MjeNMV.gb \
   --conservation_table conservation.tsv \
   --conservation_reference query \
-  --identity 70 \
-  --alignment_length 100 \
+  --identity 95 \
+  --alignment_length 1000 \
   -o MjeNMV_conservation_table \
   -f svg
 ```
 
 This writes `MjeNMV_conservation_table.svg`.
+
+![Circular MjeNMV diagram with five high-confidence MelaMJNV conservation segments loaded through a table](../../examples/tutorial-5-conservation-table.svg)
 
 `--conservation_table` cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
 

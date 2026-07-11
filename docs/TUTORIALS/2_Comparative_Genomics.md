@@ -52,6 +52,8 @@ gbdraw linear \
   -f svg
 ```
 
+![Two aligned Hepatoplasmataceae genomes connected by precomputed TBLASTX ribbons](../../examples/tutorial-2-pairwise-blast.svg)
+
 The default pairwise link style is `ribbon`, which draws straight filled ribbons and is best when the exact BLAST alignment span is the main signal. Use `--pairwise_match_style curve` for curved filled ribbons in dense synteny-style views; the curve style still preserves each match span from `qstart/qend` and `sstart/send`.
 
 For generated collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients. Collinear blocks use RBH anchors. In the web app, `Evidence scope` controls which record pairs provide collinearity evidence. `Adjacent pairs` uses only neighboring records; `All records` uses every record pair for grouping and block support. Both settings draw ribbons only for adjacent display pairs.
@@ -170,6 +172,8 @@ gbdraw linear \
   -f svg
 ```
 
+![Two cropped Hepatoplasmataceae regions with the H. vulgare record reverse-complemented](../../examples/tutorial-2-record-selectors.svg)
+
 This selector-only example intentionally omits `-b/--blast`; a full-record BLAST table does not automatically acquire coordinates for cropped or reverse-complemented records.
 
 `--records_table` is an alternative input source, so do not combine it with `--gbk`, `--gff`, or `--fasta`.
@@ -203,8 +207,8 @@ gbdraw linear \
   -b AP027078_AP027131.tblastx.out AP027131_AP027133.tblastx.out AP027133_AP027132.tblastx.out AP027132_NZ_CP006932.tblastx.out \
   --align_center \
   --separate_strands \
-  --block_stroke_width 1 \
-  --block_stroke_color gray \
+  --show_gc \
+  --show_skew \
   --palette default \
   -o hepatoplasmataceae_default \
   -f svg
@@ -238,6 +242,8 @@ gbdraw circular \
   -o AP027131_conservation \
   -f svg
 ```
+
+![Circular Candidatus Hepatoplasma vulgare genome with a Candidatus Tyloplasma litorale conservation ring](../../examples/tutorial-2-conservation-ring.svg)
 
 Use one `--conservation_blast` file per ring. If gbdraw can identify the displayed reference IDs on only one BLAST side, `--conservation_reference auto` works; otherwise set `query` or `subject` explicitly. BLAST rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
 

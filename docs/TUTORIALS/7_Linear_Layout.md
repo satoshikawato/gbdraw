@@ -33,6 +33,8 @@ gbdraw linear \
 
 This writes `majani_tracks_below.svg`. Use `--track_axis_gap 12` when you want an explicit pixel gap instead of automatic spacing.
 
+![Two majanivirus records with feature, GC content, and GC skew tracks placed below each record axis](../../examples/tutorial-7-track-layout-below.svg)
+
 ## 3. Use a Ruler on the Axis
 
 `--ruler_on_axis` is effective when `--scale_style ruler` is used with `--track_layout above` or `below`.
@@ -96,6 +98,8 @@ gbdraw linear \
 
 `--keep_definition_left_aligned` keeps the definition column fixed while `--align_center` moves the record axes. `--hide_accession` and `--hide_length` remove the default metadata lines. `--show_replicon` adds a line only when a source feature supplies a `chromosome` or `plasmid` qualifier.
 
+![Two centered majanivirus records with compact bold names and gray subtitles in a fixed left definition column](../../examples/tutorial-7-definition-lines.svg)
+
 ## 6. Customize Linear Track Slots
 
 For simple ordering, use `--linear_track_order`:
@@ -128,6 +132,8 @@ gbdraw linear \
 ```
 
 The axis index is the boundary in the slot list. Here the feature slot overlays boundary `0`, and the two later slots are placed below it.
+
+![Linear MjeNMV diagram with an overlay feature slot followed by custom-height GC content and GC skew slots](../../examples/tutorial-7-linear-track-slots.svg)
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 6](./6_Depth_Quantitative_Tracks.md) | [Go to Tutorial 8 >](./8_Interactive_SVG_Sessions.md)

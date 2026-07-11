@@ -76,6 +76,8 @@ gbdraw circular \
 
 This writes `MjeNMV_depth_circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. Because this record is annotated as linear, gbdraw also prints the expected topology warning for this circular-only example.
 
+![Circular MjeNMV diagram with a blue depth ring and quantitative depth ticks](../../examples/tutorial-6-depth-circular.svg)
+
 ## 3. Add Multiple Logical Depth Tracks
 
 Use repeatable `--depth_track` when you need multiple logical depth tracks. Each `--depth_track` group accepts one shared file or one file per displayed record.
@@ -98,6 +100,8 @@ gbdraw linear \
 ```
 
 This writes `majani_depth_tracks.svg`. The repeated input groups keep the example setup short; replace the second `--depth_track` group with another sample's files in a real comparison.
+
+![Two majanivirus records with blue Run A and red Run B depth tracks on shared axes](../../examples/tutorial-6-depth-tracks.svg)
 
 Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same automatically determined y-axis maximum across records for each logical track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
 
@@ -153,6 +157,8 @@ gbdraw linear \
 
 This writes `MjeNMV_gc_percent.svg`.
 
+![Linear MjeNMV diagram with an absolute GC percent track and quantitative axis](../../examples/tutorial-6-gc-percent.svg)
+
 The same percent-mode options are available in circular mode, together with circular track geometry such as `--gc_content_width` and `--gc_content_radius`.
 
 ## 6. Add Another Skew Track
@@ -172,6 +178,8 @@ gbdraw linear \
 ```
 
 This writes `MjeNMV_two_skew_tracks.svg`.
+
+![Linear MjeNMV diagram with separate GC skew and AT skew tracks](../../examples/tutorial-6-two-skew-tracks.svg)
 
 Use the same `nt=AT` pattern in circular track tables or circular track slots when you need an additional circular skew ring.
 
