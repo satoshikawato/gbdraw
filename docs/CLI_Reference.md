@@ -383,7 +383,7 @@ Circular conservation rings use one ring per `--conservation_blast` source and a
 
 ## TSV Manifest Inputs
 
-The table options accept UTF-8, tab-separated files with a header row. Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
+The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
 
 ### `--records_table`
 
@@ -399,9 +399,9 @@ Allowed columns:
 | `record_label` | optional | Linear record label, equivalent to one repeated `--record_label` value. |
 | `record_subtitle` | optional | Linear subtitle line, equivalent to one repeated `--record_subtitle` value. |
 | `record_id` | optional | Record selector for this row, such as a record ID or `#1`. Required when the source file would otherwise load more than one displayed record. |
-| `region` | optional | Row-scoped crop such as `1000-9000`, `1000..9000`, or `1000-9000:rc`. Unqualified regions apply to this row's selected record. |
+| `region` | optional | Row-scoped crop such as `1000-9000`, `1000..9000`, or `1000-9000:rc`. Do not include a record ID, record index, or file selector; the crop always applies to the record selected by this row. |
 | `reverse_complement` | optional | Row-scoped reverse-complement flag. True values include `1`, `true`, `yes`, `y`, `on`; false values include blank, `0`, `false`, `no`, `n`, `off`, `none`, `null`, `-`. |
-| `order` | optional | Positive integer used to sort rows before loading. |
+| `order` | optional | Positive integer used to sort rows before loading. Explicit values sort first in numeric order; blank values follow in table row order. Equal explicit values preserve table row order. |
 | `row` | optional | Circular multi-record canvas row, used with `--multi_record_canvas`. |
 | `column` | optional | Positive integer used to order records within a multi-record row. |
 
@@ -556,9 +556,11 @@ Allowed columns:
 | `inner_gap_px` | optional | Numeric inner gap in pixels, without a unit. |
 | `outer_gap_px` | optional | Numeric outer gap in pixels, without a unit. |
 | `z` | optional | Integer SVG layering order. |
-| `params` | optional | Comma-separated renderer parameters in `key=value` form, for example `nt=AT,legend_label=AT skew`. |
+| `params` | optional | Comma-separated renderer-specific parameters in `key=value` form, for example `nt=AT,legend_label=AT skew`. Structural settings belong in their dedicated columns and cannot be repeated here. |
 
-Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary; it is converted internally to a split feature slot, so do not add `side`, `lane_direction`, or `lanes` again in that row's `params`. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
+Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary and is converted internally to a split feature slot. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
+
+Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `spacing`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, `visible`, `strict`, `compress`, and `reserve`. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid.
 
 ```tsv
 id	renderer	side	r	w	params

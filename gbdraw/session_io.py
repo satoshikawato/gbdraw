@@ -624,7 +624,7 @@ def _rewrite_tsv_path_cells(
     replacements: Mapping[tuple[int, str], str],
 ) -> None:
     try:
-        with table_path.open("r", encoding="utf-8", newline="") as handle:
+        with table_path.open("r", encoding="utf-8-sig", newline="") as handle:
             rows = list(csv.reader(handle, delimiter="\t"))
     except OSError as exc:
         raise ValidationError(f"Could not read restored TSV table: {table_path}") from exc

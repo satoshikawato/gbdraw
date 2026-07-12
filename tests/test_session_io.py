@@ -18,6 +18,7 @@ from gbdraw.cli_utils.session import (
     strip_session_output_args,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.cli_tables import read_records_table
 from gbdraw.render.formats import ACCEPTED_FORMATS
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -240,6 +241,46 @@ def test_cli_invocation_restoration_rewrites_records_table_paths(tmp_path: Path)
     restored_gbk_name = table_lines[1].split("\t")[0]
     restored_gbk_path = table_path.parent / restored_gbk_name
     assert restored_gbk_path.read_bytes() == b"LOCUS       TEST\n"
+
+
+def test_cli_session_round_trip_rewrites_bom_records_table_first_column(
+    tmp_path: Path,
+) -> None:
+    gbk_path = tmp_path / "original.gb"
+    gbk_path.write_text("LOCUS       TEST\n", encoding="utf-8")
+    table_path = tmp_path / "records.tsv"
+    table_path.write_text("gbk\trecord_id\noriginal.gb\t#1\n", encoding="utf-8-sig")
+
+    files, bindings = collect_embedded_files_from_cli_args(
+        "linear",
+        ["--records_table", str(table_path), "-f", "svg"],
+    )
+    session = _minimal_session(files, mode="linear")
+    session["cliInvocation"] = {
+        "schema": 1,
+        "mode": "linear",
+        "args": ["--records_table", "records.tsv", "-f", "svg"],
+        "renderFormats": ["svg"],
+        "fileBindings": [bindings[0].__dict__],
+        "generatedBy": "gbdraw",
+    }
+
+    spec = session_to_cli_args(
+        session,
+        mode="linear",
+        temp_dir=tmp_path / "restored",
+        output_override=None,
+        format_override=None,
+    )
+
+    restored_table = Path(spec.args[1])
+    restored_text = restored_table.read_text(encoding="utf-8")
+    assert restored_text.startswith("gbk\trecord_id\n")
+    assert not restored_text.startswith("\ufeff")
+    restored_gbk_name = restored_text.splitlines()[1].split("\t")[0]
+    restored_gbk_path = restored_table.parent / restored_gbk_name
+    assert restored_gbk_path.read_bytes() == b"LOCUS       TEST\n"
+    assert read_records_table(str(restored_table)).gbk_files == [str(restored_gbk_path.resolve())]
 
 
 def test_gui_only_circular_session_maps_to_cli_args(tmp_path: Path) -> None:

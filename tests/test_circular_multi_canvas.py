@@ -2010,6 +2010,143 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
 
 
 @pytest.mark.circular
+def test_circular_cli_records_table_regions_follow_sorted_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\tregion\torder\n"
+        "b.gbk\t201-400\t2\n"
+        "a.gbk\t1-100\t1\n",
+        encoding="utf-8",
+    )
+    source_records = {
+        "a.gbk": _build_record("record_a", 20, length=500),
+        "b.gbk": _build_record("record_b", 220, length=500),
+    }
+    captured: dict[str, Any] = {}
+
+    def fake_load(paths, *_args, **_kwargs):
+        return [source_records[Path(paths[0]).name]]
+
+    def fake_multi(records, **kwargs):
+        captured["records"] = records
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "multi.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", fake_load)
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+
+    circular_cli_module.circular_main(
+        [
+            "--records_table",
+            str(table),
+            "--multi_record_canvas",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    records = captured["records"]
+    assert [record.id for record in records] == ["record_a", "record_b"]
+    assert [len(record.seq) for record in records] == [100, 200]
+
+
+@pytest.mark.circular
+def test_circular_cli_rejects_qualified_records_table_region_before_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    table = tmp_path / "records.tsv"
+    table.write_text("gbk\tregion\na.gbk\t#2:1-10\n", encoding="utf-8")
+    rendered = False
+
+    def fake_assemble(*_args, **_kwargs):
+        nonlocal rendered
+        rendered = True
+        return Drawing(filename=str(tmp_path / "unexpected.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    with pytest.raises(ValidationError, match=rf"{table}.*row 2, column 'region'"):
+        circular_cli_module.circular_main(["--records_table", str(table), "-f", "svg"])
+    assert rendered is False
+
+
+@pytest.mark.circular
+def test_circular_cli_track_table_validates_params_and_forwards_axis(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    bad_table = tmp_path / "bad-tracks.tsv"
+    bad_table.write_text(
+        "id\trenderer\tside\tparams\n"
+        "ticks\tticks\tinside\trenderer=spacer\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=rf"{bad_table}.*row 2, column 'params'.*renderer",
+    ):
+        circular_cli_module.circular_main(
+            ["--gbk", "dummy.gb", "--circular_track_table", str(bad_table), "-f", "svg"]
+        )
+
+    valid_table = tmp_path / "tracks.tsv"
+    valid_table.write_text(
+        "id\trenderer\tside\tparams\n"
+        "ticks\tticks\toutside\ttick_label_layout=tick_only\n"
+        "features\tfeatures\taxis\tlegend_label=Genes\n"
+        "gc\tdinucleotide_content\tinside\tnt=GC\n",
+        encoding="utf-8",
+    )
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        circular_cli_module,
+        "load_gbks",
+        lambda *_args, **_kwargs: [_build_record("record", 20)],
+    )
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+
+    def fake_single(*_args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "single.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--circular_track_table",
+            str(valid_table),
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["circular_track_axis_index"] == 1
+    assert [spec.split(":", 1)[0] for spec in captured["circular_track_slots"]] == [
+        "ticks",
+        "features",
+        "gc",
+    ]
+
+
+@pytest.mark.circular
 def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

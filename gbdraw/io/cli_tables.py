@@ -12,7 +12,10 @@ from typing import Literal, Sequence
 
 from ..exceptions import ValidationError
 from ..io.regions import parse_region_spec
-from ..tracks import parse_circular_track_slots
+from ..tracks import (
+    normalize_circular_track_slots_with_axis,
+    parse_circular_track_slots,
+)
 from ..tracks.parsing import split_kv_list
 
 
@@ -134,31 +137,11 @@ class RecordsTable:
         return tuple(dep.path for dep in self.path_dependencies)
 
     def row_scoped_region_specs(self) -> list[str]:
-        specs: list[str] = []
-        for loaded_index, row in enumerate(self.rows, start=1):
-            raw_region = row.region.strip()
-            if not raw_region:
-                continue
-            try:
-                parsed = parse_region_spec(raw_region)
-            except ValueError as exc:
-                raise ValidationError(
-                    _cell_error(
-                        self.table_path,
-                        row.row_number,
-                        "region",
-                        f"invalid region value {raw_region!r}: {exc}",
-                    )
-                ) from exc
-            if (
-                parsed.record_id is None
-                and parsed.record_index is None
-                and parsed.file_selector is None
-            ):
-                specs.append(f"#{loaded_index}:{raw_region}")
-            else:
-                specs.append(raw_region)
-        return specs
+        return [
+            f"#{loaded_index}:{row.region}"
+            for loaded_index, row in enumerate(self.rows, start=1)
+            if row.region
+        ]
 
     def multi_record_positions(self) -> list[str]:
         if not self.has_multi_record_placement:
@@ -192,6 +175,7 @@ class _TrackRow:
     slot_id: str
     renderer: str
     side: str | None
+    params: tuple[tuple[str, str], ...]
     values: dict[str, str]
 
 
@@ -228,6 +212,31 @@ _RECORDS_COLUMNS = frozenset(
 _BOOLEAN_TRUE = {"1", "true", "yes", "y", "on"}
 _BOOLEAN_FALSE = {"", "0", "false", "no", "n", "off", "none", "null", "-"}
 _TRACK_TABLE_SIDES = {"outside", "axis", "inside"}
+_CIRCULAR_TRACK_STRUCTURAL_PARAM_KEYS = frozenset(
+    {
+        "id",
+        "renderer",
+        "type",
+        "side",
+        "r",
+        "radius",
+        "w",
+        "width",
+        "spacing",
+        "inner_gap_px",
+        "outer_gap_px",
+        "z",
+        "z_index",
+        "zindex",
+        "enabled",
+        "show",
+        "visible",
+        "strict",
+        "compress",
+        "reserve",
+    }
+)
+_FEATURE_LANE_PARAM_KEYS = frozenset({"lane_direction", "lanes"})
 
 
 def read_conservation_table(path: str) -> ConservationTable:
@@ -303,6 +312,12 @@ def read_circular_track_table(path: str) -> CircularTrackTable:
             row.row_number,
             row.values.get("side", ""),
         )
+        params = _parse_circular_track_table_params(
+            table_path,
+            row.row_number,
+            renderer,
+            row.values.get("params", ""),
+        )
         track_rows.append(
             _TrackRow(
                 row_index=row.row_index,
@@ -310,6 +325,7 @@ def read_circular_track_table(path: str) -> CircularTrackTable:
                 slot_id=slot_id,
                 renderer=renderer,
                 side=side,
+                params=params,
                 values=row.values,
             )
         )
@@ -343,6 +359,7 @@ def read_circular_track_table(path: str) -> CircularTrackTable:
                 slot_id=row.slot_id,
                 renderer=row.renderer,
                 side=side,
+                params=row.params,
                 values=row.values,
             )
         )
@@ -357,7 +374,8 @@ def read_circular_track_table(path: str) -> CircularTrackTable:
     for row in ordered_rows:
         specs.append(_circular_track_row_to_spec(table_path, row))
     try:
-        parse_circular_track_slots(specs)
+        slots = parse_circular_track_slots(specs)
+        normalize_circular_track_slots_with_axis(slots, axis_index)
     except Exception as exc:
         raise ValidationError(f"{table_path}: invalid circular track table: {exc}") from exc
     return CircularTrackTable(
@@ -432,6 +450,8 @@ def read_records_table(path: str) -> RecordsTable:
                     f"{table_path}: duplicate records table placement row={grid_row}, column={column}."
                 )
             seen_grid_cells.add(key)
+        region = values.get("region", "").strip()
+        _validate_records_table_region(table_path, row.row_number, region)
         parsed_rows.append(
             RecordsTableRow(
                 row_index=row.row_index,
@@ -442,7 +462,7 @@ def read_records_table(path: str) -> RecordsTable:
                 record_label=values.get("record_label", "").strip(),
                 record_subtitle=values.get("record_subtitle", "").strip(),
                 record_id=values.get("record_id", "").strip(),
-                region=values.get("region", "").strip(),
+                region=region,
                 reverse_complement=_parse_table_bool(table_path, row, "reverse_complement"),
                 order=order,
                 row=grid_row,
@@ -459,7 +479,8 @@ def read_records_table(path: str) -> RecordsTable:
         sorted(
             parsed_rows,
             key=lambda item: (
-                item.order if item.order is not None else 1_000_000_000 + item.row_index,
+                item.order is None,
+                item.order if item.order is not None else item.row_index,
                 item.row_index,
             ),
         )
@@ -480,7 +501,7 @@ def _read_tsv_table(
 ) -> tuple[Path, tuple[str, ...], list[_RawRow]]:
     table_path = Path(str(path))
     try:
-        handle = table_path.open("r", encoding="utf-8", newline="")
+        handle = table_path.open("r", encoding="utf-8-sig", newline="")
     except OSError as exc:
         raise ValidationError(f"Could not read {table_name}: {table_path}") from exc
 
@@ -622,7 +643,6 @@ def _circular_track_row_to_spec(table_path: Path, row: _TrackRow) -> str:
                     "side=axis is only supported for renderer=features",
                 )
             )
-        _validate_axis_row_params(table_path, row)
     options: list[str] = []
     for column, option in (
         ("r", "r"),
@@ -639,35 +659,74 @@ def _circular_track_row_to_spec(table_path: Path, row: _TrackRow) -> str:
         options.extend(["side=overlay", "lane_direction=split"])
     elif row.side:
         options.append(f"side={row.side}")
-    params = row.values.get("params", "").strip()
-    if params:
-        options.append(params)
+    options.extend(f"{key}={value}" for key, value in row.params)
     suffix = f"@{','.join(options)}" if options else ""
     return f"{row.slot_id}:{row.renderer}{suffix}"
 
 
-def _validate_axis_row_params(table_path: Path, row: _TrackRow) -> None:
-    params = row.values.get("params", "").strip()
+def _parse_circular_track_table_params(
+    table_path: Path,
+    row_number: int,
+    renderer: str,
+    raw_params: str,
+) -> tuple[tuple[str, str], ...]:
+    params = str(raw_params or "").strip()
     if not params:
-        return
+        return ()
     try:
         parsed_params = split_kv_list(params)
     except ValueError as exc:
         raise ValidationError(
-            _cell_error(table_path, row.row_number, "params", str(exc))
+            _cell_error(table_path, row_number, "params", str(exc))
         ) from exc
-    conflict_keys = {"side", "lane_direction", "lanes"}
+    reserved_keys = set(_CIRCULAR_TRACK_STRUCTURAL_PARAM_KEYS)
+    if renderer.strip().lower() == "features":
+        reserved_keys.update(_FEATURE_LANE_PARAM_KEYS)
     for key, _value in parsed_params:
         normalized_key = key.strip().lower()
-        if normalized_key in conflict_keys:
+        if normalized_key in reserved_keys:
             raise ValidationError(
                 _cell_error(
                     table_path,
-                    row.row_number,
+                    row_number,
                     "params",
-                    f"side=axis cannot be combined with params key {key!r}",
+                    f"structural key {key!r} is not allowed; use the dedicated table columns",
                 )
             )
+    return tuple(parsed_params)
+
+
+def _validate_records_table_region(
+    table_path: Path,
+    row_number: int,
+    raw_region: str,
+) -> None:
+    if not raw_region:
+        return
+    try:
+        parsed = parse_region_spec(raw_region)
+    except ValueError as exc:
+        raise ValidationError(
+            _cell_error(
+                table_path,
+                row_number,
+                "region",
+                f"invalid region value {raw_region!r}: {exc}",
+            )
+        ) from exc
+    if (
+        parsed.record_id is not None
+        or parsed.record_index is not None
+        or parsed.file_selector is not None
+    ):
+        raise ValidationError(
+            _cell_error(
+                table_path,
+                row_number,
+                "region",
+                "value must not include a record or file selector",
+            )
+        )
 
 
 def _validate_records_table_placement(

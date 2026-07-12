@@ -7,7 +7,7 @@
 
 **Goal:** use TSV manifests when row-coupled inputs are clearer than long order-sensitive option lists.
 
-Relative paths in table files resolve against the table file, not against the shell's current directory.
+Save tables as UTF-8 with real tab characters. Files with or without a UTF-8 byte order mark (BOM) are accepted. Relative paths resolve against the table file, not against the shell's current directory.
 
 ## 1. Prepare Example GenBank Files
 
@@ -45,6 +45,8 @@ This writes `majani_records_table.svg`.
 ![Three majanivirus records using table-defined labels, subtitles, cropped regions, and reverse-complement orientation](../../examples/tutorial-5-records-table.svg)
 
 `--records_table` replaces `--gbk`, `--gff`, and `--fasta`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
+
+Each `region` cell is scoped to its own row. Use only coordinates such as `1000-9000`, `1000..9000`, or `1000-9000:rc`; do not prefix them with a record ID, `#` index, or file selector. When `order` is present, explicit positive integers sort first in numeric order. Blank `order` cells follow and preserve their table row order; equal explicit values also preserve table row order.
 
 ## 3. Linear `--records_table` for GFF3 + FASTA Rows
 
@@ -186,6 +188,8 @@ This writes `tutorial-circular-track-table.svg`. The result places GC content, G
 ![Human mitochondrial circular diagram with GC content, GC skew, and custom AT skew rings](../../examples/tutorial-circular-track-table.svg)
 
 `--circular_track_table` cannot be combined with inline circular track slot options such as `--circular_track_order`, `--circular_track_slot`, or `--circular_track_axis_index`.
+
+Keep slot structure in the dedicated columns: `id`, `renderer`, `side`, `r`, `w`, `spacing`, `inner_gap_px`, `outer_gap_px`, and `z`. Do not repeat these settings or their aliases in `params`, and do not put `lane_direction` or `lanes` in a feature row. Use `params` only for renderer-specific settings such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout`.
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 4](./4_Protein_Comparisons.md) | [Go to Tutorial 6 >](./6_Depth_Quantitative_Tracks.md)

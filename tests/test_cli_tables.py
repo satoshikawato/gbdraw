@@ -37,6 +37,28 @@ def test_conservation_table_rejects_unknown_columns(tmp_path: Path) -> None:
         read_conservation_table(str(table))
 
 
+@pytest.mark.parametrize(
+    ("filename", "content", "reader"),
+    [
+        ("records.tsv", "gbk\na.gbk\n", read_records_table),
+        ("conservation.tsv", "blast\na.tsv\n", read_conservation_table),
+        ("tracks.tsv", "id\trenderer\nfeatures\tfeatures\n", read_circular_track_table),
+    ],
+)
+def test_cli_tables_accept_utf8_bom(
+    tmp_path: Path,
+    filename: str,
+    content: str,
+    reader,
+) -> None:
+    table = tmp_path / filename
+    table.write_text(content, encoding="utf-8-sig")
+
+    parsed = reader(str(table))
+
+    assert parsed.table_path == str(table)
+
+
 def test_circular_track_table_defaults_first_features_row_to_axis(tmp_path: Path) -> None:
     table = tmp_path / "tracks.tsv"
     table.write_text(
@@ -72,6 +94,106 @@ def test_circular_track_table_rejects_non_feature_axis_row(tmp_path: Path) -> No
 
     with pytest.raises(ValidationError, match="side=axis is only supported"):
         read_circular_track_table(str(table))
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "id",
+        "renderer",
+        "type",
+        "side",
+        "r",
+        "radius",
+        "w",
+        "width",
+        "spacing",
+        "inner_gap_px",
+        "outer_gap_px",
+        "z",
+        "z_index",
+        "zindex",
+        "enabled",
+        "show",
+        "visible",
+        "strict",
+        "compress",
+        "reserve",
+    ],
+)
+def test_circular_track_table_rejects_structural_params(
+    tmp_path: Path,
+    key: str,
+) -> None:
+    table = tmp_path / "tracks.tsv"
+    table.write_text(
+        f"id\trenderer\tparams\noriginal\tticks\t{key}=replacement\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match=rf"{table}.*row 2, column 'params'.*{key}",
+    ):
+        read_circular_track_table(str(table))
+
+
+@pytest.mark.parametrize("key", ["lane_direction", "lanes"])
+def test_circular_track_table_rejects_feature_lane_params(
+    tmp_path: Path,
+    key: str,
+) -> None:
+    table = tmp_path / "tracks.tsv"
+    table.write_text(
+        f"id\trenderer\tparams\nfeatures\tfeatures\t{key}=outside\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match=rf"column 'params'.*{key}"):
+        read_circular_track_table(str(table))
+
+
+def test_circular_track_table_accepts_renderer_specific_params(tmp_path: Path) -> None:
+    table = tmp_path / "tracks.tsv"
+    table.write_text(
+        "id\trenderer\tside\tparams\n"
+        "ticks\tticks\toutside\ttick_label_layout=tick_only\n"
+        "features\tfeatures\taxis\tlegend_label=Genes\n"
+        "skew\tdinucleotide_skew\tinside\tnt=AT,positive_color=red,negative_color=blue\n",
+        encoding="utf-8",
+    )
+
+    parsed = read_circular_track_table(str(table))
+
+    assert parsed.axis_index == 1
+    assert "tick_label_layout=tick_only" in parsed.slot_specs[0]
+    assert "legend_label=Genes" in parsed.slot_specs[1]
+    assert "nt=AT" in parsed.slot_specs[2]
+
+
+def test_circular_track_table_runs_axis_aware_normalization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = tmp_path / "tracks.tsv"
+    table.write_text(
+        "id\trenderer\tside\noutside\tticks\toutside\nfeatures\tfeatures\taxis\n",
+        encoding="utf-8",
+    )
+    called: dict[str, int] = {}
+
+    def reject_with_axis(_slots, axis_index):
+        called["axis_index"] = axis_index
+        raise ValueError("axis-aware failure")
+
+    monkeypatch.setattr(
+        "gbdraw.io.cli_tables.normalize_circular_track_slots_with_axis",
+        reject_with_axis,
+    )
+
+    with pytest.raises(ValidationError, match="invalid circular track table.*axis-aware failure"):
+        read_circular_track_table(str(table))
+    assert called == {"axis_index": 1}
 
 
 def test_records_table_sorts_by_order_and_generates_positions(tmp_path: Path) -> None:
@@ -128,3 +250,70 @@ def test_records_table_rejects_duplicate_grid_cells(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError, match="duplicate records table placement"):
         read_records_table(str(table))
+
+
+@pytest.mark.parametrize(
+    "region",
+    [
+        "#2:1-10",
+        "record_b:1-10",
+        "b.gbk:#1:1-10",
+    ],
+)
+def test_records_table_rejects_qualified_regions(tmp_path: Path, region: str) -> None:
+    table = tmp_path / "records.tsv"
+    table.write_text(f"gbk\tregion\na.gbk\t{region}\n", encoding="utf-8")
+
+    with pytest.raises(
+        ValidationError,
+        match=rf"{table}.*row 2, column 'region'.*must not include a record or file selector",
+    ):
+        read_records_table(str(table))
+
+
+def test_records_table_qualifies_regions_after_order_sorting(tmp_path: Path) -> None:
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\tregion\torder\n"
+        "b.gbk\t200..300\t2\n"
+        "a.gbk\t100-150:rc\t1\n",
+        encoding="utf-8",
+    )
+
+    parsed = read_records_table(str(table))
+
+    assert [Path(path).name for path in parsed.gbk_files] == ["a.gbk", "b.gbk"]
+    assert parsed.row_scoped_region_specs() == ["#1:100-150:rc", "#2:200..300"]
+
+
+def test_records_table_explicit_large_order_sorts_before_missing(tmp_path: Path) -> None:
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\torder\nmissing.gbk\t\nexplicit.gbk\t1000000001\n",
+        encoding="utf-8",
+    )
+
+    parsed = read_records_table(str(table))
+
+    assert [Path(path).name for path in parsed.gbk_files] == ["explicit.gbk", "missing.gbk"]
+
+
+def test_records_table_order_sort_is_stable_for_equal_and_missing_values(tmp_path: Path) -> None:
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\torder\n"
+        "equal_a.gbk\t7\n"
+        "missing_a.gbk\t\n"
+        "equal_b.gbk\t7\n"
+        "missing_b.gbk\t\n",
+        encoding="utf-8",
+    )
+
+    parsed = read_records_table(str(table))
+
+    assert [Path(path).name for path in parsed.gbk_files] == [
+        "equal_a.gbk",
+        "equal_b.gbk",
+        "missing_a.gbk",
+        "missing_b.gbk",
+    ]
