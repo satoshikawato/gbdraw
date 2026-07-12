@@ -11,7 +11,14 @@ from tempfile import TemporaryDirectory
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
+from .io.cli_tables import (
+    RecordsTable,
+    read_circular_track_table,
+    read_conservation_table,
+    read_records_table,
+)
 from .io.genome import load_gbks, load_gff_fasta
+from .io.regions import apply_region_specs, parse_region_specs
 from .io.colors import load_default_colors, read_color_table
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
@@ -138,6 +145,65 @@ def _parse_multi_record_position_arg(value: str) -> str:
     return f"{selector_text}@{int(row_text)}"
 
 
+def _load_records_table_records(
+    records_table: RecordsTable,
+    *,
+    mode: str,
+    selected_features_set,
+    color_table: Optional[DataFrame],
+    feature_table: Optional[DataFrame],
+) -> list:
+    records: list = []
+    if records_table.input_kind == "gbk":
+        for row in records_table.rows:
+            loaded = load_gbks(
+                [row.gbk],
+                mode,
+                False,
+                record_selectors=[row.record_id],
+                reverse_flags=[row.reverse_complement],
+            )
+            records.append(_require_one_records_table_record(records_table, row, loaded))
+        return records
+
+    candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
+        selected_features_set,
+        color_table=color_table,
+        feature_visibility_table=feature_table,
+    )
+    for row in records_table.rows:
+        loaded = load_gff_fasta(
+            [row.gff],
+            [row.fasta],
+            mode,
+            candidate_feature_types,
+            keep_all_features=keep_all_features,
+            load_comparison=False,
+            record_selectors=[row.record_id],
+            reverse_flags=[row.reverse_complement],
+        )
+        records.append(_require_one_records_table_record(records_table, row, loaded))
+    return records
+
+
+def _require_one_records_table_record(
+    records_table: RecordsTable,
+    row,
+    loaded,
+):
+    if len(loaded) == 1:
+        return loaded[0]
+    if len(loaded) > 1 and not row.record_id:
+        raise ValidationError(
+            f"{records_table.table_path}: row {row.row_number} loaded {len(loaded)} records; "
+            "add record_id so the row selects exactly one displayed record."
+        )
+    raise ValidationError(
+        f"{records_table.table_path}: row {row.row_number} must load exactly one displayed record; "
+        f"loaded {len(loaded)}."
+    )
+
+
 def _get_args(args) -> argparse.Namespace:
     """
     Parses command-line arguments for generating circular genome diagrams.
@@ -178,6 +244,11 @@ def _get_args(args) -> argparse.Namespace:
         help="FASTA file (required with --gff)",
         type=str,
         nargs='*')
+    parser.add_argument(
+        "--records_table",
+        metavar="TSV",
+        help="TSV manifest for row-coupled input records and circular placement metadata.",
+        type=str)
     parser.add_argument(
         '-o',
         '--output',
@@ -353,6 +424,11 @@ def _get_args(args) -> argparse.Namespace:
         help='Precomputed BLAST outfmt 6/7 file(s) for circular conservation rings.',
         type=str,
         nargs='+')
+    parser.add_argument(
+        '--conservation_table',
+        metavar='TSV',
+        help='TSV manifest with conservation BLAST files, labels, and colors.',
+        type=str)
     parser.add_argument(
         '--conservation_reference',
         help='BLAST side containing displayed circular reference coordinates.',
@@ -556,7 +632,7 @@ def _get_args(args) -> argparse.Namespace:
         default="")
     label_list_group.add_argument(
         '--label_blacklist',
-        help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
+        help='Comma-separated keywords for label blacklisting (optional); mutually exclusive with --label_whitelist',
         type=str,
         default="")
 
@@ -623,6 +699,11 @@ def _get_args(args) -> argparse.Namespace:
         help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, spacing, side, and z for explicit overrides. Implicit inside numeric/depth slots auto-compress and never move outside automatically.',
         action='append',
         default=[])
+    parser.add_argument(
+        '--circular_track_table',
+        metavar='TSV',
+        help='TSV manifest for circular track slots and axis placement.',
+        type=str)
     parser.add_argument(
         '--circular_track_axis_index',
         type=int,
@@ -709,6 +790,20 @@ def _get_args(args) -> argparse.Namespace:
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if args.records_table and args.multi_record_position:
+        parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
+    if args.conservation_table and args.conservation_blast:
+        parser.error("--conservation_table cannot be combined with --conservation_blast")
+    if args.conservation_table and args.conservation_labels:
+        parser.error("--conservation_table cannot be combined with --conservation_labels")
+    if args.conservation_table and args.conservation_colors:
+        parser.error("--conservation_table cannot be combined with --conservation_colors")
+    if args.circular_track_table and args.circular_track_order:
+        parser.error("--circular_track_table cannot be combined with --circular_track_order")
+    if args.circular_track_table and args.circular_track_slot:
+        parser.error("--circular_track_table cannot be combined with --circular_track_slot")
+    if args.circular_track_table and args.circular_track_axis_index is not None:
+        parser.error("--circular_track_table cannot be combined with --circular_track_axis_index")
     if args.feature_width is not None and args.feature_width <= 0:
         parser.error("--feature_width must be > 0")
     if args.gc_content_width is not None and args.gc_content_width <= 0:
@@ -934,7 +1029,12 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
     multi_record_column_gap_ratio: float = args.multi_record_column_gap_ratio
     multi_record_row_gap_ratio: float = args.multi_record_row_gap_ratio
-    multi_record_positions: list[str] = [str(position) for position in (args.multi_record_position or [])]
+    records_table = read_records_table(args.records_table) if args.records_table else None
+    multi_record_positions: list[str] = (
+        records_table.multi_record_positions()
+        if records_table
+        else [str(position) for position in (args.multi_record_position or [])]
+    )
     plot_title: str = str(args.plot_title or "").strip()
     plot_title_position: str = args.plot_title_position
     definition_font_size: Optional[float] = args.definition_font_size
@@ -967,10 +1067,23 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
-    conservation_blast_files: list[str] | None = list(args.conservation_blast or []) or None
+    conservation_table = read_conservation_table(args.conservation_table) if args.conservation_table else None
+    conservation_blast_files: list[str] | None = (
+        conservation_table.conservation_blast_files
+        if conservation_table
+        else list(args.conservation_blast or []) or None
+    )
     conservation_reference: str = args.conservation_reference
-    conservation_labels: list[str] | None = list(args.conservation_labels or []) or None
-    conservation_colors: list[str] | None = list(args.conservation_colors or []) or None
+    conservation_labels: list[str] | None = (
+        conservation_table.labels
+        if conservation_table
+        else list(args.conservation_labels or []) or None
+    )
+    conservation_colors: list[str] | None = (
+        conservation_table.colors
+        if conservation_table
+        else list(args.conservation_colors or []) or None
+    )
     conservation_ring_width: Optional[float] = args.conservation_ring_width
     conservation_ring_gap: Optional[float] = args.conservation_ring_gap
     evalue: float = args.evalue
@@ -995,9 +1108,18 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
     feature_width: Optional[float] = args.feature_width
-    circular_track_order: str | None = args.circular_track_order
-    circular_track_slot_specs: list[str] = list(args.circular_track_slot or [])
-    circular_track_axis_index: int | None = args.circular_track_axis_index
+    circular_track_table = read_circular_track_table(args.circular_track_table) if args.circular_track_table else None
+    circular_track_order: str | None = None if circular_track_table else args.circular_track_order
+    circular_track_slot_specs: list[str] = (
+        list(circular_track_table.slot_specs)
+        if circular_track_table
+        else list(args.circular_track_slot or [])
+    )
+    circular_track_axis_index: int | None = (
+        circular_track_table.axis_index
+        if circular_track_table
+        else args.circular_track_axis_index
+    )
     gc_content_width: Optional[float] = args.gc_content_width
     gc_content_radius: Optional[float] = args.gc_content_radius
     gc_content_mode: str | None = args.gc_content_mode
@@ -1013,7 +1135,30 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     gc_skew_radius: Optional[float] = args.gc_skew_radius
     if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
         raise ValidationError("plot_title_font_size must be > 0")
-    if args.gbk:
+    if records_table:
+        if records_table.input_kind == "gbk":
+            args.gbk = records_table.gbk_files
+            args.gff = None
+            args.fasta = None
+        else:
+            args.gbk = None
+            args.gff = records_table.gff_files
+            args.fasta = records_table.fasta_files
+        gb_records = _load_records_table_records(
+            records_table,
+            mode="circular",
+            selected_features_set=selected_features_set,
+            color_table=color_table,
+            feature_table=feature_table,
+        )
+        records_table_region_specs = parse_region_specs(records_table.row_scoped_region_specs())
+        if records_table_region_specs:
+            try:
+                gb_records = apply_region_specs(gb_records, records_table_region_specs, log=logger)
+            except ValueError as exc:
+                logger.error(f"ERROR: {exc}")
+                raise ValidationError(str(exc)) from exc
+    elif args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
         candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
@@ -1170,8 +1315,9 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
     )
     if circular_track_slot_specs and legacy_geometry_requested:
+        slot_source_option = "--circular_track_table" if circular_track_table else "--circular_track_slot"
         raise ValidationError(
-            "Legacy circular geometry options cannot be combined with --circular_track_slot; "
+            f"Legacy circular geometry options cannot be combined with {slot_source_option}; "
             "put r= and/or w= on the matching circular track slot."
         )
 

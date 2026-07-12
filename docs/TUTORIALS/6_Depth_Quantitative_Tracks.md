@@ -1,0 +1,171 @@
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+
+[< Back to the Tutorials Index](./TUTORIALS.md)
+[< Back to Tutorial 5](./5_Table_Driven_Inputs.md) | [Go to Tutorial 7 >](./7_Linear_Layout.md)
+
+# Tutorial 6: Coverage Depth and Quantitative Tracks
+
+**Goal:** add coverage/depth tracks, absolute GC percent tracks, and quantitative axes to circular and linear diagrams.
+
+## 1. Prepare Inputs
+
+Sections 2-4 use Hepatoplasmataceae genomes and matching per-base depth files. In a source checkout, the files are available under [`tests/test_inputs`](../../tests/test_inputs/):
+
+| Record | GenBank | Depth TSV | Sequencing run | Tutorial use |
+|---|---|---|---|---|
+| AP027078.1 | `AP027078.gb` | `AP027078.DRR394944.depth.tsv` | DRR394944 | Section 4 |
+| AP027131.1 | `AP027131.gb` | `AP027131.DRR394921.depth.tsv` | DRR394921 | Section 3 |
+| AP027133.1 | `AP027133.gb` | `AP027133.DRR394922.depth.tsv` | DRR394922 | Section 2 |
+| AP027132.1 | `AP027132.gb` | `AP027132.DRR394921.depth.tsv` | DRR394921 | Section 3 |
+
+Run the depth examples from the repository root so the `tests/test_inputs/` paths resolve. If you copy the relevant GenBank and TSV files to another working directory, remove that prefix from the commands.
+
+Depth TSV files use the first three columns of samtools depth output: `reference`, 1-based `position`, and non-negative `depth`. A header is optional; gbdraw normalizes these columns to `reference_name`, `position`, and `depth`. The supplied files are headerless and contain one row per base. The examples use non-overlapping 100 nt mean-depth windows to retain local depth structure without producing oversized SVG files.
+
+Sections 5 and 6 use the MjeNMV GenBank record:
+
+```bash
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gb
+```
+
+In a source checkout, this file is also available as `examples/MjeNMV.gb`.
+
+## 2. Add One Logical Depth Track
+
+Use `--depth` when you need one logical depth track.
+
+```bash
+gbdraw circular \
+  --gbk tests/test_inputs/AP027133.gb \
+  --depth tests/test_inputs/AP027133.DRR394922.depth.tsv \
+  --depth_width 45 \
+  --depth_window 100 \
+  --depth_step 100 \
+  --depth_max 150 \
+  --show_depth_axis \
+  --show_depth_ticks \
+  --depth_large_tick_interval 50 \
+  --depth_small_tick_interval 25 \
+  -o tutorial-6-depth-circular \
+  -f svg
+```
+
+This writes `tutorial-6-depth-circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. The 150x maximum does not clip the observed 100 nt mean depths and produces evenly spaced 50x tick labels.
+
+![Circular AP027133.1 genome diagram with a blue DRR394922 depth ring and quantitative ticks up to 150x](../../examples/tutorial-6-depth-circular.svg)
+
+## 3. Compare a Logical Depth Track Across Records
+
+Use one `--depth_track` group with one matching file per displayed record. AP027131.1 and AP027132.1 both use reads from DRR394921, so their coverage can be compared on one shared axis.
+
+```bash
+gbdraw linear \
+  --gbk tests/test_inputs/AP027131.gb tests/test_inputs/AP027132.gb \
+  --depth_track tests/test_inputs/AP027131.DRR394921.depth.tsv tests/test_inputs/AP027132.DRR394921.depth.tsv \
+  --depth_track_label "DRR394921" \
+  --depth_track_color "#4E79A7" \
+  --depth_height 36 \
+  --depth_window 100 \
+  --depth_step 100 \
+  --depth_min 0 \
+  --depth_max 1000 \
+  --depth_large_tick_interval 500 \
+  --depth_small_tick_interval 250 \
+  --show_depth_axis \
+  --show_depth_ticks \
+  --share_depth_axis \
+  -o tutorial-6-depth-tracks \
+  -f svg
+```
+
+This writes `tutorial-6-depth-tracks.svg`. The common 0x to 1,000x scale makes the lower AP027131.1 coverage and higher AP027132.1 coverage directly comparable.
+
+![AP027131.1 and AP027132.1 linear diagrams with DRR394921 depth tracks on shared axes ranging from 0x to 1,000x](../../examples/tutorial-6-depth-tracks.svg)
+
+Repeat `--depth_track` only when another matched dataset is available. A second logical track is intentionally omitted here because the example data do not include a second matching depth file for both records.
+
+Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same y-axis range across records for each logical track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
+
+Use `--depth_track_height` when each logical track needs its own height. Track-specific axis overrides are also available:
+
+- `--depth_track_large_tick_interval`
+- `--depth_track_small_tick_interval`
+- `--depth_track_tick_font_size`
+
+## 4. Control Scaling
+
+Log scaling is useful when a few high-depth bins would otherwise flatten the rest of the track.
+
+```bash
+gbdraw linear \
+  --gbk tests/test_inputs/AP027078.gb \
+  --depth tests/test_inputs/AP027078.DRR394944.depth.tsv \
+  --depth_height 40 \
+  --depth_window 100 \
+  --depth_step 100 \
+  --depth_log_scale \
+  --depth_min 1 \
+  --depth_max 250000 \
+  --show_depth_axis \
+  --show_depth_ticks \
+  -o tutorial-depth-log-axis \
+  -f svg
+```
+
+This writes `tutorial-depth-log-axis.svg`, with a log-scaled depth axis spanning the requested 1x to 250,000x range. AP027078.1 contains a high local coverage peak, and log scaling keeps the background coverage visible without clipping the 100 nt mean depths.
+
+![Linear AP027078.1 genome diagram with a blue log-scaled DRR394944 depth track and an axis from 1x to 250,000x](../../examples/tutorial-depth-log-axis.svg)
+
+Use `--no_depth_log_scale` to force linear scaling when a config file or saved session enables log scaling.
+
+## 5. Use GC Percent Mode
+
+The default GC content track is mean-centered deviation. Use `--gc_content_mode percent` when the y-axis should show absolute GC percent.
+
+```bash
+gbdraw linear \
+  --gbk MjeNMV.gb \
+  --show_gc \
+  --gc_content_mode percent \
+  --gc_content_min_percent 25 \
+  --gc_content_max_percent 75 \
+  --gc_content_large_tick_interval 10 \
+  --gc_content_small_tick_interval 5 \
+  --show_gc_content_axis \
+  --show_gc_content_ticks \
+  -o MjeNMV_gc_percent \
+  -f svg
+```
+
+This writes `MjeNMV_gc_percent.svg`.
+
+![Linear MjeNMV diagram with an absolute GC percent track and quantitative axis](../../examples/tutorial-6-gc-percent.svg)
+
+The same percent-mode options are available in circular mode, together with circular track geometry such as `--gc_content_width` and `--gc_content_radius`.
+
+## 6. Add Another Skew Track
+
+Custom track slots can add a second skew track with a different dinucleotide. This example keeps the standard GC skew and adds AT skew below it:
+
+```bash
+gbdraw linear \
+  --gbk MjeNMV.gb \
+  --show_skew \
+  --linear_track_slot 'features:features@side=overlay' \
+  --linear_track_slot 'gc_skew:gc_skew@side=below,h=24px,spacing=8px' \
+  --linear_track_slot 'at_skew:dinucleotide_skew@side=below,h=24px,spacing=8px,nt=AT,positive_color=#deaf6e,negative_color=#7294e3' \
+  --linear_track_axis_index 0 \
+  -o MjeNMV_two_skew_tracks \
+  -f svg
+```
+
+This writes `MjeNMV_two_skew_tracks.svg`.
+
+![Linear MjeNMV diagram with separate GC skew and AT skew tracks](../../examples/tutorial-6-two-skew-tracks.svg)
+
+Use the same `nt=AT` pattern in circular track tables or circular track slots when you need an additional circular skew ring.
+
+[< Back to the Tutorials Index](./TUTORIALS.md)
+[< Back to Tutorial 5](./5_Table_Driven_Inputs.md) | [Go to Tutorial 7 >](./7_Linear_Layout.md)
+
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

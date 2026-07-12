@@ -51,11 +51,12 @@ def load_gbks(
         try:
             logger.info("INFO: Loading GenBank file {}".format(gbk_file))
             records_list = list(SeqIO.parse(gbk_file, "genbank"))
-            if mode == "linear":
+            if mode in {"linear", "circular"}:
                 selector_raw = record_selectors[file_idx] if record_selectors and file_idx < len(record_selectors) else None
                 selector = parse_record_selector(selector_raw)
                 if selector is not None:
                     records_list = select_record(records_list, selector, log=logger)
+            if mode == "linear":
                 if len(gbk_list) > 1 and load_comparison and len(records_list) > 1:
                     records_list = [records_list[0]]
                 reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
@@ -71,6 +72,8 @@ def load_gbks(
                     record_list.append(record)
                     id_list.append(record.id)  # type: ignore
             elif mode == "circular":
+                reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
+                records_list = reverse_records(records_list, reverse_flag, log=logger)
                 logger.info("INFO: Importing all entries...")
                 for record in records_list:
                     if record.id in id_list:
@@ -93,6 +96,9 @@ def load_gbks(
                     record_list.append(record)
                     id_list.append(record.id)  # type: ignore
         except ValueError as e:  # Catching common exception when parsing GenBank files
+            if str(e).startswith("Record selector"):
+                logger.error(f"ERROR: {e}")
+                raise ValidationError(str(e)) from e
             logger.error(
                 f"ERROR: error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format. Error: {e}"
             )
@@ -233,16 +239,19 @@ def load_gff_fasta(
             fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
             merged_records = merge_gff_fasta_records(gff_records, fasta_records)
 
-            if mode == "linear":
+            if mode in {"linear", "circular"}:
                 selector_raw = record_selectors[file_idx] if record_selectors and file_idx < len(record_selectors) else None
                 selector = parse_record_selector(selector_raw)
                 if selector is not None:
                     merged_records = select_record(merged_records, selector, log=logger)
+            if mode == "linear":
                 if load_comparison and len(merged_records) > 1:
                     merged_records = [merged_records[0]]
                 reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
                 merged_records = reverse_records(merged_records, reverse_flag, log=logger)
             elif mode == "circular":
+                reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
+                merged_records = reverse_records(merged_records, reverse_flag, log=logger)
                 for record in merged_records:
                     if "topology" in record.annotations:
                         topology: str = record.annotations["topology"]  # type: ignore
@@ -266,6 +275,9 @@ def load_gff_fasta(
                 record_list.append(record)
                 id_list.append(record.id)  # type: ignore
         except ValueError as e:
+            if str(e).startswith("Record selector"):
+                logger.error(f"ERROR: {e}")
+                raise ValidationError(str(e)) from e
             logger.error(
                 f"ERROR: error parsing GFF3/FASTA files ({gff_file}, {fasta_file}). Error: {e}"
             )

@@ -5,10 +5,14 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
+from svgwrite import Drawing
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
+
+import gbdraw.linear as linear_cli_module
+from gbdraw.exceptions import ValidationError
 
 INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
 SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
@@ -127,6 +131,75 @@ def _write_multi_record_gbk(path: Path) -> dict[str, int]:
 
     SeqIO.write([rec_a, rec_b], path, "genbank")
     return {"RecA": rec_a_len, "RecB": rec_b_len}
+
+
+@pytest.mark.linear
+def test_linear_cli_records_table_regions_follow_sorted_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\tregion\torder\n"
+        "b.gbk\t201-400\t2\n"
+        "a.gbk\t1-100\t1\n",
+        encoding="utf-8",
+    )
+    source_records = {
+        "a.gbk": SeqRecord(Seq("A" * 500), id="record_a"),
+        "b.gbk": SeqRecord(Seq("T" * 500), id="record_b"),
+    }
+    captured: dict[str, object] = {}
+
+    def fake_load(paths, *_args, **_kwargs):
+        return [source_records[Path(paths[0]).name]]
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "linear.svg"))
+
+    monkeypatch.setattr(linear_cli_module, "load_gbks", fake_load)
+    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+
+    linear_cli_module.linear_main(
+        [
+            "--records_table",
+            str(table),
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    records = captured["records"]
+    assert [record.id for record in records] == ["record_a", "record_b"]
+    assert [len(record.seq) for record in records] == [100, 200]
+
+
+@pytest.mark.linear
+def test_linear_cli_rejects_qualified_records_table_region_before_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    table = tmp_path / "records.tsv"
+    table.write_text("gbk\tregion\na.gbk\trecord_b:1-10\n", encoding="utf-8")
+    rendered = False
+
+    def fake_assemble(*_args, **_kwargs):
+        nonlocal rendered
+        rendered = True
+        return Drawing(filename=str(tmp_path / "unexpected.svg"))
+
+    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    with pytest.raises(ValidationError, match=rf"{table}.*row 2, column 'region'"):
+        linear_cli_module.linear_main(["--records_table", str(table), "-f", "svg"])
+    assert rendered is False
 
 
 @pytest.mark.linear

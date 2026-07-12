@@ -155,7 +155,7 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
         default="")
     label_list_group.add_argument(
         '--label_blacklist',
-        help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
+        help='Comma-separated keywords for label blacklisting (optional); mutually exclusive with --label_whitelist',
         type=str,
         default="")
     parser.add_argument(
@@ -185,14 +185,17 @@ def add_legend_args(parser: argparse.ArgumentParser, choices_help: str = '"right
 
 def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Validate input file argument combinations."""
+    records_table = getattr(args, "records_table", None)
+    if records_table and (args.gbk or args.gff or args.fasta):
+        parser.error("Error: --records_table cannot be used with --gbk, --gff, or --fasta.")
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
     if args.gff and not args.fasta:
         parser.error("Error: --gff requires --fasta.")
     if args.fasta and not args.gff:
         parser.error("Error: --fasta requires --gff.")
-    if not args.gbk and not (args.gff and args.fasta):
-        parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
+    if not records_table and not args.gbk and not (args.gff and args.fasta):
+        parser.error("Error: Either --records_table, --gbk, or both --gff and --fasta must be provided.")
 
 
 def validate_label_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:

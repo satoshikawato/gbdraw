@@ -8,6 +8,8 @@ The interactive Gallery assets are hosted online and are not bundled with local 
 
 For circular examples, `--track_type` names the simple-layout preset. Custom Track Slots use explicit geometry instead, and the circular axis remains fixed.
 
+For CLI users converting long Gallery commands into TSV manifests, see the detailed `--records_table`, `--conservation_table`, and `--circular_track_table` examples in the [CLI Reference](./CLI_Reference.md#tsv-manifest-inputs).
+
 #### White spot syndrome virus genome comparison
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#WSSV_genome_comparison](https://gbdraw.app/gallery/#WSSV_genome_comparison)
@@ -116,6 +118,8 @@ AP027133_AP027132.tblastx.out \
 AP027132_NZ_CP006932.tblastx.out \
 --align_center \
 --separate_strands \
+--show_gc \
+--show_skew \
 --block_stroke_width 1 \
 --block_stroke_color gray \
 --palette default \

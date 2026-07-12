@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.cli_tables import (
+    read_circular_track_table,
+    read_conservation_table,
+    read_records_table,
+)
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
 from gbdraw.session_io import (
     SessionBuildContext,
@@ -310,6 +315,32 @@ def collect_embedded_files_from_cli_args(
     index = 0
     while index < len(cli_args):
         token = str(cli_args[index])
+        if _is_cli_table_option(mode, token):
+            value_index = index + 1
+            if value_index < len(cli_args) and _is_embeddable_path(cli_args[value_index]):
+                table_slot = _append_cli_input(files, cli_args[value_index], depth=False)
+                bindings.append(_binding(value_index, table_slot, cli_args[value_index]))
+                table_entry = {
+                    "argIndex": value_index,
+                    "kind": _cli_table_kind(token),
+                    "slot": table_slot,
+                    "dependencies": [],
+                }
+                for dependency in _read_cli_table_dependencies(token, cli_args[value_index]):
+                    if not _is_embeddable_path(dependency.path):
+                        continue
+                    dependency_slot = _append_cli_input(files, dependency.path, depth=False)
+                    table_entry["dependencies"].append(
+                        {
+                            "rowIndex": dependency.row_index,
+                            "rowNumber": dependency.row_number,
+                            "column": dependency.column,
+                            "slot": dependency_slot,
+                        }
+                    )
+                files.setdefault("cliTables", []).append(table_entry)
+            index += 2
+            continue
         if mode == "circular" and token in {"--gbk", "--gff", "--fasta", "--conservation_blast", "--depth_track"}:
             values, next_index = _collect_option_values(cli_args, index + 1)
             for offset, value in enumerate(values):
@@ -399,6 +430,34 @@ def collect_embedded_files_from_cli_args(
     return files, tuple(bindings)
 
 
+def _is_cli_table_option(mode: Literal["circular", "linear"], token: str) -> bool:
+    if token == "--records_table":
+        return True
+    if mode == "circular" and token in {"--conservation_table", "--circular_track_table"}:
+        return True
+    return False
+
+
+def _cli_table_kind(token: str) -> str:
+    if token == "--records_table":
+        return "records"
+    if token == "--conservation_table":
+        return "conservation"
+    if token == "--circular_track_table":
+        return "circular_track"
+    return "unknown"
+
+
+def _read_cli_table_dependencies(token: str, path: object):
+    if token == "--records_table":
+        return read_records_table(str(path)).path_dependencies
+    if token == "--conservation_table":
+        return read_conservation_table(str(path)).path_dependencies
+    if token == "--circular_track_table":
+        return read_circular_track_table(str(path)).path_dependencies
+    return ()
+
+
 _COMMON_SINGLE_FILE_OPTIONS = {
     "-d": "files.d_color",
     "--default_colors": "files.d_color",
@@ -428,6 +487,7 @@ def _empty_files_payload() -> dict[str, Any]:
         "qualifier_priority": None,
         "linearSeqs": [],
         "cliInputs": [],
+        "cliTables": [],
     }
 
 

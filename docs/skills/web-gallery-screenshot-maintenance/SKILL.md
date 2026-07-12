@@ -31,7 +31,7 @@ Then inspect the target tutorial JSON and media directory:
 1. Audit screenshots, tutorial writing, and structured content together. Do not treat a screenshot pass as complete until the tutorial also satisfies the Writing Rules and Structured Content Rules below.
 2. Enumerate only media referenced by tutorial JSON first. Treat unreferenced media as cleanup candidates after visible screenshots are fixed.
 3. Compare each referenced screenshot with its operation text and caption.
-4. Check adjacent operation screenshots for parent/child duplication. If a broader crop already shows the child controls clearly and the child crop adds no new action context, remove the child operation/media instead of recropping the broader image.
+4. Check adjacent operation screenshots for parent/child duplication. Remove the child operation/media only when the broader crop is already compact and readable at Gallery size, clearly shows the child controls, and adds no unrelated area merely to absorb the child image. Otherwise keep focused crops or recrop the shared panel.
 5. Hash or otherwise compare referenced screenshots after the visual pass. Pixel-identical screenshots inside the same tutorial are acceptable only when they are intentionally reused across non-adjacent, clearly different contexts; otherwise consolidate the operation, recrop one image, or delete the duplicate media.
 6. Classify each screenshot as:
    - `keep`: real UI/result crop, readable, caption matches.
@@ -40,7 +40,7 @@ Then inspect the target tutorial JSON and media directory:
    - `add`: operation needs an extra crop to avoid one overloaded screenshot.
 7. Review tutorial writing and structure: remove generic Requirements, avoid unnecessary Files tab steps, keep pre-generation setup, generated-result inspection, and post-generation edits separate, and omit redundant operation `title`/`body` when a clear step plus media caption already conveys the action.
 8. Review structured content: convert repeated-field setup lists, file mappings, record metadata, track recipes, and color rules to tables when rows share the same fields; keep simple one-column checklists as bullets.
-9. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes.
+9. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes. For every recrop or replacement, also compare the old and new images side by side at the same displayed size. Reject the replacement when it makes the operated control less compact, removes a useful selected target, or adds page area without adding information needed for the documented action.
 10. Record screenshot, writing, and structured-content decisions in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
 11. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
 12. Keep batches small. Do not migrate every tutorial in one risky change.
@@ -49,6 +49,7 @@ Then inspect the target tutorial JSON and media directory:
 
 Use the real UI the user operates.
 
+- Treat a good existing screenshot as the semantic-crop baseline. Prefer the smallest truthful crop that keeps the operated control, selected value, and only the neighboring context needed to locate it. A larger crop is not an improvement merely because it contains more real UI.
 - Tutorial media must render as appropriately scaled thumbnails in the Gallery, while click-to-open behavior must show the original image itself at natural bitmap size. Do not use a framed page-like modal, captions, headers, or extra white shell around the opened image.
 - If a screenshot is unreadable in the Gallery, fix the source capture density, crop extent, or thumbnail/lightbox behavior. Do not rely on browser zoom, CSS upscaling, or a larger wrapper around the same low-resolution bitmap.
 - Mode selector screenshots must show the real Circular/Linear control with the active choice readable.
@@ -58,7 +59,7 @@ Use the real UI the user operates.
 - Dropdown/select operations must show the select in context plus a capture-only opened-option overlay with the chosen option highlighted.
 - Text and number inputs must show labels, values, units, and nearby related controls. Highlight changed fields when multiple inputs are visible.
 - When one operation sentence lists several pre-generation settings, include an overview crop that shows the actual text inputs, selects, toggles, or selected chips, even if separate dropdown crops also show individual menu choices.
-- Plot title operations must include the full Plot Title input value and the Plot Title Position control in the same readable context. If the default sidebar width clips the title text, widen the sidebar or crop wider for capture instead of accepting a cut-off title input.
+- Plot title operations must keep the Plot Title input and Plot Title Position control in the same readable context. If a long title cannot fit at the normal compact sidebar width, put the exact copyable value in tutorial text or a table and let the screenshot identify the real input without implying that its visible substring is complete. Widen only enough to make the control recognizable; do not turn a compact operation crop into a page-wide image solely to expose every character of a long title.
 - Checkboxes, toggles, and radio groups must show selected state in context.
 - Track slots, conservation rings, record labels, record positions, and color rules must show the actual row/panel where values are typed or edited.
 - Feature-specific color rule operations must show the real `SPECIFIC RULES (-t)` controls, not a generated plot preview.
@@ -77,11 +78,13 @@ Use the real UI the user operates.
 - Generated preview screenshots with floating controls must leave enough capture-time breathing room around the SVG content so zoom/original/search controls do not cover top records, labels, or legends, and bottom titles do not visually collide with legends. If the visible crop is cramped, recapture with a larger viewport or SVG canvas instead of accepting overlap.
 - Do not show the same generated preview or popup twice in immediate succession as both step-level media and operation media. If the operation already carries the result or popup crop, omit step-level media or make the two crops visibly different and purposeful.
 - More generally, omit step-level media when the operation media already shows the same UI state, Files tab, generated preview, or popup without adding new context.
-- When one operation crop already includes another operation's entire control area, keep the broader crop if it remains readable and remove the narrower duplicate. Prefer a single truthful panel crop over consecutive screenshots that repeat the same controls.
+- When one operation crop already includes another operation's entire control area, keep the broader crop only if it remains compact at Gallery size and every extra area helps explain the action. Otherwise keep the narrower crop or recrop the shared panel. Prefer a single truthful panel crop over consecutive screenshots that repeat the same controls, but do not trade away compactness merely to reduce the image count.
 - Post-generation editor screenshots must come from the exact restored session for that example. Before capturing drawers such as Legend, Features, or Orthogroups, verify the restored editor state matches the example-specific generated result. A generic or stale drawer state, such as a BGC legend editor showing only `CDS`, is a `replace`, even if it is a real drawer crop.
 - Drawer screenshots must show the named active drawer tab and must not be overlapped by a popup or another drawer's controls. Legend drawer crops should be scrolled so the entries named by the caption are visible.
 - If a restored session's saved editor state and rendered SVG disagree, fix the app restore behavior or refresh the session artifact before capturing. Do not document the broken intermediate state as the tutorial screenshot.
 - If a restored session's UI controls disagree with the tutorial command or rendered output, fix the app restore behavior or refresh the session artifact before capturing. This includes settings that may exist only in `cliInvocation.args` in older sessions, such as multi-record `--multi_record_position` tokens.
+- Treat capture metadata as executable documentation even when the current bitmap is retained. Its active tab, selected values, target selector, and crop composition must reproduce the visible screenshot state; do not leave a recipe that would silently replace a Details image with Qualifiers or otherwise change the documented action on the next refresh.
+- For ordered or movable controls such as track slots, comparison series, and record rows, replay the tutorial steps against the reset/default state and compare the resulting order with the saved Gallery session. Document every required move explicitly instead of relying on a pre-arranged restored session.
 - When capturing a drawer, keep the actual drawer controls visible, but exclude unrelated floating preview controls if they visually overlap the drawer; use temporary capture-only CSS rather than permanent app changes.
 
 Reject preview screenshots for non-final input/edit operations even if the generated result is visually correct.
@@ -97,6 +100,7 @@ Capture standards:
 - For representative upload-row crops, assert both the file order and the row's metadata values in app state before capture; do not trust visible labels alone because input values may be clipped in the DOM text.
 - Use device scale factor 2 or higher; use 3 for dense forms and popup/detail screenshots. Treat requests such as "150 dpi" as a demand for a higher-density source bitmap: increase device scale factor or crop tighter, never upscale an existing low-resolution image.
 - When the request is only to improve resolution, preserve the same semantic crop. Increase device scale factor, capture density, or source viewport as needed, but do not include extra sibling slots, following sections, or unrelated context. For stack/list panels, compute the clip bottom from the same last visible row rather than from the whole container.
+- Before overwriting an existing tutorial image, preserve or render the previous image for a same-size side-by-side review. Do not accept the new capture until the action remains at least as easy to identify, the crop is no less compact without a documented reason, and any clicked feature or ribbon remains visibly associated with its popup.
 - Save temporary PNGs under `/tmp` and commit WebP only.
 - Use WebP quality 92-95 for UI controls and dense forms.
 - Do not upscale a crop. Recapture at higher scale instead.

@@ -35,7 +35,10 @@ Options (examples):
   --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)
   -o, --output         Output file prefix (optional)
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
+  --records_table      TSV manifest for row-coupled input records
   --conservation_blast BLAST result file(s) for circular conservation rings (-outfmt 6 or 7)
+  --conservation_table TSV manifest for circular conservation BLAST rings
+  --circular_track_table TSV manifest for circular track slots
 
 Additional Information:
   - For full documentation, visit: https://github.com/satoshikawato/gbdraw/
@@ -49,7 +52,7 @@ Additional Information:
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [-o OUTPUT] [-p PALETTE] [-t TABLE]
+              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-o OUTPUT] [-p PALETTE] [-t TABLE]
               [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
               [--species SPECIES] [--strain STRAIN] [-k FEATURES]
               [--feature_shape TYPE=SHAPE]
@@ -67,6 +70,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
               [--suppress_skew]
               [--conservation_blast BLAST [BLAST ...]]
+              [--conservation_table TSV]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
@@ -96,6 +100,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--feature_width FEATURE_WIDTH]
               [--circular_track_order CIRCULAR_TRACK_ORDER]
               [--circular_track_slot CIRCULAR_TRACK_SLOT]
+              [--circular_track_table TSV]
               [--gc_content_width GC_CONTENT_WIDTH]
               [--gc_content_radius GC_CONTENT_RADIUS]
               [--gc_content_mode {deviation,percent}]
@@ -123,6 +128,8 @@ options:
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
+  --records_table TSV   TSV manifest for row-coupled input records and
+                        circular placement metadata.
   -o, --output OUTPUT   output file prefix (default: accession number of the
                         sequence)
   -p, --palette PALETTE
@@ -185,6 +192,9 @@ options:
   --conservation_blast BLAST [BLAST ...]
                         Precomputed BLAST outfmt 6/7 file(s) for circular
                         conservation rings.
+  --conservation_table TSV
+                        TSV manifest with conservation BLAST files, labels,
+                        and colors.
   --conservation_reference {query,subject,auto}
                         BLAST side containing displayed circular reference
                         coordinates. Use "subject" for BLAST generated as
@@ -193,6 +203,9 @@ options:
   --conservation_labels LABEL [LABEL ...]
                         Labels for conservation rings, aligned by logical
                         source index.
+  --conservation_colors COLOR [COLOR ...]
+                        Colors for conservation rings, aligned by logical
+                        source index. Accepts SVG color names or #RRGGBB.
   --conservation_ring_width CONSERVATION_RING_WIDTH
                         Conservation ring width for circular mode (in px; must
                         be > 0).
@@ -257,9 +270,8 @@ options:
                         pattern (optional); mutually exclusive with
                         --label_blacklist
   --label_blacklist LABEL_BLACKLIST
-                        Comma-separated keywords or path to a file for label
-                        blacklisting (optional); mutually exclusive with
-                        --label_whitelist
+                        Comma-separated keywords for label blacklisting
+                        (optional); mutually exclusive with --label_whitelist
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for
                         labels (optional)
@@ -305,6 +317,9 @@ options:
                         slots with no explicit r or w auto-compress when needed
                         and never move outside automatically. z only controls
                         SVG layering.
+  --circular_track_table TSV
+                        TSV manifest for circular track slots and axis
+                        placement.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).
@@ -366,6 +381,222 @@ options:
 
 Circular conservation rings use one ring per `--conservation_blast` source and a shared identity gradient legend. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for conservation rings, so provide precomputed BLAST output.
 
+## TSV Manifest Inputs
+
+The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
+
+### `--records_table`
+
+Use `--records_table` in circular or linear mode when each displayed record needs its own input path, selector, crop, orientation, label, or circular grid placement. It is an alternative to `--gbk` or `--gff` plus `--fasta`, and cannot be combined with those input options.
+
+Allowed columns:
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `gbk` | required for GenBank rows | GenBank/GBFF path. |
+| `gff` | required for GFF3/FASTA rows | GFF3 path. |
+| `fasta` | required for GFF3/FASTA rows | FASTA path paired with `gff`. |
+| `record_label` | optional | Linear record label, equivalent to one repeated `--record_label` value. |
+| `record_subtitle` | optional | Linear subtitle line, equivalent to one repeated `--record_subtitle` value. |
+| `record_id` | optional | Record selector for this row, such as a record ID or `#1`. Required when the source file would otherwise load more than one displayed record. |
+| `region` | optional | Row-scoped crop such as `1000-9000`, `1000..9000`, or `1000-9000:rc`. Do not include a record ID, record index, or file selector; the crop always applies to the record selected by this row. |
+| `reverse_complement` | optional | Row-scoped reverse-complement flag. True values include `1`, `true`, `yes`, `y`, `on`; false values include blank, `0`, `false`, `no`, `n`, `off`, `none`, `null`, `-`. |
+| `order` | optional | Positive integer used to sort rows before loading. Explicit values sort first in numeric order; blank values follow in table row order. Equal explicit values preserve table row order. |
+| `row` | optional | Circular multi-record canvas row, used with `--multi_record_canvas`. |
+| `column` | optional | Positive integer used to order records within a multi-record row. |
+
+One row represents one displayed record. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. In circular mode, put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
+
+Minimal GenBank records table:
+
+```tsv
+gbk	record_label	record_subtitle	record_id	region	reverse_complement	order	row	column
+a.gbk	Strain A		#1		0	1	1	1
+b.gbk	Strain B		#1		0	2	1	2
+c.gbk	Strain C		#1	1000-9000	1	3	2	1
+```
+
+Minimal GFF3 plus FASTA records table:
+
+```tsv
+gff	fasta	record_label	record_subtitle	record_id	region	reverse_complement	order	row	column
+a.gff3	a.fna	Strain A		chr1	1000-9000	0	1	1	1
+b.gff3	b.fna	Strain B		chr1		0	2	1	2
+```
+
+Gallery-style linear example: the BGC Gallery session uses five GenBank files, custom record labels, subtitles, and reverse-complements the fifth record. Put that row-coupled part in `bgc_records.tsv`:
+
+```tsv
+gbk	record_label	record_subtitle	reverse_complement	order
+BGC0000708.gbk	<i>Streptomyces lividus</i> CBS 844.73	Lividomycin biosynthetic gene cluster	0	1
+BGC0000709.gbk	<i>Streptomyces fradiae</i> ATCC 10745	Neomycin biosynthetic gene cluster	0	2
+BGC0000711.gbk	<i>Streptomyces fradiae</i> MCIMB 8233	Neomycin biosynthetic gene cluster	0	3
+BGC0000712.gbk	<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455	Paromomycin biosynthetic gene cluster	0	4
+BGC0000713.gbk	<i>Streptomyces ribosidificus</i> ATCC 21294	Ribostamycin biosynthetic gene	1	5
+```
+
+Then keep the other Gallery options, but replace `--gbk ...`, repeated `--record_label`, repeated `--record_subtitle`, and repeated `--reverse_complement` with:
+
+```bash
+gbdraw linear \
+  --records_table bgc_records.tsv \
+  --protein_blastp_mode orthogroup \
+  --show_labels first \
+  --pairwise_match_style curve \
+  -o BGC0000708-BGC0000713 \
+  -f interactive-svg
+```
+
+Gallery-style circular multi-record example: the `Vnig_TUMSAT-TG-2018` entry places six records from one GBFF file on two rows. Repeat the file path and select each record by `record_id`:
+
+```tsv
+gbk	record_id	order	row	column
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#1	1	1	1
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#2	2	1	2
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#3	3	2	1
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#4	4	2	2
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#5	5	2	3
+GCF_015097735.1_ASM1509773v1_genomic.gbff	#6	6	2	4
+```
+
+Use it with `--multi_record_canvas`; do not also pass `--multi_record_position`:
+
+```bash
+gbdraw circular \
+  --records_table vnig_records.tsv \
+  --multi_record_canvas \
+  --multi_record_size_mode auto \
+  --multi_record_min_radius_ratio 0.55 \
+  --multi_record_column_gap_ratio 0.1 \
+  --multi_record_row_gap_ratio 0.05 \
+  -p orchid \
+  --track_type tuckin \
+  -o Vnig_TUMSAT-TG-2018 \
+  -f interactive-svg
+```
+
+### `--conservation_table`
+
+Use `--conservation_table` in circular mode to keep BLAST paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
+
+Allowed columns:
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `blast` | yes | Path to a precomputed BLAST outfmt 6 or 7 file. |
+| `label` | optional | Conservation ring label. If the column is present, row order supplies the label list. |
+| `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list. |
+
+The row order defines the ring order. Thresholds and geometry still stay on the CLI, for example `--conservation_reference`, `--bitscore`, `--evalue`, `--identity`, `--alignment_length`, `--conservation_ring_width`, and `--conservation_ring_gap`.
+
+```tsv
+blast	label	color
+ref_a.blast.tsv	Reference A	#E15759
+ref_b.blast.tsv	Reference B	#4E79A7
+```
+
+Gallery-style WSSV example: the `WSSV_genome_comparison` command has 20 `--conservation_blast`, 20 `--conservation_labels`, and 20 `--conservation_colors` values. The equivalent `wssv_conservation.tsv` is:
+
+```tsv
+blast	label	color
+CN01.circular_conservation.losatn.tsv	CN01	#6e91b7
+WSSV-TW.circular_conservation.losatn.tsv	WSSV-TW	#f4a251
+WSSV-CN.circular_conservation.losatn.tsv	WSSV-CN	#77b26f
+WSSV-TH.circular_conservation.losatn.tsv	WSSV-TH	#e67577
+JP01A.circular_conservation.losatn.tsv	JP01A	#8fc4c0
+JP01B.circular_conservation.losatn.tsv	JP01B	#f0d369
+Pc2020.circular_conservation.losatn.tsv	Pc2020	#be92b2
+E1.circular_conservation.losatn.tsv	E1	#ffafb7
+0722-1.circular_conservation.losatn.tsv	0722-1	#ae8e7c
+CN03.circular_conservation.losatn.tsv	CN03	#c6bebb
+CN04.circular_conservation.losatn.tsv	CN04	#6e91b7
+WSSV-AU.circular_conservation.losatn.tsv	WSSV-AU	#f4a251
+EU129.circular_conservation.losatn.tsv	EU129	#e67577
+GCF7.circular_conservation.losatn.tsv	GCF7	#8fc4c0
+MES-753.circular_conservation.losatn.tsv	MES-753	#bcb4ca
+Shantou2019.circular_conservation.losatn.tsv	Shantou2019	#f0d369
+POMZ1.circular_conservation.losatn.tsv	POMZ1	#be92b2
+POMZ4.circular_conservation.losatn.tsv	POMZ4	#ffafb7
+MG18PR-0187-N40S.circular_conservation.losatn.tsv	MG18PR-0187-N40S	#ae8e7c
+Angostura2013.circular_conservation.losatn.tsv	Angostura2013	#c6bebb
+```
+
+Then use:
+
+```bash
+gbdraw circular \
+  --gbk AP027280.gb \
+  --conservation_table wssv_conservation.tsv \
+  --conservation_reference subject \
+  --bitscore 100 \
+  --evalue 1e-30 \
+  --identity 90 \
+  --alignment_length 100 \
+  --suppress_gc \
+  --suppress_skew \
+  --track_type spreadout \
+  -o WSSV_genome_comparison \
+  -f interactive-svg
+```
+
+### `--circular_track_table`
+
+Use `--circular_track_table` in circular mode to describe slot order and axis placement. It cannot be combined with `--circular_track_order`, `--circular_track_slot`, or `--circular_track_axis_index`.
+
+Allowed columns:
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `id` | yes | Unique slot ID, for example `features`, `gc_content`, or `a_skew_2`. |
+| `renderer` | yes | Renderer name. Supported values are `features`, `ticks`, `dinucleotide_content`, `dinucleotide_skew`, `depth`, `sequence_conservation`, and `spacer`; aliases such as `gc_content`, `gc_skew`, `skew`, and `conservation` are accepted. |
+| `side` | optional | `outside`, `axis`, or `inside`. If omitted, rows default to `inside`, except the first `features` row may become `axis` when no explicit axis row exists. |
+| `r` | optional | Slot radius scalar. Values may be ratios such as `0.8`, percentages such as `80%`, or pixels such as `200px`. |
+| `w` | optional | Slot width scalar, using the same scalar syntax as `r`. |
+| `spacing` | optional | Compatibility scalar for both circular gaps. Do not combine with `inner_gap_px` or `outer_gap_px`. |
+| `inner_gap_px` | optional | Numeric inner gap in pixels, without a unit. |
+| `outer_gap_px` | optional | Numeric outer gap in pixels, without a unit. |
+| `z` | optional | Integer SVG layering order. |
+| `params` | optional | Comma-separated renderer-specific parameters in `key=value` form, for example `nt=AT,legend_label=AT skew`. Structural settings belong in their dedicated columns and cannot be repeated here. |
+
+Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary and is converted internally to a split feature slot. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
+
+Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `spacing`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, `visible`, `strict`, `compress`, and `reserve`. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid.
+
+```tsv
+id	renderer	side	r	w	params
+features	features	axis
+gc_content	dinucleotide_content	inside		0.1	nt=GC
+gc_skew	dinucleotide_skew	inside		0.1	nt=GC
+ticks	ticks	inside			tick_label_layout=label_in_tick_out
+```
+
+Gallery-style HmmtDNA AT-skew example: the `HmmtDNA_ATskew` entry adds an AT-skew ring to the standard GC content, GC skew, feature, and tick slots. The equivalent `hmmt_tracks.tsv` is:
+
+```tsv
+id	renderer	side	r	w	params
+features	features	axis
+gc_content	dinucleotide_content	inside		0.1	nt=GC
+gc_skew	dinucleotide_skew	inside		0.1	nt=GC
+a_skew_2	dinucleotide_skew	inside		0.1	nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew
+ticks	ticks	inside			tick_label_layout=label_in_tick_out
+```
+
+Use it like this:
+
+```bash
+gbdraw circular \
+  --gbk HmmtDNA.gbk \
+  --circular_track_table hmmt_tracks.tsv \
+  --track_type middle \
+  --window 500 \
+  --step 50 \
+  --species '<i>Homo sapiens</i>' \
+  --labels out \
+  -l left \
+  -o HmmtDNA_ATskew \
+  -f interactive-svg
+```
+
 Depth tracks can be supplied with the legacy `--depth` option or the repeatable
 `--depth_track` option. `--depth` keeps the single-track SVG IDs `depth` and
 `depth_axis`. Multiple `--depth_track` groups render as `depth_1`,
@@ -376,7 +607,7 @@ one file to reuse it for every record, or one file per record.
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [-b [BLAST ...]] [-t TABLE]
+              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-b [BLAST ...]] [-t TABLE]
               [--losatp_bin LOSATP_BIN]
               [--ncbi_blastp_bin NCBI_BLASTP_BIN]
               [--losatp_threads LOSATP_THREADS]
@@ -420,7 +651,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--linear_track_slot SLOT]
               [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
               [--ruler_on_axis] [-f FORMAT] [-l LEGEND]
-              [--show_labels [{all,first,none}]] [--resolve_overlaps]
+              [--show_labels [{all,first,orthogroup_top,none}]] [--resolve_overlaps]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
@@ -449,6 +680,8 @@ options:
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
+  --records_table TSV   TSV manifest for row-coupled input records and per-
+                        record options.
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
@@ -606,19 +839,19 @@ options:
                         PNG/PDF/EPS/PS require CairoSVG.
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
                         "top", "bottom", "none")
-  --show_labels [{all,first,none}]
+  --show_labels [{all,first,orthogroup_top,none}]
                         Show labels: no argument or 'all' (all records),
-                        'first' (first record only), 'none' (no labels).
-                        Default: 'none'
+                        'first' (first record only), 'orthogroup_top' (topmost
+                        record containing each orthogroup), 'none' (no
+                        labels). Default: 'none'
   --resolve_overlaps    Resolve overlaps (experimental; default: False).
   --label_whitelist LABEL_WHITELIST
                         Path to a TSV file for label whitelisting by regex
                         pattern (optional); mutually exclusive with
                         --label_blacklist
   --label_blacklist LABEL_BLACKLIST
-                        Comma-separated keywords or path to a file for label
-                        blacklisting (optional); mutually exclusive with
-                        --label_whitelist
+                        Comma-separated keywords for label blacklisting
+                        (optional); mutually exclusive with --label_whitelist
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for
                         labels (optional)
@@ -717,5 +950,7 @@ hit set is not guaranteed to be identical to LOSAT.
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
 - [Tutorials](./TUTORIALS/TUTORIALS.md)
+- [Tutorial 4: Protein Comparisons Without Precomputed BLAST](./TUTORIALS/4_Protein_Comparisons.md)
+- [Tutorial 5: Table-Driven CLI Inputs](./TUTORIALS/5_Table_Driven_Inputs.md)
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

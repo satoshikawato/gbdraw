@@ -151,10 +151,32 @@ gbdraw linear \
 ```bash
 gbdraw linear \
   --gbk genome1.gb genome2.gb \
-  --reverse_complement false true \
+  --reverse_complement false \
+  --reverse_complement true \
   -o output \
   -f svg
 ```
+
+### Use a records table for row-specific inputs
+
+Create `records.tsv`:
+
+```tsv
+gbk	record_label	record_id	region	reverse_complement	order
+genome1.gb	Genome 1	#1		0	1
+genome2.gb	Genome 2	#1	101-20000	1	2
+```
+
+Then run:
+
+```bash
+gbdraw linear \
+  --records_table records.tsv \
+  -o output \
+  -f svg
+```
+
+See [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for GenBank, GFF3+FASTA, circular placement, conservation, and track-slot table examples.
 
 ## Comparative Genomics
 
@@ -183,6 +205,20 @@ gbdraw linear \
   -o multi_comparison \
   -f svg
 ```
+
+### Generated protein comparison without BLAST tables
+
+```bash
+gbdraw linear \
+  --gbk genome1.gb genome2.gb genome3.gb \
+  --protein_blastp_mode orthogroup \
+  --show_labels orthogroup_top \
+  --pairwise_match_style curve \
+  -o protein_orthogroup \
+  -f svg
+```
+
+Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. Do not combine these modes with `-b/--blast`. See [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
 
 ### Filter BLAST ribbons
 

@@ -11,12 +11,14 @@ import gbdraw.circular as circular_cli_module
 from gbdraw.circular import circular_main
 from gbdraw.linear import _get_args as get_linear_args
 from gbdraw.cli_utils.session import (
+    collect_embedded_files_from_cli_args,
     make_rendered_svg,
     parse_session_pre_args,
     resolve_session_sidecar_path,
     strip_session_output_args,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.cli_tables import read_records_table
 from gbdraw.render.formats import ACCEPTED_FORMATS
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -147,6 +149,138 @@ def test_cli_invocation_restoration_substitutes_embedded_files(tmp_path: Path) -
     assert spec.cli_invocation_args[-2:] == ("-f", "interactive-svg")
     assert spec.file_bindings[0].argIndex == 3
     assert spec.file_bindings[0].slot == "files.c_gb"
+
+
+def test_cli_session_capture_embeds_records_table_dependencies(tmp_path: Path) -> None:
+    gbk_path = tmp_path / "input.gb"
+    gbk_path.write_text("LOCUS       TEST\n", encoding="utf-8")
+    table_path = tmp_path / "records.tsv"
+    table_path.write_text(
+        "gbk\trecord_id\n"
+        "input.gb\t#1\n",
+        encoding="utf-8",
+    )
+
+    files, bindings = collect_embedded_files_from_cli_args(
+        "linear",
+        ["--records_table", str(table_path), "-f", "svg"],
+    )
+
+    assert bindings[0].argIndex == 1
+    assert bindings[0].slot == "files.cliInputs[0]"
+    assert files["cliInputs"][0]["name"] == "records.tsv"
+    assert files["cliInputs"][1]["name"] == "input.gb"
+    assert files["cliTables"] == [
+        {
+            "argIndex": 1,
+            "kind": "records",
+            "slot": "files.cliInputs[0]",
+            "dependencies": [
+                {
+                    "rowIndex": 0,
+                    "rowNumber": 2,
+                    "column": "gbk",
+                    "slot": "files.cliInputs[1]",
+                }
+            ],
+        }
+    ]
+
+
+def test_cli_invocation_restoration_rewrites_records_table_paths(tmp_path: Path) -> None:
+    session = _minimal_session(
+        {
+            "cliInputs": [
+                _file_entry(
+                    "records.tsv",
+                    b"gbk\trecord_id\noriginal.gb\t#1\n",
+                ),
+                _file_entry("original.gb", b"LOCUS       TEST\n"),
+            ],
+            "cliTables": [
+                {
+                    "argIndex": 1,
+                    "kind": "records",
+                    "slot": "files.cliInputs[0]",
+                    "dependencies": [
+                        {
+                            "rowIndex": 0,
+                            "rowNumber": 2,
+                            "column": "gbk",
+                            "slot": "files.cliInputs[1]",
+                        }
+                    ],
+                }
+            ],
+        },
+        mode="linear",
+    )
+    session["cliInvocation"] = {
+        "schema": 1,
+        "mode": "linear",
+        "args": ["--records_table", "records.tsv", "-f", "svg"],
+        "renderFormats": ["svg"],
+        "fileBindings": [
+            {"argIndex": 1, "slot": "files.cliInputs[0]", "name": "records.tsv"}
+        ],
+        "generatedBy": "gbdraw",
+    }
+
+    spec = session_to_cli_args(
+        session,
+        mode="linear",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    table_path = Path(spec.args[1])
+    assert table_path.exists()
+    table_lines = table_path.read_text(encoding="utf-8").splitlines()
+    assert table_lines[0] == "gbk\trecord_id"
+    restored_gbk_name = table_lines[1].split("\t")[0]
+    restored_gbk_path = table_path.parent / restored_gbk_name
+    assert restored_gbk_path.read_bytes() == b"LOCUS       TEST\n"
+
+
+def test_cli_session_round_trip_rewrites_bom_records_table_first_column(
+    tmp_path: Path,
+) -> None:
+    gbk_path = tmp_path / "original.gb"
+    gbk_path.write_text("LOCUS       TEST\n", encoding="utf-8")
+    table_path = tmp_path / "records.tsv"
+    table_path.write_text("gbk\trecord_id\noriginal.gb\t#1\n", encoding="utf-8-sig")
+
+    files, bindings = collect_embedded_files_from_cli_args(
+        "linear",
+        ["--records_table", str(table_path), "-f", "svg"],
+    )
+    session = _minimal_session(files, mode="linear")
+    session["cliInvocation"] = {
+        "schema": 1,
+        "mode": "linear",
+        "args": ["--records_table", "records.tsv", "-f", "svg"],
+        "renderFormats": ["svg"],
+        "fileBindings": [bindings[0].__dict__],
+        "generatedBy": "gbdraw",
+    }
+
+    spec = session_to_cli_args(
+        session,
+        mode="linear",
+        temp_dir=tmp_path / "restored",
+        output_override=None,
+        format_override=None,
+    )
+
+    restored_table = Path(spec.args[1])
+    restored_text = restored_table.read_text(encoding="utf-8")
+    assert restored_text.startswith("gbk\trecord_id\n")
+    assert not restored_text.startswith("\ufeff")
+    restored_gbk_name = restored_text.splitlines()[1].split("\t")[0]
+    restored_gbk_path = restored_table.parent / restored_gbk_name
+    assert restored_gbk_path.read_bytes() == b"LOCUS       TEST\n"
+    assert read_records_table(str(restored_table)).gbk_files == [str(restored_gbk_path.resolve())]
 
 
 def test_gui_only_circular_session_maps_to_cli_args(tmp_path: Path) -> None:

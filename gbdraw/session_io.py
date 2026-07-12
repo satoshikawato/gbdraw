@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import binascii
 import copy
+import csv
 import json
 import math
 import os
@@ -465,6 +466,8 @@ def _session_cli_invocation_to_args(
         )
         run_args[binding.argIndex] = str(materialized)
 
+    _restore_cli_table_paths(session, run_args, temp_dir=temp_dir)
+
     run_args = _apply_option_override(run_args, "-o", "--output", output_override)
     run_args = _apply_option_override(run_args, "-f", "--format", format_override)
     invocation_args = _apply_option_override(invocation_args, "-o", "--output", output_override)
@@ -542,6 +545,118 @@ def _gui_session_to_cli_args(
         cli_invocation_args=tuple(invocation_args),
         file_bindings=tuple(bindings),
     )
+
+
+def _restore_cli_table_paths(
+    session: Mapping[str, Any],
+    run_args: list[str],
+    *,
+    temp_dir: Path,
+) -> None:
+    files = session.get("files")
+    if not isinstance(files, Mapping):
+        return
+    cli_tables = files.get("cliTables")
+    if not isinstance(cli_tables, list):
+        return
+
+    for table_entry in cli_tables:
+        if not isinstance(table_entry, Mapping):
+            continue
+        try:
+            arg_index = int(table_entry.get("argIndex"))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("files.cliTables argIndex must be an integer.") from exc
+        if arg_index < 0 or arg_index >= len(run_args):
+            raise ValidationError("files.cliTables argIndex is out of range.")
+
+        table_path = Path(str(run_args[arg_index]))
+        if not table_path.is_file():
+            table_slot = str(table_entry.get("slot") or "").strip()
+            if not table_slot:
+                raise ValidationError("files.cliTables slot is required.")
+            table_file_entry = get_session_slot(session, table_slot)
+            table_path = materialize_embedded_file(
+                table_file_entry,
+                temp_dir=temp_dir,
+                role=f"arg{arg_index}",
+            )
+            run_args[arg_index] = str(table_path)
+
+        dependencies = table_entry.get("dependencies")
+        if not isinstance(dependencies, list) or not dependencies:
+            continue
+        replacements: dict[tuple[int, str], str] = {}
+        for dependency in dependencies:
+            if not isinstance(dependency, Mapping):
+                continue
+            try:
+                row_index = int(dependency.get("rowIndex"))
+            except (TypeError, ValueError) as exc:
+                raise ValidationError("files.cliTables dependencies rowIndex must be an integer.") from exc
+            column = str(dependency.get("column") or "").strip()
+            slot = str(dependency.get("slot") or "").strip()
+            if not column or not slot:
+                raise ValidationError("files.cliTables dependency entries require column and slot.")
+            dependency_entry = get_session_slot(session, slot)
+            materialized = materialize_embedded_file(
+                dependency_entry,
+                temp_dir=temp_dir,
+                role=slot.replace(".", "_").replace("[", "_").replace("]", ""),
+            )
+            replacements[(row_index, column)] = _relative_path_for_table(
+                materialized,
+                table_path.parent,
+            )
+        if replacements:
+            _rewrite_tsv_path_cells(table_path, replacements)
+
+
+def _relative_path_for_table(path: Path, table_dir: Path) -> str:
+    try:
+        return os.path.relpath(str(path), str(table_dir))
+    except ValueError:
+        return str(path)
+
+
+def _rewrite_tsv_path_cells(
+    table_path: Path,
+    replacements: Mapping[tuple[int, str], str],
+) -> None:
+    try:
+        with table_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.reader(handle, delimiter="\t"))
+    except OSError as exc:
+        raise ValidationError(f"Could not read restored TSV table: {table_path}") from exc
+
+    header: list[str] | None = None
+    output_rows: list[list[str]] = []
+    data_row_index = 0
+    for cells in rows:
+        if not cells or all(str(cell).strip() == "" for cell in cells):
+            continue
+        if header is None:
+            header = [str(cell).strip() for cell in cells]
+            output_rows.append(header)
+            continue
+        values = [str(cell) for cell in cells]
+        while len(values) < len(header):
+            values.append("")
+        for (target_row_index, column), replacement in replacements.items():
+            if target_row_index != data_row_index or column not in header:
+                continue
+            values[header.index(column)] = replacement
+        output_rows.append(values[: len(header)])
+        data_row_index += 1
+
+    if header is None:
+        raise ValidationError(f"Restored TSV table has no header row: {table_path}")
+    try:
+        with table_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+            writer.writerows(output_rows)
+    except OSError as exc:
+        raise ValidationError(f"Could not rewrite restored TSV table: {table_path}") from exc
 
 
 def _append_common_gui_args(
