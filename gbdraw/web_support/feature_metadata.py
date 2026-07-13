@@ -17,6 +17,8 @@ from gbdraw.features.visibility import (
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
+_COORD_BASE_KEY = "gbdraw_coord_base"
+_COORD_STEP_KEY = "gbdraw_coord_step"
 
 
 def _normalize_record_selector(record_selector: object | None) -> str | None:
@@ -110,19 +112,60 @@ def _get_location_parts(location: Any) -> list[Any]:
     return [location]
 
 
-def _format_location_parts(location: Any) -> list[dict[str, object]]:
+def _read_record_coord_map(record: Any) -> tuple[int, int]:
+    annotations = getattr(record, "annotations", None) or {}
+    try:
+        base = int(annotations.get(_COORD_BASE_KEY, 1))
+    except (TypeError, ValueError):
+        base = 1
+    try:
+        step = int(annotations.get(_COORD_STEP_KEY, 1))
+    except (TypeError, ValueError):
+        step = 1
+    if step == 0:
+        step = 1
+    return base, (1 if step > 0 else -1)
+
+
+def _absolute_display_interval(
+    start: int,
+    end: int,
+    coord_base: int,
+    coord_step: int,
+) -> tuple[int, int]:
+    if end <= start:
+        coord = coord_base + (coord_step * start)
+        return coord - 1, coord
+    first_coord = coord_base + (coord_step * start)
+    last_coord = coord_base + (coord_step * (end - 1))
+    min_coord = min(first_coord, last_coord)
+    max_coord = max(first_coord, last_coord)
+    return min_coord - 1, max_coord
+
+
+def _format_location_parts(
+    location: Any,
+    coord_base: int = 1,
+    coord_step: int = 1,
+) -> list[dict[str, object]]:
     parts = []
     for part in _get_location_parts(location):
         try:
             start = int(part.start)
             end = int(part.end)
             strand = part.strand if part.strand is not None else location.strand
+            display_start, display_end = _absolute_display_interval(
+                start,
+                end,
+                coord_base,
+                coord_step,
+            )
             parts.append(
                 {
-                    "start": start,
-                    "end": end,
+                    "start": display_start,
+                    "end": display_end,
                     "strand": _strand_display(strand),
-                    "display": f"{start + 1}..{end}",
+                    "display": f"{display_start + 1}..{display_end}",
                 }
             )
         except Exception:
@@ -242,6 +285,7 @@ def extract_features_from_records_payload(
         record_id = record.id or f"Record_{rec_idx}"
         hash_record_id = record.id
         organism = _get_record_organism(record)
+        coord_base, coord_step = _read_record_coord_map(record)
         record_ids.append(record_id)
         for feat in record.features:
             if not should_render_feature(
@@ -253,10 +297,20 @@ def extract_features_from_records_payload(
             ):
                 continue
 
-            start = int(feat.location.start)
-            end = int(feat.location.end)
+            feature_start = int(feat.location.start)
+            feature_end = int(feat.location.end)
+            start, end = _absolute_display_interval(
+                feature_start,
+                feature_end,
+                coord_base,
+                coord_step,
+            )
             strand_raw = feat.location.strand
-            location_parts = _format_location_parts(feat.location)
+            location_parts = _format_location_parts(
+                feat.location,
+                coord_base,
+                coord_step,
+            )
             nucleotide_sequence, sequence_warnings = _extract_nucleotide_sequence(feat, record)
             amino_acid_sequence, translation_warnings = _extract_amino_acid_sequence(
                 feat,

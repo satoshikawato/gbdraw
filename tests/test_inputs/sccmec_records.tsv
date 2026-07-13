@@ -1,0 +1,5 @@
+gbk	record_label	record_id	region	reverse_complement	order
+NCTC8325.gb	NCTC 8325 (MSSA; empty site)	NC_007795.1	30000-100000	0	1
+COL.gb	COL (SCCmec I)	NC_002951.2	30000-100000	0	2
+N315.gb	N315 (SCCmec II)	NC_002745.2	30000-100000	0	3
+MW2.gb	MW2 (SCCmec IVa)	NC_003923.1	30000-100000	0	4

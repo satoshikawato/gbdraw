@@ -331,6 +331,59 @@ def _web_transform_cds_span(start, end, strand, view_transform):
     display_strand = -strand if strand in {-1, 1} else strand
     return display_start, display_end, display_strand
 
+def _web_strand_symbol(strand):
+    if strand in (-1, 1, "-1", "1"):
+        return "+" if int(strand) == 1 else "-"
+    return str(strand or "").strip()
+
+def _web_read_record_coord_map(record):
+    annotations = getattr(record, "annotations", {}) or {}
+    try:
+        base = int(annotations.get("gbdraw_coord_base", 1))
+    except Exception:
+        base = 1
+    try:
+        step = int(annotations.get("gbdraw_coord_step", 1))
+    except Exception:
+        step = 1
+    if step == 0:
+        step = 1
+    return base, (1 if step > 0 else -1)
+
+def _web_absolute_display_interval(start, end, coord_base, coord_step):
+    start = int(start)
+    end = int(end)
+    coord_base = int(coord_base)
+    coord_step = 1 if int(coord_step) > 0 else -1
+    if end <= start:
+        coord = coord_base + (coord_step * start)
+        return coord - 1, coord
+    first_coord = coord_base + (coord_step * start)
+    last_coord = coord_base + (coord_step * (end - 1))
+    return min(first_coord, last_coord) - 1, max(first_coord, last_coord)
+
+def _web_member_display_coord_map(data, view_transform):
+    normalized = _normalize_web_view_transform(view_transform)
+    try:
+        base = int(data.get("coord_base", 1))
+    except Exception:
+        base = 1
+    try:
+        step = int(data.get("coord_step", 1))
+    except Exception:
+        step = 1
+    if step == 0:
+        step = 1
+    step = 1 if step > 0 else -1
+    if normalized["reverse"]:
+        try:
+            length = int(data.get("coord_length") or normalized["length"] or 0)
+        except Exception:
+            length = int(normalized["length"] or 0)
+        base = base + (step * max(0, length - 1))
+        step = -step
+    return base, step
+
 def _compute_web_feature_svg_id(record_id, feature_type, start, end, strand):
     from gbdraw.features.ids import compute_feature_hash_from_parts
 
@@ -497,7 +550,8 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         raise ValueError("No records found")
     return records[0]
 
-def _serialize_cds_protein(protein):
+def _serialize_cds_protein(protein, record=None):
+    coord_base, coord_step = _web_read_record_coord_map(record)
     return {
         "protein_id": protein.protein_id,
         "record_index": protein.record_index,
@@ -525,6 +579,9 @@ def _serialize_cds_protein(protein):
         "feature_hash_end": getattr(protein, "feature_hash_end", None),
         "feature_hash_strand": getattr(protein, "feature_hash_strand", None),
         "feature_hash_parts": [list(part) for part in (getattr(protein, "feature_hash_parts", ()) or ())],
+        "coord_base": coord_base,
+        "coord_step": coord_step,
+        "coord_length": len(record.seq) if record is not None else 0,
     }
 
 def _safe_web_protein_id_token(value):
@@ -589,7 +646,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             stable_record_key = f"r{record_index_offset + 1:04d}_{record.id}"
         proteins = _with_stable_web_protein_ids(proteins, stable_record_key)
         protein_map = {
-            protein.protein_id: _serialize_cds_protein(protein)
+            protein.protein_id: _serialize_cds_protein(protein, record)
             for protein in proteins
         }
         return json.dumps({
@@ -872,7 +929,7 @@ def _serialize_orthogroups_payload(orthogroups):
                         "featureSvgId": member.feature_svg_id,
                         "start": member.start,
                         "end": member.end,
-                        "strand": member.strand,
+                        "strand": _web_strand_symbol(member.strand),
                         "representative": member.representative,
                         "role": str(getattr(member, "role", "") or ""),
                         "confidence": str(getattr(member, "confidence", "") or ""),
@@ -895,6 +952,57 @@ def _serialize_orthogroups_payload(orthogroups):
             }
         )
     return payload
+
+def _web_orthogroup_member_display_metadata(record_payloads):
+    metadata = {}
+    for record in record_payloads:
+        raw_map = record.get("protein_map") or {}
+        view_transform = record.get("view_transform") or {}
+        if not isinstance(raw_map, dict):
+            continue
+        for protein_id, data in raw_map.items():
+            if not isinstance(data, dict):
+                continue
+            try:
+                display_start, display_end, display_strand = _web_transform_cds_span(
+                    data.get("start", 0),
+                    data.get("end", 0),
+                    data.get("strand"),
+                    view_transform,
+                )
+                coord_base, coord_step = _web_member_display_coord_map(data, view_transform)
+                absolute_start, absolute_end = _web_absolute_display_interval(
+                    display_start,
+                    display_end,
+                    coord_base,
+                    coord_step,
+                )
+            except Exception:
+                continue
+            metadata[str(data.get("protein_id") or protein_id)] = {
+                "start": absolute_start,
+                "end": absolute_end,
+                "strand": _web_strand_symbol(display_strand),
+            }
+    return metadata
+
+def _apply_web_orthogroup_member_display_metadata(groups, metadata_by_protein_id):
+    if not metadata_by_protein_id:
+        return groups
+    for group in groups or []:
+        if not isinstance(group, dict):
+            continue
+        for member in group.get("members", []) or []:
+            if not isinstance(member, dict):
+                continue
+            protein_id = str(member.get("proteinId") or member.get("protein_id") or "")
+            metadata = metadata_by_protein_id.get(protein_id)
+            if not metadata:
+                continue
+            member["start"] = metadata["start"]
+            member["end"] = metadata["end"]
+            member["strand"] = metadata["strand"]
+    return groups
 
 def convert_losatp_blastp_pairs_to_genomic_payload(
     pairs_json,
@@ -1059,6 +1167,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 record["protein_map"],
                 record["view_transform"],
             )
+        member_display_metadata = _web_orthogroup_member_display_metadata(record_payloads)
 
         combined_protein_map = {}
         for protein_map in protein_maps_by_record.values():
@@ -1219,6 +1328,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 for block in collinearity_result.blocks
             ]
             serialized_groups = _serialize_orthogroups_payload(collinearity_result.orthogroups)
+            _apply_web_orthogroup_member_display_metadata(serialized_groups, member_display_metadata)
             for group in serialized_groups:
                 group["scope"] = group_scope
                 group["groupKind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"
@@ -1308,8 +1418,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "hit_count": int(converted.shape[0]),
                 }
             )
-
-        return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": _serialize_orthogroups_payload(orthogroups)})
+        serialized_groups = _serialize_orthogroups_payload(orthogroups)
+        _apply_web_orthogroup_member_display_metadata(serialized_groups, member_display_metadata)
+        return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": serialized_groups})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 

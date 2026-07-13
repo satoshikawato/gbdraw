@@ -419,6 +419,7 @@ def _build_interactive_svg_context(
                 )
                 or stable_feature_id
             ),
+            records=records,
         )
         features = payload.get("features", [])
         if orthogroup_payload:

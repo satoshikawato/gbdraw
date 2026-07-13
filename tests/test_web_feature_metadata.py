@@ -11,6 +11,8 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.features.ids import compute_feature_hash
+from gbdraw.io.regions import apply_region_specs, parse_region_specs
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
 from gbdraw.features.visibility import compile_feature_visibility_rules, should_render_feature
 
@@ -250,6 +252,58 @@ def test_web_feature_extraction_adds_compound_location_parts(
         {"start": 6, "end": 9, "strand": "+", "display": "7..9"},
     ]
     assert feature["nucleotide_sequence"] == "AAAGGG"
+
+
+def test_web_feature_extraction_region_uses_absolute_display_coordinates(
+    tmp_path: Path,
+) -> None:
+    record = SeqRecord(Seq("A" * 60), id="NC_REGION", name="Region")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(9, 20, strand=1),
+            type="misc_feature",
+            qualifiers={"note": ["visible in cropped region"]},
+        )
+    )
+    path = _write_genbank(tmp_path, record)
+
+    payload = extract_features_from_genbank_payload(path, region_spec="10-30")
+    feature = payload["features"][0]
+    cropped_record = apply_region_specs([record], parse_region_specs(["10-30"]))[0]
+
+    assert feature["start"] == 9
+    assert feature["end"] == 20
+    assert feature["location_parts"] == [
+        {"start": 9, "end": 20, "strand": "+", "display": "10..20"}
+    ]
+    assert feature["svg_id"] == compute_feature_hash(
+        cropped_record.features[0],
+        record_id=cropped_record.id,
+    )
+
+
+def test_web_feature_extraction_region_reverse_uses_absolute_display_coordinates(
+    tmp_path: Path,
+) -> None:
+    record = SeqRecord(Seq("A" * 120), id="NC_REGION_RC", name="RegionRc")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(89, 99, strand=1),
+            type="misc_feature",
+            qualifiers={"note": ["visible in reverse-complement region"]},
+        )
+    )
+    path = _write_genbank(tmp_path, record)
+
+    payload = extract_features_from_genbank_payload(path, region_spec="80-100:rc")
+    feature = payload["features"][0]
+
+    assert feature["start"] == 89
+    assert feature["end"] == 99
+    assert feature["strand"] == "-"
+    assert feature["location_parts"] == [
+        {"start": 89, "end": 99, "strand": "-", "display": "90..99"}
+    ]
 
 
 def test_web_feature_selector_record_location_matches_visibility_rule(

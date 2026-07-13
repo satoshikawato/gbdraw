@@ -3467,7 +3467,8 @@ json.dumps({
                 recordSelector,
                 recordInstanceKey,
                 recordIndex: idx,
-                featureVisibility: featureVisibilityCacheKey
+                featureVisibility: featureVisibilityCacheKey,
+                proteinMapSchema: 2
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
           const usePersistentFastaCache = !useProteinBlastp;

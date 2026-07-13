@@ -646,6 +646,13 @@ const standaloneIntervalText = (start, end) => {
   return startText || endText;
 };
 
+const standaloneStrandText = (strand) => {
+  const text = String(strand || '').trim();
+  if (text === '1') return '+';
+  if (text === '-1') return '-';
+  return text;
+};
+
 const standaloneMemberLocationText = (member) => {
   if (!member || typeof member !== 'object') return '';
   const start = Number(member.start);
@@ -653,7 +660,7 @@ const standaloneMemberLocationText = (member) => {
   const startText = Number.isFinite(start) ? String(start + 1) : String(member.start ?? '').trim();
   const endText = Number.isFinite(end) ? String(end) : String(member.end ?? '').trim();
   const range = startText && endText ? `${startText}..${endText}` : startText || endText;
-  const strand = String(member.strand || '').trim();
+  const strand = standaloneStrandText(member.strand);
   return range && strand ? `${range} (${strand})` : range;
 };
 

@@ -90,7 +90,8 @@ const memberLocationText = (member) => {
   const start = Number(member?.start);
   const end = Number(member?.end);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return '';
-  const strand = member?.strand ? `(${member.strand})` : '';
+  const normalizedStrand = normalizeMemberStrand(member?.strand);
+  const strand = normalizedStrand ? `(${normalizedStrand})` : '';
   return `${start + 1}-${end}${strand}`;
 };
 

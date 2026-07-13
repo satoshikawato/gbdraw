@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import Any, Callable, Mapping, Sequence
 
 
+_COORD_BASE_KEY = "gbdraw_coord_base"
+_COORD_STEP_KEY = "gbdraw_coord_step"
+
+
 def _get_value(source: Any, key: str, default: Any = None) -> Any:
     if isinstance(source, Mapping):
         return source.get(key, default)
@@ -32,6 +36,51 @@ def _float_value(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _strand_display(strand: Any) -> str:
+    if strand == 1 or str(strand).strip() == "1":
+        return "+"
+    if strand == -1 or str(strand).strip() == "-1":
+        return "-"
+    return _text(strand)
+
+
+def _read_record_coord_map(record: Any) -> tuple[int, int]:
+    annotations = getattr(record, "annotations", None) or {}
+    try:
+        base = int(annotations.get(_COORD_BASE_KEY, 1))
+    except (TypeError, ValueError):
+        base = 1
+    try:
+        step = int(annotations.get(_COORD_STEP_KEY, 1))
+    except (TypeError, ValueError):
+        step = 1
+    if step == 0:
+        step = 1
+    return base, (1 if step > 0 else -1)
+
+
+def _record_coord_maps(records: Sequence[Any] | None) -> dict[int, tuple[int, int]]:
+    if records is None:
+        return {}
+    return {index: _read_record_coord_map(record) for index, record in enumerate(records)}
+
+
+def _absolute_display_interval(
+    start: int,
+    end: int,
+    coord_base: int,
+    coord_step: int,
+) -> tuple[int, int]:
+    if end <= start:
+        coord = coord_base + (coord_step * start)
+        return coord - 1, coord
+    first_coord = coord_base + (coord_step * start)
+    last_coord = coord_base + (coord_step * (end - 1))
+    min_coord = min(first_coord, last_coord)
+    max_coord = max(first_coord, last_coord)
+    return min_coord - 1, max_coord
 
 
 def _serialize_orthogroup_name_candidate(candidate: Any) -> dict[str, object]:
@@ -82,6 +131,7 @@ FeatureIdMapper = Callable[[int, str], str]
 def _serialize_member(
     member: Any,
     feature_id_mapper: FeatureIdMapper | None = None,
+    record_coord_maps: Mapping[int, tuple[int, int]] | None = None,
 ) -> dict[str, object]:
     record_index = _int_value(_get_value(member, "record_index"))
     stable_feature_svg_id = _text(_get_value(member, "feature_svg_id"))
@@ -90,6 +140,11 @@ def _serialize_member(
         if feature_id_mapper is not None and stable_feature_svg_id
         else stable_feature_svg_id
     )
+    start = _int_value(_get_value(member, "start"))
+    end = _int_value(_get_value(member, "end"))
+    coord_map = (record_coord_maps or {}).get(record_index)
+    if coord_map is not None:
+        start, end = _absolute_display_interval(start, end, coord_map[0], coord_map[1])
     return {
         "orthogroupId": _text(_get_value(member, "orthogroup_id")),
         "proteinId": _text(_get_value(member, "protein_id")),
@@ -101,9 +156,9 @@ def _serialize_member(
         "featureSvgId": feature_svg_id,
         "stableFeatureSvgId": stable_feature_svg_id,
         "stable_feature_svg_id": stable_feature_svg_id,
-        "start": _int_value(_get_value(member, "start")),
-        "end": _int_value(_get_value(member, "end")),
-        "strand": _get_value(member, "strand"),
+        "start": start,
+        "end": end,
+        "strand": _strand_display(_get_value(member, "strand")),
         "representative": bool(_get_value(member, "representative")),
         "role": _text(_get_value(member, "role")),
         "confidence": _text(_get_value(member, "confidence")),
@@ -126,11 +181,14 @@ def serialize_orthogroups_payload(
     orthogroups: Any,
     *,
     feature_id_mapper: FeatureIdMapper | None = None,
+    records: Sequence[Any] | None = None,
+    record_coord_maps: Mapping[int, tuple[int, int]] | None = None,
 ) -> list[dict[str, object]]:
     """Serialize OrthogroupResult to the web interactive SVG payload shape."""
 
     if orthogroups is None:
         return []
+    resolved_coord_maps = record_coord_maps or _record_coord_maps(records)
     groups = _get_value(orthogroups, "orthogroups", {}) or {}
     names_by_id = _get_value(orthogroups, "names_by_orthogroup_id", {}) or {}
     descriptions_by_id = _get_value(orthogroups, "descriptions_by_orthogroup_id", {}) or {}
@@ -195,7 +253,11 @@ def serialize_orthogroups_payload(
                     for edge in (related_edges_by_id.get(orthogroup_id, []) or [])
                 ],
                 "members": [
-                    _serialize_member(member, feature_id_mapper=feature_id_mapper)
+                    _serialize_member(
+                        member,
+                        feature_id_mapper=feature_id_mapper,
+                        record_coord_maps=resolved_coord_maps,
+                    )
                     for member in members
                 ],
             }

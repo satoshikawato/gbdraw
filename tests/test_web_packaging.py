@@ -512,6 +512,51 @@ def test_web_orthogroup_payload_serializes_record_local_scope() -> None:
     assert payload[0]["member_count"] == 1
     assert payload[0]["record_coverage_count"] == 1
     assert payload[0]["members"][0]["role"] == "local_paralog"
+    assert payload[0]["members"][0]["strand"] == "+"
+
+
+def test_web_losatp_orthogroup_members_use_absolute_region_coordinates() -> None:
+    helpers_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    groups = [
+        {
+            "members": [
+                {
+                    "proteinId": "p1",
+                    "start": 0,
+                    "end": 457,
+                    "strand": "-",
+                }
+            ]
+        }
+    ]
+    metadata = namespace["_web_orthogroup_member_display_metadata"](
+        [
+            {
+                "protein_map": {
+                    "p1": {
+                        "protein_id": "p1",
+                        "start": 0,
+                        "end": 457,
+                        "strand": -1,
+                        "coord_base": 10000,
+                        "coord_step": 1,
+                        "coord_length": 1000,
+                    }
+                },
+                "view_transform": {"length": 1000, "reverse": False},
+            }
+        ]
+    )
+
+    namespace["_apply_web_orthogroup_member_display_metadata"](groups, metadata)
+
+    assert groups[0]["members"][0]["start"] == 9999
+    assert groups[0]["members"][0]["end"] == 10456
+    assert groups[0]["members"][0]["strand"] == "-"
 
 
 def test_web_collinear_payload_splits_local_groups_from_global_orthogroups() -> None:

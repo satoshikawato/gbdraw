@@ -271,8 +271,72 @@ def test_linear_cli_interactive_context_includes_orthogroup_payload() -> None:
     context = linear_cli._build_interactive_svg_context([record], {"CDS"}, orthogroups)
 
     assert context.orthogroups[0]["id"] == "og_1"
+    assert context.orthogroups[0]["members"][0]["start"] == 0
+    assert context.orthogroups[0]["members"][0]["end"] == 9
+    assert context.orthogroups[0]["members"][0]["strand"] == "+"
     assert context.features[0]["orthogroup_id"] == "og_1"
     assert context.features[0]["orthogroup_member"]["sourceProteinId"] == "WP_000001.1"
+    assert context.features[0]["orthogroup_member"]["strand"] == "+"
+
+
+def test_linear_cli_interactive_context_orthogroup_members_use_absolute_region_coordinates() -> None:
+    feature = SeqFeature(
+        SimpleLocation(0, 457, strand=-1),
+        type="CDS",
+        qualifiers={"gene": ["geneA"], "translation": ["M"]},
+    )
+    record = SeqRecord(Seq("N" * 1000), id="rec1", features=[feature])
+    record.annotations["gbdraw_coord_base"] = 10000
+    record.annotations["gbdraw_coord_step"] = 1
+    svg_id = compute_feature_hash(feature, record_id=record.id)
+    member = SimpleNamespace(
+        orthogroup_id="og_1",
+        protein_id="gbd_r0001_cds000001",
+        source_protein_id="WP_000001.1",
+        record_index=0,
+        record_id="rec1",
+        feature_index=0,
+        label="geneA",
+        feature_svg_id=svg_id,
+        start=0,
+        end=457,
+        strand=-1,
+        representative=True,
+        role="anchor",
+        confidence="high",
+        assignment_reason="rbh",
+        supporting_edges=(),
+        best_core_support=0.0,
+        second_best_core_support=0.0,
+        gene="geneA",
+        product="protein A",
+        note=None,
+        locus_tag=None,
+        gene_id=None,
+        old_locus_tag=None,
+    )
+    orthogroups = SimpleNamespace(
+        orthogroups={"og_1": [member]},
+        names_by_orthogroup_id={"og_1": "geneA"},
+        descriptions_by_orthogroup_id={"og_1": "protein A"},
+        name_candidates_by_orthogroup_id={},
+        confidence_by_orthogroup_id={"og_1": "high"},
+        rbh_orthogroups={"og_1": ("gbd_r0001_cds000001",)},
+        ortholog_edges_by_orthogroup_id={},
+        ortholog_paths_by_orthogroup_id={},
+        related_edges_by_orthogroup_id={},
+        scope_by_orthogroup_id={"og_1": "cross_record"},
+        source_record_index_by_orthogroup_id={},
+    )
+
+    context = linear_cli._build_interactive_svg_context([record], {"CDS"}, orthogroups)
+
+    member_payload = context.orthogroups[0]["members"][0]
+    assert member_payload["start"] == 9999
+    assert member_payload["end"] == 10456
+    assert member_payload["strand"] == "-"
+    assert context.features[0]["orthogroup_member"]["start"] == 9999
+    assert context.features[0]["orthogroup_member"]["end"] == 10456
 
 
 def test_enrich_svg_uses_orthogroup_payload_for_feature_and_match_metadata() -> None:
