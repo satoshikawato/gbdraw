@@ -569,8 +569,8 @@ export const migrateFeatureOverrideState = ({
   editorState,
   migration
 }) => {
-  const nextFeatureState = cloneJson(featureState || {}, {});
-  const nextEditorState = cloneJson(editorState || {}, {});
+  const nextFeatureState = cloneJsonValue(featureState || {}, {});
+  const nextEditorState = cloneJsonValue(editorState || {}, {});
   const keySets = recoveredKeySets(nextFeatureState.extractedFeatures);
   const skipped = { count: 0 };
   const featureIdMaps = [migration?.featureIdMap || {}];

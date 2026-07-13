@@ -23,7 +23,9 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     )
     sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
     sequence_fasta_path.write_text(
-        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-utils.js", "./feature-utils.mjs"),
         encoding="utf-8",
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"
