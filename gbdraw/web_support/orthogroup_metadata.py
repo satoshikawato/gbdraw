@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping, Sequence
 
+from gbdraw.core.record_metadata import (
+    _absolute_display_interval,
+    _read_coord_map as _read_record_coord_map,
+)
 
-_COORD_BASE_KEY = "gbdraw_coord_base"
-_COORD_STEP_KEY = "gbdraw_coord_step"
 
 
 def _get_value(source: Any, key: str, default: Any = None) -> Any:
@@ -46,19 +48,6 @@ def _strand_display(strand: Any) -> str:
     return _text(strand)
 
 
-def _read_record_coord_map(record: Any) -> tuple[int, int]:
-    annotations = getattr(record, "annotations", None) or {}
-    try:
-        base = int(annotations.get(_COORD_BASE_KEY, 1))
-    except (TypeError, ValueError):
-        base = 1
-    try:
-        step = int(annotations.get(_COORD_STEP_KEY, 1))
-    except (TypeError, ValueError):
-        step = 1
-    if step == 0:
-        step = 1
-    return base, (1 if step > 0 else -1)
 
 
 def _record_coord_maps(records: Sequence[Any] | None) -> dict[int, tuple[int, int]]:
@@ -67,20 +56,6 @@ def _record_coord_maps(records: Sequence[Any] | None) -> dict[int, tuple[int, in
     return {index: _read_record_coord_map(record) for index, record in enumerate(records)}
 
 
-def _absolute_display_interval(
-    start: int,
-    end: int,
-    coord_base: int,
-    coord_step: int,
-) -> tuple[int, int]:
-    if end <= start:
-        coord = coord_base + (coord_step * start)
-        return coord - 1, coord
-    first_coord = coord_base + (coord_step * start)
-    last_coord = coord_base + (coord_step * (end - 1))
-    min_coord = min(first_coord, last_coord)
-    max_coord = max(first_coord, last_coord)
-    return min_coord - 1, max_coord
 
 
 def _serialize_orthogroup_name_candidate(candidate: Any) -> dict[str, object]:

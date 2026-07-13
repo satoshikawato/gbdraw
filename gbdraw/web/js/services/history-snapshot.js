@@ -5,7 +5,7 @@ import {
 } from '../app/feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 
-const cloneJsonData = (value) => {
+export const cloneJsonData = (value) => {
   if (value === null || value === undefined) return value;
   return JSON.parse(JSON.stringify(value));
 };

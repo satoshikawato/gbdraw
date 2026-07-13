@@ -319,30 +319,6 @@ def _label_x_bounds_cached(
     return min_x, max_x
 
 
-def _leader_anchor_candidates(label: dict, total_length: int) -> list[tuple[float, float]]:
-    """
-    Return discrete candidate anchor points on the label bbox perimeter:
-    4 corners + 4 edge midpoints.
-    """
-    if "start_x" not in label or "start_y" not in label:
-        return []
-    if "width_px" not in label or "height_px" not in label:
-        return []
-
-    min_x, max_x = _label_x_bounds(label, minimum_margin=0.0)
-    min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=0.0)
-    mid_x = 0.5 * (min_x + max_x)
-    mid_y = 0.5 * (min_y + max_y)
-    return [
-        (min_x, min_y),
-        (min_x, max_y),
-        (max_x, min_y),
-        (max_x, max_y),
-        (mid_x, min_y),
-        (mid_x, max_y),
-        (min_x, mid_y),
-        (max_x, mid_y),
-    ]
 
 
 def _leader_start_meta(label: dict, total_length: int | None) -> tuple[str, float, float, float, float] | None:

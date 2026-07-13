@@ -388,13 +388,15 @@ def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    normalization_js = (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 
     assert '<option value="distribution_split">Distribution split</option>' not in index_html
     assert '<option value="family_merge">Family merge</option>' not in index_html
     assert "orthogroupMembershipMode: 'anchor_core_v1'" in state_js
-    assert "outparalog_split: 'anchor_core_v1'" in config_js
-    assert "outparalog_split: 'anchor_core_v1'" in run_analysis_js
+    assert "outparalog_split: 'anchor_core_v1'" in normalization_js
+    assert "normalizeOrthogroupMembershipMode" in config_js
+    assert "normalizeOrthogroupMembershipMode" in run_analysis_js
 
 
 def test_web_linear_definition_line_styles_contract() -> None:
@@ -921,7 +923,7 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "nucleotideSequence" in svg_actions_source
     assert "aminoAcidSequence" in svg_actions_source
     assert "buildFeatureSequenceFastas" in svg_actions_source
-    assert "import { getFeatureCaption, resolveDisplayProteinId } from '../feature-utils.js';" in svg_actions_source
+    assert "import { getFeatureCaption, normalizeStringArray, resolveDisplayProteinId } from '../feature-utils.js';" in svg_actions_source
     assert "const proteinId = resolveDisplayProteinId(feat, member);" in svg_actions_source
     assert "label: 'Protein ID', value: proteinId" in svg_actions_source
     assert "document.elementsFromPoint(eventLike.clientX, eventLike.clientY)" in svg_actions_source

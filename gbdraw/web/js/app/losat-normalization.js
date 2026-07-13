@@ -1,5 +1,25 @@
 export const normalizeCollinearAnchorMode = (_value) => 'rbh';
 
+export const normalizeOrthogroupMembershipMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const aliases = {
+    legacy: 'anchor_core_v1',
+    rbh: 'anchor_core_v1',
+    rbh_only: 'anchor_core_v1',
+    merge: 'anchor_core_v1',
+    family: 'anchor_core_v1',
+    family_merge: 'anchor_core_v1',
+    local_split: 'anchor_core_v1',
+    density_split: 'anchor_core_v1',
+    outparalog_split: 'anchor_core_v1',
+    distribution_split: 'anchor_core_v1',
+    orthogroups: 'anchor_core_v1',
+    anchor_core: 'anchor_core_v1'
+  };
+  const resolved = aliases[normalized] || normalized;
+  return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
+};
+
 export const normalizeCollinearSearchScope = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   const aliases = {

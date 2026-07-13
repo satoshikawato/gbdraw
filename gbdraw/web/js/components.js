@@ -49,6 +49,16 @@ export const HelpTip = {
   }
 };
 
+export const AutoValueField = {
+  props: ['visible', 'text'],
+  template: `
+    <div class="auto-value-field">
+      <span v-if="visible" class="auto-value-placeholder">{{ text }}</span>
+      <slot></slot>
+    </div>
+  `
+};
+
 export const FileUploader = {
   template: '#file-uploader-template',
   props: ['label', 'accept', 'modelValue', 'small', 'multiple'],

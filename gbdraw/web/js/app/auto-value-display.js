@@ -1,3 +1,5 @@
+import { normalizeOptionalText } from './track-slot-display.js';
+
 const LENGTH_THRESHOLD_BP = 50000;
 
 const DEFAULTS = Object.freeze({
@@ -71,11 +73,6 @@ const LINEAR_TICK_THRESHOLDS = Object.freeze([
   [5_000_000, 500_000],
   [Infinity, 1_000_000]
 ]);
-
-const normalizeOptionalText = (value) => {
-  const text = String(value ?? '').trim();
-  return text.length > 0 ? text : null;
-};
 
 const parsePositiveNumber = (value) => {
   const text = normalizeOptionalText(value);

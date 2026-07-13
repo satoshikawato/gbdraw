@@ -1,3 +1,5 @@
+import { concatUint8Arrays } from '../services/losat-runtime.js';
+
 const DEFAULT_INITIAL_MEMORY_PAGES = 21;
 const DEFAULT_MAXIMUM_MEMORY_PAGES = 16384;
 const WORKER_PREPARE_TIMEOUT_MS = 120000;
@@ -8,17 +10,6 @@ const childWorkerUrl = new URL('./losat-wasi-thread-worker.js', import.meta.url)
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const concatUint8Arrays = (chunks) => {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  chunks.forEach((chunk) => {
-    merged.set(chunk, offset);
-    offset += chunk.length;
-  });
-  return merged;
 };
 
 const compileLosatModule = async (module, wasmUrl) => {

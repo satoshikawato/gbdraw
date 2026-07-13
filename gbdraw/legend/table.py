@@ -14,6 +14,15 @@ from gbdraw.core.color import (
 _COLLINEARITY_COLOR_MODES = {"average_identity", "orientation", "orientation_identity"}
 
 
+def _unique_legend_key(legend_table: dict, preferred: str) -> str:
+    if preferred not in legend_table:
+        return preferred
+    suffix = 2
+    while f"{preferred} ({suffix})" in legend_table:
+        suffix += 1
+    return f"{preferred} ({suffix})"
+
+
 def _normalize_collinearity_legend_color_mode(value: object) -> str | None:
     normalized = str(value or "").strip().lower().replace("-", "_")
     if normalized == "identity":

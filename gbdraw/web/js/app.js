@@ -1,10 +1,10 @@
-import { HelpTip, FileUploader } from './components.js';
+import { AutoValueField, HelpTip, FileUploader } from './components.js';
 import { createAppSetup } from './app/app-setup.js';
 
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { FileUploader, HelpTip },
+  components: { AutoValueField, FileUploader, HelpTip },
   setup: createAppSetup
 });
 

@@ -1,4 +1,5 @@
 import { resolveColorToHex } from './color-utils.js';
+import { normalizeOptionalText } from './track-slot-display.js';
 
 const SKEW_COLOR_PARAM_TO_PALETTE_KEY = Object.freeze({
   positive_color: 'skew_high',
@@ -15,11 +16,6 @@ const unwrapRef = (value) => {
     return value.value;
   }
   return value;
-};
-
-const normalizeOptionalText = (value) => {
-  const text = String(value ?? '').trim();
-  return text.length > 0 ? text : null;
 };
 
 export const normalizeColorInputValue = (value) => {

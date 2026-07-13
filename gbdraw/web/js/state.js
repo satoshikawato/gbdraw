@@ -7,6 +7,7 @@ import { createDefaultLinearDefinitionLineStyles } from './app/cli-args.js';
 import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
 import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
 import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
+import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -857,10 +858,6 @@ const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
 const normalizeCircularLegendPosition = (value) => String(value || '').trim().toLowerCase() || 'left';
-const normalizeCircularPlotTitlePosition = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
-};
 const shouldDeferCircularPreviewUpdates = computed(
   () =>
     generatedMode.value === 'circular' &&

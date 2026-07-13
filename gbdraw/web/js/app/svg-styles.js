@@ -6,6 +6,7 @@ import {
 } from './color-utils.js';
 import { FEATURE_SELECTOR, getFeatureElementIndex, getFeatureElements, getFeatureIdentity } from './feature-editor/svg-actions.js';
 import { ruleMatchesFeature } from './feature-utils.js';
+import { parseTransformXY } from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 
 export const createSvgStyles = ({ state, watch, legendActions }) => {
@@ -340,11 +341,6 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       } else {
         const texts = featureLegendGroup.querySelectorAll('text');
         const allPaths = featureLegendGroup.querySelectorAll('path');
-        const parseTransform = (transform) => {
-          if (!transform) return { x: 0, y: 0 };
-          const match = transform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
-          return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
-        };
         texts.forEach((textEl) => {
           const textContent = textEl.textContent?.trim();
           if (!textContent) return;
@@ -353,11 +349,11 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
           const newColor = resolveLegendColor(textContent, colors);
           if (!newColor) return;
 
-          const textPos = parseTransform(textEl.getAttribute('transform'));
+          const textPos = parseTransformXY(textEl.getAttribute('transform'));
           let bestPath = null;
           let bestX = -Infinity;
           for (const path of allPaths) {
-            const pathPos = parseTransform(path.getAttribute('transform'));
+            const pathPos = parseTransformXY(path.getAttribute('transform'));
             const fill = path.getAttribute('fill');
             if (
               Math.abs(pathPos.y - textPos.y) < 2 &&

@@ -7,6 +7,10 @@ from typing import Any
 from Bio import SeqIO
 from Bio.Seq import Seq
 
+from gbdraw.core.record_metadata import (
+    _absolute_display_interval,
+    _read_coord_map as _read_record_coord_map,
+)
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.visibility import (
@@ -17,8 +21,6 @@ from gbdraw.features.visibility import (
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
-_COORD_BASE_KEY = "gbdraw_coord_base"
-_COORD_STEP_KEY = "gbdraw_coord_step"
 
 
 def _normalize_record_selector(record_selector: object | None) -> str | None:
@@ -112,35 +114,8 @@ def _get_location_parts(location: Any) -> list[Any]:
     return [location]
 
 
-def _read_record_coord_map(record: Any) -> tuple[int, int]:
-    annotations = getattr(record, "annotations", None) or {}
-    try:
-        base = int(annotations.get(_COORD_BASE_KEY, 1))
-    except (TypeError, ValueError):
-        base = 1
-    try:
-        step = int(annotations.get(_COORD_STEP_KEY, 1))
-    except (TypeError, ValueError):
-        step = 1
-    if step == 0:
-        step = 1
-    return base, (1 if step > 0 else -1)
 
 
-def _absolute_display_interval(
-    start: int,
-    end: int,
-    coord_base: int,
-    coord_step: int,
-) -> tuple[int, int]:
-    if end <= start:
-        coord = coord_base + (coord_step * start)
-        return coord - 1, coord
-    first_coord = coord_base + (coord_step * start)
-    last_coord = coord_base + (coord_step * (end - 1))
-    min_coord = min(first_coord, last_coord)
-    max_coord = max(first_coord, last_coord)
-    return min_coord - 1, max_coord
 
 
 def _format_location_parts(

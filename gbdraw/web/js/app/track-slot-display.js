@@ -1,4 +1,4 @@
-const normalizeOptionalText = (value) => {
+export const normalizeOptionalText = (value) => {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
 };

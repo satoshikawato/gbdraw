@@ -5,9 +5,12 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const sourceUrl = new URL('../../gbdraw/web/js/app/depth-track-state.js', import.meta.url);
+const displaySourceUrl = new URL('../../gbdraw/web/js/app/track-slot-display.js', import.meta.url);
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-depth-track-state-'));
 const tempModulePath = join(tempDir, 'depth-track-state.mjs');
+await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n');
 await writeFile(tempModulePath, await readFile(sourceUrl, 'utf8'));
+await writeFile(join(tempDir, 'track-slot-display.js'), await readFile(displaySourceUrl, 'utf8'));
 
 const {
   depthFileSlotsFromValue,

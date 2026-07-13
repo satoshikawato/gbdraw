@@ -2,6 +2,7 @@ import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../st
 import { resolveColorToHex } from '../app/color-utils.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
+import { cloneJsonData } from './history-snapshot.js';
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
@@ -30,10 +31,15 @@ import {
 import {
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
-  normalizeGroupMetadataScope
+  normalizeGroupMetadataScope,
+  normalizeOrthogroupMembershipMode
 } from '../app/losat-normalization.js';
 import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
+import {
+  normalizeCircularPlotTitlePosition,
+  normalizeLinearPlotTitlePosition
+} from '../app/plot-title-position.js';
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
@@ -125,11 +131,6 @@ const cloneStringMap = (source) => {
     cloned[normalizedKey] = String(value ?? '');
   });
   return cloned;
-};
-
-export const cloneJsonData = (value) => {
-  if (value === null || value === undefined) return value;
-  return JSON.parse(JSON.stringify(value));
 };
 
 const normalizeFeatureVisibilityRulesForSession = (rules) => (
@@ -334,16 +335,6 @@ const buildSessionFilename = (title) => {
   return `${safe}.gbdraw-session.json`;
 };
 
-const normalizeCircularPlotTitlePosition = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
-};
-
-const normalizeLinearPlotTitlePosition = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
-};
-
 const normalizeLegendPosition = (value, fallback = 'left') => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized || fallback;
@@ -447,26 +438,6 @@ const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
-};
-
-const normalizeOrthogroupMembershipMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  const aliases = {
-    legacy: 'anchor_core_v1',
-    rbh: 'anchor_core_v1',
-    rbh_only: 'anchor_core_v1',
-    merge: 'anchor_core_v1',
-    family: 'anchor_core_v1',
-    family_merge: 'anchor_core_v1',
-    local_split: 'anchor_core_v1',
-    density_split: 'anchor_core_v1',
-    outparalog_split: 'anchor_core_v1',
-    distribution_split: 'anchor_core_v1',
-    orthogroups: 'anchor_core_v1',
-    anchor_core: 'anchor_core_v1'
-  };
-  const resolved = aliases[normalized] || normalized;
-  return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
 };
 
 const normalizePairwiseMatchStyle = (value) => {

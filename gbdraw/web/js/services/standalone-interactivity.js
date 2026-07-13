@@ -1,5 +1,7 @@
 import { buildFeatureSequenceFastas } from '../app/feature-sequence-fasta.js';
+import { normalizeStringArray } from '../app/feature-utils.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
+import { ensureSvgDefs } from './svg-serialization.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
@@ -46,16 +48,6 @@ const getElementFeatureId = (element) =>
   );
 
 
-
-const normalizeStringArray = (value) => {
-  if (Array.isArray(value)) {
-    return value
-      .filter((item) => item !== null && item !== undefined)
-      .map((item) => String(item));
-  }
-  if (value === null || value === undefined || value === '') return [];
-  return [String(value)];
-};
 
 const normalizeQualifierMap = (qualifiers) => {
   const normalized = {};
@@ -1280,15 +1272,6 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
       hover_rows: hoverRows
     };
   });
-};
-
-const ensureSvgDefs = (svg) => {
-  let defs = svg.querySelector('defs');
-  if (!defs) {
-    defs = document.createElementNS(SVG_NS, 'defs');
-    svg.insertBefore(defs, svg.firstChild);
-  }
-  return defs;
 };
 
 const appendStandaloneFeatureGlowFilter = (

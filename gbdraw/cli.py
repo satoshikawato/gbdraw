@@ -159,9 +159,6 @@ def main() -> None:
                 import os
                 web_dir = os.path.join(os.path.dirname(__file__), 'web')
 
-            if not str(web_dir).endswith("index.html") and not str(web_dir).endswith("web"):
-                pass
-            
             print("Launching gbdraw GUI (Local Mode)...")
             start_local_server(str(web_dir))
         else:

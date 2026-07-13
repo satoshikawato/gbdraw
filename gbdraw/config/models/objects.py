@@ -119,17 +119,6 @@ def _optional_depth_bound(value: Any) -> float | None:
     return float(value)
 
 
-def _optional_depth_positive(value: Any) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
-            return None
-        return float(normalized)
-    return float(value)
-
-
 def _optional_gc_content_bound(value: Any) -> float | None:
     if value is None:
         return None
@@ -203,8 +192,8 @@ class ObjectsDepthConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsDepthConfig":
-        legacy_tick_interval = _optional_depth_positive(d.get("tick_interval", None))
-        large_tick_interval = _optional_depth_positive(d.get("large_tick_interval", None))
+        legacy_tick_interval = _optional_depth_bound(d.get("tick_interval", None))
+        large_tick_interval = _optional_depth_bound(d.get("large_tick_interval", None))
         if large_tick_interval is None:
             large_tick_interval = legacy_tick_interval
         return cls(
@@ -219,8 +208,8 @@ class ObjectsDepthConfig:
             show_ticks=_bool_from_config(d.get("show_ticks", True), default=True),
             tick_interval=large_tick_interval,
             large_tick_interval=large_tick_interval,
-            small_tick_interval=_optional_depth_positive(d.get("small_tick_interval", None)),
-            tick_font_size=_optional_depth_positive(d.get("tick_font_size", None)),
+            small_tick_interval=_optional_depth_bound(d.get("small_tick_interval", None)),
+            tick_font_size=_optional_depth_bound(d.get("tick_font_size", None)),
             share_axis=_bool_from_config(d.get("share_axis", False), default=False),
         )
 

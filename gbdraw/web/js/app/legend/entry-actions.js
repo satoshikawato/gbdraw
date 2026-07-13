@@ -456,12 +456,6 @@ json.dumps({"width": width})
 
     const entries = [];
 
-    const parseTransform = (transform) => {
-      if (!transform) return { x: 0, y: 0 };
-      const match = transform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
-      return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
-    };
-
     let entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
     if (entryGroups.length === 0) {
       const texts = Array.from(targetGroup.querySelectorAll('text'));
@@ -472,14 +466,14 @@ json.dumps({"width": width})
         const caption = textEl.textContent?.trim();
         if (!caption) return;
 
-        const textPos = parseTransform(textEl.getAttribute('transform'));
+        const textPos = parseTransformXY(textEl.getAttribute('transform'));
         let bestPath = null;
         let bestX = -Infinity;
 
         for (const path of allPaths) {
           const fill = path.getAttribute('fill');
           if (!fill || fill === 'none' || fill.startsWith('url(')) continue;
-          const pathPos = parseTransform(path.getAttribute('transform'));
+          const pathPos = parseTransformXY(path.getAttribute('transform'));
           if (Math.abs(pathPos.y - textPos.y) < 2 && pathPos.x < textPos.x) {
             if (pathPos.x > bestX) {
               bestX = pathPos.x;
@@ -524,10 +518,10 @@ json.dumps({"width": width})
 
       let xPos = 0,
         yPos = 0;
-      const groupTransform = parseTransform(entryGroup.getAttribute('transform'));
+      const groupTransform = parseTransformXY(entryGroup.getAttribute('transform'));
       const textEl = entryGroup.querySelector('text');
       if (textEl) {
-        const textTransform = parseTransform(textEl.getAttribute('transform'));
+        const textTransform = parseTransformXY(textEl.getAttribute('transform'));
         xPos = groupTransform.x + textTransform.x;
         yPos = groupTransform.y + textTransform.y;
       } else if (groupTransform.x !== 0 || groupTransform.y !== 0) {

@@ -1,14 +1,6 @@
-const FASTA_LINE_WIDTH = 60;
+import { normalizeStringArray } from './feature-utils.js';
 
-const normalizeStringArray = (value) => {
-  if (Array.isArray(value)) {
-    return value
-      .filter((item) => item !== null && item !== undefined)
-      .map((item) => String(item));
-  }
-  if (value === null || value === undefined || value === '') return [];
-  return [String(value)];
-};
+const FASTA_LINE_WIDTH = 60;
 
 const normalizeHeaderText = (value) =>
   String(value || '').replace(/\s+/g, ' ').trim();

@@ -13,6 +13,7 @@ from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
+from ..core.record_metadata import _read_coord_map, _write_coord_map
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
 
 logger = logging.getLogger(__name__)
@@ -22,31 +23,11 @@ _REGION_COORD_RE = re.compile(
     re.IGNORECASE,
 )
 
-_COORD_BASE_KEY = "gbdraw_coord_base"
-_COORD_STEP_KEY = "gbdraw_coord_step"
 _REGION_APPLIED_KEY = "gbdraw_region_applied"
 
 
-def _read_coord_map(record: SeqRecord) -> tuple[int, int]:
-    annotations = getattr(record, "annotations", None) or {}
-    try:
-        base = int(annotations.get(_COORD_BASE_KEY, 1))
-    except (TypeError, ValueError):
-        base = 1
-    try:
-        step = int(annotations.get(_COORD_STEP_KEY, 1))
-    except (TypeError, ValueError):
-        step = 1
-    if step == 0:
-        step = 1
-    return base, (1 if step > 0 else -1)
 
 
-def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:
-    if getattr(record, "annotations", None) is None:
-        record.annotations = {}
-    record.annotations[_COORD_BASE_KEY] = int(base)
-    record.annotations[_COORD_STEP_KEY] = 1 if int(step) >= 0 else -1
 
 
 @dataclass(frozen=True)

@@ -2,6 +2,7 @@ import {
   buildFeatureElementIndex,
   getFeatureElements
 } from '../feature-editor/svg-actions.js';
+import { setClassToken } from '../../services/svg-serialization.js';
 
 export const PREVIEW_FEATURE_SEARCH_MATCH_CLASS = 'gbdraw-preview-feature-search-match';
 export const PREVIEW_FEATURE_SEARCH_ACTIVE_CLASS = 'gbdraw-preview-feature-search-active-match';
@@ -17,23 +18,6 @@ export const resolvePreviewSvg = (root) => {
   if (!root) return null;
   if (root.matches?.('svg')) return root;
   return root.querySelector?.('svg') || null;
-};
-
-const setClassToken = (element, token, enabled) => {
-  if (!element) return;
-  if (element.classList?.toggle) {
-    element.classList.toggle(token, Boolean(enabled));
-    return;
-  }
-  const existing = String(element.getAttribute('class') || '').trim();
-  const tokens = existing ? existing.split(/\s+/).filter(Boolean) : [];
-  const nextTokens = tokens.filter((entry) => entry !== token);
-  if (enabled) nextTokens.push(token);
-  if (nextTokens.length) {
-    element.setAttribute('class', nextTokens.join(' '));
-  } else {
-    element.removeAttribute('class');
-  }
 };
 
 export const stripPreviewFeatureSearchClasses = (svg) => {

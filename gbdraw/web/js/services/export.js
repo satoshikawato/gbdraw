@@ -2,7 +2,9 @@ import { state } from '../state.js';
 import { setDpiInPng } from '../utils/png.js';
 import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
 import { enrichSvgWithStandaloneInteractivity, stripEditorOnlyCursorStyles } from './standalone-interactivity.js';
-import { stripTransientPreviewState } from './svg-serialization.js';
+import { ensureSvgDefs, stripTransientPreviewState } from './svg-serialization.js';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const getDownloadName = (extension) => {
   const baseName =
@@ -77,17 +79,6 @@ const getSvgDimensions = (svg) => {
   }
   if (!w || !h) return null;
   return { width: w, height: h };
-};
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-const ensureSvgDefs = (svg) => {
-  let defs = svg.querySelector('defs');
-  if (!defs) {
-    defs = document.createElementNS(SVG_NS, 'defs');
-    svg.insertBefore(defs, svg.firstChild);
-  }
-  return defs;
 };
 
 const moveGradientsToDefs = (svg) => {

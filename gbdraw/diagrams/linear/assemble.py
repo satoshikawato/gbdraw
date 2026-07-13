@@ -26,6 +26,7 @@ from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     DepthTrackSpec,
     build_depth_track_dataframes,
     depth_track_count,
+    depth_track_heights,
     normalize_depth_tracks,
     sync_depth_track_legend_entries,
 )
@@ -39,6 +40,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
+from ...configurators.gc import _slot_skew_config
 from ...core.text import calculate_bbox_dimensions
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup  # type: ignore[reportMissingImports]
@@ -47,8 +49,8 @@ from ...render.groups.linear.length_bar import (
     RULER_TICK_LENGTH,
 )
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
-from ...io.colors import resolve_color_to_hex
 from ...legend.table import (  # type: ignore[reportMissingImports]
+    _unique_legend_key,
     configure_pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
@@ -119,27 +121,11 @@ def _feature_slot_for_linear_slots(slots: list) -> object | None:
     return next((slot for slot in slots if slot.renderer == "features"), None)
 
 
-def _depth_track_heights_from_specs(
-    record_depth_tracks: list[list[DepthTrackSpec]] | None,
-) -> list[float | None]:
-    if not record_depth_tracks:
-        return []
-    track_count = depth_track_count(record_depth_tracks)
-    heights: list[float | None] = [None for _ in range(track_count)]
-    for row in record_depth_tracks:
-        for track_index, spec in enumerate(row):
-            if track_index >= len(heights) or heights[track_index] is not None:
-                continue
-            if spec.height is not None:
-                heights[track_index] = float(spec.height)
-    return heights
-
-
 def _apply_depth_track_heights_to_linear_slots(
     slots: list,
     record_depth_tracks: list[list[DepthTrackSpec]] | None,
 ) -> list:
-    depth_heights = _depth_track_heights_from_specs(record_depth_tracks)
+    depth_heights = depth_track_heights(record_depth_tracks)
     if not depth_heights:
         return slots
     out = []
@@ -169,43 +155,12 @@ def _clone_gc_config_with_dinucleotide(gc_config: GcContentConfigurator, dinucle
     return cloned
 
 
-def _clone_skew_config_with_dinucleotide(skew_config, dinucleotide: str):
-    cloned = copy.copy(skew_config)
-    cloned.dinucleotide = str(dinucleotide).upper()
-    return cloned
 
 
-def _slot_param_text(slot, *names: str) -> str | None:
-    params = getattr(slot, "params", {}) or {}
-    for name in names:
-        value = params.get(name)
-        text = str(value).strip() if value is not None else ""
-        if text:
-            return text
-    return None
 
 
-def _slot_skew_config(
-    skew_config: GcSkewConfigurator,
-    slot,
-    dinucleotide: str,
-) -> GcSkewConfigurator:
-    cloned = copy.copy(skew_config)
-    cloned.dinucleotide = str(dinucleotide).upper()
-    if positive_color := _slot_param_text(slot, "positive_color", "high_color"):
-        cloned.high_fill_color = resolve_color_to_hex(positive_color)
-    if negative_color := _slot_param_text(slot, "negative_color", "low_color"):
-        cloned.low_fill_color = resolve_color_to_hex(negative_color)
-    return cloned
 
 
-def _unique_legend_key(legend_table: dict, preferred: str) -> str:
-    if preferred not in legend_table:
-        return preferred
-    suffix = 2
-    while f"{preferred} ({suffix})" in legend_table:
-        suffix += 1
-    return f"{preferred} ({suffix})"
 
 
 def _slot_legend_label(slot, fallback: str) -> str:
@@ -677,54 +632,8 @@ def _precalculate_gc_dataframes(
     return [skew_df(record, window, step, dinucleotide) for record in records]
 
 
-def _precalculate_depth_dataframes(
-    records: list[SeqRecord],
-    *,
-    depth_tables: list[DataFrame | None] | None,
-    depth_config: DepthConfigurator | None,
-    enabled: bool,
-) -> list[DataFrame | None]:
-    """Build depth data once per record and share it across linear groups."""
-    if not enabled or depth_config is None or not depth_tables:
-        return [None for _ in records]
-    out: list[DataFrame | None] = []
-    for index, record in enumerate(records):
-        table = depth_tables[index] if index < len(depth_tables) else None
-        if table is None:
-            out.append(None)
-            continue
-        out.append(
-            build_depth_df(
-                record,
-                table,
-                int(depth_config.window),
-                int(depth_config.step),
-                normalize=bool(depth_config.normalize),
-                min_depth=depth_config.min_depth,
-                max_depth=depth_config.max_depth,
-            )
-        )
-    return out
 
 
-def _apply_shared_depth_axis(
-    record_depth_dfs: list[DataFrame | None],
-    depth_config: DepthConfigurator | None,
-) -> None:
-    """Use one automatically determined depth axis max across all records."""
-
-    if depth_config is None or not bool(getattr(depth_config, "share_axis", False)):
-        return
-    if depth_config.max_depth is not None:
-        return
-
-    max_depth_values = [
-        float(df["depth"].max())
-        for df in record_depth_dfs
-        if df is not None and not df.empty and "depth" in df.columns
-    ]
-    if max_depth_values:
-        depth_config.max_depth = max(max_depth_values)
 
 
 def _linear_depth_group_id(

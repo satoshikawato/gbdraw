@@ -34,11 +34,11 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
+from ...configurators.gc import _slot_skew_config
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
-from ...io.colors import resolve_color_to_hex  # type: ignore[reportMissingImports]
 from ...labels.circular import (  # type: ignore[reportMissingImports]
     assign_leader_start_points,
     minimum_bbox_gap_px,
@@ -50,7 +50,7 @@ from ...labels.filtering import preprocess_label_filtering  # type: ignore[repor
 from ...layout.circular import calculate_feature_position_factors_circular  # type: ignore[reportMissingImports]
 from ...layout.circular_depth_axis import depth_axis_tick_font_size_px  # type: ignore[reportMissingImports]
 from ...layout.common import calculate_cds_ratio  # type: ignore[reportMissingImports]
-from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
+from ...legend.table import _unique_legend_key, prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
@@ -84,6 +84,7 @@ from .presets import (  # type: ignore[reportMissingImports]
     circular_track_slots_from_preset_order,
     normalize_circular_track_preset,
 )
+from .positioning import _parse_svg_number as _svg_number
 
 
 LEGEND_LABEL_MARGIN_PX = 4.0
@@ -430,15 +431,6 @@ def _labels_collide_with_legend(
     return bool(_legend_collision_indices(labels, total_length, canvas_config, legend_config))
 
 
-def _label_overlaps_other_labels(candidate: dict[str, Any], labels: list[dict[str, Any]], idx: int, total_length: int) -> bool:
-    """Check candidate against peer labels with the existing overlap predicates."""
-    for peer_idx, peer in enumerate(labels):
-        if peer_idx == idx or peer.get("is_embedded"):
-            continue
-        min_gap_px = minimum_bbox_gap_px(candidate, peer)
-        if y_overlap(candidate, peer, total_length, min_gap_px) and x_overlap(candidate, peer, minimum_margin=min_gap_px):
-            return True
-    return False
 
 
 def _legend_center_local(
@@ -966,49 +958,6 @@ def _slot_width_ratio_factor(
     return float(slot.width.resolve(float(base_radius_px))) / denominator
 
 
-def _feature_track_ratio_factor_from_draw_width(
-    draw_width_px: float,
-    *,
-    precomputed_feature_dict: dict | None,
-    total_length: int,
-    canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
-) -> float | None:
-    """Convert a measured feature draw band width back to renderer track_ratio_factor."""
-    target_width = max(0.0, float(draw_width_px))
-    if target_width <= FEATURE_BAND_EPSILON:
-        return None
-
-    if precomputed_feature_dict is not None:
-        zero_band = _compute_feature_band_bounds_px(
-            precomputed_feature_dict,
-            total_length,
-            base_radius_px=float(canvas_config.radius),
-            track_ratio=float(canvas_config.track_ratio),
-            length_param=str(canvas_config.length_param),
-            track_ratio_factor=0.0,
-            cfg=cfg,
-        )
-        unit_band = _compute_feature_band_bounds_px(
-            precomputed_feature_dict,
-            total_length,
-            base_radius_px=float(canvas_config.radius),
-            track_ratio=float(canvas_config.track_ratio),
-            length_param=str(canvas_config.length_param),
-            track_ratio_factor=1.0,
-            cfg=cfg,
-        )
-        if zero_band is not None and unit_band is not None:
-            zero_width = abs(float(zero_band[1]) - float(zero_band[0]))
-            unit_width = abs(float(unit_band[1]) - float(unit_band[0]))
-            scalable_width = unit_width - zero_width
-            if scalable_width > FEATURE_BAND_EPSILON:
-                return max(0.0, (target_width - zero_width) / scalable_width)
-
-    denominator = float(canvas_config.radius) * float(canvas_config.track_ratio)
-    if denominator <= FEATURE_BAND_EPSILON:
-        return None
-    return target_width / denominator
 
 
 def _slot_dinucleotide(slot_or_resolved: CircularTrackSlot | CircularResolvedSlot, default: str) -> str:
@@ -1018,16 +967,6 @@ def _slot_dinucleotide(slot_or_resolved: CircularTrackSlot | CircularResolvedSlo
     return nt if len(nt) >= 2 else str(default or "GC").upper()
 
 
-def _svg_number(value: object, *, default: float = 0.0) -> float:
-    if value is None:
-        return float(default)
-    raw = str(value).strip()
-    if raw.endswith("px"):
-        raw = raw[:-2]
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return float(default)
 
 
 def _text_element_plain_text(element: Any) -> str:
@@ -1105,28 +1044,8 @@ def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
     return cloned
 
 
-def _slot_param_text(slot, *names: str) -> str | None:
-    params = getattr(slot, "params", {}) or {}
-    for name in names:
-        value = params.get(name)
-        text = str(value).strip() if value is not None else ""
-        if text:
-            return text
-    return None
 
 
-def _slot_skew_config(
-    skew_config: GcSkewConfigurator,
-    slot,
-    dinucleotide: str,
-) -> GcSkewConfigurator:
-    cloned = copy.copy(skew_config)
-    cloned.dinucleotide = str(dinucleotide).upper()
-    if positive_color := _slot_param_text(slot, "positive_color", "high_color"):
-        cloned.high_fill_color = resolve_color_to_hex(positive_color)
-    if negative_color := _slot_param_text(slot, "negative_color", "low_color"):
-        cloned.low_fill_color = resolve_color_to_hex(negative_color)
-    return cloned
 
 
 def _slot_gc_config_with_axis_font_size(
@@ -1184,13 +1103,6 @@ def _slot_dataframe_for_nt(
     return DataFrame()
 
 
-def _unique_legend_key(legend_table: dict, preferred: str) -> str:
-    if preferred not in legend_table:
-        return preferred
-    suffix = 2
-    while f"{preferred} ({suffix})" in legend_table:
-        suffix += 1
-    return f"{preferred} ({suffix})"
 
 
 def _slot_legend_label(slot: CircularTrackSlot, fallback: str) -> str:
@@ -1646,149 +1558,12 @@ def _default_depth_track_width_px(
     )
 
 
-def _default_numeric_slot_width_px(
-    slot: CircularTrackSlot,
-    *,
-    canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
-) -> float:
-    renderer = str(slot.renderer)
-    if renderer == "depth":
-        return _default_depth_track_width_px(canvas_config=canvas_config, cfg=cfg)
-    if renderer == "dinucleotide_skew":
-        return _default_gc_skew_track_width_px(
-            "gc_skew",
-            canvas_config=canvas_config,
-            cfg=cfg,
-        )
-    return _default_gc_skew_track_width_px(
-        "gc_content",
-        canvas_config=canvas_config,
-        cfg=cfg,
-    )
 
 
-def _default_gc_skew_layout_without_depth(
-    *,
-    canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
-    show_gc: bool,
-    show_skew: bool,
-    radius_mapper: Callable[[float], float] | None = None,
-) -> dict[str, tuple[float, float]]:
-    """Return default no-depth GC/skew layout as {kind: (center_px, width_px)}."""
-    track_ids = _default_gc_skew_track_ids_without_depth(
-        show_gc=show_gc,
-        show_skew=show_skew,
-    )
-    if not track_ids:
-        return {}
-
-    length_param = str(canvas_config.length_param)
-    track_type = _circular_preset_for_layout(canvas_config, cfg)
-    track_dict = cfg.canvas.circular.track_dict[length_param][track_type]
-    layout: dict[str, tuple[float, float]] = {}
-    for kind, track_id in track_ids.items():
-        center_px = float(canvas_config.radius) * float(track_dict[str(track_id)])
-        if radius_mapper is not None:
-            center_px = float(radius_mapper(center_px))
-        width_px = _default_gc_skew_track_width_px(
-            kind,
-            canvas_config=canvas_config,
-            cfg=cfg,
-        )
-        layout[kind] = (float(center_px), float(width_px))
-    return layout
 
 
-def _default_gc_skew_gap_px(
-    layout: dict[str, tuple[float, float]],
-    *,
-    canvas_config: CircularCanvasConfigurator,
-) -> float:
-    """Return the default radial gap between adjacent GC/skew tracks."""
-    fallback_gap = max(1.0, 0.01 * float(canvas_config.radius))
-    if len(layout) < 2:
-        return fallback_gap
-
-    annuli = sorted(
-        (
-            (
-                float(center_px) - (0.5 * float(width_px)),
-                float(center_px) + (0.5 * float(width_px)),
-            )
-            for center_px, width_px in layout.values()
-        ),
-        key=lambda annulus: annulus[0],
-    )
-    gaps = [
-        max(0.0, float(annuli[idx + 1][0]) - float(annuli[idx][1]))
-        for idx in range(len(annuli) - 1)
-    ]
-    positive_gaps = [gap for gap in gaps if gap > FEATURE_BAND_EPSILON]
-    if not positive_gaps:
-        return 0.0
-    return min(positive_gaps)
 
 
-def _distributed_lane_specs_between_bounds(
-    *,
-    inner_radius_px: float,
-    outer_radius_px: float,
-    default_widths_outer_to_inner: Sequence[float],
-    desired_gap_px: float,
-    include_outer_boundary_gap: bool = False,
-    fill_available: bool = False,
-) -> list[tuple[float, float]]:
-    """Return outer-to-inner lane specs as (center_px, width_scale)."""
-    lane_count = len(default_widths_outer_to_inner)
-    if lane_count <= 0:
-        return []
-
-    inner = float(inner_radius_px)
-    outer = float(outer_radius_px)
-    if outer < inner:
-        inner, outer = outer, inner
-    available_width = max(0.0, outer - inner)
-
-    default_widths_inner_to_outer = [
-        max(0.0, float(width_px))
-        for width_px in reversed(default_widths_outer_to_inner)
-    ]
-    total_default_width = sum(default_widths_inner_to_outer)
-    if total_default_width <= FEATURE_BAND_EPSILON:
-        return []
-
-    gap_count = lane_count if include_outer_boundary_gap else max(0, lane_count - 1)
-    desired_gap = max(0.0, float(desired_gap_px))
-    if gap_count > 0:
-        compressed_gap_px = min(
-            desired_gap,
-            max(0.0, available_width / (3.0 * float(gap_count))),
-        )
-    else:
-        compressed_gap_px = 0.0
-
-    compressed_width_budget = max(0.0, available_width - (float(gap_count) * compressed_gap_px))
-    if compressed_width_budget < total_default_width - FEATURE_BAND_EPSILON:
-        gap_px = compressed_gap_px
-        width_scale = max(0.0, compressed_width_budget / total_default_width)
-    else:
-        width_scale = 1.0
-        if fill_available and gap_count > 0:
-            gap_px = max(0.0, (available_width - total_default_width) / float(gap_count))
-        else:
-            gap_px = compressed_gap_px
-
-    specs_inner_to_outer: list[tuple[float, float]] = []
-    cursor = inner
-    for width_px in default_widths_inner_to_outer:
-        scaled_width_px = width_px * width_scale
-        center_px = cursor + (0.5 * scaled_width_px)
-        specs_inner_to_outer.append((float(center_px), float(width_scale)))
-        cursor += scaled_width_px + gap_px
-
-    return list(reversed(specs_inner_to_outer))
 
 
 def _compute_feature_band_bounds_px(
@@ -1924,32 +1699,6 @@ def _build_feature_radius_mapper(
     return mapper, old_band, new_band
 
 
-def _default_track_center_radius_px(
-    kind: str,
-    *,
-    canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
-) -> float | None:
-    """Return default center radius for a built-in circular track kind."""
-    if kind in {"axis", "ticks"}:
-        return float(canvas_config.radius)
-
-    if kind == "depth":
-        track_id = canvas_config.track_ids.get("depth_track")
-    elif kind == "gc_content":
-        track_id = canvas_config.track_ids.get("gc_track")
-    elif kind == "gc_skew":
-        track_id = canvas_config.track_ids.get("skew_track")
-    else:
-        track_id = None
-
-    if track_id is None:
-        return None
-
-    length_param = str(canvas_config.length_param)
-    track_type = _circular_preset_for_layout(canvas_config, cfg)
-    norm_factor = float(cfg.canvas.circular.track_dict[length_param][track_type][str(track_id)])
-    return float(canvas_config.radius) * norm_factor
 
 
 def _default_outer_label_arena(
@@ -1982,15 +1731,6 @@ def _default_outer_label_arena(
     return anchor_radius, arc_outer
 
 
-def _arena_from_center_and_width(center_px: float | None, width_px: float | None) -> tuple[float, float] | None:
-    """Convert center+width to (inner, outer) arena bounds."""
-    if center_px is None or width_px is None:
-        return None
-    inner_px = float(center_px) - (float(width_px) / 2.0)
-    outer_px = float(center_px) + (float(width_px) / 2.0)
-    if outer_px < inner_px:
-        inner_px, outer_px = outer_px, inner_px
-    return inner_px, outer_px
 
 
 def _annulus_from_center_and_width(center_px: float, width_px: float) -> tuple[float, float]:
@@ -2024,141 +1764,10 @@ def _annulus_overlaps_any_band(
     return any(_annulus_overlaps_band(annulus, band) for band in forbidden_bands)
 
 
-def _resolve_ratio_annulus_center_avoiding_forbidden_bands(
-    *,
-    current_center_px: float,
-    ratio_bounds: tuple[float, float],
-    forbidden_bands: list[tuple[float, float]],
-    prefer_inside: bool = True,
-) -> float | None:
-    """Resolve center for ratio-scaled annulus (ticks), prioritizing inward moves."""
-    ratio_min, ratio_max = sorted((float(ratio_bounds[0]), float(ratio_bounds[1])))
-    if ratio_min <= 0.0 or ratio_max <= 0.0:
-        return None
-
-    if not forbidden_bands:
-        return float(current_center_px)
-
-    def annulus_for_center(center_px: float) -> tuple[float, float]:
-        return _tick_annulus_for_center(center_px, (ratio_min, ratio_max))
-
-    current = float(current_center_px)
-    if current > FEATURE_BAND_EPSILON and not _annulus_overlaps_any_band(
-        annulus_for_center(current), forbidden_bands
-    ):
-        return current
-
-    inside_candidates: list[float] = []
-    outside_candidates: list[float] = []
-    for band_inner, band_outer in forbidden_bands:
-        low, high = sorted((float(band_inner), float(band_outer)))
-        inside_center = (low - FEATURE_BAND_EPSILON) / ratio_max
-        outside_center = (high + FEATURE_BAND_EPSILON) / ratio_min
-        if inside_center > FEATURE_BAND_EPSILON:
-            inside_candidates.append(float(inside_center))
-        if outside_center > FEATURE_BAND_EPSILON:
-            outside_candidates.append(float(outside_center))
-
-    def pick_valid(candidates: list[float]) -> float | None:
-        for candidate in sorted(candidates, key=lambda value: (abs(value - current), value)):
-            if _annulus_overlaps_any_band(annulus_for_center(candidate), forbidden_bands):
-                continue
-            return float(candidate)
-        return None
-
-    if prefer_inside:
-        resolved = pick_valid(inside_candidates)
-        if resolved is not None:
-            return resolved
-        return pick_valid(outside_candidates)
-
-    combined_candidates = inside_candidates + outside_candidates
-    return pick_valid(combined_candidates)
 
 
-def _resolve_fixed_width_annulus_center_avoiding_forbidden_bands(
-    *,
-    current_center_px: float,
-    width_px: float,
-    forbidden_bands: list[tuple[float, float]],
-    prefer_inside: bool = True,
-) -> float | None:
-    """Resolve center for fixed-width annulus (GC tracks), prioritizing inward moves."""
-    if width_px < 0:
-        return None
-    if not forbidden_bands:
-        return float(current_center_px)
-
-    current = float(current_center_px)
-    annulus = _annulus_from_center_and_width(current, float(width_px))
-    if current > FEATURE_BAND_EPSILON and not _annulus_overlaps_any_band(annulus, forbidden_bands):
-        return current
-
-    half_width = max(0.0, 0.5 * float(width_px))
-    inside_candidates: list[float] = []
-    outside_candidates: list[float] = []
-    for band_inner, band_outer in forbidden_bands:
-        low, high = sorted((float(band_inner), float(band_outer)))
-        inside_center = low - half_width - FEATURE_BAND_EPSILON
-        outside_center = high + half_width + FEATURE_BAND_EPSILON
-        if inside_center > FEATURE_BAND_EPSILON:
-            inside_candidates.append(float(inside_center))
-        if outside_center > FEATURE_BAND_EPSILON:
-            outside_candidates.append(float(outside_center))
-
-    def pick_valid(candidates: list[float]) -> float | None:
-        for candidate in sorted(candidates, key=lambda value: (abs(value - current), value)):
-            candidate_annulus = _annulus_from_center_and_width(candidate, float(width_px))
-            if _annulus_overlaps_any_band(candidate_annulus, forbidden_bands):
-                continue
-            return float(candidate)
-        return None
-
-    if prefer_inside:
-        resolved = pick_valid(inside_candidates)
-        if resolved is not None:
-            return resolved
-        return pick_valid(outside_candidates)
-
-    return pick_valid(inside_candidates + outside_candidates)
 
 
-def _shrink_fixed_width_annulus_to_avoid_forbidden_bands(
-    *,
-    center_px: float,
-    current_width_px: float,
-    forbidden_bands: list[tuple[float, float]],
-) -> float | None:
-    """Shrink fixed-width annulus around center so it avoids all forbidden bands."""
-    if current_width_px < 0:
-        return None
-    if not forbidden_bands:
-        return float(current_width_px)
-
-    center = float(center_px)
-    if center <= FEATURE_BAND_EPSILON:
-        return None
-
-    max_half_width = float("inf")
-    for band_inner, band_outer in forbidden_bands:
-        low, high = sorted((float(band_inner), float(band_outer)))
-        if center <= low:
-            max_half_width = min(max_half_width, low - FEATURE_BAND_EPSILON - center)
-        elif center >= high:
-            max_half_width = min(max_half_width, center - (high + FEATURE_BAND_EPSILON))
-        else:
-            # Center inside forbidden band: shrinking alone cannot resolve overlap.
-            return None
-
-    if not math.isfinite(max_half_width):
-        return float(current_width_px)
-    if max_half_width < 0.0:
-        return None
-
-    shrunk_width = min(float(current_width_px), 2.0 * max_half_width)
-    if shrunk_width < 0.0:
-        return None
-    return float(shrunk_width)
 
 
 def _tick_annulus_for_center(
@@ -2188,45 +1797,6 @@ def _tick_annulus_overlaps_feature_band(
     )
 
 
-def _resolve_ticks_center_radius_avoiding_feature_band(
-    *,
-    current_ticks_radius_px: float,
-    default_ticks_radius_px: float,
-    feature_band_px: tuple[float, float],
-    default_feature_band_px: tuple[float, float],
-    tick_ratio_bounds: tuple[float, float],
-) -> float | None:
-    """Resolve a non-overlapping tick center while preserving default band gaps when possible."""
-    tick_min_ratio, tick_max_ratio = sorted((float(tick_ratio_bounds[0]), float(tick_ratio_bounds[1])))
-    if tick_min_ratio <= 0.0 or tick_max_ratio <= 0.0:
-        return None
-
-    feature_inner, feature_outer = sorted((float(feature_band_px[0]), float(feature_band_px[1])))
-    default_feature_inner, default_feature_outer = sorted(
-        (float(default_feature_band_px[0]), float(default_feature_band_px[1]))
-    )
-
-    default_tick_inner, default_tick_outer = _tick_annulus_for_center(default_ticks_radius_px, tick_ratio_bounds)
-    base_inside_gap = default_feature_inner - default_tick_outer
-    base_outside_gap = default_tick_inner - default_feature_outer
-    inside_gap = max(0.0, base_inside_gap)
-    outside_gap = max(0.0, base_outside_gap)
-
-    candidates: list[float] = []
-
-    inside_center = (feature_inner - inside_gap - FEATURE_BAND_EPSILON) / tick_max_ratio
-    if inside_center > FEATURE_BAND_EPSILON:
-        if not _tick_annulus_overlaps_feature_band(inside_center, tick_ratio_bounds, feature_band_px):
-            candidates.append(float(inside_center))
-
-    outside_center = (feature_outer + outside_gap + FEATURE_BAND_EPSILON) / tick_min_ratio
-    if outside_center > FEATURE_BAND_EPSILON:
-        if not _tick_annulus_overlaps_feature_band(outside_center, tick_ratio_bounds, feature_band_px):
-            candidates.append(float(outside_center))
-
-    if not candidates:
-        return None
-    return min(candidates, key=lambda candidate: abs(float(candidate) - float(current_ticks_radius_px)))
 
 
 def add_record_on_circular_canvas(

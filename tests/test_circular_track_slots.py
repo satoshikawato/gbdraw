@@ -25,6 +25,10 @@ from gbdraw.tracks import (
     parse_circular_track_slot,
     parse_circular_track_slots,
 )
+from tests.utils.circular_drawer_fakes import (
+    make_numeric_slot_capture,
+    make_numeric_slot_geometry_capture,
+)
 
 
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
@@ -41,7 +45,7 @@ def _load_edl933_record():
 
 
 def _load_mjenmv_record():
-    input_path = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
+    input_path = Path(__file__).parent.parent / "examples" / "MjeNMV.gb"
     return SeqIO.read(str(input_path), "genbank")
 
 
@@ -189,18 +193,7 @@ def _capture_circular_core_geometry(
         )
         return canvas
 
-    def capture_numeric_slot(
-        key: str,
-        canvas_config,
-        track_width_override,
-        norm_factor_override,
-    ) -> None:
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured[key] = (
-            float(norm_factor_override) * float(canvas_config.radius),
-            float(track_width_override),
-        )
+    capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
     def fake_add_depth_group_on_canvas(
         canvas,
@@ -1042,50 +1035,11 @@ def test_default_custom_slots_tuckin_inherit_preset_when_inside_numeric_tracks_a
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, tuple[float, float]] = {}
 
-    def capture_numeric_slot(
-        slot_id: str,
-        canvas_config,
-        track_width_override,
-        norm_factor_override,
-    ) -> None:
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured[slot_id] = (
-            float(norm_factor_override) * float(canvas_config.radius),
-            float(track_width_override),
-        )
+    capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
@@ -1164,50 +1118,11 @@ def test_default_custom_slots_use_ordered_legacy_numeric_lanes(
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, tuple[float, float]] = {}
 
-    def capture_numeric_slot(
-        slot_id: str,
-        canvas_config,
-        track_width_override,
-        norm_factor_override,
-    ) -> None:
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured[slot_id] = (
-            float(norm_factor_override) * float(canvas_config.radius),
-            float(track_width_override),
-        )
+    capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
@@ -1236,50 +1151,11 @@ def test_reordered_builtin_numeric_slots_follow_slot_order(
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, tuple[float, float]] = {}
 
-    def capture_numeric_slot(
-        slot_id: str,
-        canvas_config,
-        track_width_override,
-        norm_factor_override,
-    ) -> None:
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured[slot_id] = (
-            float(norm_factor_override) * float(canvas_config.radius),
-            float(track_width_override),
-        )
+    capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
@@ -1646,18 +1522,7 @@ def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
     depth_table = _depth_table(str(record.id))
     captured: dict[str, tuple[float, float]] = {}
 
-    def capture_numeric_slot(
-        slot_id: str,
-        canvas_config,
-        track_width_override,
-        norm_factor_override,
-    ) -> None:
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured[slot_id] = (
-            float(norm_factor_override) * float(canvas_config.radius),
-            float(track_width_override),
-        )
+    capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
     def fake_add_depth_group_on_canvas(
         canvas,
@@ -1675,37 +1540,9 @@ def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
         capture_numeric_slot(str(group_id or "depth"), canvas_config, track_width_override, norm_factor_override)
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
     monkeypatch.setattr(circular_assemble_module, "add_depth_group_on_canvas", fake_add_depth_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
@@ -1741,18 +1578,7 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
     depth_table = _depth_table(str(record.id))
     captured: dict[str, tuple[float, float] | float] = {}
 
-    def capture_numeric_slot(
-        slot_id: str,
-        canvas_config,
-        track_width_override,
-        norm_factor_override,
-    ) -> None:
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured[slot_id] = (
-            float(norm_factor_override) * float(canvas_config.radius),
-            float(track_width_override),
-        )
+    capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
     def fake_add_depth_group_on_canvas(
         canvas,
@@ -1770,21 +1596,7 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
         capture_numeric_slot(str(group_id or "depth"), canvas_config, track_width_override, norm_factor_override)
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 
     def fake_add_gc_skew_group_on_canvas(
         canvas,
@@ -1953,50 +1765,11 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, tuple[float, float]] = {}
 
-    def capture_numeric_slot(
-        slot_id: str,
-        canvas_config,
-        track_width_override,
-        norm_factor_override,
-    ) -> None:
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured[slot_id] = (
-            float(norm_factor_override) * float(canvas_config.radius),
-            float(track_width_override),
-        )
+    capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
@@ -2073,37 +1846,9 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_places_when_space_is_re
     def fake_add_tick_group_on_canvas(canvas, *args, **kwargs):
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_skew')
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)

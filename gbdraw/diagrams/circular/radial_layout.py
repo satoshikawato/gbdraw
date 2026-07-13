@@ -1274,11 +1274,6 @@ def _scaled_inside_auto_outer_gap(intent: _RadialSlotIntent, scale: float) -> fl
     )
 
 
-def _scaled_inside_auto_spacing(intent: _RadialSlotIntent, scale: float) -> float:
-    return max(
-        _scaled_inside_auto_inner_gap(intent, scale),
-        _scaled_inside_auto_outer_gap(intent, scale),
-    )
 
 
 def _gap_between_inner_outer_tracks(

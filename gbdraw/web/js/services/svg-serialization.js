@@ -9,6 +9,23 @@ const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'feature-selection-status'
 ]);
 
+export const setClassToken = (element, token, enabled) => {
+  if (!element) return;
+  if (element.classList?.toggle) {
+    element.classList.toggle(token, Boolean(enabled));
+    return;
+  }
+  const existing = String(element.getAttribute('class') || '').trim();
+  const tokens = existing ? existing.split(/\s+/).filter(Boolean) : [];
+  const nextTokens = tokens.filter((entry) => entry !== token);
+  if (enabled) nextTokens.push(token);
+  if (nextTokens.length) {
+    element.setAttribute('class', nextTokens.join(' '));
+  } else {
+    element.removeAttribute('class');
+  }
+};
+
 const removeClassToken = (element, token) => {
   if (!element) return;
   if (element.classList?.remove) {
@@ -55,4 +72,13 @@ export const serializeCleanSvg = (svg, options = {}) => {
     clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   }
   return new XMLSerializer().serializeToString(clone);
+};
+
+export const ensureSvgDefs = (svg) => {
+  let defs = svg.querySelector('defs');
+  if (!defs) {
+    defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    svg.insertBefore(defs, svg.firstChild);
+  }
+  return defs;
 };
