@@ -1,5 +1,6 @@
-from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from runpy import run_path
+from types import SimpleNamespace
 
 from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py as _build_py
@@ -8,14 +9,8 @@ from setuptools.command.sdist import sdist as _sdist
 
 def _load_build_support_module():
     # Load the helper by path so PEP 517 isolated builds do not need `gbdraw` importable first.
-    build_support_path = Path(__file__).resolve().parent / "gbdraw" / "_build_support.py"
-    spec = spec_from_file_location("gbdraw_build_support", build_support_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load build support module from {build_support_path}")
-
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    path = Path(__file__).resolve().parent / "gbdraw" / "_build_support.py"
+    return SimpleNamespace(**run_path(str(path)))
 
 
 _build_support = _load_build_support_module()

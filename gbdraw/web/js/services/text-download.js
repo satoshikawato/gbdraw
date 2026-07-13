@@ -7,7 +7,9 @@ export const downloadTextFile = (
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  document.body.appendChild(link);
   link.addEventListener('click', (event) => event.stopPropagation(), { once: true });
   link.click();
+  document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };

@@ -15,8 +15,9 @@ import threading
 import urllib.error
 import urllib.request
 import zipfile
-from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from runpy import run_path
+from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -36,14 +37,7 @@ from gbdraw._web_assets import (
 
 
 def _load_build_support_module():
-    build_support_path = REPO_ROOT / "gbdraw" / "_build_support.py"
-    spec = spec_from_file_location("gbdraw_build_support", build_support_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load build support module from {build_support_path}")
-
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return SimpleNamespace(**run_path(str(REPO_ROOT / "gbdraw" / "_build_support.py")))
 
 
 BUILD_SUPPORT = _load_build_support_module()

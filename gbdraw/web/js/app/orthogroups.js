@@ -4,6 +4,7 @@ import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
+import { downloadTextFile } from '../services/text-download.js';
 
 const { computed } = window.Vue;
 
@@ -27,21 +28,6 @@ const makeSafeFilename = (value, fallback = 'orthogroup') => {
 
 const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
 const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
-
-const downloadTextFile = (filename, text, type = 'text/plain;charset=utf-8') => {
-  const blob = new Blob([String(text ?? '')], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.addEventListener('click', (event) => {
-    event.stopPropagation();
-  }, { once: true });
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
 
 const copyTextToClipboard = async (text) => {
   const value = String(text ?? '');
@@ -391,7 +377,11 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
   const downloadOrthogroupSequences = (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt') => {
     const text = buildOrthogroupFasta(groupOrId, sequenceKind);
     if (!text) return;
-    downloadTextFile(orthogroupSequenceFilename(groupOrId, sequenceKind), text);
+    downloadTextFile(
+      orthogroupSequenceFilename(groupOrId, sequenceKind),
+      text,
+      'text/plain;charset=utf-8'
+    );
   };
 
   const copyOrthogroupMemberSequence = async (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
@@ -403,7 +393,11 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
   const downloadOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
     const text = buildOrthogroupMemberFasta(member, sequenceKind, groupOrId);
     if (!text) return;
-    downloadTextFile(orthogroupMemberSequenceFilename(member, sequenceKind, groupOrId), text);
+    downloadTextFile(
+      orthogroupMemberSequenceFilename(member, sequenceKind, groupOrId),
+      text,
+      'text/plain;charset=utf-8'
+    );
   };
 
   const selectOrthogroup = (orthogroupId) => {

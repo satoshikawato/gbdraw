@@ -16,6 +16,7 @@ import logging
 from gbdraw.circular import _get_args as _get_circular_args, run_circular_from_namespace
 from gbdraw.linear import _get_args as _get_linear_args, run_linear_from_namespace
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json
+from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload as _serialize_shared_orthogroups_payload
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -823,135 +824,8 @@ def _dataframe_json_rows(df):
         rows.append({str(key): _clean_json_scalar(value) for key, value in row.items()})
     return rows
 
-def _serialize_orthogroup_name_candidate(candidate):
-    if isinstance(candidate, dict):
-        getter = candidate.get
-    else:
-        getter = lambda key, default=None: getattr(candidate, key, default)
-    return {
-        "text": str(getter("text", "") or ""),
-        "source": str(getter("source", "") or ""),
-        "memberCount": int(getter("member_count", 0) or 0),
-        "recordCoverageCount": int(getter("record_coverage_count", 0) or 0),
-        "representativeCount": int(getter("representative_count", 0) or 0),
-        "score": float(getter("score", 0.0) or 0.0),
-    }
-
-def _serialize_ortholog_edge(edge):
-    return {
-        "orthogroupId": str(getattr(edge, "orthogroup_id", "") or ""),
-        "sourceRbhOrthogroupId": getattr(edge, "source_rbh_orthogroup_id", None),
-        "targetRbhOrthogroupId": getattr(edge, "target_rbh_orthogroup_id", None),
-        "queryProteinId": str(getattr(edge, "query_protein_id", "") or ""),
-        "subjectProteinId": str(getattr(edge, "subject_protein_id", "") or ""),
-        "queryRecordIndex": int(getattr(edge, "query_record_index", 0) or 0),
-        "subjectRecordIndex": int(getattr(edge, "subject_record_index", 0) or 0),
-        "edgeKind": str(getattr(edge, "edge_kind", "") or ""),
-        "renderRole": str(getattr(edge, "render_role", "") or ""),
-        "pathId": getattr(edge, "path_id", None),
-        "identity": float(getattr(edge, "identity", 0.0) or 0.0),
-        "evalue": float(getattr(edge, "evalue", 0.0) or 0.0),
-        "bitscore": float(getattr(edge, "bitscore", 0.0) or 0.0),
-        "alignmentLength": int(getattr(edge, "alignment_length", 0) or 0),
-    }
-
-def _serialize_ortholog_path(path):
-    return {
-        "orthogroupId": str(getattr(path, "orthogroup_id", "") or ""),
-        "pathId": str(getattr(path, "path_id", "") or ""),
-        "proteinIds": [str(item) for item in (getattr(path, "protein_ids", ()) or ())],
-        "edgeIds": [str(item) for item in (getattr(path, "edge_ids", ()) or ())],
-        "sharedProteinIds": [str(item) for item in (getattr(path, "shared_protein_ids", ()) or ())],
-    }
-
 def _serialize_orthogroups_payload(orthogroups):
-    if orthogroups is None:
-        return []
-    payload = []
-    names_by_orthogroup_id = getattr(orthogroups, "names_by_orthogroup_id", {}) or {}
-    descriptions_by_orthogroup_id = getattr(orthogroups, "descriptions_by_orthogroup_id", {}) or {}
-    candidates_by_orthogroup_id = getattr(orthogroups, "name_candidates_by_orthogroup_id", {}) or {}
-    confidence_by_orthogroup_id = getattr(orthogroups, "confidence_by_orthogroup_id", {}) or {}
-    rbh_orthogroups = getattr(orthogroups, "rbh_orthogroups", {}) or {}
-    ortholog_edges_by_orthogroup_id = getattr(orthogroups, "ortholog_edges_by_orthogroup_id", {}) or {}
-    ortholog_paths_by_orthogroup_id = getattr(orthogroups, "ortholog_paths_by_orthogroup_id", {}) or {}
-    related_edges_by_orthogroup_id = getattr(orthogroups, "related_edges_by_orthogroup_id", {}) or {}
-    scope_by_orthogroup_id = getattr(orthogroups, "scope_by_orthogroup_id", {}) or {}
-    source_record_index_by_orthogroup_id = getattr(orthogroups, "source_record_index_by_orthogroup_id", {}) or {}
-    for orthogroup_id, members in orthogroups.orthogroups.items():
-        record_coverage_count = len({int(member.record_index) for member in members})
-        member_ids = {str(member.protein_id) for member in members}
-        rbh_ids = [
-            str(rbh_id)
-            for rbh_id, protein_ids in rbh_orthogroups.items()
-            if member_ids.intersection({str(protein_id) for protein_id in protein_ids})
-        ]
-        payload.append(
-            {
-                "id": orthogroup_id,
-                "name": str(names_by_orthogroup_id.get(orthogroup_id, "") or ""),
-                "description": str(descriptions_by_orthogroup_id.get(orthogroup_id, "") or ""),
-                "nameConfidence": str(confidence_by_orthogroup_id.get(orthogroup_id, "none") or "none"),
-                "scope": str(scope_by_orthogroup_id.get(orthogroup_id, "cross_record") or "cross_record"),
-                "source_record_index": (
-                    int(source_record_index_by_orthogroup_id[orthogroup_id])
-                    if orthogroup_id in source_record_index_by_orthogroup_id
-                    else None
-                ),
-                "nameCandidates": [
-                    _serialize_orthogroup_name_candidate(candidate)
-                    for candidate in (candidates_by_orthogroup_id.get(orthogroup_id, []) or [])
-                ],
-                "member_count": len(members),
-                "record_coverage_count": record_coverage_count,
-                "rbhOrthogroupIds": rbh_ids,
-                "orthologEdges": [
-                    _serialize_ortholog_edge(edge)
-                    for edge in (ortholog_edges_by_orthogroup_id.get(orthogroup_id, []) or [])
-                ],
-                "orthologPaths": [
-                    _serialize_ortholog_path(path)
-                    for path in (ortholog_paths_by_orthogroup_id.get(orthogroup_id, []) or [])
-                ],
-                "relatedEdges": [
-                    _serialize_ortholog_edge(edge)
-                    for edge in (related_edges_by_orthogroup_id.get(orthogroup_id, []) or [])
-                ],
-                "members": [
-                    {
-                        "orthogroupId": member.orthogroup_id,
-                        "proteinId": member.protein_id,
-                        "sourceProteinId": member.source_protein_id,
-                        "recordIndex": member.record_index,
-                        "recordId": member.record_id,
-                        "featureIndex": member.feature_index,
-                        "label": member.label,
-                        "featureSvgId": member.feature_svg_id,
-                        "start": member.start,
-                        "end": member.end,
-                        "strand": _web_strand_symbol(member.strand),
-                        "representative": member.representative,
-                        "role": str(getattr(member, "role", "") or ""),
-                        "confidence": str(getattr(member, "confidence", "") or ""),
-                        "assignmentReason": str(getattr(member, "assignment_reason", "") or ""),
-                        "supportingEdges": [
-                            str(edge_id)
-                            for edge_id in (getattr(member, "supporting_edges", ()) or ())
-                        ],
-                        "bestCoreSupport": float(getattr(member, "best_core_support", 0.0) or 0.0),
-                        "secondBestCoreSupport": float(getattr(member, "second_best_core_support", 0.0) or 0.0),
-                        "gene": getattr(member, "gene", None),
-                        "product": getattr(member, "product", None),
-                        "note": getattr(member, "note", None),
-                        "locusTag": getattr(member, "locus_tag", None),
-                        "geneId": getattr(member, "gene_id", None),
-                        "oldLocusTag": getattr(member, "old_locus_tag", None),
-                    }
-                    for member in members
-                ],
-            }
-        )
-    return payload
+    return _serialize_shared_orthogroups_payload(orthogroups, include_stable_feature_ids=False)
 
 def _web_orthogroup_member_display_metadata(record_payloads):
     metadata = {}

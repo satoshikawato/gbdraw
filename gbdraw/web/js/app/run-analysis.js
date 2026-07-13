@@ -62,7 +62,7 @@ import {
   normalizeDefinitionLineStyleState
 } from './cli-args.js';
 import { downloadZipFile } from '../utils/zip.js';
-import { cloneJsonData } from '../services/history-snapshot.js';
+import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
 import { downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
@@ -1616,37 +1616,30 @@ json.dumps({
     generationAbortSignal = generationAbortController?.signal || null;
     if (!isReflow) activeLosatAbortController = generationAbortController;
     const previousSelectedResultIndex = selectedResultIndex.value;
-    const cloneJsonSafe = (value, fallback) => {
-      try {
-        return JSON.parse(JSON.stringify(value));
-      } catch (_err) {
-        return fallback;
-      }
-    };
     const manualCancelSnapshot = isReflow
       ? null
       : {
           results: Array.isArray(results.value) ? results.value.map((entry) => ({ ...entry })) : [],
-          trackSlotResolvedGeometry: cloneJsonSafe(trackSlotResolvedGeometry.value || null, null),
+          trackSlotResolvedGeometry: cloneJsonValue(trackSlotResolvedGeometry.value || null, null),
           selectedResultIndex: selectedResultIndex.value,
           zoom: zoom.value,
           pairwiseMatchFactors: { ...(pairwiseMatchFactors.value || {}) },
           addedLegendCaptions: new Set(addedLegendCaptions.value || []),
           fileLegendCaptions: new Set(fileLegendCaptions.value || []),
-          featureColorOverrides: cloneJsonSafe(featureColorOverrides, {}),
-          featureStrokeOverrides: cloneJsonSafe(featureStrokeOverrides, {}),
-          legendEntries: cloneJsonSafe(legendEntries.value || [], []),
-          deletedLegendEntries: cloneJsonSafe(deletedLegendEntries.value || [], []),
-          legendColorOverrides: cloneJsonSafe(legendColorOverrides, {}),
-          originalLegendOrder: cloneJsonSafe(originalLegendOrder.value || [], []),
-          originalLegendColors: cloneJsonSafe(originalLegendColors.value || {}, {}),
-          extractedFeatures: cloneJsonSafe(extractedFeatures.value || [], []),
-          featureSelectorSafetyScope: cloneJsonSafe(featureSelectorSafetyScope.value || [], []),
-          editableLabels: cloneJsonSafe(editableLabels.value || [], []),
-          featureEditorStatus: cloneJsonSafe(featureEditorStatus || {}, {}),
+          featureColorOverrides: cloneJsonValue(featureColorOverrides, {}),
+          featureStrokeOverrides: cloneJsonValue(featureStrokeOverrides, {}),
+          legendEntries: cloneJsonValue(legendEntries.value || [], []),
+          deletedLegendEntries: cloneJsonValue(deletedLegendEntries.value || [], []),
+          legendColorOverrides: cloneJsonValue(legendColorOverrides, {}),
+          originalLegendOrder: cloneJsonValue(originalLegendOrder.value || [], []),
+          originalLegendColors: cloneJsonValue(originalLegendColors.value || {}, {}),
+          extractedFeatures: cloneJsonValue(extractedFeatures.value || [], []),
+          featureSelectorSafetyScope: cloneJsonValue(featureSelectorSafetyScope.value || [], []),
+          editableLabels: cloneJsonValue(editableLabels.value || [], []),
+          featureEditorStatus: cloneJsonValue(featureEditorStatus || {}, {}),
           featureExtractionPending: featureExtractionPending.value,
           featureExtractionError: featureExtractionError.value,
-          featureRecordIds: cloneJsonSafe(featureRecordIds.value || [], []),
+          featureRecordIds: cloneJsonValue(featureRecordIds.value || [], []),
           selectedFeatureRecordIdx: selectedFeatureRecordIdx.value,
           labelOverrideBuildWarning: labelOverrideBuildWarning.value
         };
@@ -1663,22 +1656,22 @@ json.dumps({
       addedLegendCaptions.value = new Set(manualCancelSnapshot.addedLegendCaptions);
       fileLegendCaptions.value = new Set(manualCancelSnapshot.fileLegendCaptions);
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
-      Object.assign(featureColorOverrides, cloneJsonSafe(manualCancelSnapshot.featureColorOverrides, {}));
+      Object.assign(featureColorOverrides, cloneJsonValue(manualCancelSnapshot.featureColorOverrides, {}));
       Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
-      Object.assign(featureStrokeOverrides, cloneJsonSafe(manualCancelSnapshot.featureStrokeOverrides, {}));
-      legendEntries.value = cloneJsonSafe(manualCancelSnapshot.legendEntries, []);
-      deletedLegendEntries.value = cloneJsonSafe(manualCancelSnapshot.deletedLegendEntries, []);
+      Object.assign(featureStrokeOverrides, cloneJsonValue(manualCancelSnapshot.featureStrokeOverrides, {}));
+      legendEntries.value = cloneJsonValue(manualCancelSnapshot.legendEntries, []);
+      deletedLegendEntries.value = cloneJsonValue(manualCancelSnapshot.deletedLegendEntries, []);
       Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
-      Object.assign(legendColorOverrides, cloneJsonSafe(manualCancelSnapshot.legendColorOverrides, {}));
-      originalLegendOrder.value = cloneJsonSafe(manualCancelSnapshot.originalLegendOrder, []);
-      originalLegendColors.value = cloneJsonSafe(manualCancelSnapshot.originalLegendColors, {});
-      extractedFeatures.value = cloneJsonSafe(manualCancelSnapshot.extractedFeatures, []);
-      featureSelectorSafetyScope.value = cloneJsonSafe(manualCancelSnapshot.featureSelectorSafetyScope, []);
-      editableLabels.value = cloneJsonSafe(manualCancelSnapshot.editableLabels, []);
-      setFeatureEditorStatus(cloneJsonSafe(manualCancelSnapshot.featureEditorStatus, {}));
+      Object.assign(legendColorOverrides, cloneJsonValue(manualCancelSnapshot.legendColorOverrides, {}));
+      originalLegendOrder.value = cloneJsonValue(manualCancelSnapshot.originalLegendOrder, []);
+      originalLegendColors.value = cloneJsonValue(manualCancelSnapshot.originalLegendColors, {});
+      extractedFeatures.value = cloneJsonValue(manualCancelSnapshot.extractedFeatures, []);
+      featureSelectorSafetyScope.value = cloneJsonValue(manualCancelSnapshot.featureSelectorSafetyScope, []);
+      editableLabels.value = cloneJsonValue(manualCancelSnapshot.editableLabels, []);
+      setFeatureEditorStatus(cloneJsonValue(manualCancelSnapshot.featureEditorStatus, {}));
       featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
       featureExtractionError.value = manualCancelSnapshot.featureExtractionError;
-      featureRecordIds.value = cloneJsonSafe(manualCancelSnapshot.featureRecordIds, []);
+      featureRecordIds.value = cloneJsonValue(manualCancelSnapshot.featureRecordIds, []);
       selectedFeatureRecordIdx.value = manualCancelSnapshot.selectedFeatureRecordIdx;
       labelOverrideBuildWarning.value = manualCancelSnapshot.labelOverrideBuildWarning;
     };

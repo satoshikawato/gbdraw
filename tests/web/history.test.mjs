@@ -11,7 +11,7 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await mkdir(join(tempDir, 'app'), { recursive: true });
-for (const filename of ['history.js', 'history-files.js', 'history-snapshot.js', 'svg-serialization.js']) {
+for (const filename of ['history.js', 'history-files.js', 'history-snapshot.js', 'json-clone.js', 'svg-serialization.js']) {
   await writeFile(
     join(tempDir, 'services', filename),
     await readFile(join(sourceDir, filename), 'utf8'),

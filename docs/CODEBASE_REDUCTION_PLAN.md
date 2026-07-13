@@ -473,3 +473,45 @@ PR ごとに次を記録する。
 4. 実測した削減行数・容量と、保留項目の理由が最終記録に残っている。
 5. 新しい循環依存、汎用すぎる helper、巨大な option schema、未使用 compatibility layer を導入していない。
 
+## 10. 実施結果（2026-07-13）
+
+安全性と純減条件を満たす候補は実装し、条件を満たさない候補は根拠を確認して保留した。
+
+| Phase | 結果 | 主な内容 |
+|---|---|---|
+| 0 | 完了 | 公開 API、Circular/Linear CLI action・既定値・代表 `Namespace`・help の SHA-256 契約を `tests/test_public_contract.py` と `tests/fixtures/public_contract.json` に固定 |
+| 1 | 完了 | 未参照 private 定義、no-op、完了文書、未使用 Web font を削除 |
+| 2 | 完了 | scalar axis、records/depth/coordinate/selector helper を既存 owner に統合し、`features.colors`/`features.visibility` の循環依存を解消 |
+| 3 | 完了 | Circular parser の色・解析引数を既存 `add_color_args` / `add_analysis_args` に統合。契約 snapshot で順序、文言、型、既定値を固定 |
+| 4 | 完了 | binary codec、文字列正規化、transform、title、JSON clone、DOM class、text download、SVG serialization/defs の安全な重複を統合 |
+| 5 | 完了 | LOSAT direct/WASI runtime を共有。main/worker の dispatch、RPC、cancel 境界と thread budget は維持 |
+| 6 | 完了 | `auto-value-field` を component 化し、Pyodide の orthogroup serializer を `web_support` の共通実装へ統合 |
+| 7 | 完了 | 数値 track capture、feature factory、同一 label test body を共有。入力・期待値・元の test 名は維持 |
+| 8-A | 完了 | canonical example を参照するよう test を変更し、重複 test input と未使用 Web font を削除 |
+| 8-B | 保留 | palette SVG は公開 docs/example URL から直接参照される。URL を維持する release 時自動生成工程がないため追跡を継続 |
+
+### 10.1 実測削減量
+
+- 基準 commit `cbfced9` から主要削減 commit `fea52cd` まで、追跡対象は 1,347,675,940 bytes から 1,297,545,546 bytes へ 50,130,394 bytes 純減した。
+- 同 commit は 1,355 行追加、698,118 行削除で、重複 fixture を含め 696,763 行純減した。
+- その後の契約固定と追加共通化は、本記録を除いて 588 行追加、712 行削除、差し引き 124 行純減した。契約 fixture/test の追加を含む。
+
+### 10.2 意図的に統合しなかった項目
+
+- threaded/non-threaded worker RPC は message shape と lifecycle が異なり、共通化すると環境分岐が増えるため現状を維持した。
+- modal shell と巨大関数は、移動だけでは純減せず責務境界も改善しない候補を保留した。
+- `analysis/collinearity.py` と `analysis/protein_colinearity.py` の短い row 数値 helper、および closure 固有の test double は、import/factory の追加を含めると純減または単純化にならないため維持した。
+- `tests/test_web_packaging.py` の CSP、asset、埋め込み source の assert は artifact 契約そのものを検証するため維持した。Node/Playwright への置換だけを目的とした test infrastructure は追加していない。
+
+### 10.3 性能・並列実行の確認
+
+- LOSAT の `DEFAULT_MAX_WORKERS=4`、total thread budget 16、threads/job 上限 16、auto allocation、threaded 判定、module worker 数は変更していない。
+- 共通化したのは 1 pair の標準 WASI setup/start/decode のみで、main/worker は従来どおり別 realm で実行する。main 側の abort check と worker 側の job lifecycle も維持した。
+- Pyodide serializer は旧埋め込み実装と出力一致を確認した。合成 10,000 member の比較では旧 24.8 ms、共通実装 30.9 ms（約 6.1 ms 増）であり、LOSAT 計算後の serialization として許容できる範囲だった。
+
+### 10.4 検証記録
+
+- 変更対象の契約・描画・packaging test: 310 passed, 19 skipped。削減前 HEAD と現行の公開 API/CLI 契約も同一 snapshot に完全一致した。
+- 全 test: fast 1114 passed / 24 skipped、slow 4 passed / 2 skipped。2 分割の合計 1118 passed / 26 skipped で収集した 1144 件をすべてカバーした。
+- `prepare_browser_wheel.py`、offline `check-assets`、最終 wheel の `inspect-wheel`、isolated `python -m build`、`prepare_cloudflare_pages.py` は成功した。
+- Node、Node Playwright、Python Playwright、Ruff は実行環境に存在しない。AGENTS.md 記載の全経路を確認し、Web は Python packaging/埋め込み実行 test で代替した。

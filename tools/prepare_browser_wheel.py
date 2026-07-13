@@ -8,8 +8,9 @@ import subprocess
 import sys
 import tempfile
 import zipfile
-from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from runpy import run_path
+from types import SimpleNamespace
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -17,14 +18,7 @@ WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 
 
 def _load_build_support_module():
-    build_support_path = REPO_ROOT / "gbdraw" / "_build_support.py"
-    spec = spec_from_file_location("gbdraw_build_support", build_support_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load build support module from {build_support_path}")
-
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return SimpleNamespace(**run_path(str(REPO_ROOT / "gbdraw" / "_build_support.py")))
 
 
 def prepare_browser_wheel(*, refresh_cache_bust: bool = False) -> int:

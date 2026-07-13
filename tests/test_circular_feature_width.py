@@ -24,7 +24,7 @@ from gbdraw.svg.circular_ticks import (
     get_circular_tick_path_ratio_bounds,
 )
 from gbdraw.tracks import CircularTrackSlot, default_circular_track_slots, parse_circular_track_slot
-from tests.utils.circular_drawer_fakes import make_numeric_track_capture
+from tests.utils.circular_drawer_fakes import make_feature_draw_ratio_capture, make_numeric_track_capture
 from svgwrite import Drawing
 
 
@@ -139,23 +139,11 @@ def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.Monke
     cfg = GbdrawConfig.from_dict(config_dict)
 
     captured_ratio_factors: list[float] = []
-
-    def fake_draw(
-        self,
-        feature_object,
-        group,
-        total_length,
-        radius,
-        track_ratio,
-        track_ratio_factor,
-        track_type,
-        strandedness,
-        length_param,
-    ):
-        captured_ratio_factors.append(float(track_ratio_factor))
-        return group
-
-    monkeypatch.setattr(circular_seq_record_group_module.FeatureDrawer, "draw", fake_draw)
+    monkeypatch.setattr(
+        circular_seq_record_group_module.FeatureDrawer,
+        "draw",
+        make_feature_draw_ratio_capture(captured_ratio_factors),
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -181,23 +169,11 @@ def test_default_custom_feature_slot_preserves_separate_strand_feature_width(
     cfg = GbdrawConfig.from_dict(config_dict)
 
     captured_ratio_factors: list[float] = []
-
-    def fake_draw(
-        self,
-        feature_object,
-        group,
-        total_length,
-        radius,
-        track_ratio,
-        track_ratio_factor,
-        track_type,
-        strandedness,
-        length_param,
-    ):
-        captured_ratio_factors.append(float(track_ratio_factor))
-        return group
-
-    monkeypatch.setattr(circular_seq_record_group_module.FeatureDrawer, "draw", fake_draw)
+    monkeypatch.setattr(
+        circular_seq_record_group_module.FeatureDrawer,
+        "draw",
+        make_feature_draw_ratio_capture(captured_ratio_factors),
+    )
 
     assemble_circular_diagram_from_record(
         record,

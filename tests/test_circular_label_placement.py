@@ -1522,7 +1522,7 @@ def test_mjenmv_inner_strict_rebalance_resolves_wsv192_wsv136_min_gap_overlap() 
     assert not overlap
 
 
-def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking() -> None:
+def _assert_mjenmv_inner_strict_keeps_current_inner_order_backtracking() -> None:
     external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
         strandedness=True,
         resolve_overlaps=False,
@@ -1540,26 +1540,14 @@ def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking() 
     deltas = [unwrapped_angles[idx + 1] - unwrapped_angles[idx] for idx in range(len(unwrapped_angles) - 1)]
     assert sum(delta <= 0.0 for delta in deltas) == 6
     assert min(deltas) == pytest.approx(-1.8091384182670334, abs=1e-6)
+
+
+def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking() -> None:
+    _assert_mjenmv_inner_strict_keeps_current_inner_order_backtracking()
 
 
 def test_mjenmv_inner_strict_no_overtake_keeps_current_inner_order_backtracking() -> None:
-    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
-        strandedness=True,
-        resolve_overlaps=False,
-        track_type="tuckin",
-        allow_inner_labels=True,
-        label_blacklist="",
-    )
-    inner_labels = sorted(
-        [label for label in external_labels if label.get("is_inner")],
-        key=lambda label: float(label["middle"]),
-    )
-    assert len(inner_labels) >= 2
-
-    unwrapped_angles = [_label_unwrapped_angle_for_order_test(label, total_length) for label in inner_labels]
-    deltas = [unwrapped_angles[idx + 1] - unwrapped_angles[idx] for idx in range(len(unwrapped_angles) - 1)]
-    assert sum(delta <= 0.0 for delta in deltas) == 6
-    assert min(deltas) == pytest.approx(-1.8091384182670334, abs=1e-6)
+    _assert_mjenmv_inner_strict_keeps_current_inner_order_backtracking()
 
 
 def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing() -> None:

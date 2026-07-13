@@ -11,6 +11,60 @@ export const concatUint8Arrays = (chunks) => {
   return merged;
 };
 
+export const hasDirectLosatApi = (wasmModule) =>
+  WebAssembly.Module.exports(wasmModule).some(
+    (entry) => entry.kind === 'function' && entry.name === 'losat_web_run_pair'
+  );
+
+export const runLosatPairWasi = async ({
+  program,
+  queryFasta,
+  subjectFasta,
+  outfmt = '6',
+  extraArgs = [],
+  wasiShim,
+  wasmModule,
+  checkCanceled = () => {}
+}) => {
+  const { WASI, File, OpenFile, PreopenDirectory, ConsoleStdout } = wasiShim;
+  const encoder = new TextEncoder();
+  const files = new Map([
+    ['query.fa', new File(encoder.encode(queryFasta), { readonly: true })],
+    ['subject.fa', new File(encoder.encode(subjectFasta), { readonly: true })]
+  ]);
+  const preopen = new PreopenDirectory('.', files);
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  const stdout = new ConsoleStdout((data) => stdoutChunks.push(data));
+  const stderr = new ConsoleStdout((data) => stderrChunks.push(data));
+  const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
+  const args = [
+    'losat',
+    program,
+    '--query',
+    'query.fa',
+    '--subject',
+    'subject.fa',
+    '--outfmt',
+    String(outfmt),
+    ...(Array.isArray(extraArgs) ? extraArgs : [])
+  ];
+  const wasi = new WASI(args, [], [stdin, stdout, stderr, preopen]);
+  const instance = await WebAssembly.instantiate(wasmModule, {
+    wasi_snapshot_preview1: wasi.wasiImport
+  });
+  checkCanceled();
+  const exitCode = wasi.start(instance);
+  checkCanceled();
+
+  const stdoutText = new TextDecoder().decode(concatUint8Arrays(stdoutChunks));
+  const stderrText = new TextDecoder().decode(concatUint8Arrays(stderrChunks));
+  if (exitCode !== 0) {
+    throw new Error(stderrText.trim() || `LOSAT exited with code ${exitCode}`);
+  }
+  return stdoutText;
+};
+
 const instantiateDirectLosat = async (
   { WASI, File, OpenFile, PreopenDirectory, ConsoleStdout },
   wasmModule

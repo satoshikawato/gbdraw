@@ -63,7 +63,8 @@ from .cli_utils.common import (
     _add_format_arg,
     _add_gc_content_axis_args,
     _add_legend_size_args,
-    _add_window_step_args,
+    add_analysis_args,
+    add_color_args,
     add_feature_args,
     add_input_args,
     add_label_args,
@@ -191,32 +192,8 @@ def _get_args(args) -> argparse.Namespace:
         '--output',
         help='output file prefix (default: accession number of the sequence)',
         type=str)
-    parser.add_argument(
-        "-p", "--palette",
-        metavar="PALETTE",
-        default="default",
-        help="Palette name (default: default)",
-        type=str
-    )
-    parser.add_argument(
-        '-t',
-        '--table',
-        help='color table (optional)',
-        type=str,
-        default="")
-    parser.add_argument(
-        '-d',
-        '--default_colors',
-        help='TSV file that overrides the color palette (optional)',
-        type=str,
-        default="")
-    parser.add_argument(
-        '-n',
-        '--nt',
-        help='dinucleotide (default: GC). ',
-        type=str,
-        default="GC")
-    _add_window_step_args(parser)
+    add_color_args(parser)
+    add_analysis_args(parser)
     parser.add_argument(
         '--species',
         help='Species name (optional; e.g. "<i>Escherichia coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")',

@@ -966,12 +966,12 @@ def test_default_preset_slots_compress_to_clear_center_definition(
             definition_profile="full",
         )
 
-    def fake_add_gc_content_group_on_canvas(
+    def fake_add_numeric_group_on_canvas(
         canvas,
         gb_record,
         gc_df,
         canvas_config,
-        gc_config,
+        track_config,
         config_dict,
         *,
         track_width_override=None,
@@ -982,24 +982,8 @@ def test_default_preset_slots_compress_to_clear_center_definition(
         capture_numeric_slot(canvas_config)
         return canvas
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(canvas_config)
-        return canvas
-
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_numeric_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_numeric_group_on_canvas)
 
     assemble_circular_diagram_from_record(
         record,
@@ -1524,21 +1508,7 @@ def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
 
     capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
-    def fake_add_depth_group_on_canvas(
-        canvas,
-        gb_record,
-        depth_df,
-        canvas_config,
-        depth_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "depth"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_depth_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, "depth")
 
     fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 
@@ -1580,21 +1550,7 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
 
     capture_numeric_slot = make_numeric_slot_geometry_capture(captured)
 
-    def fake_add_depth_group_on_canvas(
-        canvas,
-        gb_record,
-        depth_df,
-        canvas_config,
-        depth_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        capture_numeric_slot(str(group_id or "depth"), canvas_config, track_width_override, norm_factor_override)
-        return canvas
+    fake_add_depth_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, "depth")
 
     fake_add_gc_content_group_on_canvas = make_numeric_slot_capture(capture_numeric_slot, 'gc_content')
 

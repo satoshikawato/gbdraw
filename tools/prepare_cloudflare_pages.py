@@ -39,44 +39,29 @@ ISOLATION_HEADERS = """/*
 """
 
 
-def _load_prepare_browser_wheel_module():
-    module_path = REPO_ROOT / "tools" / "prepare_browser_wheel.py"
-    spec = spec_from_file_location("prepare_browser_wheel", module_path)
+def _load_repo_module(module_path: Path, module_name: str):
+    spec = spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load browser wheel preparation module from {module_path}")
+        raise RuntimeError(f"Could not load module from {module_path}")
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_prepare_browser_wheel_module():
+    return _load_repo_module(REPO_ROOT / "tools" / "prepare_browser_wheel.py", "prepare_browser_wheel")
 
 
 def _load_build_support_module():
-    module_path = REPO_ROOT / "gbdraw" / "_build_support.py"
-    spec = spec_from_file_location("gbdraw_build_support", module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load build support module from {module_path}")
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return _load_repo_module(REPO_ROOT / "gbdraw" / "_build_support.py", "gbdraw_build_support")
 
 
 def _load_refresh_gallery_sessions_module():
-    module_path = REPO_ROOT / "tools" / "refresh_gallery_sessions.py"
-    spec = spec_from_file_location("refresh_gallery_sessions", module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load gallery session refresh module from {module_path}")
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return _load_repo_module(REPO_ROOT / "tools" / "refresh_gallery_sessions.py", "refresh_gallery_sessions")
 
 
 def _load_stamp_web_build_module():
-    module_path = REPO_ROOT / "tools" / "stamp_web_build.py"
-    spec = spec_from_file_location("stamp_web_build", module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load hosted build stamping module from {module_path}")
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return _load_repo_module(REPO_ROOT / "tools" / "stamp_web_build.py", "stamp_web_build")
 
 
 def _replace_once(source: str, old: str, new: str) -> str:

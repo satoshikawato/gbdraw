@@ -2,6 +2,25 @@ from collections.abc import MutableMapping
 from typing import Any
 
 
+def make_feature_draw_ratio_capture(captured: list[float]):
+    def capture(
+        _drawer,
+        _feature,
+        group,
+        _total_length,
+        _radius,
+        _track_ratio,
+        track_ratio_factor,
+        _track_type,
+        _strandedness,
+        _length_param,
+    ):
+        captured.append(float(track_ratio_factor))
+        return group
+
+    return capture
+
+
 def make_numeric_track_capture(
     captured: MutableMapping[str, Any],
     *,

@@ -1,5 +1,9 @@
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
-import { concatUint8Arrays, runLosatPairDirect } from './losat-runtime.js';
+import {
+  hasDirectLosatApi,
+  runLosatPairDirect,
+  runLosatPairWasi
+} from './losat-runtime.js';
 
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losat-threaded.wasm';
@@ -72,11 +76,6 @@ const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
   }
   return wasmModulePromises.get(key);
 };
-
-const hasDirectLosatApi = (wasmModule) =>
-  WebAssembly.Module.exports(wasmModule).some(
-    (entry) => entry.kind === 'function' && entry.name === 'losat_web_run_pair'
-  );
 
 const moduleHasThreadedWasiShape = (wasmModule) => {
   const exports = WebAssembly.Module.exports(wasmModule);
@@ -154,8 +153,6 @@ export const runLosatPair = async ({
     loadLosatModule(wasmPath)
   ]);
   throwIfAborted(signal);
-  const { WASI, File, OpenFile, PreopenDirectory, ConsoleStdout } = wasiShim;
-
   if (hasDirectLosatApi(wasmModule)) {
     const text = await runLosatPairDirect({
       program,
@@ -170,50 +167,16 @@ export const runLosatPair = async ({
     return text;
   }
 
-  const encoder = new TextEncoder();
-  const files = new Map([
-    ['query.fa', new File(encoder.encode(queryFasta), { readonly: true })],
-    ['subject.fa', new File(encoder.encode(subjectFasta), { readonly: true })]
-  ]);
-  const preopen = new PreopenDirectory('.', files);
-
-  const stdoutChunks = [];
-  const stderrChunks = [];
-  const stdout = new ConsoleStdout((data) => stdoutChunks.push(data));
-  const stderr = new ConsoleStdout((data) => stderrChunks.push(data));
-  const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
-  const fds = [stdin, stdout, stderr, preopen];
-
-  const extraList = Array.isArray(extraArgs) ? extraArgs : [];
-  const args = [
-    'losat',
+  return runLosatPairWasi({
     program,
-    '--query',
-    'query.fa',
-    '--subject',
-    'subject.fa',
-    '--outfmt',
-    String(outfmt),
-    ...extraList
-  ];
-
-  const wasi = new WASI(args, [], fds);
-  const instance = await WebAssembly.instantiate(wasmModule, {
-    wasi_snapshot_preview1: wasi.wasiImport
+    queryFasta,
+    subjectFasta,
+    outfmt,
+    extraArgs,
+    wasiShim,
+    wasmModule,
+    checkCanceled: () => throwIfAborted(signal)
   });
-  throwIfAborted(signal);
-  const exitCode = wasi.start(instance);
-  throwIfAborted(signal);
-
-  const stdoutText = new TextDecoder().decode(concatUint8Arrays(stdoutChunks));
-  const stderrText = new TextDecoder().decode(concatUint8Arrays(stderrChunks));
-
-  if (exitCode !== 0) {
-    const detail = stderrText.trim() || `LOSAT exited with code ${exitCode}`;
-    throw new Error(detail);
-  }
-
-  return stdoutText;
 };
 
 const getDefaultConcurrency = (jobCount) => {

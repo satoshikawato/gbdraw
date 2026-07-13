@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature, SimpleLocation
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
@@ -28,6 +28,10 @@ from gbdraw.labels.filtering import (
     get_label_text,
     preprocess_label_filtering,
     read_label_override_file,
+)
+from tests.utils.feature_fixtures import (
+    make_origin_spanning_feature_object as _make_origin_spanning_feature_object,
+    make_origin_spanning_seq_feature as _make_origin_spanning_seq_feature,
 )
 
 
@@ -80,41 +84,6 @@ def _make_record() -> SeqRecord:
     record = SeqRecord(Seq("A" * 400), id="rec1")
     record.features = [_make_seq_feature()]
     return record
-
-
-def _make_origin_spanning_seq_feature() -> SeqFeature:
-    return SeqFeature(
-        CompoundLocation(
-            [
-                SimpleLocation(0, 576, strand=-1),
-                SimpleLocation(16023, 16569, strand=-1),
-            ],
-            operator="join",
-        ),
-        type="D-loop",
-        qualifiers={},
-    )
-
-
-def _make_origin_spanning_feature_object(record_id: str = "rec1") -> FeatureObject:
-    return FeatureObject(
-        feature_id="feature_000000099",
-        location=[
-            FeatureLocationPart("block", "001", "negative", 1, 576, False),
-            FeatureLocationPart("block", "002", "negative", 16023, 16569, True),
-        ],
-        is_directional=False,
-        color="#cccccc",
-        note="",
-        label_text="",
-        coordinates=[
-            SimpleLocation(0, 576, strand=-1),
-            SimpleLocation(16023, 16569, strand=-1),
-        ],
-        type="D-loop",
-        qualifiers={},
-        record_id=record_id,
-    )
 
 
 def test_read_label_override_file_ok(tmp_path: Path) -> None:

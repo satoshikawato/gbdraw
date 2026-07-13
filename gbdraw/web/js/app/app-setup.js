@@ -24,6 +24,7 @@ import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
+import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
   disposeDiagramGenerationWorker,
@@ -1868,18 +1869,7 @@ export const createAppSetup = () => {
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
     if (!value) return;
-    const blob = new Blob([value], { type });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = String(filename || 'gbdraw.txt');
-    document.body.appendChild(link);
-    link.addEventListener('click', (event) => {
-      event.stopPropagation();
-    }, { once: true });
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadTextFile(String(filename || 'gbdraw.txt'), value, type);
   };
 
   const specificRuleLegendOptions = computed(() => {
