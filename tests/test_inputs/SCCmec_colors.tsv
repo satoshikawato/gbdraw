@@ -1,0 +1,7 @@
+CDS	gene	^mecA$	#D55E00	mecA
+CDS	gene	^(mecI|mecR1)$	#E89C86	mec regulators
+CDS	gene	^ccr[ABC][0-9]*$	#0072B2	ccr recombinases
+CDS	product	cassette chromosome recombinase	#0072B2	ccr recombinases
+CDS	product	(transposase|insertion sequence)	#E69F00	IS / transposase
+CDS	gene	^(ermA|aadD|ble|bleO|spc|tetK)$	#CC79A7	Other resistance genes
+CDS	gene	^(rlmH|orfX)$	#333333	orfX / rlmH

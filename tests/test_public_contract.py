@@ -33,6 +33,8 @@ def _json_value(value):
         return {str(key): _json_value(item) for key, item in value.items()}
     module = getattr(value, "__module__", None)
     name = getattr(value, "__qualname__", getattr(value, "__name__", None))
+    if (module, name) == ("pandas.core.frame", "DataFrame"):
+        module = "pandas"
     return f"{module}.{name}" if module and name else str(value)
 
 
