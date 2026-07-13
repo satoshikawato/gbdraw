@@ -1,17 +1,10 @@
 import { runFeatureExtraction } from '../services/diagram-generation.js';
+import { cloneJsonValue } from '../services/json-clone.js';
 
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 const featureExtractionCache = new WeakMap();
 
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
-
-const cloneJsonValue = (value, fallback) => {
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (_err) {
-    return fallback;
-  }
-};
 
 const normalizeRecordSelectorText = (value) => {
   const normalized = String(value ?? '').trim();

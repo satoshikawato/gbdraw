@@ -5,20 +5,22 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
-const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
+const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-color-actions-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'feature-editor'), { recursive: true });
+await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
+await mkdir(join(tempDir, 'services'), { recursive: true });
 await writeFile(
-  join(tempDir, 'feature-editor', 'color-actions.js'),
-  await readFile(join(sourceDir, 'feature-editor', 'color-actions.js'), 'utf8'),
+  join(tempDir, 'app', 'feature-editor', 'color-actions.js'),
+  await readFile(join(sourceDir, 'app', 'feature-editor', 'color-actions.js'), 'utf8'),
   'utf8'
 );
-await writeFile(join(tempDir, 'feature-utils.js'), await readFile(join(sourceDir, 'feature-utils.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'color-utils.js'), await readFile(join(sourceDir, 'color-utils.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'app', 'feature-utils.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'app', 'color-utils.js'), await readFile(join(sourceDir, 'app', 'color-utils.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'svg-serialization.js'), await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'), 'utf8');
 
 const { createFeatureColorActions } = await import(
-  pathToFileURL(join(tempDir, 'feature-editor', 'color-actions.js'))
+  pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
 );
 
 const ref = (value) => ({ value });

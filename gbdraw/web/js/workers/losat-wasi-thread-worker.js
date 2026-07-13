@@ -1,18 +1,9 @@
+import { concatUint8Arrays } from '../services/losat-runtime.js';
+
 const markWorkerStart = (control, state) => {
   const view = new Int32Array(control);
   Atomics.store(view, 0, state);
   Atomics.notify(view, 0, 1);
-};
-
-const concatUint8Arrays = (chunks) => {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  chunks.forEach((chunk) => {
-    merged.set(chunk, offset);
-    offset += chunk.length;
-  });
-  return merged;
 };
 
 let preparedContext = null;

@@ -9,6 +9,10 @@ import {
   buildFeatureVisibilitySelectorCache,
   preserveFeatureVisibilitySelectorCacheForOverrides
 } from './feature-visibility.js';
+import {
+  normalizeCircularPlotTitlePosition,
+  normalizeLinearPlotTitlePosition
+} from './plot-title-position.js';
 
 export const setupWatchers = ({
   state,
@@ -140,19 +144,9 @@ export const setupWatchers = ({
     syncPaletteDraftState
   } = resultsManager;
 
-  const normalizeCircularPlotTitlePosition = (value) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
-  };
-
   const normalizeLegendPosition = (value, fallback = 'left') => {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized || fallback;
-  };
-
-  const normalizeLinearPlotTitlePosition = (value) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
   };
 
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';

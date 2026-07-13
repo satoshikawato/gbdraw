@@ -7,11 +7,19 @@ from typing import Any, Optional
 
 import pandas as pd
 from pandas import DataFrame
-from Bio.SeqFeature import SeqFeature
 
 from ..exceptions import InputFileError, ParseError, ValidationError
-from ..features.colors import compute_feature_hash
-from ..features.ids import compute_feature_object_hash
+from ..features.selector_values import (
+    _matches_constraint,
+    get_feature_hash as _get_feature_hash,
+    get_feature_location_str as _get_feature_location_str,
+    get_feature_qualifiers as _get_feature_qualifiers,
+    get_feature_record_id as _get_feature_record_id,
+    get_feature_record_location_str as _get_feature_record_location_str,
+    get_feature_type as _get_feature_type,
+    get_qualifier_values as _get_qualifier_values,
+    normalize_qualifier_values as _normalize_qualifier_values,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,216 +192,32 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
     return df
 
 
-def _normalize_qualifier_values(raw_values: Any) -> list[str]:
-    if raw_values is None:
-        return []
-    if isinstance(raw_values, (list, tuple, set)):
-        return [str(value) for value in raw_values if value is not None]
-    return [str(raw_values)]
 
 
-def _get_feature_type(feature: Any) -> str:
-    feature_type = getattr(feature, "type", None)
-    if feature_type is None:
-        feature_type = getattr(feature, "feature_type", "")
-    return str(feature_type or "")
 
 
-def _get_feature_qualifiers(feature: Any) -> dict:
-    qualifiers = getattr(feature, "qualifiers", {})
-    if qualifiers is None:
-        return {}
-    if isinstance(qualifiers, dict):
-        return qualifiers
-    try:
-        return dict(qualifiers)
-    except Exception:
-        return {}
 
 
-def _get_feature_record_id(feature: Any, record_id: Optional[str]) -> Optional[str]:
-    if record_id is not None and str(record_id).strip() != "":
-        return str(record_id)
-    feature_record_id = getattr(feature, "record_id", None)
-    if feature_record_id is None or str(feature_record_id).strip() == "":
-        return None
-    return str(feature_record_id)
 
 
-def _iter_feature_coordinates(feature: Any) -> list[Any]:
-    coordinates = getattr(feature, "coordinates", None)
-    if coordinates is None:
-        return []
-    try:
-        return list(coordinates)
-    except Exception:
-        return []
 
 
-def _extract_first_coordinate_part(feature: Any) -> Optional[tuple[int, int, Any]]:
-    for part in _iter_feature_coordinates(feature):
-        try:
-            start = int(getattr(part, "start"))
-            end = int(getattr(part, "end"))
-            strand = getattr(part, "strand", None)
-        except Exception:
-            continue
-        return start, end, strand
-    return None
 
 
-def _extract_coordinate_bounds(feature: Any) -> Optional[tuple[int, int]]:
-    starts: list[int] = []
-    ends: list[int] = []
-    for part in _iter_feature_coordinates(feature):
-        try:
-            starts.append(int(getattr(part, "start")))
-            ends.append(int(getattr(part, "end")))
-        except Exception:
-            continue
-    if not starts or not ends:
-        return None
-    return min(starts), max(ends)
 
 
-def _extract_first_location_part(feature: Any) -> Optional[tuple[int, int, Any]]:
-    if isinstance(feature, SeqFeature):
-        loc = feature.location
-        if hasattr(loc, "parts") and loc.parts:
-            part = loc.parts[0]
-            return int(part.start), int(part.end), part.strand
-        return int(loc.start), int(loc.end), loc.strand
-
-    coordinate_part = _extract_first_coordinate_part(feature)
-    if coordinate_part is not None:
-        return coordinate_part
-
-    location = getattr(feature, "location", None)
-    if not location:
-        return None
-
-    selected = None
-    for part in location:
-        kind = getattr(part, "kind", None)
-        if kind is None and isinstance(part, tuple) and len(part) >= 1:
-            kind = part[0]
-        if kind == "block":
-            selected = part
-            break
-    if selected is None:
-        selected = location[0]
-
-    try:
-        start = getattr(selected, "start", selected[3])
-        end = getattr(selected, "end", selected[4])
-        strand = getattr(selected, "strand", selected[2])
-    except Exception:
-        return None
-    try:
-        return int(start), int(end), strand
-    except Exception:
-        return None
 
 
-def _get_feature_hash(feature: Any, record_id: Optional[str]) -> Optional[str]:
-    resolved_record_id = _get_feature_record_id(feature, record_id)
-    if isinstance(feature, SeqFeature):
-        return compute_feature_hash(feature, record_id=resolved_record_id)
-
-    return compute_feature_object_hash(feature, record_id=resolved_record_id)
 
 
-def _get_feature_location_str(feature: Any) -> Optional[str]:
-    if isinstance(feature, SeqFeature):
-        try:
-            return f"{int(feature.location.start)}..{int(feature.location.end)}"
-        except Exception:
-            return None
-
-    coordinate_bounds = _extract_coordinate_bounds(feature)
-    if coordinate_bounds is not None:
-        return f"{coordinate_bounds[0]}..{coordinate_bounds[1]}"
-
-    location = getattr(feature, "location", None)
-    if not location:
-        return None
-
-    starts: list[int] = []
-    ends: list[int] = []
-    for part in location:
-        kind = getattr(part, "kind", None)
-        if kind is None and isinstance(part, tuple) and len(part) >= 1:
-            kind = part[0]
-        if kind not in {"block", None}:
-            continue
-        try:
-            start = int(getattr(part, "start", part[3]))
-            end = int(getattr(part, "end", part[4]))
-        except Exception:
-            continue
-        starts.append(start)
-        ends.append(end)
-    if not starts or not ends:
-        return None
-    return f"{min(starts)}..{max(ends)}"
 
 
-def _normalize_strand_token(strand: Any) -> str:
-    if strand in (None, "", "none", "None", "undefined"):
-        return "undefined"
-    if isinstance(strand, str):
-        normalized = strand.strip().lower()
-        if normalized in {"positive", "plus", "+", "forward", "1"}:
-            return "+"
-        if normalized in {"negative", "minus", "-", "reverse", "-1"}:
-            return "-"
-        if normalized in {"undefined", "none", ""}:
-            return "undefined"
-        return "undefined"
-    if isinstance(strand, (int, float)):
-        try:
-            numeric = int(strand)
-        except Exception:
-            return "undefined"
-        if numeric == 1:
-            return "+"
-        if numeric == -1:
-            return "-"
-        return "undefined"
-    return "undefined"
 
 
-def _get_feature_record_location_str(feature: Any, record_id: Optional[str]) -> Optional[str]:
-    resolved_record_id = _get_feature_record_id(feature, record_id)
-    if not resolved_record_id:
-        return None
-
-    position = _get_feature_position_str(feature)
-    if not position:
-        return None
-
-    return f"{resolved_record_id}:{position}"
 
 
-def _get_feature_position_str(feature: Any) -> Optional[str]:
-    location = _get_feature_location_str(feature)
-    if not location:
-        return None
-
-    strand_source = None
-    first_part = _extract_first_location_part(feature)
-    if first_part is not None:
-        strand_source = first_part[2]
-    strand = _normalize_strand_token(strand_source)
-    return f"{location}:{strand}"
 
 
-def _get_qualifier_values(qualifiers: dict, qualifier_key: str) -> list[str]:
-    for key, values in qualifiers.items():
-        if str(key).lower() != str(qualifier_key).lower():
-            continue
-        return _normalize_qualifier_values(values)
-    return []
 
 
 def _is_label_override_header_row(
@@ -521,12 +345,6 @@ def _matches_any_pattern(candidate: Optional[str], patterns: list[re.Pattern[str
     return any(pattern.search(candidate) for pattern in patterns)
 
 
-def _matches_constraint(rule_token: str, actual_value: Optional[str]) -> bool:
-    if str(rule_token) == "*":
-        return True
-    if actual_value is None:
-        return False
-    return str(rule_token) == str(actual_value)
 
 
 def _resolve_label_override(

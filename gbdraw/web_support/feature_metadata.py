@@ -7,6 +7,10 @@ from typing import Any
 from Bio import SeqIO
 from Bio.Seq import Seq
 
+from gbdraw.core.record_metadata import (
+    _absolute_display_interval,
+    _read_coord_map as _read_record_coord_map,
+)
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.visibility import (
@@ -110,19 +114,33 @@ def _get_location_parts(location: Any) -> list[Any]:
     return [location]
 
 
-def _format_location_parts(location: Any) -> list[dict[str, object]]:
+
+
+
+
+def _format_location_parts(
+    location: Any,
+    coord_base: int = 1,
+    coord_step: int = 1,
+) -> list[dict[str, object]]:
     parts = []
     for part in _get_location_parts(location):
         try:
             start = int(part.start)
             end = int(part.end)
             strand = part.strand if part.strand is not None else location.strand
+            display_start, display_end = _absolute_display_interval(
+                start,
+                end,
+                coord_base,
+                coord_step,
+            )
             parts.append(
                 {
-                    "start": start,
-                    "end": end,
+                    "start": display_start,
+                    "end": display_end,
                     "strand": _strand_display(strand),
-                    "display": f"{start + 1}..{end}",
+                    "display": f"{display_start + 1}..{display_end}",
                 }
             )
         except Exception:
@@ -242,6 +260,7 @@ def extract_features_from_records_payload(
         record_id = record.id or f"Record_{rec_idx}"
         hash_record_id = record.id
         organism = _get_record_organism(record)
+        coord_base, coord_step = _read_record_coord_map(record)
         record_ids.append(record_id)
         for feat in record.features:
             if not should_render_feature(
@@ -253,10 +272,20 @@ def extract_features_from_records_payload(
             ):
                 continue
 
-            start = int(feat.location.start)
-            end = int(feat.location.end)
+            feature_start = int(feat.location.start)
+            feature_end = int(feat.location.end)
+            start, end = _absolute_display_interval(
+                feature_start,
+                feature_end,
+                coord_base,
+                coord_step,
+            )
             strand_raw = feat.location.strand
-            location_parts = _format_location_parts(feat.location)
+            location_parts = _format_location_parts(
+                feat.location,
+                coord_base,
+                coord_step,
+            )
             nucleotide_sequence, sequence_warnings = _extract_nucleotide_sequence(feat, record)
             amino_acid_sequence, translation_warnings = _extract_amino_acid_sequence(
                 feat,

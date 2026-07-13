@@ -225,6 +225,78 @@ def get_qualifier_values(qualifiers: dict, qualifier_key: str) -> list[str]:
     return []
 
 
+def _matches_constraint(rule_token: str, actual_value: Optional[str]) -> bool:
+    if str(rule_token) == "*":
+        return True
+    if actual_value is None:
+        return False
+    return str(rule_token) == str(actual_value)
+
+
+def _iter_color_rule_sets(color_map: dict, feature_type: str):
+    rules_for_feature_type = color_map.get(feature_type)
+    if rules_for_feature_type:
+        yield rules_for_feature_type
+    wildcard_rules = color_map.get("*")
+    if wildcard_rules:
+        yield wildcard_rules
+
+
+def _unpack_color_rule(rule) -> tuple[Any, str, Optional[str]]:
+    if len(rule) >= 3:
+        return rule[0], rule[1], rule[2]
+    return rule[0], rule[1], None
+
+
+def find_specific_color_rule(
+    feature: SeqFeature,
+    color_map: dict,
+    record_id: Optional[str] = None,
+) -> tuple[str, Optional[str]] | None:
+    """Return the first matching specific color rule, if any."""
+
+    feature_type = get_feature_type(feature)
+    for rules_for_feature_type in _iter_color_rule_sets(color_map, feature_type):
+        if "hash" in rules_for_feature_type:
+            feature_hash = get_feature_hash(feature, record_id=record_id)
+            for rule in rules_for_feature_type["hash"]:
+                pattern, color, caption = _unpack_color_rule(rule)
+                if feature_hash and pattern.search(feature_hash):
+                    return color, caption
+
+        if "record_location" in rules_for_feature_type:
+            record_location = get_feature_record_location_str(feature, record_id)
+            for rule in rules_for_feature_type["record_location"]:
+                pattern, color, caption = _unpack_color_rule(rule)
+                if record_location and pattern.search(record_location):
+                    return color, caption
+
+        qualifiers = get_feature_qualifiers(feature)
+        for qualifier_key in qualifiers:
+            if qualifier_key in rules_for_feature_type:
+                for rule in rules_for_feature_type[qualifier_key]:
+                    pattern, color, caption = _unpack_color_rule(rule)
+                    for value in get_qualifier_values(qualifiers, qualifier_key):
+                        if pattern.search(value):
+                            return color, caption
+
+        if "location" in rules_for_feature_type:
+            location_str = get_feature_location_str(feature)
+            for rule in rules_for_feature_type["location"]:
+                pattern, color, caption = _unpack_color_rule(rule)
+                if location_str and pattern.search(location_str):
+                    return color, caption
+    return None
+
+
+def feature_matches_specific_color_rule(
+    feature: SeqFeature,
+    color_map: dict,
+    record_id: Optional[str] = None,
+) -> bool:
+    return find_specific_color_rule(feature, color_map, record_id=record_id) is not None
+
+
 def build_feature_selector_values(
     feature: Any,
     record_id: Optional[str] = None,

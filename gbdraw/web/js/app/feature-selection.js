@@ -1,3 +1,5 @@
+import { setClassToken } from '../services/svg-serialization.js';
+
 const { computed, reactive } = window.Vue;
 
 export const FEATURE_SELECTION_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
@@ -28,23 +30,6 @@ export const getFeatureSelectionScope = (feature) => [
   feature?.record_idx ?? '',
   feature?.displayRecordId || feature?.record_id || ''
 ].join('::');
-
-const setClassToken = (element, token, enabled) => {
-  if (!element) return;
-  if (element.classList?.toggle) {
-    element.classList.toggle(token, Boolean(enabled));
-    return;
-  }
-  const existing = String(element.getAttribute('class') || '').trim();
-  const tokens = existing ? existing.split(/\s+/).filter(Boolean) : [];
-  const nextTokens = tokens.filter((entry) => entry !== token);
-  if (enabled) nextTokens.push(token);
-  if (nextTokens.length) {
-    element.setAttribute('class', nextTokens.join(' '));
-  } else {
-    element.removeAttribute('class');
-  }
-};
 
 export const stripFeatureSelectionClasses = (svg) => {
   if (!svg) return;

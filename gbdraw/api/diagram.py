@@ -30,6 +30,7 @@ from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     build_depth_track_dataframes,
     depth_track_count,
     depth_track_data_count,
+    depth_track_heights as _depth_track_heights_from_specs,
     normalize_depth_tracks,
     sync_depth_track_legend_entries,
 )
@@ -202,8 +203,8 @@ def _validate_circular_track_axis_index(
     return circular_track_axis_index
 
 
-def _circular_slots_have_renderer(
-    slots: Sequence[CircularTrackSlot] | None,
+def _slots_have_renderer(
+    slots: Sequence[CircularTrackSlot | LinearTrackSlot] | None,
     renderer: str,
 ) -> bool:
     return any(slot.enabled and str(slot.renderer) == renderer for slot in (slots or []))
@@ -240,22 +241,6 @@ def _parse_linear_track_slot_inputs(
     return parse_linear_track_slots(list(linear_track_slots))
 
 
-def _depth_track_heights_from_specs(
-    record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
-) -> list[float | None]:
-    if not record_depth_tracks:
-        return []
-    track_count = depth_track_count(record_depth_tracks)
-    heights: list[float | None] = [None for _ in range(track_count)]
-    for row in record_depth_tracks:
-        for track_index, spec in enumerate(row):
-            if track_index >= len(heights) or heights[track_index] is not None:
-                continue
-            if spec.height is not None:
-                heights[track_index] = float(spec.height)
-    return heights
-
-
 def _validate_linear_track_axis_index(
     linear_track_axis_index: int | None,
     parsed_linear_track_slots: Sequence[LinearTrackSlot] | None,
@@ -279,35 +264,6 @@ def _validate_linear_track_axis_index(
         raise ValidationError(str(exc)) from exc
     return linear_track_axis_index
 
-
-def _linear_slots_have_renderer(
-    slots: Sequence[LinearTrackSlot] | None,
-    renderer: str,
-) -> bool:
-    return any(slot.enabled and str(slot.renderer) == renderer for slot in (slots or []))
-
-
-def _linear_slots_define_renderer(
-    slots: Sequence[LinearTrackSlot] | None,
-    renderer: str,
-) -> bool:
-    return any(str(slot.renderer) == renderer for slot in (slots or []))
-
-
-def _dinucleotides_from_linear_slots(
-    slots: Sequence[LinearTrackSlot] | None,
-    *,
-    default_nt: str,
-) -> set[str]:
-    nts: set[str] = set()
-    for slot in slots or []:
-        if not slot.enabled or str(slot.renderer) not in {"dinucleotide_content", "dinucleotide_skew"}:
-            continue
-        params = slot.params or {}
-        nt = str(params.get("nt", params.get("dinucleotide", default_nt)) or default_nt).upper()
-        if len(nt) >= 2:
-            nts.add(nt)
-    return nts
 
 
 def _build_circular_dinucleotide_content_dataframes(
@@ -659,54 +615,12 @@ def _cfg_with_depth_scale_max(cfg: GbdrawConfig, max_depth: float | None) -> Gbd
     )
 
 
-def _max_depth_from_dataframes(depth_dfs: Sequence[DataFrame | None]) -> float | None:
-    max_values = [
-        float(depth_df["depth"].max())
-        for depth_df in depth_dfs
-        if depth_df is not None and not depth_df.empty and "depth" in depth_df.columns
-    ]
-    return max(max_values) if max_values else None
 
 
-def _load_depth_table(depth_table: DataFrame | None, depth_file: str | None) -> DataFrame | None:
-    if depth_table is not None and depth_file is not None:
-        raise ValidationError("Pass either depth_table or depth_file, not both.")
-    if depth_table is not None:
-        return depth_table
-    if depth_file:
-        return read_depth_tsv(depth_file)
-    return None
 
 
-def _load_depth_tables(
-    *,
-    records: Sequence[SeqRecord],
-    depth_tables: Sequence[DataFrame] | None,
-    depth_files: Sequence[str] | None,
-) -> list[DataFrame | None] | None:
-    if depth_tables is not None and depth_files is not None:
-        raise ValidationError("Pass either depth_tables or depth_files, not both.")
-    if depth_tables is None and depth_files is None:
-        return None
-
-    record_count = len(records)
-    if depth_tables is not None:
-        tables = list(depth_tables)
-    else:
-        depth_paths = list(depth_files or [])
-        tables = [read_depth_tsv(path) for path in depth_paths]
-
-    if len(tables) == 1:
-        return [tables[0] for _ in range(record_count)]
-    if len(tables) != record_count:
-        raise ValidationError(
-            f"Expected one depth table/file or one per record ({record_count}); got {len(tables)}."
-        )
-    return list(tables)
 
 
-def _depth_track_count_from_data(depth_tracks: Sequence[Sequence[DepthTrackData]] | None) -> int:
-    return max((len(row) for row in (depth_tracks or ())), default=0)
 
 
 def _depth_track_count_for_render(
@@ -744,8 +658,8 @@ def _default_circular_depth_slots_if_needed(
     )
 
 
-def _validate_circular_depth_track_indices(
-    slots: Sequence[CircularTrackSlot] | None,
+def _validate_depth_track_indices(
+    slots: Sequence[CircularTrackSlot | LinearTrackSlot] | None,
     *,
     depth_track_count_value: int,
 ) -> None:
@@ -766,32 +680,6 @@ def _validate_circular_depth_track_indices(
                 f"Depth slot '{slot.id}' track_index={track_index} is outside the available "
                 f"depth track range 0..{max(0, depth_track_count_value - 1)}."
             )
-
-
-def _validate_linear_depth_track_indices(
-    slots: Sequence[LinearTrackSlot] | None,
-    *,
-    depth_track_count_value: int,
-) -> None:
-    if not slots:
-        return
-    for slot in slots:
-        if not slot.enabled or str(slot.renderer) != "depth":
-            continue
-        raw_index = (slot.params or {}).get("track_index", 0)
-        try:
-            track_index = int(raw_index or 0)
-        except (TypeError, ValueError) as exc:
-            raise ValidationError(
-                f"Depth slot '{slot.id}' has invalid track_index={raw_index!r}."
-            ) from exc
-        if track_index < 0 or track_index >= depth_track_count_value:
-            raise ValidationError(
-                f"Depth slot '{slot.id}' track_index={track_index} is outside the available "
-                f"depth track range 0..{max(0, depth_track_count_value - 1)}."
-            )
-
-
 def _parse_svg_length_px(value: object, *, default: float = 0.0) -> float:
     """Parse SVG length values like '1000px' into float pixels."""
     if value is None:
@@ -1328,17 +1216,6 @@ def _resolve_multi_record_size_mode(mode: str) -> Literal["linear", "auto", "equ
     return cast(Literal["linear", "auto", "equal"], normalized)
 
 
-def _resolve_definition_position(
-    position: str,
-    *,
-    argument_name: str = "definition_position",
-) -> Literal["center", "top", "bottom"]:
-    normalized = str(position).strip().lower()
-    if normalized not in _DEFINITION_POSITIONS:
-        raise ValidationError(
-            f"{argument_name} must be one of: center, top, bottom"
-    )
-    return cast(Literal["center", "top", "bottom"], normalized)
 
 
 def _resolve_linear_plot_title_position(
@@ -1959,13 +1836,13 @@ def assemble_linear_diagram_from_records(
     )
     available_depth_track_count = depth_track_count(record_depth_tracks)
     if parsed_linear_track_slots is not None:
-        show_depth = _linear_slots_have_renderer(parsed_linear_track_slots, "depth")
-        show_gc = _linear_slots_have_renderer(parsed_linear_track_slots, "dinucleotide_content")
-        show_skew = _linear_slots_have_renderer(parsed_linear_track_slots, "dinucleotide_skew")
+        show_depth = _slots_have_renderer(parsed_linear_track_slots, "depth")
+        show_gc = _slots_have_renderer(parsed_linear_track_slots, "dinucleotide_content")
+        show_skew = _slots_have_renderer(parsed_linear_track_slots, "dinucleotide_skew")
         if show_depth and record_depth_tracks is None:
             raise ValidationError("A linear depth track slot requires a depth_table, depth_file, or depth_track input.")
         if show_depth:
-            _validate_linear_depth_track_indices(
+            _validate_depth_track_indices(
                 parsed_linear_track_slots,
                 depth_track_count_value=max(1, available_depth_track_count),
             )
@@ -2394,9 +2271,9 @@ def assemble_circular_diagram_from_record(
 
     # Explicit slots override high-level show flags used by canvas sizing.
     if parsed_circular_track_slots is not None:
-        show_depth = _circular_slots_have_renderer(parsed_circular_track_slots, "depth")
-        show_gc = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
-        show_skew = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
+        show_depth = _slots_have_renderer(parsed_circular_track_slots, "depth")
+        show_gc = _slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
+        show_skew = _slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
         if show_depth and not show_depth_from_input:
             raise ValidationError("A circular depth track slot requires a depth_table, depth_file, or depth_track input.")
     else:
@@ -2556,7 +2433,7 @@ def assemble_circular_diagram_from_record(
     else:
         resolved_depth_df = None
         resolved_depth_tracks = []
-    _validate_circular_depth_track_indices(
+    _validate_depth_track_indices(
         parsed_circular_track_slots,
         depth_track_count_value=max(1, len(resolved_depth_tracks)),
     )
@@ -2893,9 +2770,9 @@ def assemble_circular_diagram_from_records(
     legend_effective = legend
 
     if parsed_circular_track_slots is not None:
-        show_depth = _circular_slots_have_renderer(parsed_circular_track_slots, "depth")
-        show_gc = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
-        show_skew = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
+        show_depth = _slots_have_renderer(parsed_circular_track_slots, "depth")
+        show_gc = _slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
+        show_skew = _slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
         if show_depth and record_depth_tracks is None:
             raise ValidationError("A circular depth track slot requires depth_tables, depth_files, or depth_track input.")
     else:
@@ -2996,7 +2873,7 @@ def assemble_circular_diagram_from_records(
             depth_df_builder=build_depth_df,
             window_steps=record_depth_window_steps,
         )
-        _validate_circular_depth_track_indices(
+        _validate_depth_track_indices(
             parsed_circular_track_slots,
             depth_track_count_value=max(1, depth_track_data_count(record_depth_track_data)),
         )

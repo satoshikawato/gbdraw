@@ -374,24 +374,6 @@ def _chain_strand_support(chain: _Chain) -> tuple[int, int]:
     return supported, conflicted
 
 
-def _representative_proteins(
-    units: Sequence[CollinearityUnit],
-    protein_map: Mapping[str, CdsProtein],
-) -> list[CdsProtein]:
-    proteins: list[CdsProtein] = []
-    missing_ids: list[str] = []
-    for unit in units:
-        protein = protein_map.get(unit.representative_protein_id)
-        if protein is None:
-            missing_ids.append(unit.representative_protein_id)
-        else:
-            proteins.append(protein)
-    if missing_ids:
-        raise ValidationError(
-            "collinearity unit representatives are missing from the protein map: "
-            + ", ".join(sorted(missing_ids)[:10])
-        )
-    return proteins
 
 
 def protein_hits_to_collinearity_anchors(
@@ -1616,95 +1598,8 @@ def calculate_collinearity_block_evalue(
     return float(math.exp(log_evalue))
 
 
-def _is_chain_accepted(
-    chain: _Chain,
-    params: CollinearityParameters,
-    *,
-    block_evalue: float,
-) -> bool:
-    if len(chain.anchors) < int(params.min_anchors):
-        return False
-    if float(chain.score) < params.effective_min_block_score():
-        return False
-    if params.block_evalue is not None and float(block_evalue) > float(params.block_evalue):
-        return False
-    return True
 
 
-def _find_best_chain(
-    anchors: Sequence[CollinearityAnchor],
-    *,
-    orientation: CollinearityOrientation,
-    params: CollinearityParameters,
-) -> _Chain | None:
-    if not anchors:
-        return None
-    max_subject_order = max(int(anchor.subject_order) for anchor in anchors)
-
-    def transformed_subject_order(anchor: CollinearityAnchor) -> int:
-        if orientation == "plus":
-            return int(anchor.subject_order)
-        return max_subject_order - int(anchor.subject_order)
-
-    ordered = sorted(
-        anchors,
-        key=lambda anchor: (
-            int(anchor.query_order),
-            transformed_subject_order(anchor),
-            str(anchor.query_protein_id),
-            str(anchor.subject_protein_id),
-        ),
-    )
-    path_scores: list[float] = []
-    path_indices: list[tuple[int, ...]] = []
-
-    for j, anchor_j in enumerate(ordered):
-        best_score = _anchor_score(anchor_j, params)
-        best_path = (j,)
-        x_j = int(anchor_j.query_order)
-        y_j = transformed_subject_order(anchor_j)
-        for i in range(j):
-            anchor_i = ordered[i]
-            x_i = int(anchor_i.query_order)
-            y_i = transformed_subject_order(anchor_i)
-            dx = x_j - x_i - 1
-            dy = y_j - y_i - 1
-            if dx < 0 or dy < 0:
-                continue
-            if dx > int(params.max_gene_gap) or dy > int(params.max_gene_gap):
-                continue
-            candidate_score = (
-                path_scores[i]
-                + _anchor_score(anchor_j, params)
-                - max(dx, dy) * float(params.gap_penalty)
-            )
-            candidate_path = path_indices[i] + (j,)
-            candidate_chain = _Chain(
-                orientation=orientation,
-                score=candidate_score,
-                anchors=tuple(ordered[index] for index in candidate_path),
-            )
-            current_chain = _Chain(
-                orientation=orientation,
-                score=best_score,
-                anchors=tuple(ordered[index] for index in best_path),
-            )
-            if _chain_rank(candidate_chain) < _chain_rank(current_chain):
-                best_score = candidate_score
-                best_path = candidate_path
-        path_scores.append(best_score)
-        path_indices.append(best_path)
-
-    best_chain: _Chain | None = None
-    for score, indices in zip(path_scores, path_indices):
-        chain = _Chain(
-            orientation=orientation,
-            score=score,
-            anchors=tuple(ordered[index] for index in indices),
-        )
-        if best_chain is None or _chain_rank(chain) < _chain_rank(best_chain):
-            best_chain = chain
-    return best_chain
 
 
 def call_collinearity_blocks(

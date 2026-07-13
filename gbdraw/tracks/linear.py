@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, Mapping, Sequence
 
-from .parsing import parse_bool, split_kv_list
+from .parsing import (
+    normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
+    parse_bool,
+    split_kv_list,
+    strip_inline_comment as _strip_inline_comment,
+)
 from .scalars import ScalarSpec
 
 
@@ -106,14 +111,6 @@ def _normalize_renderer(raw: str) -> str:
     return _RENDERER_ALIASES.get(renderer, renderer)
 
 
-def _normalize_dinucleotide_skew_color_params(params: dict[str, Any]) -> dict[str, Any]:
-    if "positive_color" not in params and "high_color" in params:
-        params["positive_color"] = params["high_color"]
-    if "negative_color" not in params and "low_color" in params:
-        params["negative_color"] = params["low_color"]
-    params.pop("high_color", None)
-    params.pop("low_color", None)
-    return params
 
 
 def _normalize_side_value(raw: object, *, field_name: str = "side") -> str:
@@ -166,12 +163,6 @@ def _parse_slot_head(head: str, original: str) -> tuple[str, str]:
     return slot_id, renderer
 
 
-def _strip_inline_comment(raw: str) -> str:
-    for marker in (" #", "\t#"):
-        index = raw.find(marker)
-        if index >= 0:
-            return raw[:index].strip()
-    return raw
 
 
 def parse_linear_track_slot(raw: str) -> LinearTrackSlot:

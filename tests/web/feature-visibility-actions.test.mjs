@@ -8,17 +8,23 @@ const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-visibility-actions-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'feature-editor'), { recursive: true });
+await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
+await mkdir(join(tempDir, 'services'), { recursive: true });
 await writeFile(
-  join(tempDir, 'feature-editor', 'visibility-actions.js'),
+  join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'),
   await readFile(join(sourceDir, 'feature-editor', 'visibility-actions.js'), 'utf8'),
   'utf8'
 );
-await writeFile(join(tempDir, 'feature-visibility.js'), await readFile(join(sourceDir, 'feature-visibility.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'feature-selector.js'), await readFile(join(sourceDir, 'feature-selector.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'app', 'feature-visibility.js'), await readFile(join(sourceDir, 'feature-visibility.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'feature-selector.js'), 'utf8'), 'utf8');
+await writeFile(
+  join(tempDir, 'services', 'text-download.js'),
+  await readFile(join(sourceDir, '..', 'services', 'text-download.js'), 'utf8'),
+  'utf8'
+);
 
 const { createFeatureVisibilityActions } = await import(
-  pathToFileURL(join(tempDir, 'feature-editor', 'visibility-actions.js'))
+  pathToFileURL(join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'))
 );
 
 const ref = (value) => ({ value });

@@ -2,6 +2,7 @@ import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../st
 import { resolveColorToHex } from '../app/color-utils.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
+import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
@@ -30,10 +31,15 @@ import {
 import {
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
-  normalizeGroupMetadataScope
+  normalizeGroupMetadataScope,
+  normalizeOrthogroupMembershipMode
 } from '../app/losat-normalization.js';
 import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
+import {
+  normalizeCircularPlotTitlePosition,
+  normalizeLinearPlotTitlePosition
+} from '../app/plot-title-position.js';
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
@@ -125,11 +131,6 @@ const cloneStringMap = (source) => {
     cloned[normalizedKey] = String(value ?? '');
   });
   return cloned;
-};
-
-export const cloneJsonData = (value) => {
-  if (value === null || value === undefined) return value;
-  return JSON.parse(JSON.stringify(value));
 };
 
 const normalizeFeatureVisibilityRulesForSession = (rules) => (
@@ -334,16 +335,6 @@ const buildSessionFilename = (title) => {
   return `${safe}.gbdraw-session.json`;
 };
 
-const normalizeCircularPlotTitlePosition = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
-};
-
-const normalizeLinearPlotTitlePosition = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
-};
-
 const normalizeLegendPosition = (value, fallback = 'left') => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized || fallback;
@@ -449,26 +440,6 @@ const normalizeCollinearColorMode = (value) => {
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
 
-const normalizeOrthogroupMembershipMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  const aliases = {
-    legacy: 'anchor_core_v1',
-    rbh: 'anchor_core_v1',
-    rbh_only: 'anchor_core_v1',
-    merge: 'anchor_core_v1',
-    family: 'anchor_core_v1',
-    family_merge: 'anchor_core_v1',
-    local_split: 'anchor_core_v1',
-    density_split: 'anchor_core_v1',
-    outparalog_split: 'anchor_core_v1',
-    distribution_split: 'anchor_core_v1',
-    orthogroups: 'anchor_core_v1',
-    anchor_core: 'anchor_core_v1'
-  };
-  const resolved = aliases[normalized] || normalized;
-  return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
-};
-
 const normalizePairwiseMatchStyle = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
@@ -518,20 +489,12 @@ const normalizeStrokeWidth = (value) => {
 
 const cloneJsonArray = (value) => {
   if (!Array.isArray(value)) return [];
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (_err) {
-    return [];
-  }
+  return cloneJsonValue(value, []);
 };
 
 const cloneJsonObject = (value) => {
   if (!isPlainObject(value)) return {};
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (_err) {
-    return {};
-  }
+  return cloneJsonValue(value, {});
 };
 
 const normalizeLegendColorOverrides = (source) => {
@@ -667,7 +630,7 @@ let lastSessionFilename = null;
 let preservedCliOptions = null;
 
 const cloneLosatForConfig = () => {
-  const cloned = JSON.parse(JSON.stringify(state.losat || {}));
+  const cloned = cloneJsonData(state.losat || {});
   if (cloned.blastp && typeof cloned.blastp === 'object' && !Array.isArray(cloned.blastp)) {
     delete cloned.blastp.collinearAnchorMode;
   }
@@ -2413,7 +2376,7 @@ export const exportSession = async (titleOverride = null) => {
 
   const lastRunInvocation = state.lastRunInfo.value?.invocation;
   const exportableCliInvocation = isCliInvocationSessionExportable(lastRunInvocation)
-    ? JSON.parse(JSON.stringify(lastRunInvocation))
+    ? cloneJsonData(lastRunInvocation)
     : undefined;
   const sessionData = {
     format: 'gbdraw-session',
@@ -2459,18 +2422,18 @@ export const exportSession = async (titleOverride = null) => {
       featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
-      featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),
+      featureColorOverrides: cloneJsonData(state.featureColorOverrides),
       featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
       featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
-      labelTextFeatureOverrides: JSON.parse(JSON.stringify(state.labelTextFeatureOverrides)),
-      labelTextBulkOverrides: JSON.parse(JSON.stringify(state.labelTextBulkOverrides)),
-      labelTextFeatureOverrideSources: JSON.parse(JSON.stringify(state.labelTextFeatureOverrideSources)),
-      labelVisibilityOverrides: JSON.parse(JSON.stringify(state.labelVisibilityOverrides)),
+      labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
+      labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
+      labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
+      labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides),
       labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
     },
     editorState: buildEditorStateData(),
     orthogroupState: {
-      groups: Array.isArray(state.orthogroups.value) ? JSON.parse(JSON.stringify(state.orthogroups.value)) : [],
+      groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(state.orthogroups.value) : [],
       selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
       selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || ''),
       orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),

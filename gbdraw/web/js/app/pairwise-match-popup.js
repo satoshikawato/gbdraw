@@ -308,7 +308,7 @@ const memberLocationText = (member) => {
   const end = Number(member.end);
   const startText = Number.isFinite(start) ? String(start + 1) : normalizeText(member.start);
   const endText = Number.isFinite(end) ? String(end) : normalizeText(member.end);
-  const strand = normalizeText(member.strand);
+  const strand = normalizeMemberStrand(member.strand);
   const range = startText && endText ? `${startText}..${endText}` : startText || endText;
   return range && strand ? `${range} (${strand})` : range;
 };

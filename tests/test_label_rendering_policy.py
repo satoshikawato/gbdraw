@@ -109,7 +109,7 @@ def test_linear_label_rendering_policy_rejects_above_feature_conflict() -> None:
         get_linear_args(
             [
                 "--gbk",
-                "tests/test_inputs/MjeNMV.gb",
+                "examples/MjeNMV.gb",
                 "--label_placement",
                 "above_feature",
                 "--label_rendering",

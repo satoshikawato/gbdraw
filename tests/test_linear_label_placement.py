@@ -118,6 +118,8 @@ def _prepare_linear_labels(
     qualifier_priority: tuple[str, str] | None = None,
 ) -> list[dict]:
     input_path = Path(__file__).parent / "test_inputs" / input_filename
+    if not input_path.exists():
+        input_path = Path(__file__).parent.parent / "examples" / input_filename
     record = SeqIO.read(str(input_path), "genbank")
 
     config_dict = load_config_toml("gbdraw.data", "config.toml")
@@ -637,7 +639,7 @@ def test_linear_above_feature_shifted_labels_get_leader_lines() -> None:
 
 @pytest.mark.linear
 def test_linear_precalc_includes_above_feature_rotated_embedded_labels() -> None:
-    input_path = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
+    input_path = Path(__file__).parent.parent / "examples" / "MjeNMV.gb"
     record = SeqIO.read(str(input_path), "genbank")
 
     config_dict = load_config_toml("gbdraw.data", "config.toml")

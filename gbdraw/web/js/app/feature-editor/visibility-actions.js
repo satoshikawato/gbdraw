@@ -13,6 +13,7 @@ import {
   setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
 } from '../feature-visibility.js';
+import { downloadTextFile } from '../../services/text-download.js';
 
 export const createFeatureVisibilityActions = ({ state, featureSvgActions, previewRuntime = null }) => {
   const {
@@ -470,17 +471,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   const removeFeatureVisibilityRule = (index) => {
     if (index < 0 || index >= featureVisibilityManualRules.length) return;
     featureVisibilityManualRules.splice(index, 1);
-  };
-
-  const downloadTextFile = (filename, text) => {
-    const blob = new Blob([text], { type: 'text/tab-separated-values;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.addEventListener('click', (event) => event.stopPropagation(), { once: true });
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
   const downloadFeatureVisibilityRulesTsv = () => {

@@ -2,6 +2,7 @@ import {
   buildLinearRegionExtractionContext,
   extractFeatureMetadataForPreview
 } from './feature-metadata-extraction.js';
+import { cloneJsonValue } from '../services/json-clone.js';
 
 const MISSING_INPUTS_WARNING =
   'Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.';
@@ -516,14 +517,6 @@ export const buildFeatureOverrideMigration = ({
   };
 };
 
-const cloneJson = (value, fallback) => {
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (_err) {
-    return fallback;
-  }
-};
-
 const recoveredKeySets = (features) => {
   const featureIds = new Set();
   const svgIds = new Set();
@@ -552,7 +545,7 @@ const rewriteOverrideMap = (source, preserveKeys, mappingLookups, skipped) => {
   Object.entries(source).forEach(([rawKey, rawValue]) => {
     const key = normalizeKey(rawKey);
     if (!key) return;
-    const value = cloneJson(rawValue, rawValue);
+    const value = cloneJsonValue(rawValue, rawValue);
 
     if (preserveKeys.has(key)) {
       rewritten[key] = value;
@@ -576,8 +569,8 @@ export const migrateFeatureOverrideState = ({
   editorState,
   migration
 }) => {
-  const nextFeatureState = cloneJson(featureState || {}, {});
-  const nextEditorState = cloneJson(editorState || {}, {});
+  const nextFeatureState = cloneJsonValue(featureState || {}, {});
+  const nextEditorState = cloneJsonValue(editorState || {}, {});
   const keySets = recoveredKeySets(nextFeatureState.extractedFeatures);
   const skipped = { count: 0 };
   const featureIdMaps = [migration?.featureIdMap || {}];

@@ -7,6 +7,7 @@ import {
 } from './label-override-table.js';
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import { downloadTextFile } from '../../services/text-download.js';
 
 const EXCLUDED_GROUP_SELECTOR =
   '#legend, #feature_legend, #pairwise_legend, #horizontal_legend, #vertical_legend, #length_bar, g[id="tick"], g[id^="tick_"]';
@@ -41,19 +42,6 @@ const makeSafeFilename = (name, fallback = 'gbdraw') => {
     .replace(/^_+|_+$/g, '');
   return cleaned || fallback;
 };
-const downloadTextFile = (filename, text) => {
-  const blob = new Blob([text], { type: 'text/tab-separated-values' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.addEventListener('click', (event) => {
-    event.stopPropagation();
-  }, { once: true });
-  link.click();
-  URL.revokeObjectURL(url);
-};
-
 const getSvgPoint = (svg, element, x, y) => {
   if (!svg || !element) return { x, y };
   const point = svg.createSVGPoint();
@@ -998,7 +986,7 @@ export const createFeatureLabelActions = ({ state }) => {
         ? String(results.value[selectedIdx]?.name || '')
         : '';
     const outputName = `${makeSafeFilename(resultName, 'gbdraw')}.label_table.tsv`;
-    downloadTextFile(outputName, `${rows.join('\n')}\n`);
+    downloadTextFile(outputName, `${rows.join('\n')}\n`, 'text/tab-separated-values');
     if (skippedFeatureCount > 0 || skippedFeatureSourceCount > 0 || skippedMissingSourceCount > 0 || fallbackHashCount > 0) {
       window.alert(
         `Exported ${rows.length} row(s). ${skippedFeatureCount} invalid feature-targeted edit(s) and ` +

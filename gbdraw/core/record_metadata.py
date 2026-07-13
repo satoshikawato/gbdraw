@@ -5,6 +5,46 @@ from typing import NamedTuple
 from Bio.SeqRecord import SeqRecord
 
 
+_COORD_BASE_KEY = "gbdraw_coord_base"
+_COORD_STEP_KEY = "gbdraw_coord_step"
+
+
+def _read_coord_map(record: object) -> tuple[int, int]:
+    annotations = getattr(record, "annotations", None) or {}
+    try:
+        base = int(annotations.get(_COORD_BASE_KEY, 1))
+    except (TypeError, ValueError):
+        base = 1
+    try:
+        step = int(annotations.get(_COORD_STEP_KEY, 1))
+    except (TypeError, ValueError):
+        step = 1
+    if step == 0:
+        step = 1
+    return base, (1 if step > 0 else -1)
+
+
+def _write_coord_map(record: object, *, base: int, step: int) -> None:
+    if getattr(record, "annotations", None) is None:
+        record.annotations = {}  # type: ignore[attr-defined]
+    record.annotations[_COORD_BASE_KEY] = int(base)  # type: ignore[attr-defined]
+    record.annotations[_COORD_STEP_KEY] = 1 if int(step) >= 0 else -1  # type: ignore[attr-defined]
+
+
+def _absolute_display_interval(
+    start: int,
+    end: int,
+    coord_base: int,
+    coord_step: int,
+) -> tuple[int, int]:
+    if end <= start:
+        coord = coord_base + (coord_step * start)
+        return coord - 1, coord
+    first_coord = coord_base + (coord_step * start)
+    last_coord = coord_base + (coord_step * (end - 1))
+    return min(first_coord, last_coord) - 1, max(first_coord, last_coord)
+
+
 class RecordSourceMetadata(NamedTuple):
     organism: str
     strain: str

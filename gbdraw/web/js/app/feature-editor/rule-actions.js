@@ -1,6 +1,7 @@
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
 import { ruleMatchesFeature } from '../feature-utils.js';
+import { downloadTextFile } from '../../services/text-download.js';
 
 export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
   const {
@@ -34,17 +35,6 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
   const captionMatches = (value, target) => normalizeCaptionKey(value) === normalizeCaptionKey(target);
   const specificRuleFields = new Set(['feat', 'qual', 'val', 'color', 'cap']);
-
-  const downloadTextFile = (filename, text) => {
-    const blob = new Blob([text], { type: 'text/tab-separated-values;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.addEventListener('click', (event) => event.stopPropagation(), { once: true });
-    link.click();
-    URL.revokeObjectURL(url);
-  };
 
   const setSpecificRuleField = (index, field, value) => {
     if (!specificRuleFields.has(field)) return;

@@ -12,7 +12,6 @@ from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
 from .io.cli_tables import (
-    RecordsTable,
     read_circular_track_table,
     read_conservation_table,
     read_records_table,
@@ -39,7 +38,7 @@ from .labels.filtering import (
 )  # type: ignore[reportMissingImports]
 from .features.colors import preprocess_color_tables
 from .io.record_select import parse_record_selector
-from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
+from .features.shapes import parse_feature_shape_overrides
 from .features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
@@ -55,11 +54,28 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 from .cli_utils.common import (
+    _add_block_stroke_args,
+    _add_comparison_filter_args,
+    _add_depth_axis_args,
+    _add_depth_track_label_color_args,
+    _add_depth_track_tick_args,
+    _add_feature_shape_arg,
+    _add_format_arg,
+    _add_gc_content_axis_args,
+    _add_legend_size_args,
+    add_analysis_args,
+    add_color_args,
+    add_feature_args,
+    add_input_args,
+    add_label_args,
     setup_logging,
     validate_input_args,
     validate_label_args,
     handle_output_formats,
     calculate_window_step,
+    load_records_table_records as _load_records_table_records,
+    parse_feature_shape_assignment_arg as _parse_feature_shape_assignment_arg,
+    record_major_depth_track_files_from_cli as _record_major_depth_track_files_from_cli,
 )
 from .cli_utils.session import (
     DiagramRunResult,
@@ -105,12 +121,6 @@ def _build_interactive_svg_context(
     return InteractiveSvgContext(features=payload.get("features", []))
 
 
-def _parse_feature_shape_assignment_arg(value: str) -> str:
-    try:
-        parse_feature_shape_assignment(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-    return value
 
 
 def _parse_multi_record_position_arg(value: str) -> str:
@@ -145,63 +155,8 @@ def _parse_multi_record_position_arg(value: str) -> str:
     return f"{selector_text}@{int(row_text)}"
 
 
-def _load_records_table_records(
-    records_table: RecordsTable,
-    *,
-    mode: str,
-    selected_features_set,
-    color_table: Optional[DataFrame],
-    feature_table: Optional[DataFrame],
-) -> list:
-    records: list = []
-    if records_table.input_kind == "gbk":
-        for row in records_table.rows:
-            loaded = load_gbks(
-                [row.gbk],
-                mode,
-                False,
-                record_selectors=[row.record_id],
-                reverse_flags=[row.reverse_complement],
-            )
-            records.append(_require_one_records_table_record(records_table, row, loaded))
-        return records
-
-    candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
-        selected_features_set,
-        color_table=color_table,
-        feature_visibility_table=feature_table,
-    )
-    for row in records_table.rows:
-        loaded = load_gff_fasta(
-            [row.gff],
-            [row.fasta],
-            mode,
-            candidate_feature_types,
-            keep_all_features=keep_all_features,
-            load_comparison=False,
-            record_selectors=[row.record_id],
-            reverse_flags=[row.reverse_complement],
-        )
-        records.append(_require_one_records_table_record(records_table, row, loaded))
-    return records
 
 
-def _require_one_records_table_record(
-    records_table: RecordsTable,
-    row,
-    loaded,
-):
-    if len(loaded) == 1:
-        return loaded[0]
-    if len(loaded) > 1 and not row.record_id:
-        raise ValidationError(
-            f"{records_table.table_path}: row {row.row_number} loaded {len(loaded)} records; "
-            "add record_id so the row selects exactly one displayed record."
-        )
-    raise ValidationError(
-        f"{records_table.table_path}: row {row.row_number} must load exactly one displayed record; "
-        f"loaded {len(loaded)}."
-    )
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -226,24 +181,7 @@ def _get_args(args) -> argparse.Namespace:
             "Use --multi_record_canvas to place multiple records on one grid canvas."
         )
     )
-    parser.add_argument(
-        "--gbk",
-        metavar="GBK_FILE",
-        help='Genbank/DDBJ flatfile',
-        type=str,
-        nargs='*')
-    parser.add_argument(
-        "--gff",
-        metavar="GFF3_FILE",
-        help="GFF3 file (instead of --gbk; --fasta is required)",
-        type=str,
-        nargs='*')
-    parser.add_argument(
-        "--fasta",
-        metavar="FASTA_FILE",
-        help="FASTA file (required with --gff)",
-        type=str,
-        nargs='*')
+    add_input_args(parser)
     parser.add_argument(
         "--records_table",
         metavar="TSV",
@@ -254,41 +192,8 @@ def _get_args(args) -> argparse.Namespace:
         '--output',
         help='output file prefix (default: accession number of the sequence)',
         type=str)
-    parser.add_argument(
-        "-p", "--palette",
-        metavar="PALETTE",
-        default="default",
-        help="Palette name (default: default)",
-        type=str
-    )
-    parser.add_argument(
-        '-t',
-        '--table',
-        help='color table (optional)',
-        type=str,
-        default="")
-    parser.add_argument(
-        '-d',
-        '--default_colors',
-        help='TSV file that overrides the color palette (optional)',
-        type=str,
-        default="")
-    parser.add_argument(
-        '-n',
-        '--nt',
-        help='dinucleotide (default: GC). ',
-        type=str,
-        default="GC")
-    parser.add_argument(
-        '-w',
-        '--window',
-        help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
-        type=int)
-    parser.add_argument(
-        '-s',
-        '--step',
-        help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
-        type=int)
+    add_color_args(parser)
+    add_analysis_args(parser)
     parser.add_argument(
         '--species',
         help='Species name (optional; e.g. "<i>Escherichia coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")',
@@ -297,28 +202,9 @@ def _get_args(args) -> argparse.Namespace:
         '--strain',
         help='Strain/isolate name (optional; e.g. "K-12", "Av")',
         type=str)
-    parser.add_argument(
-        '-k',
-        '--features',
-        help='Comma-separated list of feature keys to draw (default: CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)',
-        type=str,
-        default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region")
-    parser.add_argument(
-        '--feature_shape',
-        help='Feature shape override (repeatable): TYPE=SHAPE where SHAPE is arrow or rectangle.',
-        type=_parse_feature_shape_assignment_arg,
-        action='append',
-        default=[],
-        metavar='TYPE=SHAPE',
-    )
-    parser.add_argument(
-        '--block_stroke_color',
-        help='Block stroke color (str; default: "gray")',
-        type=str)
-    parser.add_argument(
-        '--block_stroke_width',
-        help='Block stroke width (optional; float; default: 2 pt for genomes <= 50 kb, 0 pt for genomes >= 50 kb)',
-        type=float)
+    add_feature_args(parser)
+    _add_feature_shape_arg(parser)
+    _add_block_stroke_args(parser)
     parser.add_argument(
         '--axis_stroke_color',
         help='Axis stroke color (str; default: "gray")',
@@ -359,12 +245,7 @@ def _get_args(args) -> argparse.Namespace:
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
-    parser.add_argument(
-        '-f',
-        '--format',
-        help='Comma-separated list of output file formats (svg, interactive-svg, png, pdf, eps, ps; default: svg; png/pdf/eps/ps require CairoSVG).',
-        type=str,
-        default="svg")
+    _add_format_arg(parser)
     parser.add_argument(
         '--suppress_gc',
         help='Suppress GC content track (default: False).',
@@ -384,40 +265,8 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='+',
         action='append')
-    parser.add_argument(
-        '--depth_track_label',
-        metavar='LABEL',
-        help='Depth track label(s). Provide one label or one per --depth_track.',
-        type=str,
-        nargs='+')
-    parser.add_argument(
-        '--depth_track_color',
-        metavar='COLOR',
-        help='Depth track fill color(s). Provide one color or one per --depth_track.',
-        type=str,
-        nargs='+')
-    parser.add_argument(
-        '--depth_track_large_tick_interval',
-        metavar='VALUE',
-        help='Depth track large tick interval(s). Provide one value or one per --depth_track.',
-        type=str,
-        nargs='+')
-    parser.add_argument(
-        '--depth_track_small_tick_interval',
-        metavar='VALUE',
-        help='Depth track small tick interval(s). Provide one value or one per --depth_track.',
-        type=str,
-        nargs='+')
-    parser.add_argument(
-        '--depth_track_tick_font_size',
-        metavar='VALUE',
-        help='Depth track tick font size(s). Provide one value or one per --depth_track.',
-        type=str,
-        nargs='+')
-    parser.add_argument(
-        '--show_depth',
-        help='Show depth coverage track. Implied when --depth is supplied.',
-        action='store_true')
+    _add_depth_track_label_color_args(parser)
+    _add_depth_track_tick_args(parser)
     parser.add_argument(
         '--conservation_blast',
         metavar='BLAST',
@@ -455,26 +304,7 @@ def _get_args(args) -> argparse.Namespace:
         '--conservation_ring_gap',
         help='Conservation ring gap for circular mode (in px; must be > 0).',
         type=float)
-    parser.add_argument(
-        '--evalue',
-        help='Maximum BLAST e-value retained for conservation rings (default: 1e-5).',
-        type=float,
-        default=1e-5)
-    parser.add_argument(
-        '--bitscore',
-        help='Minimum BLAST bitscore retained for conservation rings (default: 50).',
-        type=float,
-        default=50.0)
-    parser.add_argument(
-        '--identity',
-        help='Minimum BLAST identity percentage retained for conservation rings (default: 70).',
-        type=float,
-        default=70.0)
-    parser.add_argument(
-        '--alignment_length',
-        help='Minimum BLAST alignment length retained for conservation rings (default: 0).',
-        type=int,
-        default=0)
+    _add_comparison_filter_args(parser)
     parser.add_argument(
         '--depth_color',
         help='Depth track fill color (optional; default: #4A90E2).',
@@ -483,75 +313,7 @@ def _get_args(args) -> argparse.Namespace:
         '--depth_width',
         help='Depth track width for circular mode (in px; must be > 0).',
         type=float)
-    parser.add_argument(
-        '--depth_window',
-        help='Depth aggregation window size. Defaults to one tenth of the GC/skew window, with a 100 bp minimum.',
-        type=int)
-    parser.add_argument(
-        '--depth_step',
-        help='Depth aggregation step size. Defaults to one tenth of the GC/skew step.',
-        type=int)
-    parser.add_argument(
-        '--share_depth_axis',
-        help='Use one depth y-axis scale across records.',
-        action='store_true')
-    parser.add_argument(
-        '--depth_min',
-        help='Minimum depth for clipping/normalization (optional; must be >= 0).',
-        type=float)
-    parser.add_argument(
-        '--depth_max',
-        help='Maximum depth for clipping/normalization (optional; must be >= 0).',
-        type=float)
-    parser.add_argument(
-        '--depth_log_scale',
-        dest='depth_normalize',
-        help='Render depth coverage on a log10 scale (IGV-style).',
-        action='store_true',
-        default=None)
-    parser.add_argument(
-        '--no_depth_log_scale',
-        dest='depth_normalize',
-        help='Render depth coverage on a linear scale.',
-        action='store_false')
-    parser.add_argument(
-        '--show_depth_axis',
-        dest='depth_show_axis',
-        help='Show depth coverage axis line, ticks, and labels.',
-        action='store_true',
-        default=None)
-    parser.add_argument(
-        '--hide_depth_axis',
-        dest='depth_show_axis',
-        help='Hide depth coverage axis line, ticks, and labels.',
-        action='store_false')
-    parser.add_argument(
-        '--show_depth_ticks',
-        dest='depth_show_ticks',
-        help='Show depth coverage axis ticks and labels.',
-        action='store_true',
-        default=None)
-    parser.add_argument(
-        '--hide_depth_ticks',
-        dest='depth_show_ticks',
-        help='Hide depth coverage axis ticks and labels.',
-        action='store_false')
-    parser.add_argument(
-        '--depth_tick_interval',
-        help='Depth coverage large tick interval in x coverage units (optional; must be > 0; legacy alias for --depth_large_tick_interval).',
-        type=float)
-    parser.add_argument(
-        '--depth_large_tick_interval',
-        help='Depth coverage large tick interval in x coverage units (optional; must be > 0).',
-        type=float)
-    parser.add_argument(
-        '--depth_small_tick_interval',
-        help='Depth coverage small tick interval in x coverage units (optional; must be > 0; hidden by default).',
-        type=float)
-    parser.add_argument(
-        '--depth_tick_font_size',
-        help='Depth coverage tick label font size (optional; must be > 0).',
-        type=float)
+    _add_depth_axis_args(parser)
     parser.add_argument(
         '-l',
         '--legend',
@@ -624,40 +386,8 @@ def _get_args(args) -> argparse.Namespace:
         default='auto',
         type=str)
 
-    label_list_group = parser.add_mutually_exclusive_group()
-    label_list_group.add_argument(
-        '--label_whitelist',
-        help='path to a file for label whitelisting (optional); mutually exclusive with --label_blacklist',
-        type=str,
-        default="")
-    label_list_group.add_argument(
-        '--label_blacklist',
-        help='Comma-separated keywords for label blacklisting (optional); mutually exclusive with --label_whitelist',
-        type=str,
-        default="")
+    add_label_args(parser)
 
-    parser.add_argument(
-        '--qualifier_priority',
-        help='Path to a TSV file defining qualifier priority for labels (optional)',
-        type=str,
-        default="")
-    parser.add_argument(
-        '--label_table',
-        help='Path to a TSV file defining post-filter label text overrides (optional)',
-        type=str,
-        default="")
-    parser.add_argument(
-        '--feature_visibility_table',
-        dest='feature_table',
-        help='Path to a TSV file defining per-feature visibility overrides (optional)',
-        type=str,
-        default="")
-    parser.add_argument(
-        '--feature_table',
-        dest='feature_table',
-        help=argparse.SUPPRESS,
-        type=str,
-        default=argparse.SUPPRESS)
     parser.add_argument(
         '--outer_label_x_radius_offset',
         help='Outer label x-radius offset factor (float; default from config)',
@@ -717,57 +447,7 @@ def _get_args(args) -> argparse.Namespace:
         '--gc_content_radius',
         help='GC content track center radius for circular mode (as a ratio of base radius; must be > 0).',
         type=float)
-    parser.add_argument(
-        '--gc_content_mode',
-        help='GC content display mode: deviation (current centered behavior) or percent (absolute 0-100%% area track).',
-        choices=['deviation', 'percent'],
-        default=None)
-    parser.add_argument(
-        '--gc_content_min_percent',
-        help='Minimum GC percent for percent-mode clipping/axis (optional; finite number).',
-        type=float)
-    parser.add_argument(
-        '--gc_content_max_percent',
-        help='Maximum GC percent for percent-mode clipping/axis (optional; finite number).',
-        type=float)
-    parser.add_argument(
-        '--gc_content_tick_interval',
-        help='GC content percent-mode large tick interval (optional; must be > 0; alias for --gc_content_large_tick_interval).',
-        type=float)
-    parser.add_argument(
-        '--gc_content_large_tick_interval',
-        help='GC content percent-mode large tick interval (optional; must be > 0).',
-        type=float)
-    parser.add_argument(
-        '--gc_content_small_tick_interval',
-        help='GC content percent-mode small tick interval (optional; must be > 0; hidden by default).',
-        type=float)
-    parser.add_argument(
-        '--gc_content_tick_font_size',
-        help='GC content percent-mode tick label font size (optional; must be > 0).',
-        type=float)
-    parser.add_argument(
-        '--show_gc_content_axis',
-        dest='gc_content_show_axis',
-        help='Show GC content percent-mode axis line, ticks, and labels.',
-        action='store_true',
-        default=None)
-    parser.add_argument(
-        '--hide_gc_content_axis',
-        dest='gc_content_show_axis',
-        help='Hide GC content percent-mode axis line, ticks, and labels.',
-        action='store_false')
-    parser.add_argument(
-        '--show_gc_content_ticks',
-        dest='gc_content_show_ticks',
-        help='Show GC content percent-mode axis ticks and labels.',
-        action='store_true',
-        default=None)
-    parser.add_argument(
-        '--hide_gc_content_ticks',
-        dest='gc_content_show_ticks',
-        help='Hide GC content percent-mode axis ticks and labels.',
-        action='store_false')
+    _add_gc_content_axis_args(parser)
     parser.add_argument(
         '--gc_skew_width',
         help='GC skew track width for circular mode (in px; must be > 0).',
@@ -776,14 +456,7 @@ def _get_args(args) -> argparse.Namespace:
         '--gc_skew_radius',
         help='GC skew track center radius for circular mode (as a ratio of base radius; must be > 0).',
         type=float)
-    parser.add_argument(
-        '--legend_box_size',
-        help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb).',
-        type=float)
-    parser.add_argument(
-        '--legend_font_size',
-        help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
-        type=float)
+    _add_legend_size_args(parser)
 
     add_session_args(parser)
 
@@ -927,34 +600,6 @@ def _get_args(args) -> argparse.Namespace:
     return args
 
 
-def _record_major_depth_track_files_from_cli(
-    depth_track_groups: list[list[str]] | None,
-    *,
-    record_count: int,
-) -> list[list[str | None]] | None:
-    if not depth_track_groups:
-        return None
-    rows: list[list[str | None]] = [[] for _ in range(record_count)]
-    for track_number, group in enumerate(depth_track_groups, start=1):
-        values = [
-            None
-            if str(path).strip().lower() in {"", "-", "none", "null"}
-            else str(path)
-            for path in (group or [])
-        ]
-        if not values or all(value is None for value in values):
-            raise ValidationError(f"--depth_track #{track_number} must include at least one file.")
-        if len(values) == 1:
-            expanded = values * record_count
-        elif len(values) == record_count:
-            expanded = values
-        else:
-            raise ValidationError(
-                f"--depth_track #{track_number} must contain one file or one per record ({record_count}); got {len(values)}."
-            )
-        for record_index, path in enumerate(expanded):
-            rows[record_index].append(path)
-    return rows
 
 
 
@@ -1150,6 +795,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             selected_features_set=selected_features_set,
             color_table=color_table,
             feature_table=feature_table,
+            gbk_loader=load_gbks,
+            gff_loader=load_gff_fasta,
         )
         records_table_region_specs = parse_region_specs(records_table.row_scoped_region_specs())
         if records_table_region_specs:

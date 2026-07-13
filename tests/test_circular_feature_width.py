@@ -24,6 +24,7 @@ from gbdraw.svg.circular_ticks import (
     get_circular_tick_path_ratio_bounds,
 )
 from gbdraw.tracks import CircularTrackSlot, default_circular_track_slots, parse_circular_track_slot
+from tests.utils.circular_drawer_fakes import make_feature_draw_ratio_capture, make_numeric_track_capture
 from svgwrite import Drawing
 
 
@@ -138,23 +139,11 @@ def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.Monke
     cfg = GbdrawConfig.from_dict(config_dict)
 
     captured_ratio_factors: list[float] = []
-
-    def fake_draw(
-        self,
-        feature_object,
-        group,
-        total_length,
-        radius,
-        track_ratio,
-        track_ratio_factor,
-        track_type,
-        strandedness,
-        length_param,
-    ):
-        captured_ratio_factors.append(float(track_ratio_factor))
-        return group
-
-    monkeypatch.setattr(circular_seq_record_group_module.FeatureDrawer, "draw", fake_draw)
+    monkeypatch.setattr(
+        circular_seq_record_group_module.FeatureDrawer,
+        "draw",
+        make_feature_draw_ratio_capture(captured_ratio_factors),
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -180,23 +169,11 @@ def test_default_custom_feature_slot_preserves_separate_strand_feature_width(
     cfg = GbdrawConfig.from_dict(config_dict)
 
     captured_ratio_factors: list[float] = []
-
-    def fake_draw(
-        self,
-        feature_object,
-        group,
-        total_length,
-        radius,
-        track_ratio,
-        track_ratio_factor,
-        track_type,
-        strandedness,
-        length_param,
-    ):
-        captured_ratio_factors.append(float(track_ratio_factor))
-        return group
-
-    monkeypatch.setattr(circular_seq_record_group_module.FeatureDrawer, "draw", fake_draw)
+    monkeypatch.setattr(
+        circular_seq_record_group_module.FeatureDrawer,
+        "draw",
+        make_feature_draw_ratio_capture(captured_ratio_factors),
+    )
 
     assemble_circular_diagram_from_record(
         record,
@@ -289,39 +266,9 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         captured["ticks_radius"] = radius_override
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["gc_width"] = track_width_override
-        captured["gc_norm"] = norm_factor_override
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["skew_width"] = track_width_override
-        captured["skew_norm"] = norm_factor_override
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     def fake_add_labels_group_on_canvas(
         canvas,
@@ -408,39 +355,9 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         captured["ticks_radius"] = radius_override
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["gc_width"] = track_width_override
-        captured["gc_norm"] = norm_factor_override
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["skew_width"] = track_width_override
-        captured["skew_norm"] = norm_factor_override
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     def fake_add_labels_group_on_canvas(
         canvas,
@@ -1039,39 +956,9 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         captured["tick_track_channel_override"] = kwargs.get("tick_track_channel_override")
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["gc_norm"] = norm_factor_override
-        captured["gc_width"] = track_width_override
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["skew_norm"] = norm_factor_override
-        captured["skew_width"] = track_width_override
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
@@ -1181,39 +1068,9 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["gc_norm"] = norm_factor_override
-        captured["gc_width"] = track_width_override
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["skew_norm"] = norm_factor_override
-        captured["skew_width"] = track_width_override
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
@@ -1321,39 +1178,9 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["gc_norm"] = norm_factor_override
-        captured["gc_width"] = track_width_override
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["skew_norm"] = norm_factor_override
-        captured["skew_width"] = track_width_override
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
@@ -1455,39 +1282,9 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
         captured["ticks"] = radius_override
         return canvas
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["gc_norm"] = norm_factor_override
-        captured["gc_width"] = track_width_override
-        return canvas
+    fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
 
-    def fake_add_gc_skew_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        skew_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        cfg=None,
-    ):
-        captured["skew_norm"] = norm_factor_override
-        captured["skew_width"] = track_width_override
-        return canvas
+    fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, width_key='skew_width', norm_key='skew_norm')
 
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
@@ -1547,37 +1344,9 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             captured["ticks"] = radius_override
             return canvas
 
-        def fake_add_gc_content_group_on_canvas(
-            canvas,
-            gb_record,
-            gc_df,
-            canvas_config,
-            gc_config,
-            config_dict,
-            *,
-            track_width_override=None,
-            norm_factor_override=None,
-            group_id=None,
-            cfg=None,
-        ):
-            captured["gc_norm"] = norm_factor_override
-            return canvas
+        fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, norm_key='gc_norm')
 
-        def fake_add_gc_skew_group_on_canvas(
-            canvas,
-            gb_record,
-            gc_df,
-            canvas_config,
-            skew_config,
-            config_dict,
-            *,
-            track_width_override=None,
-            norm_factor_override=None,
-            group_id=None,
-            cfg=None,
-        ):
-            captured["skew_norm"] = norm_factor_override
-            return canvas
+        fake_add_gc_skew_group_on_canvas = make_numeric_track_capture(captured, norm_key='skew_norm')
 
         def fake_add_labels_group_on_canvas(
             canvas,

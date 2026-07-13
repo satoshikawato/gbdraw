@@ -17,6 +17,7 @@ import {
   formatPxAuto,
   formatRadiusFactorAuto,
   isManualSlotValue,
+  normalizeOptionalText,
   parseCircularScalarDisplay
 } from './track-slot-display.js';
 
@@ -148,11 +149,6 @@ const normalizeNt = (value, fallback = 'GC') => {
 const cleanToken = (value, fallback) => {
   const text = String(value || '').trim();
   return text || fallback;
-};
-
-const normalizeOptionalText = (value) => {
-  const text = String(value ?? '').trim();
-  return text.length > 0 ? text : null;
 };
 
 const normalizeColorParam = (value) => {

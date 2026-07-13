@@ -28,11 +28,12 @@ from gbdraw.linear import _parse_linear_track_axis_gap, _parse_linear_track_layo
 from gbdraw.render.groups.linear.length_bar import LengthBarGroup, RULER_TICK_LENGTH
 
 
-INPUT_GBK = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
-INPUT_MELA_GBK = Path(__file__).parent / "test_inputs" / "MelaMJNV.gb"
+EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
+INPUT_GBK = EXAMPLES_DIR / "MjeNMV.gb"
+INPUT_MELA_GBK = EXAMPLES_DIR / "MelaMJNV.gb"
 INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
 INPUT_HMMTDNA = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
-INPUT_MJE_MELA_BLAST = Path(__file__).parent / "test_inputs" / "MjeNMV.MelaMJNV.tblastx.out"
+INPUT_MJE_MELA_BLAST = EXAMPLES_DIR / "MjeNMV.MelaMJNV.tblastx.out"
 
 
 def _run_linear_with_gbks(

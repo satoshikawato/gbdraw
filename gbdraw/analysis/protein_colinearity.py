@@ -947,11 +947,6 @@ def _feature_hash_parts(feature: SeqFeature) -> tuple[tuple[int, int, int | None
     return tuple(parts)
 
 
-def _feature_hash_inputs(feature: SeqFeature) -> tuple[int | None, int | None, int | None]:
-    parts = _feature_hash_parts(feature)
-    if not parts:
-        return None, None, None
-    return parts[0]
 
 
 def extract_cds_proteins(
@@ -2752,71 +2747,6 @@ def _build_distribution_split_orthogroups_from_normalized_tables(
     )
 
 
-def _select_distribution_split_orthogroup_edges_from_directional_hits(
-    directional_hits_by_pair: Mapping[tuple[int, int], DataFrame],
-    protein_map: Mapping[str, CdsProtein],
-    *,
-    record_count: int | None,
-    include_singletons: bool,
-    orthogroup_member_max_hits: int,
-    max_related_edges_per_orthogroup: int,
-) -> OrthogroupEdgeSelectionResult:
-    if int(max_related_edges_per_orthogroup) <= 0:
-        raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
-    normalized_tables = _normalize_directional_hit_tables(
-        directional_hits_by_pair,
-        protein_map,
-    )
-    rbnh_edge_tables = _select_rbnh_edge_tables(normalized_tables)
-    if record_count is None:
-        record_count = 0
-        for query_index, subject_index in normalized_tables:
-            record_count = max(record_count, int(query_index) + 1, int(subject_index) + 1)
-
-    all_edges_by_pair = {
-        pair: _comparison_columns_only(table)
-        for pair, table in rbnh_edge_tables.items()
-    }
-    adjacent_anchor_edges_by_pair = {
-        pair: _comparison_columns_only(table)
-        for pair, table in rbnh_edge_tables.items()
-        if int(pair[1]) == int(pair[0]) + 1
-    }
-    adjacent_candidate_edges_by_pair = {
-        (query_index, query_index + 1): _comparison_columns_only(
-            directional_hits_by_pair.get(
-                (query_index, query_index + 1),
-                _empty_comparison_hits(),
-            )
-        )
-        for query_index in range(max(0, int(record_count) - 1))
-    }
-    for query_index in range(max(0, int(record_count) - 1)):
-        adjacent_anchor_edges_by_pair.setdefault(
-            (query_index, query_index + 1),
-            _empty_comparison_hits(),
-        )
-
-    orthogroups = _build_distribution_split_orthogroups_from_normalized_tables(
-        normalized_tables,
-        rbnh_edge_tables,
-        protein_map,
-        include_singletons=include_singletons,
-        member_max_hits=int(orthogroup_member_max_hits),
-    )
-    adjacent_display_edges_by_pair = _build_adjacent_display_edges_by_pair(
-        adjacent_anchor_edges_by_pair,
-        orthogroups,
-        record_count=int(record_count),
-        max_display_edges_per_orthogroup=int(max_related_edges_per_orthogroup),
-        adjacent_candidate_edges_by_pair=adjacent_candidate_edges_by_pair,
-    )
-    return OrthogroupEdgeSelectionResult(
-        orthogroups=orthogroups,
-        all_edges_by_pair=all_edges_by_pair,
-        adjacent_anchor_edges_by_pair=adjacent_anchor_edges_by_pair,
-        adjacent_display_edges_by_pair=adjacent_display_edges_by_pair,
-    )
 
 
 class _UnionFind:

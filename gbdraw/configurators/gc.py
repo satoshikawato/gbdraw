@@ -1,11 +1,33 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import copy
 from typing import Dict
 
 from pandas import DataFrame
 
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.io.colors import resolve_color_to_hex
+
+
+def _slot_param_text(slot, *names: str) -> str | None:
+    params = getattr(slot, "params", {}) or {}
+    for name in names:
+        value = params.get(name)
+        text = str(value).strip() if value is not None else ""
+        if text:
+            return text
+    return None
+
+
+def _slot_skew_config(skew_config, slot, dinucleotide: str):
+    cloned = copy.copy(skew_config)
+    cloned.dinucleotide = str(dinucleotide).upper()
+    if positive_color := _slot_param_text(slot, "positive_color", "high_color"):
+        cloned.high_fill_color = resolve_color_to_hex(positive_color)
+    if negative_color := _slot_param_text(slot, "negative_color", "low_color"):
+        cloned.low_fill_color = resolve_color_to_hex(negative_color)
+    return cloned
 
 
 class GcContentConfigurator:

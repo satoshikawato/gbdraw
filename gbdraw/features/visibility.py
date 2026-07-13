@@ -13,6 +13,8 @@ from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
 from .selector_values import (
+    _matches_constraint,
+    feature_matches_specific_color_rule,
     get_feature_hash,
     get_feature_location_str,
     get_feature_qualifiers,
@@ -237,12 +239,6 @@ def compile_feature_visibility_rules(
     return compiled_rules or None
 
 
-def _matches_constraint(rule_token: str, actual_value: Optional[str]) -> bool:
-    if str(rule_token) == "*":
-        return True
-    if actual_value is None:
-        return False
-    return str(rule_token) == str(actual_value)
 
 
 def _rule_matches_feature(feature: Any, rule: dict[str, Any], record_id: Optional[str]) -> bool:
@@ -332,8 +328,6 @@ def should_render_feature(
     else:
         base_visible = feature_type in selected_set
         if not base_visible and specific_color_rules:
-            from .colors import feature_matches_specific_color_rule
-
             base_visible = feature_matches_specific_color_rule(
                 feature,
                 specific_color_rules,

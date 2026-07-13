@@ -282,48 +282,6 @@ def _find_best_track_indexed(
     return track_nums[0]
 
 
-def _find_best_track_split_overlaps_by_strand(
-    feature: dict,
-    center_track: List[dict],
-    outer_tracks: Dict[str, List[dict]],
-    inner_tracks: Dict[str, List[dict]],
-    genome_length: Optional[int] = None,
-    max_track: int = 100,
-) -> int:
-    """
-    Find best track when non-stranded overlap resolution uses split inner/outer pools.
-
-    This mode is intended for circular middle layout with resolve_overlaps enabled:
-    - track 0 is shared across all strands
-    - positive/undefined displacement tracks are assigned from +1, +2, ...
-    - negative displacement tracks are assigned from -1, -2, ...
-    """
-    # Keep center track shared to preserve existing visual anchoring as much as possible.
-    has_center_overlap = False
-    for existing in center_track:
-        if check_feature_overlap(feature, existing, False, genome_length):
-            has_center_overlap = True
-            break
-    if not has_center_overlap:
-        return 0
-
-    is_negative = feature["strand"] == "negative"
-    track_dict = inner_tracks if is_negative else outer_tracks
-    sign = -1 if is_negative else 1
-
-    for track_index in range(1, max_track):
-        key = f"track_{track_index}"
-        if key not in track_dict or not track_dict[key]:
-            return sign * track_index
-        has_overlap = False
-        for existing in track_dict[key]:
-            if check_feature_overlap(feature, existing, False, genome_length):
-                has_overlap = True
-                break
-        if not has_overlap:
-            return sign * track_index
-
-    return sign * (max_track - 1)
 
 
 def _find_best_track_split_overlaps_by_strand_indexed(

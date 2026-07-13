@@ -1,3 +1,5 @@
+import { normalizeOptionalText } from './track-slot-display.js';
+
 const DEPTH_TRACK_FALLBACK_COLORS = [
   '#4A90E2',
   '#E45756',
@@ -13,11 +15,6 @@ const normalizePositiveNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-};
-
-const normalizeOptionalText = (value) => {
-  const text = String(value ?? '').trim();
-  return text.length > 0 ? text : null;
 };
 
 const cloneParams = (params = {}) => {

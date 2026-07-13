@@ -752,12 +752,12 @@ def test_render_formats_do_not_include_session_json_aliases() -> None:
     assert "session-json" not in ACCEPTED_FORMATS
 
 
-def test_circular_cli_save_session_round_trip(tmp_path: Path, test_inputs_dir: Path) -> None:
+def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path) -> None:
     output_prefix = tmp_path / "circular_session"
     circular_main(
         [
             "--gbk",
-            str(test_inputs_dir / "MjeNMV.gb"),
+            str(examples_dir / "MjeNMV.gb"),
             "-o",
             str(output_prefix),
             "-f",

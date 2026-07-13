@@ -1,3 +1,7 @@
+import { parseTransform } from '../legend-layout/transform-utils.js';
+
+export { parseTransform };
+
 export const getLegendChildById = (parent, id) => {
   if (!parent) return null;
   for (const child of parent.children || []) {
@@ -19,15 +23,6 @@ export const parseTransformXY = (transform) => {
   if (!transform) return { x: 0, y: 0 };
   const match = transform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
   return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
-};
-
-export const parseTransform = (transformStr) => {
-  if (!transformStr) return { x: 0, y: 0 };
-  const match = transformStr.match(/translate\(\s*([-\d.]+)\s*,?\s*([-\d.]+)?\s*\)/);
-  if (match) {
-    return { x: parseFloat(match[1]) || 0, y: parseFloat(match[2]) || 0 };
-  }
-  return { x: 0, y: 0 };
 };
 
 export const getAllFeatureLegendGroups = (svg) => {

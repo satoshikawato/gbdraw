@@ -34,4 +34,26 @@ def split_kv_list(raw: str) -> list[tuple[str, str]]:
     return out
 
 
-__all__ = ["CircularTrackSlotParseError", "parse_bool", "split_kv_list"]
+def normalize_dinucleotide_skew_color_params(params: dict) -> dict:
+    if "positive_color" not in params and "high_color" in params:
+        params["positive_color"] = params["high_color"]
+    if "negative_color" not in params and "low_color" in params:
+        params["negative_color"] = params["low_color"]
+    params.pop("high_color", None)
+    params.pop("low_color", None)
+    return params
+
+
+def strip_inline_comment(raw: str) -> str:
+    for marker in (" #", "\t#"):
+        index = raw.find(marker)
+        if index >= 0:
+            return raw[:index].strip()
+    return raw
+
+
+__all__ = [
+    "CircularTrackSlotParseError",
+    "parse_bool",
+    "split_kv_list",
+]

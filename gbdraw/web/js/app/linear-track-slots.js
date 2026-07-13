@@ -7,7 +7,8 @@ import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,
   formatPxAuto,
-  isManualSlotValue
+  isManualSlotValue,
+  normalizeOptionalText
 } from './track-slot-display.js';
 
 const SUPPORTED_RENDERERS = [
@@ -53,11 +54,6 @@ const ESTIMATED_LINEAR_DEPTH_SPACING_PX = 8;
 const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
   return { ...params };
-};
-
-const normalizeOptionalText = (value) => {
-  const text = String(value ?? '').trim();
-  return text.length > 0 ? text : null;
 };
 
 const normalizeColorParam = (value) => {

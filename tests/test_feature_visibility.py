@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature, SimpleLocation
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
@@ -19,7 +19,6 @@ from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
 from gbdraw.features.colors import compute_feature_hash, precompute_used_color_rules, preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
-from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
@@ -32,6 +31,10 @@ from gbdraw.io.colors import load_default_colors
 from gbdraw.legend.table import prepare_legend_table
 from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json
+from tests.utils.feature_fixtures import (
+    make_origin_spanning_feature_object as _make_origin_spanning_feature_object,
+    make_origin_spanning_seq_feature as _make_origin_spanning_seq_feature,
+)
 
 
 def _visibility_df(rows: list[list[str]]) -> pd.DataFrame:
@@ -100,41 +103,6 @@ def _legend_config_stubs(
         block_stroke_width=0.5,
     )
     return gc_config, skew_config, feature_config
-
-
-def _make_origin_spanning_seq_feature() -> SeqFeature:
-    return SeqFeature(
-        CompoundLocation(
-            [
-                SimpleLocation(0, 576, strand=-1),
-                SimpleLocation(16023, 16569, strand=-1),
-            ],
-            operator="join",
-        ),
-        type="D-loop",
-        qualifiers={},
-    )
-
-
-def _make_origin_spanning_feature_object(record_id: str = "rec1") -> FeatureObject:
-    return FeatureObject(
-        feature_id="feature_000000099",
-        location=[
-            FeatureLocationPart("block", "001", "negative", 1, 576, False),
-            FeatureLocationPart("block", "002", "negative", 16023, 16569, True),
-        ],
-        is_directional=False,
-        color="#cccccc",
-        note="",
-        label_text="",
-        coordinates=[
-            SimpleLocation(0, 576, strand=-1),
-            SimpleLocation(16023, 16569, strand=-1),
-        ],
-        type="D-loop",
-        qualifiers={},
-        record_id=record_id,
-    )
 
 
 def test_read_feature_visibility_file_ok(tmp_path: Path) -> None:

@@ -373,6 +373,19 @@ def depth_track_count(record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | 
     return max((len(row) for row in record_depth_tracks), default=0)
 
 
+def depth_track_heights(
+    record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
+) -> list[float | None]:
+    heights: list[float | None] = [None for _ in range(depth_track_count(record_depth_tracks))]
+    for row in record_depth_tracks or ():
+        for track_index, spec in enumerate(row):
+            if track_index >= len(heights) or heights[track_index] is not None:
+                continue
+            if spec.height is not None:
+                heights[track_index] = float(spec.height)
+    return heights
+
+
 def depth_track_data_count(record_depth_tracks: Sequence[Sequence[DepthTrackData]] | None) -> int:
     if not record_depth_tracks:
         return 0

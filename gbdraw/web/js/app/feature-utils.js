@@ -1,3 +1,13 @@
+export const normalizeStringArray = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== null && item !== undefined)
+      .map((item) => String(item));
+  }
+  if (value === null || value === undefined || value === '') return [];
+  return [String(value)];
+};
+
 export const getFeatureCaption = (feature) => {
   return (
     feature.label ||

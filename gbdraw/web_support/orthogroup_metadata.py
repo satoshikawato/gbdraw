@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping, Sequence
 
-
-def _get_value(source: Any, key: str, default: Any = None) -> Any:
-    if isinstance(source, Mapping):
-        return source.get(key, default)
-    return getattr(source, key, default)
+from gbdraw.core.record_metadata import (
+    _absolute_display_interval,
+    _read_coord_map as _read_record_coord_map,
+)
 
 
 def _text(value: Any) -> str:
@@ -34,44 +33,59 @@ def _float_value(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _strand_display(strand: Any) -> str:
+    if strand == 1 or str(strand).strip() == "1":
+        return "+"
+    if strand == -1 or str(strand).strip() == "-1":
+        return "-"
+    return _text(strand)
+
+
+def _record_coord_maps(records: Sequence[Any] | None) -> dict[int, tuple[int, int]]:
+    if records is None:
+        return {}
+    return {index: _read_record_coord_map(record) for index, record in enumerate(records)}
+
+
 def _serialize_orthogroup_name_candidate(candidate: Any) -> dict[str, object]:
+    getter = candidate.get if isinstance(candidate, Mapping) else lambda key, default=None: getattr(candidate, key, default)
     return {
-        "text": _text(_get_value(candidate, "text")),
-        "source": _text(_get_value(candidate, "source")),
-        "memberCount": _int_value(_get_value(candidate, "member_count")),
-        "recordCoverageCount": _int_value(_get_value(candidate, "record_coverage_count")),
-        "representativeCount": _int_value(_get_value(candidate, "representative_count")),
-        "score": _float_value(_get_value(candidate, "score")),
+        "text": _text(getter("text", "")),
+        "source": _text(getter("source", "")),
+        "memberCount": _int_value(getter("member_count", 0)),
+        "recordCoverageCount": _int_value(getter("record_coverage_count", 0)),
+        "representativeCount": _int_value(getter("representative_count", 0)),
+        "score": _float_value(getter("score", 0.0)),
     }
 
 
 def _serialize_ortholog_edge(edge: Any) -> dict[str, object]:
     return {
-        "orthogroupId": _text(_get_value(edge, "orthogroup_id")),
-        "sourceRbhOrthogroupId": _get_value(edge, "source_rbh_orthogroup_id"),
-        "targetRbhOrthogroupId": _get_value(edge, "target_rbh_orthogroup_id"),
-        "queryProteinId": _text(_get_value(edge, "query_protein_id")),
-        "subjectProteinId": _text(_get_value(edge, "subject_protein_id")),
-        "queryRecordIndex": _int_value(_get_value(edge, "query_record_index")),
-        "subjectRecordIndex": _int_value(_get_value(edge, "subject_record_index")),
-        "edgeKind": _text(_get_value(edge, "edge_kind")),
-        "renderRole": _text(_get_value(edge, "render_role")),
-        "pathId": _get_value(edge, "path_id"),
-        "identity": _float_value(_get_value(edge, "identity")),
-        "evalue": _float_value(_get_value(edge, "evalue")),
-        "bitscore": _float_value(_get_value(edge, "bitscore")),
-        "alignmentLength": _int_value(_get_value(edge, "alignment_length")),
+        "orthogroupId": _text(getattr(edge, "orthogroup_id", "")),
+        "sourceRbhOrthogroupId": getattr(edge, "source_rbh_orthogroup_id", None),
+        "targetRbhOrthogroupId": getattr(edge, "target_rbh_orthogroup_id", None),
+        "queryProteinId": _text(getattr(edge, "query_protein_id", "")),
+        "subjectProteinId": _text(getattr(edge, "subject_protein_id", "")),
+        "queryRecordIndex": _int_value(getattr(edge, "query_record_index", 0)),
+        "subjectRecordIndex": _int_value(getattr(edge, "subject_record_index", 0)),
+        "edgeKind": _text(getattr(edge, "edge_kind", "")),
+        "renderRole": _text(getattr(edge, "render_role", "")),
+        "pathId": getattr(edge, "path_id", None),
+        "identity": _float_value(getattr(edge, "identity", 0.0)),
+        "evalue": _float_value(getattr(edge, "evalue", 0.0)),
+        "bitscore": _float_value(getattr(edge, "bitscore", 0.0)),
+        "alignmentLength": _int_value(getattr(edge, "alignment_length", 0)),
     }
 
 
 def _serialize_ortholog_path(path: Any) -> dict[str, object]:
     return {
-        "orthogroupId": _text(_get_value(path, "orthogroup_id")),
-        "pathId": _text(_get_value(path, "path_id")),
-        "proteinIds": [_text(item) for item in (_get_value(path, "protein_ids", ()) or ())],
-        "edgeIds": [_text(item) for item in (_get_value(path, "edge_ids", ()) or ())],
+        "orthogroupId": _text(getattr(path, "orthogroup_id", "")),
+        "pathId": _text(getattr(path, "path_id", "")),
+        "proteinIds": [_text(item) for item in (getattr(path, "protein_ids", ()) or ())],
+        "edgeIds": [_text(item) for item in (getattr(path, "edge_ids", ()) or ())],
         "sharedProteinIds": [
-            _text(item) for item in (_get_value(path, "shared_protein_ids", ()) or ())
+            _text(item) for item in (getattr(path, "shared_protein_ids", ()) or ())
         ],
     }
 
@@ -82,86 +96,91 @@ FeatureIdMapper = Callable[[int, str], str]
 def _serialize_member(
     member: Any,
     feature_id_mapper: FeatureIdMapper | None = None,
+    record_coord_maps: Mapping[int, tuple[int, int]] | None = None,
+    include_stable_feature_ids: bool = True,
 ) -> dict[str, object]:
-    record_index = _int_value(_get_value(member, "record_index"))
-    stable_feature_svg_id = _text(_get_value(member, "feature_svg_id"))
+    record_index = int(member.record_index)
+    stable_feature_svg_id = str(member.feature_svg_id or "")
     feature_svg_id = (
         feature_id_mapper(record_index, stable_feature_svg_id)
         if feature_id_mapper is not None and stable_feature_svg_id
         else stable_feature_svg_id
     )
-    return {
-        "orthogroupId": _text(_get_value(member, "orthogroup_id")),
-        "proteinId": _text(_get_value(member, "protein_id")),
-        "sourceProteinId": _get_value(member, "source_protein_id"),
+    start = int(member.start)
+    end = int(member.end)
+    coord_map = (record_coord_maps or {}).get(record_index)
+    if coord_map is not None:
+        start, end = _absolute_display_interval(start, end, coord_map[0], coord_map[1])
+    payload = {
+        "orthogroupId": member.orthogroup_id,
+        "proteinId": member.protein_id,
+        "sourceProteinId": member.source_protein_id,
         "recordIndex": record_index,
-        "recordId": _text(_get_value(member, "record_id")),
-        "featureIndex": _int_value(_get_value(member, "feature_index")),
-        "label": _text(_get_value(member, "label")),
+        "recordId": member.record_id,
+        "featureIndex": member.feature_index,
+        "label": member.label,
         "featureSvgId": feature_svg_id,
-        "stableFeatureSvgId": stable_feature_svg_id,
-        "stable_feature_svg_id": stable_feature_svg_id,
-        "start": _int_value(_get_value(member, "start")),
-        "end": _int_value(_get_value(member, "end")),
-        "strand": _get_value(member, "strand"),
-        "representative": bool(_get_value(member, "representative")),
-        "role": _text(_get_value(member, "role")),
-        "confidence": _text(_get_value(member, "confidence")),
-        "assignmentReason": _text(_get_value(member, "assignment_reason")),
+        "start": start,
+        "end": end,
+        "strand": _strand_display(member.strand),
+        "representative": member.representative,
+        "role": str(getattr(member, "role", "") or ""),
+        "confidence": str(getattr(member, "confidence", "") or ""),
+        "assignmentReason": str(getattr(member, "assignment_reason", "") or ""),
         "supportingEdges": [
-            _text(edge_id) for edge_id in (_get_value(member, "supporting_edges", ()) or ())
+            str(edge_id) for edge_id in (getattr(member, "supporting_edges", ()) or ())
         ],
-        "bestCoreSupport": _float_value(_get_value(member, "best_core_support")),
-        "secondBestCoreSupport": _float_value(_get_value(member, "second_best_core_support")),
-        "gene": _get_value(member, "gene"),
-        "product": _get_value(member, "product"),
-        "note": _get_value(member, "note"),
-        "locusTag": _get_value(member, "locus_tag"),
-        "geneId": _get_value(member, "gene_id"),
-        "oldLocusTag": _get_value(member, "old_locus_tag"),
+        "bestCoreSupport": float(getattr(member, "best_core_support", 0.0) or 0.0),
+        "secondBestCoreSupport": float(getattr(member, "second_best_core_support", 0.0) or 0.0),
+        "gene": getattr(member, "gene", None),
+        "product": getattr(member, "product", None),
+        "note": getattr(member, "note", None),
+        "locusTag": getattr(member, "locus_tag", None),
+        "geneId": getattr(member, "gene_id", None),
+        "oldLocusTag": getattr(member, "old_locus_tag", None),
     }
+    if include_stable_feature_ids:
+        payload["stableFeatureSvgId"] = stable_feature_svg_id
+        payload["stable_feature_svg_id"] = stable_feature_svg_id
+    return payload
 
 
 def serialize_orthogroups_payload(
     orthogroups: Any,
     *,
     feature_id_mapper: FeatureIdMapper | None = None,
+    records: Sequence[Any] | None = None,
+    record_coord_maps: Mapping[int, tuple[int, int]] | None = None,
+    include_stable_feature_ids: bool = True,
 ) -> list[dict[str, object]]:
     """Serialize OrthogroupResult to the web interactive SVG payload shape."""
 
     if orthogroups is None:
         return []
-    groups = _get_value(orthogroups, "orthogroups", {}) or {}
-    names_by_id = _get_value(orthogroups, "names_by_orthogroup_id", {}) or {}
-    descriptions_by_id = _get_value(orthogroups, "descriptions_by_orthogroup_id", {}) or {}
-    candidates_by_id = _get_value(orthogroups, "name_candidates_by_orthogroup_id", {}) or {}
-    confidence_by_id = _get_value(orthogroups, "confidence_by_orthogroup_id", {}) or {}
-    rbh_orthogroups = _get_value(orthogroups, "rbh_orthogroups", {}) or {}
-    ortholog_edges_by_id = _get_value(orthogroups, "ortholog_edges_by_orthogroup_id", {}) or {}
-    ortholog_paths_by_id = _get_value(orthogroups, "ortholog_paths_by_orthogroup_id", {}) or {}
-    related_edges_by_id = _get_value(orthogroups, "related_edges_by_orthogroup_id", {}) or {}
-    scope_by_id = _get_value(orthogroups, "scope_by_orthogroup_id", {}) or {}
-    source_record_index_by_id = (
-        _get_value(orthogroups, "source_record_index_by_orthogroup_id", {}) or {}
-    )
+    resolved_coord_maps = record_coord_maps or _record_coord_maps(records)
+    groups = getattr(orthogroups, "orthogroups", {}) or {}
+    names_by_id = getattr(orthogroups, "names_by_orthogroup_id", {}) or {}
+    descriptions_by_id = getattr(orthogroups, "descriptions_by_orthogroup_id", {}) or {}
+    candidates_by_id = getattr(orthogroups, "name_candidates_by_orthogroup_id", {}) or {}
+    confidence_by_id = getattr(orthogroups, "confidence_by_orthogroup_id", {}) or {}
+    rbh_orthogroups = getattr(orthogroups, "rbh_orthogroups", {}) or {}
+    ortholog_edges_by_id = getattr(orthogroups, "ortholog_edges_by_orthogroup_id", {}) or {}
+    ortholog_paths_by_id = getattr(orthogroups, "ortholog_paths_by_orthogroup_id", {}) or {}
+    related_edges_by_id = getattr(orthogroups, "related_edges_by_orthogroup_id", {}) or {}
+    scope_by_id = getattr(orthogroups, "scope_by_orthogroup_id", {}) or {}
+    source_record_index_by_id = getattr(orthogroups, "source_record_index_by_orthogroup_id", {}) or {}
 
     payload: list[dict[str, object]] = []
     for orthogroup_id, members in groups.items():
         orthogroup_id = _text(orthogroup_id)
         members = list(members or [])
-        member_ids = {_text(_get_value(member, "protein_id")) for member in members}
+        member_ids = {_text(getattr(member, "protein_id", "")) for member in members}
         rbh_ids = [
             _text(rbh_id)
             for rbh_id, protein_ids in rbh_orthogroups.items()
             if member_ids.intersection({_text(protein_id) for protein_id in protein_ids})
         ]
-        record_coverage_count = len(
-            {
-                int(_get_value(member, "record_index"))
-                for member in members
-                if _int_or_none(_get_value(member, "record_index")) is not None
-            }
-        )
+        record_coverage_count = len({int(member.record_index) for member in members})
         source_record_index = (
             _int_or_none(source_record_index_by_id[orthogroup_id])
             if orthogroup_id in source_record_index_by_id
@@ -195,7 +214,12 @@ def serialize_orthogroups_payload(
                     for edge in (related_edges_by_id.get(orthogroup_id, []) or [])
                 ],
                 "members": [
-                    _serialize_member(member, feature_id_mapper=feature_id_mapper)
+                    _serialize_member(
+                        member,
+                        feature_id_mapper=feature_id_mapper,
+                        record_coord_maps=resolved_coord_maps,
+                        include_stable_feature_ids=include_stable_feature_ids,
+                    )
                     for member in members
                 ],
             }

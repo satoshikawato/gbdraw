@@ -156,6 +156,15 @@ def _first_text(*values: object) -> str:
     return ""
 
 
+def _strand_symbol(value: object) -> str:
+    text = _first_text(value)
+    if text == "1":
+        return "+"
+    if text == "-1":
+        return "-"
+    return text
+
+
 def _normalize_string_array(value: object | None) -> list[str]:
     if isinstance(value, (list, tuple, set)):
         return [str(item) for item in value if item is not None]
@@ -468,7 +477,7 @@ def _normalize_orthogroup_member(member: object | None) -> dict[str, object] | N
         "featureSvgId": _first_text(member.get("featureSvgId"), member.get("feature_svg_id")),
         "start": start,
         "end": end,
-        "strand": _first_text(member.get("strand")),
+        "strand": _strand_symbol(member.get("strand")),
         "representative": bool(member.get("representative")),
         "gene": _first_text(member.get("gene")),
         "locusTag": _first_text(member.get("locusTag"), member.get("locus_tag")),
@@ -1012,7 +1021,7 @@ def _member_location_text(member: Mapping[str, object]) -> str:
         text = f"{start}..{end}"
     else:
         text = _first_text(start, end)
-    strand = _first_text(member.get("strand"))
+    strand = _strand_symbol(member.get("strand"))
     return f"{text} ({strand})" if text and strand else text
 
 

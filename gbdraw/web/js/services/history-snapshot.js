@@ -4,11 +4,9 @@ import {
   splitLegacyVisibilityRules
 } from '../app/feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
+import { cloneJsonData } from './json-clone.js';
 
-const cloneJsonData = (value) => {
-  if (value === null || value === undefined) return value;
-  return JSON.parse(JSON.stringify(value));
-};
+export { cloneJsonData };
 
 const clonePlainObject = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};

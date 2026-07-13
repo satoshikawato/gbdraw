@@ -1,5 +1,5 @@
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption, resolveDisplayProteinId } from '../feature-utils.js';
+import { getFeatureCaption, normalizeStringArray, resolveDisplayProteinId } from '../feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverRows,
@@ -149,16 +149,6 @@ export const createFeatureSvgActions = ({
     const startPos = Number.isFinite(startNumeric) ? startNumeric + 1 : feat.start;
     const endPos = Number.isFinite(endNumeric) ? endNumeric : feat.end;
     return `${startPos}..${endPos}${feat.strand ? ` (${feat.strand})` : ''}`;
-  };
-
-  const normalizeStringArray = (value) => {
-    if (Array.isArray(value)) {
-      return value
-        .filter((item) => item !== null && item !== undefined)
-        .map((item) => String(item));
-    }
-    if (value === null || value === undefined || value === '') return [];
-    return [String(value)];
   };
 
   const normalizeQualifierRows = (qualifiers) => {

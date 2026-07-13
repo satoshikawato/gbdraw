@@ -16,6 +16,7 @@ import logging
 from gbdraw.circular import _get_args as _get_circular_args, run_circular_from_namespace
 from gbdraw.linear import _get_args as _get_linear_args, run_linear_from_namespace
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json
+from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload as _serialize_shared_orthogroups_payload
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -331,6 +332,59 @@ def _web_transform_cds_span(start, end, strand, view_transform):
     display_strand = -strand if strand in {-1, 1} else strand
     return display_start, display_end, display_strand
 
+def _web_strand_symbol(strand):
+    if strand in (-1, 1, "-1", "1"):
+        return "+" if int(strand) == 1 else "-"
+    return str(strand or "").strip()
+
+def _web_read_record_coord_map(record):
+    annotations = getattr(record, "annotations", {}) or {}
+    try:
+        base = int(annotations.get("gbdraw_coord_base", 1))
+    except Exception:
+        base = 1
+    try:
+        step = int(annotations.get("gbdraw_coord_step", 1))
+    except Exception:
+        step = 1
+    if step == 0:
+        step = 1
+    return base, (1 if step > 0 else -1)
+
+def _web_absolute_display_interval(start, end, coord_base, coord_step):
+    start = int(start)
+    end = int(end)
+    coord_base = int(coord_base)
+    coord_step = 1 if int(coord_step) > 0 else -1
+    if end <= start:
+        coord = coord_base + (coord_step * start)
+        return coord - 1, coord
+    first_coord = coord_base + (coord_step * start)
+    last_coord = coord_base + (coord_step * (end - 1))
+    return min(first_coord, last_coord) - 1, max(first_coord, last_coord)
+
+def _web_member_display_coord_map(data, view_transform):
+    normalized = _normalize_web_view_transform(view_transform)
+    try:
+        base = int(data.get("coord_base", 1))
+    except Exception:
+        base = 1
+    try:
+        step = int(data.get("coord_step", 1))
+    except Exception:
+        step = 1
+    if step == 0:
+        step = 1
+    step = 1 if step > 0 else -1
+    if normalized["reverse"]:
+        try:
+            length = int(data.get("coord_length") or normalized["length"] or 0)
+        except Exception:
+            length = int(normalized["length"] or 0)
+        base = base + (step * max(0, length - 1))
+        step = -step
+    return base, step
+
 def _compute_web_feature_svg_id(record_id, feature_type, start, end, strand):
     from gbdraw.features.ids import compute_feature_hash_from_parts
 
@@ -497,7 +551,8 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         raise ValueError("No records found")
     return records[0]
 
-def _serialize_cds_protein(protein):
+def _serialize_cds_protein(protein, record=None):
+    coord_base, coord_step = _web_read_record_coord_map(record)
     return {
         "protein_id": protein.protein_id,
         "record_index": protein.record_index,
@@ -525,6 +580,9 @@ def _serialize_cds_protein(protein):
         "feature_hash_end": getattr(protein, "feature_hash_end", None),
         "feature_hash_strand": getattr(protein, "feature_hash_strand", None),
         "feature_hash_parts": [list(part) for part in (getattr(protein, "feature_hash_parts", ()) or ())],
+        "coord_base": coord_base,
+        "coord_step": coord_step,
+        "coord_length": len(record.seq) if record is not None else 0,
     }
 
 def _safe_web_protein_id_token(value):
@@ -589,7 +647,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             stable_record_key = f"r{record_index_offset + 1:04d}_{record.id}"
         proteins = _with_stable_web_protein_ids(proteins, stable_record_key)
         protein_map = {
-            protein.protein_id: _serialize_cds_protein(protein)
+            protein.protein_id: _serialize_cds_protein(protein, record)
             for protein in proteins
         }
         return json.dumps({
@@ -766,135 +824,59 @@ def _dataframe_json_rows(df):
         rows.append({str(key): _clean_json_scalar(value) for key, value in row.items()})
     return rows
 
-def _serialize_orthogroup_name_candidate(candidate):
-    if isinstance(candidate, dict):
-        getter = candidate.get
-    else:
-        getter = lambda key, default=None: getattr(candidate, key, default)
-    return {
-        "text": str(getter("text", "") or ""),
-        "source": str(getter("source", "") or ""),
-        "memberCount": int(getter("member_count", 0) or 0),
-        "recordCoverageCount": int(getter("record_coverage_count", 0) or 0),
-        "representativeCount": int(getter("representative_count", 0) or 0),
-        "score": float(getter("score", 0.0) or 0.0),
-    }
-
-def _serialize_ortholog_edge(edge):
-    return {
-        "orthogroupId": str(getattr(edge, "orthogroup_id", "") or ""),
-        "sourceRbhOrthogroupId": getattr(edge, "source_rbh_orthogroup_id", None),
-        "targetRbhOrthogroupId": getattr(edge, "target_rbh_orthogroup_id", None),
-        "queryProteinId": str(getattr(edge, "query_protein_id", "") or ""),
-        "subjectProteinId": str(getattr(edge, "subject_protein_id", "") or ""),
-        "queryRecordIndex": int(getattr(edge, "query_record_index", 0) or 0),
-        "subjectRecordIndex": int(getattr(edge, "subject_record_index", 0) or 0),
-        "edgeKind": str(getattr(edge, "edge_kind", "") or ""),
-        "renderRole": str(getattr(edge, "render_role", "") or ""),
-        "pathId": getattr(edge, "path_id", None),
-        "identity": float(getattr(edge, "identity", 0.0) or 0.0),
-        "evalue": float(getattr(edge, "evalue", 0.0) or 0.0),
-        "bitscore": float(getattr(edge, "bitscore", 0.0) or 0.0),
-        "alignmentLength": int(getattr(edge, "alignment_length", 0) or 0),
-    }
-
-def _serialize_ortholog_path(path):
-    return {
-        "orthogroupId": str(getattr(path, "orthogroup_id", "") or ""),
-        "pathId": str(getattr(path, "path_id", "") or ""),
-        "proteinIds": [str(item) for item in (getattr(path, "protein_ids", ()) or ())],
-        "edgeIds": [str(item) for item in (getattr(path, "edge_ids", ()) or ())],
-        "sharedProteinIds": [str(item) for item in (getattr(path, "shared_protein_ids", ()) or ())],
-    }
-
 def _serialize_orthogroups_payload(orthogroups):
-    if orthogroups is None:
-        return []
-    payload = []
-    names_by_orthogroup_id = getattr(orthogroups, "names_by_orthogroup_id", {}) or {}
-    descriptions_by_orthogroup_id = getattr(orthogroups, "descriptions_by_orthogroup_id", {}) or {}
-    candidates_by_orthogroup_id = getattr(orthogroups, "name_candidates_by_orthogroup_id", {}) or {}
-    confidence_by_orthogroup_id = getattr(orthogroups, "confidence_by_orthogroup_id", {}) or {}
-    rbh_orthogroups = getattr(orthogroups, "rbh_orthogroups", {}) or {}
-    ortholog_edges_by_orthogroup_id = getattr(orthogroups, "ortholog_edges_by_orthogroup_id", {}) or {}
-    ortholog_paths_by_orthogroup_id = getattr(orthogroups, "ortholog_paths_by_orthogroup_id", {}) or {}
-    related_edges_by_orthogroup_id = getattr(orthogroups, "related_edges_by_orthogroup_id", {}) or {}
-    scope_by_orthogroup_id = getattr(orthogroups, "scope_by_orthogroup_id", {}) or {}
-    source_record_index_by_orthogroup_id = getattr(orthogroups, "source_record_index_by_orthogroup_id", {}) or {}
-    for orthogroup_id, members in orthogroups.orthogroups.items():
-        record_coverage_count = len({int(member.record_index) for member in members})
-        member_ids = {str(member.protein_id) for member in members}
-        rbh_ids = [
-            str(rbh_id)
-            for rbh_id, protein_ids in rbh_orthogroups.items()
-            if member_ids.intersection({str(protein_id) for protein_id in protein_ids})
-        ]
-        payload.append(
-            {
-                "id": orthogroup_id,
-                "name": str(names_by_orthogroup_id.get(orthogroup_id, "") or ""),
-                "description": str(descriptions_by_orthogroup_id.get(orthogroup_id, "") or ""),
-                "nameConfidence": str(confidence_by_orthogroup_id.get(orthogroup_id, "none") or "none"),
-                "scope": str(scope_by_orthogroup_id.get(orthogroup_id, "cross_record") or "cross_record"),
-                "source_record_index": (
-                    int(source_record_index_by_orthogroup_id[orthogroup_id])
-                    if orthogroup_id in source_record_index_by_orthogroup_id
-                    else None
-                ),
-                "nameCandidates": [
-                    _serialize_orthogroup_name_candidate(candidate)
-                    for candidate in (candidates_by_orthogroup_id.get(orthogroup_id, []) or [])
-                ],
-                "member_count": len(members),
-                "record_coverage_count": record_coverage_count,
-                "rbhOrthogroupIds": rbh_ids,
-                "orthologEdges": [
-                    _serialize_ortholog_edge(edge)
-                    for edge in (ortholog_edges_by_orthogroup_id.get(orthogroup_id, []) or [])
-                ],
-                "orthologPaths": [
-                    _serialize_ortholog_path(path)
-                    for path in (ortholog_paths_by_orthogroup_id.get(orthogroup_id, []) or [])
-                ],
-                "relatedEdges": [
-                    _serialize_ortholog_edge(edge)
-                    for edge in (related_edges_by_orthogroup_id.get(orthogroup_id, []) or [])
-                ],
-                "members": [
-                    {
-                        "orthogroupId": member.orthogroup_id,
-                        "proteinId": member.protein_id,
-                        "sourceProteinId": member.source_protein_id,
-                        "recordIndex": member.record_index,
-                        "recordId": member.record_id,
-                        "featureIndex": member.feature_index,
-                        "label": member.label,
-                        "featureSvgId": member.feature_svg_id,
-                        "start": member.start,
-                        "end": member.end,
-                        "strand": member.strand,
-                        "representative": member.representative,
-                        "role": str(getattr(member, "role", "") or ""),
-                        "confidence": str(getattr(member, "confidence", "") or ""),
-                        "assignmentReason": str(getattr(member, "assignment_reason", "") or ""),
-                        "supportingEdges": [
-                            str(edge_id)
-                            for edge_id in (getattr(member, "supporting_edges", ()) or ())
-                        ],
-                        "bestCoreSupport": float(getattr(member, "best_core_support", 0.0) or 0.0),
-                        "secondBestCoreSupport": float(getattr(member, "second_best_core_support", 0.0) or 0.0),
-                        "gene": getattr(member, "gene", None),
-                        "product": getattr(member, "product", None),
-                        "note": getattr(member, "note", None),
-                        "locusTag": getattr(member, "locus_tag", None),
-                        "geneId": getattr(member, "gene_id", None),
-                        "oldLocusTag": getattr(member, "old_locus_tag", None),
-                    }
-                    for member in members
-                ],
+    return _serialize_shared_orthogroups_payload(orthogroups, include_stable_feature_ids=False)
+
+def _web_orthogroup_member_display_metadata(record_payloads):
+    metadata = {}
+    for record in record_payloads:
+        raw_map = record.get("protein_map") or {}
+        view_transform = record.get("view_transform") or {}
+        if not isinstance(raw_map, dict):
+            continue
+        for protein_id, data in raw_map.items():
+            if not isinstance(data, dict):
+                continue
+            try:
+                display_start, display_end, display_strand = _web_transform_cds_span(
+                    data.get("start", 0),
+                    data.get("end", 0),
+                    data.get("strand"),
+                    view_transform,
+                )
+                coord_base, coord_step = _web_member_display_coord_map(data, view_transform)
+                absolute_start, absolute_end = _web_absolute_display_interval(
+                    display_start,
+                    display_end,
+                    coord_base,
+                    coord_step,
+                )
+            except Exception:
+                continue
+            metadata[str(data.get("protein_id") or protein_id)] = {
+                "start": absolute_start,
+                "end": absolute_end,
+                "strand": _web_strand_symbol(display_strand),
             }
-        )
-    return payload
+    return metadata
+
+def _apply_web_orthogroup_member_display_metadata(groups, metadata_by_protein_id):
+    if not metadata_by_protein_id:
+        return groups
+    for group in groups or []:
+        if not isinstance(group, dict):
+            continue
+        for member in group.get("members", []) or []:
+            if not isinstance(member, dict):
+                continue
+            protein_id = str(member.get("proteinId") or member.get("protein_id") or "")
+            metadata = metadata_by_protein_id.get(protein_id)
+            if not metadata:
+                continue
+            member["start"] = metadata["start"]
+            member["end"] = metadata["end"]
+            member["strand"] = metadata["strand"]
+    return groups
 
 def convert_losatp_blastp_pairs_to_genomic_payload(
     pairs_json,
@@ -1059,6 +1041,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 record["protein_map"],
                 record["view_transform"],
             )
+        member_display_metadata = _web_orthogroup_member_display_metadata(record_payloads)
 
         combined_protein_map = {}
         for protein_map in protein_maps_by_record.values():
@@ -1219,6 +1202,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 for block in collinearity_result.blocks
             ]
             serialized_groups = _serialize_orthogroups_payload(collinearity_result.orthogroups)
+            _apply_web_orthogroup_member_display_metadata(serialized_groups, member_display_metadata)
             for group in serialized_groups:
                 group["scope"] = group_scope
                 group["groupKind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"
@@ -1308,8 +1292,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "hit_count": int(converted.shape[0]),
                 }
             )
-
-        return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": _serialize_orthogroups_payload(orthogroups)})
+        serialized_groups = _serialize_orthogroups_payload(orthogroups)
+        _apply_web_orthogroup_member_display_metadata(serialized_groups, member_display_metadata)
+        return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": serialized_groups})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 

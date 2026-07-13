@@ -97,6 +97,69 @@ def format_percent_tick(value: float) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".") + "%"
 
 
+def _format_depth_tick(value: float) -> str:
+    value = 0.0 if not math.isfinite(value) else float(value)
+    if abs(value - round(value)) < 0.05 or abs(value) >= 100.0:
+        return f"{value:.0f}x"
+    if abs(value) >= 10.0:
+        return f"{value:.1f}x"
+    return f"{value:.2f}".rstrip("0").rstrip(".") + "x"
+
+
+def _depth_axis_bounds(depth_df: Any, min_depth: float | None, max_depth: float | None) -> tuple[float, float]:
+    axis_min = float(min_depth) if min_depth is not None else 0.0
+    if max_depth is not None:
+        axis_max = float(max_depth)
+    elif "depth" in depth_df.columns and not depth_df.empty:
+        axis_max = float(depth_df["depth"].max())
+    else:
+        axis_max = axis_min
+    if not math.isfinite(axis_max):
+        axis_max = axis_min
+    return axis_min, max(axis_min, axis_max)
+
+
+def _scale_depth_value(value: float, *, normalize: bool) -> float:
+    value = 0.0 if not math.isfinite(value) else float(value)
+    if not normalize:
+        return value
+    return math.log10(value) + 1.0 if value > 0 else 0.0
+
+
+def _scaled_depth_fraction(
+    value: float,
+    axis_min: float,
+    axis_max: float,
+    *,
+    normalize: bool,
+) -> float:
+    return scaled_scalar_fraction(
+        _scale_depth_value(value, normalize=normalize),
+        _scale_depth_value(axis_min, normalize=normalize),
+        _scale_depth_value(axis_max, normalize=normalize),
+    )
+
+
+def _prepare_depth_plot_dataframe(
+    depth_df: Any,
+    min_depth: float | None,
+    max_depth: float | None,
+    *,
+    normalize: bool,
+) -> Any:
+    plot_df = depth_df.copy()
+    axis_min, axis_max = _depth_axis_bounds(plot_df, min_depth, max_depth)
+    if axis_max <= axis_min:
+        plot_df["depth_normalized"] = 0.0
+        return plot_df
+    plot_df["depth_normalized"] = plot_df["depth"].map(
+        lambda value: _scaled_depth_fraction(
+            float(value), axis_min, axis_max, normalize=normalize
+        )
+    )
+    return plot_df
+
+
 def linear_scalar_axis_tick_font_size_px(
     axis_config: Any,
     track_height_px: float,

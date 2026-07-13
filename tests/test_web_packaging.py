@@ -213,7 +213,7 @@ def _assert_white_gallery_thumbnail(path: Path) -> None:
 
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
-    expected_wheel_name = "gbdraw-0.13.0-py3-none-any.whl"
+    expected_wheel_name = "gbdraw-0.14.0b0-py3-none-any.whl"
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
@@ -388,13 +388,15 @@ def test_web_losatp_orthogroup_membership_uses_anchor_core_model() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    normalization_js = (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 
     assert '<option value="distribution_split">Distribution split</option>' not in index_html
     assert '<option value="family_merge">Family merge</option>' not in index_html
     assert "orthogroupMembershipMode: 'anchor_core_v1'" in state_js
-    assert "outparalog_split: 'anchor_core_v1'" in config_js
-    assert "outparalog_split: 'anchor_core_v1'" in run_analysis_js
+    assert "outparalog_split: 'anchor_core_v1'" in normalization_js
+    assert "normalizeOrthogroupMembershipMode" in config_js
+    assert "normalizeOrthogroupMembershipMode" in run_analysis_js
 
 
 def test_web_linear_definition_line_styles_contract() -> None:
@@ -512,6 +514,51 @@ def test_web_orthogroup_payload_serializes_record_local_scope() -> None:
     assert payload[0]["member_count"] == 1
     assert payload[0]["record_coverage_count"] == 1
     assert payload[0]["members"][0]["role"] == "local_paralog"
+    assert payload[0]["members"][0]["strand"] == "+"
+
+
+def test_web_losatp_orthogroup_members_use_absolute_region_coordinates() -> None:
+    helpers_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    groups = [
+        {
+            "members": [
+                {
+                    "proteinId": "p1",
+                    "start": 0,
+                    "end": 457,
+                    "strand": "-",
+                }
+            ]
+        }
+    ]
+    metadata = namespace["_web_orthogroup_member_display_metadata"](
+        [
+            {
+                "protein_map": {
+                    "p1": {
+                        "protein_id": "p1",
+                        "start": 0,
+                        "end": 457,
+                        "strand": -1,
+                        "coord_base": 10000,
+                        "coord_step": 1,
+                        "coord_length": 1000,
+                    }
+                },
+                "view_transform": {"length": 1000, "reverse": False},
+            }
+        ]
+    )
+
+    namespace["_apply_web_orthogroup_member_display_metadata"](groups, metadata)
+
+    assert groups[0]["members"][0]["start"] == 9999
+    assert groups[0]["members"][0]["end"] == 10456
+    assert groups[0]["members"][0]["strand"] == "-"
 
 
 def test_web_collinear_payload_splits_local_groups_from_global_orthogroups() -> None:
@@ -876,7 +923,7 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "nucleotideSequence" in svg_actions_source
     assert "aminoAcidSequence" in svg_actions_source
     assert "buildFeatureSequenceFastas" in svg_actions_source
-    assert "import { getFeatureCaption, resolveDisplayProteinId } from '../feature-utils.js';" in svg_actions_source
+    assert "import { getFeatureCaption, normalizeStringArray, resolveDisplayProteinId } from '../feature-utils.js';" in svg_actions_source
     assert "const proteinId = resolveDisplayProteinId(feat, member);" in svg_actions_source
     assert "label: 'Protein ID', value: proteinId" in svg_actions_source
     assert "document.elementsFromPoint(eventLike.clientX, eventLike.clientY)" in svg_actions_source
@@ -1013,8 +1060,13 @@ def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path
         pytest.skip("node is not available")
 
     source_path = WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js"
+    feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
     module_path = tmp_path / "feature-sequence-fasta.mjs"
-    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    module_path.write_text(
+        source_path.read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
+        encoding="utf-8",
+    )
     check_path = tmp_path / "check-feature-sequence-fasta.mjs"
     check_path.write_text(
         f"""
@@ -1461,7 +1513,10 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
     feature_utils_path = tmp_path / "feature-utils.mjs"
     feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
     sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
-    sequence_fasta_path.write_text((WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8"), encoding="utf-8")
+    sequence_fasta_path.write_text(
+        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
+        encoding="utf-8",
+    )
     normalization_path = tmp_path / "losat-normalization.mjs"
     normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
@@ -1603,7 +1658,10 @@ def test_collinear_adjacent_popup_labels_local_collinear_groups(tmp_path: Path) 
     feature_utils_path = tmp_path / "feature-utils.mjs"
     feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
     sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
-    sequence_fasta_path.write_text((WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8"), encoding="utf-8")
+    sequence_fasta_path.write_text(
+        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
+        encoding="utf-8",
+    )
     normalization_path = tmp_path / "losat-normalization.mjs"
     normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
@@ -1755,7 +1813,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     repo_root = tmp_path / "repo"
     web_root = repo_root / "gbdraw" / "web"
     web_root.mkdir(parents=True)
-    expected_name = "gbdraw-0.13.0-py3-none-any.whl"
+    expected_name = "gbdraw-0.14.0b0-py3-none-any.whl"
     calls: list[object] = []
 
     def fake_run(args: list[str], *, cwd: Path, env: dict[str, str], check: bool) -> None:
@@ -3614,7 +3672,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
-    assert wheel_path.name == "gbdraw-0.13.0-py3-none-any.whl"
+    assert wheel_path.name == "gbdraw-0.14.0b0-py3-none-any.whl"
     subprocess.run(
         [sys.executable, "tools/verify_gui_offline.py", "inspect-wheel", str(wheel_path)],
         cwd=REPO_ROOT,
