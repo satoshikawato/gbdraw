@@ -1,63 +1,63 @@
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 # Gallery
-This gallery showcases representative `gbdraw` outputs and the commands used to generate them. For shorter copy-paste examples, see [Recipes](./RECIPES.md).
+This gallery contains representative `gbdraw` outputs and the commands used to generate them. For shorter copy-paste examples, see [Recipes](./RECIPES.md).
 
-Interactive SVG versions of selected examples are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub previews static SVG images, so use the public gallery when you want to inspect JavaScript-enabled standalone SVG output. Selected Gallery entries also include a Tutorial tab for reproducing the same figure in the web app.
+Interactive SVG versions of selected examples are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub previews static SVG images, so use the public gallery when you want to inspect JavaScript-enabled SVG output. Selected gallery entries also include a Tutorial tab for reproducing the same figure in the web app.
 
-The interactive Gallery assets are hosted online and are not bundled with local `gbdraw` installs. Running `gbdraw gui` locally still keeps genome analysis on your own machine.
+The interactive gallery assets are hosted online and are not bundled with local `gbdraw` installs. Running `gbdraw gui` locally still keeps genome analysis on your own machine.
 
-For circular examples, `--track_type` names the simple-layout preset. Custom Track Slots use explicit geometry instead, and the circular axis remains fixed.
+For circular examples, `--track_type` names the circular layout preset. Custom track slots use explicit geometry instead, and the circular axis remains fixed.
 
-For CLI users converting long Gallery commands into TSV manifests, see the detailed `--records_table`, `--conservation_table`, and `--circular_track_table` examples in the [CLI Reference](./CLI_Reference.md#tsv-manifest-inputs).
+When converting long gallery commands into TSV manifests, see the `--records_table`, `--conservation_table`, and `--circular_track_table` examples in the [CLI Reference](./CLI_Reference.md#tsv-manifest-inputs).
 
 #### White spot syndrome virus genome comparison
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#WSSV_genome_comparison](https://gbdraw.app/gallery/#WSSV_genome_comparison)
 
-Web tutorial: open the [WSSV Gallery entry](https://gbdraw.app/gallery/#WSSV_genome_comparison) and select the Tutorial tab.
+Web tutorial: open the [WSSV gallery entry](https://gbdraw.app/gallery/#WSSV_genome_comparison) and select the Tutorial tab.
 
-This circular web tutorial covers browser LOSAT `blastn` conservation rings, comparison FASTA inputs, ring labels and colors, large SVG handling, feature clicks, legend inspection, and session export.
+The tutorial builds a circular WSSV conservation-ring plot in the browser: it runs LOSAT `blastn`, uploads comparison FASTA files, sets ring labels and colors, checks feature and legend popups, and exports a session.
 
 
-#### <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 Complete Genome
+#### <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 complete genome
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018)
 
-Web tutorial: open the [Vibrio multi-record Gallery entry](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018) and select the Tutorial tab.
+Web tutorial: open the [Vibrio multi-record gallery entry](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018) and select the Tutorial tab.
 
-This circular multi-record session uses a saved hosted Gallery session and interactive SVG output.
+This circular multi-record example starts from a hosted gallery session and interactive SVG output.
 
-The web tutorial covers one GBFF input with six records, Multi-record canvas settings, automatic record sizing, explicit row placement, feature clicks, and session export.
+The tutorial uses one GBFF input with six records, sets up the multi-record canvas, assigns rows, checks feature popups, and exports a session.
 
 #### Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#BGC0000708-BGC0000713](https://gbdraw.app/gallery/#BGC0000708-BGC0000713)
 
-Web tutorial: open the [BGC Gallery entry](https://gbdraw.app/gallery/#BGC0000708-BGC0000713) and select the Tutorial tab.
+Web tutorial: open the [BGC gallery entry](https://gbdraw.app/gallery/#BGC0000708-BGC0000713) and select the Tutorial tab.
 
-This linear web tutorial covers browser LOSATP orthogroups, antiSMASH `gene_kind` color rules, rotated first-record labels, feature clicks, orthogroup popups, legend editing, and session export.
+The tutorial runs a browser LOSATP orthogroup search, colors features with antiSMASH `gene_kind` rules, rotates first-record labels, checks feature and orthogroup popups, edits the legend, and exports a session.
 
-#### Majaniviruses Multi-Genome Comparison
+#### Majaniviruses multi-genome comparison
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#majanivirus_orthogroup](https://gbdraw.app/gallery/#majanivirus_orthogroup)
 
-Web tutorial: open the [majanivirus Gallery entry](https://gbdraw.app/gallery/#majanivirus_orthogroup) and select the Tutorial tab.
+Web tutorial: open the [majanivirus gallery entry](https://gbdraw.app/gallery/#majanivirus_orthogroup) and select the Tutorial tab.
 
-This linear web tutorial covers a large nine-record browser LOSATP orthogroup comparison, product-based color rules, record labels, match popups, large SVG handling, and session export.
+The tutorial runs a nine-record LOSATP orthogroup comparison in the browser, applies product-based color rules, sets record labels, checks match popups, and exports a session.
 
 <details><summary>Expand to see the script</summary>
 
 ```bash
-# Pairwise TBLASTX search 
-tblastx -query MjeNMV.fasta -subject MelaMJNV.fasta -outfmt 7 -out MjeNMV.MelaMJNV.tblastx.out 
-tblastx -query MelaMJNV.fasta -subject PemoMJNVA.fasta -outfmt 7 -out MelaMJNV.PemoMJNVA.tblastx.out 
-tblastx -query PemoMJNVA.fasta -subject PeseMJNV.fasta -outfmt 7 -out PemoMJNVA.PeseMJNV.tblastx.out 
-tblastx -query PeseMJNV.fasta -subject PemoMJNVB.fasta -outfmt 7 -out PeseMJNV.PemoMJNVB.tblastx.out 
-tblastx -query PemoMJNVB.fasta -subject LvMJNV.fasta -outfmt 7 -out PemoMJNVB.LvMJNV.tblastx.out 
-tblastx -query LvMJNV.fasta -subject TrcuMJNV.fasta -outfmt 7 -out LvMJNV.TrcuMJNV.tblastx.out 
-tblastx -query TrcuMJNV.fasta -subject MellatMJNV.fasta -outfmt 7 -out TrcuMJNV.MellatMJNV.tblastx.out 
-tblastx -query MellatMJNV.fasta -subject MeenMJNV.fasta -outfmt 7 -out MellatMJNV.MeenMJNV.tblastx.out 
-tblastx -query MeenMJNV.fasta -subject MejoMJNV.fasta -outfmt 7 -out MeenMJNV.MejoMJNV.tblastx.out 
+# Pairwise TBLASTX search
+tblastx -query MjeNMV.fasta -subject MelaMJNV.fasta -outfmt 7 -out MjeNMV.MelaMJNV.tblastx.out
+tblastx -query MelaMJNV.fasta -subject PemoMJNVA.fasta -outfmt 7 -out MelaMJNV.PemoMJNVA.tblastx.out
+tblastx -query PemoMJNVA.fasta -subject PeseMJNV.fasta -outfmt 7 -out PemoMJNVA.PeseMJNV.tblastx.out
+tblastx -query PeseMJNV.fasta -subject PemoMJNVB.fasta -outfmt 7 -out PeseMJNV.PemoMJNVB.tblastx.out
+tblastx -query PemoMJNVB.fasta -subject LvMJNV.fasta -outfmt 7 -out PemoMJNVB.LvMJNV.tblastx.out
+tblastx -query LvMJNV.fasta -subject TrcuMJNV.fasta -outfmt 7 -out LvMJNV.TrcuMJNV.tblastx.out
+tblastx -query TrcuMJNV.fasta -subject MellatMJNV.fasta -outfmt 7 -out TrcuMJNV.MellatMJNV.tblastx.out
+tblastx -query MellatMJNV.fasta -subject MeenMJNV.fasta -outfmt 7 -out MellatMJNV.MeenMJNV.tblastx.out
+tblastx -query MeenMJNV.fasta -subject MejoMJNV.fasta -outfmt 7 -out MeenMJNV.MejoMJNV.tblastx.out
 
 # gbdraw
 gbdraw linear \
@@ -95,11 +95,11 @@ gbdraw linear \
 
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
-#### Hepatoplasmataceae Five-Genome Comparison
+#### Hepatoplasmataceae five-genome comparison
 
 Interactive SVG session outputs: [collinear](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear), [orthogroup](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup)
 
-Web tutorials: open the [collinear Gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) or [orthogroup Gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and select the Tutorial tab.
+Web tutorials: open the [collinear gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) or [orthogroup gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and select the Tutorial tab.
 
 <details><summary>Expand to see the script</summary>
 
@@ -135,15 +135,15 @@ AP027132_NZ_CP006932.tblastx.out \
 
 Interactive SVG session output: [https://gbdraw.app/gallery/#HmmtDNA_ATskew](https://gbdraw.app/gallery/#HmmtDNA_ATskew)
 
-Web tutorial: open the [human mitochondrial AT skew Gallery entry](https://gbdraw.app/gallery/#HmmtDNA_ATskew) and select the Tutorial tab.
+Web tutorial: open the [human mitochondrial AT skew gallery entry](https://gbdraw.app/gallery/#HmmtDNA_ATskew) and select the Tutorial tab.
 
-This circular web tutorial covers Custom Track Slots, an added AT skew dinucleotide track, gene-based CDS labels, feature clicks, legend editing, and session export.
+The tutorial uses custom track slots to add an AT-skew ring, switches CDS labels to gene names, checks feature popups, edits the legend, and exports a session.
 
 <details><summary>Expand to see the script</summary>
 
-The following `qualifier_priority.tsv` designated by `--qualifier_priority` option specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
+The `qualifier_priority.tsv` file passed with `--qualifier_priority` chooses the label qualifier for each feature type. Here, CDS labels use `gene`; other feature types keep the default qualifier order:
 
-```modified_default_colors.tsv
+```qualifier_priority.tsv
 CDS gene
 ```
 | feature type | qualifier |
@@ -218,7 +218,7 @@ gbdraw linear \
 -t lambda_specific_table.tsv \
 --block_stroke_width 2 \
 --axis_stroke_width 5 \
---definition_font_size 24 
+--definition_font_size 24
 ```
 
 </details>

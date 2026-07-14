@@ -3,13 +3,13 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 3](./3_Advanced_Customization.md) | [Go to Tutorial 5 >](./5_Table_Driven_Inputs.md)
 
-# Tutorial 4: Protein Comparisons Without Precomputed BLAST
+# Tutorial 4: Protein comparisons without precomputed BLAST
 
-**Goal:** build linear comparison plots from CDS-derived proteins without preparing BLAST tables yourself.
+Build linear comparison plots from CDS-derived proteins without preparing BLAST tables first.
 
-## 1. Prepare Annotated GenBank Inputs
+## 1. Prepare annotated GenBank inputs
 
-The generated protein workflows need two or more annotated GenBank or GFF3 + FASTA records with CDS translations, or CDS features that can be translated.
+The protein-search modes need two or more annotated GenBank or GFF3 + FASTA records with CDS translations, or CDS features that can be translated.
 
 This tutorial uses three majanivirus GenBank records:
 
@@ -21,7 +21,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC
 
 If you are working from a source checkout, the same files are also available under `examples/`.
 
-## 2. Runtime Selection
+## 2. Runtime selection
 
 Unless you pass an explicit executable path, `--protein_blastp_mode pairwise`, `orthogroup`, and `collinear` resolve the protein search runtime in this order:
 
@@ -56,7 +56,7 @@ NCBI BLAST+ output is compatible with the workflow, but it may not produce exact
 
 Pass only one of `--losatp_bin` and `--ncbi_blastp_bin` in a command.
 
-## 3. Pairwise Protein Ribbons
+## 3. Pairwise protein ribbons
 
 `pairwise` runs adjacent protein searches and draws pairwise ribbons from the resulting matches.
 
@@ -74,7 +74,7 @@ This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-deri
 
 ![Pairwise majanivirus protein comparison with curved ribbons between two linear records](../../examples/tutorial-protein-pairwise.svg)
 
-## 4. Orthogroup Ribbons
+## 4. Orthogroup ribbons
 
 `orthogroup` groups related CDS-derived proteins across all input records before drawing adjacent display ribbons.
 
@@ -95,7 +95,7 @@ This writes `majani_orthogroup.svg`.
 
 ![Orthogroup-supported protein ribbons across three majanivirus records](../../examples/majani_orthogroup.svg)
 
-## 5. Collinear Blocks
+## 5. Collinear blocks
 
 `collinear` keeps protein-supported matches that occur in compatible local order.
 
@@ -117,7 +117,7 @@ This writes `majani_collinear.svg`.
 
 ![Collinear protein blocks across three majanivirus records](../../examples/majani_collinear.svg)
 
-## 6. When to Prefer Precomputed `-b/--blast`
+## 6. When to prefer precomputed `-b/--blast`
 
 Use precomputed BLAST tables when you need exact reproducibility from a specific BLAST version, custom database settings, nucleotide comparisons, translated nucleotide searches, or a workflow that has already filtered hits upstream.
 

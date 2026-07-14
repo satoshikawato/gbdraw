@@ -3,11 +3,11 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 6](./6_Depth_Quantitative_Tracks.md) | [Go to Tutorial 8 >](./8_Interactive_SVG_Sessions.md)
 
-# Tutorial 7: Linear Layout, Definitions, and Rulers
+# Tutorial 7: Linear layout, definitions, and rulers
 
-**Goal:** customize linear plots with track placement, rulers, record definitions, titles, and custom track slots.
+Customize linear plots with track placement, rulers, record definitions, titles, and custom track slots.
 
-## 1. Prepare Inputs
+## 1. Prepare inputs
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gb
@@ -16,7 +16,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC
 
 If you are working from a source checkout, the same files are available under `examples/`.
 
-## 2. Place Tracks Above, Middle, or Below
+## 2. Place tracks above, middle, or below
 
 `--track_layout above`, `middle`, and `below` control where the feature track sits relative to the record axis.
 
@@ -35,7 +35,7 @@ This writes `majani_tracks_below.svg`. Use `--track_axis_gap 12` when you want a
 
 ![Two majanivirus records with feature, GC content, and GC skew tracks placed below each record axis](../../examples/tutorial-7-track-layout-below.svg)
 
-## 3. Use a Ruler on the Axis
+## 3. Use a ruler on the axis
 
 `--ruler_on_axis` is effective when `--scale_style ruler` is used with `--track_layout above` or `below`.
 
@@ -50,7 +50,7 @@ gbdraw linear \
   -f svg
 ```
 
-## 4. Combine the Ruler with Record Text and a Plot Title
+## 4. Combine the ruler with record text and a plot title
 
 `--record_label` and `--record_subtitle` are repeatable and order-sensitive. Their order follows the input records unless you use `--records_table`, where labels and subtitles belong in table columns.
 
@@ -75,7 +75,7 @@ The result combines per-record axis rulers, ordered definition lines, and a shar
 
 ![Linear majanivirus plot with a top title, two record definition blocks, and 50 kbp rulers on the record axes](../../examples/tutorial-7-linear-layout.svg)
 
-## 5. Tune Definition Lines
+## 5. Tune definition lines
 
 Use definition controls when you need compact or publication-specific record labels.
 
@@ -100,7 +100,7 @@ gbdraw linear \
 
 ![Two centered majanivirus records with compact bold names and gray subtitles in a fixed left definition column](../../examples/tutorial-7-definition-lines.svg)
 
-## 6. Customize Linear Track Slots
+## 6. Customize linear track slots
 
 For simple ordering, use `--linear_track_order`:
 

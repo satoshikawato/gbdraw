@@ -4,7 +4,7 @@
 
 This reference mirrors the current command help from `python -m gbdraw.cli`. Use it as the source of truth for available options and defaults.
 
-## Main Command
+## Main command
 
 ```text
 gbdraw v. 0.14.0b0: A diagram generator for small genomes
@@ -48,7 +48,7 @@ Additional Information:
 
 `gbdraw gui` starts a local HTTP server on a free port and opens the web UI in your browser. Streamlit is not required.
 
-## Circular Mode
+## Circular mode
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
@@ -381,7 +381,7 @@ options:
 
 Circular conservation rings use one ring per `--conservation_blast` source and a shared identity gradient legend. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for conservation rings, so provide precomputed BLAST output.
 
-## TSV Manifest Inputs
+## TSV manifest inputs
 
 The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
 
@@ -603,7 +603,7 @@ Depth tracks can be supplied with the legacy `--depth` option or the repeatable
 `depth_2`, and so on. Each `--depth_track` group is one logical track; provide
 one file to reuse it for every record, or one file per record.
 
-## Linear Mode
+## Linear mode
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
@@ -945,7 +945,7 @@ still force a native LOSAT executable on any platform with `--losatp_bin`.
 NCBI BLAST+ fallback produces compatible outfmt 6 protein comparisons, but its
 hit set is not guaranteed to be identical to LOSAT.
 
-## Related Guides
+## Related guides
 
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)

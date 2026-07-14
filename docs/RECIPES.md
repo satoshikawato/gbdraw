@@ -4,7 +4,7 @@
 
 Quick copy-paste solutions for common tasks. For explanations and screenshots, see the [Tutorials](./TUTORIALS/TUTORIALS.md).
 
-## Circular Diagrams
+## Circular diagrams
 
 ### Basic circular plot
 
@@ -54,7 +54,7 @@ gbdraw circular \
 gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels
 ```
 
-`--track_type` selects a circular preset. Custom Track Slots can reorder tracks while inheriting omitted geometry from that preset; the circular axis stays fixed and is not configurable as a slot.
+`--track_type` selects a circular preset. Custom track slots can reorder tracks while inheriting omitted geometry from that preset; the circular axis stays fixed and is not configurable as a slot.
 
 ### Reorder circular tracks without calculating radii
 
@@ -98,7 +98,7 @@ gbdraw circular \
   --multi_record_size_mode auto
 ```
 
-## Linear Diagrams
+## Linear diagrams
 
 ### Basic linear plot
 
@@ -178,7 +178,7 @@ gbdraw linear \
 
 See [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for GenBank, GFF3+FASTA, circular placement, conservation, and track-slot table examples.
 
-## Comparative Genomics
+## Comparative genomics
 
 ### Two-genome comparison
 
@@ -252,7 +252,7 @@ gbdraw circular \
 
 Use additional `--conservation_blast` files to add additional rings. Circular conservation uses raw HSP spans; reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
 
-## Color and Label Tables
+## Color and label tables
 
 ### Override default feature colors
 
@@ -311,7 +311,7 @@ Then:
 gbdraw circular --gbk genome.gb --labels --label_table label_override.tsv -o output -f svg
 ```
 
-## GFF3 Input
+## GFF3 input
 
 ### Circular plot from GFF3 + FASTA
 
@@ -325,7 +325,7 @@ gbdraw circular --gff annotations.gff --fasta sequence.fasta -o output -f svg
 gbdraw linear --gff annotations.gff --fasta sequence.fasta -o output -f svg
 ```
 
-## Output Formats
+## Output formats
 
 ### Export to multiple formats
 

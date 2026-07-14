@@ -3,22 +3,22 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 1](./1_Customizing_Plots.md) | [Go to Tutorial 3 >](./3_Advanced_Customization.md)
 
-# Tutorial 2: Comparative Genomics with BLAST
+# Tutorial 2: Compare genomes with BLAST and protein searches
 
-**Goal:** visualize sequence similarity with linear BLAST comparisons, generated protein comparisons, and circular LOSATN/TLOSATX homology rings.
+Use precomputed BLAST tables or CDS protein searches to draw linear similarity links, then compare LOSATN and TLOSATX hits in circular mode.
 
-## 1. Required Inputs
+## 1. Required inputs
 
-Comparative plots need two or more annotated genomes in GenBank or GFF3 + FASTA format.
+Linear comparative plots require two or more annotated genomes in GenBank or GFF3 + FASTA format.
 
-For precomputed comparisons, supply one nucleotide or protein BLAST result file for each adjacent comparison with `-b/--blast`. Accepted BLAST table formats are outfmt 6 and outfmt 7.
+For precomputed searches, supply one tabular nucleotide or protein BLAST output file for each adjacent record pair with `-b/--blast`. gbdraw accepts outfmt 6 and outfmt 7.
 
-For generated protein comparisons, do not supply BLAST tables. Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`; gbdraw extracts proteins from CDS features and runs the selected blastp workflow.
+To run a protein search during diagram generation, omit `-b/--blast` and select `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. gbdraw obtains amino acid sequences from CDS features and runs the selected workflow.
 
 > [!IMPORTANT]
-> `-b/--blast` and `--protein_blastp_mode` are mutually exclusive. Choose one comparison source per run: either precomputed BLAST tables or generated protein blastp comparisons.
+> `-b/--blast` and `--protein_blastp_mode` are mutually exclusive. Choose one source per run: precomputed tabular BLAST output or a protein search run by gbdraw.
 
-## 2. Prepare a Pairwise Example
+## 2. Prepare a pairwise example
 
 This example uses the first two sequences from the [Hepatoplasmataceae five-genome comparison](../GALLERY.md#hepatoplasmataceae-five-genome-comparison): *Candidatus Tyloplasma litorale* (AP027078.1) and *Candidatus Hepatoplasma vulgare* (AP027131.1).
 
@@ -30,7 +30,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027131.1&rettype=fasta&retmode=text" -O AP027131.fasta
 ```
 
-Install NCBI BLAST+ so that `tblastx` is available on `PATH`, then create an outfmt 7 comparison table:
+Install NCBI BLAST+ so that `tblastx` is available on `PATH`, then run a translated nucleotide search and save the outfmt 7 results:
 
 ```bash
 tblastx \
@@ -40,7 +40,7 @@ tblastx \
   -out AP027078_AP027131.tblastx.out
 ```
 
-## 3. Generate the Pairwise Plot
+## 3. Generate the pairwise plot
 
 ```bash
 gbdraw linear \
@@ -54,13 +54,17 @@ gbdraw linear \
 
 ![Two aligned Hepatoplasmataceae genomes connected by precomputed TBLASTX ribbons](../../examples/tutorial-2-pairwise-blast.svg)
 
-The default pairwise link style is `ribbon`, which draws straight filled ribbons and is best when the exact BLAST alignment span is the main signal. Use `--pairwise_match_style curve` for curved filled ribbons in dense synteny-style views; the curve style still preserves each match span from `qstart/qend` and `sstart/send`.
+The default `ribbon` style draws each retained BLAST high-scoring pair (HSP) as a straight filled ribbon between its query and subject coordinate spans. The `--pairwise_match_style curve` option bends the same spans, which can make dense tracks easier to follow; it does not merge or resize HSPs.
 
-For generated collinear protein comparisons, `--collinear_color_mode orientation_identity` uses separate forward and inverted identity gradients. Collinear blocks use RBH anchors. In the web app, `Evidence scope` controls which record pairs provide collinearity evidence. `Adjacent pairs` uses only neighboring records; `All records` uses every record pair for grouping and block support. Both settings draw ribbons only for adjacent display pairs.
+## 4. Run protein searches during diagram generation
 
-## 4. Generate Protein Comparisons Without BLAST Tables
+gbdraw can instead generate protein matches directly from CDS-derived amino acid sequences. These commands omit `-b/--blast`.
 
-The same two GenBank files can be compared by generated protein blastp workflows. These commands intentionally omit `-b/--blast`.
+All three modes compare CDS-derived proteins. Unless you pass an explicit executable path, gbdraw chooses the protein-search runtime in this order: bundled native LOSAT, `losat` on `PATH`, then NCBI BLAST+ `blastp` on `PATH`.
+
+The package currently bundles LOSAT only for Linux x86_64. On macOS and Windows, install NCBI BLAST+ and make `blastp` available on `PATH`, or pass it with `--ncbi_blastp_bin /path/to/blastp`. Use `--losatp_bin /path/to/losat` to force a native LOSAT executable on any platform.
+
+The NCBI BLAST+ fallback produces compatible 12-column outfmt 6 output, but its hit set can differ from LOSAT.
 
 Pairwise protein ribbons:
 
@@ -106,30 +110,28 @@ gbdraw linear \
 
 See [Tutorial 4](./4_Protein_Comparisons.md) for runtime selection, labels, and collinear tuning.
 
-## 5. Interpreting Orthogroups and Collinear Blocks
+## 5. Interpreting orthogroups and collinear blocks
 
-`orthogroup` groups related CDS-derived proteins across the input records, while `collinear` groups those protein-supported matches when their genes occur in a compatible order.
-
-Both modes run protein `blastp` searches on proteins obtained from CDS features. gbdraw uses bundled native LOSAT when available, then a `losat` executable on `PATH`, then NCBI BLAST+ `blastp` on `PATH`. Linux x86_64 can use the bundled LOSAT binary. macOS and Windows do not currently ship bundled LOSAT binaries, so install NCBI BLAST+ and make `blastp` available on `PATH`, or pass it explicitly with `--ncbi_blastp_bin /path/to/blastp`. You can still force a native LOSAT executable on any platform with `--losatp_bin /path/to/losat`. NCBI BLAST+ fallback provides compatible outfmt 6 protein comparisons, but it is not guaranteed to produce exactly the same hit set as LOSAT.
-
-Choose one comparison source per run. Precomputed `-b/--blast` tables are used directly as pairwise comparison input; generated `--protein_blastp_mode` runs infer pairwise protein matches, orthogroups, or collinear blocks from CDS proteins.
+`pairwise` draws filtered protein matches between adjacent records. `orthogroup` assigns CDS-derived proteins to similarity-based groups and draws group-supported links. `collinear` combines compatible runs of orthogroup-backed anchors into blocks.
 
 ### Orthogroups
 
 In evolutionary genomics, an orthogroup is a set of genes descended from a single gene in the last common ancestor of the taxa being compared. Different genomes may contribute one gene, multiple genes, or no detectable member. An orthogroup is therefore not necessarily a set of one-to-one orthologs.
 
 > [!NOTE]
-> gbdraw infers similarity-based groups for visualization. Reciprocal and near-reciprocal protein matches define the group cores, and additional proteins are assigned when the evidence supports membership in the same family. Because gbdraw does not infer gene or species trees, these groups may not necessarily reflect true phylogenetic orthology. Use a dedicated orthology workflow such as OrthoFinder when orthology inference itself is the analysis goal.
+> gbdraw builds similarity-based groups for visualization; it does not infer gene or species trees. These groups are not a substitute for phylogenetically informed orthology inference. Use a dedicated workflow such as OrthoFinder when orthology assignments are the analysis goal.
 
-### Collinear Blocks
+### Collinear blocks
 
-An anchor is a protein-supported gene pair associated with the same gbdraw orthogroup. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed, which suggests an inversion.
+An anchor links a pair of CDS-derived proteins assigned to the same gbdraw orthogroup. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed, which suggests an inversion.
 
 Multi-anchor blocks combine protein similarity with conserved local gene order. They can highlight conserved gene neighborhoods, including candidate operons or gene clusters, but they do not by themselves establish shared function or cotranscription. Genes lying between anchors are not automatically homologous or members of the same orthogroup.
 
 The default `--collinear_min_anchors 1` retains singleton links. Set it to `2` to require at least two anchors per rendered block; higher values require more anchors.
 
-## 6. Select Records or Regions
+Blocks are built from reciprocal best-hit (RBH) anchors. The `--collinear_color_mode orientation_identity` option assigns separate identity gradients to forward and inverted blocks. In the web app, `Evidence scope` controls which record pairs are searched for collinearity evidence. `Adjacent pairs` limits searches to neighboring records. `All records` searches every record pair for grouping and block support. Both settings render blocks only between adjacent displayed records.
+
+## 6. Select records or regions
 
 Linear mode supports three selectors:
 
@@ -161,7 +163,7 @@ gbdraw linear \
 
 Each occurrence of `--record_id` and `--reverse_complement` accepts one value. Repeat the option rather than placing several values after a single occurrence.
 
-If you use `--region` or `--reverse_complement` together with BLAST, make sure the BLAST coordinates still match the selected inputs.
+If you use `--region` or `--reverse_complement` with BLAST results, make sure the coordinates match the selected inputs.
 
 For larger comparisons, put row-specific selectors and crops in a records table instead of repeating several order-sensitive CLI options. Create `records.tsv`:
 
@@ -180,11 +182,11 @@ gbdraw linear \
 
 ![Two cropped Hepatoplasmataceae regions with the H. vulgare record reverse-complemented](../../examples/tutorial-2-record-selectors.svg)
 
-This selector-only example intentionally omits `-b/--blast`; a full-record BLAST table does not automatically acquire coordinates for cropped or reverse-complemented records.
+This selector-only example omits `-b/--blast`; gbdraw does not remap full-record BLAST coordinates to cropped or reverse-complemented inputs.
 
 `--records_table` is an alternative input source, so do not combine it with `--gbk`, `--gff`, or `--fasta`.
 
-## 7. Compare More Than Two Genomes
+## 7. Compare more than two genomes
 
 The Gallery comparison extends the pair above to five genomes. Download the remaining three GenBank and FASTA records:
 
@@ -199,7 +201,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP006932.1&rettype=fasta&retmode=text" -O NZ_CP006932.fasta
 ```
 
-The first adjacent comparison table was created in Section 2. Generate the remaining three in the same order as the genome list:
+The first adjacent BLAST output file was created in Section 2. Generate the remaining three in the same order as the genome list:
 
 ```bash
 tblastx -query AP027131.fasta -subject AP027133.fasta -outfmt 7 -out AP027131_AP027133.tblastx.out
@@ -220,18 +222,18 @@ gbdraw linear \
   -f svg
 ```
 
-Add `--evalue`, `--bitscore`, or `--alignment_length` when you want to filter the comparison tables before drawing the ribbons.
+Add `--evalue`, `--bitscore`, or `--alignment_length` to filter retained BLAST HSPs before drawing ribbons.
 
-Inspect the result for four ribbon bands, each connecting one adjacent pair in the five-genome input order.
+The output should have four ribbon bands, each connecting one adjacent pair in the five-genome input order.
 
 ![Five aligned Hepatoplasmataceae genomes connected by four adjacent BLAST ribbon tracks](../../examples/hepatoplasmataceae_default.svg)
 
 > [!IMPORTANT]
-> BLAST files must follow the same order as the genome list.
+> BLAST output files must follow the same order as the genome list.
 
-## 8. Circular Homology Rings: LOSATN vs TLOSATX
+## 8. Circular search-hit rings: LOSATN and TLOSATX
 
-Circular mode can place one pairwise comparison ring per query sequence around an annotated reference. This example uses MjeNMV as the reference and the other nine majaniviruses as queries for both LOSATN and TLOSATX. Comparing the two diagrams reveals homology that is weak at the nucleotide level but retained at the translated protein level.
+Circular mode can draw one ring of pairwise search hits per query sequence around an annotated reference. This example uses MjeNMV as the reference and the other nine majaniviruses as queries for LOSATN nucleotide searches and TLOSATX translated nucleotide searches. Comparing the diagrams shows where nucleotide similarity is sparse but translated-sequence similarity remains detectable.
 
 ### 8.1 Download the reference and queries
 
@@ -285,22 +287,22 @@ Select `LOSATN`, set `Task` to `blastn`, `Minimum Identity` to `50`, and `Minimu
 
 ![MjeNMV reference with nine majanivirus LOSATN rings; most nucleotide-level rings are sparse](../../examples/tutorial-2-majanivirus-losatn.svg)
 
-Most rings contain only isolated nucleotide matches. MelaMJNV is the clear exception: its outer ring remains dense because it is much more similar to MjeNMV at the nucleotide level than the other queries.
+Most rings contain only isolated nucleotide HSPs. MelaMJNV is the exception: its outer ring remains dense because it is more similar to MjeNMV at the nucleotide level than the other queries.
 
 ### 8.4 Generate the translated TLOSATX rings
 
 Keep the same reference, query order, colors, and layout. Change `LOSAT Mode` to `TLOSATX`, then set `Minimum Identity` to `30` and `Minimum Length` to `30`. Keep `Reference gencode` and each query `Subject gencode` at `1`, then click `Generate Diagram` again.
 
-![MjeNMV reference with nine majanivirus TLOSATX rings showing broader translated-protein homology](../../examples/tutorial-2-majanivirus-tlosatx.svg)
+![MjeNMV reference with nine majanivirus TLOSATX rings showing broader translated-sequence similarity](../../examples/tutorial-2-majanivirus-tlosatx.svg)
 
-The eight nucleotide-divergent queries produce much denser rings in the TLOSATX plot, while MelaMJNV remains dense in both plots. The contrast indicates that much of the shared protein-coding content remains detectable after translation even where synonymous substitutions and other nucleotide changes reduce direct DNA similarity.
+The eight nucleotide-divergent queries produce denser rings in the TLOSATX plot, while MelaMJNV remains dense in both. At these thresholds, translated-sequence similarity remains detectable in many regions that have no retained LOSATN HSP.
 
-After applying the displayed thresholds, each of the eight divergent queries yields 108–177 LOSATN HSPs but 769–2,000 TLOSATX HSPs. MelaMJNV is the close nucleotide-level match and remains dense in both diagrams.
+At the displayed thresholds, each of the eight divergent queries yields 108–177 LOSATN HSPs and 769–2,000 TLOSATX HSPs.
 
 > [!NOTE]
-> MjeNMV is annotated as linear, so gbdraw reports a topology warning. This tutorial intentionally uses a circular view to compare homology rings; use linear mode when the displayed topology must match the record annotation.
+> MjeNMV is annotated as linear, so gbdraw reports a topology warning. This tutorial intentionally uses a circular view to compare similarity rings; use linear mode when the displayed topology must match the record annotation.
 
-The web app can save the raw LOSAT tables with `Save Raw LOSAT TSV`. To draw the same rings from the CLI, pass one saved outfmt 6/7 file per ring with `--conservation_blast` and select `--conservation_reference subject`. BLAST rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
+The web app can save raw LOSAT results with `Save Raw LOSAT TSV`. To draw the same rings from the CLI, pass one saved outfmt 6/7 file per ring with `--conservation_blast` and select `--conservation_reference subject`. Rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 1](./1_Customizing_Plots.md) | [Go to Tutorial 3 >](./3_Advanced_Customization.md)

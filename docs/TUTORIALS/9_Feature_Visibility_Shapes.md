@@ -3,11 +3,11 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 8](./8_Interactive_SVG_Sessions.md)
 
-# Tutorial 9: Feature Visibility and Shapes
+# Tutorial 9: Feature visibility and shapes
 
-**Goal:** override which features are drawn or included in generated protein comparisons, and change feature shapes without changing the input annotation.
+Override which features are drawn or included in generated protein comparisons, and change feature shapes without changing the input annotation.
 
-## 1. Prepare an Input
+## 1. Prepare an input
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text" -O HmmtDNA.gbk
@@ -15,7 +15,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC
 
 If you are working from a source checkout, the same record is available as `tests/test_inputs/HmmtDNA.gbk`.
 
-## 2. Override Feature Shapes
+## 2. Override feature shapes
 
 `--feature_shape TYPE=SHAPE` is repeatable. Supported shapes are `arrow` and `rectangle`.
 
@@ -35,7 +35,7 @@ Shape overrides apply by feature type. In this result, blue CDS features are rec
 
 ![Human mitochondrial genome with rectangular blue CDS features and arrow-shaped yellow tRNA features](../../examples/tutorial-9-feature-shapes.svg)
 
-## 3. Create a Feature Visibility Table
+## 3. Create a feature visibility table
 
 Create `feature_visibility.tsv`:
 
@@ -56,7 +56,7 @@ Columns:
 
 Rules are checked from top to bottom, and the first matching row wins.
 
-## 4. Apply Visibility Rules
+## 4. Apply visibility rules
 
 ```bash
 gbdraw circular \
@@ -83,7 +83,7 @@ Actions:
 
 Use only the current action names listed above.
 
-## 5. Combine with Feature Type, Color, and Label Controls
+## 5. Combine with feature type, color, and label controls
 
 `-k/--features` sets the baseline feature types. Color tables and label tables still act on the features that remain visible.
 

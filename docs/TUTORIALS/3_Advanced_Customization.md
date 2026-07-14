@@ -3,13 +3,15 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 2](./2_Comparative_Genomics.md) | [Go to Tutorial 4 >](./4_Protein_Comparisons.md)
 
-# Tutorial 3: Advanced Customization
+# Tutorial 3: Control colors, labels, and appearance
 
-**Goal:** use tables and styling options for fine-grained control over colors, labels, and plot appearance.
+Use tables and styling options to control feature colors, labels, and plot appearance.
 
-In circular simple layout, `--track_type` selects a preset (`tuckin`, `middle`, or `spreadout`). Custom Track Slots layer an ordered slot list and explicit overrides on top of that preset. If a built-in slot omits radius, width, physical gap, placement, or standard renderer params, those values are inherited from the selected preset for each record. If you provide `r`, `w`, `inner_gap_px`, `outer_gap_px`, `side`, `z`, or renderer params, that slot value wins. The legacy `spacing` field is accepted as a compatibility alias for both circular gaps. Inside numeric/depth slots with no explicit `r` or `w` auto-compress when needed and never move outside automatically. The circular axis stays fixed and cannot be moved or hidden with a circular track slot.
+`--track_type` selects the base circular preset (`tuckin`, `middle`, or `spreadout`). Custom track slots add an ordered slot list on top of that preset. A built-in slot inherits any omitted radius, width, physical gaps, placement, and standard renderer parameters from the preset for each record. Explicit `r`, `w`, `inner_gap_px`, `outer_gap_px`, `side`, `z`, and renderer parameters override the inherited values. The legacy `spacing` field remains a compatibility alias for both circular gaps.
 
-## Part 1: Advanced Color Control
+Numeric and depth slots placed inside the axis auto-compress when `r` and `w` are omitted; gbdraw never moves them outside automatically. The circular axis stays fixed and cannot be moved or hidden with a circular track slot.
+
+## Color tables
 
 `gbdraw` supports two complementary table formats:
 
@@ -18,7 +20,7 @@ In circular simple layout, `--track_type` selects a preset (`tuckin`, `middle`, 
 | Default override table | `-d` | Replace the default color for an entire feature type |
 | Feature-specific table | `-t` | Highlight selected features based on qualifier matches |
 
-### 1. Override Default Colors
+### 1. Override default colors
 
 Create `modified_default_colors.tsv`:
 
@@ -41,11 +43,11 @@ gbdraw circular \
   -o MjeNMV_modified_default_colors
 ```
 
-The CDS features should now use the light-gray override instead of the built-in CDS color.
+The output now uses the light-gray override for CDS features instead of the built-in CDS color.
 
 ![Circular MjeNMV diagram with CDS features recolored light gray by a default-color override](../../examples/MjeNMV_modified_default_colors.svg)
 
-### 2. Highlight Specific Features
+### 2. Highlight specific features
 
 Create `feature_specific_colors.tsv`:
 
@@ -70,13 +72,13 @@ gbdraw circular \
   -o MjeNMV_feature_specific_colors_with_labels
 ```
 
-Inspect the result for blue WSSV-like proteins, yellow BIRP features, and a red tyrosine recombinase against the light-gray CDS background.
+The output has blue WSSV-like proteins, yellow BIRP features, and a red tyrosine recombinase against the light-gray CDS background.
 
 ![Labeled circular MjeNMV diagram with blue WSSV-like proteins, yellow BIRP features, and a red tyrosine recombinase](../../examples/MjeNMV_feature_specifc_colors_with_labels.svg)
 
-## Part 2: Advanced Label Control
+## Label filters and overrides
 
-### 1. Blacklist Uninformative Labels
+### 1. Blacklist uninformative labels
 
 ```bash
 gbdraw circular \
@@ -96,9 +98,9 @@ The highlighted features remain, but labels containing `hypothetical` are remove
 
 ![Labeled circular MjeNMV diagram with hypothetical-protein labels removed](../../examples/MjeNMV_feature_specifc_colors_with_labels_blacklist.svg)
 
-To remove several label terms, pass one comma-separated value, for example `--label_blacklist "hypothetical,putative"`. Matching is case-insensitive substring matching.
+To remove several label terms, pass one comma-separated value, for example `--label_blacklist "hypothetical,putative"`. The blacklist uses case-insensitive substring matching.
 
-### 2. Whitelist Only the Labels You Need
+### 2. Whitelist only the labels you need
 
 Create `stx_whitelist.tsv`:
 
@@ -109,7 +111,7 @@ CDS	gene	^stx2A$
 CDS	gene	^stx2B$
 ```
 
-Whitelist patterns use the same case-insensitive Python regex `search(...)` matching as `-t`.
+`--label_whitelist` uses the same case-insensitive Python `re.search(...)` semantics as `-t`.
 Use `^...$` for exact matches, or broader patterns such as `wsv.*-like protein` when you want to keep a label family.
 
 Download the O157:H7 Sakai GenBank file used by this example:
@@ -135,7 +137,7 @@ Only CDS features whose `gene` qualifier matches one of the four whitelist patte
 
 ![Circular E. coli O157:H7 Sakai diagram labeled only for stx1A, stx1B, stx2A, and stx2B CDS features](../../examples/O157_H7_stx_whitelist.svg)
 
-### 3. Change Which Qualifier Supplies the Label
+### 3. Change which qualifier supplies the label
 
 Create `qualifier_priority.tsv`:
 
@@ -169,9 +171,9 @@ The mitochondrial CDS labels now come from the `gene` qualifier and use the soft
 
 ![Human mitochondrial diagram with CDS labels taken from gene qualifiers and drawn in the soft-pastels palette](../../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
 
-### 4. Override Label Text After Filtering
+### 4. Override label text after filtering
 
-Most `--label_table` rules run after whitelist, blacklist, and qualifier-priority processing. A rule whose qualifier is `hash` targets one exact feature at the highest priority and can bypass whitelist or blacklist filtering.
+Ordinary `--label_table` rules run after whitelist, blacklist, and qualifier-priority processing. A rule whose qualifier is `hash` targets one exact feature at the highest priority and can bypass whitelist or blacklist filtering.
 
 Create `label_override.tsv`:
 
@@ -204,11 +206,9 @@ gbdraw linear \
   -o MjeNMV_linear_label_override
 ```
 
-### 5. Control Embedded vs External Labels
+### 5. Control embedded vs external labels
 
-Use `--label_rendering embedded_only` to keep only labels that fit inside
-feature bodies, or `--label_rendering external_only` to force labels outside.
-The default `auto` behavior is unchanged.
+The default `--label_rendering auto` mode embeds labels that fit inside feature bodies and routes the remaining labels outside. Use `embedded_only` to discard labels that require external placement, or `external_only` to place every label outside feature bodies.
 
 ```bash
 gbdraw circular \
@@ -228,9 +228,7 @@ The circular `embedded_only` result keeps only labels that fit inside their feat
 
 ![Circular MjeNMV diagram showing only labels that fit inside feature bodies](../../examples/tutorial-3-embedded-labels.svg)
 
-For slanted labels above linear features, use `--label_placement above_feature`
-with the default `--label_rendering auto`. Do not combine this placement mode
-with `--label_rendering embedded_only` or `--label_rendering external_only`.
+For slanted labels above linear features, use `--label_placement above_feature` with the default `--label_rendering auto`. Do not combine this placement mode with `--label_rendering embedded_only` or `--label_rendering external_only`.
 
 ```bash
 gbdraw linear \
@@ -245,9 +243,9 @@ The linear result places the 45-degree labels above their features:
 
 ![Linear MjeNMV diagram with feature labels rotated 45 degrees above the feature track](../../examples/tutorial-3-above-feature-labels.svg)
 
-## Part 3: Fine-Tune Plot Appearance
+## Fine-tune plot appearance
 
-Use the current stroke and text options for publication-oriented styling:
+These options control stroke colors and widths, font sizes, and circular label offsets:
 
 - `--block_stroke_color` and `--block_stroke_width`
 - `--axis_stroke_color` and `--axis_stroke_width`
@@ -289,7 +287,7 @@ The final montage compares paired x/y outer-label offsets of 0.95, 1.00, 1.05, a
 
 ![Circular WSSV diagrams comparing outer-label radius offsets from 0.95 through 1.10](../../examples/outer_label_offset_comparison.png)
 
-## Part 4: Linear Mode Input Selectors
+## Linear mode input selectors
 
 For linear plots, the main selectors are:
 

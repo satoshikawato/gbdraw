@@ -1,10 +1,10 @@
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)
 
-# Frequently Asked Questions
+# Frequently asked questions
 
 ## Is there a web GUI? Do I need Streamlit?
 
-Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted app, or run `gbdraw gui` locally after installation. Streamlit is not required. Local GUI analysis runs on your machine; the interactive Gallery examples are hosted at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/).
+Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted app, or run `gbdraw gui` locally after installation. Streamlit is not required. Local GUI analysis runs on your machine; the interactive gallery examples are hosted at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/).
 
 ## Why do my CLI and browser renders differ slightly?
 

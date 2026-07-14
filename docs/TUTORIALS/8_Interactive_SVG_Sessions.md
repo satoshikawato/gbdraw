@@ -3,11 +3,11 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 7](./7_Linear_Layout.md) | [Go to Tutorial 9 >](./9_Feature_Visibility_Shapes.md)
 
-# Tutorial 8: Interactive SVG and Session Round Trips
+# Tutorial 8: Interactive SVG and saved sessions
 
-**Goal:** move between CLI output, standalone interactive SVG, saved GUI sessions, and regenerated diagrams.
+Write interactive SVG files, save GUI sessions, and regenerate diagrams from saved sessions.
 
-## 1. Prepare Inputs
+## 1. Prepare inputs
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gb
@@ -16,7 +16,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC
 
 If you are working from a source checkout, the same files are available under `examples/`.
 
-## 2. Export Standalone Interactive SVG
+## 2. Export standalone interactive SVG
 
 Use canonical `interactive-svg` spelling:
 
@@ -39,7 +39,7 @@ Hover over a feature for a compact summary, or click it to open the **Details**,
 
 ![Standalone interactive SVG with zoom and search controls and a feature details popup open](./images/tutorial-8-interactive-feature-popup.png)
 
-## 3. What the Interactive SVG Contains
+## 3. What the interactive SVG contains
 
 Interactive SVG embeds feature metadata for rendered features. Linear comparison plots can also include pairwise match metadata. Reuse the precomputed BLAST outfmt 7 table maintained in `examples/`:
 
@@ -60,13 +60,13 @@ gbdraw linear \
   -f interactive-svg
 ```
 
-The thresholds leave one high-confidence ribbon. Click it in `MjeNMV_MelaMJNV_interactive.interactive.svg` to inspect its match metadata:
+The thresholds leave one retained ribbon. Click it in `MjeNMV_MelaMJNV_interactive.interactive.svg` to inspect its match metadata:
 
 ![Standalone interactive SVG with a precomputed TBLASTX ribbon and its pairwise match metadata popup](./images/tutorial-8-interactive-match-popup.png)
 
 Generated orthogroup workflows also include orthogroup metadata; complete the runtime setup in [Tutorial 4](./4_Protein_Comparisons.md) before using `--protein_blastp_mode orthogroup`.
 
-## 4. Save a GUI Session Sidecar
+## 4. Save a GUI session sidecar
 
 `--save_session` writes a GUI-loadable `.gbdraw-session.json` next to the diagram.
 
@@ -96,7 +96,7 @@ gbdraw circular \
   -f svg
 ```
 
-## 5. Regenerate from a Session
+## 5. Regenerate from a session
 
 Use `--session` with the same diagram subcommand that created the session. Alongside `--session`, the CLI accepts output and format overrides plus optional `--save_session` or `--session_output`; other diagram options are rejected.
 
@@ -109,7 +109,7 @@ gbdraw circular \
 
 This writes `MjeNMV_regenerated.svg` without requiring the original GenBank file next to the session.
 
-## 6. Open the Local Web UI
+## 6. Open the local web UI
 
 Launch the browser UI from an installed environment:
 

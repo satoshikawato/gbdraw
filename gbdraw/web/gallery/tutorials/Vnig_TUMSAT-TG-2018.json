@@ -219,7 +219,7 @@
       ]
     },
     {
-      "title": "Add Title",
+      "title": "Add the plot title",
       "body": "Set the plot title and place it below the multi-record canvas.",
       "table": {
         "columns": ["Setting", "Value"],

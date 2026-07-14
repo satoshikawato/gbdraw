@@ -76,7 +76,7 @@
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-02-01-upload-row-context.webp",
             "alt": "Linear GenBank input row 1 with AP027078.gb uploaded and the organism, subtitle, region, and LOSAT filename controls visible.",
-            "caption": "The first uploaded row shows AP027078.gb in the real Linear input card; repeat the remaining files in the table order."
+            "caption": "The first uploaded row shows AP027078.gb in the Linear input card; repeat the remaining files in the table order."
           }
         }
       ]

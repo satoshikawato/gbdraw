@@ -4,9 +4,9 @@
 
 # Quickstart
 
-This guide walks through a first circular plot with the CLI. If you prefer a GUI, use [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` locally after installation.
+This quickstart creates a first circular plot with the CLI. If you prefer a GUI, use [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` locally after installation.
 
-## 1. Confirm the Installation
+## 1. Confirm the installation
 
 Make sure `gbdraw` is available in your environment:
 
@@ -14,7 +14,7 @@ Make sure `gbdraw` is available in your environment:
 gbdraw -h
 ```
 
-## 2. Download a Sample GenBank File
+## 2. Download a sample GenBank file
 
 This example uses the *Escherichia coli* K-12 reference genome.
 
@@ -22,7 +22,7 @@ This example uses the *Escherichia coli* K-12 reference genome.
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O NC_000913.gbk
 ```
 
-## 3. Generate a Circular Plot
+## 3. Generate a circular plot
 
 ```bash
 gbdraw circular \
@@ -39,13 +39,13 @@ This command:
 - draws a circular plot
 - separates forward and reverse strands into different feature tracks
 
-## 4. Inspect the Output
+## 4. Inspect the output
 
 Open the resulting SVG in a browser or vector editor.
 
 ![Circular E. coli K-12 genome diagram with separate forward and reverse strand tracks](../examples/ecoli_k12_plot.svg)
 
-## 5. Optional: Add Labels or a Centered Definition
+## 5. Optional: add labels or a centered definition
 
 Show labels for a focused set of RNA features. Restricting this large *E. coli* genome to rRNA and tRNA features keeps the labels readable:
 
@@ -75,7 +75,7 @@ gbdraw circular \
 
 ![Circular E. coli K-12 genome diagram with a centered italic species name and strain](../examples/ecoli_with_title.svg)
 
-## 6. Optional: Linear Mode Selectors
+## 6. Optional: linear mode selectors
 
 Linear mode can target specific records or regions:
 
@@ -109,9 +109,9 @@ gbdraw linear \
   -f svg
 ```
 
-## Next Steps
+## Next steps
 
-- Continue to [Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md)
+- Continue to [Tutorial 1: Customize a circular plot](./TUTORIALS/1_Customizing_Plots.md)
 - Use [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) for generated protein comparisons without precomputed BLAST tables
 - Use [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for row-coupled records, selectors, and table manifests
 - Browse [Recipes](./RECIPES.md) for common command patterns

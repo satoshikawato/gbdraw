@@ -3,13 +3,13 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 5](./5_Table_Driven_Inputs.md) | [Go to Tutorial 7 >](./7_Linear_Layout.md)
 
-# Tutorial 6: Coverage Depth and Quantitative Tracks
+# Tutorial 6: Coverage depth and numeric tracks
 
-**Goal:** add coverage/depth tracks, absolute GC percent tracks, and quantitative axes to circular and linear diagrams.
+Add per-base coverage depth tracks, absolute GC-percent tracks, and numeric axes to circular and linear diagrams.
 
-## 1. Prepare Inputs
+## 1. Prepare inputs
 
-Sections 2-4 use Hepatoplasmataceae genomes and matching per-base depth files. In a source checkout, the files are available under [`tests/test_inputs`](../../tests/test_inputs/):
+Sections 2 through 4 use Hepatoplasmataceae genomes and matching per-base depth files. In a source checkout, the files are available under [`tests/test_inputs`](../../tests/test_inputs/):
 
 | Record | GenBank | Depth TSV | Sequencing run | Tutorial use |
 |---|---|---|---|---|
@@ -30,9 +30,9 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC
 
 In a source checkout, this file is also available as `examples/MjeNMV.gb`.
 
-## 2. Add One Logical Depth Track
+## 2. Add one depth track
 
-Use `--depth` when you need one logical depth track.
+Use `--depth` when you need one depth track.
 
 ```bash
 gbdraw circular \
@@ -54,7 +54,7 @@ This writes `tutorial-6-depth-circular.svg`. Circular mode uses `--depth_width` 
 
 ![Circular AP027133.1 genome diagram with a blue DRR394922 depth ring and quantitative ticks up to 150x](../../examples/tutorial-6-depth-circular.svg)
 
-## 3. Compare a Logical Depth Track Across Records
+## 3. Compare depth across records
 
 Use one `--depth_track` group with one matching file per displayed record. AP027131.1 and AP027132.1 both use reads from DRR394921, so their coverage can be compared on one shared axis.
 
@@ -82,17 +82,17 @@ This writes `tutorial-6-depth-tracks.svg`. The common 0x to 1,000x scale makes t
 
 ![AP027131.1 and AP027132.1 linear diagrams with DRR394921 depth tracks on shared axes ranging from 0x to 1,000x](../../examples/tutorial-6-depth-tracks.svg)
 
-Repeat `--depth_track` only when another matched dataset is available. A second logical track is intentionally omitted here because the example data do not include a second matching depth file for both records.
+Repeat `--depth_track` only when another matching dataset is available. A second depth track is omitted here because the example data do not include a second matching depth file for both records.
 
-Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same y-axis range across records for each logical track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
+Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same y-axis range across records for each depth track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
 
-Use `--depth_track_height` when each logical track needs its own height. Track-specific axis overrides are also available:
+Use `--depth_track_height` when each depth track needs its own height. Track-specific axis overrides are also available:
 
 - `--depth_track_large_tick_interval`
 - `--depth_track_small_tick_interval`
 - `--depth_track_tick_font_size`
 
-## 4. Control Scaling
+## 4. Control scaling
 
 Log scaling is useful when a few high-depth bins would otherwise flatten the rest of the track.
 
@@ -118,7 +118,7 @@ This writes `tutorial-depth-log-axis.svg`, with a log-scaled depth axis spanning
 
 Use `--no_depth_log_scale` to force linear scaling when a config file or saved session enables log scaling.
 
-## 5. Use GC Percent Mode
+## 5. Use GC percent mode
 
 The default GC content track is mean-centered deviation. Use `--gc_content_mode percent` when the y-axis should show absolute GC percent.
 
@@ -143,7 +143,7 @@ This writes `MjeNMV_gc_percent.svg`.
 
 The same percent-mode options are available in circular mode, together with circular track geometry such as `--gc_content_width` and `--gc_content_radius`.
 
-## 6. Add Another Skew Track
+## 6. Add another skew track
 
 Custom track slots can add a second skew track with a different dinucleotide. This example keeps the standard GC skew and adds AT skew below it:
 

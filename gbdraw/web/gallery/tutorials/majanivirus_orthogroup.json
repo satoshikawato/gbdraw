@@ -108,7 +108,7 @@
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-02-01-upload-row-label-context.webp",
             "alt": "Linear GenBank input row 1 with MjeNMV.gb uploaded and its Organism / strain label in the same input card.",
-            "caption": "The first uploaded row shows MjeNMV.gb and its Organism / strain label in the real Linear input card; repeat the remaining rows from the table."
+            "caption": "The first uploaded row shows MjeNMV.gb and its Organism / strain label in the Linear input card; repeat the remaining rows from the table."
           }
         }
       ]
