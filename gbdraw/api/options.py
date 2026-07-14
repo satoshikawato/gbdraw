@@ -58,6 +58,17 @@ class OutputOptions:
 
 
 @dataclass(frozen=True)
+class CircularMultiRecordOptions:
+    """Layout values used only by circular multi-record canvases."""
+
+    multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto"
+    multi_record_min_radius_ratio: float = 0.55
+    multi_record_column_gap_ratio: float = 0.10
+    multi_record_row_gap_ratio: float = 0.05
+    multi_record_positions: Sequence[str] | None = None
+
+
+@dataclass(frozen=True)
 class DiagramOptions:
     """Bundled options for diagram assembly helpers."""
 
@@ -71,6 +82,12 @@ class DiagramOptions:
     feature_table_file: str | None = None
     feature_visibility_table: DataFrame | None = None
     feature_visibility_table_file: str | None = None
+    label_whitelist_table: DataFrame | None = None
+    label_whitelist_file: str | None = None
+    qualifier_priority_table: DataFrame | None = None
+    qualifier_priority_file: str | None = None
+    label_override_table: DataFrame | None = None
+    label_override_file: str | None = None
     feature_shapes: Mapping[str, str] | None = None
     dinucleotide: str = "GC"
     window: int | None = None
@@ -128,6 +145,7 @@ class DiagramOptions:
 
 
 __all__ = [
+    "CircularMultiRecordOptions",
     "ColorOptions",
     "DiagramOptions",
     "OutputOptions",

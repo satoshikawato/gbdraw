@@ -21,11 +21,18 @@ from .diagram import (  # type: ignore[reportMissingImports]
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
     build_circular_diagram,
+    build_circular_multi_diagram,
     build_linear_diagram,
 )
 from .io import (
+    CircularTrackTable,
+    ConservationTable,
+    ConservationTableRow,
+    RecordsTable,
+    RecordsTableRow,
     RegionSpec,
     RecordSelector,
+    TablePathDependency,
     apply_region_specs,
     load_gbks,
     load_gff_fasta,
@@ -33,6 +40,12 @@ from .io import (
     parse_record_selectors,
     parse_region_spec,
     parse_region_specs,
+    read_circular_track_table,
+    read_conservation_table,
+    read_label_override_table,
+    read_label_whitelist_table,
+    read_qualifier_priority_table,
+    read_records_table,
 )
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityAnchor,
@@ -51,8 +64,16 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     OrthologPath,
     normalize_orthogroup_membership_mode,
 )
-from .options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
+from .options import (
+    CircularMultiRecordOptions,
+    ColorOptions,
+    DiagramOptions,
+    OutputOptions,
+    TrackOptions,
+)
 from .render import parse_formats, render_to_bytes, save_figure, save_figure_to
+from gbdraw.render.interactive_context import build_interactive_svg_context
+from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from .tracks import (  # type: ignore[reportMissingImports]
     CircularTrackRendererName,
     CircularTrackSide,
@@ -100,10 +121,17 @@ __all__ = [
     "assemble_circular_diagram_from_record",
     "assemble_linear_diagram_from_records",
     "build_circular_diagram",
+    "build_circular_multi_diagram",
     "build_linear_diagram",
     # io
+    "CircularTrackTable",
+    "ConservationTable",
+    "ConservationTableRow",
+    "RecordsTable",
+    "RecordsTableRow",
     "RegionSpec",
     "RecordSelector",
+    "TablePathDependency",
     "apply_region_specs",
     "load_gbks",
     "load_gff_fasta",
@@ -111,6 +139,12 @@ __all__ = [
     "parse_record_selectors",
     "parse_region_spec",
     "parse_region_specs",
+    "read_circular_track_table",
+    "read_conservation_table",
+    "read_label_override_table",
+    "read_label_whitelist_table",
+    "read_qualifier_priority_table",
+    "read_records_table",
     # collinearity
     "CollinearityAnchor",
     "CollinearityBlock",
@@ -126,11 +160,15 @@ __all__ = [
     "OrthologPath",
     "normalize_orthogroup_membership_mode",
     # options
+    "CircularMultiRecordOptions",
     "ColorOptions",
     "DiagramOptions",
     "OutputOptions",
     "TrackOptions",
     # render
+    "InteractiveSvgContext",
+    "build_interactive_svg_context",
+    "enrich_svg",
     "parse_formats",
     "render_to_bytes",
     "save_figure",

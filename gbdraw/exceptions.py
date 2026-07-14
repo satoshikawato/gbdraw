@@ -21,8 +21,13 @@ class ValidationError(GbdrawError):
     """Raised when user input or data fails validation."""
 
 
+class ExportError(GbdrawError):
+    """Raised when an explicitly requested library export cannot be generated."""
+
+
 __all__ = [
     "ConfigError",
+    "ExportError",
     "GbdrawError",
     "InputFileError",
     "ParseError",

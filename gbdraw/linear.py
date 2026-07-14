@@ -21,11 +21,7 @@ from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
 from .render.formats import INTERACTIVE_SVG_FORMAT
 from .render.interactive_svg import InteractiveSvgContext
-from .web_support.feature_metadata import extract_features_from_records_payload
-from .web_support.orthogroup_metadata import (
-    enrich_features_with_orthogroups,
-    serialize_orthogroups_payload,
-)
+from .render.interactive_context import build_interactive_svg_context
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
 from .definition_line_styles import (
     parse_definition_line_style_assignment,
@@ -52,8 +48,6 @@ from .labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
-from .features.colors import preprocess_color_tables
-from .features.ids import make_linear_rendered_feature_id
 from .features.shapes import parse_feature_shape_overrides
 from .features.visibility import (
     compile_feature_visibility_rules,
@@ -70,7 +64,6 @@ from .tracks import (
 
 from .cli_utils.common import (
     _add_block_stroke_args,
-    _add_comparison_filter_args,
     _add_depth_axis_args,
     _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
@@ -88,7 +81,6 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
     load_records_table_records as _load_records_table_records,
-    parse_feature_shape_assignment_arg as _parse_feature_shape_assignment_arg,
     record_major_depth_track_files_from_cli as _record_major_depth_track_files_from_cli,
 )
 from .cli_utils.session import (
@@ -414,32 +406,15 @@ def _build_interactive_svg_context(
     default_colors=None,
 ) -> InteractiveSvgContext:
     try:
-        specific_color_rules = None
-        if color_table is not None and default_colors is not None:
-            specific_color_rules, _ = preprocess_color_tables(color_table, default_colors)
-        payload = extract_features_from_records_payload(
+        return build_interactive_svg_context(
             records,
-            selected_features=selected_features,
+            selected_features_set=selected_features,
             feature_visibility_rules=feature_visibility_rules,
-            specific_color_rules=specific_color_rules,
+            color_table=color_table,
+            default_colors=default_colors,
+            orthogroups=orthogroups,
             linear_rendered_feature_ids=True,
         )
-        record_count = len(records)
-        orthogroup_payload = serialize_orthogroups_payload(
-            orthogroups,
-            feature_id_mapper=lambda record_index, stable_feature_id: (
-                make_linear_rendered_feature_id(
-                    record_index=record_index,
-                    stable_feature_id=stable_feature_id,
-                    record_count=record_count,
-                )
-                or stable_feature_id
-            ),
-            records=records,
-        )
-        features = payload.get("features", [])
-        if orthogroup_payload:
-            features = enrich_features_with_orthogroups(features, orthogroup_payload)
     except Exception as exc:
         logger.warning(
             "WARNING: Rich interactive feature metadata could not be generated; "
@@ -447,10 +422,6 @@ def _build_interactive_svg_context(
             exc,
         )
         return InteractiveSvgContext()
-    return InteractiveSvgContext(
-        features=features,
-        orthogroups=orthogroup_payload,
-    )
 
 def _parse_linear_label_placement(value: str) -> str:
     normalized = str(value).strip().lower()

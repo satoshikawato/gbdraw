@@ -23,7 +23,7 @@ from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
 from .render.formats import INTERACTIVE_SVG_FORMAT
 from .render.interactive_svg import InteractiveSvgContext
-from .web_support.feature_metadata import extract_features_from_records_payload
+from .render.interactive_context import build_interactive_svg_context
 from .api.diagram import (  # type: ignore[reportMissingImports]
     assemble_circular_diagram_from_record,
     assemble_circular_diagram_from_records,
@@ -36,11 +36,9 @@ from .labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
-from .features.colors import preprocess_color_tables
 from .io.record_select import parse_record_selector
 from .features.shapes import parse_feature_shape_overrides
 from .features.visibility import (
-    compile_feature_visibility_rules,
     read_feature_visibility_file,
     resolve_candidate_feature_types,
 )
@@ -74,7 +72,6 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
     load_records_table_records as _load_records_table_records,
-    parse_feature_shape_assignment_arg as _parse_feature_shape_assignment_arg,
     record_major_depth_track_files_from_cli as _record_major_depth_track_files_from_cli,
 )
 from .cli_utils.session import (
@@ -102,14 +99,12 @@ def _build_interactive_svg_context(
     default_colors=None,
 ) -> InteractiveSvgContext:
     try:
-        specific_color_rules = None
-        if color_table is not None and default_colors is not None:
-            specific_color_rules, _ = preprocess_color_tables(color_table, default_colors)
-        payload = extract_features_from_records_payload(
+        return build_interactive_svg_context(
             records,
-            selected_features=selected_features,
-            feature_visibility_rules=compile_feature_visibility_rules(feature_table),
-            specific_color_rules=specific_color_rules,
+            selected_features_set=selected_features,
+            feature_table=feature_table,
+            color_table=color_table,
+            default_colors=default_colors,
         )
     except Exception as exc:
         logger.warning(
@@ -118,7 +113,6 @@ def _build_interactive_svg_context(
             exc,
         )
         return InteractiveSvgContext()
-    return InteractiveSvgContext(features=payload.get("features", []))
 
 
 
