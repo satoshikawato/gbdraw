@@ -111,9 +111,9 @@ gbdraw linear \
 
 ## Next steps
 
-- Continue to [Tutorial 1: Customize a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md)
-- Use [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) to generate protein comparisons from annotated CDS features
-- Use [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for row-based records, selectors, and table manifests
+- Continue with [Style a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md)
+- Use [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md) to run protein searches during diagram generation
+- Use [TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md) when records need separate labels, selectors, crops, or orientations
 - Browse [Recipes](./RECIPES.md) for common command patterns
 - Use the [CLI Reference](./CLI_Reference.md) for the full option list
 - Explore more figures in the [Gallery](./GALLERY.md)

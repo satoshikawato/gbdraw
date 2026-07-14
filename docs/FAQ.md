@@ -27,13 +27,13 @@ Common fixes:
 3. Keep only important labels with `--label_whitelist` regex patterns
 4. Use the `--track_type middle` circular preset or reduce the number of displayed labels
 
-See [Tutorial 3](./TUTORIALS/3_Advanced_Customization.md) for examples.
+See [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md) for examples.
 
 ## How do I change the color of one specific gene?
 
 Use a feature-specific color table with `-t`. This matches selected features by qualifier values and assigns a color and legend label.
 
-See [Tutorial 3](./TUTORIALS/3_Advanced_Customization.md) and [Recipes](./RECIPES.md).
+See [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md) and [Recipes](./RECIPES.md).
 
 ## My comparative diagram has no ribbons. What is usually wrong?
 
@@ -43,7 +43,7 @@ The most common causes are:
 2. The BLAST file order does not match the genome input order
 3. Filtering thresholds such as `--evalue`, `--bitscore`, `--identity`, or `--alignment_length` are too strict
 
-See [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
+See [Draw genome comparison links from BLAST and protein searches](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
 ## Why is my circular BLAST similarity ring empty?
 

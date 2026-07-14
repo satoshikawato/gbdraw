@@ -14,10 +14,10 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 
 ## Tutorials
 
-- [Tutorial 1: Customize a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md)
-- [Tutorial 2: Compare genomes with BLAST and protein searches](./TUTORIALS/2_Comparative_Genomics.md)
-- [Tutorial 3: Control colors, labels, and appearance](./TUTORIALS/3_Advanced_Customization.md)
-- [Tutorials 4-9](./TUTORIALS/TUTORIALS.md#protein-searches-table-inputs-and-output-controls): protein comparisons, TSV manifests, coverage/depth tracks, linear layout, interactive SVG sessions, and feature visibility.
+- [Style a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md)
+- [Draw genome comparison links from BLAST and protein searches](./TUTORIALS/2_Comparative_Genomics.md)
+- [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md)
+- [More command-line guides](./TUTORIALS/TUTORIALS.md): CDS protein matches, TSV manifests, read-depth tracks, linear layout, interactive SVG sessions, and feature visibility.
 
 ## Reference
 
@@ -33,6 +33,6 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 - Hosted interactive SVG gallery and web tutorials: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
-- Protein BLASTP comparisons: `--protein_blastp_mode pairwise` draws adjacent CDS protein matches, `orthogroup` assigns CDS proteins to similarity groups for visualization, and `collinear` combines compatible runs of protein-match anchors into gene-order-preserving blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`. The similarity groups are not phylogeny-based orthogroups; see [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#5-gbdraw-similarity-groups-and-collinear-blocks).
+- Protein-search modes: `--protein_blastp_mode pairwise` draws adjacent CDS protein matches, `orthogroup` assigns CDS-derived proteins to gbdraw similarity groups, and `collinear` combines compatible runs of protein-match anchors into collinear blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`. The similarity groups are not phylogeny-based orthogroups; see [the genome-comparison guide](./TUTORIALS/2_Comparative_Genomics.md#5-gbdraw-similarity-groups-and-collinear-blocks).
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

@@ -1,9 +1,9 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 8](./8_Interactive_SVG_Sessions.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Create interactive SVGs and restore saved sessions](./8_Interactive_SVG_Sessions.md)
 
-# Tutorial 9: Feature visibility and shapes
+# Control feature visibility and shapes
 
 Control which annotated features are drawn or included in gbdraw's protein searches, and change feature shapes without editing the input annotation.
 
@@ -99,7 +99,7 @@ gbdraw linear \
 
 For precise targeting, constrain each row with `record_id` and `feature_type`, then match a stable qualifier such as `protein_id` or `locus_tag`. The special qualifier keys `hash`, `location`, and `record_location` are also supported. Use broad product regexes only when the annotation text is consistent across records.
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 8](./8_Interactive_SVG_Sessions.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Create interactive SVGs and restore saved sessions](./8_Interactive_SVG_Sessions.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

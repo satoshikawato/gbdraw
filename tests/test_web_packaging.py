@@ -785,10 +785,10 @@ def test_interactive_gallery_examples_are_wired() -> None:
     assert [entry["title"] for entry in examples] == [
         "Human mitochondrial genome (AT skew)",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
-        "White spot syndrome virus genome comparison",
-        "Majanivirus genomes (protein similarity groups)",
-        "Hepatoplasmataceae genome comparison (collinear blocks)",
-        "Hepatoplasmataceae genome comparison (protein similarity groups)",
+        "White spot syndrome virus nucleotide-similarity rings",
+        "Majanivirus CDS protein-similarity links",
+        "Hepatoplasmataceae collinear protein-match blocks",
+        "Hepatoplasmataceae CDS protein-similarity links",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
     ]
     for entry in examples:

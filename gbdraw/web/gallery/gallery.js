@@ -555,7 +555,7 @@ const renderTutorial = (tutorial, sample) => {
     const downloads = appendSection(tutorialContent, 'Input downloads');
     renderDownloads(downloads, tutorial.downloads);
   }
-  renderStepSection(tutorialContent, 'Web app steps', tutorial.manualSteps, { numbered: true });
+  renderStepSection(tutorialContent, 'Reproduce the figure', tutorial.manualSteps, { numbered: true });
   renderStepSection(
     tutorialContent,
     asText(tutorial.commonColorRuleGuide?.title) || 'Color rule basics',
@@ -563,7 +563,7 @@ const renderTutorial = (tutorial, sample) => {
   );
   renderStepSection(tutorialContent, 'Color rules', tutorial.colorRules);
   renderStepSection(tutorialContent, 'Post-generation edits', tutorial.postGenerationEdits);
-  renderStepSection(tutorialContent, 'LOSAT tips', tutorial.losatTips);
+  renderStepSection(tutorialContent, 'Running LOSAT in the browser', tutorial.losatTips);
   renderStepSection(tutorialContent, 'Troubleshooting', tutorial.troubleshooting);
   renderRelated(tutorialContent, tutorial.related);
 };

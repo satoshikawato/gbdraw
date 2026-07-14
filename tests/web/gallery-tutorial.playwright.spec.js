@@ -101,9 +101,9 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Compare Hepatoplasmataceae genomes with collinear blocks' })
+    page.getByRole('heading', { name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
-  await expect(page.getByText('Web app steps')).toBeVisible();
+  await expect(page.getByText('Reproduce the figure')).toBeVisible();
   await expect(page.getByText('Use browser LOSAT')).toBeVisible();
   await expect(page.getByText('Use Orientation + identity for Color mode.')).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
@@ -142,7 +142,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Compare Hepatoplasmataceae genomes by protein similarity' })
+    page.getByRole('heading', { name: 'Plot CDS protein-similarity links across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('row', { name: 'blastp mode Orthogroups' })).toBeVisible();
@@ -266,16 +266,16 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   expect(pageErrors).toEqual([]);
 });
 
-test('Gallery renders the WSSV conservation tutorial and media', async ({ page }) => {
+test('Gallery renders the WSSV nucleotide-similarity tutorial and media', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#WSSV_genome_comparison`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /White spot syndrome virus genome comparison/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /White spot syndrome virus nucleotide-similarity rings/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Compare WSSV genomes with nucleotide-similarity rings' })
+    page.getByRole('heading', { name: 'Plot WSSV nucleotide matches in circular rings' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
@@ -389,7 +389,7 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Compare nine majanivirus genomes by protein similarity' })
+    page.getByRole('heading', { name: 'Plot CDS protein-similarity links across nine majanivirus genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
@@ -531,13 +531,13 @@ test('Gallery shows an inline fallback when tutorial media fails to load', async
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Compare Hepatoplasmataceae genomes with collinear blocks' })
+    page.getByRole('heading', { name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
   await page.locator('#tutorial-panel .tutorial-media').first().scrollIntoViewIfNeeded();
   await expect(
     page.getByText('Media unavailable: ./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp')
   ).toBeVisible();
-  await expect(page.getByText('Web app steps')).toBeVisible();
+  await expect(page.getByText('Reproduce the figure')).toBeVisible();
 });
 
 test('Gallery renders operation media and keeps it inside a mobile viewport', async ({ page }) => {
@@ -797,7 +797,7 @@ test('Gallery ignores stale tutorial fetch results after sample changes', async 
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Compare Hepatoplasmataceae genomes with collinear blocks'
+      name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes'
     })
   ).toHaveCount(0);
 });

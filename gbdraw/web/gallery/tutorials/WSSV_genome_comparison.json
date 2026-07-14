@@ -1,8 +1,8 @@
 {
   "id": "WSSV_genome_comparison",
   "version": 1,
-  "title": "Compare WSSV genomes with nucleotide-similarity rings",
-  "summary": "Build a circular White spot syndrome virus reference diagram with 20 rings of retained nucleotide-similarity hits from browser LOSAT blastn searches.",
+  "title": "Plot WSSV nucleotide matches in circular rings",
+  "summary": "Run LOSAT blastn searches against a White spot syndrome virus reference and plot the retained HSP spans as 20 circular rings.",
   "estimatedTime": "10-30 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Circular",
@@ -363,7 +363,7 @@
     },
     {
       "title": "Set search thresholds",
-      "body": "Set the blastn filters so each ring shows HSPs with bitscore at least 100, E-value at most 1e-30, identity at least 90%, and alignment length at least 100 nt.",
+      "body": "Set the blastn filters so each ring shows HSPs with a bit score of at least 100, an E-value of at most 1e-30, at least 90% identity, and an alignment length of at least 100 nt.",
       "table": {
         "columns": ["Threshold", "Value"],
         "rows": [
@@ -377,8 +377,8 @@
         {
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-07-01-thresholds.webp",
-            "alt": "LOSAT Settings thresholds with bitscore 100, e-value 1e-30, identity 90, and minimum length 100.",
-            "caption": "Set bitscore 100, e-value 1e-30, identity 90, and minimum length 100."
+            "alt": "LOSAT Settings thresholds with bit score 100, E-value 1e-30, identity 90, and minimum length 100.",
+            "caption": "Set the bit score to 100, E-value to 1e-30, identity to 90, and minimum length to 100."
           }
         }
       ]
@@ -478,7 +478,7 @@
     },
     {
       "title": "A ring appears in the wrong order",
-      "body": "Check the FASTA upload order, ring labels, and ring colors. The legend follows the configured conservation series order."
+      "body": "Check the FASTA upload order, ring labels, and ring colors. The legend follows the comparison FASTA upload order."
     },
     {
       "title": "The rings look too sparse",

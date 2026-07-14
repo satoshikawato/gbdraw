@@ -1,7 +1,7 @@
 {
   "id": "hepatoplasmataceae_collinear",
   "version": 1,
-  "title": "Compare Hepatoplasmataceae genomes with collinear blocks",
+  "title": "Plot collinear protein-match blocks across five Hepatoplasmataceae genomes",
   "summary": "Run LOSATP in the browser and combine compatible protein-match anchors into collinear blocks across five Hepatoplasmataceae genomes.",
   "estimatedTime": "10-20 min after inputs are available",
   "difficulty": "Advanced",
@@ -104,7 +104,7 @@
       ]
     },
     {
-      "title": "Select collinear reduction",
+      "title": "Build collinear blocks",
       "body": "In LOSATP settings, set blastp mode to Collinear blocks. Use Orientation + identity for Color mode.",
       "table": {
         "columns": ["Setting", "Value"],
@@ -122,7 +122,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "These settings combine compatible runs of protein-match anchors from gbdraw similarity groups into gene-order-preserving ribbons.",
+      "note": "These settings combine compatible runs of protein-match anchors from gbdraw similarity groups into collinear blocks.",
       "operations": [
         {
           "title": "LOSATP collinear controls",

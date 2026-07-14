@@ -1,9 +1,9 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 4](./4_Protein_Comparisons.md) | [Go to Tutorial 6 >](./6_Depth_Quantitative_Tracks.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Draw protein matches from CDS features](./4_Protein_Comparisons.md) | [Next: Plot read depth and numeric tracks >](./6_Depth_Quantitative_Tracks.md)
 
-# Tutorial 5: TSV manifests for CLI inputs
+# Use TSV manifests for CLI inputs
 
 Use TSV manifests when each input row needs its own path, label, selector, crop, or orientation.
 
@@ -193,7 +193,7 @@ This writes `tutorial-circular-track-table.svg`. The result places GC content, G
 
 Keep slot structure in the dedicated columns: `id`, `renderer`, `side`, `r`, `w`, `spacing`, `inner_gap_px`, `outer_gap_px`, and `z`. Do not repeat these settings or their aliases in `params`, and do not put `lane_direction` or `lanes` in a feature row. Use `params` only for renderer-specific settings such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout`.
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 4](./4_Protein_Comparisons.md) | [Go to Tutorial 6 >](./6_Depth_Quantitative_Tracks.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Draw protein matches from CDS features](./4_Protein_Comparisons.md) | [Next: Plot read depth and numeric tracks >](./6_Depth_Quantitative_Tracks.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

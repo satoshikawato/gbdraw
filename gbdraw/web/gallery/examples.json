@@ -50,10 +50,10 @@
   },
   {
     "id": "WSSV_genome_comparison",
-    "title": "White spot syndrome virus genome comparison",
+    "title": "White spot syndrome virus nucleotide-similarity rings",
     "tags": [
       "Circular",
-      "Conservation",
+      "Nucleotide similarity",
       "LOSAT"
     ],
     "svg": "./examples/WSSV_genome_comparison.svg",
@@ -73,7 +73,7 @@
   },
   {
     "id": "majanivirus_orthogroup",
-    "title": "Majanivirus genomes (protein similarity groups)",
+    "title": "Majanivirus CDS protein-similarity links",
     "tags": [
       "Linear",
       "LOSAT",
@@ -104,7 +104,7 @@
   },
   {
     "id": "hepatoplasmataceae_collinear",
-    "title": "Hepatoplasmataceae genome comparison (collinear blocks)",
+    "title": "Hepatoplasmataceae collinear protein-match blocks",
     "tags": [
       "Linear",
       "LOSAT",
@@ -131,7 +131,7 @@
   },
   {
     "id": "hepatoplasmataceae_orthogroup",
-    "title": "Hepatoplasmataceae genome comparison (protein similarity groups)",
+    "title": "Hepatoplasmataceae CDS protein-similarity links",
     "tags": [
       "Linear",
       "LOSAT",

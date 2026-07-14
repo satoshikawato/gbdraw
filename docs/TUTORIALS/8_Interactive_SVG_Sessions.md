@@ -1,9 +1,9 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 7](./7_Linear_Layout.md) | [Go to Tutorial 9 >](./9_Feature_Visibility_Shapes.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Arrange linear tracks and labels](./7_Linear_Layout.md) | [Next: Control feature visibility and shapes >](./9_Feature_Visibility_Shapes.md)
 
-# Tutorial 8: Interactive SVG and saved sessions
+# Create interactive SVGs and restore saved sessions
 
 Write interactive SVG files, save GUI sessions, and regenerate diagrams from saved sessions.
 
@@ -64,7 +64,7 @@ The thresholds leave one retained ribbon. Click it in `MjeNMV_MelaMJNV_interacti
 
 ![Standalone interactive SVG with a precomputed TBLASTX ribbon and its pairwise match metadata popup](./images/tutorial-8-interactive-match-popup.png)
 
-Comparisons generated with gbdraw's `orthogroup` mode also include similarity-group metadata. Complete the runtime setup in [Tutorial 4](./4_Protein_Comparisons.md) before using `--protein_blastp_mode orthogroup`.
+Comparisons generated with gbdraw's `orthogroup` mode also include gbdraw similarity-group metadata. Complete the runtime setup in [Draw protein matches from annotated CDS features](./4_Protein_Comparisons.md) before using `--protein_blastp_mode orthogroup`.
 
 ## 4. Save a GUI session sidecar
 
@@ -121,7 +121,7 @@ Click **Load Session**, then choose the `.gbdraw-session.json` file to restore i
 
 ![Local gbdraw web app after loading a session, with the embedded GenBank input, circular settings, and saved result restored](./images/tutorial-8-loaded-session.png)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 7](./7_Linear_Layout.md) | [Go to Tutorial 9 >](./9_Feature_Visibility_Shapes.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Arrange linear tracks and labels](./7_Linear_Layout.md) | [Next: Control feature visibility and shapes >](./9_Feature_Visibility_Shapes.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

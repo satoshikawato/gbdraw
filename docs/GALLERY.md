@@ -12,7 +12,7 @@ For circular examples, `--track_type` names the circular layout preset. Custom t
 
 When converting long gallery commands into TSV manifests, see the `--records_table`, `--conservation_table`, and `--circular_track_table` examples in the [CLI Reference](./CLI_Reference.md#tsv-manifest-inputs).
 
-## White spot syndrome virus genome comparison
+## White spot syndrome virus nucleotide-similarity rings
 
 [Open the interactive WSSV example and web tutorial](https://gbdraw.app/gallery/#WSSV_genome_comparison).
 
@@ -28,13 +28,13 @@ One RefSeq GBFF file supplies two chromosomes and four plasmids. The Tutorial ta
 
 [Open the interactive aminoglycoside BGC example and web tutorial](https://gbdraw.app/gallery/#BGC0000708-BGC0000713).
 
-The Tutorial tab runs a LOSATP protein search, groups the translated CDS features by similarity, and colors features from antiSMASH `gene_kind` qualifiers. It also covers first-record label rotation, feature and group popups, legend editing, and session export.
+The Tutorial tab runs a LOSATP protein search, assigns CDS-derived proteins to gbdraw similarity groups, and colors features from antiSMASH `gene_kind` qualifiers. It also covers first-record label rotation, feature and group popups, legend editing, and session export.
 
 ## Majanivirus genome comparisons
 
 [Open the interactive nine-genome protein-similarity example and web tutorial](https://gbdraw.app/gallery/#majanivirus_orthogroup).
 
-The web tutorial runs LOSATP across nine majanivirus records, assigns translated CDS features to gbdraw similarity groups, applies product-based color rules, and inspects a group-match popup.
+The web tutorial runs LOSATP across nine majanivirus records, assigns CDS-derived proteins to gbdraw similarity groups, applies product-based color rules, and inspects a group-match popup.
 
 ### Static ten-genome TBLASTX example
 

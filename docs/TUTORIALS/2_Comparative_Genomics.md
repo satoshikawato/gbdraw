@@ -1,11 +1,11 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 1](./1_Customizing_Plots.md) | [Go to Tutorial 3 >](./3_Advanced_Customization.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Style a circular genome diagram](./1_Customizing_Plots.md) | [Next: Set feature colors and labels >](./3_Advanced_Customization.md)
 
-# Tutorial 2: Compare genomes with BLAST and protein searches
+# Draw genome comparison links from BLAST and protein searches
 
-Use precomputed BLAST tables or protein similarity searches from translated CDS features to draw linear links. The final section compares LOSATN and TLOSATX hits in circular mode.
+Use precomputed BLAST tables or search CDS-derived protein sequences to draw linear links. The final section compares LOSATN and TLOSATX hits in circular mode.
 
 ## 1. Required inputs
 
@@ -54,7 +54,7 @@ gbdraw linear \
 
 ![Two aligned Hepatoplasmataceae genomes connected by precomputed TBLASTX ribbons](../../examples/tutorial-2-pairwise-blast.svg)
 
-The default `ribbon` style draws each retained BLAST high-scoring pair (HSP) as a straight filled ribbon between its query and subject coordinate spans. The `--pairwise_match_style curve` option bends the same spans, which can make dense tracks easier to follow; it does not merge or resize HSPs.
+The default `ribbon` style draws each retained BLAST high-scoring segment pair (HSP) as a straight filled ribbon between its query and subject coordinate spans. The `--pairwise_match_style curve` option bends the same spans, which can make dense tracks easier to follow; it does not merge or resize HSPs.
 
 ## 4. Run protein searches during diagram generation
 
@@ -108,7 +108,7 @@ gbdraw linear \
 
 ![Collinear protein blocks between two Hepatoplasmataceae genomes](../../examples/tutorial-2-protein-collinear.svg)
 
-See [Tutorial 4](./4_Protein_Comparisons.md) for runtime selection, labels, and collinear tuning.
+See [Draw protein matches from annotated CDS features](./4_Protein_Comparisons.md) for runtime selection, labels, and collinear tuning.
 
 ## 5. gbdraw similarity groups and collinear blocks
 
@@ -304,7 +304,7 @@ At the displayed thresholds, each of the eight divergent queries yields 108–17
 
 The web app can save raw LOSAT results with `Save Raw LOSAT TSV`. To draw the same rings from the CLI, pass one saved outfmt 6/7 file per ring with `--conservation_blast` and select `--conservation_reference subject`. Rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 1](./1_Customizing_Plots.md) | [Go to Tutorial 3 >](./3_Advanced_Customization.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Style a circular genome diagram](./1_Customizing_Plots.md) | [Next: Set feature colors and labels >](./3_Advanced_Customization.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

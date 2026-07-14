@@ -2,7 +2,7 @@
 
 # Recipes
 
-Copy-paste command examples for common tasks. For explanations and screenshots, see the [Tutorials](./TUTORIALS/TUTORIALS.md).
+Copy-paste command examples for common tasks. For explanations and screenshots, see the [command-line guides](./TUTORIALS/TUTORIALS.md).
 
 ## Circular diagrams
 
@@ -176,7 +176,7 @@ gbdraw linear \
   -f svg
 ```
 
-See [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for table examples covering GenBank, GFF3+FASTA, circular placement, BLAST similarity rings, and track slots.
+See [Use TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md) for examples covering GenBank, GFF3+FASTA, circular placement, BLAST similarity rings, and track slots.
 
 ## Comparative genomics
 
@@ -218,7 +218,7 @@ gbdraw linear \
   -f svg
 ```
 
-Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The `orthogroup` mode creates similarity groups for visualization; it does not infer phylogeny-based orthogroups. Do not combine these modes with `-b/--blast`. See [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
+Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The `orthogroup` mode creates gbdraw similarity groups for visualization; it does not infer phylogeny-based orthogroups. Do not combine these modes with `-b/--blast`. See [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
 
 ### Filter BLAST ribbons
 

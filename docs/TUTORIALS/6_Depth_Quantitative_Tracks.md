@@ -1,11 +1,11 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 5](./5_Table_Driven_Inputs.md) | [Go to Tutorial 7 >](./7_Linear_Layout.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Use TSV manifests](./5_Table_Driven_Inputs.md) | [Next: Arrange linear tracks and labels >](./7_Linear_Layout.md)
 
-# Tutorial 6: Coverage depth and numeric tracks
+# Plot read depth and other numeric tracks
 
-Add per-base sequencing depth tracks, GC content (%) tracks, and numeric axes to circular and linear diagrams.
+Add per-base read depth tracks, GC content (%) tracks, and numeric axes to circular and linear diagrams.
 
 ## 1. Prepare inputs
 
@@ -165,7 +165,7 @@ This writes `MjeNMV_two_skew_tracks.svg`.
 
 Use the same `nt=AT` pattern in circular track tables or circular track slots when you need an additional circular skew ring.
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 5](./5_Table_Driven_Inputs.md) | [Go to Tutorial 7 >](./7_Linear_Layout.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Use TSV manifests](./5_Table_Driven_Inputs.md) | [Next: Arrange linear tracks and labels >](./7_Linear_Layout.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

@@ -1,9 +1,9 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 3](./3_Advanced_Customization.md) | [Go to Tutorial 5 >](./5_Table_Driven_Inputs.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Set feature colors and labels](./3_Advanced_Customization.md) | [Next: Use TSV manifests >](./5_Table_Driven_Inputs.md)
 
-# Tutorial 4: Protein comparisons from annotated CDS features
+# Draw protein matches from annotated CDS features
 
 Build linear comparison diagrams by translating annotated CDS features and searching the resulting protein sequences.
 
@@ -74,9 +74,9 @@ This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-deri
 
 ![Pairwise majanivirus protein comparison with curved ribbons between two linear records](../../examples/tutorial-protein-pairwise.svg)
 
-## 4. Similarity-group ribbons (`orthogroup` mode)
+## 4. gbdraw similarity-group ribbons (`orthogroup` mode)
 
-`orthogroup` assigns CDS-derived proteins to similarity groups across all input records before drawing ribbons between adjacent records. The mode does not perform phylogeny-based orthology inference.
+`orthogroup` assigns CDS-derived proteins to gbdraw similarity groups across all input records before drawing ribbons between adjacent records. The mode does not perform phylogeny-based orthology inference.
 
 ```bash
 gbdraw linear \
@@ -123,7 +123,7 @@ Use precomputed BLAST tables when you need to preserve an existing result, use c
 
 Do not combine `-b/--blast` with `--protein_blastp_mode`. The CLI rejects that combination because the two options define different comparison sources.
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 3](./3_Advanced_Customization.md) | [Go to Tutorial 5 >](./5_Table_Driven_Inputs.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Set feature colors and labels](./3_Advanced_Customization.md) | [Next: Use TSV manifests >](./5_Table_Driven_Inputs.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

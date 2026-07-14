@@ -1,7 +1,7 @@
 {
   "id": "hepatoplasmataceae_orthogroup",
   "version": 1,
-  "title": "Compare Hepatoplasmataceae genomes by protein similarity",
+  "title": "Plot CDS protein-similarity links across five Hepatoplasmataceae genomes",
   "summary": "Run LOSATP in the browser, assign CDS-derived proteins to gbdraw similarity groups, and draw links between group members in five Hepatoplasmataceae genomes.",
   "estimatedTime": "10-20 min after inputs are available",
   "difficulty": "Advanced",
@@ -116,7 +116,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records. These groups support visualization but are not phylogeny-based orthology assignments. The companion collinear tutorial combines compatible runs of the same protein-match anchors into larger gene-order blocks.",
+      "note": "gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records. These groups support visualization but are not phylogeny-based orthology assignments. The companion collinear tutorial combines compatible runs of the same protein-match anchors into collinear blocks.",
       "operations": [
         {
           "title": "Orthogroups mode controls",
@@ -386,7 +386,7 @@
     },
     {
       "title": "The output is too dense",
-      "body": "Raise identity, bitscore, or match length thresholds, lower the E-value cutoff, or use the collinear tutorial when you want larger block-level summaries."
+      "body": "Raise the identity, bit score, or match-length threshold, lower the E-value cutoff, or use the collinear tutorial when you want block-level summaries."
     },
     {
       "title": "The generated diagram differs from the Gallery image",

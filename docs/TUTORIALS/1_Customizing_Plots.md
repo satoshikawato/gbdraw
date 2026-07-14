@@ -1,12 +1,12 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to Quickstart](../QUICKSTART.md) | [Go to Tutorial 2 >](./2_Comparative_Genomics.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw genome comparison links >](./2_Comparative_Genomics.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
+[< Back to the guide index](./TUTORIALS.md)
 
-# Tutorial 1: Customize a circular genome diagram
+# Style a circular genome diagram
 
-This tutorial covers the main styling controls for circular genome diagrams: palettes, track presets, center labels, plot titles, and feature labels.
+Use palettes, track presets, center labels, plot titles, and feature labels to change a circular genome diagram.
 
 ## 1. Change the color scheme
 
@@ -129,10 +129,10 @@ Linear mode has its own input selectors:
 - `--reverse_complement`
 - `--region`
 
-See [Tutorial 2](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for details.
+See [Draw genome comparison links from BLAST and protein searches](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for details.
 
-[< Back to Quickstart](../QUICKSTART.md) | [Go to Tutorial 2 >](./2_Comparative_Genomics.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw genome comparison links >](./2_Comparative_Genomics.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
+[< Back to the guide index](./TUTORIALS.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

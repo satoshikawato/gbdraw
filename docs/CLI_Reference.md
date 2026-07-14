@@ -949,8 +949,8 @@ hit set is not guaranteed to be identical to LOSAT.
 
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
-- [Tutorials](./TUTORIALS/TUTORIALS.md)
-- [Tutorial 4: Protein comparisons from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md)
-- [Tutorial 5: TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md)
+- [Command-line guides](./TUTORIALS/TUTORIALS.md)
+- [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md)
+- [Use TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md)
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

@@ -1,12 +1,12 @@
 {
   "id": "majanivirus_orthogroup",
   "version": 1,
-  "title": "Compare nine majanivirus genomes by protein similarity",
-  "summary": "Run LOSATP in the browser to group CDS-derived proteins from nine majanivirus genomes, then apply product-based feature colors and draw curved links between group members.",
+  "title": "Plot CDS protein-similarity links across nine majanivirus genomes",
+  "summary": "Run LOSATP in the browser, assign CDS-derived proteins from nine majanivirus genomes to gbdraw similarity groups, apply product-based feature colors, and draw curved links between group members.",
   "estimatedTime": "15-40 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Linear",
-  "primaryWorkflow": "Large LOSATP similarity-group comparison (Orthogroups mode)",
+  "primaryWorkflow": "LOSATP similarity-group comparison (Orthogroups mode)",
   "downloads": [
     {
       "label": "LC738868",
@@ -384,7 +384,7 @@
     },
     {
       "title": "Inspect a similarity-group ribbon",
-      "body": "Click a pairwise match ribbon to inspect the gbdraw group ID, inferred display name, member count, and record coverage. The table below the summary lists all member proteins.",
+      "body": "Click a pairwise match ribbon to inspect the gbdraw group ID, annotation-derived display name, member count, and record coverage. The table below the summary lists all member proteins.",
       "operations": [
         {
           "media": {
@@ -490,7 +490,7 @@
     },
     {
       "title": "Expected ribbons are missing",
-      "body": "Check that protein blastp mode is Orthogroups, the input order matches the Gallery session, and the bitscore, e-value, and identity thresholds match the tutorial values."
+      "body": "Check that protein blastp mode is Orthogroups, the input order matches the Gallery session, and the bit score, E-value, and identity thresholds match the tutorial values."
     },
     {
       "title": "The rows do not match the Gallery figure",
