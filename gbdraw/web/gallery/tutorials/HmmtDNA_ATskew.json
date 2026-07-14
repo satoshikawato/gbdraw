@@ -153,7 +153,7 @@
     },
     {
       "title": "Set the dinucleotide calculation window",
-      "body": "Use a short mitochondrial window so GC content, GC skew, and AT skew all show local structure.",
+      "body": "Use a 500 nt window with a 50 nt step to show local variation in GC content, GC skew, and AT skew.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -174,7 +174,7 @@
     },
     {
       "title": "Open Custom Track Slots",
-      "body": "In the circular layout controls, enable Custom Track Slots and reset to the Middle template if you need a clean starting stack.",
+      "body": "In the circular layout controls, enable Custom Track Slots and reset to the Middle template to start from the slot order used here.",
       "table": {
         "columns": ["Slot", "Renderer", "Position", "Key settings"],
         "rows": [
@@ -375,7 +375,7 @@
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
             "alt": "RNR2 Details popup beside the highlighted l-rRNA feature in the human mitochondrial AT skew diagram.",
-            "caption": "The highlighted RNR2 l-rRNA remains fully visible beside its Details popup."
+            "caption": "The Details popup identifies the highlighted RNR2 l-rRNA feature and its location."
           },
           "capture": {
             "source": "webapp",
@@ -427,7 +427,7 @@
   "postGenerationEdits": [
     {
       "title": "Review the generated legend",
-      "body": "Generate Diagram already adds AT skew (+) and AT skew (-) to the legend. Use the legend editor only for optional caption/order tweaks; the two entries represent positive and negative skew.",
+      "body": "Generate Diagram adds AT skew (+) and AT skew (-) to the legend. Use the legend editor only if you want to change their captions or order; the two entries represent positive and negative skew.",
       "operations": [
         {
           "media": {

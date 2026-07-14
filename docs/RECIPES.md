@@ -2,7 +2,7 @@
 
 # Recipes
 
-Quick copy-paste solutions for common tasks. For explanations and screenshots, see the [Tutorials](./TUTORIALS/TUTORIALS.md).
+Copy-paste command examples for common tasks. For explanations and screenshots, see the [Tutorials](./TUTORIALS/TUTORIALS.md).
 
 ## Circular diagrams
 
@@ -206,7 +206,7 @@ gbdraw linear \
   -f svg
 ```
 
-### Generated protein comparison without BLAST tables
+### Run a protein comparison from CDS annotations
 
 ```bash
 gbdraw linear \
@@ -250,7 +250,7 @@ gbdraw circular \
   -f svg
 ```
 
-Use additional `--conservation_blast` files to add additional rings. Circular conservation uses raw HSP spans; reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
+Pass more `--conservation_blast` files to add rings. Circular conservation uses raw HSP spans; reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
 
 ## Color and label tables
 

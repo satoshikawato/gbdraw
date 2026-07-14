@@ -77,7 +77,7 @@ The result combines per-record axis rulers, ordered definition lines, and a shar
 
 ## 5. Tune definition lines
 
-Use definition controls when you need compact or publication-specific record labels.
+Use definition controls when a publication figure needs compact record labels.
 
 ```bash
 gbdraw linear \

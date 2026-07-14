@@ -2,7 +2,7 @@
   "id": "BGC0000708-BGC0000713",
   "version": 1,
   "title": "Reproduce the aminoglycoside BGC comparison in the web app",
-  "summary": "Build a five-cluster linear comparison with browser LOSATP orthogroups, antiSMASH gene-kind color rules, rotated labels, and a bottom legend.",
+  "summary": "Build a linear comparison of five biosynthetic gene clusters. The example uses browser LOSATP groups, antiSMASH gene_kind color rules, rotated labels, and a bottom legend.",
   "estimatedTime": "10-20 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Linear",
@@ -99,7 +99,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "This example compares protein-coding genes across related biosynthetic gene clusters, so orthogroup-backed blastp matches are the useful comparison signal.",
+      "note": "This example compares translated CDS features across related biosynthetic gene clusters. Orthogroup mode groups proteins by search similarity across all five records and draws links between group members.",
       "operations": [
         {
           "title": "Run LOSAT settings panel",
@@ -222,7 +222,7 @@
     },
     {
       "title": "Set labels, colors, and figure layout",
-      "body": "Use the saved session values for a compact manuscript-style comparison, including the orange palette and gray fallback for unmatched CDS features.",
+      "body": "Use the Gallery session settings, including the orange palette and a gray default for CDS features that match none of the specific color rules.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -416,7 +416,7 @@
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-align-og1.webp",
             "alt": "The livE feature assigned to og_1 beside its feature popup with Align available.",
-            "caption": "Click the livE CDS in og_1, then choose Align to regenerate around the shared core."
+            "caption": "Click the livE CDS in og_1, then choose Align to align the records on that group."
           },
           "capture": {
             "source": "webapp",
@@ -595,7 +595,7 @@
   "colorRules": [
     {
       "title": "Use gene_kind for antiSMASH categories",
-      "body": "These BGC records carry antiSMASH gene_kind qualifiers, which are more reliable for core, additional, transport, and regulatory categories than broad product text."
+      "body": "These BGC records carry antiSMASH gene_kind qualifiers for core biosynthetic, additional biosynthetic, transport, and regulatory categories. Use those annotations instead of matching broad product terms."
     },
     {
       "title": "Use gene for label text",
@@ -621,11 +621,11 @@
     },
     {
       "title": "Prefer Safe total threads",
-      "body": "Safe avoids consuming every logical CPU and is the best default for keeping the browser responsive."
+      "body": "Safe leaves some logical CPUs unused so the browser can remain responsive."
     },
     {
       "title": "Use orthogroups for protein-level BGC comparison",
-      "body": "Orthogroup mode keeps related proteins linked even when local gene order differs across clusters."
+      "body": "Orthogroup mode groups proteins by search similarity even when their local gene order differs across clusters. It does not perform phylogeny-based orthology inference."
     },
     {
       "title": "Tune the match thresholds together",
@@ -633,7 +633,7 @@
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so label, color, and legend changes should be faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so label, color, and legend edits avoid another search."
     }
   ],
   "troubleshooting": [
@@ -647,7 +647,7 @@
     },
     {
       "title": "Labels are missing or too dense",
-      "body": "Use Show labels: first record, label placement above feature, and 45 degree label rotation. If needed, reduce labels by tightening the label filter."
+      "body": "Use Show labels: first record, label placement above feature, and 45° label rotation. If needed, reduce labels by tightening the label filter."
     },
     {
       "title": "Threaded LOSAT is unavailable",

@@ -8,9 +8,9 @@
 
 | Method | Best for | Notes |
 | --- | --- | --- |
-| Hosted web app | Quick plotting with zero install | Runs at [gbdraw.app](https://gbdraw.app/) in your browser. |
-| Bioconda | Daily local use and reproducible environments | Recommended for most users. |
-| Source install | Development and testing current repository state | Uses `pip install -e ".[dev]"`. |
+| Hosted web app | Making a diagram without a local installation | Runs at [gbdraw.app](https://gbdraw.app/) in your browser. |
+| Bioconda | Routine command-line use and reproducible environments | Recommended for most users. |
+| Source install | Developing or testing the current checkout | Uses `pip install -e ".[dev]"`. |
 
 ## 1. Hosted web app
 
@@ -39,7 +39,7 @@ Local `gbdraw gui` analysis runs on your machine. The interactive gallery exampl
 
 ## 2. Bioconda installation
 
-Bioconda is the recommended local installation path for normal use.
+Bioconda is the recommended local installation path for routine command-line use.
 
 ```bash
 mamba create -n gbdraw -c conda-forge -c bioconda gbdraw

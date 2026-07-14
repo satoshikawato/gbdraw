@@ -2,7 +2,7 @@
 
 # Command-Line Reference
 
-This reference mirrors the current command help from `python -m gbdraw.cli`. Use it as the source of truth for available options and defaults.
+This reference mirrors the current command help from `python -m gbdraw.cli` and lists the available options and defaults.
 
 ## Main command
 
@@ -424,7 +424,7 @@ a.gff3	a.fna	Strain A		chr1	1000-9000	0	1	1	1
 b.gff3	b.fna	Strain B		chr1		0	2	1	2
 ```
 
-Gallery-style linear example: the BGC Gallery session uses five GenBank files, custom record labels, subtitles, and reverse-complements the fifth record. Put that row-coupled part in `bgc_records.tsv`:
+Gallery linear example: the BGC Gallery session uses five GenBank files, custom record labels, subtitles, and a reverse-complemented fifth record. Put those row-specific settings in `bgc_records.tsv`:
 
 ```tsv
 gbk	record_label	record_subtitle	reverse_complement	order
@@ -447,7 +447,7 @@ gbdraw linear \
   -f interactive-svg
 ```
 
-Gallery-style circular multi-record example: the `Vnig_TUMSAT-TG-2018` entry places six records from one GBFF file on two rows. Repeat the file path and select each record by `record_id`:
+Gallery circular multi-record example: the `Vnig_TUMSAT-TG-2018` entry places six records from one GBFF file on two rows. Repeat the file path and select each record by `record_id`:
 
 ```tsv
 gbk	record_id	order	row	column
@@ -495,7 +495,7 @@ ref_a.blast.tsv	Reference A	#E15759
 ref_b.blast.tsv	Reference B	#4E79A7
 ```
 
-Gallery-style WSSV example: the `WSSV_genome_comparison` command has 20 `--conservation_blast`, 20 `--conservation_labels`, and 20 `--conservation_colors` values. The equivalent `wssv_conservation.tsv` is:
+Gallery WSSV example: the `WSSV_genome_comparison` command has 20 `--conservation_blast`, 20 `--conservation_labels`, and 20 `--conservation_colors` values. The equivalent `wssv_conservation.tsv` is:
 
 ```tsv
 blast	label	color
@@ -570,7 +570,7 @@ gc_skew	dinucleotide_skew	inside		0.1	nt=GC
 ticks	ticks	inside			tick_label_layout=label_in_tick_out
 ```
 
-Gallery-style HmmtDNA AT-skew example: the `HmmtDNA_ATskew` entry adds an AT-skew ring to the standard GC content, GC skew, feature, and tick slots. The equivalent `hmmt_tracks.tsv` is:
+Gallery HmmtDNA AT-skew example: the `HmmtDNA_ATskew` entry adds an AT-skew ring to the standard GC content, GC skew, feature, and tick slots. The equivalent `hmmt_tracks.tsv` is:
 
 ```tsv
 id	renderer	side	r	w	params
@@ -950,7 +950,7 @@ hit set is not guaranteed to be identical to LOSAT.
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
 - [Tutorials](./TUTORIALS/TUTORIALS.md)
-- [Tutorial 4: Protein Comparisons Without Precomputed BLAST](./TUTORIALS/4_Protein_Comparisons.md)
-- [Tutorial 5: Table-Driven CLI Inputs](./TUTORIALS/5_Table_Driven_Inputs.md)
+- [Tutorial 4: Protein comparisons from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md)
+- [Tutorial 5: TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md)
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

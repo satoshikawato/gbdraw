@@ -7,10 +7,6 @@
 
 Use tables and styling options to control feature colors, labels, and plot appearance.
 
-`--track_type` selects the base circular preset (`tuckin`, `middle`, or `spreadout`). Custom track slots add an ordered slot list on top of that preset. A built-in slot inherits any omitted radius, width, physical gaps, placement, and standard renderer parameters from the preset for each record. Explicit `r`, `w`, `inner_gap_px`, `outer_gap_px`, `side`, `z`, and renderer parameters override the inherited values. The legacy `spacing` field remains a compatibility alias for both circular gaps.
-
-Numeric and depth slots placed inside the axis auto-compress when `r` and `w` are omitted; gbdraw never moves them outside automatically. The circular axis stays fixed and cannot be moved or hidden with a circular track slot.
-
 ## Color tables
 
 `gbdraw` supports two complementary table formats:
@@ -43,7 +39,7 @@ gbdraw circular \
   -o MjeNMV_modified_default_colors
 ```
 
-The output now uses the light-gray override for CDS features instead of the built-in CDS color.
+CDS features are now light gray instead of the built-in CDS color.
 
 ![Circular MjeNMV diagram with CDS features recolored light gray by a default-color override](../../examples/MjeNMV_modified_default_colors.svg)
 
@@ -72,13 +68,13 @@ gbdraw circular \
   -o MjeNMV_feature_specific_colors_with_labels
 ```
 
-The output has blue WSSV-like proteins, yellow BIRP features, and a red tyrosine recombinase against the light-gray CDS background.
+WSSV-like proteins are blue, BIRP features are yellow, and the tyrosine recombinase is red against the light-gray CDS background.
 
 ![Labeled circular MjeNMV diagram with blue WSSV-like proteins, yellow BIRP features, and a red tyrosine recombinase](../../examples/MjeNMV_feature_specifc_colors_with_labels.svg)
 
 ## Label filters and overrides
 
-### 1. Blacklist uninformative labels
+### 1. Exclude uninformative labels
 
 ```bash
 gbdraw circular \
@@ -100,7 +96,7 @@ The highlighted features remain, but labels containing `hypothetical` are remove
 
 To remove several label terms, pass one comma-separated value, for example `--label_blacklist "hypothetical,putative"`. The blacklist uses case-insensitive substring matching.
 
-### 2. Whitelist only the labels you need
+### 2. Keep only selected labels
 
 Create `stx_whitelist.tsv`:
 
@@ -112,7 +108,7 @@ CDS	gene	^stx2B$
 ```
 
 `--label_whitelist` uses the same case-insensitive Python `re.search(...)` semantics as `-t`.
-Use `^...$` for exact matches, or broader patterns such as `wsv.*-like protein` when you want to keep a label family.
+Use `^...$` for exact matches, or broader patterns such as `wsv.*-like protein` to keep a set of related labels.
 
 Download the O157:H7 Sakai GenBank file used by this example:
 
@@ -241,9 +237,13 @@ gbdraw linear \
 
 The linear result places the 45-degree labels above their features:
 
-![Linear MjeNMV diagram with feature labels rotated 45 degrees above the feature track](../../examples/tutorial-3-above-feature-labels.svg)
+![Linear MjeNMV diagram with feature labels rotated 45° above the feature track](../../examples/tutorial-3-above-feature-labels.svg)
 
 ## Fine-tune plot appearance
+
+`--track_type` selects the base circular preset (`tuckin`, `middle`, or `spreadout`). Custom track slots add an ordered slot list on top of that preset. A built-in slot inherits any omitted radius, width, physical gaps, placement, and standard renderer parameters from the preset for each record. Explicit `r`, `w`, `inner_gap_px`, `outer_gap_px`, `side`, `z`, and renderer parameters override the inherited values. The legacy `spacing` field remains a compatibility alias for both circular gaps.
+
+Numeric and depth slots placed inside the axis auto-compress when `r` and `w` are omitted; gbdraw never moves them outside automatically. The circular axis stays fixed and cannot be moved or hidden with a circular track slot.
 
 These options control stroke colors and widths, font sizes, and circular label offsets:
 

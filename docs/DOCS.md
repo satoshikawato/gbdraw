@@ -9,7 +9,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a plot without installi
 ## Start here
 
 - [Installation](./INSTALL.md): choose between the hosted web app, Bioconda, or a local development install.
-- [Quickstart](./QUICKSTART.md): create a first circular plot in a few minutes.
+- [Quickstart](./QUICKSTART.md): draw a circular genome diagram from a GenBank record.
 - [Recipes](./RECIPES.md): copy-paste command patterns for common tasks.
 
 ## Tutorials
@@ -33,6 +33,6 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a plot without installi
 - Hosted interactive SVG gallery and web tutorials: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
-- Protein BLASTP comparisons: `--protein_blastp_mode pairwise` draws adjacent CDS protein matches, `orthogroup` groups CDS proteins across the input records before drawing links, and `collinear` draws gene-order-preserving blocks from compatible orthogroup anchors. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`; see [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#5-interpreting-orthogroups-and-collinear-blocks) for the biological meaning of orthogroups and collinear blocks.
+- Protein BLASTP comparisons: `--protein_blastp_mode pairwise` draws adjacent CDS protein matches, `orthogroup` assigns CDS proteins to similarity-based groups for visualization, and `collinear` combines compatible runs of protein-match anchors into gene-order-preserving blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`. These groups are not phylogeny-based orthology assignments; see [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#5-interpreting-orthogroups-and-collinear-blocks).
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

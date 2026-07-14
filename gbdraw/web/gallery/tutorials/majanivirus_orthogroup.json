@@ -2,7 +2,7 @@
   "id": "majanivirus_orthogroup",
   "version": 1,
   "title": "Reproduce the large majanivirus orthogroup comparison in the web app",
-  "summary": "Build a nine-genome linear comparison for large dsDNA viruses using browser LOSATP orthogroups, product-based feature colors, curved match ribbons, and a right legend.",
+  "summary": "Build a nine-genome majanivirus comparison with browser LOSATP groups. The diagram uses product-based feature colors, curved match ribbons, and a right legend.",
   "estimatedTime": "15-40 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Linear",
@@ -189,7 +189,7 @@
     },
     {
       "title": "Set the linear layout",
-      "body": "Use a centered, compact layout so the long viral rows and many orthogroup ribbons stay comparable.",
+      "body": "Use a centered, compact layout so the nine viral genome rows and their match ribbons fit in the same view.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -298,7 +298,7 @@
           ["Default color", "CDS", "", "unmatched CDS", "#d3d3d3", "other proteins"]
         ]
       },
-      "note": "Use product here because the visual categories are broad protein families rather than individual genes.",
+      "note": "These rules match strings in the product annotations; they do not infer protein-family membership.",
       "operations": [
         {
           "title": "Specific product rules",
@@ -384,7 +384,7 @@
     },
     {
       "title": "Inspect an orthogroup ribbon",
-      "body": "Click a pairwise match ribbon to inspect the orthogroup ID, inferred display name, member count, and record coverage. The same popup provides the full member table below the summary.",
+      "body": "Click a pairwise match ribbon to inspect the group ID, inferred display name, member count, and record coverage. The table below the summary lists all member proteins.",
       "operations": [
         {
           "media": {
@@ -445,12 +445,12 @@
   ],
   "colorRules": [
     {
-      "title": "Use product for broad viral protein families",
-      "body": "The visible categories in this figure are WSSV-like proteins, BIRP, tyrosine recombinase, and other proteins. Product text is the practical qualifier for those broad family rules."
+      "title": "Use product to match the annotation categories",
+      "body": "The visible categories in this figure are WSSV-like proteins, BIRP, tyrosine recombinase, and other proteins. The corresponding terms occur in the product annotations, so the color rules match that qualifier."
     },
     {
       "title": "Keep regex values narrow enough",
-      "body": "Rules are matching patterns. wsv.*-like protein is targeted enough for this dataset, while a value such as protein would swallow most CDS features."
+      "body": "Rules are matching patterns. wsv.*-like protein is specific enough for this dataset, while a value such as protein would match most CDS features."
     },
     {
       "title": "Use default CDS color for the background",
@@ -472,7 +472,7 @@
     },
     {
       "title": "Prefer Safe total threads",
-      "body": "Safe avoids consuming every logical CPU and is the best default when you want the browser to stay responsive."
+      "body": "Safe leaves some logical CPUs unused so the browser can remain responsive."
     },
     {
       "title": "Treat 32 as a requested maximum",
@@ -480,7 +480,7 @@
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so styling-only changes should be faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so styling edits avoid another search."
     }
   ],
   "troubleshooting": [

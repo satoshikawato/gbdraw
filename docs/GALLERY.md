@@ -1,8 +1,10 @@
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)
-# Gallery
-This gallery contains representative `gbdraw` outputs and the commands used to generate them. For shorter copy-paste examples, see [Recipes](./RECIPES.md).
 
-Interactive SVG versions of selected examples are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub previews static SVG images, so use the public gallery when you want to inspect JavaScript-enabled SVG output. Selected gallery entries also include a Tutorial tab for reproducing the same figure in the web app.
+# Gallery
+
+Each entry pairs a `gbdraw` output with the command used to generate it. For shorter command examples, see [Recipes](./RECIPES.md).
+
+Interactive versions of selected SVGs are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub shows the images without their embedded JavaScript; the public gallery preserves feature and match popups, zoom controls, and other interactions. Its Tutorial tabs reproduce selected figures in the web app.
 
 The interactive gallery assets are hosted online and are not bundled with local `gbdraw` installs. Running `gbdraw gui` locally still keeps genome analysis on your own machine.
 
@@ -10,40 +12,33 @@ For circular examples, `--track_type` names the circular layout preset. Custom t
 
 When converting long gallery commands into TSV manifests, see the `--records_table`, `--conservation_table`, and `--circular_track_table` examples in the [CLI Reference](./CLI_Reference.md#tsv-manifest-inputs).
 
-#### White spot syndrome virus genome comparison
+## White spot syndrome virus genome comparison
 
-Interactive SVG session output: [https://gbdraw.app/gallery/#WSSV_genome_comparison](https://gbdraw.app/gallery/#WSSV_genome_comparison)
+[Open the interactive WSSV example and web tutorial](https://gbdraw.app/gallery/#WSSV_genome_comparison).
 
-Web tutorial: open the [WSSV gallery entry](https://gbdraw.app/gallery/#WSSV_genome_comparison) and select the Tutorial tab.
+The Tutorial tab runs LOSAT `blastn` against 20 comparison FASTA files, assigns labels and colors to the resulting similarity rings, checks feature and legend popups, and saves the session.
 
-The tutorial builds a circular WSSV conservation-ring plot in the browser: it runs LOSAT `blastn`, uploads comparison FASTA files, sets ring labels and colors, checks feature and legend popups, and exports a session.
+## <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 complete genome
 
+[Open the interactive *Vibrio* multi-record example and web tutorial](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018).
 
-#### <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 complete genome
+One RefSeq GBFF file supplies two chromosomes and four plasmids. The Tutorial tab places the six records on a shared circular canvas, inspects a feature popup, and saves the session.
 
-Interactive SVG session output: [https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018)
+## Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.
 
-Web tutorial: open the [Vibrio multi-record gallery entry](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018) and select the Tutorial tab.
+[Open the interactive aminoglycoside BGC example and web tutorial](https://gbdraw.app/gallery/#BGC0000708-BGC0000713).
 
-This circular multi-record example starts from a hosted gallery session and interactive SVG output.
+The Tutorial tab runs a LOSATP protein search, groups the translated CDS features by similarity, and colors features from antiSMASH `gene_kind` qualifiers. It also covers first-record label rotation, feature and orthogroup popups, legend editing, and session export.
 
-The tutorial uses one GBFF input with six records, sets up the multi-record canvas, assigns rows, checks feature popups, and exports a session.
+## Majanivirus genome comparisons
 
-#### Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.
+[Open the interactive nine-genome orthogroup example and web tutorial](https://gbdraw.app/gallery/#majanivirus_orthogroup).
 
-Interactive SVG session output: [https://gbdraw.app/gallery/#BGC0000708-BGC0000713](https://gbdraw.app/gallery/#BGC0000708-BGC0000713)
+The web tutorial runs LOSATP across nine majanivirus records, assigns translated CDS features to gbdraw similarity groups, applies product-based color rules, and inspects a match popup.
 
-Web tutorial: open the [BGC gallery entry](https://gbdraw.app/gallery/#BGC0000708-BGC0000713) and select the Tutorial tab.
+### Static ten-genome TBLASTX example
 
-The tutorial runs a browser LOSATP orthogroup search, colors features with antiSMASH `gene_kind` rules, rotates first-record labels, checks feature and orthogroup popups, edits the legend, and exports a session.
-
-#### Majaniviruses multi-genome comparison
-
-Interactive SVG session output: [https://gbdraw.app/gallery/#majanivirus_orthogroup](https://gbdraw.app/gallery/#majanivirus_orthogroup)
-
-Web tutorial: open the [majanivirus gallery entry](https://gbdraw.app/gallery/#majanivirus_orthogroup) and select the Tutorial tab.
-
-The tutorial runs a nine-record LOSATP orthogroup comparison in the browser, applies product-based color rules, sets record labels, checks match popups, and exports a session.
+The CLI example below uses precomputed TBLASTX results rather than the generated orthogroup workflow. It includes a tenth record, MellatMJNV, between TrcuMJNV and MeenMJNV.
 
 <details><summary>Expand to see the script</summary>
 
@@ -95,11 +90,15 @@ gbdraw linear \
 
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
-#### Hepatoplasmataceae five-genome comparison
+## Hepatoplasmataceae five-genome comparison
 
-Interactive SVG session outputs: [collinear](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear), [orthogroup](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup)
+Interactive examples and web tutorials: [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) and [orthogroup links](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup).
 
-Web tutorials: open the [collinear gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) or [orthogroup gallery entry](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and select the Tutorial tab.
+Both web tutorials run LOSATP on the same five genomes. One draws links between proteins assigned to the same gbdraw similarity group; the other combines compatible runs of protein-match anchors into collinear blocks.
+
+### Static TBLASTX example
+
+The CLI example below instead draws HSPs from four precomputed TBLASTX files, one for each adjacent genome pair.
 
 <details><summary>Expand to see the script</summary>
 
@@ -131,13 +130,15 @@ AP027132_NZ_CP006932.tblastx.out \
 
 ![hepatoplasmataceae_default.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae_default.svg)
 
-#### Human mitochondrial genome (feature qualifier priority)
+## Human mitochondrial genome
 
-Interactive SVG session output: [https://gbdraw.app/gallery/#HmmtDNA_ATskew](https://gbdraw.app/gallery/#HmmtDNA_ATskew)
+[Open the interactive human mitochondrial AT-skew example and web tutorial](https://gbdraw.app/gallery/#HmmtDNA_ATskew).
 
-Web tutorial: open the [human mitochondrial AT skew gallery entry](https://gbdraw.app/gallery/#HmmtDNA_ATskew) and select the Tutorial tab.
+The web tutorial adds an AT-skew ring with custom track slots, uses the `gene` qualifier for CDS labels, inspects a feature popup, and edits the legend.
 
-The tutorial uses custom track slots to add an AT-skew ring, switches CDS labels to gene names, checks feature popups, edits the legend, and exports a session.
+### Static qualifier-priority example
+
+The CLI example below changes CDS labels to the `gene` qualifier. Unlike the interactive entry, it does not add an AT-skew ring.
 
 <details><summary>Expand to see the script</summary>
 
@@ -166,7 +167,7 @@ gbdraw circular \
 
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
-#### <i>Nicotiana tabacum</i> chloroplast genome
+## <i>Nicotiana tabacum</i> chloroplast genome
 
 <details><summary>Expand to see the script</summary>
 
@@ -201,7 +202,7 @@ gbdraw circular \
 
 ![NC_001879_color.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001879_color.svg)
 
-#### Lambda phage
+## Lambda phage
 
 <details><summary>Expand to see the script</summary>
 
@@ -226,7 +227,7 @@ gbdraw linear \
 ![NC_001416.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001416.svg)
 
 
-#### <i>Ca.</i> Sukunaarchaeum mirabile M16-5
+## <i>Ca.</i> Sukunaarchaeum mirabile M16-5
 
 <details><summary>Expand to see the script</summary>
 
@@ -251,7 +252,7 @@ gbdraw circular \
 ![M16-5_fugaku.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/M16-5_fugaku.svg)
 
 
-#### <i>Pandoravirus salinus</i>
+## <i>Pandoravirus salinus</i>
 
 <details><summary>Expand to see the script</summary>
 
@@ -272,7 +273,7 @@ gbdraw circular \
 
 ![Pandoravirus_salinus_forest.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/Pandoravirus_salinus_forest.svg)
 
-#### <i>Candidatus</i> Pelagibacter ubique HTCC1062
+## <i>Candidatus</i> Pelagibacter ubique HTCC1062
 
 <details><summary>Expand to see the script</summary>
 
@@ -292,7 +293,7 @@ gbdraw circular \
 
 ![NC_007205_oceanic_voyage.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_007205_oceanic_voyage.svg)
 
-#### <i>Prochlorococcus marinus</i> CCMP1375
+## <i>Prochlorococcus marinus</i> CCMP1375
 
 <details><summary>Expand to see the script</summary>
 
@@ -313,7 +314,7 @@ gbdraw circular \
 
 ![NC_005042_pine_reflection.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_005042_pine_reflection.svg)
 
-#### <i>Flavobacterium columnare</i> ATCC 49512
+## <i>Flavobacterium columnare</i> ATCC 49512
 
 <details><summary>Expand to see the script</summary>
 
@@ -334,7 +335,7 @@ gbdraw circular \
 
 ![NC_016510_mint.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_016510_mint.svg)
 
-#### <i>Thermus aquaticus</i> Y51MC23
+## <i>Thermus aquaticus</i> Y51MC23
 
 <details><summary>Expand to see the script</summary>
 
@@ -353,7 +354,7 @@ gbdraw circular \
 
 ![NZ_CP010822_orange.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NZ_CP010822_orange.svg)
 
-#### <i>Helicobacter pylori</i> J99
+## <i>Helicobacter pylori</i> J99
 
 <details><summary>Expand to see the script</summary>
 
@@ -374,7 +375,7 @@ gbdraw circular \
 ![NC_000921_spring.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000921_spring.svg)
 
 
-#### <i>Mycobacterium tuberculosis</i> H37Rv
+## <i>Mycobacterium tuberculosis</i> H37Rv
 
 <details><summary>Expand to see the script</summary>
 

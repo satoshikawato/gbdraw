@@ -122,7 +122,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "These settings summarize orthogroup-backed protein anchors as gene-order-preserving ribbons.",
+      "note": "These settings combine compatible runs of protein-match anchors from gbdraw similarity groups into gene-order-preserving ribbons.",
       "operations": [
         {
           "title": "LOSATP collinear controls",
@@ -241,7 +241,7 @@
     },
     {
       "title": "Generate and inspect the diagram",
-      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache. The preview should show orientation-colored collinear blocks between adjacent records.",
+      "body": "Click Generate Diagram. The first LOSATP search can take time; later runs reuse its results when the input files and LOSAT settings have not changed. The preview should show orientation-colored collinear blocks between adjacent records.",
       "operations": [
         {
           "media": {
@@ -388,7 +388,7 @@
     },
     {
       "title": "Prefer Safe total threads",
-      "body": "Safe avoids consuming every logical CPU and is the best default when you want the browser to remain responsive."
+      "body": "Safe leaves some logical CPUs unused so the browser can remain responsive."
     },
     {
       "title": "Keep Threads per run on Auto",
@@ -400,7 +400,7 @@
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so iterative diagram styling is faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so styling edits avoid another search."
     }
   ],
   "troubleshooting": [
@@ -414,7 +414,7 @@
     },
     {
       "title": "The output is cluttered",
-      "body": "Raise Min block genes or identity thresholds to reduce weak blocks, then regenerate."
+      "body": "Raise Min block genes or the identity threshold to retain fewer blocks, then regenerate."
     },
     {
       "title": "The generated diagram differs from the Gallery image",

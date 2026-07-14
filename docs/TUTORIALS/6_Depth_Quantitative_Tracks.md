@@ -5,7 +5,7 @@
 
 # Tutorial 6: Coverage depth and numeric tracks
 
-Add per-base coverage depth tracks, absolute GC-percent tracks, and numeric axes to circular and linear diagrams.
+Add per-base sequencing-depth tracks, GC content (%) tracks, and numeric axes to circular and linear diagrams.
 
 ## 1. Prepare inputs
 
@@ -20,7 +20,7 @@ Sections 2 through 4 use Hepatoplasmataceae genomes and matching per-base depth 
 
 Run the depth examples from the repository root so the `tests/test_inputs/` paths resolve. If you copy the relevant GenBank and TSV files to another working directory, remove that prefix from the commands.
 
-Depth TSV files use the first three columns of samtools depth output: `reference`, 1-based `position`, and non-negative `depth`. A header is optional; gbdraw normalizes these columns to `reference_name`, `position`, and `depth`. The supplied files are headerless and contain one row per base. The examples use non-overlapping 100 nt mean-depth windows to retain local depth structure without producing oversized SVG files.
+Depth TSV files use the first three columns of `samtools depth` output: `reference`, 1-based `position`, and non-negative `depth`. A header is optional; gbdraw normalizes these columns to `reference_name`, `position`, and `depth`. The supplied files are headerless and contain one row per base. The examples plot mean depth in non-overlapping 100 nt windows, retaining local variation without producing oversized SVG files.
 
 Sections 5 and 6 use the MjeNMV GenBank record:
 
@@ -50,9 +50,9 @@ gbdraw circular \
   -f svg
 ```
 
-This writes `tutorial-6-depth-circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. The 150x maximum does not clip the observed 100 nt mean depths and produces evenly spaced 50x tick labels.
+This writes `tutorial-6-depth-circular.svg`. Circular mode uses `--depth_width` for the radial thickness of the depth track. The 150× maximum does not clip the observed mean depth in 100 nt windows and produces evenly spaced 50× tick labels.
 
-![Circular AP027133.1 genome diagram with a blue DRR394922 depth ring and quantitative ticks up to 150x](../../examples/tutorial-6-depth-circular.svg)
+![Circular AP027133.1 genome diagram with a blue DRR394922 depth ring and quantitative ticks up to 150×](../../examples/tutorial-6-depth-circular.svg)
 
 ## 3. Compare depth across records
 
@@ -78,9 +78,9 @@ gbdraw linear \
   -f svg
 ```
 
-This writes `tutorial-6-depth-tracks.svg`. The common 0x to 1,000x scale makes the lower AP027131.1 coverage and higher AP027132.1 coverage directly comparable.
+This writes `tutorial-6-depth-tracks.svg`. The common 0× to 1,000× scale makes the lower AP027131.1 depth and higher AP027132.1 depth directly comparable.
 
-![AP027131.1 and AP027132.1 linear diagrams with DRR394921 depth tracks on shared axes ranging from 0x to 1,000x](../../examples/tutorial-6-depth-tracks.svg)
+![AP027131.1 and AP027132.1 linear diagrams with DRR394921 depth tracks on shared axes ranging from 0× to 1,000×](../../examples/tutorial-6-depth-tracks.svg)
 
 Repeat `--depth_track` only when another matching dataset is available. A second depth track is omitted here because the example data do not include a second matching depth file for both records.
 
@@ -112,15 +112,15 @@ gbdraw linear \
   -f svg
 ```
 
-This writes `tutorial-depth-log-axis.svg`, with a log-scaled depth axis spanning the requested 1x to 250,000x range. AP027078.1 contains a high local coverage peak, and log scaling keeps the background coverage visible without clipping the 100 nt mean depths.
+This writes `tutorial-depth-log-axis.svg`, with a log-scaled depth axis spanning the requested 1× to 250,000× range. AP027078.1 contains a high local depth peak, and log scaling keeps the background depth visible without clipping the mean values from the 100 nt windows.
 
-![Linear AP027078.1 genome diagram with a blue log-scaled DRR394944 depth track and an axis from 1x to 250,000x](../../examples/tutorial-depth-log-axis.svg)
+![Linear AP027078.1 genome diagram with a blue log-scaled DRR394944 depth track and an axis from 1× to 250,000×](../../examples/tutorial-depth-log-axis.svg)
 
 Use `--no_depth_log_scale` to force linear scaling when a config file or saved session enables log scaling.
 
-## 5. Use GC percent mode
+## 5. Plot GC content as a percentage
 
-The default GC content track is mean-centered deviation. Use `--gc_content_mode percent` when the y-axis should show absolute GC percent.
+The default GC content track shows deviation from the mean. Use `--gc_content_mode percent` when the y-axis should show GC content (%).
 
 ```bash
 gbdraw linear \
@@ -139,9 +139,9 @@ gbdraw linear \
 
 This writes `MjeNMV_gc_percent.svg`.
 
-![Linear MjeNMV diagram with an absolute GC percent track and quantitative axis](../../examples/tutorial-6-gc-percent.svg)
+![Linear MjeNMV diagram with a GC content (%) track and quantitative axis](../../examples/tutorial-6-gc-percent.svg)
 
-The same percent-mode options are available in circular mode, together with circular track geometry such as `--gc_content_width` and `--gc_content_radius`.
+The same `percent` mode options are available in circular mode, together with circular track geometry such as `--gc_content_width` and `--gc_content_radius`.
 
 ## 6. Add another skew track
 

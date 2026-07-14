@@ -8,8 +8,8 @@
       "body": "Start with the feature category you want to recolor, such as CDS, rRNA, tRNA, ncRNA, or repeat_region."
     },
     {
-      "title": "Choose the qualifier by the identity you want to encode",
-      "body": "Use gene for shared gene symbols, locus_tag for one specific annotated feature, protein_id for one CDS protein, and product for broader functional categories."
+      "title": "Choose the qualifier that identifies the target",
+      "body": "Use gene for gene symbols, locus_tag for one annotated feature, protein_id for one CDS translation, and product for categories recorded in the product annotation."
     },
     {
       "title": "Keep values specific",

@@ -5,7 +5,7 @@
 
 # Tutorial 2: Compare genomes with BLAST and protein searches
 
-Use precomputed BLAST tables or CDS protein searches to draw linear similarity links, then compare LOSATN and TLOSATX hits in circular mode.
+Use precomputed BLAST tables or protein similarity searches from translated CDS features to draw linear links. The final section compares LOSATN and TLOSATX hits in circular mode.
 
 ## 1. Required inputs
 
@@ -79,7 +79,7 @@ gbdraw linear \
 
 ![Pairwise protein comparison between two Hepatoplasmataceae genomes](../../examples/tutorial-2-protein-pairwise.svg)
 
-Orthogroup-supported ribbons:
+Ribbons between proteins in the same gbdraw orthogroup:
 
 ```bash
 gbdraw linear \
@@ -91,7 +91,7 @@ gbdraw linear \
   -f svg
 ```
 
-![Orthogroup-supported protein ribbons between two Hepatoplasmataceae genomes](../../examples/tutorial-2-protein-orthogroup.svg)
+![Protein ribbons based on gbdraw similarity groups between two Hepatoplasmataceae genomes](../../examples/tutorial-2-protein-orthogroup.svg)
 
 Collinear blocks:
 
@@ -112,7 +112,7 @@ See [Tutorial 4](./4_Protein_Comparisons.md) for runtime selection, labels, and 
 
 ## 5. Interpreting orthogroups and collinear blocks
 
-`pairwise` draws filtered protein matches between adjacent records. `orthogroup` assigns CDS-derived proteins to similarity-based groups and draws group-supported links. `collinear` combines compatible runs of orthogroup-backed anchors into blocks.
+`pairwise` draws filtered protein matches between adjacent records. `orthogroup` assigns CDS-derived proteins to similarity-based groups and draws links between members of the same group. `collinear` combines compatible runs of those protein-match anchors into blocks.
 
 ### Orthogroups
 
@@ -123,7 +123,7 @@ In evolutionary genomics, an orthogroup is a set of genes descended from a singl
 
 ### Collinear blocks
 
-An anchor links a pair of CDS-derived proteins assigned to the same gbdraw orthogroup. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed, which suggests an inversion.
+An anchor links a pair of CDS-derived proteins assigned to the same gbdraw orthogroup. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed, consistent with an inversion between the displayed regions.
 
 Multi-anchor blocks combine protein similarity with conserved local gene order. They can highlight conserved gene neighborhoods, including candidate operons or gene clusters, but they do not by themselves establish shared function or cotranscription. Genes lying between anchors are not automatically homologous or members of the same orthogroup.
 
@@ -295,7 +295,7 @@ Keep the same reference, query order, colors, and layout. Change `LOSAT Mode` to
 
 ![MjeNMV reference with nine majanivirus TLOSATX rings showing broader translated-sequence similarity](../../examples/tutorial-2-majanivirus-tlosatx.svg)
 
-The eight nucleotide-divergent queries produce denser rings in the TLOSATX plot, while MelaMJNV remains dense in both. At these thresholds, translated-sequence similarity remains detectable in many regions that have no retained LOSATN HSP.
+The eight queries with few retained nucleotide hits produce denser rings in the TLOSATX plot, while MelaMJNV remains dense in both. At these thresholds, translated-sequence similarity remains detectable in many regions that have no retained LOSATN HSP.
 
 At the displayed thresholds, each of the eight divergent queries yields 108–177 LOSATN HSPs and 769–2,000 TLOSATX HSPs.
 

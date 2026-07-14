@@ -4,7 +4,7 @@
 
 # Quickstart
 
-This quickstart creates a first circular plot with the CLI. If you prefer a GUI, use [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` locally after installation.
+This quickstart shows how to draw a circular genome diagram with the CLI. If you prefer a GUI, use [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` locally after installation.
 
 ## 1. Confirm the installation
 
@@ -45,7 +45,7 @@ Open the resulting SVG in a browser or vector editor.
 
 ![Circular E. coli K-12 genome diagram with separate forward and reverse strand tracks](../examples/ecoli_k12_plot.svg)
 
-## 5. Optional: add labels or a centered definition
+## 5. Optional: add labels or a centered organism name
 
 Show labels for a focused set of RNA features. Restricting this large *E. coli* genome to rRNA and tRNA features keeps the labels readable:
 
@@ -112,7 +112,7 @@ gbdraw linear \
 ## Next steps
 
 - Continue to [Tutorial 1: Customize a circular plot](./TUTORIALS/1_Customizing_Plots.md)
-- Use [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) for generated protein comparisons without precomputed BLAST tables
+- Use [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) to generate protein comparisons from annotated CDS features
 - Use [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for row-coupled records, selectors, and table manifests
 - Browse [Recipes](./RECIPES.md) for common command patterns
 - Use the [CLI Reference](./CLI_Reference.md) for the full option list

@@ -53,7 +53,7 @@ Circular conservation rings draw raw HSP spans only. A BLAST row where the selec
 
 ## Can pairwise comparison links be curved?
 
-Yes. In linear mode, `--pairwise_match_style ribbon` is the default straight filled ribbon style. Use `--pairwise_match_style curve` for curved filled ribbons, which are useful for dense synteny-style views while still preserving each match span.
+Yes. In linear mode, `--pairwise_match_style ribbon` draws straight filled ribbons by default. Use `--pairwise_match_style curve` to bend the same match spans; curved links can be easier to distinguish in a dense comparison plot.
 
 ## Can I use gene names instead of product descriptions for labels?
 
@@ -67,7 +67,7 @@ CDS	gene
 gbdraw circular --gbk genome.gb --labels --qualifier_priority priority.tsv -o output -f svg
 ```
 
-## How do I make the GC curve smoother?
+## How do I make the GC content track smoother?
 
 Increase the window and step sizes:
 

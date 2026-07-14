@@ -3,9 +3,9 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 3](./3_Advanced_Customization.md) | [Go to Tutorial 5 >](./5_Table_Driven_Inputs.md)
 
-# Tutorial 4: Protein comparisons without precomputed BLAST
+# Tutorial 4: Protein comparisons from annotated CDS features
 
-Build linear comparison plots from CDS-derived proteins without preparing BLAST tables first.
+Build linear comparison plots by translating annotated CDS features and searching the resulting protein sequences.
 
 ## 1. Prepare annotated GenBank inputs
 
@@ -23,7 +23,7 @@ If you are working from a source checkout, the same files are also available und
 
 ## 2. Runtime selection
 
-Unless you pass an explicit executable path, `--protein_blastp_mode pairwise`, `orthogroup`, and `collinear` resolve the protein search runtime in this order:
+Unless you pass an explicit executable path, `--protein_blastp_mode pairwise`, `orthogroup`, and `collinear` choose the protein search program in this order:
 
 1. bundled native LOSAT on Linux x86_64 when available
 2. `losat` on `PATH`
@@ -56,9 +56,9 @@ NCBI BLAST+ output is compatible with the workflow, but it may not produce exact
 
 Pass only one of `--losatp_bin` and `--ncbi_blastp_bin` in a command.
 
-## 3. Pairwise protein ribbons
+## 3. Pairwise protein matches
 
-`pairwise` runs adjacent protein searches and draws pairwise ribbons from the resulting matches.
+`pairwise` searches each adjacent record pair and draws a ribbon for every retained protein match.
 
 ```bash
 gbdraw linear \
@@ -76,7 +76,7 @@ This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-deri
 
 ## 4. Orthogroup ribbons
 
-`orthogroup` groups related CDS-derived proteins across all input records before drawing adjacent display ribbons.
+`orthogroup` assigns CDS-derived proteins to similarity-based groups across all input records before drawing ribbons between adjacent records.
 
 ```bash
 gbdraw linear \
@@ -93,11 +93,11 @@ This writes `majani_orthogroup.svg`.
 
 `--show_labels orthogroup_top` labels the topmost displayed member of each orthogroup, which is useful when the same group appears in multiple records.
 
-![Orthogroup-supported protein ribbons across three majanivirus records](../../examples/majani_orthogroup.svg)
+![Protein ribbons based on gbdraw similarity groups across three majanivirus records](../../examples/majani_orthogroup.svg)
 
 ## 5. Collinear blocks
 
-`collinear` keeps protein-supported matches that occur in compatible local order.
+`collinear` combines protein-match anchors that occur in compatible local order.
 
 ```bash
 gbdraw linear \
@@ -119,7 +119,7 @@ This writes `majani_collinear.svg`.
 
 ## 6. When to prefer precomputed `-b/--blast`
 
-Use precomputed BLAST tables when you need exact reproducibility from a specific BLAST version, custom database settings, nucleotide comparisons, translated nucleotide searches, or a workflow that has already filtered hits upstream.
+Use precomputed BLAST tables when you need to preserve an existing result, use custom database settings, compare nucleotide or translated nucleotide sequences, or draw hits that were filtered by an upstream workflow.
 
 Do not combine `-b/--blast` with `--protein_blastp_mode`. The CLI rejects that combination because the two options define different comparison sources.
 

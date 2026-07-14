@@ -90,7 +90,7 @@
           ["Execution", "Auto"],
           ["Total threads", "Safe"],
           ["Parallel runs", "Auto"],
-          ["Threads per run", "Auto for normal use, or 32 when you need to mirror the saved CLI command"]
+          ["Threads per run", "Auto for routine runs, or 32 when you need to mirror the saved CLI command"]
         ]
       },
       "operations": [
@@ -105,7 +105,7 @@
     },
     {
       "title": "Keep orthogroup matching enabled",
-      "body": "Use Orthogroups when you want each ribbon to represent an orthogroup-backed protein relationship rather than a merged collinear block.",
+      "body": "Use Orthogroups to draw links between proteins assigned to the same gbdraw similarity group rather than combining anchors into collinear blocks.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -116,7 +116,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "Orthogroup evidence is built from all record pairs; the diagram draws ribbons between adjacent displayed records. The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks.",
+      "note": "gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records. These groups support visualization but are not phylogeny-based orthology assignments. The companion collinear tutorial combines compatible runs of the same protein-match anchors into larger gene-order blocks.",
       "operations": [
         {
           "title": "Orthogroups mode controls",
@@ -223,7 +223,7 @@
     },
     {
       "title": "Generate and inspect the orthogroup overview",
-      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache. The generated preview should show many individual green pairwise ribbons instead of larger orientation-colored collinear blocks.",
+      "body": "Click Generate Diagram. The first LOSATP search can take time; later runs reuse its results when the input files and LOSAT settings have not changed. The preview should show many individual green pairwise ribbons instead of larger orientation-colored collinear blocks.",
       "operations": [
         {
           "media": {
@@ -236,7 +236,7 @@
     },
     {
       "title": "Open an orthogroup match popup",
-      "body": "Click a pairwise ribbon in the interactive SVG to inspect the orthogroup ID, display name, member count, and record coverage. The member table remains available below the summary.",
+      "body": "Click a pairwise ribbon in the interactive SVG to inspect the group ID, display name, member count, and record coverage. The table below the summary lists the member proteins.",
       "operations": [
         {
           "media": {
@@ -360,7 +360,7 @@
     },
     {
       "title": "Prefer Safe total threads",
-      "body": "Safe avoids consuming every logical CPU and is the best default when you want the browser to remain responsive."
+      "body": "Safe leaves some logical CPUs unused so the browser can remain responsive."
     },
     {
       "title": "Keep Threads per run on Auto",
@@ -372,7 +372,7 @@
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so iterative diagram styling is faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so styling edits avoid another search."
     }
   ],
   "troubleshooting": [

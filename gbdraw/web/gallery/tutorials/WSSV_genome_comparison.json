@@ -2,7 +2,7 @@
   "id": "WSSV_genome_comparison",
   "version": 1,
   "title": "Reproduce the WSSV circular conservation ring comparison in the web app",
-  "summary": "Build a single-reference circular White spot syndrome virus diagram with 20 conservation rings generated from browser LOSAT blastn results.",
+  "summary": "Build a circular White spot syndrome virus reference diagram with 20 rings of retained nucleotide-similarity hits from browser LOSAT blastn searches.",
   "estimatedTime": "10-30 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Circular",
@@ -363,7 +363,7 @@
     },
     {
       "title": "Set conservation thresholds",
-      "body": "Use strict blastn thresholds so the rings show high-confidence conserved nucleotide segments.",
+      "body": "Set the blastn filters so each ring shows HSPs with bitscore at least 100, E-value at most 1e-30, identity at least 90%, and alignment length at least 100 nt.",
       "table": {
         "columns": ["Threshold", "Value"],
         "rows": [
@@ -391,7 +391,7 @@
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-09-01-conservation-rings.webp",
             "alt": "Generated WSSV conservation diagram with 20 conservation rings and the left identity legend.",
-            "caption": "The generated preview stacks 20 conservation rings inside the reference CDS feature ring."
+            "caption": "The generated preview stacks 20 nucleotide-similarity hit rings inside the reference CDS feature ring."
           }
         }
       ]
@@ -464,11 +464,11 @@
   "losatTips": [
     {
       "title": "Use blastn megablast for close viral genomes",
-      "body": "The WSSV comparison uses nucleotide-level conservation, so blastn with megablast is the appropriate browser LOSAT workflow."
+      "body": "These WSSV genomes are compared at the nucleotide level. The tutorial uses the megablast task for the closely related sequences."
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when the canonical inputs and LOSAT settings match, so styling-only changes should be faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so styling edits avoid another search."
     }
   ],
   "troubleshooting": [
@@ -482,7 +482,7 @@
     },
     {
       "title": "The rings look too sparse",
-      "body": "The Gallery figure uses strict thresholds. Lower identity or alignment length only when you intentionally want weaker matches to appear."
+      "body": "The Gallery figure uses the thresholds listed above. Lower the identity or alignment-length cutoff only when you want to retain more weak or short HSPs."
     },
     {
       "title": "The browser becomes slow",

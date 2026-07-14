@@ -50,7 +50,7 @@ Each `region` cell is scoped to its own row. Use only coordinates such as `1000-
 
 ## 3. Linear `--records_table` for GFF3 + FASTA rows
 
-Create a tiny pair of GFF3 + FASTA inputs:
+Create a small pair of GFF3 + FASTA inputs:
 
 ```bash
 cat > toy_a.fna <<'EOF'
@@ -153,7 +153,7 @@ gbdraw circular \
 
 This writes `MjeNMV_conservation_table.svg`.
 
-![Circular MjeNMV diagram with five retained MelaMJNV conservation segments loaded through a table](../../examples/tutorial-5-conservation-table.svg)
+![Circular MjeNMV diagram with five retained MelaMJNV TBLASTX HSP spans loaded through a table](../../examples/tutorial-5-conservation-table.svg)
 
 `--conservation_table` cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
 

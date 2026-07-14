@@ -5,7 +5,7 @@
 
 # Tutorial 9: Feature visibility and shapes
 
-Override which features are drawn or included in generated protein comparisons, and change feature shapes without changing the input annotation.
+Control which annotated features are drawn or passed to gbdraw's protein searches, and change feature shapes without editing the input annotation.
 
 ## 1. Prepare an input
 
@@ -78,10 +78,8 @@ The baseline selects only CDS features. The table hides cytochrome c oxidase sub
 Actions:
 
 - `show` draws matching features even when the baseline `-k/--features` list would not include them.
-- `off` hides matching features and removes them from downstream analysis inputs.
-- `exclude_matching` keeps the baseline drawing decision, but removes matching features from generated protein comparison inputs. In the example, ATP synthase F0 subunit 6 therefore remains visible.
-
-Use only the current action names listed above.
+- `off` hides matching features and removes them from protein search inputs.
+- `exclude_matching` keeps the feature's current visibility but removes it from protein search inputs. In the example, ATP synthase F0 subunit 6 therefore remains visible.
 
 ## 5. Combine with feature type, color, and label controls
 
