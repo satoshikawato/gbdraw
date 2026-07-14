@@ -5,7 +5,7 @@
 
 # Tutorial 4: Protein comparisons from annotated CDS features
 
-Build linear comparison plots by translating annotated CDS features and searching the resulting protein sequences.
+Build linear comparison diagrams by translating annotated CDS features and searching the resulting protein sequences.
 
 ## 1. Prepare annotated GenBank inputs
 
@@ -74,9 +74,9 @@ This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-deri
 
 ![Pairwise majanivirus protein comparison with curved ribbons between two linear records](../../examples/tutorial-protein-pairwise.svg)
 
-## 4. Orthogroup ribbons
+## 4. Similarity-group ribbons (`orthogroup` mode)
 
-`orthogroup` assigns CDS-derived proteins to similarity-based groups across all input records before drawing ribbons between adjacent records.
+`orthogroup` assigns CDS-derived proteins to similarity groups across all input records before drawing ribbons between adjacent records. The mode does not perform phylogeny-based orthology inference.
 
 ```bash
 gbdraw linear \
@@ -91,7 +91,7 @@ gbdraw linear \
 
 This writes `majani_orthogroup.svg`.
 
-`--show_labels orthogroup_top` labels the topmost displayed member of each orthogroup, which is useful when the same group appears in multiple records.
+`--show_labels orthogroup_top` labels the topmost displayed member of each gbdraw similarity group, which is useful when the same group appears in multiple records.
 
 ![Protein ribbons based on gbdraw similarity groups across three majanivirus records](../../examples/majani_orthogroup.svg)
 

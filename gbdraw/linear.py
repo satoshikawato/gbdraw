@@ -555,7 +555,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         "--records_table",
         metavar="TSV",
-        help="TSV manifest for row-coupled input records and per-record options.",
+        help="TSV manifest for row-based input records and per-record options.",
         type=str)
     parser.add_argument(
         '-b',
@@ -592,7 +592,7 @@ def _get_args(args) -> argparse.Namespace:
         '--protein_blastp_mode',
         hidden_aliases=('--protein-blastp-mode',),
         dest='protein_blastp_mode',
-        help='Protein blastp comparison mode: none, pairwise adjacent ribbons, all-record Orthogroups, or Collinear blocks (default: none).',
+        help='Protein blastp comparison mode: none, pairwise adjacent ribbons, all-record similarity groups (orthogroup), or collinear blocks (default: none).',
         choices=PROTEIN_BLASTP_MODES,
         default='none')
     _add_argument_with_hidden_aliases(
@@ -616,7 +616,7 @@ def _get_args(args) -> argparse.Namespace:
         '--align_orthogroup_feature',
         hidden_aliases=('--align-orthogroup-feature',),
         dest='align_orthogroup_feature',
-        help='Align linear records by the protein blastp orthogroup containing this feature SVG hash or protein ID.',
+        help='Align linear records by the gbdraw similarity group containing this feature SVG hash or protein ID.',
         type=str,
         default="")
     _add_argument_with_hidden_aliases(
@@ -769,7 +769,7 @@ def _get_args(args) -> argparse.Namespace:
         '--keep_definition_left_aligned',
         hidden_aliases=('--keep-definition-left-aligned',),
         dest='keep_definition_left_aligned',
-        help='Keep linear definition labels in the left column when records are center-aligned or aligned by orthogroup (default: False).',
+        help='Keep the linear record-label block in the left column when records are center-aligned or aligned by a gbdraw similarity group (default: False).',
         action='store_true')
     parser.add_argument(
         '--evalue',
@@ -859,7 +859,7 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--record_label',
-        help='Optional top definition line (for example organism/strain; repeatable; order matches input records)',
+        help='Optional top record-label line (for example organism/strain; repeatable; order matches input records)',
         type=str,
         action='append',
         default=[])
@@ -868,21 +868,21 @@ def _get_args(args) -> argparse.Namespace:
         '--record_subtitle',
         hidden_aliases=('--record-subtitle',),
         dest='record_subtitle',
-        help='Optional second definition line (repeatable; order matches input records)',
+        help='Optional second record-label line (repeatable; order matches input records)',
         type=str,
         action='append',
         default=[])
     parser.add_argument(
         '--show_replicon',
-        help='Show inferred replicon labels in linear record definitions (default: False).',
+        help='Show inferred replicon labels in linear record-label blocks (default: False).',
         action='store_true')
     parser.add_argument(
         '--hide_accession',
-        help='Hide accession labels in linear record definitions (default: False).',
+        help='Hide accession labels in linear record-label blocks (default: False).',
         action='store_true')
     parser.add_argument(
         '--hide_length',
-        help='Hide length/coordinate labels in linear record definitions (default: False).',
+        help='Hide length/coordinate labels in linear record-label blocks (default: False).',
         action='store_true')
     parser.add_argument(
         '--label_font_size',
@@ -966,7 +966,7 @@ def _get_args(args) -> argparse.Namespace:
         default="right")
     parser.add_argument(
             "--show_labels",
-            help="Show labels: no argument or 'all' (all records), 'first' (first record only), 'orthogroup_top' (topmost record containing each orthogroup), 'none' (no labels). Default: 'none'",
+            help="Show labels: no argument or 'all' (all records), 'first' (first record only), 'orthogroup_top' (topmost record containing each gbdraw similarity group), 'none' (no labels). Default: 'none'",
             nargs='?',
             const="all",
             default="none",

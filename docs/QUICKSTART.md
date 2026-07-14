@@ -22,7 +22,7 @@ This example uses the *Escherichia coli* K-12 reference genome.
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O NC_000913.gbk
 ```
 
-## 3. Generate a circular plot
+## 3. Generate a circular genome diagram
 
 ```bash
 gbdraw circular \
@@ -36,7 +36,7 @@ This command:
 
 - reads `NC_000913.gbk`
 - writes `ecoli_k12_plot.svg`
-- draws a circular plot
+- draws a circular genome diagram
 - separates forward and reverse strands into different feature tracks
 
 ## 4. Inspect the output
@@ -45,7 +45,7 @@ Open the resulting SVG in a browser or vector editor.
 
 ![Circular E. coli K-12 genome diagram with separate forward and reverse strand tracks](../examples/ecoli_k12_plot.svg)
 
-## 5. Optional: add labels or a centered organism name
+## 5. Optional: add feature labels or a center label
 
 Show labels for a focused set of RNA features. Restricting this large *E. coli* genome to rRNA and tRNA features keeps the labels readable:
 
@@ -61,7 +61,7 @@ gbdraw circular \
 
 ![Circular E. coli K-12 genome with labeled rRNA and tRNA features](../examples/quickstart-labeled-rna-features.svg)
 
-Add centered organism text:
+Add a species and strain to the center of the diagram:
 
 ```bash
 gbdraw circular \
@@ -73,7 +73,7 @@ gbdraw circular \
   --strain "K-12"
 ```
 
-![Circular E. coli K-12 genome diagram with a centered italic species name and strain](../examples/ecoli_with_title.svg)
+![Circular E. coli K-12 genome diagram with an italic species name and strain in the center](../examples/ecoli_with_title.svg)
 
 ## 6. Optional: linear mode selectors
 
@@ -111,9 +111,9 @@ gbdraw linear \
 
 ## Next steps
 
-- Continue to [Tutorial 1: Customize a circular plot](./TUTORIALS/1_Customizing_Plots.md)
+- Continue to [Tutorial 1: Customize a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md)
 - Use [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) to generate protein comparisons from annotated CDS features
-- Use [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for row-coupled records, selectors, and table manifests
+- Use [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for row-based records, selectors, and table manifests
 - Browse [Recipes](./RECIPES.md) for common command patterns
 - Use the [CLI Reference](./CLI_Reference.md) for the full option list
 - Explore more figures in the [Gallery](./GALLERY.md)

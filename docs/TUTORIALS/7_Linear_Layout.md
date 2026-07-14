@@ -3,9 +3,9 @@
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 6](./6_Depth_Quantitative_Tracks.md) | [Go to Tutorial 8 >](./8_Interactive_SVG_Sessions.md)
 
-# Tutorial 7: Linear layout, definitions, and rulers
+# Tutorial 7: Linear track layout, record labels, and rulers
 
-Customize linear plots with track placement, rulers, record definitions, titles, and custom track slots.
+Customize linear diagrams with track placement, rulers, record labels, titles, and custom track slots.
 
 ## 1. Prepare inputs
 
@@ -71,13 +71,13 @@ gbdraw linear \
   -f svg
 ```
 
-The result combines per-record axis rulers, ordered definition lines, and a shared title:
+The result combines per-record axis rulers, ordered record-label lines, and a shared title:
 
-![Linear majanivirus plot with a top title, two record definition blocks, and 50 kbp rulers on the record axes](../../examples/tutorial-7-linear-layout.svg)
+![Linear majanivirus diagram with a top title, two record-label blocks, and 50 kbp rulers on the record axes](../../examples/tutorial-7-linear-layout.svg)
 
-## 5. Tune definition lines
+## 5. Format the record-label block
 
-Use definition controls when a publication figure needs compact record labels.
+Use the definition-line options when a publication figure needs compact record labels.
 
 ```bash
 gbdraw linear \
@@ -96,9 +96,9 @@ gbdraw linear \
   -f svg
 ```
 
-`--keep_definition_left_aligned` keeps the definition column fixed while `--align_center` moves the record axes. `--hide_accession` and `--hide_length` remove the default metadata lines. `--show_replicon` adds a line only when a source feature supplies a `chromosome` or `plasmid` qualifier.
+`--keep_definition_left_aligned` keeps the record-label column fixed while `--align_center` moves the record axes. `--hide_accession` and `--hide_length` remove the default metadata lines. `--show_replicon` adds a line only when a source feature supplies a `chromosome` or `plasmid` qualifier.
 
-![Two centered majanivirus records with compact bold names and gray subtitles in a fixed left definition column](../../examples/tutorial-7-definition-lines.svg)
+![Two centered majanivirus records with compact bold names and gray subtitles in a fixed left record-label column](../../examples/tutorial-7-definition-lines.svg)
 
 ## 6. Customize linear track slots
 

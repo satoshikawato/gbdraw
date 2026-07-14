@@ -1763,11 +1763,11 @@
                         <template v-if="mode === 'circular'">
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label class="input-label">Species <help-tip text="Species label used in the centered circular definition when no custom plot title is set."></help-tip></label>
+                                    <label class="input-label">Species <help-tip text="Species name used in the circular center label when no custom plot title is set."></help-tip></label>
                                     <input type="text" v-model="form.species" class="form-input" placeholder="e.g. <i>Escherichia coli</i>">
                                 </div>
                                 <div>
-                                    <label class="input-label">Strain <help-tip text="Strain or isolate label used in the centered circular definition."></help-tip></label>
+                                    <label class="input-label">Strain <help-tip text="Strain or isolate name used in the circular center label."></help-tip></label>
                                     <input type="text" v-model="form.strain" class="form-input" placeholder="e.g. K-12">
                                 </div>
                             </div>
@@ -1812,7 +1812,7 @@
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Keep linear definition labels in the left column when records are center-aligned or aligned by orthogroup."></help-tip></span>
+                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Keep the linear record-label block in the left column when records are center-aligned or aligned by a gbdraw similarity group."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.normalize_length" class="form-checkbox">
@@ -2137,7 +2137,7 @@
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
                                             <div>
-                                                <label class="input-label text-[10px]">Center Reserved Radius <help-tip text="Override the centered definition reserved radius in px. Lower values let inside tracks move closer to the center and may overlap center text."></help-tip></label>
+                                                <label class="input-label text-[10px]">Center Reserved Radius <help-tip text="Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center and may overlap the label."></help-tip></label>
                                                 <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" class="form-input form-input-compact" placeholder="Auto">
                                             </div>
                                         </div>
@@ -2431,7 +2431,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-textbox"></i> Title &amp; Legend <help-tip text="Adjust plot title, definition text, and legend settings."></help-tip></summary>
+                        <summary><i class="ph ph-textbox"></i> Title &amp; Legend <help-tip text="Adjust the plot title, record-label text, and legend."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <label class="input-label text-[10px] mb-1">
@@ -2454,7 +2454,7 @@
                                 <div>
                                     <label class="input-label text-[10px] mb-1">
                                         Plot Title Position
-                                        <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record definitions stay centered.' : 'Placement of the linear plot title.'"></help-tip>
+                                        <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record center labels stay in place.' : 'Placement of the linear plot title.'"></help-tip>
                                     </label>
                                     <select v-model="adv.plot_title_position" class="form-input text-xs py-1">
                                         <option v-if="mode === 'circular'" value="none">None (Default)</option>
@@ -2479,7 +2479,7 @@
                                 <div>
                                     <label class="input-label text-[10px] mb-0">
                                         Definition Font Size
-                                        <help-tip text="Font size for definition text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip>
+                                        <help-tip text="Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip>
                                     </label>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
                                         <input
@@ -2512,7 +2512,7 @@
                                     >
                                     <span class="inline-flex items-center gap-1">
                                         Show Accession
-                                        <help-tip text="Linear only. Shows the accession line in each record definition. Default: on."></help-tip>
+                                        <help-tip text="Linear only. Shows the accession line in each record-label block. Default: on."></help-tip>
                                     </span>
                                 </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -2532,7 +2532,7 @@
                                 <div class="flex items-center justify-between">
                                     <h4 class="text-[11px] font-bold text-slate-500">
                                         Definition Line Styles
-                                        <help-tip text="Linear only. Optional line-specific size, weight, and fill overrides for the record definition stack."></help-tip>
+                                    <help-tip text="Linear only. Optional line-specific size, weight, and fill overrides for the record-label block."></help-tip>
                                     </h4>
                                 </div>
                                 <div class="grid grid-cols-[minmax(6rem,1fr)_3.75rem_max-content_minmax(8rem,1.2fr)] gap-1.5 items-center">
@@ -2603,7 +2603,7 @@
                                 >
                                 <span class="inline-flex items-center gap-1">
                                     Keep Full Definition with Plot Title
-                                    <help-tip text="Circular only. Keeps species and strain in the centered record definitions when a plot title is shown, including shared multi-record canvases."></help-tip>
+                                    <help-tip text="Circular only. Keeps species and strain in the center label when a plot title is shown, including shared multi-record canvases."></help-tip>
                                 </span>
                             </label>
 

@@ -4,9 +4,9 @@
 
 [< Back to the Tutorials Index](./TUTORIALS.md)
 
-# Tutorial 1: Customize a circular plot
+# Tutorial 1: Customize a circular genome diagram
 
-Start here for the main circular-plot styling controls: palettes, track presets, centered definition text, titles, and labels.
+This tutorial covers the main styling controls for circular genome diagrams: palettes, track presets, center labels, plot titles, and feature labels.
 
 ## 1. Change the color scheme
 
@@ -46,13 +46,13 @@ Custom track slots can reorder tracks without replacing the preset geometry. Whe
 
 The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular track slot.
 
-The montage compares `tuckin`, `middle`, and `spreadout` from left to right. All three plots use `--separate_strands`.
+The montage compares `tuckin`, `middle`, and `spreadout` from left to right. All three diagrams use `--separate_strands`.
 
 ![Circular WSSV diagrams comparing tuckin, middle, and spreadout presets with separate strand tracks](../../examples/track_layout_separate_strands.png)
 
-## 3. Add centered organism text or a plot title
+## 3. Add a center label or plot title
 
-Use `--species` and `--strain` to control the centered definition text:
+Use `--species` and `--strain` to label the center of the diagram:
 
 ```bash
 gbdraw circular \
@@ -64,7 +64,7 @@ gbdraw circular \
   --strain "K-12"
 ```
 
-The species name is italicized and shown with the strain in the centered definition text.
+The species name is italicized and shown with the strain at the center of the diagram.
 
 ![Circular E. coli K-12 diagram with an italic species name and centered strain text](../../examples/ecoli_with_title.svg)
 
@@ -100,7 +100,7 @@ With the default `--label_rendering auto` mode, labels that fit are embedded in 
 > [!WARNING]
 > Avoid `--labels` or `--labels both` on feature-dense genomes unless you also filter labels with `--label_blacklist` or `--label_whitelist`.
 
-## 5. Simplify the plot
+## 5. Simplify the diagram
 
 Suppress the GC tracks and legend to leave more space for annotated features:
 

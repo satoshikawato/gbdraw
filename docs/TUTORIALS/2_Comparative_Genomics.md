@@ -9,7 +9,7 @@ Use precomputed BLAST tables or protein similarity searches from translated CDS 
 
 ## 1. Required inputs
 
-Linear comparative plots require two or more annotated genomes in GenBank or GFF3 + FASTA format.
+Linear genome comparisons require two or more annotated genomes in GenBank or GFF3 + FASTA format.
 
 For precomputed searches, supply one tabular nucleotide or protein BLAST output file for each adjacent record pair with `-b/--blast`. gbdraw accepts outfmt 6 and outfmt 7.
 
@@ -20,7 +20,7 @@ To run a protein search during diagram generation, omit `-b/--blast` and select 
 
 ## 2. Prepare a pairwise example
 
-This example uses the first two sequences from the [Hepatoplasmataceae five-genome comparison](../GALLERY.md#hepatoplasmataceae-five-genome-comparison): *Candidatus Tyloplasma litorale* (AP027078.1) and *Candidatus Hepatoplasma vulgare* (AP027131.1).
+This example uses the first two sequences from the [Hepatoplasmataceae five-genome comparison](../GALLERY.md#hepatoplasmataceae-five-genome-comparison): "*Candidatus* Tyloplasma litorale" (AP027078.1) and "*Candidatus* Hepatoplasma vulgare" (AP027131.1).
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027078.1&rettype=gbwithparts&retmode=text" -O AP027078.gb
@@ -40,7 +40,7 @@ tblastx \
   -out AP027078_AP027131.tblastx.out
 ```
 
-## 3. Generate the pairwise plot
+## 3. Generate the pairwise diagram
 
 ```bash
 gbdraw linear \
@@ -79,7 +79,7 @@ gbdraw linear \
 
 ![Pairwise protein comparison between two Hepatoplasmataceae genomes](../../examples/tutorial-2-protein-pairwise.svg)
 
-Ribbons between proteins in the same gbdraw orthogroup:
+Ribbons between proteins in the same gbdraw similarity group (`orthogroup` mode):
 
 ```bash
 gbdraw linear \
@@ -110,22 +110,22 @@ gbdraw linear \
 
 See [Tutorial 4](./4_Protein_Comparisons.md) for runtime selection, labels, and collinear tuning.
 
-## 5. Interpreting orthogroups and collinear blocks
+## 5. gbdraw similarity groups and collinear blocks
 
-`pairwise` draws filtered protein matches between adjacent records. `orthogroup` assigns CDS-derived proteins to similarity-based groups and draws links between members of the same group. `collinear` combines compatible runs of those protein-match anchors into blocks.
+`pairwise` draws filtered protein matches between adjacent records. `orthogroup` assigns CDS-derived proteins to similarity groups and draws links between members of the same group. `collinear` combines compatible runs of those protein-match anchors into blocks.
 
-### Orthogroups
+### Why gbdraw groups are not inferred orthogroups
 
 In evolutionary genomics, an orthogroup is a set of genes descended from a single gene in the last common ancestor of the taxa being compared. Different genomes may contribute one gene, multiple genes, or no detectable member. An orthogroup is therefore not necessarily a set of one-to-one orthologs.
 
 > [!NOTE]
-> gbdraw builds similarity-based groups for visualization; it does not infer gene or species trees. These groups are not a substitute for phylogenetically informed orthology inference. Use a dedicated workflow such as OrthoFinder when orthology assignments are the analysis goal.
+> The gbdraw mode is named `orthogroup`, but it builds similarity groups for visualization and does not infer gene or species trees. Do not treat these groups as orthology assignments. Use a phylogenetically informed tool such as OrthoFinder when orthology inference is the analysis goal.
 
 ### Collinear blocks
 
-An anchor links a pair of CDS-derived proteins assigned to the same gbdraw orthogroup. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed, consistent with an inversion between the displayed regions.
+An anchor links a pair of CDS-derived proteins assigned to the same gbdraw similarity group. A collinear block is a run of anchors with compatible order in two records. For multi-anchor blocks, `plus` means that the anchors occur in the same order in both records; `minus` means that their order is reversed, consistent with an inversion between the displayed regions.
 
-Multi-anchor blocks combine protein similarity with conserved local gene order. They can highlight conserved gene neighborhoods, including candidate operons or gene clusters, but they do not by themselves establish shared function or cotranscription. Genes lying between anchors are not automatically homologous or members of the same orthogroup.
+Multi-anchor blocks combine protein similarity with conserved local gene order. They can highlight conserved gene neighborhoods, including candidate operons or gene clusters, but they do not by themselves establish shared function or cotranscription. Genes lying between anchors are not automatically homologous or members of the same similarity group.
 
 The default `--collinear_min_anchors 1` retains singleton links. Set it to `2` to require at least two anchors per rendered block; higher values require more anchors.
 

@@ -783,12 +783,12 @@ def test_interactive_gallery_examples_are_wired() -> None:
     ]
     assert gallery_svg_sizes == sorted(gallery_svg_sizes)
     assert [entry["title"] for entry in examples] == [
-        "<i>Homo sapiens</i> mitochondrion (AT skew)",
+        "Human mitochondrial genome (AT skew)",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "White spot syndrome virus genome comparison",
-        "Large dsDNA viruses (<i>Nimaviridae</i>)",
-        "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
-        "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
+        "Majanivirus genomes (protein similarity groups)",
+        "Hepatoplasmataceae genome comparison (collinear blocks)",
+        "Hepatoplasmataceae genome comparison (protein similarity groups)",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
     ]
     for entry in examples:

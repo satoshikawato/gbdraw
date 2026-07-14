@@ -1,7 +1,7 @@
 [
   {
     "id": "HmmtDNA_ATskew",
-    "title": "<i>Homo sapiens</i> mitochondrion (AT skew)",
+    "title": "Human mitochondrial genome (AT skew)",
     "tags": [
       "Circular",
       "Mitochondrion"
@@ -27,7 +27,7 @@
     "tags": [
       "Linear",
       "LOSAT",
-      "Orthogroup"
+      "Similarity groups"
     ],
     "svg": "./examples/BGC0000708-BGC0000713.svg",
     "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
@@ -73,11 +73,11 @@
   },
   {
     "id": "majanivirus_orthogroup",
-    "title": "Large dsDNA viruses (<i>Nimaviridae</i>)",
+    "title": "Majanivirus genomes (protein similarity groups)",
     "tags": [
       "Linear",
       "LOSAT",
-      "Orthogroup"
+      "Similarity groups"
     ],
     "svg": "./examples/majanivirus_orthogroup.svg",
     "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
@@ -104,7 +104,7 @@
   },
   {
     "id": "hepatoplasmataceae_collinear",
-    "title": "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
+    "title": "Hepatoplasmataceae genome comparison (collinear blocks)",
     "tags": [
       "Linear",
       "LOSAT",
@@ -131,11 +131,11 @@
   },
   {
     "id": "hepatoplasmataceae_orthogroup",
-    "title": "<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
+    "title": "Hepatoplasmataceae genome comparison (protein similarity groups)",
     "tags": [
       "Linear",
       "LOSAT",
-      "Orthogroup"
+      "Similarity groups"
     ],
     "svg": "./examples/hepatoplasmataceae_orthogroup.svg",
     "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",

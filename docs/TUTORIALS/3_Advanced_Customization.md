@@ -5,7 +5,7 @@
 
 # Tutorial 3: Control colors, labels, and appearance
 
-Use tables and styling options to control feature colors, labels, and plot appearance.
+Use tables and styling options to control feature colors, labels, and diagram appearance.
 
 ## Color tables
 
@@ -239,7 +239,7 @@ The linear result places the 45-degree labels above their features:
 
 ![Linear MjeNMV diagram with feature labels rotated 45° above the feature track](../../examples/tutorial-3-above-feature-labels.svg)
 
-## Fine-tune plot appearance
+## Fine-tune diagram appearance
 
 `--track_type` selects the base circular preset (`tuckin`, `middle`, or `spreadout`). Custom track slots add an ordered slot list on top of that preset. A built-in slot inherits any omitted radius, width, physical gaps, placement, and standard renderer parameters from the preset for each record. Explicit `r`, `w`, `inner_gap_px`, `outer_gap_px`, `side`, `z`, and renderer parameters override the inherited values. The legacy `spacing` field remains a compatibility alias for both circular gaps.
 
@@ -275,9 +275,9 @@ gbdraw circular \
   -f svg
 ```
 
-The first montage compares centered definition text at 20, 28, and 36 pt from left to right.
+The first montage compares center-label text at 20, 28, and 36 pt from left to right.
 
-![Human mitochondrial diagrams comparing 20, 28, and 36 pt centered definition text](../../examples/definition_font_size_comparison.png)
+![Human mitochondrial diagrams comparing 20, 28, and 36 pt center-label text](../../examples/definition_font_size_comparison.png)
 
 The second montage compares circular feature labels at 8, 12, and 16 pt from left to right.
 
@@ -289,7 +289,7 @@ The final montage compares paired x/y outer-label offsets of 0.95, 1.00, 1.05, a
 
 ## Linear mode input selectors
 
-For linear plots, the main selectors are:
+For linear diagrams, the main selectors are:
 
 - `--record_id`
 - `--reverse_complement`

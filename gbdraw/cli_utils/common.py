@@ -44,7 +44,7 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--gbk",
         metavar="GBK_FILE",
-        help='Genbank/DDBJ flatfile',
+        help='GenBank/DDBJ flat file',
         type=str,
         nargs='*')
     parser.add_argument(
@@ -220,22 +220,22 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
 def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--evalue',
-        help='Maximum BLAST e-value retained for conservation rings (default: 1e-5).',
+        help='Maximum BLAST e-value retained for similarity rings (default: 1e-5).',
         type=float,
         default=1e-5)
     parser.add_argument(
         '--bitscore',
-        help='Minimum BLAST bitscore retained for conservation rings (default: 50).',
+        help='Minimum BLAST bitscore retained for similarity rings (default: 50).',
         type=float,
         default=50.0)
     parser.add_argument(
         '--identity',
-        help='Minimum BLAST identity percentage retained for conservation rings (default: 70).',
+        help='Minimum BLAST identity percentage retained for similarity rings (default: 70).',
         type=float,
         default=70.0)
     parser.add_argument(
         '--alignment_length',
-        help='Minimum BLAST alignment length retained for conservation rings (default: 0).',
+        help='Minimum BLAST alignment length retained for similarity rings (default: 0).',
         type=int,
         default=0)
 

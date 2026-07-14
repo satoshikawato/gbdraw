@@ -1,12 +1,12 @@
 {
   "id": "hepatoplasmataceae_orthogroup",
   "version": 1,
-  "title": "Reproduce the Hepatoplasmataceae orthogroup comparison in the web app",
-  "summary": "Build the five-genome Hepatoplasmataceae linear comparison with browser LOSATP orthogroup matching.",
+  "title": "Compare Hepatoplasmataceae genomes by protein similarity",
+  "summary": "Run LOSATP in the browser, assign CDS-derived proteins to gbdraw similarity groups, and draw links between group members in five Hepatoplasmataceae genomes.",
   "estimatedTime": "10-20 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Linear",
-  "primaryWorkflow": "LOSATP orthogroups",
+  "primaryWorkflow": "LOSATP similarity groups (Orthogroups mode)",
   "downloads": [
     {
       "label": "AP027078",
@@ -104,7 +104,7 @@
       ]
     },
     {
-      "title": "Keep orthogroup matching enabled",
+      "title": "Select the Orthogroups mode",
       "body": "Use Orthogroups to draw links between proteins assigned to the same gbdraw similarity group rather than combining anchors into collinear blocks.",
       "table": {
         "columns": ["Setting", "Value"],
@@ -222,26 +222,26 @@
       ]
     },
     {
-      "title": "Generate and inspect the orthogroup overview",
-      "body": "Click Generate Diagram. The first LOSATP search can take time; later runs reuse its results when the input files and LOSAT settings have not changed. The preview should show many individual green pairwise ribbons instead of larger orientation-colored collinear blocks.",
+      "title": "Generate and inspect the similarity-group overview",
+      "body": "Click Generate Diagram. The first LOSATP search can take time; later runs reuse its results when the input files and LOSAT settings have not changed. The preview should show individual green similarity-group ribbons instead of larger orientation-colored collinear blocks.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-07-01-orthogroup-overview.webp",
-            "alt": "Generated five-genome Hepatoplasmataceae preview with dense green orthogroup ribbons, GC content and skew tracks, a ruler, and the legend.",
-            "caption": "The generated preview shows five genome records connected by dense green orthogroup ribbons."
+            "alt": "Generated five-genome Hepatoplasmataceae preview with dense green similarity-group ribbons, GC content and skew tracks, a ruler, and the legend.",
+            "caption": "The generated preview shows five genome records connected by dense green similarity-group ribbons."
           }
         }
       ]
     },
     {
-      "title": "Open an orthogroup match popup",
-      "body": "Click a pairwise ribbon in the interactive SVG to inspect the group ID, display name, member count, and record coverage. The table below the summary lists the member proteins.",
+      "title": "Open a similarity-group match popup",
+      "body": "Click a pairwise ribbon in the interactive SVG to inspect the gbdraw group ID, display name, member count, and record coverage. The table below the summary lists the member proteins.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-08-01-orthogroup-popup.webp",
-            "alt": "Zoomed Hepatoplasmataceae orthogroup crop with the highlighted match ribbon and popup.",
+            "alt": "Zoomed Hepatoplasmataceae similarity-group crop with the highlighted match ribbon and popup.",
             "caption": "The highlighted og_244 ribbon remains visible beside its compact 30S ribosomal protein S11 summary."
           },
           "capture": {
@@ -297,13 +297,13 @@
   "postGenerationEdits": [
     {
       "title": "Inspect a CDS feature",
-      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, orthogroup membership, and protein ID.",
+      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, gbdraw group ID, and protein ID.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, orthogroup ID, and protein ID.",
-            "caption": "The Details tab identifies the DnaA CDS as orthogroup og_1 in AP027078.1."
+            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, gbdraw group ID, and protein ID.",
+            "caption": "The Details tab identifies the DnaA CDS as a member of gbdraw group og_1 in AP027078.1."
           },
           "capture": {
             "source": "webapp",
@@ -381,7 +381,7 @@
       "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
     },
     {
-      "title": "The first run feels slow",
+      "title": "The first run is slow",
       "body": "This example runs five genomes through LOSATP in the browser. Wait for the first cache entry before making styling-only changes."
     },
     {

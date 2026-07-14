@@ -97,11 +97,11 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*collinear analysis/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*collinear blocks/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app' })
+    page.getByRole('heading', { name: 'Compare Hepatoplasmataceae genomes with collinear blocks' })
   ).toBeVisible();
   await expect(page.getByText('Web app steps')).toBeVisible();
   await expect(page.getByText('Use browser LOSAT')).toBeVisible();
@@ -138,21 +138,21 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*orthogroup matches/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*protein similarity groups/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae orthogroup comparison in the web app' })
+    page.getByRole('heading', { name: 'Compare Hepatoplasmataceae genomes by protein similarity' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('row', { name: 'blastp mode Orthogroups' })).toBeVisible();
   await expect(
     tutorialPanel.getByText(
-      'Orthogroup evidence is built from all record pairs; the diagram draws ribbons between adjacent displayed records.'
+      'gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records.'
     )
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Minimum Identity 0' })).toBeVisible();
-  await expect(page.getByText('orthogroup ID, display name, member count')).toBeVisible();
+  await expect(page.getByText('gbdraw group ID, display name, member count')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(10);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
@@ -186,7 +186,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the aminoglycoside BGC comparison in the web app' })
+    page.getByRole('heading', { name: 'Compare five aminoglycoside biosynthetic gene clusters' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('heading', { name: 'Color rule basics' })).toBeVisible();
@@ -275,7 +275,7 @@ test('Gallery renders the WSSV conservation tutorial and media', async ({ page }
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the WSSV circular conservation ring comparison in the web app' })
+    page.getByRole('heading', { name: 'Compare WSSV genomes with nucleotide-similarity rings' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
@@ -327,7 +327,7 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the human mitochondrial AT skew diagram in the web app' })
+    page.getByRole('heading', { name: 'Human mitochondrial genome with an AT skew track' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('Open Custom Track Slots', { exact: true })).toBeVisible();
@@ -385,11 +385,11 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#majanivirus_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Large dsDNA viruses/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Majanivirus genomes.*protein similarity groups/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the large majanivirus orthogroup comparison in the web app' })
+    page.getByRole('heading', { name: 'Compare nine majanivirus genomes by protein similarity' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
@@ -454,7 +454,7 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
     page.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
@@ -531,7 +531,7 @@ test('Gallery shows an inline fallback when tutorial media fails to load', async
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app' })
+    page.getByRole('heading', { name: 'Compare Hepatoplasmataceae genomes with collinear blocks' })
   ).toBeVisible();
   await page.locator('#tutorial-panel .tutorial-media').first().scrollIntoViewIfNeeded();
   await expect(
@@ -749,7 +749,7 @@ test('Gallery can preview draft tutorials when explicitly enabled', async ({ pag
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
     page.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
 });
@@ -784,7 +784,7 @@ test('Gallery ignores stale tutorial fetch results after sample changes', async 
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
 
@@ -792,12 +792,12 @@ test('Gallery ignores stale tutorial fetch results after sample changes', async 
   await collinearRequestFinished;
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app'
+      name: 'Compare Hepatoplasmataceae genomes with collinear blocks'
     })
   ).toHaveCount(0);
 });
@@ -808,7 +808,7 @@ test('Gallery mobile controls and tutorial text do not overlap or overflow', asy
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
     page.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
 

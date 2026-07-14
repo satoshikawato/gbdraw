@@ -5,7 +5,7 @@
 
 # Tutorial 9: Feature visibility and shapes
 
-Control which annotated features are drawn or passed to gbdraw's protein searches, and change feature shapes without editing the input annotation.
+Control which annotated features are drawn or included in gbdraw's protein searches, and change feature shapes without editing the input annotation.
 
 ## 1. Prepare an input
 

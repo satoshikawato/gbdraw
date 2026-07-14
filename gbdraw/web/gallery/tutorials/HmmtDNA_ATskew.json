@@ -1,8 +1,8 @@
 {
   "id": "HmmtDNA_ATskew",
   "version": 1,
-  "title": "Reproduce the human mitochondrial AT skew diagram in the web app",
-  "summary": "Build a single-record circular mitochondrial genome diagram with custom circular track slots for GC content, GC skew, AT skew, ticks, labels, and a left legend.",
+  "title": "Human mitochondrial genome with an AT skew track",
+  "summary": "Add GC content, GC skew, and AT skew tracks to a circular human mitochondrial genome diagram, then configure its ticks, feature labels, and legend.",
   "estimatedTime": "5-10 min after the input is available",
   "difficulty": "Intermediate",
   "appMode": "Circular",
@@ -32,7 +32,7 @@
     },
     {
       "title": "Upload the GenBank file",
-      "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1. Type the <i> tags in the Species field literally so the generated definition is italicized.",
+      "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1. Type the <i> tags in the Species field literally to italicize the center label.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [

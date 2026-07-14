@@ -35,7 +35,7 @@ Use a feature-specific color table with `-t`. This matches selected features by 
 
 See [Tutorial 3](./TUTORIALS/3_Advanced_Customization.md) and [Recipes](./RECIPES.md).
 
-## My comparative plot has no ribbons. What is usually wrong?
+## My comparative diagram has no ribbons. What is usually wrong?
 
 The most common causes are:
 
@@ -45,15 +45,15 @@ The most common causes are:
 
 See [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
-## Why is my circular conservation ring empty?
+## Why is my circular BLAST similarity ring empty?
 
 Check that the BLAST file is outfmt 6 or 7, the displayed circular record ID appears on the side selected by `--conservation_reference`, and the thresholds are not too strict. When BLAST was generated as `blastn -query comparison.fasta -subject reference.fasta`, use `--conservation_reference subject`.
 
-Circular conservation rings draw raw HSP spans only. A BLAST row where the selected reference start is greater than the selected reference end is treated as reverse orientation, not as a hit crossing the circular origin; binned or wraparound inference is not part of the current implementation.
+These rings draw raw HSP spans; they do not infer evolutionary conservation. A BLAST row where the selected reference start is greater than the selected reference end is treated as reverse orientation, not as a hit crossing the circular origin. The current implementation does not infer binned or wraparound hits.
 
 ## Can pairwise comparison links be curved?
 
-Yes. In linear mode, `--pairwise_match_style ribbon` draws straight filled ribbons by default. Use `--pairwise_match_style curve` to bend the same match spans; curved links can be easier to distinguish in a dense comparison plot.
+Yes. In linear mode, `--pairwise_match_style ribbon` draws straight filled ribbons by default. Use `--pairwise_match_style curve` to bend the same match spans; curved links can be easier to distinguish in a dense comparison diagram.
 
 ## Can I use gene names instead of product descriptions for labels?
 

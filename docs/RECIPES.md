@@ -6,7 +6,7 @@ Copy-paste command examples for common tasks. For explanations and screenshots, 
 
 ## Circular diagrams
 
-### Basic circular plot
+### Basic circular genome diagram
 
 ```bash
 gbdraw circular --gbk genome.gb -o output -f svg
@@ -26,7 +26,7 @@ gbdraw circular --gbk genome.gb -o output -f svg --separate_strands -p orchid
 
 See [color_palette_examples.md](../examples/color_palette_examples.md) for the available palettes.
 
-### Add centered organism text
+### Add a center label
 
 ```bash
 gbdraw circular \
@@ -100,7 +100,7 @@ gbdraw circular \
 
 ## Linear diagrams
 
-### Basic linear plot
+### Basic linear genome diagram
 
 ```bash
 gbdraw linear --gbk genome.gb -o output -f svg
@@ -176,7 +176,7 @@ gbdraw linear \
   -f svg
 ```
 
-See [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for GenBank, GFF3+FASTA, circular placement, conservation, and track-slot table examples.
+See [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for table examples covering GenBank, GFF3+FASTA, circular placement, BLAST similarity rings, and track slots.
 
 ## Comparative genomics
 
@@ -218,7 +218,7 @@ gbdraw linear \
   -f svg
 ```
 
-Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. Do not combine these modes with `-b/--blast`. See [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
+Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The `orthogroup` mode creates similarity groups for visualization; it does not infer phylogeny-based orthogroups. Do not combine these modes with `-b/--blast`. See [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
 
 ### Filter BLAST ribbons
 
@@ -234,7 +234,7 @@ gbdraw linear \
   -f svg
 ```
 
-### Circular conservation rings from BLAST
+### Circular BLAST similarity rings
 
 ```bash
 blastn -query comparison.fasta -subject reference.fasta -outfmt 7 -out comparison_vs_reference.blast.out
@@ -250,7 +250,7 @@ gbdraw circular \
   -f svg
 ```
 
-Pass more `--conservation_blast` files to add rings. Circular conservation uses raw HSP spans; reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
+Pass more `--conservation_blast` files to add rings. Each ring shows raw BLAST HSP spans, not an inferred measure of evolutionary conservation. Reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
 
 ## Color and label tables
 

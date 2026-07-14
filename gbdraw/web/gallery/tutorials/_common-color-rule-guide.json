@@ -16,7 +16,7 @@
       "body": "Rule values are treated as matching patterns, so broad words can recolor unrelated features. Prefer specific names, anchored patterns, or accessions when possible."
     },
     {
-      "title": "Set a Legend Caption",
+      "title": "Set a legend caption",
       "body": "Legend Caption is optional. When provided, it becomes the figure legend label for matching features. Use a concise biological name rather than the raw qualifier value."
     },
     {

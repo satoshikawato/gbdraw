@@ -5,7 +5,7 @@
 
 # Tutorial 6: Coverage depth and numeric tracks
 
-Add per-base sequencing-depth tracks, GC content (%) tracks, and numeric axes to circular and linear diagrams.
+Add per-base sequencing depth tracks, GC content (%) tracks, and numeric axes to circular and linear diagrams.
 
 ## 1. Prepare inputs
 

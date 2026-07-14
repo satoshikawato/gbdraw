@@ -107,7 +107,7 @@ def print_help_message() -> NoReturn:
     print("")
     print("Options (examples):")
     print("  --gbk                Input GenBank file(s)")
-    print("  --gff                Input GFF# file(s) (rquires --fasta; mutually exclusive with --gbk)")
+    print("  --gff                Input GFF3 file(s) (requires --fasta; mutually exclusive with --gbk)")
     print("  --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)")
     print("  -o, --output         Output file prefix (optional)")
     print("  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)")

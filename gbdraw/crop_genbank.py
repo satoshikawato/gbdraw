@@ -18,7 +18,7 @@ def _get_args():
     parser.add_argument(
         '-i',
         '--input',
-        help='Genbank/DDBJ flatfile (required)',
+        help='GenBank/DDBJ flat file (required)',
         type=str,
         required=True)
     parser.add_argument(
@@ -27,7 +27,7 @@ def _get_args():
         "--out",
         "--output",
         metavar="FILE",
-        help="output Genbank file",
+        help="output GenBank file",
         required=True)
     parser.add_argument(
         "-s",

@@ -185,7 +185,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         "--records_table",
         metavar="TSV",
-        help="TSV manifest for row-coupled input records and circular placement metadata.",
+        help="TSV manifest for row-based input records and circular placement metadata.",
         type=str)
     parser.add_argument(
         '-o',
@@ -235,11 +235,11 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--keep_full_definition_with_plot_title',
-        help='Keep the full centered record definition when a circular plot title is shown (default: False).',
+        help='Keep the full species/strain center label when a circular plot title is shown (default: False).',
         action='store_true')
     parser.add_argument(
         '--center_reserved_radius',
-        help='Override the centered definition reserved radius for circular track packing (in px; must be >= 0).',
+        help='Override the center-label reserved radius for circular track packing (in px; must be >= 0).',
         type=float)
     parser.add_argument(
         '--label_font_size',
@@ -270,13 +270,13 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '--conservation_blast',
         metavar='BLAST',
-        help='Precomputed BLAST outfmt 6/7 file(s) for circular conservation rings.',
+        help='Precomputed BLAST outfmt 6/7 file(s) for circular similarity rings.',
         type=str,
         nargs='+')
     parser.add_argument(
         '--conservation_table',
         metavar='TSV',
-        help='TSV manifest with conservation BLAST files, labels, and colors.',
+        help='TSV manifest with BLAST files for similarity rings, labels, and colors.',
         type=str)
     parser.add_argument(
         '--conservation_reference',
@@ -287,22 +287,22 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '--conservation_labels',
         metavar='LABEL',
-        help='Labels for conservation rings, aligned by logical source index.',
+        help='Labels for similarity rings, aligned by logical source index.',
         type=str,
         nargs='+')
     parser.add_argument(
         '--conservation_colors',
         metavar='COLOR',
-        help='Colors for conservation rings, aligned by logical source index. Accepts SVG color names or #RRGGBB.',
+        help='Colors for similarity rings, aligned by logical source index. Accepts SVG color names or #RRGGBB.',
         type=str,
         nargs='+')
     parser.add_argument(
         '--conservation_ring_width',
-        help='Conservation ring width for circular mode (in px; must be > 0).',
+        help='Similarity ring width for circular mode (in px; must be > 0).',
         type=float)
     parser.add_argument(
         '--conservation_ring_gap',
-        help='Conservation ring gap for circular mode (in px; must be > 0).',
+        help='Similarity ring gap for circular mode (in px; must be > 0).',
         type=float)
     _add_comparison_filter_args(parser)
     parser.add_argument(

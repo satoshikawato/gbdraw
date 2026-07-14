@@ -121,7 +121,7 @@ This writes `majani_circular_grid.svg`.
 
 When a records table provides `row` and `column`, do not also use `--multi_record_position`.
 
-## 5. Circular conservation rings with `--conservation_table`
+## 5. Circular BLAST similarity rings with `--conservation_table`
 
 Use the precomputed BLAST outfmt 7 table maintained in `examples/`. From a source checkout, copy it into the tutorial working directory:
 
@@ -154,6 +154,8 @@ gbdraw circular \
 This writes `MjeNMV_conservation_table.svg`.
 
 ![Circular MjeNMV diagram with five retained MelaMJNV TBLASTX HSP spans loaded through a table](../../examples/tutorial-5-conservation-table.svg)
+
+The ring shows retained HSP spans from the BLAST table. It does not infer evolutionary conservation.
 
 `--conservation_table` cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
 

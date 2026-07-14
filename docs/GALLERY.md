@@ -16,7 +16,7 @@ When converting long gallery commands into TSV manifests, see the `--records_tab
 
 [Open the interactive WSSV example and web tutorial](https://gbdraw.app/gallery/#WSSV_genome_comparison).
 
-The Tutorial tab runs LOSAT `blastn` against 20 comparison FASTA files, assigns labels and colors to the resulting similarity rings, checks feature and legend popups, and saves the session.
+The Tutorial tab runs LOSAT `blastn` against 20 comparison FASTA files, assigns labels and colors to the resulting nucleotide-similarity rings, checks feature and legend popups, and saves the session.
 
 ## <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 complete genome
 
@@ -28,17 +28,17 @@ One RefSeq GBFF file supplies two chromosomes and four plasmids. The Tutorial ta
 
 [Open the interactive aminoglycoside BGC example and web tutorial](https://gbdraw.app/gallery/#BGC0000708-BGC0000713).
 
-The Tutorial tab runs a LOSATP protein search, groups the translated CDS features by similarity, and colors features from antiSMASH `gene_kind` qualifiers. It also covers first-record label rotation, feature and orthogroup popups, legend editing, and session export.
+The Tutorial tab runs a LOSATP protein search, groups the translated CDS features by similarity, and colors features from antiSMASH `gene_kind` qualifiers. It also covers first-record label rotation, feature and group popups, legend editing, and session export.
 
 ## Majanivirus genome comparisons
 
-[Open the interactive nine-genome orthogroup example and web tutorial](https://gbdraw.app/gallery/#majanivirus_orthogroup).
+[Open the interactive nine-genome protein-similarity example and web tutorial](https://gbdraw.app/gallery/#majanivirus_orthogroup).
 
-The web tutorial runs LOSATP across nine majanivirus records, assigns translated CDS features to gbdraw similarity groups, applies product-based color rules, and inspects a match popup.
+The web tutorial runs LOSATP across nine majanivirus records, assigns translated CDS features to gbdraw similarity groups, applies product-based color rules, and inspects a group-match popup.
 
 ### Static ten-genome TBLASTX example
 
-The CLI example below uses precomputed TBLASTX results rather than the generated orthogroup workflow. It includes a tenth record, MellatMJNV, between TrcuMJNV and MeenMJNV.
+The CLI example below uses precomputed TBLASTX results rather than gbdraw's generated protein-similarity groups. It includes a tenth record, MellatMJNV, between TrcuMJNV and MeenMJNV.
 
 <details><summary>Expand to see the script</summary>
 
@@ -92,7 +92,7 @@ gbdraw linear \
 
 ## Hepatoplasmataceae five-genome comparison
 
-Interactive examples and web tutorials: [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) and [orthogroup links](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup).
+Interactive examples and web tutorials: [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) and [protein-similarity links](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup).
 
 Both web tutorials run LOSATP on the same five genomes. One draws links between proteins assigned to the same gbdraw similarity group; the other combines compatible runs of protein-match anchors into collinear blocks.
 
@@ -132,13 +132,13 @@ AP027132_NZ_CP006932.tblastx.out \
 
 ## Human mitochondrial genome
 
-[Open the interactive human mitochondrial AT-skew example and web tutorial](https://gbdraw.app/gallery/#HmmtDNA_ATskew).
+[Open the interactive human mitochondrial AT skew example and web tutorial](https://gbdraw.app/gallery/#HmmtDNA_ATskew).
 
-The web tutorial adds an AT-skew ring with custom track slots, uses the `gene` qualifier for CDS labels, inspects a feature popup, and edits the legend.
+The web tutorial adds an AT skew ring with custom track slots, uses the `gene` qualifier for CDS labels, inspects a feature popup, and edits the legend.
 
 ### Static qualifier-priority example
 
-The CLI example below changes CDS labels to the `gene` qualifier. Unlike the interactive entry, it does not add an AT-skew ring.
+The CLI example below changes CDS labels to the `gene` qualifier. Unlike the interactive entry, it does not add an AT skew ring.
 
 <details><summary>Expand to see the script</summary>
 
@@ -227,7 +227,7 @@ gbdraw linear \
 ![NC_001416.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001416.svg)
 
 
-## <i>Ca.</i> Sukunaarchaeum mirabile M16-5
+## "<i>Ca.</i> Sukunaarchaeum mirabile" M16-5
 
 <details><summary>Expand to see the script</summary>
 
@@ -273,7 +273,7 @@ gbdraw circular \
 
 ![Pandoravirus_salinus_forest.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/Pandoravirus_salinus_forest.svg)
 
-## <i>Candidatus</i> Pelagibacter ubique HTCC1062
+## "<i>Candidatus</i> Pelagibacter ubique" HTCC1062
 
 <details><summary>Expand to see the script</summary>
 

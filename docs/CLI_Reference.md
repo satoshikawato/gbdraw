@@ -31,13 +31,13 @@ Examples:
 
 Options (examples):
   --gbk                Input GenBank file(s)
-  --gff                Input GFF# file(s) (rquires --fasta; mutually exclusive with --gbk)
+  --gff                Input GFF3 file(s) (requires --fasta; mutually exclusive with --gbk)
   --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)
   -o, --output         Output file prefix (optional)
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
-  --records_table      TSV manifest for row-coupled input records
-  --conservation_blast BLAST result file(s) for circular conservation rings (-outfmt 6 or 7)
-  --conservation_table TSV manifest for circular conservation BLAST rings
+  --records_table      TSV manifest for row-based input records
+  --conservation_blast BLAST result file(s) for circular similarity rings (-outfmt 6 or 7)
+  --conservation_table TSV manifest for circular BLAST similarity rings
   --circular_track_table TSV manifest for circular track slots
 
 Additional Information:
@@ -123,12 +123,12 @@ multiple records on one grid canvas.
 
 options:
   -h, --help            show this help message and exit
-  --gbk [GBK_FILE ...]  Genbank/DDBJ flatfile
+  --gbk [GBK_FILE ...]  GenBank/DDBJ flat file
   --gff [GFF3_FILE ...]
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
-  --records_table TSV   TSV manifest for row-coupled input records and
+  --records_table TSV   TSV manifest for row-based input records and
                         circular placement metadata.
   -o, --output OUTPUT   output file prefix (default: accession number of the
                         sequence)
@@ -176,10 +176,10 @@ options:
                         Plot title font size for circular top/bottom title
                         layout (optional; default: 32).
   --keep_full_definition_with_plot_title
-                        Keep the full centered record definition when a
+                        Keep the full species/strain center label when a
                         circular plot title is shown (default: False).
   --center_reserved_radius CENTER_RESERVED_RADIUS
-                        Override the centered definition reserved radius for
+                        Override the center-label reserved radius for
                         circular track packing (in px; must be >= 0).
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 14 (pt) for
@@ -191,36 +191,36 @@ options:
   --suppress_skew       Suppress GC skew track (default: False).
   --conservation_blast BLAST [BLAST ...]
                         Precomputed BLAST outfmt 6/7 file(s) for circular
-                        conservation rings.
+                        similarity rings.
   --conservation_table TSV
-                        TSV manifest with conservation BLAST files, labels,
-                        and colors.
+                        TSV manifest with BLAST files for similarity rings,
+                        labels, and colors.
   --conservation_reference {query,subject,auto}
                         BLAST side containing displayed circular reference
                         coordinates. Use "subject" for BLAST generated as
                         comparison FASTA query against displayed genome
                         subject. Default: "auto".
   --conservation_labels LABEL [LABEL ...]
-                        Labels for conservation rings, aligned by logical
+                        Labels for similarity rings, aligned by logical
                         source index.
   --conservation_colors COLOR [COLOR ...]
-                        Colors for conservation rings, aligned by logical
+                        Colors for similarity rings, aligned by logical
                         source index. Accepts SVG color names or #RRGGBB.
   --conservation_ring_width CONSERVATION_RING_WIDTH
-                        Conservation ring width for circular mode (in px; must
+                        Similarity ring width for circular mode (in px; must
                         be > 0).
   --conservation_ring_gap CONSERVATION_RING_GAP
-                        Conservation ring gap for circular mode (in px; must
+                        Similarity ring gap for circular mode (in px; must
                         be > 0).
-  --evalue EVALUE       Maximum BLAST e-value retained for conservation rings
+  --evalue EVALUE       Maximum BLAST e-value retained for similarity rings
                         (default: 1e-5).
-  --bitscore BITSCORE   Minimum BLAST bitscore retained for conservation rings
+  --bitscore BITSCORE   Minimum BLAST bitscore retained for similarity rings
                         (default: 50).
   --identity IDENTITY   Minimum BLAST identity percentage retained for
-                        conservation rings (default: 70).
+                        similarity rings (default: 70).
   --alignment_length ALIGNMENT_LENGTH
                         Minimum BLAST alignment length retained for
-                        conservation rings (default: 0).
+                        similarity rings (default: 0).
   -l, --legend LEGEND   Legend position (default: "right"; "left", "right",
                         "top", "bottom", "upper_left", "upper_right",
                         "lower_left", "lower_right", "none")
@@ -379,7 +379,7 @@ options:
                         for genomes <= 50 kb, 16 for genomes >= 50 kb).
 ```
 
-Circular conservation rings use one ring per `--conservation_blast` source and a shared identity gradient legend. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for conservation rings, so provide precomputed BLAST output.
+Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for these rings, so provide precomputed BLAST output.
 
 ## TSV manifest inputs
 
@@ -484,7 +484,7 @@ Allowed columns:
 | Column | Required | Meaning |
 | --- | --- | --- |
 | `blast` | yes | Path to a precomputed BLAST outfmt 6 or 7 file. |
-| `label` | optional | Conservation ring label. If the column is present, row order supplies the label list. |
+| `label` | optional | Similarity ring label. If the column is present, row order supplies the label list. |
 | `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list. |
 
 The row order defines the ring order. Thresholds and geometry still stay on the CLI, for example `--conservation_reference`, `--bitscore`, `--evalue`, `--identity`, `--alignment_length`, `--conservation_ring_width`, and `--conservation_ring_gap`.
@@ -570,7 +570,7 @@ gc_skew	dinucleotide_skew	inside		0.1	nt=GC
 ticks	ticks	inside			tick_label_layout=label_in_tick_out
 ```
 
-Gallery HmmtDNA AT-skew example: the `HmmtDNA_ATskew` entry adds an AT-skew ring to the standard GC content, GC skew, feature, and tick slots. The equivalent `hmmt_tracks.tsv` is:
+Gallery HmmtDNA AT skew example: the `HmmtDNA_ATskew` entry adds an AT skew ring to the standard GC content, GC skew, feature, and tick slots. The equivalent `hmmt_tracks.tsv` is:
 
 ```tsv
 id	renderer	side	r	w	params
@@ -675,12 +675,12 @@ Generate plot in PNG/PDF/SVG/PS/EPS.
 
 options:
   -h, --help            show this help message and exit
-  --gbk [GBK_FILE ...]  Genbank/DDBJ flatfile
+  --gbk [GBK_FILE ...]  GenBank/DDBJ flat file
   --gff [GFF3_FILE ...]
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
-  --records_table TSV   TSV manifest for row-coupled input records and per-
+  --records_table TSV   TSV manifest for row-based input records and per-
                         record options.
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
@@ -699,8 +699,8 @@ options:
                         (default: runtime default).
   --protein_blastp_mode {none,pairwise,orthogroup,collinear}
                         Protein blastp comparison mode: none, pairwise
-                        adjacent ribbons, all-record Orthogroups, or
-                        Collinear blocks (default: none).
+                        adjacent ribbons, all-record similarity groups
+                        (orthogroup), or collinear blocks (default: none).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block. The default 1 includes singleton
@@ -794,7 +794,7 @@ options:
                         Shared plot title font size (optional; float; default:
                         32).
   --record_label RECORD_LABEL
-                        Override record definition label (repeatable; order
+                        Override the top record-label line (repeatable; order
                         matches input records)
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 24 pt for genomes
@@ -842,8 +842,8 @@ options:
   --show_labels [{all,first,orthogroup_top,none}]
                         Show labels: no argument or 'all' (all records),
                         'first' (first record only), 'orthogroup_top' (topmost
-                        record containing each orthogroup), 'none' (no
-                        labels). Default: 'none'
+                        record containing each gbdraw similarity group),
+                        'none' (no labels). Default: 'none'
   --resolve_overlaps    Resolve overlaps (experimental; default: False).
   --label_whitelist LABEL_WHITELIST
                         Path to a TSV file for label whitelisting by regex

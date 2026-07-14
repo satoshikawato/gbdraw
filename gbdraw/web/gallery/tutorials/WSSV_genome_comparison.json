@@ -1,12 +1,12 @@
 {
   "id": "WSSV_genome_comparison",
   "version": 1,
-  "title": "Reproduce the WSSV circular conservation ring comparison in the web app",
+  "title": "Compare WSSV genomes with nucleotide-similarity rings",
   "summary": "Build a circular White spot syndrome virus reference diagram with 20 rings of retained nucleotide-similarity hits from browser LOSAT blastn searches.",
   "estimatedTime": "10-30 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Circular",
-  "primaryWorkflow": "Circular conservation rings with browser LOSAT blastn",
+  "primaryWorkflow": "Circular nucleotide-similarity rings with LOSAT blastn",
   "requirements": ["Load the bundled Gallery session for the exact prepared inputs, or obtain and assemble all 20 comparison FASTA files listed below for a manual rebuild."],
   "downloads": [
     {
@@ -208,7 +208,7 @@
     },
     {
       "title": "Set the basic circular layout",
-      "body": "Use a spread-out circular track so the outer CDS features remain readable around the conservation rings.",
+      "body": "Use a spread-out circular track so the outer CDS features remain readable around the similarity rings.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -362,7 +362,7 @@
       ]
     },
     {
-      "title": "Set conservation thresholds",
+      "title": "Set search thresholds",
       "body": "Set the blastn filters so each ring shows HSPs with bitscore at least 100, E-value at most 1e-30, identity at least 90%, and alignment length at least 100 nt.",
       "table": {
         "columns": ["Threshold", "Value"],
@@ -385,12 +385,12 @@
     },
     {
       "title": "Generate the diagram",
-      "body": "Click Generate Diagram. The preview should show the AP027280 feature ring, 20 conservation rings, the position scale, and a left legend with an identity gradient for each comparison genome.",
+      "body": "Click Generate Diagram. The preview should show the AP027280 feature ring, 20 nucleotide-similarity rings, the position scale, and a left legend with an identity gradient for each comparison genome.",
       "operations": [
         {
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-09-01-conservation-rings.webp",
-            "alt": "Generated WSSV conservation diagram with 20 conservation rings and the left identity legend.",
+            "alt": "Generated WSSV comparison diagram with 20 nucleotide-similarity rings and the left identity legend.",
             "caption": "The generated preview stacks 20 nucleotide-similarity hit rings inside the reference CDS feature ring."
           }
         }
@@ -412,7 +412,7 @@
         {
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
-            "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and Details metadata.",
+            "alt": "Zoomed WSSV comparison crop with the clicked outer CDS, nucleotide-similarity rings, and Details metadata.",
             "caption": "The Details tab shows the VP180 label, AP027280.1 record, CDS type, location, and BDX26618.1 protein ID."
           },
           "capture": {
@@ -473,7 +473,7 @@
   ],
   "troubleshooting": [
     {
-      "title": "Conservation rings are missing",
+      "title": "Similarity rings are missing",
       "body": "Check that Pairwise Comparisons uses Run LOSAT, the comparison FASTA files are uploaded, and the generated result is the circular output."
     },
     {
@@ -490,7 +490,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check AP027280.gb, Track Preset Spreadout, Separate Strands, Hide GC Content, Hide GC Skew, Label Mode None, Legend Position Left, conservation Ring Width and Ring Gap, thresholds, colors, and comparison FASTA order."
+      "body": "Check AP027280.gb, Track Preset Spreadout, Separate Strands, Hide GC Content, Hide GC Skew, Label Mode None, Legend Position Left, Ring Width, Ring Gap, thresholds, colors, and comparison FASTA order."
     }
   ],
   "related": [
