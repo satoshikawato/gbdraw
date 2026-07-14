@@ -14,6 +14,13 @@
       "accession": "NC_012920",
       "targetName": "HmmtDNA.gbk",
       "note": "Download the complete human mitochondrial genome as a GenBank flat file and save it with this filename if you want to match the Gallery session."
+    },
+    {
+      "label": "Qualifier priority table",
+      "source": "Gallery file",
+      "targetName": "HmmtDNA_qualifier_priority.tsv",
+      "href": "./files/HmmtDNA_qualifier_priority.tsv",
+      "note": "Download this repository-managed TSV beside HmmtDNA.gbk for the runnable CLI command."
     }
   ],
   "manualSteps": [

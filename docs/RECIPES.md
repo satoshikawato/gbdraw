@@ -338,11 +338,11 @@ PNG, PDF, EPS, and PS require CairoSVG to be installed.
 ### Export standalone interactive SVG
 
 ```bash
-gbdraw circular --gbk genome.gb -o output -f interactive-svg
-gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg,interactive-svg
+gbdraw circular --gbk genome.gb -o output -f interactive_svg
+gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg,interactive_svg
 ```
 
-`interactive-svg` writes the normal `output.svg` plus `output.interactive.svg`.
+`interactive_svg` writes the normal `output.svg` plus `output.interactive.svg`. The older spelling `interactive-svg` remains accepted as a compatibility alias.
 It does not require CairoSVG, Node.js, Playwright, Chromium, or a web build step.
 Open the interactive file in a browser; some desktop SVG viewers block embedded scripts.
 

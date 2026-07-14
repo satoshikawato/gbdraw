@@ -185,7 +185,7 @@ options:
                         Label font size (optional; default: 14 (pt) for
                         genomes <= 50 kb, 8 for genomes >= 50 kb)
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
-                        interactive-svg, png, pdf, eps, ps; default: svg).
+                        interactive_svg, png, pdf, eps, ps; default: svg).
                         PNG/PDF/EPS/PS require CairoSVG.
   --suppress_gc         Suppress GC content track (default: False).
   --suppress_skew       Suppress GC skew track (default: False).
@@ -444,7 +444,7 @@ gbdraw linear \
   --show_labels first \
   --pairwise_match_style curve \
   -o BGC0000708-BGC0000713 \
-  -f interactive-svg
+  -f interactive_svg
 ```
 
 Gallery circular multi-record example: the `Vnig_TUMSAT-TG-2018` entry places six records from one GBFF file on two rows. Repeat the file path and select each record by `record_id`:
@@ -472,7 +472,7 @@ gbdraw circular \
   -p orchid \
   --track_type tuckin \
   -o Vnig_TUMSAT-TG-2018 \
-  -f interactive-svg
+  -f interactive_svg
 ```
 
 ### `--conservation_table`
@@ -536,7 +536,7 @@ gbdraw circular \
   --suppress_skew \
   --track_type spreadout \
   -o WSSV_genome_comparison \
-  -f interactive-svg
+  -f interactive_svg
 ```
 
 ### `--circular_track_table`
@@ -594,7 +594,7 @@ gbdraw circular \
   --labels out \
   -l left \
   -o HmmtDNA_ATskew \
-  -f interactive-svg
+  -f interactive_svg
 ```
 
 Depth tracks can be supplied with the legacy `--depth` option or the repeatable
@@ -835,7 +835,7 @@ options:
                         Effective only with --scale_style ruler and
                         --track_layout above|below.
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
-                        interactive-svg, png, pdf, eps, ps; default: svg).
+                        interactive_svg, png, pdf, eps, ps; default: svg).
                         PNG/PDF/EPS/PS require CairoSVG.
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
                         "top", "bottom", "none")

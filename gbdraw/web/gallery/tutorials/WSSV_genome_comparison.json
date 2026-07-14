@@ -1,20 +1,20 @@
 {
   "id": "WSSV_genome_comparison",
   "version": 1,
-  "title": "Plot WSSV nucleotide matches in circular rings",
-  "summary": "Run LOSAT blastn searches against a White spot syndrome virus reference and plot the retained HSP spans as 20 circular rings.",
-  "estimatedTime": "10-30 min after inputs are available",
+  "title": "Advanced session-based WSSV comparison case study",
+  "summary": "Load the bundled session first to inspect a White spot syndrome virus reference and 20 prepared BLAST/LOSAT comparison rings. The original prepared-input command is provenance, not a directly runnable public recipe.",
+  "estimatedTime": "Session inspection: under 5 min; input preparation: hours; search: 10-30 min; render and interaction: under 5 min",
   "difficulty": "Advanced",
   "appMode": "Circular",
   "primaryWorkflow": "Circular nucleotide-similarity rings with LOSAT blastn",
-  "requirements": ["Load the bundled Gallery session for the exact prepared inputs, or obtain and assemble all 20 comparison FASTA files listed below for a manual rebuild."],
+  "requirements": ["Start by loading the bundled Gallery session. A manual rebuild requires preparing all 20 comparison assemblies; the public sources below do not form a complete exact-reproduction bundle."],
   "downloads": [
     {
       "label": "Bundled Gallery session",
       "source": "Gallery artifact",
       "href": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
       "targetName": "WSSV_genome_comparison.gbdraw-session.json",
-      "note": "Load this bundled session to inspect the completed result or reuse its prepared comparison inputs and cached LOSAT output."
+      "note": "This is the primary path: load the session to inspect the completed result, settings, prepared inputs, and cached LOSAT output without rebuilding the external dataset."
     },
     {
       "label": "AP027280",
@@ -172,8 +172,22 @@
   ],
   "manualSteps": [
     {
-      "title": "Switch to Circular mode",
-      "body": "Open gbdraw.app and select Circular mode before adding the WSSV reference record.",
+      "title": "Load the bundled session first",
+      "body": "Open gbdraw.app, choose Load Settings / Session, and load WSSV_genome_comparison.gbdraw-session.json from Files. Inspect the restored result and settings before deciding whether the external input preparation is necessary for your work.",
+      "operations": [
+        {
+          "body": "Use the restored session as the complete inspection path; the following steps document the optional prepared-input rebuild.",
+          "media": {
+            "src": "./thumbnails/WSSV_genome_comparison.webp",
+            "alt": "Completed WSSV circular comparison restored from the bundled Gallery session.",
+            "caption": "The bundled session restores the completed 20-ring comparison without requiring the external preparation workflow."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Optional rebuild: switch to Circular mode",
+      "body": "For a manual rebuild with prepared inputs, open gbdraw.app and select Circular mode before adding the WSSV reference record.",
       "operations": [
         {
           "media": {

@@ -18,14 +18,14 @@ If you are working from a source checkout, the same files are available under `e
 
 ## 2. Export standalone interactive SVG
 
-The format name is `interactive-svg`:
+The format name is `interactive_svg`:
 
 ```bash
 gbdraw circular \
   --gbk MjeNMV.gb \
   --labels \
   -o MjeNMV_interactive \
-  -f interactive-svg
+  -f interactive_svg
 ```
 
 Expected outputs:
@@ -57,7 +57,7 @@ gbdraw linear \
   --alignment_length 1400 \
   --pairwise_match_style curve \
   -o MjeNMV_MelaMJNV_interactive \
-  -f interactive-svg
+  -f interactive_svg
 ```
 
 The thresholds leave one retained ribbon. Click it in `MjeNMV_MelaMJNV_interactive.interactive.svg` to inspect its match metadata:
@@ -76,14 +76,14 @@ gbdraw circular \
   --labels \
   --save_session \
   -o MjeNMV_session_demo \
-  -f interactive-svg
+  -f interactive_svg
 ```
 
 Expected session output:
 
 - `MjeNMV_session_demo.gbdraw-session.json`
 
-As in Step 2, this command also writes `MjeNMV_session_demo.svg` and `MjeNMV_session_demo.interactive.svg` because the requested format is `interactive-svg`.
+As in Step 2, this command also writes `MjeNMV_session_demo.svg` and `MjeNMV_session_demo.interactive.svg` because the requested format is `interactive_svg`.
 
 Use `--session_output` when you want an explicit session path:
 

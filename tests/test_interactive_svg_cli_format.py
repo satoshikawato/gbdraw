@@ -77,7 +77,7 @@ def test_handle_output_formats_keeps_interactive_when_cairosvg_missing(monkeypat
     monkeypatch.setattr(cli_common, "has_cairosvg", lambda: False)
 
     assert cli_common.handle_output_formats(["interactive-svg", "png", "pdf"]) == [
-        "interactive-svg"
+        "interactive_svg"
     ]
 
 
@@ -687,5 +687,5 @@ def test_cli_help_lists_interactive_svg(capsys) -> None:
         linear_cli._get_args(["--help"])
     linear_help = capsys.readouterr().out
 
-    assert "interactive-svg" in circular_help
-    assert "interactive-svg" in linear_help
+    assert "interactive_svg" in circular_help
+    assert "interactive_svg" in linear_help

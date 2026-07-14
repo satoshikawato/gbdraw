@@ -135,6 +135,27 @@ The axis index is the boundary in the slot list. Here the feature slot overlays 
 
 ![Linear MjeNMV diagram with an overlay feature slot followed by custom-height GC content and GC skew slots](../../examples/tutorial-7-linear-track-slots.svg)
 
+## 7. Select records, regions, and orientation
+
+Use these repeatable options when a file contains several records or when only part of a record belongs in the figure:
+
+- `--record_id`: select a record by its ID or a quoted `'#index'` value;
+- `--region`: crop with `record_id:start-end[:rc]`;
+- `--reverse_complement`: provide one Boolean value per input file.
+
+```bash
+gbdraw linear \
+  --gbk tests/test_inputs/AP027078.gb tests/test_inputs/AP027131.gb \
+  --region AP027078.1:1-300000 \
+  --region AP027131.1:1-300000:rc \
+  --reverse_complement false \
+  --reverse_complement true \
+  -o selected_regions \
+  -f svg
+```
+
+Do not reuse full-record BLAST coordinates after cropping or reversing inputs unless the comparison data were generated for the displayed coordinate system. For larger sets, put selectors, regions, orientation, and order in a [`--records_table`](./5_Table_Driven_Inputs.md#2-linear---records_table-for-genbank-rows).
+
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Plot read depth and numeric tracks](./6_Depth_Quantitative_Tracks.md) | [Next: Create interactive SVGs >](./8_Interactive_SVG_Sessions.md)
 

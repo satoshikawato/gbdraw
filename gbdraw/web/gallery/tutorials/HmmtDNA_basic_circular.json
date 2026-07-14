@@ -1,0 +1,88 @@
+{
+  "id": "HmmtDNA_basic_circular",
+  "version": 1,
+  "title": "Create your first circular genome figure",
+  "summary": "Upload one small GenBank record, choose a circular preset, show feature labels and GC tracks, and export the result without running a sequence search.",
+  "estimatedTime": "Under 5 min",
+  "difficulty": "Beginner",
+  "appMode": "Circular",
+  "primaryWorkflow": "Circular basics",
+  "requirements": ["No external search runtime is required."],
+  "downloads": [
+    {
+      "label": "NC_012920.1",
+      "source": "NCBI Nucleotide",
+      "accession": "NC_012920.1",
+      "targetName": "HmmtDNA.gbk",
+      "note": "Download the complete record as a GenBank flat file and keep this filename."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Select Circular mode",
+      "body": "Open gbdraw.app and select Circular. This workflow uses one annotated GenBank file and does not need Pairwise Comparisons.",
+      "operations": [
+        {
+          "body": "Choose Circular before uploading the record.",
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-01-01-circular-mode.webp",
+            "alt": "Mode selector with Circular selected.",
+            "caption": "Select Circular mode."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Upload the GenBank record",
+      "body": "Upload HmmtDNA.gbk and set Output prefix to HmmtDNA_basic_circular.",
+      "operations": [
+        {
+          "body": "Check that the HmmtDNA.gbk file chip appears in the Circular GenBank uploader.",
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-02-01-genbank-upload.webp",
+            "alt": "Circular GenBank uploader containing HmmtDNA.gbk.",
+            "caption": "Upload the human mitochondrial GenBank record."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Choose the compact layout",
+      "body": "Set Track Preset to Middle, enable Separate Strands, set Label Mode to Out, and enter <i>Homo sapiens</i> in Species. Keep the default GC content and GC skew tracks.",
+      "operations": [
+        {
+          "body": "Choose Middle from Track Preset and keep the default quantitative tracks enabled.",
+          "media": {
+            "src": "./media/HmmtDNA_ATskew/manual-03-01-track-preset-middle.webp",
+            "alt": "Circular Track Preset selector with Middle highlighted.",
+            "caption": "Middle keeps the feature and GC tracks compact on this small genome."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Generate and export SVG",
+      "body": "Click Generate Diagram. Check that features, labels, GC content, and GC skew are visible, then use SVG in the export controls.",
+      "operations": [
+        {
+          "body": "Compare the preview with the Gallery result before exporting.",
+          "media": {
+            "src": "./thumbnails/HmmtDNA_basic_circular.webp",
+            "alt": "Beginner circular human mitochondrial genome diagram with feature and GC tracks.",
+            "caption": "The completed beginner figure requires no sequence-search step."
+          }
+        }
+      ]
+    }
+  ],
+  "related": [
+    {
+      "label": "Next: add an AT skew track",
+      "href": "./#HmmtDNA_ATskew"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    }
+  ]
+}

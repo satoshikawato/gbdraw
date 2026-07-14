@@ -49,12 +49,14 @@ BROWSER_WHEEL_REQUIRED_RUNTIME_DATA = {
 }
 GALLERY_SESSION_FILES = [
     "BGC0000708-BGC0000713.gbdraw-session.json",
+    "HmmtDNA_basic_circular.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
+    "lambda_basic_linear.gbdraw-session.json",
 ]
 GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
@@ -766,37 +768,47 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
 
 def test_interactive_gallery_examples_are_wired() -> None:
     expected_ids = [
+        "HmmtDNA_basic_circular",
+        "lambda_basic_linear",
         "HmmtDNA_ATskew",
-        "BGC0000708-BGC0000713",
-        "WSSV_genome_comparison",
-        "majanivirus_orthogroup",
+        "Vnig_TUMSAT-TG-2018",
         "hepatoplasmataceae_collinear",
         "hepatoplasmataceae_orthogroup",
-        "Vnig_TUMSAT-TG-2018",
+        "BGC0000708-BGC0000713",
+        "majanivirus_orthogroup",
+        "WSSV_genome_comparison",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
 
     assert [entry["id"] for entry in examples] == expected_ids
-    gallery_svg_sizes = [
-        (GALLERY_ROOT / entry["svg"].removeprefix("./")).stat().st_size
-        for entry in examples
-    ]
-    assert gallery_svg_sizes == sorted(gallery_svg_sizes)
+    assert [entry["displayOrder"] for entry in examples] == sorted(
+        entry["displayOrder"] for entry in examples
+    )
     assert [entry["title"] for entry in examples] == [
+        "Human mitochondrial genome: first circular figure",
+        "Lambda phage: first linear figure",
         "Human mitochondrial genome (AT skew)",
-        "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
-        "White spot syndrome virus nucleotide-similarity rings",
-        "Majanivirus CDS protein-similarity links",
+        "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         "Hepatoplasmataceae collinear protein-match blocks",
         "Hepatoplasmataceae CDS protein-similarity links",
-        "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
+        "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
+        "Majanivirus CDS protein-similarity links",
+        "White spot syndrome virus nucleotide-similarity rings",
     ]
     for entry in examples:
         assert entry["title"]
-        assert "description" not in entry
+        assert entry["description"]
+        assert entry["difficulty"] in {"Beginner", "Intermediate", "Advanced"}
+        assert entry["workflow"]
+        assert entry["inputSummary"]
+        assert entry["estimatedTime"]
+        assert isinstance(entry["displayOrder"], int)
+        assert entry["commandKind"] in {"runnable", "provenance"}
+        assert entry["commandNote"]
         assert not entry.get("interactiveStep")
         assert entry["tags"]
         assert entry["command"].startswith("gbdraw ")
+        assert "interactive-svg" not in entry["command"]
         assert entry["fileSizeLabel"]
         assert entry["sourceNote"]
         assert entry["featureSources"]
@@ -855,6 +867,37 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert thumbnail_header.startswith(b"RIFF")
         assert b"WEBP" in thumbnail_header
         _assert_white_gallery_thumbnail(thumbnail_path)
+
+    assert [entry["difficulty"] for entry in examples[:2]] == ["Beginner", "Beginner"]
+    provenance = [entry for entry in examples if entry["commandKind"] == "provenance"]
+    assert [entry["id"] for entry in provenance] == ["WSSV_genome_comparison"]
+    assert "not directly runnable" in provenance[0]["commandNote"]
+    collinear = next(entry for entry in examples if entry["id"] == "hepatoplasmataceae_collinear")
+    assert collinear["command"].count("--losatp_threads") == 1
+
+
+def test_runnable_gallery_support_downloads_exist() -> None:
+    expected_local_downloads = {
+        "HmmtDNA_ATskew": {"./files/HmmtDNA_qualifier_priority.tsv"},
+        "BGC0000708-BGC0000713": {
+            "./files/BGC0000708-BGC0000713_default_colors.tsv",
+            "./files/BGC0000708-BGC0000713_specific_colors.tsv",
+            "./files/BGC0000708-BGC0000713_qualifier_priority.tsv",
+        },
+        "majanivirus_orthogroup": {
+            "./files/modified_default_colors.tsv",
+            "./files/majani_custom_color_table.tsv",
+        },
+    }
+
+    for example_id, hrefs in expected_local_downloads.items():
+        tutorial = json.loads(
+            (GALLERY_ROOT / "tutorials" / f"{example_id}.json").read_text(encoding="utf-8")
+        )
+        tutorial_hrefs = {download.get("href") for download in tutorial.get("downloads", [])}
+        assert hrefs <= tutorial_hrefs
+        for href in hrefs:
+            assert (GALLERY_ROOT / href.removeprefix("./")).is_file()
 
 
 def test_index_cloaks_vue_template_until_mount() -> None:

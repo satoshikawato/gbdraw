@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from gbdraw.session_io import load_session, session_mode, write_session_json  # noqa: E402
+from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 
 
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
@@ -25,12 +26,14 @@ SESSION_ROOT = GALLERY_ROOT / "sessions"
 
 GALLERY_SESSION_FILES = (
     "BGC0000708-BGC0000713.gbdraw-session.json",
+    "HmmtDNA_basic_circular.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
+    "lambda_basic_linear.gbdraw-session.json",
 )
 
 
@@ -91,7 +94,7 @@ def _preserve_gallery_cli_invocation(
     preserved_cli["schema"] = 1
     preserved_cli["mode"] = mode
     preserved_cli["args"] = _with_interactive_svg_format(list(source_cli["args"]))
-    preserved_cli["renderFormats"] = ["interactive-svg"]
+    preserved_cli["renderFormats"] = [INTERACTIVE_SVG_FORMAT]
     preserved_cli.setdefault("fileBindings", [])
     preserved_cli.setdefault("generatedBy", "gbdraw")
     refreshed_session["cliInvocation"] = preserved_cli

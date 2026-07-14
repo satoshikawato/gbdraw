@@ -17,6 +17,40 @@ CompositeKind = Literal["grid", "contact_sheet", "social_preview"]
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PALETTES_FILE = PROJECT_ROOT / "gbdraw" / "data" / "color_palettes.toml"
 
+MANUALLY_MANAGED_FIGURES: dict[str, str] = {
+    "docs/TUTORIALS/images/tutorial-8-interactive-feature-popup.png": (
+        "Browser screenshot; recapture after loading the tutorial session and opening a feature popup."
+    ),
+    "docs/TUTORIALS/images/tutorial-8-interactive-match-popup.png": (
+        "Browser screenshot; recapture after loading the tutorial session and opening a match popup."
+    ),
+    "docs/TUTORIALS/images/tutorial-8-loaded-session.png": (
+        "Browser screenshot; recapture from the local web app after loading the documented session."
+    ),
+    "gbdraw/web/assets/gbdraw-logo-title.png": (
+        "Brand asset derived from the adjacent SVG; update and verify both logo files together."
+    ),
+}
+
+UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
+    "examples/Escherichia_Shigella_multi.svg": "Recipe-only multi-record companion to the published two-record figure.",
+    "examples/M16-5_fugaku.svg": "Archived single-genome style recipe retained for reproducibility.",
+    "examples/NC_000921_spring.svg": "Archived single-genome style recipe retained for reproducibility.",
+    "examples/NC_000962_psyche.svg": "Archived single-genome style recipe retained for reproducibility.",
+    "examples/NC_001416.svg": "Static companion to the Beginner linear interactive Gallery example.",
+    "examples/NC_001879_color.svg": "Archived chloroplast color-table recipe retained for reproducibility.",
+    "examples/NC_005042_pine_reflection.svg": "Archived single-genome style recipe retained for reproducibility.",
+    "examples/NC_007205_oceanic_voyage.svg": "Archived single-genome style recipe retained for reproducibility.",
+    "examples/NC_010162_edelweiss.svg": "Source panel used by the published social-preview composite.",
+    "examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg": (
+        "Legacy static companion retained alongside the current human mitochondrial tutorial recipe."
+    ),
+    "examples/NC_016510_mint.svg": "Archived single-genome style recipe retained for reproducibility.",
+    "examples/NZ_CP010822_orange.svg": "Archived single-genome style recipe retained for reproducibility.",
+    "examples/Pandoravirus_salinus_forest.svg": "Archived large-genome style recipe retained for reproducibility.",
+    "examples/majani.svg": "Source panel used by the published social-preview composite.",
+}
+
 
 @dataclass(frozen=True)
 class SupportAsset:
@@ -119,6 +153,58 @@ SUPPORT_ASSETS: dict[str, SupportAsset] = {
     "qualifier_priority.tsv": SupportAsset(
         filename="qualifier_priority.tsv",
         content="CDS\tgene\n",
+    ),
+    "label_override.tsv": SupportAsset(
+        filename="label_override.tsv",
+        content=(
+            "LC738868.1\tCDS\tlabel\t^protein gustavus-like protein$\tgustavus-like protein\n"
+            "*\t*\tlabel\t^hypothetical protein$\tHP\n"
+        ),
+    ),
+    "linear_records.tsv": SupportAsset(
+        filename="linear_records.tsv",
+        content=(
+            "gbk\trecord_label\trecord_subtitle\trecord_id\tregion\treverse_complement\torder\n"
+            "{PROJECT_ROOT}/examples/MjeNMV.gb\tMarsupenaeus japonicus endogenous nimavirus\tGinoza2017\tLC738868.1\t\t0\t1\n"
+            "{PROJECT_ROOT}/examples/MelaMJNV.gb\tMelicertus latisulcatus majanivirus\tOkinawa2016\tLC738874.1\t1-160000\t0\t2\n"
+            "{PROJECT_ROOT}/examples/PemoMJNVA.gb\tPenaeus monodon majanivirus A\tMikawa2016\tLC738870.1\t1-160000\t1\t3\n"
+        ),
+    ),
+    "circular_records.tsv": SupportAsset(
+        filename="circular_records.tsv",
+        content=(
+            "gbk\trecord_id\torder\trow\tcolumn\n"
+            "{PROJECT_ROOT}/examples/MjeNMV.gb\tLC738868.1\t1\t1\t1\n"
+            "{PROJECT_ROOT}/examples/MelaMJNV.gb\tLC738874.1\t2\t1\t2\n"
+            "{PROJECT_ROOT}/examples/PemoMJNVA.gb\tLC738870.1\t3\t2\t1\n"
+        ),
+    ),
+    "conservation.tsv": SupportAsset(
+        filename="conservation.tsv",
+        content=(
+            "blast\tlabel\tcolor\n"
+            "{PROJECT_ROOT}/examples/MjeNMV.MelaMJNV.tblastx.out\tMelaMJNV\t#4E79A7\n"
+        ),
+    ),
+    "circular_tracks.tsv": SupportAsset(
+        filename="circular_tracks.tsv",
+        content=(
+            "id\trenderer\tside\tr\tw\tparams\n"
+            "features\tfeatures\taxis\n"
+            "gc_content\tdinucleotide_content\tinside\t\t0.1\tnt=GC\n"
+            "gc_skew\tdinucleotide_skew\tinside\t\t0.1\tnt=GC\n"
+            "at_skew\tdinucleotide_skew\tinside\t\t0.1\tnt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew\n"
+            "ticks\tticks\tinside\t\t\ttick_label_layout=label_in_tick_out\n"
+        ),
+    ),
+    "feature_visibility.tsv": SupportAsset(
+        filename="feature_visibility.tsv",
+        content=(
+            "record_id\tfeature_type\tqualifier\tvalue\taction\n"
+            "NC_012920.1\tCDS\tproduct\t^cytochrome c oxidase subunit I$\toff\n"
+            "*\ttRNA\tproduct\t^tRNA-Leu$\tshow\n"
+            "*\tCDS\tproduct\t^ATP synthase F0 subunit 6$\texclude_matching\n"
+        ),
     ),
 }
 
@@ -1187,9 +1273,491 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
     return figures
 
 
+def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
+    """Recipes for tutorial figures that are not part of the legacy gallery set."""
+
+    figures: dict[str, FigureSpec] = {}
+
+    def add(
+        figure_id: str,
+        output_path: str,
+        recipe: CliRecipe,
+        *,
+        required_inputs: tuple[str, ...],
+        support_assets: tuple[str, ...] = (),
+    ) -> None:
+        figures[figure_id] = _figure(
+            figure_id=figure_id,
+            output_path=output_path,
+            groups=("docs",),
+            required_inputs=required_inputs,
+            support_assets=support_assets,
+            recipe=recipe,
+            description=f"Documentation tutorial figure: {figure_id}.",
+        )
+
+    add(
+        "quickstart_labeled_rna_features",
+        "examples/quickstart-labeled-rna-features.svg",
+        CliRecipe(
+            subcommand="circular",
+            gbk_files=("NC_000913.gbk",),
+            extra_args=("--track_type", "middle", "--features", "rRNA,tRNA", "--labels"),
+        ),
+        required_inputs=("NC_000913.gbk",),
+    )
+    add(
+        "tutorial_2_pairwise_blast",
+        "examples/tutorial-2-pairwise-blast.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=("AP027078.gb", "AP027131.gb"),
+            blast_files=("AP027078_AP027131.tblastx.out",),
+            extra_args=("--separate_strands", "--align_center"),
+        ),
+        required_inputs=("AP027078.gb", "AP027131.gb", "AP027078_AP027131.tblastx.out"),
+    )
+    add(
+        "tutorial_3_label_override",
+        "examples/tutorial-3-label-override.svg",
+        CliRecipe(
+            subcommand="circular",
+            gbk_files=("MjeNMV.gbk",),
+            file_args=(_file_arg("--label_table", "label_override.tsv"),),
+            extra_args=("--labels",),
+        ),
+        required_inputs=("MjeNMV.gbk",),
+        support_assets=("label_override.tsv",),
+    )
+    add(
+        "tutorial_3_embedded_labels",
+        "examples/tutorial-3-embedded-labels.svg",
+        CliRecipe(
+            subcommand="circular",
+            gbk_files=("MjeNMV.gbk",),
+            extra_args=("--labels", "--label_rendering", "embedded_only"),
+        ),
+        required_inputs=("MjeNMV.gbk",),
+    )
+    add(
+        "tutorial_3_above_feature_labels",
+        "examples/tutorial-3-above-feature-labels.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=("MjeNMV.gbk",),
+            extra_args=(
+                "--show_labels",
+                "all",
+                "--label_placement",
+                "above_feature",
+                "--label_rotation",
+                "45",
+            ),
+        ),
+        required_inputs=("MjeNMV.gbk",),
+    )
+
+    protein_inputs = ("MjeNMV.gb", "MelaMJNV.gb", "PemoMJNVA.gb")
+    add(
+        "tutorial_protein_pairwise",
+        "examples/tutorial-protein-pairwise.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=protein_inputs[:2],
+            extra_args=(
+                "--protein_blastp_mode",
+                "pairwise",
+                "--align_center",
+                "--pairwise_match_style",
+                "curve",
+            ),
+        ),
+        required_inputs=protein_inputs[:2],
+    )
+    add(
+        "majani_orthogroup",
+        "examples/majani_orthogroup.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=protein_inputs,
+            extra_args=(
+                "--protein_blastp_mode",
+                "orthogroup",
+                "--show_labels",
+                "orthogroup_top",
+                "--pairwise_match_style",
+                "curve",
+                "--align_center",
+            ),
+        ),
+        required_inputs=protein_inputs,
+    )
+    add(
+        "majani_collinear",
+        "examples/majani_collinear.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=protein_inputs,
+            extra_args=(
+                "--protein_blastp_mode",
+                "collinear",
+                "--collinear_min_anchors",
+                "2",
+                "--collinear_color_mode",
+                "orientation_identity",
+                "--pairwise_match_style",
+                "curve",
+                "--align_center",
+            ),
+        ),
+        required_inputs=protein_inputs,
+    )
+
+    add(
+        "tutorial_5_records_table",
+        "examples/tutorial-5-records-table.svg",
+        CliRecipe(
+            subcommand="linear",
+            file_args=(_file_arg("--records_table", "linear_records.tsv"),),
+        ),
+        required_inputs=protein_inputs,
+        support_assets=("linear_records.tsv",),
+    )
+    add(
+        "tutorial_5_circular_grid",
+        "examples/tutorial-5-circular-grid.svg",
+        CliRecipe(
+            subcommand="circular",
+            file_args=(_file_arg("--records_table", "circular_records.tsv"),),
+            extra_args=("--multi_record_canvas", "--multi_record_size_mode", "auto"),
+        ),
+        required_inputs=protein_inputs,
+        support_assets=("circular_records.tsv",),
+    )
+    add(
+        "tutorial_5_conservation_table",
+        "examples/tutorial-5-conservation-table.svg",
+        CliRecipe(
+            subcommand="circular",
+            gbk_files=("MjeNMV.gb",),
+            file_args=(_file_arg("--conservation_table", "conservation.tsv"),),
+            extra_args=(
+                "--conservation_reference",
+                "query",
+                "--identity",
+                "95",
+                "--alignment_length",
+                "1000",
+            ),
+        ),
+        required_inputs=("MjeNMV.gb", "MjeNMV.MelaMJNV.tblastx.out"),
+        support_assets=("conservation.tsv",),
+    )
+    add(
+        "tutorial_circular_track_table",
+        "examples/tutorial-circular-track-table.svg",
+        CliRecipe(
+            subcommand="circular",
+            gbk_files=("HmmtDNA.gbk",),
+            file_args=(_file_arg("--circular_track_table", "circular_tracks.tsv"),),
+            extra_args=(
+                "--track_type",
+                "middle",
+                "--window",
+                "500",
+                "--step",
+                "50",
+                "--species",
+                "<i>Homo sapiens</i>",
+                "-l",
+                "left",
+            ),
+        ),
+        required_inputs=("HmmtDNA.gbk",),
+        support_assets=("circular_tracks.tsv",),
+    )
+
+    add(
+        "tutorial_6_depth_circular",
+        "examples/tutorial-6-depth-circular.svg",
+        CliRecipe(
+            subcommand="circular",
+            gbk_files=("AP027133.gb",),
+            file_args=(_file_arg("--depth", "AP027133.DRR394922.depth.tsv"),),
+            extra_args=(
+                "--depth_width",
+                "45",
+                "--depth_window",
+                "100",
+                "--depth_step",
+                "100",
+                "--depth_max",
+                "150",
+                "--show_depth_axis",
+                "--show_depth_ticks",
+                "--depth_large_tick_interval",
+                "50",
+                "--depth_small_tick_interval",
+                "25",
+            ),
+        ),
+        required_inputs=("AP027133.gb", "AP027133.DRR394922.depth.tsv"),
+    )
+    add(
+        "tutorial_6_depth_tracks",
+        "examples/tutorial-6-depth-tracks.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=("AP027131.gb", "AP027132.gb"),
+            file_args=(
+                _file_arg(
+                    "--depth_track",
+                    "AP027131.DRR394921.depth.tsv",
+                    "AP027132.DRR394921.depth.tsv",
+                ),
+            ),
+            extra_args=(
+                "--depth_track_label",
+                "DRR394921",
+                "--depth_track_color",
+                "#4E79A7",
+                "--depth_height",
+                "36",
+                "--depth_window",
+                "100",
+                "--depth_step",
+                "100",
+                "--depth_min",
+                "0",
+                "--depth_max",
+                "1000",
+                "--depth_large_tick_interval",
+                "500",
+                "--depth_small_tick_interval",
+                "250",
+                "--show_depth_axis",
+                "--show_depth_ticks",
+                "--share_depth_axis",
+            ),
+        ),
+        required_inputs=(
+            "AP027131.gb",
+            "AP027132.gb",
+            "AP027131.DRR394921.depth.tsv",
+            "AP027132.DRR394921.depth.tsv",
+        ),
+    )
+    add(
+        "tutorial_depth_log_axis",
+        "examples/tutorial-depth-log-axis.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=("AP027078.gb",),
+            file_args=(_file_arg("--depth", "AP027078.DRR394944.depth.tsv"),),
+            extra_args=(
+                "--depth_height",
+                "40",
+                "--depth_window",
+                "100",
+                "--depth_step",
+                "100",
+                "--depth_log_scale",
+                "--depth_min",
+                "1",
+                "--depth_max",
+                "250000",
+                "--show_depth_axis",
+                "--show_depth_ticks",
+            ),
+        ),
+        required_inputs=("AP027078.gb", "AP027078.DRR394944.depth.tsv"),
+    )
+    add(
+        "tutorial_6_gc_percent",
+        "examples/tutorial-6-gc-percent.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=("MjeNMV.gb",),
+            extra_args=(
+                "--show_gc",
+                "--gc_content_mode",
+                "percent",
+                "--gc_content_min_percent",
+                "25",
+                "--gc_content_max_percent",
+                "75",
+                "--gc_content_large_tick_interval",
+                "10",
+                "--gc_content_small_tick_interval",
+                "5",
+                "--show_gc_content_axis",
+                "--show_gc_content_ticks",
+            ),
+        ),
+        required_inputs=("MjeNMV.gb",),
+    )
+    add(
+        "tutorial_6_two_skew_tracks",
+        "examples/tutorial-6-two-skew-tracks.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=("MjeNMV.gb",),
+            extra_args=(
+                "--show_skew",
+                "--linear_track_slot",
+                "features:features@side=overlay",
+                "--linear_track_slot",
+                "gc_skew:gc_skew@side=below,h=24px,spacing=8px",
+                "--linear_track_slot",
+                "at_skew:dinucleotide_skew@side=below,h=24px,spacing=8px,nt=AT,positive_color=#deaf6e,negative_color=#7294e3",
+                "--linear_track_axis_index",
+                "0",
+            ),
+        ),
+        required_inputs=("MjeNMV.gb",),
+    )
+
+    layout_inputs = ("MjeNMV.gb", "MelaMJNV.gb")
+    add(
+        "tutorial_7_track_layout_below",
+        "examples/tutorial-7-track-layout-below.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=layout_inputs,
+            extra_args=("--track_layout", "below", "--track_axis_gap", "auto", "--show_gc", "--show_skew"),
+        ),
+        required_inputs=layout_inputs,
+    )
+    add(
+        "tutorial_7_linear_layout",
+        "examples/tutorial-7-linear-layout.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=layout_inputs,
+            extra_args=(
+                "--track_layout",
+                "below",
+                "--scale_style",
+                "ruler",
+                "--ruler_on_axis",
+                "--scale_interval",
+                "50000",
+                "--record_label",
+                "Marsupenaeus japonicus endogenous nimavirus",
+                "--record_label",
+                "Melicertus latisulcatus majanivirus",
+                "--record_subtitle",
+                "Ginoza2017",
+                "--record_subtitle",
+                "Okinawa2016",
+                "--plot_title",
+                "Majanivirus comparison",
+                "--plot_title_position",
+                "top",
+            ),
+        ),
+        required_inputs=layout_inputs,
+    )
+    add(
+        "tutorial_7_definition_lines",
+        "examples/tutorial-7-definition-lines.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=layout_inputs,
+            extra_args=(
+                "--record_label",
+                "MjeNMV",
+                "--record_label",
+                "MelaMJNV",
+                "--record_subtitle",
+                "Ginoza2017",
+                "--record_subtitle",
+                "Okinawa2016",
+                "--align_center",
+                "--hide_accession",
+                "--hide_length",
+                "--keep_definition_left_aligned",
+                "--definition_line_style",
+                "name:weight=bold,size=18",
+                "--definition_line_style",
+                "subtitle:size=14,color=#555555",
+            ),
+        ),
+        required_inputs=layout_inputs,
+    )
+    add(
+        "tutorial_7_linear_track_slots",
+        "examples/tutorial-7-linear-track-slots.svg",
+        CliRecipe(
+            subcommand="linear",
+            gbk_files=("MjeNMV.gb",),
+            extra_args=(
+                "--show_gc",
+                "--show_skew",
+                "--linear_track_slot",
+                "features:features@side=overlay,h=60px",
+                "--linear_track_slot",
+                "gc_content:gc_content@h=24px,spacing=8px",
+                "--linear_track_slot",
+                "gc_skew:gc_skew@h=24px,spacing=8px",
+                "--linear_track_axis_index",
+                "0",
+            ),
+        ),
+        required_inputs=("MjeNMV.gb",),
+    )
+
+    add(
+        "tutorial_9_feature_shapes",
+        "examples/tutorial-9-feature-shapes.svg",
+        CliRecipe(
+            subcommand="circular",
+            gbk_files=("HmmtDNA.gbk",),
+            extra_args=(
+                "-k",
+                "CDS,tRNA",
+                "--feature_shape",
+                "CDS=rectangle",
+                "--feature_shape",
+                "tRNA=arrow",
+                "--labels",
+                "out",
+                "--track_type",
+                "middle",
+            ),
+        ),
+        required_inputs=("HmmtDNA.gbk",),
+    )
+    add(
+        "tutorial_9_feature_visibility",
+        "examples/tutorial-9-feature-visibility.svg",
+        CliRecipe(
+            subcommand="circular",
+            gbk_files=("HmmtDNA.gbk",),
+            file_args=(_file_arg("--feature_visibility_table", "feature_visibility.tsv"),),
+            extra_args=(
+                "-k",
+                "CDS",
+                "--feature_shape",
+                "CDS=rectangle",
+                "--feature_shape",
+                "tRNA=arrow",
+                "--labels",
+                "out",
+                "--track_type",
+                "middle",
+            ),
+        ),
+        required_inputs=("HmmtDNA.gbk",),
+        support_assets=("feature_visibility.tsv",),
+    )
+    return figures
+
+
 def _palette_figures() -> dict[str, FigureSpec]:
     figures: dict[str, FigureSpec] = {}
     palette_names = load_palette_names()
+    representative_names = ("default", "ajisai", "soft_pastels")
 
     palette_base_inputs = (
         "AP027078.gb",
@@ -1210,24 +1778,35 @@ def _palette_figures() -> dict[str, FigureSpec]:
         _blast_prep("AP027132_NZ_CP006932.tblastx.out", "tblastx", "AP027132.fasta", "NZ_CP006932.fasta"),
     )
 
-    circular_ids: list[str] = []
-    linear_ids: list[str] = []
-    for palette_name in palette_names:
+    def circular_recipe(palette_name: str) -> CliRecipe:
+        return CliRecipe(
+            subcommand="circular",
+            gbk_files=("AP027078.gb",),
+            extra_args=("--separate_strands", "--track_type", "tuckin", "-p", palette_name),
+        )
+
+    def linear_recipe(palette_name: str) -> CliRecipe:
+        return CliRecipe(
+            subcommand="linear",
+            gbk_files=palette_base_inputs,
+            blast_files=(
+                "AP027078_AP027131.tblastx.out",
+                "AP027131_AP027133.tblastx.out",
+                "AP027133_AP027132.tblastx.out",
+                "AP027132_NZ_CP006932.tblastx.out",
+            ),
+            extra_args=("--align_center", "--separate_strands", "--show_gc", "--show_skew", "-p", palette_name),
+        )
+
+    for palette_name in representative_names:
         circular_id = f"palette_circular_{palette_name}"
         linear_id = f"palette_linear_{palette_name}"
-        circular_ids.append(circular_id)
-        linear_ids.append(linear_id)
-
         figures[circular_id] = _figure(
             figure_id=circular_id,
             output_path=f"examples/AP027078_tuckin_separate_strands_{palette_name}.svg",
             groups=("palettes",),
             required_inputs=("AP027078.gb",),
-            recipe=CliRecipe(
-                subcommand="circular",
-                gbk_files=("AP027078.gb",),
-                extra_args=("--separate_strands", "--track_type", "tuckin", "-p", palette_name),
-            ),
+            recipe=circular_recipe(palette_name),
             description=f"Circular palette example for {palette_name}.",
         )
         figures[linear_id] = _figure(
@@ -1236,23 +1815,7 @@ def _palette_figures() -> dict[str, FigureSpec]:
             groups=("palettes",),
             required_inputs=palette_base_inputs,
             preparations=palette_preparations,
-            recipe=CliRecipe(
-                subcommand="linear",
-                gbk_files=(
-                    "AP027078.gb",
-                    "AP027131.gb",
-                    "AP027133.gb",
-                    "AP027132.gb",
-                    "NZ_CP006932.gb",
-                ),
-                blast_files=(
-                    "AP027078_AP027131.tblastx.out",
-                    "AP027131_AP027133.tblastx.out",
-                    "AP027133_AP027132.tblastx.out",
-                    "AP027132_NZ_CP006932.tblastx.out",
-                ),
-                extra_args=("--align_center", "--separate_strands", "--show_gc", "--show_skew", "-p", palette_name),
-            ),
+            recipe=linear_recipe(palette_name),
             description=f"Linear palette example for {palette_name}.",
         )
 
@@ -1260,7 +1823,7 @@ def _palette_figures() -> dict[str, FigureSpec]:
         figure_id="palettes_combined_image_1",
         output_path="examples/palettes_combined_image_1.png",
         groups=("palettes", "composites"),
-        required_inputs=(),
+        required_inputs=("AP027078.gb",),
         recipe=CompositeRecipe(
             kind="contact_sheet",
             columns=11,
@@ -1268,7 +1831,10 @@ def _palette_figures() -> dict[str, FigureSpec]:
             gap=0,
             padding=0,
             canvas_size=(8250, 3750),
-            panels=tuple(CompositePanel(figure_id=figure_id) for figure_id in circular_ids),
+            panels=tuple(
+                CompositePanel(recipe=circular_recipe(palette_name))
+                for palette_name in palette_names
+            ),
         ),
         description="Circular palette contact sheet.",
     )
@@ -1276,7 +1842,7 @@ def _palette_figures() -> dict[str, FigureSpec]:
         figure_id="palettes_combined_image_2",
         output_path="examples/palettes_combined_image_2.png",
         groups=("palettes", "composites"),
-        required_inputs=(),
+        required_inputs=palette_base_inputs,
         recipe=CompositeRecipe(
             kind="contact_sheet",
             columns=5,
@@ -1284,7 +1850,13 @@ def _palette_figures() -> dict[str, FigureSpec]:
             gap=0,
             padding=0,
             canvas_size=(3750, 8250),
-            panels=tuple(CompositePanel(figure_id=figure_id) for figure_id in linear_ids),
+            panels=tuple(
+                CompositePanel(
+                    recipe=linear_recipe(palette_name),
+                    preparations=palette_preparations,
+                )
+                for palette_name in palette_names
+            ),
         ),
         description="Linear palette contact sheet.",
     )
@@ -1294,6 +1866,7 @@ def _palette_figures() -> dict[str, FigureSpec]:
 
 def build_figure_specs() -> dict[str, FigureSpec]:
     figures = _docs_and_readme_figures()
+    figures.update(_remaining_tutorial_figures())
     figures.update(_palette_figures())
     return figures
 
@@ -1306,10 +1879,12 @@ __all__ = [
     "FigureSpec",
     "FastaPreparation",
     "FileArgument",
+    "MANUALLY_MANAGED_FIGURES",
     "PALETTES_FILE",
     "PROJECT_ROOT",
     "SUPPORT_ASSETS",
     "SupportAsset",
+    "UNREFERENCED_FIGURE_RETENTION",
     "build_figure_specs",
     "get_support_assets",
     "load_palette_names",

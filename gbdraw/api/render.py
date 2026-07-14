@@ -85,7 +85,7 @@ def save_figure_to(
     classification = classify_formats(fmt_list)
     svg_source = canvas.tostring()
     if classification.interactive:
-        interactive_filename = resolve_format_output_path(base_prefix, "interactive-svg")
+        interactive_filename = resolve_format_output_path(base_prefix, INTERACTIVE_SVG_FORMAT)
         try:
             interactive_svg = enrich_svg(svg_source, context=interactive_context)
         except GbdrawError:

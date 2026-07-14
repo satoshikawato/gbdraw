@@ -2,398 +2,120 @@
 
 # Gallery
 
-Each entry pairs a `gbdraw` output with the command used to generate it. For shorter command examples, see [Recipes](./RECIPES.md).
+Use this page to choose a visual capability, then use the reproducible recipes below when you need the exact inputs and settings. For diagrams with feature popups, match inspection, zoom controls, downloadable sessions, and guided browser tutorials, open the [interactive gallery](https://gbdraw.app/gallery/).
 
-Interactive versions of selected SVGs are available at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/). GitHub shows the images without their embedded JavaScript; the public gallery preserves feature and match popups, zoom controls, and other interactions. Its Tutorial tabs reproduce selected figures in the web app.
+## Capabilities
 
-The interactive gallery assets are hosted online and are not bundled with local `gbdraw` installs. Running `gbdraw gui` locally still keeps genome analysis on your own machine.
+### Circular genome overview
 
-For circular examples, `--track_type` names the circular layout preset. Custom track slots use explicit geometry instead, and the circular axis remains fixed.
+Circular mode can separate strands, place labels inside and outside the ring, and add GC content or dinucleotide-skew tracks.
 
-When converting long gallery commands into TSV manifests, see the `--records_table`, `--conservation_table`, and `--circular_track_table` examples in the [CLI Reference](./CLI_Reference.md#tsv-manifest-inputs).
+![Circular human mitochondrial genome with qualifier-based labels](../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
 
-## White spot syndrome virus nucleotide-similarity rings
+### Linear genome comparison
 
-[Open the interactive WSSV example and web tutorial](https://gbdraw.app/gallery/#WSSV_genome_comparison).
+Linear mode can align several records and connect nucleotide or protein matches. Use precomputed BLAST-family tables when the search is performed outside gbdraw, or use the built-in protein-search modes described in the [comparison tutorials](./TUTORIALS/2_Comparative_Genomics.md).
 
-The Tutorial tab runs LOSAT `blastn` against 20 comparison FASTA files, assigns labels and colors to the resulting nucleotide-similarity rings, checks feature and legend popups, and saves the session.
+![Linear Escherichia and Shigella comparison](../examples/Escherichia_Shigella_pair.svg)
 
-## <i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018 complete genome
+### Feature filtering and color rules
 
-[Open the interactive *Vibrio* multi-record example and web tutorial](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018).
+Whitelist and blacklist tables control visible features. Default and qualifier-specific color tables keep the visual encoding explicit and reusable.
 
-One RefSeq GBFF file supplies two chromosomes and four plasmids. The Tutorial tab places the six records on a shared circular canvas, inspects a feature popup, and saves the session.
+![Filtered E. coli virulence-feature diagram](../examples/O157_H7_stx_whitelist.svg)
 
-## Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.
+### Quantitative tracks
 
-[Open the interactive aminoglycoside BGC example and web tutorial](https://gbdraw.app/gallery/#BGC0000708-BGC0000713).
+Depth, GC content, and dinucleotide-skew tracks can use quantitative axes and shared scales. See [Plot read depth and other numeric tracks](./TUTORIALS/6_Depth_Quantitative_Tracks.md).
 
-The Tutorial tab runs a LOSATP protein search, assigns CDS-derived proteins to gbdraw similarity groups, and colors features from antiSMASH `gene_kind` qualifiers. It also covers first-record label rotation, feature and group popups, legend editing, and session export.
+![Circular comparison of window and step settings](../examples/window_step_comparison.png)
 
-## Majanivirus genome comparisons
+### Layout and typography
 
-[Open the interactive nine-genome protein-similarity example and web tutorial](https://gbdraw.app/gallery/#majanivirus_orthogroup).
+Track placement, strand separation, label offsets, legend position, and font sizes can be adjusted independently.
 
-The web tutorial runs LOSATP across nine majanivirus records, assigns CDS-derived proteins to gbdraw similarity groups, applies product-based color rules, and inspects a group-match popup.
+![Comparison of circular definition font sizes](../examples/definition_font_size_comparison.png)
 
-### Static ten-genome TBLASTX example
+### Palettes
 
-The CLI example below uses precomputed TBLASTX results rather than gbdraw's generated protein-similarity groups. It includes a tenth record, MellatMJNV, between TrcuMJNV and MeenMJNV.
+gbdraw includes palettes for different visual moods and contrast needs. The [palette reference](../examples/color_palette_examples.md) shows every palette in circular and linear contexts and lists its underlying colors.
 
-<details><summary>Expand to see the script</summary>
+![Circular palette contact sheet](../examples/palettes_combined_image_1.png)
 
-```bash
-# Pairwise TBLASTX search
-tblastx -query MjeNMV.fasta -subject MelaMJNV.fasta -outfmt 7 -out MjeNMV.MelaMJNV.tblastx.out
-tblastx -query MelaMJNV.fasta -subject PemoMJNVA.fasta -outfmt 7 -out MelaMJNV.PemoMJNVA.tblastx.out
-tblastx -query PemoMJNVA.fasta -subject PeseMJNV.fasta -outfmt 7 -out PemoMJNVA.PeseMJNV.tblastx.out
-tblastx -query PeseMJNV.fasta -subject PemoMJNVB.fasta -outfmt 7 -out PeseMJNV.PemoMJNVB.tblastx.out
-tblastx -query PemoMJNVB.fasta -subject LvMJNV.fasta -outfmt 7 -out PemoMJNVB.LvMJNV.tblastx.out
-tblastx -query LvMJNV.fasta -subject TrcuMJNV.fasta -outfmt 7 -out LvMJNV.TrcuMJNV.tblastx.out
-tblastx -query TrcuMJNV.fasta -subject MellatMJNV.fasta -outfmt 7 -out TrcuMJNV.MellatMJNV.tblastx.out
-tblastx -query MellatMJNV.fasta -subject MeenMJNV.fasta -outfmt 7 -out MellatMJNV.MeenMJNV.tblastx.out
-tblastx -query MeenMJNV.fasta -subject MejoMJNV.fasta -outfmt 7 -out MeenMJNV.MejoMJNV.tblastx.out
+## Reproducible recipes
 
-# gbdraw
-gbdraw linear \
---gbk \
-./in_gbk/MjeNMV.gb \
-./in_gbk/MelaMJNV.gb \
-./in_gbk/PemoMJNVA.gb \
-./in_gbk/PeseMJNV.gb \
-./in_gbk/PemoMJNVB.gb \
-./in_gbk/LvMJNV.gb \
-./in_gbk/TrcuMJNV.gb \
-./in_gbk/MellatMJNV.gb \
-./in_gbk/MeenMJNV.gb \
-./in_gbk/MejoMJNV.gb \
--b \
-./in_fna/MjeNMV.MelaMJNV.tblastx.out \
-./in_fna/MelaMJNV.PemoMJNVA.tblastx.out \
-./in_fna/PemoMJNVA.PeseMJNV.tblastx.out \
-./in_fna/PeseMJNV.PemoMJNVB.tblastx.out \
-./in_fna/PemoMJNVB.LvMJNV.tblastx.out \
-./in_fna/LvMJNV.TrcuMJNV.tblastx.out \
-./in_fna/TrcuMJNV.MellatMJNV.tblastx.out \
-./in_fna/MellatMJNV.MeenMJNV.tblastx.out \
-./in_fna/MeenMJNV.MejoMJNV.tblastx.out \
--t majani_custom_color_table.tsv \
--d modified_default_colors.tsv \
---block_stroke_width 1 \
---block_stroke_color gray \
---align_center \
---separate_strands \
--o majani -f svg
-```
+The repository contains a machine-readable figure manifest in [`tools/reproduce_examples_manifest.py`](../tools/reproduce_examples_manifest.py). The reproducer resolves inputs from `tests/test_inputs/` and `examples/`, creates small support TSV files, and reports any unavailable source instead of silently substituting it.
 
-</details>
-
-![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
-
-## Hepatoplasmataceae five-genome comparison
-
-Interactive examples and web tutorials: [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) and [protein-similarity links](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup).
-
-Both web tutorials run LOSATP on the same five genomes. One draws links between proteins assigned to the same gbdraw similarity group; the other combines compatible runs of protein-match anchors into collinear blocks.
-
-### Static TBLASTX example
-
-The CLI example below instead draws HSPs from four precomputed TBLASTX files, one for each adjacent genome pair.
-
-<details><summary>Expand to see the script</summary>
+List recipe readiness without rendering:
 
 ```bash
-gbdraw linear \
---gbk \
-AP027078.gb \
-AP027131.gb \
-AP027133.gb \
-AP027132.gb \
-NZ_CP006932.gb \
--b \
-AP027078_AP027131.tblastx.out \
-AP027131_AP027133.tblastx.out \
-AP027133_AP027132.tblastx.out \
-AP027132_NZ_CP006932.tblastx.out \
---align_center \
---separate_strands \
---show_gc \
---show_skew \
---block_stroke_width 1 \
---block_stroke_color gray \
---palette default \
--f svg \
--o hepatoplasmataceae_default
+python tools/reproduce_examples.py --list
 ```
 
-</details>
-
-![hepatoplasmataceae_default.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae_default.svg)
-
-## Human mitochondrial genome
-
-[Open the interactive human mitochondrial AT skew example and web tutorial](https://gbdraw.app/gallery/#HmmtDNA_ATskew).
-
-The web tutorial adds an AT skew ring with custom track slots, uses the `gene` qualifier for CDS labels, inspects a feature popup, and edits the legend.
-
-### Static qualifier-priority example
-
-The CLI example below changes CDS labels to the `gene` qualifier. Unlike the interactive entry, it does not add an AT skew ring.
-
-<details><summary>Expand to see the script</summary>
-
-The `qualifier_priority.tsv` file passed with `--qualifier_priority` chooses the label qualifier for each feature type. Here, CDS labels use `gene`; other feature types keep the default qualifier order:
-
-```qualifier_priority.tsv
-CDS gene
-```
-| feature type | qualifier |
-| ------ | ------- |
-| CDS | gene |
+Render one recipe into `_reproduced/examples/`:
 
 ```bash
-gbdraw circular \
---gbk NC_012920.gb \
--f svg --track_type middle \
---species "<i>Homo sapiens</i>" \
---block_stroke_width 2 \
---axis_stroke_width 5 \
---labels both \
---qualifier_priority qualifier_priority.tsv \
--o NC_012920_middle_qualifier_priority_inner_axis5_def28_italic \
---definition_font_size 28
+python tools/reproduce_examples.py --figure HmmtDNA_qualifier_priority_soft_pastels
 ```
-</details>
 
-![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
-
-## <i>Nicotiana tabacum</i> chloroplast genome
-
-<details><summary>Expand to see the script</summary>
-
+Render all documentation figures:
 
 ```bash
-gbdraw circular \
---gbk NC_001879.gbk \
---separate_strands \
--f svg \
--o NC_001879_color \
--k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
--t chloroplast_specific_table.tsv \
---block_stroke_width 1 \
---block_stroke_color black \
---axis_stroke_width 3 \
---line_stroke_width 2 \
---suppress_gc \
---suppress_skew \
--p default \
---track_type tuckin \
---labels both \
---qualifier_priority qualifier_priority.tsv \
---outer_label_x_radius_offset 0.90 \
---outer_label_y_radius_offset 0.90 \
---inner_label_x_radius_offset 0.975 \
---inner_label_y_radius_offset 0.975 \
---species "<i>Nicotiana tabacum</i>" \
---definition_font_size 28 \
---legend upper_left
+python tools/reproduce_examples.py --group docs
 ```
-</details>
 
-![NC_001879_color.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001879_color.svg)
+To deliberately refresh tracked figures after reviewing the output, add `--output-root .`. Do not use that option merely to preview a change.
 
-## Lambda phage
+### Human mitochondrial genome labels
 
-<details><summary>Expand to see the script</summary>
-
+Question: how can CDS labels use the `gene` qualifier while other feature types keep their defaults?
 
 ```bash
-gbdraw linear \
---gbk NC_001416.gb \
--o NC_001416 \
--f svg \
---show_labels all \
---separate_strands \
---legend left \
--d cds_white.tsv \
--t lambda_specific_table.tsv \
---block_stroke_width 2 \
---axis_stroke_width 5 \
---definition_font_size 24
+python tools/reproduce_examples.py --figure HmmtDNA_qualifier_priority_soft_pastels
 ```
 
-</details>
+The recipe generates the qualifier-priority TSV and renders the circular figure. The browser equivalent is the [human mtDNA AT-skew tutorial](https://gbdraw.app/gallery/#HmmtDNA_ATskew).
 
-![NC_001416.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001416.svg)
+### Escherichia and Shigella nucleotide matches
 
-
-## "<i>Ca.</i> Sukunaarchaeum mirabile" M16-5
-
-<details><summary>Expand to see the script</summary>
-
+Question: how do adjacent-genome BLAST HSPs appear in a two-record or multi-record layout?
 
 ```bash
-gbdraw circular \
---gbk M16-5.gb \
---separate_strands \
--f svg \
--o M16-5_fugaku \
---block_stroke_width 1 \
---axis_stroke_width 1 \
--p fugaku \
---track_type middle \
---species "<i>Ca.</i> Sukunaarchaeum mirabile" \
---definition_font_size 22 \
---legend upper_right
+python tools/reproduce_examples.py \
+  --figure Escherichia_Shigella_pair \
+  --figure Escherichia_Shigella_multi
 ```
 
-</details>
+The manifest records query and subject order for each search preparation. For interpretation details, see [Compare genomes with precomputed BLAST-family results](./TUTORIALS/2_Comparative_Genomics.md).
 
-![M16-5_fugaku.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/M16-5_fugaku.svg)
+### Majanivirus TBLASTX comparison
 
-
-## <i>Pandoravirus salinus</i>
-
-<details><summary>Expand to see the script</summary>
+Question: how can ten viral records be compared with precomputed translated nucleotide matches and product-based colors?
 
 ```bash
-gbdraw circular \
---gbk Pandoravirus_salinus.gb \
---separate_strands \
--f svg \
--o Pandoravirus_salinus_forest \
--p forest \
---track_type tuckin \
---species "<i>Pandoravirus salinus</i>" \
---definition_font_size 22 \
---legend upper_right
+python tools/reproduce_examples.py --figure majani
 ```
 
-</details>
+The static recipe uses adjacent-pair TBLASTX output. The [interactive nine-genome case study](https://gbdraw.app/gallery/#majanivirus_orthogroup) instead runs a protein search and assigns CDS-derived proteins to gbdraw similarity groups; those are distinct workflows.
 
-![Pandoravirus_salinus_forest.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/Pandoravirus_salinus_forest.svg)
+### Additional single-genome styles
 
-## "<i>Candidatus</i> Pelagibacter ubique" HTCC1062
-
-<details><summary>Expand to see the script</summary>
+These recipes demonstrate chloroplast annotation colors, compact archaeal circular layout, and large viral genomes:
 
 ```bash
-gbdraw circular \
---gbk NC_007205.gb \
--f svg \
---separate_strands \
---species "<i>Ca. </i> Pelagibacter ubique" \
---strain "HTCC1062" \
---legend none \
---palette oceanic_voyage \
--o NC_007205_oceanic_voyage
+python tools/reproduce_examples.py \
+  --figure NC_001879_color \
+  --figure M16-5_fugaku \
+  --figure Pandoravirus_salinus_forest
 ```
 
-</details>
+## Advanced interactive case studies
 
-![NC_007205_oceanic_voyage.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_007205_oceanic_voyage.svg)
+The hosted gallery keeps the larger session-based workflows separate from the static recipes:
 
-## <i>Prochlorococcus marinus</i> CCMP1375
-
-<details><summary>Expand to see the script</summary>
-
-
-```bash
-gbdraw circular \
---gbk NC_005042.gb \
--f svg \
---separate_strands \
---species "<i>Prochlorococcus marinus</i>" \
---strain "CCMP1375" \
---legend none \
---palette pine_reflection \
--o NC_005042_pine_reflection
-```
-
-</details>
-
-![NC_005042_pine_reflection.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_005042_pine_reflection.svg)
-
-## <i>Flavobacterium columnare</i> ATCC 49512
-
-<details><summary>Expand to see the script</summary>
-
-
-```bash
-gbdraw circular \
---gbk NC_016510.gb \
--f svg \
---separate_strands \
---species "<i>Flavobacterium columnare</i>" \
---strain "ATCC 49512" \
---legend none \
---palette mint \
--o NC_016510_mint
-```
-
-</details>
-
-![NC_016510_mint.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_016510_mint.svg)
-
-## <i>Thermus aquaticus</i> Y51MC23
-
-<details><summary>Expand to see the script</summary>
-
-```bash
-gbdraw circular \
---gbk NZ_CP010822.gb \
--f svg \
---separate_strands \
---species "<i>Thermus aquaticus</i>" \
---strain "Y51MC23" \
---legend none \
---palette orange \
--o NZ_CP010822_orange
-```
-</details>
-
-![NZ_CP010822_orange.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NZ_CP010822_orange.svg)
-
-## <i>Helicobacter pylori</i> J99
-
-<details><summary>Expand to see the script</summary>
-
-```bash
-gbdraw circular \
---gbk NC_000921.gb \
--f svg \
---separate_strands \
---species "<i>Helicobacter pylori</i>" \
---strain "J99" \
---legend none \
---palette spring \
--o NC_000921_spring
-```
-
-</details>
-
-![NC_000921_spring.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000921_spring.svg)
-
-
-## <i>Mycobacterium tuberculosis</i> H37Rv
-
-<details><summary>Expand to see the script</summary>
-
-```bash
-gbdraw circular \
---gbk NC_000962.gb \
--f svg \
---separate_strands \
---species "<i>Mycobacterium tuberculosis</i>" \
---strain "H37Rv" \
---legend none \
---palette psyche \
--o NC_000962_psyche
-```
-
-</details>
-
-![NC_000962_psyche.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000962_psyche.svg)
-
+- [Vibrio multi-record circular layout](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018) — six records on one canvas.
+- [Aminoglycoside biosynthetic gene clusters](https://gbdraw.app/gallery/#BGC0000708-BGC0000713) — protein search, similarity groups, qualifier colors, and legend editing.
+- [Hepatoplasmataceae similarity groups](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) — the same records rendered with two different match representations.
+- [WSSV nucleotide-similarity rings](https://gbdraw.app/gallery/#WSSV_genome_comparison) — an advanced session-first case study. Its displayed command documents provenance but is not labeled as directly runnable because the complete exact public input bundle is unavailable.
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)

@@ -22,6 +22,16 @@ Run the depth examples from the repository root so the `tests/test_inputs/` path
 
 Depth TSV files use the first three columns of `samtools depth` output: `reference`, 1-based `position`, and non-negative `depth`. A header is optional; gbdraw normalizes these columns to `reference_name`, `position`, and `depth`. The supplied files are headerless and contain one row per base. The examples plot mean depth in non-overlapping 100 nt windows, retaining local variation without producing oversized SVG files.
 
+Create the input from a coordinate-sorted, indexed BAM file with `-aa` so bases with zero coverage are retained:
+
+```bash
+samtools depth -aa input.bam > sample.depth.tsv
+```
+
+Keep the reference names identical across the GenBank record, the BAM header, and the first TSV column. A mismatch such as `NC_000001.1` versus `chr1` leaves that record without plotted values. Rows missing from the TSV are unknown rather than implicitly zero; use `-aa` when zero coverage must be represented. For several displayed records, one depth file may contain rows for every record, or `--depth_track` may receive one file per record in the same order as `--gbk`.
+
+Per-base input preserves the source measurement. `--depth_window` controls how many bases are summarized into each plotted mean, while `--depth_step` controls the distance between consecutive windows. Equal values produce non-overlapping windows; a smaller step produces overlapping windows and a larger SVG. Use per-base plotting (`--depth_window 1 --depth_step 1`) only when individual positions matter.
+
 Sections 5 and 6 use the MjeNMV GenBank record:
 
 ```bash
@@ -83,6 +93,8 @@ This writes `tutorial-6-depth-tracks.svg`. The common 0× to 1,000× scale makes
 ![AP027131.1 and AP027132.1 linear diagrams with DRR394921 depth tracks on shared axes ranging from 0× to 1,000×](../../examples/tutorial-6-depth-tracks.svg)
 
 Repeat `--depth_track` only when another matching dataset is available. A second depth track is omitted here because the example data do not include a second matching depth file for both records.
+
+For multiple samples, repeat `--depth_track`, and give each group a matching `--depth_track_label` and `--depth_track_color`. Within every group, list files in displayed-record order. If a sample has no measurement for a record, do not substitute an unrelated file: prepare a correctly named zero-coverage table or omit that comparison.
 
 Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same y-axis range across records for each depth track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
 

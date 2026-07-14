@@ -5,7 +5,9 @@
 
 # Draw protein matches from annotated CDS features
 
-Build linear comparison diagrams by translating annotated CDS features and searching the resulting protein sequences.
+**Question:** Should annotated CDS translations be shown as individual pairwise hits, cross-record similarity groups, or locally ordered collinear blocks?
+
+After this guide, you can choose the protein-search runtime and compare all three modes without treating gbdraw similarity groups as phylogeny-based orthogroups. The workflow builds linear diagrams by translating annotated CDS features and searching the resulting protein sequences.
 
 ## 1. Prepare annotated GenBank inputs
 

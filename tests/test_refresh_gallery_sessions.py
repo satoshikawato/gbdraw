@@ -60,7 +60,7 @@ def test_preserve_gallery_cli_invocation_keeps_original_render_args() -> None:
             "schema": 1,
             "mode": "circular",
             "args": ["--gbk", "input.gb", "-f", "interactive_svg"],
-            "renderFormats": ["interactive-svg"],
+            "renderFormats": ["interactive_svg"],
             "fileBindings": [
                 {"argIndex": 1, "slot": "files.c_gb", "name": "input.gb"}
             ],
@@ -81,7 +81,7 @@ def test_preserve_gallery_cli_invocation_keeps_original_render_args() -> None:
     assert any("AT skew" in arg for arg in args)
     assert "--conservation_blast" in args
     assert args[-2:] == ["-f", "interactive_svg"]
-    assert refreshed_session["cliInvocation"]["renderFormats"] == ["interactive-svg"]
+    assert refreshed_session["cliInvocation"]["renderFormats"] == ["interactive_svg"]
     assert (
         refreshed_session["cliInvocation"]["fileBindings"]
         == source_session["cliInvocation"]["fileBindings"]

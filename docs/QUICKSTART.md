@@ -4,7 +4,7 @@
 
 # Quickstart
 
-This quickstart shows how to draw a circular genome diagram with the CLI. If you prefer a GUI, use [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` locally after installation.
+This under-10-minute quickstart draws one circular genome diagram with the CLI. If you prefer a GUI, use the [Beginner circular tutorial](https://gbdraw.app/gallery/#HmmtDNA_basic_circular) or run `gbdraw gui` locally.
 
 ## 1. Confirm the installation
 
@@ -21,6 +21,14 @@ This example uses the *Escherichia coli* K-12 reference genome.
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O NC_000913.gbk
 ```
+
+With `curl`:
+
+```bash
+curl -L "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -o NC_000913.gbk
+```
+
+The same accession can be downloaded from [NCBI Nucleotide](https://www.ncbi.nlm.nih.gov/nuccore/NC_000913.3) by choosing the GenBank format.
 
 ## 3. Generate a circular genome diagram
 
@@ -75,42 +83,10 @@ gbdraw circular \
 
 ![Circular E. coli K-12 genome diagram with an italic species name and strain in the center](../examples/ecoli_with_title.svg)
 
-## 6. Optional: linear mode selectors
-
-Linear mode can target specific records or regions:
-
-- `--record_id`: select a record by ID or `#index`
-- `--reverse_complement`: reverse-complement per input file
-- `--region`: crop a region with `record_id:start-end[:rc]`
-
-Example:
-
-```bash
-gbdraw linear \
-  --gbk NC_000913.gbk \
-  --record_id NC_000913.3 \
-  --region NC_000913.3:100000-250000 \
-  -o ecoli_linear_region \
-  -f svg
-```
-
-![Linear E. coli K-12 diagram cropped to positions 100000 through 250000](../examples/quickstart-linear-region.svg)
-
-If you need an index selector in the shell, quote it:
-
-```bash
-gbdraw linear \
-  --gbk Genome1.gbk Genome2.gbk \
-  --record_id Genome1_Chr1 \
-  --record_id '#0' \
-  --reverse_complement false \
-  --reverse_complement true \
-  -o genome_pair_selected \
-  -f svg
-```
-
 ## Next steps
 
+- Create a one-record linear figure in the [Beginner linear Gallery tutorial](https://gbdraw.app/gallery/#lambda_basic_linear).
+- Select linear records or regions in [Arrange linear tracks, record labels, and rulers](./TUTORIALS/7_Linear_Layout.md#7-select-records-regions-and-orientation).
 - Continue with [Style a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md)
 - Use [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md) to run protein searches during diagram generation
 - Use [TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md) when records need separate labels, selectors, crops, or orientations

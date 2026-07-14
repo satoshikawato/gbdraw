@@ -5,11 +5,15 @@ const sampleList = document.querySelector('#sample-list');
 const sampleCount = document.querySelector('#sample-count');
 const selectedTitle = document.querySelector('#selected-title');
 const selectedDescription = document.querySelector('#selected-description');
+const selectedMeta = document.querySelector('#selected-meta');
 const selectedTags = document.querySelector('#selected-tags');
 const fileSize = document.querySelector('#file-size');
 const frame = document.querySelector('#demo-frame');
 const frameLoading = document.querySelector('#frame-loading');
 const commandBlock = document.querySelector('#command-block code');
+const commandKind = document.querySelector('#command-kind');
+const commandNote = document.querySelector('#command-note');
+const copyCommandButton = document.querySelector('#copy-command');
 const interactiveStep = document.querySelector('#interactive-step');
 const openLink = document.querySelector('#open-link');
 const downloadLink = document.querySelector('#download-link');
@@ -757,6 +761,18 @@ const renderSampleList = () => {
     if (sample.description) {
       appendText(body, 'span', 'sample-card__description', sample.description);
     }
+    appendText(
+      body,
+      'span',
+      'sample-card__meta',
+      [sample.difficulty, sample.workflow].filter(Boolean).join(' · ')
+    );
+    appendText(
+      body,
+      'span',
+      'sample-card__meta sample-card__meta--secondary',
+      [sample.inputSummary, sample.estimatedTime].filter(Boolean).join(' · ')
+    );
     const tagRow = document.createElement('span');
     tagRow.className = 'tag-row';
     renderTags(tagRow, sample.tags);
@@ -770,7 +786,6 @@ const renderSampleList = () => {
         tutorialStatus === 'draft' ? 'Draft tutorial' : 'Tutorial planned'
       );
     }
-    appendText(body, 'span', 'sample-card__size', sample.fileSizeLabel);
     button.appendChild(body);
 
     button.addEventListener('click', () => selectSample(sample.id));
@@ -832,9 +847,23 @@ const selectSample = (id, { updateHash = true } = {}) => {
   selectedTitle.innerHTML = sample.title;
   selectedDescription.textContent = sample.description || '';
   selectedDescription.hidden = !sample.description;
+  selectedMeta.textContent = [sample.difficulty, sample.workflow, sample.inputSummary, sample.estimatedTime]
+    .filter(Boolean)
+    .join(' · ');
+  selectedMeta.hidden = !selectedMeta.textContent;
   renderTags(selectedTags, sample.tags);
   fileSize.textContent = sample.fileSizeLabel;
   commandBlock.textContent = sample.command;
+  const isRunnable = sample.commandKind === 'runnable';
+  commandKind.textContent = isRunnable ? 'Runnable' : 'Provenance';
+  commandKind.className = `command-kind command-kind--${isRunnable ? 'runnable' : 'provenance'}`;
+  commandNote.textContent = sample.commandNote || '';
+  commandNote.hidden = !sample.commandNote;
+  copyCommandButton.disabled = !isRunnable;
+  copyCommandButton.textContent = isRunnable ? 'Copy command' : 'Provenance only';
+  copyCommandButton.title = isRunnable
+    ? 'Copy this runnable CLI command'
+    : 'This command needs prepared inputs that are not fully public.';
   interactiveStep.textContent = sample.interactiveStep || '';
   interactiveStep.hidden = !sample.interactiveStep;
   updateActionLinks(sample);
@@ -876,6 +905,20 @@ copyLink.addEventListener('click', async () => {
     updateCopyButton('Copied');
   } catch (error) {
     updateCopyButton('Copy failed');
+  }
+});
+
+copyCommandButton.addEventListener('click', async () => {
+  const sample = examples.find((entry) => entry.id === selectedId);
+  if (!sample || sample.commandKind !== 'runnable') return;
+  try {
+    await copyText(sample.command);
+    copyCommandButton.textContent = 'Copied';
+    window.setTimeout(() => {
+      if (selectedId === sample.id) copyCommandButton.textContent = 'Copy command';
+    }, 1600);
+  } catch (error) {
+    copyCommandButton.textContent = 'Copy failed';
   }
 });
 

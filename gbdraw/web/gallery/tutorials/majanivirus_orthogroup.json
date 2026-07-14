@@ -70,6 +70,20 @@
       "accession": "LC738878",
       "targetName": "MejoMJNV.gb",
       "note": "Download the Metapenaeus joyneri majanivirus record as a GenBank flat file."
+    },
+    {
+      "label": "Default color table",
+      "source": "Gallery file",
+      "targetName": "modified_default_colors.tsv",
+      "href": "./files/modified_default_colors.tsv",
+      "note": "Download this repository-managed color table beside the nine GenBank files."
+    },
+    {
+      "label": "Specific color table",
+      "source": "Gallery file",
+      "targetName": "majani_custom_color_table.tsv",
+      "href": "./files/majani_custom_color_table.tsv",
+      "note": "Contains the product-based feature rules used by the runnable command."
     }
   ],
   "manualSteps": [

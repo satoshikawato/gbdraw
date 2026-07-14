@@ -43,6 +43,27 @@
       "targetName": "BGC0000713.gbk",
       "href": "https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk",
       "note": "Download the ribostamycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "Default color table",
+      "source": "Gallery file",
+      "targetName": "BGC0000708-BGC0000713_default_colors.tsv",
+      "href": "./files/BGC0000708-BGC0000713_default_colors.tsv",
+      "note": "Sets the fallback CDS color used by the runnable command."
+    },
+    {
+      "label": "Specific color table",
+      "source": "Gallery file",
+      "targetName": "BGC0000708-BGC0000713_specific_colors.tsv",
+      "href": "./files/BGC0000708-BGC0000713_specific_colors.tsv",
+      "note": "Contains the four antiSMASH gene_kind rules used in the figure."
+    },
+    {
+      "label": "Qualifier priority table",
+      "source": "Gallery file",
+      "targetName": "BGC0000708-BGC0000713_qualifier_priority.tsv",
+      "href": "./files/BGC0000708-BGC0000713_qualifier_priority.tsv",
+      "note": "Uses the gene qualifier for concise CDS labels."
     }
   ],
   "manualSteps": [

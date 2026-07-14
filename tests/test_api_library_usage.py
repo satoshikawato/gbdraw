@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -10,6 +11,7 @@ import gbdraw.api.diagram as api_diagram_module
 from gbdraw.api import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
+    load_gff_fasta,
 )
 from gbdraw.api.options import DiagramOptions
 from gbdraw.config.toml import load_config_toml
@@ -27,6 +29,44 @@ SELECTED_FEATURES = [
     "misc_RNA",
     "repeat_region",
 ]
+
+
+@pytest.mark.circular
+def test_documented_python_api_example_runs(
+    examples_dir: Path,
+    temp_output_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    documentation = (Path(__file__).parents[1] / "docs" / "PYTHON_API.md").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"```python\n(.*?)\n```", documentation, re.DOTALL)
+    assert match is not None
+    monkeypatch.setenv("GBDRAW_EXAMPLE_GBK", str(examples_dir / "MjeNMV.gb"))
+    monkeypatch.setenv("GBDRAW_API_OUTPUT_DIR", str(temp_output_dir))
+
+    exec(compile(match.group(1), "docs/PYTHON_API.md", "exec"), {})
+
+    assert (temp_output_dir / "api_circular.svg").exists()
+
+
+@pytest.mark.linear
+def test_documented_gff3_fasta_fixture_preserves_records_and_cds() -> None:
+    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+    records = load_gff_fasta(
+        [str(fixture_dir / "lambda_two_contigs.gff3")],
+        [str(fixture_dir / "lambda_two_contigs.fna")],
+        mode="linear",
+        selected_features_set=["CDS", "gene"],
+    )
+
+    assert [record.id for record in records] == ["lambda_left", "lambda_right"]
+    cds_features = [
+        feature for record in records for feature in record.features if feature.type == "CDS"
+    ]
+    assert len(cds_features) == 45
+    assert {feature.location.strand for feature in cds_features} == {1, -1}
+    assert all(feature.qualifiers.get("translation") for feature in cds_features)
 
 
 @pytest.mark.linear

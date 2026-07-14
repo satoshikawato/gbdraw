@@ -10,6 +10,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 
 - [Installation](./INSTALL.md): choose between the hosted web app, Bioconda, or a local development install.
 - [Quickstart](./QUICKSTART.md): draw a circular genome diagram from a GenBank record.
+- [Workflow guide](./WORKFLOW_GUIDE.md): choose the shortest path for one genome, comparisons, quantitative tracks, automation, or the web app.
 - [Recipes](./RECIPES.md): copy-paste command patterns for common tasks.
 
 ## Tutorials
@@ -22,6 +23,9 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 ## Reference
 
 - [CLI Reference](./CLI_Reference.md): current command help for `gbdraw`, `gbdraw circular`, and `gbdraw linear`.
+- [Python API](./PYTHON_API.md): render circular and linear diagrams from Python.
+- [GFF3 + FASTA input](./GFF3_FASTA.md): prepare, validate, and draw annotation files without GenBank conversion.
+- [Export formats](./EXPORT.md): choose SVG, interactive SVG, PNG, PDF, EPS, or PS and understand paired interactive output files.
 - [Gallery](./GALLERY.md): example diagrams and the commands used to generate them.
 - [Interactive SVG gallery](https://gbdraw.app/gallery/): hosted genome diagrams with feature and match popups. Selected examples include web-app tutorials.
 - [FAQ](./FAQ.md): common questions, limitations, and workarounds.

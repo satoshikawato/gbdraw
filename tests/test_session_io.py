@@ -144,9 +144,9 @@ def test_cli_invocation_restoration_substitutes_embedded_files(tmp_path: Path) -
     assert materialized.exists()
     assert materialized.read_bytes() == b"LOCUS       TEST\n"
     assert spec.args[0:2] == ("-o", "new")
-    assert spec.args[-2:] == ("-f", "interactive-svg")
+    assert spec.args[-2:] == ("-f", "interactive_svg")
     assert spec.cli_invocation_args[0:2] == ("-o", "new")
-    assert spec.cli_invocation_args[-2:] == ("-f", "interactive-svg")
+    assert spec.cli_invocation_args[-2:] == ("-f", "interactive_svg")
     assert spec.file_bindings[0].argIndex == 3
     assert spec.file_bindings[0].slot == "files.c_gb"
 
@@ -524,6 +524,7 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
     )
 
     config = payload["config"]
+    assert payload["cliInvocation"]["renderFormats"] == ["interactive_svg"]
     assert config["form"]["prefix"] == "out"
     assert config["form"]["align_center"] is True
     assert config["form"]["separate_strands"] is True

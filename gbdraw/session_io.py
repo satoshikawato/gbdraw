@@ -21,6 +21,7 @@ from typing import Any, Literal, Mapping, Sequence
 from .definition_line_styles import DEFINITION_LINE_KINDS, parse_definition_line_style_overrides
 from .exceptions import ValidationError
 from .io.regions import RegionSpec, parse_region_specs
+from .render.formats import normalize_format_token
 
 SESSION_FORMAT = "gbdraw-session"
 CURRENT_SESSION_VERSION = 30
@@ -298,6 +299,10 @@ def session_to_cli_args(
     """Convert a GUI/CLI session into normal CLI arguments and temp files."""
 
     validate_session(session)
+    if format_override is not None:
+        format_override = ",".join(
+            normalize_format_token(value) for value in format_override.split(",")
+        )
     declared_mode = session_mode(session)
     if declared_mode and declared_mode != mode:
         raise ValidationError(
@@ -383,7 +388,7 @@ def build_session_json(
         "schema": 1,
         "mode": context.mode,
         "args": [str(arg) for arg in context.cli_invocation_args],
-        "renderFormats": [str(fmt) for fmt in context.render_formats],
+        "renderFormats": [normalize_format_token(fmt) for fmt in context.render_formats],
         "fileBindings": [_binding_to_json(binding) for binding in context.file_bindings],
         "generatedBy": "gbdraw",
     }

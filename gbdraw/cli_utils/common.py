@@ -18,13 +18,13 @@ from gbdraw.features.visibility import resolve_candidate_feature_types
 from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.render.export import CAIROSVG_AVAILABLE, has_cairosvg
-from gbdraw.render.formats import CAIROSVG_FORMATS, SVG_FORMAT, is_cairosvg_format
+from gbdraw.render.formats import CAIROSVG_FORMATS, SVG_FORMAT, is_cairosvg_format, normalize_format_token
 
 logger = logging.getLogger(__name__)
 
 _OUTPUT_FORMAT_HELP = (
     "Comma-separated list of output file formats "
-    "(svg, interactive-svg, png, pdf, eps, ps; default: svg; "
+    "(svg, interactive_svg, png, pdf, eps, ps; default: svg; "
     "png/pdf/eps/ps require CairoSVG)."
 )
 
@@ -480,6 +480,7 @@ def parse_feature_shape_assignment_arg(value: str) -> str:
 
 def handle_output_formats(out_formats: list[str]) -> list[str]:
     """Handle WebAssembly and CairoSVG availability for output formats."""
+    out_formats = [normalize_format_token(fmt) for fmt in out_formats]
     cairo_formats = [f for f in out_formats if is_cairosvg_format(f)]
     if "pyodide" in sys.modules:
         if cairo_formats:

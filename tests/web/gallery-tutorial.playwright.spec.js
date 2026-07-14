@@ -275,9 +275,10 @@ test('Gallery renders the WSSV nucleotide-similarity tutorial and media', async 
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Plot WSSV nucleotide matches in circular rings' })
+    page.getByRole('heading', { name: 'Advanced session-based WSSV comparison case study' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(tutorialPanel.getByText('Load the bundled session first')).toBeVisible();
   await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
@@ -291,7 +292,7 @@ test('Gallery renders the WSSV nucleotide-similarity tutorial and media', async 
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('cell', { name: 'MG18PR-0187-N40S.fa' })).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(10);
+  await expect(mediaImages).toHaveCount(11);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-comparison-fasta-series.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-upload-fasta-comparisons.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-conservation-rings.webp"]')).toHaveCount(1);
@@ -637,6 +638,26 @@ test('Gallery copy link button copies the selected sample URL', async ({ page })
 
   await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__copiedGalleryLink)).toBe(`${baseUrl}/gallery/#HmmtDNA_ATskew`);
+});
+
+test('Gallery orders Beginner examples first and distinguishes runnable commands', async ({ page }) => {
+  await page.goto(`${baseUrl}/gallery/`, { waitUntil: 'domcontentloaded' });
+
+  const cards = page.locator('.sample-card');
+  await expect(cards).toHaveCount(9);
+  await expect(cards.nth(0)).toContainText('Beginner');
+  await expect(cards.nth(0)).toContainText('Circular basics');
+  await expect(cards.nth(1)).toContainText('Linear basics');
+
+  await page.getByRole('tab', { name: 'Command' }).click();
+  await expect(page.getByText('Runnable', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy command' })).toBeEnabled();
+  await expect(page.locator('#command-block')).toContainText('-f interactive_svg');
+
+  await page.locator('[data-sample-id="WSSV_genome_comparison"]').click();
+  await expect(page.getByText('Provenance', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Provenance only' })).toBeDisabled();
+  await expect(page.locator('#command-note')).toContainText('not directly runnable');
 });
 
 test('Gallery tab controls support keyboard navigation', async ({ page }) => {
