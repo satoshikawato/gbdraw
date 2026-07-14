@@ -1,20 +1,55 @@
 # Python API Improvement Plan
 
 - 作成日: 2026-07-14
+- 更新日: 2026-07-14
 - 対象バージョン: `0.14.0b0`
 - 監査スナップショット: branch `cli_tsv_inputs`, HEAD `8f952d4` の作業ツリー
+- 実装スナップショット: branch `cli_tsv_inputs`, HEAD `67cb66d` の作業ツリー
 - 対象: `gbdraw/api/`, Python API から利用する入出力・設定・interactive SVG・session 経路、関連テストと文書
 - 目的: 静的描画エンジンとして既に高い機能到達度を持つ `gbdraw.api` を、CLI/Web の主要ワークフローも安全に利用できる公開 API にする
 
+## 0. 実装結果
+
+本計画に基づく API 改修は完了した。Phase 4 の session bridge は、CLI 引数を
+library contract に漏らさないため設計ゲートで停止し、非公開を維持する判断を
+[ADR](ADR_PYTHON_SESSION_API.md) に記録した。これは完了の定義 7 で認めた結果である。
+
+| 領域 | 状態 | 実装結果 |
+|---|---|---|
+| P1 anchor mode | 完了 | `all`、`one_to_one`、`rbh` と alias の正規化結果を collinearity owner まで転送 |
+| P1 typed config | 完了 | `LabelsFilteringConfig.raw` 内の 3 種のラベル DataFrame を override 後も保持 |
+| P1 export | 完了 | `save_figure_to` を strict にし、実在 path だけを返し、変換失敗を型付き例外に統一 |
+| P2 interactive SVG | 完了 | `InteractiveSvgContext`、`enrich_svg`、`build_interactive_svg_context` を公開し、bytes API へ context を追加 |
+| P2 table input | 完了 | records/conservation/circular-track の型・reader と 3 種の label reader、DataFrame/file options を公開 |
+| P2 multi-record Circular | 完了 | `CircularMultiRecordOptions` と `build_circular_multi_diagram` を追加 |
+| P3 session | 設計ゲート完了 | CLI 非依存の typed request model が揃うまで session orchestration を内部に維持 |
+| P3 documentation | 完了 | capability matrix、主要 recipe、制約を追加し、全 Python code block を pytest から実行 |
+
+実装後の公開面は `gbdraw.api.__all__` が 87 symbol、`DiagramOptions` が 70 field、
+`CircularMultiRecordOptions` が 5 field である。契約 snapshot には意図した追加だけを反映した。
+
+検証結果:
+
+- targeted suite: `307 passed`
+- full non-slow suite: `1156 passed, 3 skipped, 6 deselected`
+- export の最終修正後の関連 suite: `41 passed`
+- 変更対象 Python file の Ruff: 成功
+- repository 全体の Ruff: 今回の変更外に既存 85 件があり、別対応が必要
+- reference SVG: 最終差分なし。ただし full suite 内の生成 test が比較前に fixture を
+  上書きできる問題を確認したため、次の作業で opt-in 化する
+
+今回得られた保守手順は
+[`maintain-python-api`](skills/maintain-python-api/SKILL.md) SKILL に整理した。
+
 ## 1. 結論と目標状態
 
-現状の Python API は、Circular/Linear の静的描画についてはほぼ全機能へ到達できる。CLI も最終的には次の公開アセンブラを呼んでいる。
+監査時の Python API は、Circular/Linear の静的描画についてはほぼ全機能へ到達できた。CLI も最終的には次の公開アセンブラを呼んでいた。
 
 - `assemble_circular_diagram_from_record`
 - `assemble_circular_diagram_from_records`
 - `assemble_linear_diagram_from_records`
 
-不足しているのは描画能力そのものより、次の公開契約とワークフローである。
+不足していたのは描画能力そのものより、次の公開契約とワークフローである。
 
 1. 公開されているが指定値が反映されない、または結果が不正確な API の修正。
 2. 型付き config、ラベル用 DataFrame、interactive metadata を安全に合成する経路。
@@ -22,7 +57,10 @@
 4. 51～63 個の引数を持つ低位アセンブラへ直接降りなくても高度機能を使える構成。
 5. 実装済みの高度機能を発見・再現できるドキュメント。
 
-最終的には、公開 namespace だけを利用して次の処理を完結できる状態を目指す。
+今回の実装で 1、2、4、5 と、3 のうち table 入力を解消した。session は不安定な
+CLI contract を公開しない方が安全と判断し、ADR の再開条件を満たすまで内部に維持する。
+
+公開 namespace だけを利用する現在の到達点は次のとおりである。
 
 ```text
 入力を読む／メモリ上の SeqRecord を受け取る
@@ -30,8 +68,9 @@
     → Circular/Linear 図を組み立てる
     → static または rich interactive SVG を生成する
     → 実際に生成できた形式と metadata を結果として受け取る
-    → 必要なら session として保存・再実行する
 ```
+
+session の保存・再実行は、CLI 非依存 typed request model の設計後にこの流れへ追加する。
 
 ## 2. スコープ
 
@@ -45,7 +84,7 @@
 - circular/linear track slot。
 - SVG、interactive SVG、PNG、PDF、EPS、PS。
 - records table、conservation table、circular track table。
-- GUI/CLI session の読込、検証、再実行に必要な Python 側機能。
+- GUI/CLI session の読込、検証、再実行に必要な Python 側機能の設計ゲート。
 - API 契約、回帰、ドキュメント実行テスト。
 
 ### 2.2 非目標
@@ -57,9 +96,9 @@
 - 公開 API のためだけに renderer や configurator を複製しない。
 - 互換性のない全面再設計を 1 PR で行わない。
 
-## 3. 現状の基準値
+## 3. 監査開始時の基準値
 
-### 3.1 公開面
+### 3.1 監査開始時の公開面
 
 - `gbdraw.api.__all__`: 70 symbol。
 - `DiagramOptions`: 64 field。
@@ -122,7 +161,9 @@
 - 同一ロジックを CLI と API に複製しない。
 - `docs/CODEBASE_REDUCTION_PLAN.md` の YAGNI/KISS 方針と矛盾する変更は採用しない。
 
-## 5. 優先度付き所見
+## 5. 優先度付き所見（監査時）
+
+この節の「現状」は監査スナップショット時点を表す。実装後の状態は「0. 実装結果」を参照する。
 
 ### P1: 公開引数 `collinearity_anchor_mode` が反映されない
 
@@ -358,6 +399,8 @@ multi_record_positions: Sequence[str] | None = None
 
 ### Phase 0: 契約と失敗モードの固定
 
+状態: 完了。
+
 目的:
 
 - 修正前の正常系と、修正すべき誤動作を characterization test で区別する。
@@ -380,6 +423,8 @@ multi_record_positions: Sequence[str] | None = None
 
 ### Phase 1: correctness 修正
 
+状態: 完了。
+
 順序:
 
 1. `collinearity_anchor_mode` を反映する。
@@ -394,6 +439,8 @@ multi_record_positions: Sequence[str] | None = None
 - public contract snapshot の変更は意図した signature/exception contract に限定される。
 
 ### Phase 2: interactive と table 入力の公開
+
+状態: 完了。
 
 順序:
 
@@ -410,6 +457,9 @@ multi_record_positions: Sequence[str] | None = None
 
 ### Phase 3: 高位 API の不足を補う
 
+状態: 高位 API 追加は完了。multi-record 固有 option だけを分離し、既存
+`DiagramOptions` の全面分割は行わなかった。field 利用状況の監査は後続作業とする。
+
 順序:
 
 1. `CircularMultiRecordOptions`。
@@ -420,6 +470,9 @@ multi_record_positions: Sequence[str] | None = None
 この phase では既存 `DiagramOptions` を廃止しない。
 
 ### Phase 4: session bridge
+
+状態: 設計ゲート完了、実装停止。判断と再開条件は
+[`ADR_PYTHON_SESSION_API.md`](ADR_PYTHON_SESSION_API.md) に記録した。
 
 順序:
 
@@ -432,6 +485,9 @@ multi_record_positions: Sequence[str] | None = None
 session 変換が CLI parser への依存を避けられない場合は、無理に公開せず phase を停止し、依存境界の整理を別計画にする。
 
 ### Phase 5: ドキュメントと安定化
+
+状態: API 文書、実行 test、公開契約 snapshot は完了。repository 全体の既存 lint debt と
+release note は後続作業とする。
 
 実施内容:
 
@@ -457,6 +513,10 @@ session 変換が CLI parser への依存を避けられない場合は、無理
 | 10 | Python API docs と実行テスト | M | optional dependency の CI 差 |
 
 PR 1～3 を release-blocking correctness、PR 4～7 を API completeness、PR 8～10 を workflow completeness とする。
+
+実装結果として PR 1～7 相当と PR 10 相当は完了した。PR 8 は ADR の設計ゲートまで、
+PR 9 は ADR の再開条件を満たさないため実施していない。この表は今後も論理的な review
+単位として残し、実際の commit 数を規定しない。
 
 ## 8. テスト計画
 
@@ -489,6 +549,10 @@ ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
 ```
 
 出力または配置に影響する変更では、該当する reference SVG test と browser test も実行する。
+
+注意: 現状の `TestGenerateReferences` は tracked reference SVG を比較前に上書きできる。
+full gate を回す前に `tests/reference_outputs/` の状態を記録し、生成結果を回帰判定の
+根拠にしない。次の作業で reference 生成を明示 opt-in に分離する。
 
 ### 8.3 追加する契約テスト
 
@@ -553,7 +617,14 @@ ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
 9. public contract、targeted test、full non-slow test、lint が通る。
 10. 高度機能の主要 recipe が文書から実行され、CI で検証される。
 
-## 12. 最初に着手する項目
+2026-07-14 判定:
+
+- 1～8、10 は完了。
+- 9 の public contract、targeted test、full non-slow test は成功した。
+- 9 の repository 全体 lint は既存 85 件のため未達。ただし変更対象 file の lint は成功し、
+  今回の差分による新規違反はない。既存 lint debt は本 API 改修と分けて解消する。
+
+## 12. 初回実装単位（完了）
 
 最初の実装単位は次の 3 PR とする。
 
@@ -562,3 +633,20 @@ ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
 3. `save_figure_to` の strict failure と実在 path 契約。
 
 この 3 件は、API surface を大きく増やさず、現行利用者が結果を信頼できる状態にする。完了後に interactive と table の公開へ進む。
+
+3 件とも完了し、続く interactive、table、multi-record の公開まで実装した。
+
+## 13. 次の作業
+
+優先順は次のとおりとする。
+
+1. reference SVG 生成を明示 opt-in にし、通常の full suite を comparison-only にする。
+   生成 test が回帰 fixture を先に更新して差分を隠さないことを確認する。
+2. `0.14.0b0` の release note に anchor mode と strict export の behavior correction、
+   新しい public symbol、session 非公開判断を記載する。
+3. repository 全体 Ruff の既存 85 件を、API 改修とは独立した cleanup として baseline 化し、
+   段階的に解消する。
+4. `DiagramOptions` 70 field の用途・利用箇所を監査する。分割は API と実装の合計コード量が
+   明確に減る場合だけ提案する。
+5. session bridge は Circular/Linear 共通の CLI 非依存 typed request model と pure conversion
+   を設計できた時点で ADR を更新して再開する。それまでは公開 symbol を追加しない。

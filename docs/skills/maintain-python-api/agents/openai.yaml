@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain Python API"
+  short_description: "Maintain gbdraw public Python API contracts"
+  default_prompt: "Use $maintain-python-api to update gbdraw public Python APIs without breaking contracts or CLI behavior."
