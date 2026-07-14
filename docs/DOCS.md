@@ -24,6 +24,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 
 - [CLI Reference](./CLI_Reference.md): current command help for `gbdraw`, `gbdraw circular`, and `gbdraw linear`.
 - [Python API](./PYTHON_API.md): render circular and linear diagrams from Python.
+- [0.14.0b0 release notes](./RELEASE_NOTES_0.14.0b0.md): Python API additions, behavior corrections, and migration guidance.
 - [GFF3 + FASTA input](./GFF3_FASTA.md): prepare, validate, and draw annotation files without GenBank conversion.
 - [Export formats](./EXPORT.md): choose SVG, interactive SVG, PNG, PDF, EPS, or PS and understand paired interactive output files.
 - [Gallery](./GALLERY.md): example diagrams and the commands used to generate them.

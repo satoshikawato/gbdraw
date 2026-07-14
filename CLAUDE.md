@@ -19,6 +19,12 @@ pytest tests/ -v -m "not slow"
 # Run all tests including slow
 pytest tests/ -v
 
+# Compare generated SVGs with tracked references (read-only)
+pytest tests/test_output_comparison.py::TestOutputComparison -v
+
+# Update tracked references only for an intentional, reviewed geometry change
+pytest tests/test_output_comparison.py::TestGenerateReferences --update-reference-outputs -v
+
 # Run a single test file
 pytest tests/test_regression.py -v
 
@@ -33,7 +39,7 @@ pytest tests/ -v -m "linear"
 pytest tests/ --cov=gbdraw --cov-report=html
 
 # Check code formatting (ruff)
-ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
+ruff check gbdraw/
 
 # Install in development mode
 pip install -e ".[dev]"
@@ -213,13 +219,21 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 When intentional changes affect SVG output, reference files need updating:
 
 ```bash
-# 1. Run tests to identify failures
-pytest tests/test_output_comparison.py -v
+# 1. Run comparison tests to identify intentional differences. Actual output is
+#    retained under pytest's temporary directory, not reference_outputs/.
+pytest tests/test_output_comparison.py::TestOutputComparison -v
 
-# 2. Review differences - ensure changes are intentional
-# 3. Regenerate and copy updated outputs to tests/reference_outputs/
-# 4. Commit with explanation of visual changes
+# 2. Review the differences and regenerate only after approving the change.
+pytest tests/test_output_comparison.py::TestGenerateReferences \
+  --update-reference-outputs -v
+
+# 3. Review the tracked SVG diff and verify the new references.
+git diff -- tests/reference_outputs/
+pytest tests/test_output_comparison.py::TestOutputComparison -v
 ```
+
+Without `--update-reference-outputs`, reference-generation tests are skipped and
+normal test runs do not write to `tests/reference_outputs/`.
 
 ## Documentation
 

@@ -7,12 +7,7 @@ from __future__ import annotations
 def _legacy_middle_factors(strand: str, track_id: int, separate_strands: bool) -> list[float]:
     """Legacy factor calculation used for backward-compatible 'middle' layout."""
     initial_offset = 0.1
-    track_spacing = 0.5
     feature_height = 0.5
-    feature_offset = 0.25
-
-    def calculate_base_position(track_num: int) -> float:
-        return -initial_offset - track_num * track_spacing
 
     def calculate_track_offset(track_num: int) -> float:
         if separate_strands:
@@ -24,7 +19,6 @@ def _legacy_middle_factors(strand: str, track_id: int, separate_strands: bool) -
         return track_num * -3 * initial_offset
 
     if not separate_strands:
-        base_pos = calculate_base_position(track_id)
         track_offset = calculate_track_offset(track_id)
         track = track_id
         return [

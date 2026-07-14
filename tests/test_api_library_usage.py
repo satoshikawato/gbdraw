@@ -17,7 +17,7 @@ from gbdraw.api import (
     assemble_linear_diagram_from_records,
     load_gff_fasta,
 )
-from gbdraw.api.options import DiagramOptions
+from gbdraw.api.options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
 from gbdraw.analysis.collinearity import CollinearityResult
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
@@ -100,11 +100,15 @@ def test_api_diagram_options_forward_collinearity_search_scope(monkeypatch: pyte
             protein_blastp_mode="collinear",
             collinearity_anchor_mode="all",
             collinearity_search_scope="all",
+            collinearity_unit_mode="nt",
+            collinear_max_paralog_links_per_orthogroup=7,
         ),
     )
 
     assert captured["collinearity_anchor_mode"] == "all"
     assert captured["collinearity_search_scope"] == "all"
+    assert captured["collinearity_unit_mode"] == "nt"
+    assert captured["collinear_max_paralog_links_per_orthogroup"] == 7
 
 
 @pytest.mark.parametrize(
@@ -179,7 +183,7 @@ def test_typed_config_override_preserves_label_filtering_dataframes() -> None:
     assert updated_filtering["extension_key"] == {"keep": True}
 
 
-@pytest.mark.parametrize("builder_name", ["circular", "linear"])
+@pytest.mark.parametrize("builder_name", ["circular", "circular_multi", "linear"])
 def test_diagram_options_attach_explicit_label_tables(
     builder_name: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -190,11 +194,11 @@ def test_diagram_options_attach_explicit_label_tables(
         captured.update(kwargs)
         return object()
 
-    target = (
-        "assemble_circular_diagram_from_record"
-        if builder_name == "circular"
-        else "assemble_linear_diagram_from_records"
-    )
+    target = {
+        "circular": "assemble_circular_diagram_from_record",
+        "circular_multi": "assemble_circular_diagram_from_records",
+        "linear": "assemble_linear_diagram_from_records",
+    }[builder_name]
     monkeypatch.setattr(api_diagram_module, target, fake_assemble)
     whitelist = pd.DataFrame(
         [["CDS", "product", "polymerase"]],
@@ -218,6 +222,10 @@ def test_diagram_options_attach_explicit_label_tables(
         api_diagram_module.build_circular_diagram(
             SeqRecord(Seq("ATGC"), id="rec1"), options=options
         )
+    elif builder_name == "circular_multi":
+        api_diagram_module.build_circular_multi_diagram(
+            [SeqRecord(Seq("ATGC"), id="rec1")], options=options
+        )
     else:
         api_diagram_module.build_linear_diagram([], options=options)
 
@@ -228,20 +236,393 @@ def test_diagram_options_attach_explicit_label_tables(
     pd.testing.assert_frame_equal(filtering["label_override_df"], override)
 
 
-def test_diagram_options_reject_label_table_and_file_together() -> None:
+def test_diagram_options_attach_explicit_label_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    whitelist = pd.DataFrame(
+        [["CDS", "product", "polymerase"]],
+        columns=["feature_type", "qualifier", "keyword"],
+    )
+    priority = pd.DataFrame(
+        [["CDS", "gene,product"]],
+        columns=["feature_type", "priorities"],
+    )
+    override = pd.DataFrame(
+        [["rec1", "CDS", "gene", "pol", "polymerase"]],
+        columns=["record_id", "feature_type", "qualifier", "value", "label_text"],
+    )
+
+    monkeypatch.setattr(api_diagram_module, "read_filter_list_file", lambda _path: whitelist)
+    monkeypatch.setattr(
+        api_diagram_module,
+        "read_qualifier_priority_file",
+        lambda _path: priority,
+    )
+    monkeypatch.setattr(
+        api_diagram_module,
+        "read_label_override_file",
+        lambda _path: override,
+    )
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        api_diagram_module,
+        "assemble_linear_diagram_from_records",
+        fake_assemble,
+    )
+    api_diagram_module.build_linear_diagram(
+        [],
+        options=DiagramOptions(
+            label_whitelist_file="whitelist.tsv",
+            qualifier_priority_file="priority.tsv",
+            label_override_file="override.tsv",
+        ),
+    )
+
+    filtering = captured["cfg"].labels.filtering.as_dict()
+    pd.testing.assert_frame_equal(filtering["whitelist_df"], whitelist)
+    pd.testing.assert_frame_equal(filtering["qualifier_priority_df"], priority)
+    pd.testing.assert_frame_equal(filtering["label_override_df"], override)
+
+
+@pytest.mark.parametrize(
+    ("table_field", "file_field"),
+    [
+        ("label_whitelist_table", "label_whitelist_file"),
+        ("qualifier_priority_table", "qualifier_priority_file"),
+        ("label_override_table", "label_override_file"),
+    ],
+)
+def test_diagram_options_reject_label_table_and_file_together(
+    table_field: str,
+    file_field: str,
+) -> None:
     table = pd.DataFrame(
         [["CDS", "product", "polymerase"]],
         columns=["feature_type", "qualifier", "keyword"],
     )
 
-    with pytest.raises(ValidationError, match="label_whitelist"):
+    with pytest.raises(ValidationError, match=table_field.removesuffix("_table")):
         api_diagram_module.build_linear_diagram(
             [],
-            options=DiagramOptions(
-                label_whitelist_table=table,
-                label_whitelist_file="whitelist.tsv",
-            ),
+            options=DiagramOptions(**{table_field: table, file_field: "labels.tsv"}),
         )
+
+
+_FORWARDING_TABLE = pd.DataFrame({"value": [1]})
+_SHARED_FORWARDING_CASES = [
+    ("config", {"extension": {"enabled": True}}, "config_dict", {"extension": {"enabled": True}}),
+    ("config_overrides", {"show_labels": True}, "config_overrides", {"show_labels": True}),
+    ("selected_features_set", ["gene"], "selected_features_set", ["gene"]),
+    ("feature_table", _FORWARDING_TABLE, "feature_table", _FORWARDING_TABLE),
+    ("feature_table_file", "feature.tsv", "feature_table_file", "feature.tsv"),
+    ("feature_visibility_table", _FORWARDING_TABLE, "feature_visibility_table", _FORWARDING_TABLE),
+    (
+        "feature_visibility_table_file",
+        "visibility.tsv",
+        "feature_visibility_table_file",
+        "visibility.tsv",
+    ),
+    ("feature_shapes", {"gene": "rectangle"}, "feature_shapes", {"gene": "rectangle"}),
+    ("dinucleotide", "AT", "dinucleotide", "AT"),
+    ("window", 111, "window", 111),
+    ("step", 17, "step", 17),
+    ("depth_window", 91, "depth_window", 91),
+    ("depth_step", 13, "depth_step", 13),
+    ("depth_table", _FORWARDING_TABLE, "depth_table", _FORWARDING_TABLE),
+    ("depth_file", "depth.tsv", "depth_file", "depth.tsv"),
+    (
+        "depth_track_tables",
+        [[_FORWARDING_TABLE]],
+        "depth_track_tables",
+        [[_FORWARDING_TABLE]],
+    ),
+    ("depth_track_files", [["depth-1.tsv"]], "depth_track_files", [["depth-1.tsv"]]),
+    ("depth_track_labels", ["coverage"], "depth_track_labels", ["coverage"]),
+    ("depth_track_colors", ["#123456"], "depth_track_colors", ["#123456"]),
+    (
+        "depth_track_large_tick_intervals",
+        [25],
+        "depth_track_large_tick_intervals",
+        [25],
+    ),
+    (
+        "depth_track_small_tick_intervals",
+        [5],
+        "depth_track_small_tick_intervals",
+        [5],
+    ),
+    ("depth_track_tick_font_sizes", [9], "depth_track_tick_font_sizes", [9]),
+    ("plot_title", "Forwarded title", "plot_title", "Forwarded title"),
+    ("plot_title_font_size", 27.0, "plot_title_font_size", 27.0),
+    ("evalue", 1e-12, "evalue", 1e-12),
+    ("bitscore", 123.0, "bitscore", 123.0),
+    ("identity", 88.0, "identity", 88.0),
+    ("alignment_length", 42, "alignment_length", 42),
+]
+
+
+def _call_high_level_builder(builder_name: str, options: DiagramOptions) -> object:
+    record = SeqRecord(Seq("ATGC"), id="rec1")
+    if builder_name == "circular":
+        return api_diagram_module.build_circular_diagram(record, options=options)
+    if builder_name == "circular_multi":
+        return api_diagram_module.build_circular_multi_diagram([record], options=options)
+    return api_diagram_module.build_linear_diagram([record], options=options)
+
+
+def _assert_forwarded_value(actual: object, expected: object) -> None:
+    if isinstance(expected, pd.DataFrame):
+        assert actual is expected
+    elif isinstance(expected, list):
+        assert isinstance(actual, list)
+        assert len(actual) == len(expected)
+        for actual_item, expected_item in zip(actual, expected):
+            _assert_forwarded_value(actual_item, expected_item)
+    else:
+        assert actual == expected
+
+
+@pytest.mark.parametrize("builder_name", ["circular", "circular_multi", "linear"])
+@pytest.mark.parametrize(
+    ("field_name", "value", "assembler_name", "expected"),
+    _SHARED_FORWARDING_CASES,
+    ids=[case[0] for case in _SHARED_FORWARDING_CASES],
+)
+def test_diagram_options_forward_shared_non_default_values(
+    builder_name: str,
+    field_name: str,
+    value: object,
+    assembler_name: str,
+    expected: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    target = {
+        "circular": "assemble_circular_diagram_from_record",
+        "circular_multi": "assemble_circular_diagram_from_records",
+        "linear": "assemble_linear_diagram_from_records",
+    }[builder_name]
+    monkeypatch.setattr(api_diagram_module, target, fake_assemble)
+
+    _call_high_level_builder(
+        builder_name,
+        DiagramOptions(**{field_name: value}),
+    )
+
+    _assert_forwarded_value(captured[assembler_name], expected)
+
+
+@pytest.mark.parametrize("builder_name", ["circular", "circular_multi", "linear"])
+def test_diagram_option_bundles_forward_non_default_values(
+    builder_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    color_table = pd.DataFrame({"color": ["#123456"]})
+    default_colors = pd.DataFrame({"color": ["#abcdef"]})
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    target = {
+        "circular": "assemble_circular_diagram_from_record",
+        "circular_multi": "assemble_circular_diagram_from_records",
+        "linear": "assemble_linear_diagram_from_records",
+    }[builder_name]
+    monkeypatch.setattr(api_diagram_module, target, fake_assemble)
+
+    options = DiagramOptions(
+        colors=ColorOptions(
+            color_table=color_table,
+            default_colors=default_colors,
+            default_colors_palette="ajisai",
+        ),
+        tracks=TrackOptions(
+            circular_track_slots=["features:features"],
+            circular_track_axis_index=1,
+            linear_track_slots=["features:features"],
+            linear_track_axis_index=1,
+            center_reserved_radius=0.2,
+        ),
+        output=OutputOptions(
+            output_prefix="forwarded",
+            legend="left",
+            plot_title_position="top",
+        ),
+    )
+    _call_high_level_builder(builder_name, options)
+
+    assert captured["color_table"] is color_table
+    assert captured["default_colors"] is default_colors
+    assert captured["default_colors_palette"] == "ajisai"
+    assert captured["output_prefix"] == "forwarded"
+    assert captured["legend"] == "left"
+    assert captured["plot_title_position"] == "top"
+    if builder_name == "linear":
+        assert captured["linear_track_slots"] == ["features:features"]
+        assert captured["linear_track_axis_index"] == 1
+    else:
+        assert captured["circular_track_slots"] == ["features:features"]
+        assert captured["circular_track_axis_index"] == 1
+        assert captured["center_reserved_radius"] == 0.2
+
+
+@pytest.mark.parametrize("builder_name", ["circular", "circular_multi", "linear"])
+@pytest.mark.parametrize(
+    ("field_name", "value", "assembler_name", "expected"),
+    [
+        ("depth_tables", [_FORWARDING_TABLE], "depth_tables", [_FORWARDING_TABLE]),
+        ("depth_files", ["depth.tsv"], "depth_files", ["depth.tsv"]),
+    ],
+)
+def test_plural_depth_options_forward_with_mode_specific_shape(
+    builder_name: str,
+    field_name: str,
+    value: object,
+    assembler_name: str,
+    expected: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    target = {
+        "circular": "assemble_circular_diagram_from_record",
+        "circular_multi": "assemble_circular_diagram_from_records",
+        "linear": "assemble_linear_diagram_from_records",
+    }[builder_name]
+    monkeypatch.setattr(api_diagram_module, target, fake_assemble)
+    _call_high_level_builder(builder_name, DiagramOptions(**{field_name: value}))
+
+    if builder_name == "circular":
+        singular_name = "depth_table" if field_name == "depth_tables" else "depth_file"
+        singular_value = expected[0]
+        _assert_forwarded_value(captured[singular_name], singular_value)
+    else:
+        _assert_forwarded_value(captured[assembler_name], expected)
+
+
+_CIRCULAR_ONLY_FORWARDING_CASES = [
+    ("conservation_blast_files", ["conservation.tsv"]),
+    ("conservation_dataframes", [_FORWARDING_TABLE]),
+    ("conservation_reference", "subject"),
+    ("conservation_labels", ["reference"]),
+    ("conservation_colors", ["#123456"]),
+    ("conservation_ring_width", 12.0),
+    ("conservation_ring_gap", 3.0),
+    ("keep_full_definition_with_plot_title", True),
+    ("species", "Example species"),
+    ("strain", "Example strain"),
+]
+
+
+@pytest.mark.parametrize("builder_name", ["circular", "circular_multi"])
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    _CIRCULAR_ONLY_FORWARDING_CASES,
+    ids=[case[0] for case in _CIRCULAR_ONLY_FORWARDING_CASES],
+)
+def test_diagram_options_forward_circular_only_non_default_values(
+    builder_name: str,
+    field_name: str,
+    value: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    target = (
+        "assemble_circular_diagram_from_record"
+        if builder_name == "circular"
+        else "assemble_circular_diagram_from_records"
+    )
+    monkeypatch.setattr(api_diagram_module, target, fake_assemble)
+    _call_high_level_builder(builder_name, DiagramOptions(**{field_name: value}))
+
+    _assert_forwarded_value(captured[field_name], value)
+
+
+_LINEAR_ONLY_FORWARDING_CASES = [
+    ("depth_track_heights", [12, 28], "depth_track_heights", [12, 28]),
+    ("blast_files", ["comparison.tsv"], "blast_files", ["comparison.tsv"]),
+    ("protein_comparisons", [_FORWARDING_TABLE], "protein_comparisons", [_FORWARDING_TABLE]),
+    ("orthogroups", object(), "orthogroups", None),
+    ("protein_blastp_mode", "pairwise", "protein_blastp_mode", "pairwise"),
+    ("pairwise_match_style", "curve", "pairwise_match_style", "curve"),
+    ("collinearity_blocks", object(), "collinearity_blocks", None),
+    ("collinearity_params", object(), "collinearity_params", None),
+    ("collinearity_unit_mode", "nt", "collinearity_unit_mode", "nt"),
+    ("collinearity_anchor_mode", "top1", "collinearity_anchor_mode", "one_to_one"),
+    ("collinearity_search_scope", "all", "collinearity_search_scope", "all"),
+    ("collinearity_color_mode", "identity", "collinearity_color_mode", "identity"),
+    ("losatp_bin", "custom-losat", "losatp_bin", "custom-losat"),
+    ("ncbi_blastp_bin", "custom-blastp", "ncbi_blastp_bin", "custom-blastp"),
+    ("losatp_threads", 3, "losatp_threads", 3),
+    ("protein_blastp_max_hits", 8, "protein_blastp_max_hits", 8),
+    ("protein_blastp_candidate_limit", 21, "protein_blastp_candidate_limit", 21),
+    (
+        "orthogroup_membership_mode",
+        "anchor_core_v1",
+        "orthogroup_membership_mode",
+        "anchor_core_v1",
+    ),
+    ("orthogroup_member_max_hits", 9, "orthogroup_member_max_hits", 9),
+    (
+        "collinear_max_paralog_links_per_orthogroup",
+        4,
+        "collinear_max_paralog_links_per_orthogroup",
+        4,
+    ),
+    ("align_orthogroup_feature", "anchor", "align_orthogroup_feature", "anchor"),
+]
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "assembler_name", "expected"),
+    _LINEAR_ONLY_FORWARDING_CASES,
+    ids=[case[0] for case in _LINEAR_ONLY_FORWARDING_CASES],
+)
+def test_diagram_options_forward_linear_only_non_default_values(
+    field_name: str,
+    value: object,
+    assembler_name: str,
+    expected: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        api_diagram_module,
+        "assemble_linear_diagram_from_records",
+        fake_assemble,
+    )
+    _call_high_level_builder("linear", DiagramOptions(**{field_name: value}))
+
+    if expected is None:
+        assert captured[assembler_name] is value
+    else:
+        _assert_forwarded_value(captured[assembler_name], expected)
 
 
 def test_circular_multi_builder_forwards_layout_options(

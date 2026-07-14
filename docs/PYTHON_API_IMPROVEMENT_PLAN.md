@@ -30,13 +30,13 @@ library contract に漏らさないため設計ゲートで停止し、非公開
 
 検証結果:
 
-- targeted suite: `307 passed`
-- full non-slow suite: `1156 passed, 3 skipped, 6 deselected`
+- follow-up targeted suite: `446 passed`
+- follow-up full non-slow suite: `1282 passed, 16 skipped, 6 deselected`
 - export の最終修正後の関連 suite: `41 passed`
-- 変更対象 Python file の Ruff: 成功
-- repository 全体の Ruff: 今回の変更外に既存 85 件があり、別対応が必要
-- reference SVG: 最終差分なし。ただし full suite 内の生成 test が比較前に fixture を
-  上書きできる問題を確認したため、次の作業で opt-in 化する
+- repository 全体の Ruff: 既存 85 件を解消し、`ruff check gbdraw/` が成功
+- reference SVG: 13 件の SHA-256 は不変。生成 test は opt-in、比較失敗時の actual SVG は
+  temporary directory へ保存
+- release readiness: release note と `DiagramOptions` 70-field audit を追加
 
 今回得られた保守手順は
 [`maintain-python-api`](skills/maintain-python-api/SKILL.md) SKILL に整理した。
@@ -545,14 +545,13 @@ python -m pytest \
 
 ```bash
 python -m pytest tests/ -v -m "not slow"
-ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
+ruff check gbdraw/
 ```
 
 出力または配置に影響する変更では、該当する reference SVG test と browser test も実行する。
 
-注意: 現状の `TestGenerateReferences` は tracked reference SVG を比較前に上書きできる。
-full gate を回す前に `tests/reference_outputs/` の状態を記録し、生成結果を回帰判定の
-根拠にしない。次の作業で reference 生成を明示 opt-in に分離する。
+`TestGenerateReferences` は `--update-reference-outputs` を指定した場合だけ書き込む。
+通常の full gate は tracked reference SVG を読み取るだけである。
 
 ### 8.3 追加する契約テスト
 
@@ -619,10 +618,10 @@ full gate を回す前に `tests/reference_outputs/` の状態を記録し、生
 
 2026-07-14 判定:
 
-- 1～8、10 は完了。
-- 9 の public contract、targeted test、full non-slow test は成功した。
-- 9 の repository 全体 lint は既存 85 件のため未達。ただし変更対象 file の lint は成功し、
-  今回の差分による新規違反はない。既存 lint debt は本 API 改修と分けて解消する。
+- 1～10 は documented mode の範囲で完了した。
+- public contract、targeted test、full non-slow test、repository 全体 lint は成功した。
+- wrong-mode の non-default field を error にするかは
+  [`DIAGRAM_OPTIONS_AUDIT.md`](DIAGRAM_OPTIONS_AUDIT.md) の validation backlog とした。
 
 ## 12. 初回実装単位（完了）
 
@@ -638,15 +637,18 @@ full gate を回す前に `tests/reference_outputs/` の状態を記録し、生
 
 ## 13. 次の作業
 
+詳細な実施計画は
+[`PYTHON_API_FOLLOWUP_PLAN.md`](PYTHON_API_FOLLOWUP_PLAN.md) に記録した。
+
 優先順は次のとおりとする。
 
-1. reference SVG 生成を明示 opt-in にし、通常の full suite を comparison-only にする。
+1. **完了:** reference SVG 生成を明示 opt-in にし、通常の full suite を comparison-only にする。
    生成 test が回帰 fixture を先に更新して差分を隠さないことを確認する。
-2. `0.14.0b0` の release note に anchor mode と strict export の behavior correction、
+2. **完了:** `0.14.0b0` の release note に anchor mode と strict export の behavior correction、
    新しい public symbol、session 非公開判断を記載する。
-3. repository 全体 Ruff の既存 85 件を、API 改修とは独立した cleanup として baseline 化し、
+3. **完了:** repository 全体 Ruff の既存 85 件を、API 改修とは独立した cleanup として baseline 化し、
    段階的に解消する。
-4. `DiagramOptions` 70 field の用途・利用箇所を監査する。分割は API と実装の合計コード量が
+4. **完了:** `DiagramOptions` 70 field の用途・利用箇所を監査する。分割は API と実装の合計コード量が
    明確に減る場合だけ提案する。
-5. session bridge は Circular/Linear 共通の CLI 非依存 typed request model と pure conversion
+5. **設計ゲート継続:** session bridge は Circular/Linear 共通の CLI 非依存 typed request model と pure conversion
    を設計できた時点で ADR を更新して再開する。それまでは公開 symbol を追加しない。

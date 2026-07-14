@@ -5,17 +5,19 @@ These tests compare current output against known reference outputs to ensure
 refactoring doesn't change the visual output of diagrams.
 
 Usage:
-    # Generate reference outputs first (run once before refactoring)
-    pytest tests/test_output_comparison.py::TestGenerateReferences -v
-
-    # Run comparison tests (run after each refactoring step)
+    # Run comparison tests (safe for normal test runs)
     pytest tests/test_output_comparison.py::TestOutputComparison -v
+
+    # Intentionally update tracked references
+    pytest tests/test_output_comparison.py::TestGenerateReferences \
+        --update-reference-outputs -v
 """
 
 import hashlib
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +35,26 @@ EXAMPLES_DIR = TESTS_DIR.parent / "examples"
 def get_file_hash(path: Path) -> str:
     """Get SHA256 hash of a file."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def replace_reference_atomically(source: Path, destination: Path) -> None:
+    """Replace a reference from a temporary file in the same directory."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            with source.open("rb") as source_handle:
+                shutil.copyfileobj(source_handle, temporary)
+        temporary_path.replace(destination)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def find_input(filename: str) -> Optional[Path]:
@@ -159,16 +181,12 @@ TEST_CASES = {
 }
 
 
+@pytest.mark.reference_generation
 class TestGenerateReferences:
     """Generate reference outputs for comparison testing.
 
-    Run this ONCE before starting refactoring to create baseline outputs.
+    Run only after approving an intentional SVG change.
     """
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Ensure reference directory exists."""
-        REFERENCE_DIR.mkdir(exist_ok=True)
 
     @pytest.mark.parametrize("name,config", TEST_CASES.items())
     def test_generate_reference(self, name, config, tmp_path):
@@ -192,9 +210,9 @@ class TestGenerateReferences:
 
             output_svg = run_gbdraw_linear(gbk_files, tmp_path, name, config["args"], blast_files)
 
-        # Copy to reference directory
+        # Replace only after generation succeeds, without exposing a partial fixture.
         ref_path = REFERENCE_DIR / f"{name}.svg"
-        shutil.copy(output_svg, ref_path)
+        replace_reference_atomically(output_svg, ref_path)
 
         print(f"Generated reference: {ref_path}")
         print(f"  Hash: {get_file_hash(ref_path)[:16]}...")
@@ -236,8 +254,8 @@ class TestOutputComparison:
         result = compare_svgs(ref_path, output_svg)
 
         if not result.equal:
-            # Save the actual output for inspection
-            actual_path = REFERENCE_DIR / f"{name}.actual.svg"
+            # Keep diagnostics outside the tracked reference directory.
+            actual_path = tmp_path / f"{name}.actual.svg"
             shutil.copy(output_svg, actual_path)
 
             diff_msg = "\n".join(result.differences[:10])

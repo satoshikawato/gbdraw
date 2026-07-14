@@ -41,6 +41,7 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",
+    "ruff==0.15.12",
     "setuptools>=61.0",
     "wheel",
 ]
@@ -72,11 +73,19 @@ markers = [
     "regression: marks tests as regression tests",
     "circular: marks tests for circular diagrams",
     "linear: marks tests for linear diagrams",
+    "reference_generation: writes tracked SVG reference outputs when explicitly enabled",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
 timeout = 300
+
+[tool.ruff]
+required-version = "==0.15.12"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]
 
 [tool.coverage.run]
 source = ["gbdraw"]

@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import math
-from typing import Optional
 
 from svgwrite.container import Group
 from svgwrite.shapes import Line

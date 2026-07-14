@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-07-14
+- Gate review: 2026-07-14、`DiagramOptions` 監査後も判断を維持
 - Related plan: `PYTHON_API_IMPROVEMENT_PLAN.md`, Phase 4
 
 ## Context
@@ -29,6 +30,10 @@ Phase 4 stops at this design gate. A public session bridge may be added only aft
 both circular and linear workflows have CLI-independent typed input request models
 and a pure conversion function can produce those models without importing CLI
 modules or returning argument strings.
+
+The follow-up [70-field audit](DIAGRAM_OPTIONS_AUDIT.md) found no dead
+`DiagramOptions` field, but it did not add typed models for record inputs, output
+requests, or session metadata. The prerequisites above remain unmet.
 
 ## Consequences
 

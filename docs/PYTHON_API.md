@@ -4,6 +4,9 @@
 
 Use `gbdraw.api` as the supported library entry point. Imports from internal modules may change without the compatibility guarantees of this namespace.
 
+The [`DiagramOptions` field audit](./DIAGRAM_OPTIONS_AUDIT.md) lists all 70 fields,
+the builders that read them, their final consumers, and mode-specific constraints.
+
 ## Capability matrix
 
 | Workflow | Public entry point |
