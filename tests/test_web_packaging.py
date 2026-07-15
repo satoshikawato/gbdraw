@@ -64,6 +64,21 @@ GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
 }
+GALLERY_EDITOR_STATE_SESSION_FILES = {
+    "BGC0000708-BGC0000713.gbdraw-session.json",
+    "HmmtDNA_ATskew.gbdraw-session.json",
+    "WSSV_genome_comparison.gbdraw-session.json",
+}
+GALLERY_LOSAT_CACHE_SESSION_FILES = {
+    "BGC0000708-BGC0000713.gbdraw-session.json",
+    "WSSV_genome_comparison.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json",
+    "majanivirus_orthogroup.gbdraw-session.json",
+}
+GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES = {
+    "BGC0000708-BGC0000713.gbdraw-session.json",
+}
 
 
 def _load_verify_module():
@@ -1068,7 +1083,7 @@ def test_web_session_feature_metadata_recovery_source_contract() -> None:
     assert "nextEditorState.featureStrokes.overrides = rewriteOverrideMap(" in recovery_js
 
 
-def test_gallery_sessions_ship_current_feature_metadata() -> None:
+def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None:
     for session_name in GALLERY_SESSION_FILES:
         session_path = GALLERY_ROOT / "sessions" / session_name
         session = json.loads(session_path.read_text(encoding="utf-8"))
@@ -1090,9 +1105,19 @@ def test_gallery_sessions_ship_current_feature_metadata() -> None:
         pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
         collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
 
+        assert session.get("version") == CURRENT_SESSION_VERSION, session_name
+        assert "files" not in session, session_name
         assert features, session_name
+        assert session.get("results"), session_name
+        assert "orthogroupState" in session, session_name
         assert rendered_feature_ids, session_name
         assert rendered_feature_ids <= feature_ids, session_name
+        if session_name in GALLERY_EDITOR_STATE_SESSION_FILES:
+            assert session.get("editorState"), session_name
+        if session_name in GALLERY_LOSAT_CACHE_SESSION_FILES:
+            assert session.get("losatCache", {}).get("entries"), session_name
+        if session_name in GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES:
+            assert session.get("losatDerivedCache", {}).get("entries"), session_name
         if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
             assert pairwise_ids or collinearity_ids, session_name
 

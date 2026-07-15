@@ -57,7 +57,7 @@ def test_manifest_counts_and_unique_paths() -> None:
     palette_circular = [figure_id for figure_id in figures if figure_id.startswith("palette_circular_")]
     palette_linear = [figure_id for figure_id in figures if figure_id.startswith("palette_linear_")]
 
-    assert len(docs_and_readme) == 55
+    assert len(docs_and_readme) == 57
     assert palette_circular == [
         "palette_circular_default",
         "palette_circular_ajisai",
@@ -68,7 +68,7 @@ def test_manifest_counts_and_unique_paths() -> None:
         "palette_linear_ajisai",
         "palette_linear_soft_pastels",
     ]
-    assert len(figures) == 55 + 6 + 2
+    assert len(figures) == 57 + 6 + 2
 
     output_paths = [spec.output_path for spec in figures.values()]
     assert len(output_paths) == len(set(output_paths))
