@@ -65,6 +65,10 @@ assert paths == [str(output_dir / "api_circular.svg")]
 assert svg_bytes.startswith(b"<svg")
 ```
 
+The resulting circular diagram:
+
+![Circular MjeNMV genome diagram produced by the documented Python API example](../examples/python-api-circular.png)
+
 ## Circular multi-record canvas
 
 The multi-record builder keeps grid-only values out of the general diagram option bundle.
@@ -109,6 +113,10 @@ linear_canvas = build_linear_diagram(
 )
 assert render_to_bytes(linear_canvas, "svg").startswith(b"<svg")
 ```
+
+The resulting pairwise comparison:
+
+![Linear comparison of two majanivirus records produced by the documented Python API example](../examples/python-api-linear.png)
 
 ```python
 import pandas as pd
