@@ -18,13 +18,13 @@ from gbdraw.features.visibility import resolve_candidate_feature_types
 from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.render.export import CAIROSVG_AVAILABLE, has_cairosvg
-from gbdraw.render.formats import CAIROSVG_FORMATS, SVG_FORMAT, is_cairosvg_format
+from gbdraw.render.formats import CAIROSVG_FORMATS, SVG_FORMAT, is_cairosvg_format, normalize_format_token
 
 logger = logging.getLogger(__name__)
 
 _OUTPUT_FORMAT_HELP = (
     "Comma-separated list of output file formats "
-    "(svg, interactive-svg, png, pdf, eps, ps; default: svg; "
+    "(svg, interactive_svg, png, pdf, eps, ps; default: svg; "
     "png/pdf/eps/ps require CairoSVG)."
 )
 
@@ -44,7 +44,7 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--gbk",
         metavar="GBK_FILE",
-        help='Genbank/DDBJ flatfile',
+        help='GenBank/DDBJ flat file',
         type=str,
         nargs='*')
     parser.add_argument(
@@ -220,22 +220,22 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
 def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--evalue',
-        help='Maximum BLAST e-value retained for conservation rings (default: 1e-5).',
+        help='Maximum BLAST e-value retained for similarity rings (default: 1e-5).',
         type=float,
         default=1e-5)
     parser.add_argument(
         '--bitscore',
-        help='Minimum BLAST bitscore retained for conservation rings (default: 50).',
+        help='Minimum BLAST bitscore retained for similarity rings (default: 50).',
         type=float,
         default=50.0)
     parser.add_argument(
         '--identity',
-        help='Minimum BLAST identity percentage retained for conservation rings (default: 70).',
+        help='Minimum BLAST identity percentage retained for similarity rings (default: 70).',
         type=float,
         default=70.0)
     parser.add_argument(
         '--alignment_length',
-        help='Minimum BLAST alignment length retained for conservation rings (default: 0).',
+        help='Minimum BLAST alignment length retained for similarity rings (default: 0).',
         type=int,
         default=0)
 
@@ -480,6 +480,7 @@ def parse_feature_shape_assignment_arg(value: str) -> str:
 
 def handle_output_formats(out_formats: list[str]) -> list[str]:
     """Handle WebAssembly and CairoSVG availability for output formats."""
+    out_formats = [normalize_format_token(fmt) for fmt in out_formats]
     cairo_formats = [f for f in out_formats if is_cairosvg_format(f)]
     if "pyodide" in sys.modules:
         if cairo_formats:

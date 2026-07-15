@@ -27,7 +27,6 @@ from tools.reproduce_examples_manifest import (  # noqa: E402
     CompositeRecipe,
     FigureSpec,
     FastaPreparation,
-    FileArgument,
     build_figure_specs,
     get_support_assets,
 )
@@ -200,7 +199,8 @@ class Reproducer:
             return target_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
         if not target_path.exists():
-            target_path.write_text(asset.content)
+            content = asset.content.replace("{PROJECT_ROOT}", str(self.project_root))
+            target_path.write_text(content, encoding="utf-8")
         return target_path
 
     def _base_inputs_for(

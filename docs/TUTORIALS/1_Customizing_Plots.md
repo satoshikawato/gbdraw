@@ -1,14 +1,14 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to Quickstart](../QUICKSTART.md) | [Go to Tutorial 2 >](./2_Comparative_Genomics.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw genome comparison links >](./2_Comparative_Genomics.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
+[< Back to the guide index](./TUTORIALS.md)
 
-# Tutorial 1: Customizing Your Plot
+# Style a circular genome diagram
 
-**Goal:** learn the basic styling controls for circular plots: palettes, track presets, centered definition text, titles, and labels.
+Use palettes, track presets, center labels, plot titles, and feature labels to change a circular genome diagram.
 
-## 1. Change the Color Scheme
+## 1. Change the color scheme
 
 `gbdraw` ships with many built-in palettes. Use `-p` or `--palette` to select one.
 
@@ -27,30 +27,32 @@ gbdraw circular \
   -p orchid
 ```
 
-The resulting SVG uses the orchid palette while keeping forward- and reverse-strand features on separate tracks.
+The SVG uses the orchid palette while keeping forward- and reverse-strand features on separate tracks.
 
 ![Circular E. coli K-12 diagram in the orchid palette with separate strand tracks](../../examples/ecoli_orchid.svg)
 
 See the [built-in palette examples](../../examples/color_palette_examples.md) for the full palette list.
 
-## 2. Choose a Circular Preset
+## 2. Choose a circular preset
 
-Two options control the overall look of a circular plot:
+These options control circular feature-track layout:
 
 - `--track_type`: preset name, `tuckin`, `middle`, or `spreadout`
 - `--separate_strands`: split forward and reverse features into different tracks
 
-`tuckin` is the default and most compact. `middle` is often easier to label. `spreadout` gives the most visual separation. Custom Track Slots can be used just to reorder tracks: omitted radius, width, physical gaps, placement, and standard renderer parameters inherit the selected `--track_type` preset. Values you provide on a slot override the inherited preset defaults; use `inner_gap_px` and `outer_gap_px` for circular radial gaps.
+`tuckin` is the compact default. `middle` is often easier to label, while `spreadout` provides the widest track separation.
+
+Custom track slots can reorder tracks without replacing the preset geometry. When a built-in slot omits its radius, width, physical gaps, placement, or standard renderer parameters, it inherits them from `--track_type`. Values set on the slot override those defaults. Use `inner_gap_px` and `outer_gap_px` to set radial gaps.
 
 The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular track slot.
 
-The montage compares `tuckin`, `middle`, and `spreadout` from left to right. All three plots use `--separate_strands`.
+The montage compares `tuckin`, `middle`, and `spreadout` from left to right. All three diagrams use `--separate_strands`.
 
 ![Circular WSSV diagrams comparing tuckin, middle, and spreadout presets with separate strand tracks](../../examples/track_layout_separate_strands.png)
 
-## 3. Add Centered Organism Text or a Plot Title
+## 3. Add a center label or plot title
 
-Use `--species` and `--strain` to control the centered definition text:
+Use `--species` and `--strain` to label the center of the diagram:
 
 ```bash
 gbdraw circular \
@@ -62,20 +64,20 @@ gbdraw circular \
   --strain "K-12"
 ```
 
-The species name is italicized and shown with the strain in the centered definition text.
+The species name is italicized and shown with the strain at the center of the diagram.
 
 ![Circular E. coli K-12 diagram with an italic species name and centered strain text](../../examples/ecoli_with_title.svg)
 
-If you want a title above or below the plot, use `--plot_title` together with `--plot_title_position top` or `bottom`.
+Use `--plot_title` with `--plot_title_position top` or `bottom` to add a title above or below the plot.
 
 > [!CAUTION]
 > Mixed-format text such as `<i>Ca.</i> Tyloplasma litorale` does not reliably survive SVG-to-PNG/PDF/EPS/PS conversion. Use SVG when exact formatting matters.
 
-## 4. Show Feature Labels
+## 4. Show feature labels
 
 Circular labels are hidden by default. Use `--labels` to show outer labels, or `--labels both` to show outer and inner labels.
 
-For a label-focused example, use the white spot syndrome virus genome rather than a crowded bacterial chromosome:
+This example uses the white spot syndrome virus genome so that individual labels remain legible:
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027280.1&rettype=gbwithparts&retmode=text" -O AP027280.gb
@@ -91,16 +93,16 @@ gbdraw circular \
   --labels
 ```
 
-Inspect the SVG for readable feature labels placed within or around the circular map.
+With the default `--label_rendering auto` mode, labels that fit are embedded in feature bodies and the remaining labels are routed outside the circle.
 
 ![Circular white spot syndrome virus genome with feature labels placed within and around the map](../../examples/WSSV_with_labels.svg)
 
 > [!WARNING]
 > Avoid `--labels` or `--labels both` on feature-dense genomes unless you also filter labels with `--label_blacklist` or `--label_whitelist`.
 
-## 5. Simplify the Plot
+## 5. Simplify the diagram
 
-You can reduce clutter by hiding tracks or legends, or by drawing only selected feature types.
+Suppress the GC tracks and legend to leave more space for annotated features:
 
 ```bash
 gbdraw circular \
@@ -115,11 +117,11 @@ gbdraw circular \
   --legend none
 ```
 
-Compared with the preceding plot, this result removes the GC content track, GC skew track, and legend while retaining the labeled, strand-separated feature map.
+The output remains a labeled, strand-separated feature map.
 
 ![Simplified circular white spot syndrome virus map without GC tracks, GC skew, or a legend](../../examples/WSSV_filtered.svg)
 
-## 6. When You Move to Linear Mode
+## 6. When you move to linear mode
 
 Linear mode has its own input selectors:
 
@@ -127,10 +129,10 @@ Linear mode has its own input selectors:
 - `--reverse_complement`
 - `--region`
 
-See [Tutorial 2](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for details.
+See [Draw genome comparison links from BLAST and protein searches](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for details.
 
-[< Back to Quickstart](../QUICKSTART.md) | [Go to Tutorial 2 >](./2_Comparative_Genomics.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw genome comparison links >](./2_Comparative_Genomics.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
+[< Back to the guide index](./TUTORIALS.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

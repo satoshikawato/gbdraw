@@ -4,12 +4,69 @@ from pathlib import Path
 
 import pytest
 
+from gbdraw.api import (
+    CircularTrackTable,
+    ConservationTable,
+    RecordsTable,
+    read_circular_track_table as api_read_circular_track_table,
+    read_conservation_table as api_read_conservation_table,
+    read_label_override_table,
+    read_label_whitelist_table,
+    read_qualifier_priority_table,
+    read_records_table as api_read_records_table,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import (
     read_circular_track_table,
     read_conservation_table,
     read_records_table,
 )
+
+
+def test_public_table_readers_share_cli_models_and_validation(tmp_path: Path) -> None:
+    records_path = tmp_path / "records.tsv"
+    records_path.write_text("gbk\nrecord.gbk\n", encoding="utf-8")
+    conservation_path = tmp_path / "conservation.tsv"
+    conservation_path.write_text("blast\nhits.tsv\n", encoding="utf-8")
+    tracks_path = tmp_path / "tracks.tsv"
+    tracks_path.write_text("id\trenderer\nfeatures\tfeatures\n", encoding="utf-8")
+
+    records = api_read_records_table(str(records_path))
+    conservation = api_read_conservation_table(str(conservation_path))
+    tracks = api_read_circular_track_table(str(tracks_path))
+
+    assert isinstance(records, RecordsTable)
+    assert isinstance(conservation, ConservationTable)
+    assert isinstance(tracks, CircularTrackTable)
+    assert records == read_records_table(str(records_path))
+    assert conservation == read_conservation_table(str(conservation_path))
+    assert tracks == read_circular_track_table(str(tracks_path))
+
+
+def test_public_label_table_readers(tmp_path: Path) -> None:
+    whitelist = tmp_path / "whitelist.tsv"
+    whitelist.write_text("CDS\tproduct\tpolymerase\n", encoding="utf-8")
+    priority = tmp_path / "priority.tsv"
+    priority.write_text("CDS\tgene,product\n", encoding="utf-8")
+    override = tmp_path / "override.tsv"
+    override.write_text("rec1\tCDS\tgene\tpol\tpolymerase\n", encoding="utf-8")
+
+    assert list(read_label_whitelist_table(str(whitelist)).columns) == [
+        "feature_type",
+        "qualifier",
+        "keyword",
+    ]
+    assert list(read_qualifier_priority_table(str(priority)).columns) == [
+        "feature_type",
+        "priorities",
+    ]
+    assert list(read_label_override_table(str(override)).columns) == [
+        "record_id",
+        "feature_type",
+        "qualifier",
+        "value",
+        "label_text",
+    ]
 
 
 def test_conservation_table_resolves_relative_paths(tmp_path: Path) -> None:

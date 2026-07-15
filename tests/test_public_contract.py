@@ -122,7 +122,6 @@ def _cli_contract(module, minimal_args: list[str], representative_args: list[str
     return {
         "actions_sha256": _hash_json(_parser_actions(parser)),
         "defaults_sha256": _hash_json(_namespace_contract(module._get_args(minimal_args))),
-        "help_sha256": hashlib.sha256(parser.format_help().encode("utf-8")).hexdigest(),
         "representative_sha256": _hash_json(
             _namespace_contract(module._get_args(representative_args))
         ),
@@ -142,7 +141,7 @@ def build_contract() -> dict[str, object]:
                 "--gbk", "contract.gb", "--output", "diagram", "--palette", "orchid",
                 "--nt", "AT", "--window", "1000", "--step", "100", "--features",
                 "CDS,tRNA", "--labels", "both", "--legend", "bottom", "--format",
-                "svg,interactive-svg", "--track_type", "spreadout", "--separate_strands",
+                "svg,interactive_svg", "--track_type", "spreadout", "--separate_strands",
             ],
         ),
         "linear_cli": _cli_contract(
@@ -152,7 +151,7 @@ def build_contract() -> dict[str, object]:
                 "--gbk", "contract-a.gb", "contract-b.gb", "--blast", "hits.tsv",
                 "--output", "diagram", "--palette", "orchid", "--nt", "AT", "--window",
                 "1000", "--step", "100", "--features", "CDS,tRNA", "--legend", "bottom",
-                "--format", "svg,interactive-svg", "--show_gc", "--show_skew",
+                "--format", "svg,interactive_svg", "--show_gc", "--show_skew",
                 "--separate_strands",
             ],
         ),

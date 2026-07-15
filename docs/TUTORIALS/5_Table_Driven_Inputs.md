@@ -1,15 +1,15 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 4](./4_Protein_Comparisons.md) | [Go to Tutorial 6 >](./6_Depth_Quantitative_Tracks.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Draw protein matches from CDS features](./4_Protein_Comparisons.md) | [Next: Plot read depth and numeric tracks >](./6_Depth_Quantitative_Tracks.md)
 
-# Tutorial 5: Table-Driven CLI Inputs
+# Use TSV manifests for CLI inputs
 
-**Goal:** use TSV manifests when row-coupled inputs are clearer than long order-sensitive option lists.
+Use TSV manifests when each input row needs its own path, label, selector, crop, or orientation.
 
 Save tables as UTF-8 with real tab characters. Files with or without a UTF-8 byte order mark (BOM) are accepted. Relative paths resolve against the table file, not against the shell's current directory.
 
-## 1. Prepare Example GenBank Files
+## 1. Prepare example GenBank files
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gb
@@ -20,7 +20,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC
 
 In a source checkout, the majanivirus files are also available under `examples/`, and `HmmtDNA.gbk` is available under `tests/test_inputs/`.
 
-## 2. Linear `--records_table` for GenBank Rows
+## 2. Linear `--records_table` for GenBank rows
 
 Create `linear_records.tsv`:
 
@@ -48,9 +48,9 @@ This writes `majani_records_table.svg`.
 
 Each `region` cell is scoped to its own row. Use only coordinates such as `1000-9000`, `1000..9000`, or `1000-9000:rc`; do not prefix them with a record ID, `#` index, or file selector. When `order` is present, explicit positive integers sort first in numeric order. Blank `order` cells follow and preserve their table row order; equal explicit values also preserve table row order.
 
-## 3. Linear `--records_table` for GFF3 + FASTA Rows
+## 3. Linear `--records_table` for GFF3 + FASTA rows
 
-Create a tiny pair of GFF3 + FASTA inputs:
+Create a small pair of GFF3 + FASTA inputs:
 
 ```bash
 cat > toy_a.fna <<'EOF'
@@ -93,7 +93,7 @@ This writes `toy_gff_records_table.svg`.
 
 A table must use either all GenBank rows or all GFF3/FASTA rows. Do not mix `gbk` with `gff`/`fasta` in the same table.
 
-## 4. Circular Multi-Record Placement
+## 4. Circular multi-record placement
 
 The majanivirus records are annotated as linear. Sections 4 and 5 intentionally reuse them to keep the setup compact, so gbdraw prints a topology warning when drawing the circular examples.
 
@@ -121,7 +121,7 @@ This writes `majani_circular_grid.svg`.
 
 When a records table provides `row` and `column`, do not also use `--multi_record_position`.
 
-## 5. Circular Conservation Rings with `--conservation_table`
+## 5. Circular BLAST similarity rings with `--conservation_table`
 
 Use the precomputed BLAST outfmt 7 table maintained in `examples/`. From a source checkout, copy it into the tutorial working directory:
 
@@ -153,11 +153,13 @@ gbdraw circular \
 
 This writes `MjeNMV_conservation_table.svg`.
 
-![Circular MjeNMV diagram with five high-confidence MelaMJNV conservation segments loaded through a table](../../examples/tutorial-5-conservation-table.svg)
+![Circular MjeNMV diagram with five retained MelaMJNV TBLASTX HSP spans loaded through a table](../../examples/tutorial-5-conservation-table.svg)
+
+The ring shows retained HSP spans from the BLAST table. It does not infer evolutionary conservation.
 
 `--conservation_table` cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
 
-## 6. Circular Track Slots with `--circular_track_table`
+## 6. Circular track slots with `--circular_track_table`
 
 Create `circular_tracks.tsv`:
 
@@ -191,7 +193,7 @@ This writes `tutorial-circular-track-table.svg`. The result places GC content, G
 
 Keep slot structure in the dedicated columns: `id`, `renderer`, `side`, `r`, `w`, `spacing`, `inner_gap_px`, `outer_gap_px`, and `z`. Do not repeat these settings or their aliases in `params`, and do not put `lane_direction` or `lanes` in a feature row. Use `params` only for renderer-specific settings such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout`.
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 4](./4_Protein_Comparisons.md) | [Go to Tutorial 6 >](./6_Depth_Quantitative_Tracks.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Draw protein matches from CDS features](./4_Protein_Comparisons.md) | [Next: Plot read depth and numeric tracks >](./6_Depth_Quantitative_Tracks.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

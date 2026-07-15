@@ -1,0 +1,4 @@
+CDS	gene_kind	biosynthetic$	#d03535	Core biosynthetic genes
+CDS	gene_kind	biosynthetic-additional	#f787a9	Additional biosynthetic genes
+CDS	gene_kind	transport	#577edb	Transport-related genes
+CDS	gene_kind	regulatory	#57b767	Regulatory genes

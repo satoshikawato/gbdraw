@@ -22,7 +22,7 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
-from gbdraw.analysis.depth import depth_df as build_depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
+from gbdraw.analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
 from gbdraw.analysis.gc import circular_dinucleotide_content_df  # type: ignore[reportMissingImports]
 from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     DepthTrackData,
@@ -68,14 +68,24 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
-from gbdraw.api.options import DiagramOptions  # type: ignore[reportMissingImports]
+from gbdraw.api.options import (  # type: ignore[reportMissingImports]
+    CircularMultiRecordOptions,
+    DiagramOptions,
+    _validate_diagram_options_mode,
+)
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.canvas.circular import resolve_circular_side_legend_geometry  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models.labels import LabelsFilteringConfig  # type: ignore[reportMissingImports]
 from gbdraw.config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from gbdraw.config.toml import load_config_toml  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
 from gbdraw.io.record_select import parse_record_selector  # type: ignore[reportMissingImports]
+from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
+    read_filter_list_file,
+    read_label_override_file,
+    read_qualifier_priority_file,
+)
 from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file  # type: ignore[reportMissingImports]
 from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     BlastMatchConfigurator,
@@ -146,6 +156,102 @@ _SVG_NUMBER_PATTERN = re.compile(r"[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?")
 _SVG_TRANSLATE_PATTERN = re.compile(
     r"translate\(\s*([-+0-9.eE]+)(?:[\s,]+([-+0-9.eE]+))?\s*\)"
 )
+
+def _resolve_single_circular_depth_options(
+    options: DiagramOptions,
+) -> tuple[DataFrame | None, str | None]:
+    singular_present = options.depth_table is not None or options.depth_file is not None
+    plural_present = options.depth_tables is not None or options.depth_files is not None
+    if singular_present and plural_present:
+        raise ValidationError(
+            "Single circular depth inputs cannot combine singular and plural forms."
+        )
+    if options.depth_table is not None and options.depth_file is not None:
+        raise ValidationError("Pass either the depth table form or depth file form, not both.")
+    if options.depth_tables is not None and options.depth_files is not None:
+        raise ValidationError("Pass either the depth table form or depth file form, not both.")
+    if options.depth_tables is not None:
+        if len(options.depth_tables) != 1:
+            raise ValidationError("Expected one depth table for one circular record.")
+        return options.depth_tables[0], None
+    if options.depth_files is not None:
+        if len(options.depth_files) != 1:
+            raise ValidationError("Expected one depth file for one circular record.")
+        return None, options.depth_files[0]
+    return options.depth_table, options.depth_file
+
+
+def _resolve_optional_table(
+    *,
+    name: str,
+    table: DataFrame | None,
+    file_path: str | None,
+    reader,
+) -> tuple[bool, DataFrame | None]:
+    if table is not None and file_path is not None:
+        raise ValidationError(f"Pass either {name}_table or {name}_file, not both.")
+    if table is not None:
+        return True, table
+    if file_path is not None:
+        return True, reader(file_path)
+    return False, None
+
+
+def _resolve_diagram_options_config(
+    options: DiagramOptions,
+) -> tuple[dict | None, GbdrawConfig | None, Mapping[str, object] | None]:
+    """Resolve typed/dict config and losslessly attach explicit label tables."""
+
+    config_dict: dict | None = None
+    cfg: GbdrawConfig | None = None
+    config_overrides = options.config_overrides
+    if isinstance(options.config, GbdrawConfig):
+        if config_overrides:
+            cfg = apply_config_overrides(options.config, config_overrides)
+            config_overrides = None
+        else:
+            cfg = options.config
+    elif isinstance(options.config, dict):
+        config_dict = options.config
+
+    whitelist_given, whitelist = _resolve_optional_table(
+        name="label_whitelist",
+        table=options.label_whitelist_table,
+        file_path=options.label_whitelist_file,
+        reader=read_filter_list_file,
+    )
+    priority_given, priority = _resolve_optional_table(
+        name="qualifier_priority",
+        table=options.qualifier_priority_table,
+        file_path=options.qualifier_priority_file,
+        reader=read_qualifier_priority_file,
+    )
+    override_given, label_override = _resolve_optional_table(
+        name="label_override",
+        table=options.label_override_table,
+        file_path=options.label_override_file,
+        reader=read_label_override_file,
+    )
+    if not (whitelist_given or priority_given or override_given):
+        return config_dict, cfg, config_overrides
+
+    if cfg is None:
+        cfg = apply_config_overrides(options.config, config_overrides)
+    filtering = copy.deepcopy(cfg.labels.filtering.as_dict())
+    if whitelist_given:
+        filtering["whitelist_df"] = whitelist
+    if priority_given:
+        filtering["qualifier_priority_df"] = priority
+    if override_given:
+        filtering["label_override_df"] = label_override
+    cfg = replace(
+        cfg,
+        labels=replace(
+            cfg.labels,
+            filtering=LabelsFilteringConfig.from_dict(filtering),
+        ),
+    )
+    return None, cfg, None
 
 
 def _resolve_feature_visibility_table_inputs(
@@ -1719,8 +1825,9 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
     normalized_pairwise_match_style = _resolve_pairwise_match_style(pairwise_match_style)
-    normalize_collinearity_anchor_mode(str(collinearity_anchor_mode))
-    normalized_collinearity_anchor_mode = "rbh"
+    normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(
+        str(collinearity_anchor_mode)
+    )
     normalized_collinearity_search_scope = normalize_collinearity_search_scope(str(collinearity_search_scope))
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
@@ -3415,22 +3522,13 @@ def build_circular_diagram(
     """Build a circular diagram using bundled DiagramOptions."""
 
     options = options or DiagramOptions()
+    _validate_diagram_options_mode(options, mode="circular")
+    depth_table, depth_file = _resolve_single_circular_depth_options(options)
     colors = options.colors
     output = options.output
     tracks = options.tracks
-    tracks = options.tracks
 
-    config_dict: dict | None = None
-    cfg: GbdrawConfig | None = None
-    config_overrides = options.config_overrides
-    if isinstance(options.config, GbdrawConfig):
-        if config_overrides:
-            cfg = apply_config_overrides(options.config, config_overrides)
-            config_overrides = None
-        else:
-            cfg = options.config
-    elif isinstance(options.config, dict):
-        config_dict = options.config
+    config_dict, cfg, config_overrides = _resolve_diagram_options_config(options)
 
     return assemble_circular_diagram_from_record(
         gb_record,
@@ -3454,16 +3552,8 @@ def build_circular_diagram(
         step=options.step,
         depth_window=options.depth_window,
         depth_step=options.depth_step,
-        depth_table=(
-            options.depth_table
-            if options.depth_table is not None
-            else (options.depth_tables[0] if options.depth_tables else None)
-        ),
-        depth_file=(
-            options.depth_file
-            if options.depth_file is not None
-            else (options.depth_files[0] if options.depth_files else None)
-        ),
+        depth_table=depth_table,
+        depth_file=depth_file,
         depth_track_tables=options.depth_track_tables,
         depth_track_files=options.depth_track_files,
         depth_track_labels=options.depth_track_labels,
@@ -3507,21 +3597,14 @@ def build_linear_diagram(
     """Build a linear diagram using bundled DiagramOptions."""
 
     options = options or DiagramOptions()
+    _validate_diagram_options_mode(options, mode="linear")
     colors = options.colors
     output = options.output
     tracks = options.tracks
-    config_dict: dict | None = None
-    cfg: GbdrawConfig | None = None
-    config_overrides = options.config_overrides
-    if isinstance(options.config, GbdrawConfig):
-        if config_overrides:
-            cfg = apply_config_overrides(options.config, config_overrides)
-            config_overrides = None
-        else:
-            cfg = options.config
-    elif isinstance(options.config, dict):
-        config_dict = options.config
-    normalize_collinearity_anchor_mode(str(options.collinearity_anchor_mode))
+    config_dict, cfg, config_overrides = _resolve_diagram_options_config(options)
+    normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(
+        str(options.collinearity_anchor_mode)
+    )
 
     return assemble_linear_diagram_from_records(
         records,
@@ -3533,7 +3616,7 @@ def build_linear_diagram(
         collinearity_blocks=options.collinearity_blocks,
         collinearity_params=options.collinearity_params,
         collinearity_unit_mode=options.collinearity_unit_mode,
-        collinearity_anchor_mode="rbh",
+        collinearity_anchor_mode=normalized_collinearity_anchor_mode,
         collinearity_search_scope=options.collinearity_search_scope,
         collinearity_color_mode=options.collinearity_color_mode,
         losatp_bin=options.losatp_bin,
@@ -3594,11 +3677,94 @@ def build_linear_diagram(
     )
 
 
+def build_circular_multi_diagram(
+    records: Sequence[SeqRecord],
+    *,
+    options: DiagramOptions | None = None,
+    layout: CircularMultiRecordOptions | None = None,
+) -> Drawing:
+    """Build a circular multi-record canvas using bundled public options."""
+
+    options = options or DiagramOptions()
+    _validate_diagram_options_mode(options, mode="circular_multi")
+    layout = layout or CircularMultiRecordOptions()
+    colors = options.colors
+    output = options.output
+    tracks = options.tracks
+    config_dict, cfg, config_overrides = _resolve_diagram_options_config(options)
+
+    return assemble_circular_diagram_from_records(
+        records,
+        conservation_blast_files=options.conservation_blast_files,
+        conservation_dataframes=options.conservation_dataframes,
+        conservation_reference=options.conservation_reference,
+        conservation_labels=options.conservation_labels,
+        conservation_colors=options.conservation_colors,
+        conservation_ring_width=options.conservation_ring_width,
+        conservation_ring_gap=options.conservation_ring_gap,
+        config_dict=config_dict,
+        config_overrides=config_overrides,
+        color_table=colors.color_table if colors else None,
+        color_table_file=colors.color_table_file if colors else None,
+        default_colors=colors.default_colors if colors else None,
+        default_colors_palette=colors.default_colors_palette if colors else "default",
+        default_colors_file=colors.default_colors_file if colors else None,
+        selected_features_set=options.selected_features_set,
+        feature_table=options.feature_table,
+        feature_table_file=options.feature_table_file,
+        feature_visibility_table=options.feature_visibility_table,
+        feature_visibility_table_file=options.feature_visibility_table_file,
+        feature_shapes=options.feature_shapes,
+        output_prefix=output.output_prefix if output else "out",
+        legend=output.legend if output else "right",
+        dinucleotide=options.dinucleotide,
+        window=options.window,
+        step=options.step,
+        depth_window=options.depth_window,
+        depth_step=options.depth_step,
+        depth_table=options.depth_table,
+        depth_file=options.depth_file,
+        depth_tables=options.depth_tables,
+        depth_files=options.depth_files,
+        depth_track_tables=options.depth_track_tables,
+        depth_track_files=options.depth_track_files,
+        depth_track_labels=options.depth_track_labels,
+        depth_track_colors=options.depth_track_colors,
+        depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+        depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+        depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+        species=options.species,
+        strain=options.strain,
+        plot_title=options.plot_title,
+        plot_title_position=(
+            output.plot_title_position
+            if output and output.plot_title_position is not None
+            else "none"
+        ),
+        plot_title_font_size=options.plot_title_font_size,
+        keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
+        center_reserved_radius=tracks.center_reserved_radius if tracks else None,
+        multi_record_size_mode=layout.multi_record_size_mode,
+        multi_record_min_radius_ratio=layout.multi_record_min_radius_ratio,
+        multi_record_column_gap_ratio=layout.multi_record_column_gap_ratio,
+        multi_record_row_gap_ratio=layout.multi_record_row_gap_ratio,
+        multi_record_positions=layout.multi_record_positions,
+        circular_track_slots=tracks.circular_track_slots if tracks else None,
+        circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
+        evalue=options.evalue,
+        bitscore=options.bitscore,
+        identity=options.identity,
+        alignment_length=options.alignment_length,
+        cfg=cfg,
+    )
+
+
 __all__ = [
     "DEFAULT_SELECTED_FEATURES",
     "assemble_circular_diagram_from_record",
     "assemble_circular_diagram_from_records",
     "assemble_linear_diagram_from_records",
     "build_circular_diagram",
+    "build_circular_multi_diagram",
     "build_linear_diagram",
 ]

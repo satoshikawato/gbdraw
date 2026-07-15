@@ -1,12 +1,12 @@
 {
   "id": "BGC0000708-BGC0000713",
   "version": 1,
-  "title": "Reproduce the aminoglycoside BGC comparison in the web app",
-  "summary": "Build a five-cluster linear comparison with browser LOSATP orthogroups, antiSMASH gene-kind color rules, rotated labels, and a bottom legend.",
+  "title": "Compare five aminoglycoside biosynthetic gene clusters",
+  "summary": "Run LOSATP in the browser, assign CDS-derived proteins from five biosynthetic gene clusters to gbdraw similarity groups, apply antiSMASH gene_kind color rules, and label the first record.",
   "estimatedTime": "10-20 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Linear",
-  "primaryWorkflow": "LOSATP orthogroups with feature color rules",
+  "primaryWorkflow": "LOSATP similarity groups (Orthogroups mode) with feature color rules",
   "requirements": ["GenBank features that retain antiSMASH qualifiers such as gene_kind."],
   "downloads": [
     {
@@ -43,6 +43,27 @@
       "targetName": "BGC0000713.gbk",
       "href": "https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk",
       "note": "Download the ribostamycin biosynthetic gene cluster as GenBank."
+    },
+    {
+      "label": "Default color table",
+      "source": "Gallery file",
+      "targetName": "BGC0000708-BGC0000713_default_colors.tsv",
+      "href": "./files/BGC0000708-BGC0000713_default_colors.tsv",
+      "note": "Sets the fallback CDS color used by the runnable command."
+    },
+    {
+      "label": "Specific color table",
+      "source": "Gallery file",
+      "targetName": "BGC0000708-BGC0000713_specific_colors.tsv",
+      "href": "./files/BGC0000708-BGC0000713_specific_colors.tsv",
+      "note": "Contains the four antiSMASH gene_kind rules used in the figure."
+    },
+    {
+      "label": "Qualifier priority table",
+      "source": "Gallery file",
+      "targetName": "BGC0000708-BGC0000713_qualifier_priority.tsv",
+      "href": "./files/BGC0000708-BGC0000713_qualifier_priority.tsv",
+      "note": "Uses the gene qualifier for concise CDS labels."
     }
   ],
   "manualSteps": [
@@ -99,7 +120,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "This example compares protein-coding genes across related biosynthetic gene clusters, so orthogroup-backed blastp matches are the useful comparison signal.",
+      "note": "This example compares CDS-derived proteins across related biosynthetic gene clusters. The Orthogroups mode uses retained protein-search hits to form gbdraw similarity groups across all five records and draws links between group members; it does not infer phylogeny-based orthogroups.",
       "operations": [
         {
           "title": "Run LOSAT settings panel",
@@ -222,7 +243,7 @@
     },
     {
       "title": "Set labels, colors, and figure layout",
-      "body": "Use the saved session values for a compact manuscript-style comparison, including the orange palette and gray fallback for unmatched CDS features.",
+      "body": "Use the Gallery session settings, including the orange palette and a gray default for CDS features that match none of the specific color rules.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -416,7 +437,7 @@
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-align-og1.webp",
             "alt": "The livE feature assigned to og_1 beside its feature popup with Align available.",
-            "caption": "Click the livE CDS in og_1, then choose Align to regenerate around the shared core."
+            "caption": "Click the livE CDS in og_1, then choose Align to align the records on that group."
           },
           "capture": {
             "source": "webapp",
@@ -470,20 +491,20 @@
           "title": "Final aligned preview",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-bgc-preview.webp",
-            "alt": "Final og_1-aligned aminoglycoside BGC comparison with five rows, curved orthogroup matches, rotated first-record labels, and a bottom legend.",
+            "alt": "Final og_1-aligned aminoglycoside BGC comparison with five rows, curved similarity-group matches, rotated first-record labels, and a bottom legend.",
             "caption": "Check the final og_1-aligned result for five BGC rows, curved matches, rotated first-record labels, and the bottom legend."
           }
         }
       ]
     },
     {
-      "title": "Inspect an orthogroup ribbon",
-      "body": "Click a pairwise match ribbon to inspect the orthogroup ID, member count, record coverage, and member table.",
+      "title": "Inspect a similarity-group ribbon",
+      "body": "Click a pairwise match ribbon to inspect the gbdraw group ID, member count, record coverage, and member table.",
       "operations": [
         {
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-09-01-orthogroup-popup.webp",
-            "alt": "Selected og_18 pairwise ribbon beside the orthogroup popup for livA.",
+            "alt": "Selected og_18 pairwise ribbon beside the similarity-group popup for livA.",
             "caption": "Click the og_18 ribbon; the popup shows livA, 6 members, coverage across 5 records, and the member table."
           },
           "capture": {
@@ -595,7 +616,7 @@
   "colorRules": [
     {
       "title": "Use gene_kind for antiSMASH categories",
-      "body": "These BGC records carry antiSMASH gene_kind qualifiers, which are more reliable for core, additional, transport, and regulatory categories than broad product text."
+      "body": "These BGC records carry antiSMASH gene_kind qualifiers for core biosynthetic, additional biosynthetic, transport, and regulatory categories. Use those annotations instead of matching broad product terms."
     },
     {
       "title": "Use gene for label text",
@@ -610,7 +631,7 @@
       "body": "When gene_kind is absent, product can group functional categories, but terms such as protein, enzyme, or transporter may match more features than intended."
     },
     {
-      "title": "Let the legend caption explain the biology",
+      "title": "Use descriptive legend captions",
       "body": "Use captions such as Core biosynthetic genes and Transport-related genes instead of raw qualifier values."
     }
   ],
@@ -621,25 +642,25 @@
     },
     {
       "title": "Prefer Safe total threads",
-      "body": "Safe avoids consuming every logical CPU and is the best default for keeping the browser responsive."
+      "body": "Safe leaves some logical CPUs unused so the browser can remain responsive."
     },
     {
-      "title": "Use orthogroups for protein-level BGC comparison",
-      "body": "Orthogroup mode keeps related proteins linked even when local gene order differs across clusters."
+      "title": "Use similarity groups for protein-level BGC comparison",
+      "body": "The Orthogroups mode uses retained protein-search hits to form gbdraw similarity groups even when local gene order differs across clusters. It does not perform phylogeny-based orthology inference."
     },
     {
       "title": "Tune the match thresholds together",
-      "body": "Raise identity, bitscore, or minimum length, or lower the E-value cutoff, when the figure has too many weak ribbons. Relax those thresholds when expected homologs are missing."
+      "body": "Raise the identity, bit score, or minimum-length threshold, or lower the E-value cutoff, when the figure has too many weak ribbons. Relax those thresholds when expected protein matches are missing."
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so label, color, and legend changes should be faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so label, color, and legend edits avoid another search."
     }
   ],
   "troubleshooting": [
     {
       "title": "The rows do not line up like the Gallery figure",
-      "body": "Check the input order, Align orthogroup feature og_1, and reverse-complement setting for BGC0000713."
+      "body": "Check the input order, the alignment to gbdraw group og_1, and the reverse-complement setting for BGC0000713."
     },
     {
       "title": "Core genes are not red",
@@ -647,7 +668,7 @@
     },
     {
       "title": "Labels are missing or too dense",
-      "body": "Use Show labels: first record, label placement above feature, and 45 degree label rotation. If needed, reduce labels by tightening the label filter."
+      "body": "Use Show labels: first record, label placement above feature, and 45° label rotation. If needed, reduce labels by tightening the label filter."
     },
     {
       "title": "Threaded LOSAT is unavailable",
@@ -655,7 +676,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check orthogroup mode, identity, bitscore, E-value, and minimum-length thresholds, track layout, legend position, label rotation, color rules, and record orientation."
+      "body": "Check the Orthogroups mode, identity, bit score, E-value, and minimum-length thresholds, track layout, legend position, label rotation, color rules, and record orientation."
     }
   ],
   "related": [
@@ -668,7 +689,7 @@
       "href": "../"
     },
     {
-      "label": "Compare with the Hepatoplasmataceae orthogroup example",
+      "label": "Compare with the Hepatoplasmataceae protein-similarity example",
       "href": "./#hepatoplasmataceae_orthogroup"
     }
   ]

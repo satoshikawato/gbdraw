@@ -10,27 +10,27 @@ from .objects import FeatureObject
 def get_feature_ends(feature, genome_length: Optional[int] = None) -> Tuple[int, int, str]:
     """
     Get feature start/end positions and strand.
-    
+
     For origin-spanning features on circular genomes, returns start > end
     to indicate the feature crosses the origin.
-    
+
     Args:
         feature: FeatureObject with location/coordinates
         genome_length: Total genome length (required for origin-spanning detection)
-    
+
     Returns:
         (start, end, strand) tuple. If start > end, feature spans the origin.
     """
     strand = feature.location[0].strand if feature.location else "undefined"
-    
+
     if hasattr(feature, "coordinates") and feature.coordinates:
         parts = list(feature.coordinates)
     else:
         parts = list(feature.location)
-    
+
     if not parts:
         return 1, 1, strand
-    
+
     starts = [max(1, int(part.start)) for part in parts]
     ends = [max(1, int(part.end)) for part in parts]
 
@@ -50,21 +50,21 @@ def get_feature_ends(feature, genome_length: Optional[int] = None) -> Tuple[int,
     # Normal case: use min/max
     start = min(starts)
     end = max(ends)
-    
+
     return start, end, strand
 
 
 def calculate_feature_metrics(feature, genome_length: Optional[int] = None) -> Tuple[int, int]:
     """
     Calculate total span and occupied length with corrected calculations.
-    
+
     Handles origin-spanning features correctly when genome_length is provided.
 
     Returns:
         (total_span, occupied_length)
     """
     start, end, _ = get_feature_ends(feature, genome_length)
-    
+
     # Calculate total span, accounting for origin-spanning
     if start > end and genome_length:
         # Origin-spanning: spans from start to genome_length, then from 1 to end
@@ -86,51 +86,51 @@ def check_feature_overlap(
 ) -> bool:
     """
     Check if two features overlap on a circular genome.
-    
+
     Handles origin-spanning features when genome_length is provided.
     Origin-spanning features have start > end.
-    
+
     Args:
         a: Feature dict with 'start', 'end', 'strand' keys
         b: Feature dict with 'start', 'end', 'strand' keys
         separate_strands: If True, features on different strands don't overlap
         genome_length: Total genome length (required for origin-spanning detection)
-    
+
     Returns:
         True if features overlap, False otherwise
     """
     if separate_strands and a["strand"] != b["strand"]:
         return False
-    
+
     a_start, a_end = a["start"], a["end"]
     b_start, b_end = b["start"], b["end"]
-    
+
     # Check if either feature spans the origin
     a_spans_origin = a_start > a_end
     b_spans_origin = b_start > b_end
-    
+
     if not a_spans_origin and not b_spans_origin:
         # Simple linear overlap check
         return not (a_end < b_start or a_start > b_end)
-    
+
     if genome_length is None:
         # Can't determine accurately without genome_length, assume overlap
         return True
-    
+
     # Handle origin-spanning cases
     def overlaps_circular(s1: int, e1: int, s2: int, e2: int, length: int) -> bool:
         """Check overlap for circular genome coordinates."""
         span1_origin = s1 > e1
         span2_origin = s2 > e2
-        
+
         if not span1_origin and not span2_origin:
             # Neither spans origin
             return not (e1 < s2 or s1 > e2)
-        
+
         if span1_origin and span2_origin:
             # Both span origin - they definitely overlap (both cover position 1 and length)
             return True
-        
+
         if span1_origin:
             # Feature 1 spans origin: covers [s1, length] and [1, e1]
             # Feature 2 is normal: covers [s2, e2]
@@ -139,11 +139,11 @@ def check_feature_overlap(
             #         or: s2 <= e1 (feature 2 is within left part)
             #         or: e2 >= s1 (feature 2 is within right part)
             return (s2 >= s1) or (e2 <= e1) or (s2 <= e1 and e2 >= 1) or (e2 >= s1 and s2 <= length)
-        
+
         # span2_origin is True
         # Feature 2 spans origin, feature 1 is normal
         return (s1 >= s2) or (e1 <= e2) or (s1 <= e2 and e1 >= 1) or (e1 >= s2 and s1 <= length)
-    
+
     return overlaps_circular(a_start, a_end, b_start, b_end, genome_length)
 
 
@@ -157,7 +157,7 @@ def find_best_track(
 ) -> int:
     """
     Find the best track for a feature, avoiding overlaps if resolve_overlaps is True.
-    
+
     Args:
         feature: Feature metrics dict
         track_dict: Dict of existing features per track
@@ -165,7 +165,7 @@ def find_best_track(
         resolve_overlaps: Whether to resolve overlapping features
         genome_length: Total genome length (for origin-spanning detection)
         max_track: Maximum number of tracks to consider
-    
+
     Returns:
         Track number (positive for positive strand, negative for negative strand)
     """
@@ -340,7 +340,7 @@ def arrange_feature_tracks(
 ) -> Dict[str, FeatureObject]:
     """
     Arrange features in tracks with improved strand handling and track assignment.
-    
+
     Args:
         feature_dict: Dict of feature_id -> FeatureObject
         separate_strands: Whether to separate positive/negative strands
@@ -349,7 +349,7 @@ def arrange_feature_tracks(
             uses shared center track 0 plus strand-specific displacement pools.
             Intended for circular middle resolve_overlaps behavior.
         genome_length: Total genome length (for origin-spanning feature detection)
-    
+
     Returns:
         Updated feature_dict with feature_track_id set on each feature
     """

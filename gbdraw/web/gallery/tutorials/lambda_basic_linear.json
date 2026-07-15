@@ -1,0 +1,88 @@
+{
+  "id": "lambda_basic_linear",
+  "version": 1,
+  "title": "Create your first linear genome figure",
+  "summary": "Upload one small phage GenBank record, separate the strands, show labels and a ruler, and export the result without running a sequence search.",
+  "estimatedTime": "Under 5 min",
+  "difficulty": "Beginner",
+  "appMode": "Linear",
+  "primaryWorkflow": "Linear basics",
+  "requirements": ["No BLAST or LOSAT search is required."],
+  "downloads": [
+    {
+      "label": "NC_001416.1",
+      "source": "NCBI Nucleotide",
+      "accession": "NC_001416.1",
+      "targetName": "NC_001416.gb",
+      "note": "Download the complete lambda phage record as a GenBank flat file."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Select Linear mode",
+      "body": "Open gbdraw.app and select Linear before adding the phage record.",
+      "operations": [
+        {
+          "body": "Choose Linear; leave Pairwise Comparisons disabled for this one-record figure.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
+            "alt": "Mode selector with Linear selected.",
+            "caption": "Select Linear mode."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Upload the lambda GenBank record",
+      "body": "Upload NC_001416.gb and set Output prefix to lambda_basic_linear. One record is enough to learn the linear layout controls.",
+      "operations": [
+        {
+          "body": "Keep a single Linear input row and verify the NC_001416.gb filename before continuing.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-02-01-record-text-row.webp",
+            "alt": "A Linear GenBank input row showing the file and record text controls.",
+            "caption": "Use one Linear input row; optional record text can be left blank."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Set labels, strands, and ruler",
+      "body": "Enable Separate Strands, set Show Labels to All Records, set Scale Style to Ruler, and put the legend on the left.",
+      "operations": [
+        {
+          "body": "Choose Ruler (Ticks) from Scale Style after enabling labels and strand separation.",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-05-02-scale-style-ruler.webp",
+            "alt": "Scale Style selector with Ruler highlighted in the linear layout controls.",
+            "caption": "The ruler makes genomic positions explicit on the linear figure."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Generate and export SVG",
+      "body": "Click Generate Diagram. Check that both strand lanes, feature labels, and the ruler are visible, then export SVG.",
+      "operations": [
+        {
+          "body": "Compare the generated preview with the Gallery result before exporting.",
+          "media": {
+            "src": "./thumbnails/lambda_basic_linear.webp",
+            "alt": "Beginner linear lambda phage genome diagram with labels and a genomic ruler.",
+            "caption": "The completed one-record linear figure requires no pairwise search."
+          }
+        }
+      ]
+    }
+  ],
+  "related": [
+    {
+      "label": "Arrange linear tracks and record labels",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/7_Linear_Layout.md"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    }
+  ]
+}

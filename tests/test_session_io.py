@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
 import gbdraw.circular as circular_cli_module
 from gbdraw.circular import circular_main
@@ -20,6 +22,12 @@ from gbdraw.cli_utils.session import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import read_records_table
 from gbdraw.render.formats import ACCEPTED_FORMATS
+from gbdraw.api.requests import (
+    CircularDiagramRequest,
+    InMemoryRecordSource,
+    LinearDiagramRequest,
+    RecordInput,
+)
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
@@ -48,12 +56,20 @@ def _file_entry(name: str, content: bytes) -> dict:
 def _minimal_session(files: dict, *, mode: str = "circular") -> dict:
     return {
         "format": SESSION_FORMAT,
-        "version": CURRENT_SESSION_VERSION,
+        "version": 30,
         "createdAt": "2026-06-22T00:00:00Z",
         "config": {"form": {"prefix": "out"}, "adv": {}},
         "ui": {"mode": mode, "cInputType": "gb", "lInputType": "gb"},
         "files": files,
     }
+
+
+def _canonical_request(mode: str):
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    record_input = RecordInput(source=InMemoryRecordSource(record))
+    if mode == "linear":
+        return LinearDiagramRequest(records=(record_input,))
+    return CircularDiagramRequest(records=(record_input,))
 
 
 def test_current_session_version_matches_web_config() -> None:
@@ -144,9 +160,9 @@ def test_cli_invocation_restoration_substitutes_embedded_files(tmp_path: Path) -
     assert materialized.exists()
     assert materialized.read_bytes() == b"LOCUS       TEST\n"
     assert spec.args[0:2] == ("-o", "new")
-    assert spec.args[-2:] == ("-f", "interactive-svg")
+    assert spec.args[-2:] == ("-f", "interactive_svg")
     assert spec.cli_invocation_args[0:2] == ("-o", "new")
-    assert spec.cli_invocation_args[-2:] == ("-f", "interactive-svg")
+    assert spec.cli_invocation_args[-2:] == ("-f", "interactive_svg")
     assert spec.file_bindings[0].argIndex == 3
     assert spec.file_bindings[0].slot == "files.c_gb"
 
@@ -521,9 +537,11 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 6, 23),
+        canonical_request=_canonical_request("linear"),
     )
 
     config = payload["config"]
+    assert payload["cliInvocation"]["renderFormats"] == ["interactive_svg"]
     assert config["form"]["prefix"] == "out"
     assert config["form"]["align_center"] is True
     assert config["form"]["separate_strands"] is True
@@ -611,6 +629,7 @@ def test_cli_session_config_populates_safe_linear_row_fields() -> None:
             ]
         },
         generated_at=datetime(2026, 6, 23),
+        canonical_request=_canonical_request("linear"),
     )
 
     seqs = payload["files"]["linearSeqs"]
@@ -674,6 +693,7 @@ def test_cli_session_config_omits_ambiguous_multi_record_row_fields() -> None:
             ]
         },
         generated_at=datetime(2026, 6, 23),
+        canonical_request=_canonical_request("linear"),
     )
 
     seq = payload["files"]["linearSeqs"][0]
@@ -774,7 +794,8 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     payload = load_session(session_path)
     assert payload["format"] == SESSION_FORMAT
     assert payload["version"] == CURRENT_SESSION_VERSION
-    assert payload["files"]["c_gb"]["data"]
+    assert "files" not in payload
+    assert payload["resources"]["record-1-genbank"]["data"]
     assert "<svg" in payload["results"][0]["content"]
     assert payload["cliInvocation"]["mode"] == "circular"
     assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.c_gb"

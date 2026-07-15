@@ -13,6 +13,22 @@ from gbdraw.io.genome import (  # type: ignore[reportMissingImports]
     load_gbks as _load_gbks,
     load_gff_fasta as _load_gff_fasta,
 )
+from gbdraw.io.cli_tables import (  # type: ignore[reportMissingImports]
+    CircularTrackTable,
+    ConservationTable,
+    ConservationTableRow,
+    RecordsTable,
+    RecordsTableRow,
+    TablePathDependency,
+    read_circular_track_table,
+    read_conservation_table,
+    read_records_table,
+)
+from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
+    read_filter_list_file,
+    read_label_override_file,
+    read_qualifier_priority_file,
+)
 from gbdraw.io.record_select import (  # type: ignore[reportMissingImports]
     RecordSelector,
     parse_record_selector as _parse_record_selector,
@@ -134,9 +150,33 @@ def apply_region_specs(
         raise ValidationError(str(exc)) from exc
 
 
+def read_label_whitelist_table(path: str) -> DataFrame | None:
+    """Read a label whitelist table using the CLI-compatible validator."""
+
+    return read_filter_list_file(path)
+
+
+def read_qualifier_priority_table(path: str) -> DataFrame | None:
+    """Read a label qualifier-priority table."""
+
+    return read_qualifier_priority_file(path)
+
+
+def read_label_override_table(path: str) -> DataFrame | None:
+    """Read a label override table."""
+
+    return read_label_override_file(path)
+
+
 __all__ = [
+    "CircularTrackTable",
+    "ConservationTable",
+    "ConservationTableRow",
+    "RecordsTable",
+    "RecordsTableRow",
     "RegionSpec",
     "RecordSelector",
+    "TablePathDependency",
     "apply_region_specs",
     "load_gbks",
     "load_gff_fasta",
@@ -144,4 +184,10 @@ __all__ = [
     "parse_record_selectors",
     "parse_region_spec",
     "parse_region_specs",
+    "read_circular_track_table",
+    "read_conservation_table",
+    "read_label_override_table",
+    "read_label_whitelist_table",
+    "read_qualifier_priority_table",
+    "read_records_table",
 ]

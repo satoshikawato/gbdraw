@@ -16,7 +16,7 @@ Core feature data models.
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, NamedTuple, Optional, Tuple
+from typing import Any, List, Literal, NamedTuple, Optional
 
 
 FeatureSegmentKind = Literal["block", "line"]
@@ -149,7 +149,7 @@ class GeneObject(FeatureObject):
         self.gene_biotype: str = gene_biotype
         self.product: str = product
         self.gene: str = gene
-        
+
     def __str__(self) -> str:
         base_str = super().__str__()
         additional_info = []
@@ -194,7 +194,7 @@ class RepeatObject(FeatureObject):
         )
         self.rpt_family: str = rpt_family
         self.rpt_type: str = rpt_type
-        
+
     def __str__(self) -> str:
         base_str = super().__str__()
         additional_info = []

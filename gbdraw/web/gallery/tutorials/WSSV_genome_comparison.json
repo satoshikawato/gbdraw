@@ -1,20 +1,20 @@
 {
   "id": "WSSV_genome_comparison",
   "version": 1,
-  "title": "Reproduce the WSSV circular conservation ring comparison in the web app",
-  "summary": "Build a single-reference circular White spot syndrome virus diagram with 20 conservation rings generated from browser LOSAT blastn results.",
-  "estimatedTime": "10-30 min after inputs are available",
+  "title": "Advanced session-based WSSV comparison case study",
+  "summary": "Load the bundled session first to inspect a White spot syndrome virus reference and 20 prepared BLAST/LOSAT comparison rings. The original prepared-input command is provenance, not a directly runnable public recipe.",
+  "estimatedTime": "Session inspection: under 5 min; input preparation: hours; search: 10-30 min; render and interaction: under 5 min",
   "difficulty": "Advanced",
   "appMode": "Circular",
-  "primaryWorkflow": "Circular conservation rings with browser LOSAT blastn",
-  "requirements": ["Load the bundled Gallery session for the exact prepared inputs, or obtain and assemble all 20 comparison FASTA files listed below for a manual rebuild."],
+  "primaryWorkflow": "Circular nucleotide-similarity rings with LOSAT blastn",
+  "requirements": ["Start by loading the bundled Gallery session. A manual rebuild requires preparing all 20 comparison assemblies; the public sources below do not form a complete exact-reproduction bundle."],
   "downloads": [
     {
       "label": "Bundled Gallery session",
       "source": "Gallery artifact",
       "href": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
       "targetName": "WSSV_genome_comparison.gbdraw-session.json",
-      "note": "Load this bundled session to inspect the completed result or reuse its prepared comparison inputs and cached LOSAT output."
+      "note": "This is the primary path: load the session to inspect the completed result, settings, prepared inputs, and cached LOSAT output without rebuilding the external dataset."
     },
     {
       "label": "AP027280",
@@ -172,8 +172,22 @@
   ],
   "manualSteps": [
     {
-      "title": "Switch to Circular mode",
-      "body": "Open gbdraw.app and select Circular mode before adding the WSSV reference record.",
+      "title": "Load the bundled session first",
+      "body": "Open gbdraw.app, choose Load Settings / Session, and load WSSV_genome_comparison.gbdraw-session.json from Files. Inspect the restored result and settings before deciding whether the external input preparation is necessary for your work.",
+      "operations": [
+        {
+          "body": "Use the restored session as the complete inspection path; the following steps document the optional prepared-input rebuild.",
+          "media": {
+            "src": "./thumbnails/WSSV_genome_comparison.webp",
+            "alt": "Completed WSSV circular comparison restored from the bundled Gallery session.",
+            "caption": "The bundled session restores the completed 20-ring comparison without requiring the external preparation workflow."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Optional rebuild: switch to Circular mode",
+      "body": "For a manual rebuild with prepared inputs, open gbdraw.app and select Circular mode before adding the WSSV reference record.",
       "operations": [
         {
           "media": {
@@ -208,7 +222,7 @@
     },
     {
       "title": "Set the basic circular layout",
-      "body": "Use a spread-out circular track so the outer CDS features remain readable around the conservation rings.",
+      "body": "Use a spread-out circular track so the outer CDS features remain readable around the similarity rings.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -362,8 +376,8 @@
       ]
     },
     {
-      "title": "Set conservation thresholds",
-      "body": "Use strict blastn thresholds so the rings show high-confidence conserved nucleotide segments.",
+      "title": "Set search thresholds",
+      "body": "Set the blastn filters so each ring shows HSPs with a bit score of at least 100, an E-value of at most 1e-30, at least 90% identity, and an alignment length of at least 100 nt.",
       "table": {
         "columns": ["Threshold", "Value"],
         "rows": [
@@ -377,21 +391,21 @@
         {
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-07-01-thresholds.webp",
-            "alt": "LOSAT Settings thresholds with bitscore 100, e-value 1e-30, identity 90, and minimum length 100.",
-            "caption": "Set bitscore 100, e-value 1e-30, identity 90, and minimum length 100."
+            "alt": "LOSAT Settings thresholds with bit score 100, E-value 1e-30, identity 90, and minimum length 100.",
+            "caption": "Set the bit score to 100, E-value to 1e-30, identity to 90, and minimum length to 100."
           }
         }
       ]
     },
     {
       "title": "Generate the diagram",
-      "body": "Click Generate Diagram. The preview should show the AP027280 feature ring, 20 conservation rings, the position scale, and a left legend with an identity gradient for each comparison genome.",
+      "body": "Click Generate Diagram. The preview should show the AP027280 feature ring, 20 nucleotide-similarity rings, the position scale, and a left legend with an identity gradient for each comparison genome.",
       "operations": [
         {
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-09-01-conservation-rings.webp",
-            "alt": "Generated WSSV conservation diagram with 20 conservation rings and the left identity legend.",
-            "caption": "The generated preview stacks 20 conservation rings inside the reference CDS feature ring."
+            "alt": "Generated WSSV comparison diagram with 20 nucleotide-similarity rings and the left identity legend.",
+            "caption": "The generated preview stacks 20 nucleotide-similarity hit rings inside the reference CDS feature ring."
           }
         }
       ]
@@ -412,7 +426,7 @@
         {
           "media": {
             "src": "./media/WSSV_genome_comparison/manual-11-01-feature-popup.webp",
-            "alt": "Zoomed WSSV conservation crop with the clicked outer CDS, conservation rings, and Details metadata.",
+            "alt": "Zoomed WSSV comparison crop with the clicked outer CDS, nucleotide-similarity rings, and Details metadata.",
             "caption": "The Details tab shows the VP180 label, AP027280.1 record, CDS type, location, and BDX26618.1 protein ID."
           },
           "capture": {
@@ -464,25 +478,25 @@
   "losatTips": [
     {
       "title": "Use blastn megablast for close viral genomes",
-      "body": "The WSSV comparison uses nucleotide-level conservation, so blastn with megablast is the appropriate browser LOSAT workflow."
+      "body": "These WSSV genomes are compared at the nucleotide level. The tutorial uses the megablast task for the closely related sequences."
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when the canonical inputs and LOSAT settings match, so styling-only changes should be faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so styling edits avoid another search."
     }
   ],
   "troubleshooting": [
     {
-      "title": "Conservation rings are missing",
+      "title": "Similarity rings are missing",
       "body": "Check that Pairwise Comparisons uses Run LOSAT, the comparison FASTA files are uploaded, and the generated result is the circular output."
     },
     {
       "title": "A ring appears in the wrong order",
-      "body": "Check the FASTA upload order, ring labels, and ring colors. The legend follows the configured conservation series order."
+      "body": "Check the FASTA upload order, ring labels, and ring colors. The legend follows the comparison FASTA upload order."
     },
     {
       "title": "The rings look too sparse",
-      "body": "The Gallery figure uses strict thresholds. Lower identity or alignment length only when you intentionally want weaker matches to appear."
+      "body": "The Gallery figure uses the thresholds listed above. Lower the identity or alignment-length cutoff only when you want to retain more weak or short HSPs."
     },
     {
       "title": "The browser becomes slow",
@@ -490,7 +504,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check AP027280.gb, Track Preset Spreadout, Separate Strands, Hide GC Content, Hide GC Skew, Label Mode None, Legend Position Left, conservation Ring Width and Ring Gap, thresholds, colors, and comparison FASTA order."
+      "body": "Check AP027280.gb, Track Preset Spreadout, Separate Strands, Hide GC Content, Hide GC Skew, Label Mode None, Legend Position Left, Ring Width, Ring Gap, thresholds, colors, and comparison FASTA order."
     }
   ],
   "related": [

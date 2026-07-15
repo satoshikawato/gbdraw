@@ -1294,7 +1294,7 @@ def _gap_between_inner_outer_tracks(
 def _inside_stack_failure_hint(intents: Sequence[_RadialSlotIntent]) -> str:
     if any(intent.renderer == "sequence_conservation" for intent in intents):
         return (
-            " For many conservation rings, reduce Ring Width/Ring Gap, disable GC/skew/depth tracks, "
+            " For many similarity rings, reduce Ring Width/Ring Gap, disable GC/skew/depth tracks, "
             "move some tracks outside, or reduce the number of comparison files."
         )
     return ""

@@ -1,26 +1,74 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 from tools.reproduce_examples import PROJECT_ROOT, Reproducer
-from tools.reproduce_examples_manifest import CliRecipe, FigureSpec, build_figure_specs, load_palette_names
+from tools.reproduce_examples_manifest import (
+    MANUALLY_MANAGED_FIGURES,
+    UNREFERENCED_FIGURE_RETENTION,
+    CliRecipe,
+    FigureSpec,
+    build_figure_specs,
+    load_palette_names,
+)
+from tools.generate_palette_page import OUTPUT_PATH as PALETTE_PAGE, render_palette_page
+
+
+PUBLIC_MARKDOWN = (
+    PROJECT_ROOT / "README.md",
+    *sorted((PROJECT_ROOT / "docs").rglob("*.md")),
+    PROJECT_ROOT / "examples" / "color_palette_examples.md",
+)
+MARKDOWN_TARGET_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+HTML_IMAGE_RE = re.compile(r'<img\b[^>]*\bsrc=["\']([^"\']+)', re.IGNORECASE)
+SELF_GITHUB_PREFIX = "https://github.com/satoshikawato/gbdraw/blob/main/"
+
+
+def _local_target(markdown_path: Path, raw_target: str) -> Path | None:
+    target = raw_target.strip().split()[0].strip("<>")
+    if target.startswith(SELF_GITHUB_PREFIX):
+        return PROJECT_ROOT / target.removeprefix(SELF_GITHUB_PREFIX).split("#", 1)[0]
+    if target.startswith("#") or "://" in target or target.startswith(("mailto:", "data:")):
+        return None
+    return (markdown_path.parent / target.split("#", 1)[0].split("?", 1)[0]).resolve()
+
+
+def _local_image_references() -> set[str]:
+    references: set[str] = set()
+    for markdown_path in PUBLIC_MARKDOWN:
+        source = markdown_path.read_text(encoding="utf-8")
+        targets = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", source)
+        targets.extend(HTML_IMAGE_RE.findall(source))
+        for raw_target in targets:
+            target = _local_target(markdown_path, raw_target)
+            if target is not None:
+                references.add(target.relative_to(PROJECT_ROOT).as_posix())
+    return references
 
 
 def test_manifest_counts_and_unique_paths() -> None:
     figures = build_figure_specs()
-    palette_names = load_palette_names()
 
     docs_and_readme = [spec for spec in figures.values() if "palettes" not in spec.groups]
     palette_circular = [figure_id for figure_id in figures if figure_id.startswith("palette_circular_")]
     palette_linear = [figure_id for figure_id in figures if figure_id.startswith("palette_linear_")]
 
-    assert len(docs_and_readme) == 32
-    assert len(palette_circular) == len(palette_names)
-    assert len(palette_linear) == len(palette_names)
-    assert len(figures) == 32 + (2 * len(palette_names)) + 2
+    assert len(docs_and_readme) == 55
+    assert palette_circular == [
+        "palette_circular_default",
+        "palette_circular_ajisai",
+        "palette_circular_soft_pastels",
+    ]
+    assert palette_linear == [
+        "palette_linear_default",
+        "palette_linear_ajisai",
+        "palette_linear_soft_pastels",
+    ]
+    assert len(figures) == 55 + 6 + 2
 
     output_paths = [spec.output_path for spec in figures.values()]
     assert len(output_paths) == len(set(output_paths))
@@ -30,11 +78,41 @@ def test_palette_manifest_stays_in_sync_with_palette_file() -> None:
     figures = build_figure_specs()
     palette_names = load_palette_names()
 
-    for palette_name in palette_names:
+    for palette_name in ("default", "ajisai", "soft_pastels"):
         assert f"palette_circular_{palette_name}" in figures
         assert f"palette_linear_{palette_name}" in figures
+    assert len(palette_names) == 55
     assert "palettes_combined_image_1" in figures
     assert "palettes_combined_image_2" in figures
+
+
+def test_palette_page_is_generated_from_palette_file() -> None:
+    assert PALETTE_PAGE.read_text(encoding="utf-8") == render_palette_page()
+
+
+def test_public_markdown_local_targets_exist() -> None:
+    missing: list[str] = []
+    for markdown_path in PUBLIC_MARKDOWN:
+        source = markdown_path.read_text(encoding="utf-8")
+        targets = MARKDOWN_TARGET_RE.findall(source) + HTML_IMAGE_RE.findall(source)
+        for raw_target in targets:
+            target = _local_target(markdown_path, raw_target)
+            if target is not None and not target.exists():
+                missing.append(f"{markdown_path.relative_to(PROJECT_ROOT)} -> {raw_target}")
+    assert missing == []
+
+
+def test_public_figures_have_reproduction_inventory_coverage() -> None:
+    references = _local_image_references()
+    manifest_paths = {spec.output_path for spec in build_figure_specs().values()}
+    manual_paths = set(MANUALLY_MANAGED_FIGURES)
+    retained_unreferenced = set(UNREFERENCED_FIGURE_RETENTION)
+
+    assert references - manifest_paths - manual_paths == set()
+    assert manifest_paths - references == retained_unreferenced
+    assert all(reason.strip() for reason in MANUALLY_MANAGED_FIGURES.values())
+    assert all(reason.strip() for reason in UNREFERENCED_FIGURE_RETENTION.values())
+    assert all((PROJECT_ROOT / path).exists() for path in manual_paths)
 
 
 def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> None:

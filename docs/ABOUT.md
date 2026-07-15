@@ -17,7 +17,7 @@ Project links:
 - GitHub: https://github.com/satoshikawato/gbdraw/
 - Web app: https://gbdraw.app/
 
-## Acknowledgments and Inspiration
+## Acknowledgments and inspiration
 
 `gbdraw` draws inspiration from a number of genome visualization tools and related projects:
 

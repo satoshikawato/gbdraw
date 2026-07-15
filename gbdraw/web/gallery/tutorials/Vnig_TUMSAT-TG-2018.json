@@ -1,8 +1,8 @@
 {
   "id": "Vnig_TUMSAT-TG-2018",
   "version": 1,
-  "title": "Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app",
-  "summary": "Build a circular multi-record canvas for two chromosomes and four plasmids from a single RefSeq GBFF file, using automatic record sizing, explicit row placement, GC content, GC skew, and a left legend.",
+  "title": "Vibrio nigripulchritudo chromosomes and plasmids on one canvas",
+  "summary": "Arrange two chromosomes and four plasmids from one RefSeq GBFF file on a shared circular canvas. The example uses automatic record sizing, two rows, GC content, GC skew, and a left legend.",
   "estimatedTime": "5-15 min after the input is available",
   "difficulty": "Intermediate",
   "appMode": "Circular",
@@ -219,7 +219,7 @@
       ]
     },
     {
-      "title": "Add Title",
+      "title": "Add the plot title",
       "body": "Set the plot title and place it below the multi-record canvas.",
       "table": {
         "columns": ["Setting", "Value"],
@@ -287,7 +287,7 @@
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
             "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",
-            "caption": "The zoomed crop keeps the clicked chromosome CDS and popup metadata readable."
+            "caption": "The popup reports the selected chromosome CDS location, protein ID, qualifiers, and sequence."
           },
           "capture": {
             "source": "webapp",

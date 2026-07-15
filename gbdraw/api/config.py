@@ -32,8 +32,15 @@ def apply_config_overrides(
     if config is None:
         config_dict = load_default_config()
     elif isinstance(config, GbdrawConfig):
-        # asdict only includes modeled fields; this is intended for typed configs.
         config_dict = asdict(config)
+        # LabelsFilteringConfig intentionally keeps DataFrames and other extension
+        # values in ``raw``.  ``asdict`` nests those values under a second ``raw``
+        # key, while downstream label selection reads them from the filtering
+        # mapping itself.  Restore the lossless public representation before
+        # applying overrides.
+        config_dict["labels"]["filtering"] = deepcopy(
+            config.labels.filtering.as_dict()
+        )
     else:
         config_dict = deepcopy(config)
 

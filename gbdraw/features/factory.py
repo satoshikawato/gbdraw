@@ -3,7 +3,6 @@
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
@@ -247,5 +246,4 @@ __all__ = [
     "create_gene_object",
     "create_repeat_object",
 ]
-
 

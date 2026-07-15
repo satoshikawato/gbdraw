@@ -3,6 +3,7 @@
 
 
 import argparse
+import copy
 import hashlib
 import json
 import logging
@@ -21,12 +22,15 @@ from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
 from .render.formats import INTERACTIVE_SVG_FORMAT
 from .render.interactive_svg import InteractiveSvgContext
-from .web_support.feature_metadata import extract_features_from_records_payload
-from .web_support.orthogroup_metadata import (
-    enrich_features_with_orthogroups,
-    serialize_orthogroups_payload,
-)
+from .render.interactive_context import build_interactive_svg_context
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
+from .api.options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
+from .api.requests import (
+    InMemoryRecordSource,
+    LinearDiagramRequest,
+    RecordInput,
+    RenderOutputRequest,
+)
 from .definition_line_styles import (
     parse_definition_line_style_assignment,
     parse_definition_line_style_overrides,
@@ -52,8 +56,6 @@ from .labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
-from .features.colors import preprocess_color_tables
-from .features.ids import make_linear_rendered_feature_id
 from .features.shapes import parse_feature_shape_overrides
 from .features.visibility import (
     compile_feature_visibility_rules,
@@ -70,7 +72,6 @@ from .tracks import (
 
 from .cli_utils.common import (
     _add_block_stroke_args,
-    _add_comparison_filter_args,
     _add_depth_axis_args,
     _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
@@ -88,7 +89,6 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
     load_records_table_records as _load_records_table_records,
-    parse_feature_shape_assignment_arg as _parse_feature_shape_assignment_arg,
     record_major_depth_track_files_from_cli as _record_major_depth_track_files_from_cli,
 )
 from .cli_utils.session import (
@@ -98,6 +98,7 @@ from .cli_utils.session import (
     collect_track_slot_geometry_records,
     make_rendered_svg,
     parse_session_pre_args,
+    render_canonical_session_if_present,
     save_session_sidecar_if_requested,
 )
 from .session_io import load_session, session_to_cli_args
@@ -414,32 +415,15 @@ def _build_interactive_svg_context(
     default_colors=None,
 ) -> InteractiveSvgContext:
     try:
-        specific_color_rules = None
-        if color_table is not None and default_colors is not None:
-            specific_color_rules, _ = preprocess_color_tables(color_table, default_colors)
-        payload = extract_features_from_records_payload(
+        return build_interactive_svg_context(
             records,
-            selected_features=selected_features,
+            selected_features_set=selected_features,
             feature_visibility_rules=feature_visibility_rules,
-            specific_color_rules=specific_color_rules,
+            color_table=color_table,
+            default_colors=default_colors,
+            orthogroups=orthogroups,
             linear_rendered_feature_ids=True,
         )
-        record_count = len(records)
-        orthogroup_payload = serialize_orthogroups_payload(
-            orthogroups,
-            feature_id_mapper=lambda record_index, stable_feature_id: (
-                make_linear_rendered_feature_id(
-                    record_index=record_index,
-                    stable_feature_id=stable_feature_id,
-                    record_count=record_count,
-                )
-                or stable_feature_id
-            ),
-            records=records,
-        )
-        features = payload.get("features", [])
-        if orthogroup_payload:
-            features = enrich_features_with_orthogroups(features, orthogroup_payload)
     except Exception as exc:
         logger.warning(
             "WARNING: Rich interactive feature metadata could not be generated; "
@@ -447,10 +431,6 @@ def _build_interactive_svg_context(
             exc,
         )
         return InteractiveSvgContext()
-    return InteractiveSvgContext(
-        features=features,
-        orthogroups=orthogroup_payload,
-    )
 
 def _parse_linear_label_placement(value: str) -> str:
     normalized = str(value).strip().lower()
@@ -555,7 +535,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         "--records_table",
         metavar="TSV",
-        help="TSV manifest for row-coupled input records and per-record options.",
+        help="TSV manifest for row-based input records and per-record options.",
         type=str)
     parser.add_argument(
         '-b',
@@ -592,7 +572,7 @@ def _get_args(args) -> argparse.Namespace:
         '--protein_blastp_mode',
         hidden_aliases=('--protein-blastp-mode',),
         dest='protein_blastp_mode',
-        help='Protein blastp comparison mode: none, pairwise adjacent ribbons, all-record Orthogroups, or Collinear blocks (default: none).',
+        help='Protein blastp comparison mode: none, pairwise adjacent ribbons, all-record similarity groups (orthogroup), or collinear blocks (default: none).',
         choices=PROTEIN_BLASTP_MODES,
         default='none')
     _add_argument_with_hidden_aliases(
@@ -616,7 +596,7 @@ def _get_args(args) -> argparse.Namespace:
         '--align_orthogroup_feature',
         hidden_aliases=('--align-orthogroup-feature',),
         dest='align_orthogroup_feature',
-        help='Align linear records by the protein blastp orthogroup containing this feature SVG hash or protein ID.',
+        help='Align linear records by the gbdraw similarity group containing this feature SVG hash or protein ID.',
         type=str,
         default="")
     _add_argument_with_hidden_aliases(
@@ -769,7 +749,7 @@ def _get_args(args) -> argparse.Namespace:
         '--keep_definition_left_aligned',
         hidden_aliases=('--keep-definition-left-aligned',),
         dest='keep_definition_left_aligned',
-        help='Keep linear definition labels in the left column when records are center-aligned or aligned by orthogroup (default: False).',
+        help='Keep the linear record-label block in the left column when records are center-aligned or aligned by a gbdraw similarity group (default: False).',
         action='store_true')
     parser.add_argument(
         '--evalue',
@@ -859,7 +839,7 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--record_label',
-        help='Optional top definition line (for example organism/strain; repeatable; order matches input records)',
+        help='Optional top record-label line (for example organism/strain; repeatable; order matches input records)',
         type=str,
         action='append',
         default=[])
@@ -868,21 +848,21 @@ def _get_args(args) -> argparse.Namespace:
         '--record_subtitle',
         hidden_aliases=('--record-subtitle',),
         dest='record_subtitle',
-        help='Optional second definition line (repeatable; order matches input records)',
+        help='Optional second record-label line (repeatable; order matches input records)',
         type=str,
         action='append',
         default=[])
     parser.add_argument(
         '--show_replicon',
-        help='Show inferred replicon labels in linear record definitions (default: False).',
+        help='Show inferred replicon labels in linear record-label blocks (default: False).',
         action='store_true')
     parser.add_argument(
         '--hide_accession',
-        help='Hide accession labels in linear record definitions (default: False).',
+        help='Hide accession labels in linear record-label blocks (default: False).',
         action='store_true')
     parser.add_argument(
         '--hide_length',
-        help='Hide length/coordinate labels in linear record definitions (default: False).',
+        help='Hide length/coordinate labels in linear record-label blocks (default: False).',
         action='store_true')
     parser.add_argument(
         '--label_font_size',
@@ -966,7 +946,7 @@ def _get_args(args) -> argparse.Namespace:
         default="right")
     parser.add_argument(
             "--show_labels",
-            help="Show labels: no argument or 'all' (all records), 'first' (first record only), 'orthogroup_top' (topmost record containing each orthogroup), 'none' (no labels). Default: 'none'",
+            help="Show labels: no argument or 'all' (all records), 'first' (first record only), 'orthogroup_top' (topmost record containing each gbdraw similarity group), 'none' (no labels). Default: 'none'",
             nargs='?',
             const="all",
             default="none",
@@ -1207,6 +1187,15 @@ def linear_main(cmd_args) -> None:
     if session_request is not None:
         with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
             session = load_session(session_request.session_path)
+            if render_canonical_session_if_present(
+                session,
+                mode="linear",
+                output_override=session_request.output,
+                format_override=session_request.format,
+                save_session=session_request.save_session,
+                session_output=session_request.session_output,
+            ):
+                return
             run_spec = session_to_cli_args(
                 session,
                 mode="linear",
@@ -1821,6 +1810,90 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         result_name=rendered_svg.svg_path.name,
     )
 
+    canonical_config = copy.deepcopy(config_dict)
+    canonical_filtering = canonical_config["labels"]["filtering"]
+    qualifier_priority_table = canonical_filtering.pop("qualifier_priority_df", None)
+    label_whitelist_table = canonical_filtering.pop("whitelist_df", None)
+    label_override_table = canonical_filtering.pop("label_override_df", None)
+    request_prefix = Path(rendered_svg.output_prefix).name
+    canonical_request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=InMemoryRecordSource(record)) for record in records
+        ),
+        options=DiagramOptions(
+            config=canonical_config,
+            colors=ColorOptions(
+                color_table=color_table,
+                default_colors=default_colors,
+                default_colors_palette=palette,
+            ),
+            tracks=TrackOptions(
+                linear_track_slots=linear_track_slot_specs,
+                linear_track_axis_index=linear_track_axis_index,
+            ),
+            output=OutputOptions(
+                output_prefix=request_prefix,
+                legend=legend,
+                plot_title_position=plot_title_position,
+            ),
+            selected_features_set=tuple(selected_features_set),
+            feature_visibility_table=feature_table,
+            label_whitelist_table=label_whitelist_table,
+            qualifier_priority_table=qualifier_priority_table,
+            label_override_table=label_override_table,
+            feature_shapes=feature_shapes or None,
+            dinucleotide=dinucleotide,
+            window=window,
+            step=step,
+            depth_window=depth_window,
+            depth_step=depth_step,
+            depth_files=tuple(depth_files) if depth_files else None,
+            depth_track_files=depth_track_files,
+            depth_track_labels=depth_track_labels,
+            depth_track_colors=depth_track_colors,
+            depth_track_heights=depth_track_heights,
+            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+            plot_title=plot_title or None,
+            plot_title_font_size=plot_title_font_size,
+            blast_files=tuple(blast_files) if blast_files else None,
+            protein_comparisons=(
+                tuple(collinearity_comparisons)
+                if collinearity_comparisons is not None
+                else None
+            ),
+            orthogroups=collinearity_orthogroups,
+            protein_blastp_mode=(
+                "none" if collinearity_comparisons is not None else protein_blastp_mode
+            ),
+            pairwise_match_style=pairwise_match_style,
+            collinearity_params=collinearity_params,
+            collinearity_unit_mode=collinear_unit_mode,
+            collinearity_anchor_mode=collinear_anchor_mode,
+            collinearity_search_scope=collinear_search_scope,
+            collinearity_color_mode=collinear_color_mode,
+            losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
+            losatp_threads=losatp_threads,
+            protein_blastp_max_hits=protein_blastp_max_hits,
+            protein_blastp_candidate_limit=protein_blastp_candidate_limit,
+            orthogroup_membership_mode=orthogroup_membership_mode,
+            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            collinear_max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
+            align_orthogroup_feature=align_orthogroup_feature or None,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        ),
+        output=RenderOutputRequest(
+            output_prefix=request_prefix,
+            formats=tuple(out_formats),
+            overwrite=True,
+        ),
+    )
+
     return DiagramRunResult(
         mode="linear",
         render_formats=tuple(out_formats),
@@ -1832,6 +1905,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             mode="linear",
             records=track_slot_geometry_records,
         ),
+        canonical_request=canonical_request,
     )
 
 

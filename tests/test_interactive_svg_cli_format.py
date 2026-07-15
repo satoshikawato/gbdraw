@@ -12,10 +12,15 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 from gbdraw.api import render as api_render
+from gbdraw.api import (
+    InteractiveSvgContext as PublicInteractiveSvgContext,
+    build_interactive_svg_context,
+    enrich_svg as public_enrich_svg,
+)
 from gbdraw import circular as circular_cli
 from gbdraw import linear as linear_cli
 from gbdraw.cli_utils import common as cli_common
-from gbdraw.exceptions import GbdrawError, ValidationError
+from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as export_module
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
@@ -57,6 +62,25 @@ def _script_payload(svg_source: str) -> str:
     return script.text or ""
 
 
+def test_interactive_types_and_builder_are_public() -> None:
+    feature = SeqFeature(
+        SimpleLocation(0, 9, strand=1),
+        type="CDS",
+        qualifiers={"gene": ["geneA"], "translation": ["M"]},
+    )
+    record = SeqRecord(Seq("ATG" * 4), id="rec1", features=[feature])
+
+    context = build_interactive_svg_context(
+        [record],
+        selected_features_set=["CDS"],
+    )
+
+    assert PublicInteractiveSvgContext is InteractiveSvgContext
+    assert public_enrich_svg is enrich_svg
+    assert context.features[0]["record_id"] == "rec1"
+    assert context.features[0]["type"] == "CDS"
+
+
 def test_parse_formats_accepts_interactive_svg_alias_and_dedupes() -> None:
     assert export_module.parse_formats("svg,interactive-svg,interactive_svg") == [
         SVG_FORMAT,
@@ -77,7 +101,7 @@ def test_handle_output_formats_keeps_interactive_when_cairosvg_missing(monkeypat
     monkeypatch.setattr(cli_common, "has_cairosvg", lambda: False)
 
     assert cli_common.handle_output_formats(["interactive-svg", "png", "pdf"]) == [
-        "interactive-svg"
+        "interactive_svg"
     ]
 
 
@@ -671,11 +695,121 @@ def test_save_figure_to_returns_interactive_path_and_checks_overwrite(
         )
 
 
+def test_save_figure_to_overwrite_replaces_existing_binary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    drawing = _drawing(tmp_path / "ignored.svg")
+    svg_path = tmp_path / "api-out.svg"
+    png_path = tmp_path / "api-out.png"
+    svg_path.write_text("stale svg", encoding="utf-8")
+    png_path.write_bytes(b"stale png")
+
+    class FakeCairoSvg:
+        @staticmethod
+        def svg2png(*, bytestring, write_to):
+            Path(write_to).write_bytes(b"new png")
+
+    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: FakeCairoSvg)
+
+    paths = api_render.save_figure_to(
+        drawing,
+        "png",
+        output_dir=str(tmp_path),
+        output_prefix="api-out",
+        overwrite=True,
+    )
+
+    assert paths == [str(svg_path), str(png_path)]
+    assert svg_path.read_text(encoding="utf-8").startswith("<?xml")
+    assert png_path.read_bytes() == b"new png"
+
+
 def test_render_to_bytes_supports_interactive_svg(monkeypatch, tmp_path: Path) -> None:
     drawing = _drawing(tmp_path / "out.svg")
-    monkeypatch.setattr(api_render, "enrich_svg", lambda _source: "<svg interactive=\"yes\" />")
+    context = InteractiveSvgContext(features=[{"svg_id": "fabc12345"}])
 
-    assert api_render.render_to_bytes(drawing, "interactive_svg") == b"<svg interactive=\"yes\" />"
+    def fake_enrich(_source, *, context=None):
+        assert context is not None
+        return "<svg interactive=\"yes\" />"
+
+    monkeypatch.setattr(api_render, "enrich_svg", fake_enrich)
+
+    assert api_render.render_to_bytes(
+        drawing,
+        "interactive_svg",
+        interactive_context=context,
+    ) == b"<svg interactive=\"yes\" />"
+
+
+def test_save_figure_to_raises_when_cairosvg_is_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    drawing = _drawing(tmp_path / "out.svg")
+
+    def missing_cairosvg():
+        raise ImportError("missing")
+
+    monkeypatch.setattr(api_render._export, "get_cairosvg", missing_cairosvg)
+
+    with pytest.raises(ValidationError, match="CairoSVG is not installed"):
+        api_render.save_figure_to(
+            drawing,
+            "png",
+            output_dir=str(tmp_path),
+            output_prefix="strict",
+        )
+
+    assert (tmp_path / "strict.svg").exists()
+    assert not (tmp_path / "strict.png").exists()
+
+
+def test_save_figure_to_reports_partial_conversion_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    drawing = _drawing(tmp_path / "out.svg")
+
+    class PartialCairoSvg:
+        @staticmethod
+        def svg2png(*, bytestring, write_to):
+            Path(write_to).write_bytes(bytestring)
+
+        @staticmethod
+        def svg2pdf(*, bytestring, write_to):
+            raise RuntimeError("converter failed")
+
+    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: PartialCairoSvg)
+
+    with pytest.raises(ExportError, match="Failed to generate PDF"):
+        api_render.save_figure_to(
+            drawing,
+            ["png", "pdf"],
+            output_dir=str(tmp_path),
+            output_prefix="partial",
+        )
+
+    assert (tmp_path / "partial.svg").exists()
+    assert (tmp_path / "partial.png").exists()
+    assert not (tmp_path / "partial.pdf").exists()
+
+
+def test_render_to_bytes_wraps_converter_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    drawing = _drawing(tmp_path / "out.svg")
+
+    class BrokenCairoSvg:
+        @staticmethod
+        def svg2png(*, bytestring):
+            raise RuntimeError("converter failed")
+
+    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: BrokenCairoSvg)
+
+    with pytest.raises(ExportError, match="Failed to render PNG bytes"):
+        api_render.render_to_bytes(drawing, "png")
 
 
 def test_cli_help_lists_interactive_svg(capsys) -> None:
@@ -687,5 +821,5 @@ def test_cli_help_lists_interactive_svg(capsys) -> None:
         linear_cli._get_args(["--help"])
     linear_help = capsys.readouterr().out
 
-    assert "interactive-svg" in circular_help
-    assert "interactive-svg" in linear_help
+    assert "interactive_svg" in circular_help
+    assert "interactive_svg" in linear_help

@@ -227,6 +227,21 @@ h1 {
     -webkit-line-clamp: 2;
 }
 
+.sample-card__meta {
+    display: block;
+    margin-top: 5px;
+    color: var(--accent-strong);
+    font-size: 0.68rem;
+    font-weight: 720;
+    line-height: 1.35;
+}
+
+.sample-card__meta--secondary {
+    margin-top: 2px;
+    color: var(--muted);
+    font-weight: 620;
+}
+
 .tag-row,
 .selected-tags {
     display: flex;
@@ -313,6 +328,55 @@ h1 {
     max-width: 72ch;
     font-size: 0.92rem;
     line-height: 1.45;
+}
+
+.selected-meta {
+    margin-top: 5px;
+    color: var(--accent-strong);
+    font-size: 0.78rem;
+    font-weight: 680;
+}
+
+.command-panel__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.command-kind {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 760;
+}
+
+.command-kind--runnable {
+    border-color: #9bc9ad;
+    background: #edf8f1;
+    color: #27613d;
+}
+
+.command-kind--provenance {
+    border-color: #d7cda8;
+    background: #fff8df;
+    color: #6d5300;
+}
+
+.command-note {
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+#copy-command:disabled {
+    color: var(--muted);
+    cursor: not-allowed;
+    opacity: 0.78;
 }
 
 .viewer-actions {

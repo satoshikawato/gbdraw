@@ -1,13 +1,13 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 6](./6_Depth_Quantitative_Tracks.md) | [Go to Tutorial 8 >](./8_Interactive_SVG_Sessions.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Plot read depth and numeric tracks](./6_Depth_Quantitative_Tracks.md) | [Next: Create interactive SVGs >](./8_Interactive_SVG_Sessions.md)
 
-# Tutorial 7: Linear Layout, Definitions, and Rulers
+# Arrange linear tracks, record labels, and rulers
 
-**Goal:** customize linear plots with track placement, rulers, record definitions, titles, and custom track slots.
+Customize linear diagrams with track placement, rulers, record labels, titles, and custom track slots.
 
-## 1. Prepare Inputs
+## 1. Prepare inputs
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gb
@@ -16,7 +16,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC
 
 If you are working from a source checkout, the same files are available under `examples/`.
 
-## 2. Place Tracks Above, Middle, or Below
+## 2. Place tracks above, middle, or below
 
 `--track_layout above`, `middle`, and `below` control where the feature track sits relative to the record axis.
 
@@ -35,7 +35,7 @@ This writes `majani_tracks_below.svg`. Use `--track_axis_gap 12` when you want a
 
 ![Two majanivirus records with feature, GC content, and GC skew tracks placed below each record axis](../../examples/tutorial-7-track-layout-below.svg)
 
-## 3. Use a Ruler on the Axis
+## 3. Use a ruler on the axis
 
 `--ruler_on_axis` is effective when `--scale_style ruler` is used with `--track_layout above` or `below`.
 
@@ -50,7 +50,7 @@ gbdraw linear \
   -f svg
 ```
 
-## 4. Combine the Ruler with Record Text and a Plot Title
+## 4. Combine the ruler with record text and a plot title
 
 `--record_label` and `--record_subtitle` are repeatable and order-sensitive. Their order follows the input records unless you use `--records_table`, where labels and subtitles belong in table columns.
 
@@ -71,13 +71,13 @@ gbdraw linear \
   -f svg
 ```
 
-The result combines per-record axis rulers, ordered definition lines, and a shared title:
+The result combines per-record axis rulers, ordered record-label lines, and a shared title:
 
-![Linear majanivirus plot with a top title, two record definition blocks, and 50 kbp rulers on the record axes](../../examples/tutorial-7-linear-layout.svg)
+![Linear majanivirus diagram with a top title, two record-label blocks, and 50 kbp rulers on the record axes](../../examples/tutorial-7-linear-layout.svg)
 
-## 5. Tune Definition Lines
+## 5. Format the record-label block
 
-Use definition controls when you need compact or publication-specific record labels.
+Use the definition-line options when a publication figure needs compact record labels.
 
 ```bash
 gbdraw linear \
@@ -96,11 +96,11 @@ gbdraw linear \
   -f svg
 ```
 
-`--keep_definition_left_aligned` keeps the definition column fixed while `--align_center` moves the record axes. `--hide_accession` and `--hide_length` remove the default metadata lines. `--show_replicon` adds a line only when a source feature supplies a `chromosome` or `plasmid` qualifier.
+`--keep_definition_left_aligned` keeps the record-label column fixed while `--align_center` moves the record axes. `--hide_accession` and `--hide_length` remove the default metadata lines. `--show_replicon` adds a line only when a source feature supplies a `chromosome` or `plasmid` qualifier.
 
-![Two centered majanivirus records with compact bold names and gray subtitles in a fixed left definition column](../../examples/tutorial-7-definition-lines.svg)
+![Two centered majanivirus records with compact bold names and gray subtitles in a fixed left record-label column](../../examples/tutorial-7-definition-lines.svg)
 
-## 6. Customize Linear Track Slots
+## 6. Customize linear track slots
 
 For simple ordering, use `--linear_track_order`:
 
@@ -135,7 +135,28 @@ The axis index is the boundary in the slot list. Here the feature slot overlays 
 
 ![Linear MjeNMV diagram with an overlay feature slot followed by custom-height GC content and GC skew slots](../../examples/tutorial-7-linear-track-slots.svg)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 6](./6_Depth_Quantitative_Tracks.md) | [Go to Tutorial 8 >](./8_Interactive_SVG_Sessions.md)
+## 7. Select records, regions, and orientation
+
+Use these repeatable options when a file contains several records or when only part of a record belongs in the figure:
+
+- `--record_id`: select a record by its ID or a quoted `'#index'` value;
+- `--region`: crop with `record_id:start-end[:rc]`;
+- `--reverse_complement`: provide one Boolean value per input file.
+
+```bash
+gbdraw linear \
+  --gbk tests/test_inputs/AP027078.gb tests/test_inputs/AP027131.gb \
+  --region AP027078.1:1-300000 \
+  --region AP027131.1:1-300000:rc \
+  --reverse_complement false \
+  --reverse_complement true \
+  -o selected_regions \
+  -f svg
+```
+
+Do not reuse full-record BLAST coordinates after cropping or reversing inputs unless the comparison data were generated for the displayed coordinate system. For larger sets, put selectors, regions, orientation, and order in a [`--records_table`](./5_Table_Driven_Inputs.md#2-linear---records_table-for-genbank-rows).
+
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Plot read depth and numeric tracks](./6_Depth_Quantitative_Tracks.md) | [Next: Create interactive SVGs >](./8_Interactive_SVG_Sessions.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

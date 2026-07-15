@@ -18,7 +18,7 @@
 
 `gbdraw` is a command-line and browser-based tool for publication-quality genome diagrams. It accepts GenBank/DDBJ flatfiles or GFF3 + FASTA pairs and produces circular or linear plots in SVG, PNG, PDF, EPS, or PS.
 
-[Interactive SVG output gallery](https://gbdraw.app/gallery/) **NEW!**
+[Interactive SVG output gallery](https://gbdraw.app/gallery/)
 ## Features
 
 - Circular and linear genome diagrams from annotated sequence files
@@ -33,15 +33,15 @@
 | --- | --- |
 | [Full documentation](./docs/DOCS.md) | Main entry point for the published docs set. |
 | [Installation](./docs/INSTALL.md) | Hosted app, Bioconda, and local development installation. |
-| [Quickstart](./docs/QUICKSTART.md) | First circular plot in a few minutes. |
-| [Tutorials](./docs/TUTORIALS/TUTORIALS.md) | Step-by-step guides for styling, comparisons, table-driven inputs, quantitative tracks, and interactive workflows. |
+| [Quickstart](./docs/QUICKSTART.md) | Create a circular plot from a GenBank record. |
+| [Tutorials](./docs/TUTORIALS/TUTORIALS.md) | Task-based guides to styling, sequence-search results, table inputs, quantitative tracks, and interactive output. |
 | [Recipes](./docs/RECIPES.md) | Copy-paste command patterns for common tasks. |
 | [CLI Reference](./docs/CLI_Reference.md) | Current command help for the CLI. |
 | [Gallery](./docs/GALLERY.md) | Example plots and commands. |
 | [FAQ](./docs/FAQ.md) | Common questions and known limitations. |
 | [About](./docs/ABOUT.md) | Citation information and project background. |
 
-## Use Without Local Installation
+## Use without local installation
 
 The hosted web app runs entirely in your browser:
 
@@ -49,7 +49,7 @@ The hosted web app runs entirely in your browser:
 
 Uploaded genomic data stays on your machine. The hosted site uses Google Analytics 4 for aggregate page-usage metrics; gbdraw does not send uploaded genome files or generated diagrams to Google Analytics.
 
-## Local Installation
+## Local installation
 
 For regular use, Bioconda is the main installation path:
 
@@ -76,7 +76,7 @@ python -m pip install -e ".[dev,export]"
 
 See [Installation](./docs/INSTALL.md) for details and platform notes.
 
-## Bug Reports and Suggestions
+## Bug reports and suggestions
 
 Please open an issue if you find a bug or want to propose an improvement:
 

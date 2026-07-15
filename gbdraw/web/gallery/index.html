@@ -27,7 +27,7 @@
     <main class="gallery-layout">
         <aside class="sample-panel" aria-labelledby="sample-list-title">
             <div class="panel-heading">
-                <h2 id="sample-list-title">Samples</h2>
+                <h2 id="sample-list-title">Examples</h2>
                 <span id="sample-count" class="sample-count"></span>
             </div>
             <div id="sample-list" class="sample-list" role="list"></div>
@@ -39,6 +39,7 @@
                     <p id="selected-tags" class="selected-tags"></p>
                     <h2 id="selected-title">Loading gallery...</h2>
                     <p id="selected-description" class="selected-description"></p>
+                    <p id="selected-meta" class="selected-meta"></p>
                 </div>
                 <div class="viewer-actions" aria-label="Selected sample actions">
                     <a id="open-link" class="action-button" href="#" target="_blank" rel="noopener" title="Open standalone SVG">Open</a>
@@ -81,8 +82,13 @@
             <section id="command-panel" class="tab-panel command-panel" role="tabpanel" aria-labelledby="command-tab" hidden>
                 <div class="command-panel__heading">
                     <h2>Command</h2>
-                    <span id="file-size" class="file-size"></span>
+                    <div class="command-panel__actions">
+                        <span id="command-kind" class="command-kind"></span>
+                        <button id="copy-command" class="action-button" type="button">Copy command</button>
+                        <span id="file-size" class="file-size"></span>
+                    </div>
                 </div>
+                <p id="command-note" class="command-note"></p>
                 <pre id="command-block"><code></code></pre>
                 <p id="interactive-step" class="interactive-step"></p>
             </section>

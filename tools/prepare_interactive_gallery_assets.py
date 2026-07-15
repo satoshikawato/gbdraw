@@ -31,7 +31,14 @@ class GallerySessionExample:
     id: str
     title: str
     tags: tuple[str, ...]
-    description: str = ""
+    description: str
+    difficulty: str
+    workflow: str
+    input_summary: str
+    estimated_time: str
+    display_order: int
+    command_kind: str
+    command_note: str
     interactive_step: str = ""
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
     command: str = ""
@@ -81,6 +88,17 @@ HMMTDNA_ATSKEW_COMMAND = (
     "'a_skew_2:dinucleotide_skew@w=0.1,nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew' "
     "--circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out "
     "--gbk HmmtDNA.gbk -f interactive_svg"
+)
+
+HMMTDNA_BASIC_COMMAND = (
+    "gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA_basic_circular "
+    "-f interactive_svg --separate_strands --track_type middle --labels out "
+    "--species '<i>Homo sapiens</i>'"
+)
+
+LAMBDA_BASIC_COMMAND = (
+    "gbdraw linear --gbk NC_001416.gb -o lambda_basic_linear -f interactive_svg "
+    "--separate_strands --show_labels all --scale_style ruler --legend left"
 )
 
 BGC_COMMAND = (
@@ -135,41 +153,125 @@ WSSV_COMMAND = (
 
 EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
+        id="HmmtDNA_basic_circular",
+        title="Human mitochondrial genome: first circular figure",
+        tags=("Circular", "GenBank", "Beginner"),
+        description="Create a first circular genome figure from one small GenBank record without running a sequence search.",
+        difficulty="Beginner",
+        workflow="Circular basics",
+        input_summary="1 GenBank file",
+        estimated_time="Under 5 min",
+        display_order=10,
+        command_kind="runnable",
+        command_note="Download HmmtDNA.gbk from the Files tab, then run this command in the same directory.",
+        command=HMMTDNA_BASIC_COMMAND,
+    ),
+    GallerySessionExample(
+        id="lambda_basic_linear",
+        title="Lambda phage: first linear figure",
+        tags=("Linear", "GenBank", "Beginner"),
+        description="Create a labeled linear genome figure and learn strand separation, the ruler, and SVG export.",
+        difficulty="Beginner",
+        workflow="Linear basics",
+        input_summary="1 GenBank file",
+        estimated_time="Under 5 min",
+        display_order=20,
+        command_kind="runnable",
+        command_note="Download NC_001416.gb from the Files tab, then run this command in the same directory.",
+        command=LAMBDA_BASIC_COMMAND,
+    ),
+    GallerySessionExample(
+        id="HmmtDNA_ATskew",
+        title="Human mitochondrial genome (AT skew)",
+        tags=("Circular", "GenBank", "Intermediate"),
+        description="Add an AT skew ring and qualifier-based labels to a compact circular mitochondrial diagram.",
+        difficulty="Intermediate",
+        workflow="Circular quantitative tracks",
+        input_summary="1 GenBank + 1 qualifier TSV",
+        estimated_time="5-10 min",
+        display_order=30,
+        command_kind="runnable",
+        command_note="Download both HmmtDNA.gbk and HmmtDNA_qualifier_priority.tsv from Files before running the command.",
+        command=HMMTDNA_ATSKEW_COMMAND,
+    ),
+    GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",
         title="<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
-        tags=("Circular", "Multi-record"),
+        tags=("Circular", "Multi-record", "Intermediate"),
+        description="Arrange two chromosomes and four plasmids from one multi-record GenBank file on a shared circular canvas.",
+        difficulty="Intermediate",
+        workflow="Circular multi-record canvas",
+        input_summary="1 multi-record GenBank file",
+        estimated_time="5-15 min",
+        display_order=40,
+        command_kind="runnable",
+        command_note="Download the pinned RefSeq assembly named in Files; no sequence search is required.",
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_collinear",
-        title="<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (collinear analysis)",
-        tags=("Linear", "LOSAT", "Collinear"),
+        title="Hepatoplasmataceae collinear protein-match blocks",
+        tags=("Linear", "Collinear", "Advanced"),
+        description="Combine compatible protein-match anchors into collinear blocks across five related genomes.",
+        difficulty="Advanced",
+        workflow="LOSATP collinear blocks",
+        input_summary="5 GenBank files",
+        estimated_time="10-20 min plus search",
+        display_order=60,
+        command_kind="runnable",
+        command_note="Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_orthogroup",
-        title="<i>Mollicutes</i> (<i>Candidatus</i> Hepatoplasmataceae) (orthogroup matches)",
-        tags=("Linear", "LOSAT", "Orthogroup"),
-    ),
-    GallerySessionExample(
-        id="majanivirus_orthogroup",
-        title="Large dsDNA viruses (<i>Nimaviridae</i>)",
-        tags=("Linear", "LOSAT", "Orthogroup"),
+        title="Hepatoplasmataceae CDS protein-similarity links",
+        tags=("Linear", "Similarity groups", "Advanced"),
+        description="Compare the same five genomes with similarity-group links instead of collinear blocks.",
+        difficulty="Advanced",
+        workflow="LOSATP similarity groups",
+        input_summary="5 GenBank files",
+        estimated_time="10-20 min plus search",
+        display_order=70,
+        command_kind="runnable",
+        command_note="Download the five accession-pinned GenBank inputs from Files. The CLI value remains orthogroup for compatibility.",
     ),
     GallerySessionExample(
         id="BGC0000708-BGC0000713",
         title="Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
-        tags=("Linear", "LOSAT", "Orthogroup"),
+        tags=("Linear", "Similarity groups", "Advanced"),
+        description="Compare five biosynthetic gene clusters while preserving antiSMASH categories and concise gene labels.",
+        difficulty="Advanced",
+        workflow="LOSATP similarity groups and color rules",
+        input_summary="5 GenBank + 3 color/label TSV files",
+        estimated_time="10-20 min plus search",
+        display_order=80,
+        command_kind="runnable",
+        command_note="Files provides the five MIBiG records and all three repository-managed TSV files used by the command.",
         command=BGC_COMMAND,
     ),
     GallerySessionExample(
-        id="HmmtDNA_ATskew",
-        title="<i>Homo sapiens</i> mitochondrion (AT skew)",
-        tags=("Circular", "Mitochondrion"),
-        command=HMMTDNA_ATSKEW_COMMAND,
+        id="majanivirus_orthogroup",
+        title="Majanivirus CDS protein-similarity links",
+        tags=("Linear", "Similarity groups", "Advanced"),
+        description="Inspect dense protein-similarity links and product-based feature colors across nine viral genomes.",
+        difficulty="Advanced",
+        workflow="LOSATP similarity groups",
+        input_summary="9 GenBank + 2 color TSV files",
+        estimated_time="15-40 min plus search",
+        display_order=90,
+        command_kind="runnable",
+        command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
     ),
     GallerySessionExample(
         id="WSSV_genome_comparison",
-        title="White spot syndrome virus genome comparison",
-        tags=("Circular", "Conservation", "LOSAT"),
+        title="White spot syndrome virus nucleotide-similarity rings",
+        tags=("Circular", "LOSAT", "Advanced"),
+        description="Inspect one viral reference against 20 prepared assemblies as concentric BLAST/LOSAT comparison rings.",
+        difficulty="Advanced",
+        workflow="Session-based circular comparison case study",
+        input_summary="Bundled session; prepared 20-assembly input set not fully public",
+        estimated_time="Session: under 5 min; preparation/search: hours",
+        display_order=100,
+        command_kind="provenance",
+        command_note="This records the original prepared-input workflow and is not directly runnable from public downloads. Load the bundled session first; Shantou2019 has no recorded public accession.",
         command=WSSV_COMMAND,
     ),
 )
@@ -230,9 +332,11 @@ def _session_command(session: dict[str, Any]) -> str:
 
 
 def _example_command(example: GallerySessionExample, session: dict[str, Any]) -> str:
-    if example.command:
-        return example.command
-    return _session_command(session)
+    command = example.command or _session_command(session)
+    command = command.replace("interactive-svg", "interactive_svg")
+    if example.id == "hepatoplasmataceae_collinear":
+        command = command.replace("--losatp_threads 32 --protein_blastp_mode collinear --losatp_threads 32", "--losatp_threads 32 --protein_blastp_mode collinear")
+    return command
 
 
 def _session_feature_sources(session: dict[str, Any]) -> list[str]:
@@ -400,11 +504,6 @@ def _validate_source_assets(example: GallerySessionExample) -> None:
         raise FileNotFoundError(f"Missing gallery source asset(s): {', '.join(missing)}")
 
 
-def _gallery_entry_size(entry: dict[str, object]) -> int:
-    svg_ref = str(entry["svg"])
-    return (GALLERY_ROOT / svg_ref.removeprefix("./")).stat().st_size
-
-
 def prepare_gallery_assets() -> list[dict[str, object]]:
     EXAMPLE_ROOT.mkdir(parents=True, exist_ok=True)
     SESSION_ROOT.mkdir(parents=True, exist_ok=True)
@@ -435,18 +534,24 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
             "featureSources": _session_feature_sources(session),
             "fileSizeLabel": _format_size(example.gallery_svg_path.stat().st_size),
             "command": _example_command(example, session),
+            "commandKind": example.command_kind,
+            "commandNote": example.command_note,
+            "description": example.description,
+            "difficulty": example.difficulty,
+            "workflow": example.workflow,
+            "inputSummary": example.input_summary,
+            "estimatedTime": example.estimated_time,
+            "displayOrder": example.display_order,
         }
         tutorial_path = GALLERY_ROOT / "tutorials" / f"{example.id}.json"
         if tutorial_path.exists():
             entry["tutorial"] = f"./tutorials/{example.id}.json"
             entry["tutorialStatus"] = "ready"
-        if example.description:
-            entry["description"] = example.description
         if example.interactive_step:
             entry["interactiveStep"] = example.interactive_step
         payload.append(entry)
 
-    payload.sort(key=_gallery_entry_size)
+    payload.sort(key=lambda entry: int(entry["displayOrder"]))
 
     (GALLERY_ROOT / "examples.json").write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n",

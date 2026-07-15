@@ -1,8 +1,8 @@
 {
   "id": "HmmtDNA_ATskew",
   "version": 1,
-  "title": "Reproduce the human mitochondrial AT skew diagram in the web app",
-  "summary": "Build a single-record circular mitochondrial genome diagram with custom circular track slots for GC content, GC skew, AT skew, ticks, labels, and a left legend.",
+  "title": "Human mitochondrial genome with an AT skew track",
+  "summary": "Add GC content, GC skew, and AT skew tracks to a circular human mitochondrial genome diagram, then configure its ticks, feature labels, and legend.",
   "estimatedTime": "5-10 min after the input is available",
   "difficulty": "Intermediate",
   "appMode": "Circular",
@@ -14,6 +14,13 @@
       "accession": "NC_012920",
       "targetName": "HmmtDNA.gbk",
       "note": "Download the complete human mitochondrial genome as a GenBank flat file and save it with this filename if you want to match the Gallery session."
+    },
+    {
+      "label": "Qualifier priority table",
+      "source": "Gallery file",
+      "targetName": "HmmtDNA_qualifier_priority.tsv",
+      "href": "./files/HmmtDNA_qualifier_priority.tsv",
+      "note": "Download this repository-managed TSV beside HmmtDNA.gbk for the runnable CLI command."
     }
   ],
   "manualSteps": [
@@ -32,7 +39,7 @@
     },
     {
       "title": "Upload the GenBank file",
-      "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1. Type the <i> tags in the Species field literally so the generated definition is italicized.",
+      "body": "Upload HmmtDNA.gbk. The Gallery session uses the human mitochondrial reference record NC_012920.1. Type the <i> tags in the Species field literally to italicize the center label.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -153,7 +160,7 @@
     },
     {
       "title": "Set the dinucleotide calculation window",
-      "body": "Use a short mitochondrial window so GC content, GC skew, and AT skew all show local structure.",
+      "body": "Use a 500 nt window with a 50 nt step to show local variation in GC content, GC skew, and AT skew.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -174,7 +181,7 @@
     },
     {
       "title": "Open Custom Track Slots",
-      "body": "In the circular layout controls, enable Custom Track Slots and reset to the Middle template if you need a clean starting stack.",
+      "body": "In the circular layout controls, enable Custom Track Slots and reset to the Middle template to start from the slot order used here.",
       "table": {
         "columns": ["Slot", "Renderer", "Position", "Key settings"],
         "rows": [
@@ -375,7 +382,7 @@
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-10-01-feature-popup.webp",
             "alt": "RNR2 Details popup beside the highlighted l-rRNA feature in the human mitochondrial AT skew diagram.",
-            "caption": "The highlighted RNR2 l-rRNA remains fully visible beside its Details popup."
+            "caption": "The Details popup identifies the highlighted RNR2 l-rRNA feature and its location."
           },
           "capture": {
             "source": "webapp",
@@ -427,7 +434,7 @@
   "postGenerationEdits": [
     {
       "title": "Review the generated legend",
-      "body": "Generate Diagram already adds AT skew (+) and AT skew (-) to the legend. Use the legend editor only for optional caption/order tweaks; the two entries represent positive and negative skew.",
+      "body": "Generate Diagram adds AT skew (+) and AT skew (-) to the legend. Use the legend editor only if you want to change their captions or order; the two entries represent positive and negative skew.",
       "operations": [
         {
           "media": {

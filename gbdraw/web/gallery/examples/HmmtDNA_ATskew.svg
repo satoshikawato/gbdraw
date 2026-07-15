@@ -3009,12 +3009,20 @@
     return text;
   }
 
+  function strandText(strand) {
+    var text = String(strand || '').trim();
+    if (text === '1') return '+';
+    if (text === '-1') return '-';
+    return text;
+  }
+
   function memberLocationText(member) {
     if (!member || typeof member !== 'object') return '';
     var start = Number(member.start);
     var end = Number(member.end);
     var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
-    if (member.strand) text += ' (' + member.strand + ')';
+    var strand = strandText(member.strand);
+    if (strand) text += ' (' + strand + ')';
     return text === '..' ? '' : text;
   }
 

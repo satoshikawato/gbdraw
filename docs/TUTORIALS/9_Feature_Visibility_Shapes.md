@@ -1,13 +1,13 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 8](./8_Interactive_SVG_Sessions.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Create interactive SVGs and restore saved sessions](./8_Interactive_SVG_Sessions.md)
 
-# Tutorial 9: Feature Visibility and Shapes
+# Control feature visibility and shapes
 
-**Goal:** override which features are drawn or included in generated protein comparisons, and change feature shapes without changing the input annotation.
+Control which annotated features are drawn or included in gbdraw's protein searches, and change feature shapes without editing the input annotation.
 
-## 1. Prepare an Input
+## 1. Prepare an input
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text" -O HmmtDNA.gbk
@@ -15,7 +15,7 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC
 
 If you are working from a source checkout, the same record is available as `tests/test_inputs/HmmtDNA.gbk`.
 
-## 2. Override Feature Shapes
+## 2. Override feature shapes
 
 `--feature_shape TYPE=SHAPE` is repeatable. Supported shapes are `arrow` and `rectangle`.
 
@@ -35,7 +35,7 @@ Shape overrides apply by feature type. In this result, blue CDS features are rec
 
 ![Human mitochondrial genome with rectangular blue CDS features and arrow-shaped yellow tRNA features](../../examples/tutorial-9-feature-shapes.svg)
 
-## 3. Create a Feature Visibility Table
+## 3. Create a feature visibility table
 
 Create `feature_visibility.tsv`:
 
@@ -56,7 +56,7 @@ Columns:
 
 Rules are checked from top to bottom, and the first matching row wins.
 
-## 4. Apply Visibility Rules
+## 4. Apply visibility rules
 
 ```bash
 gbdraw circular \
@@ -78,12 +78,10 @@ The baseline selects only CDS features. The table hides cytochrome c oxidase sub
 Actions:
 
 - `show` draws matching features even when the baseline `-k/--features` list would not include them.
-- `off` hides matching features and removes them from downstream analysis inputs.
-- `exclude_matching` keeps the baseline drawing decision, but removes matching features from generated protein comparison inputs. In the example, ATP synthase F0 subunit 6 therefore remains visible.
+- `off` hides matching features and removes them from protein search inputs.
+- `exclude_matching` keeps the feature's current visibility but removes it from protein search inputs. In the example, ATP synthase F0 subunit 6 therefore remains visible.
 
-Use only the current action names listed above.
-
-## 5. Combine with Feature Type, Color, and Label Controls
+## 5. Combine with feature type, color, and label controls
 
 `-k/--features` sets the baseline feature types. Color tables and label tables still act on the features that remain visible.
 
@@ -101,7 +99,7 @@ gbdraw linear \
 
 For precise targeting, constrain each row with `record_id` and `feature_type`, then match a stable qualifier such as `protein_id` or `locus_tag`. The special qualifier keys `hash`, `location`, and `record_location` are also supported. Use broad product regexes only when the annotation text is consistent across records.
 
-[< Back to the Tutorials Index](./TUTORIALS.md)
-[< Back to Tutorial 8](./8_Interactive_SVG_Sessions.md)
+[< Back to the guide index](./TUTORIALS.md)
+[< Previous: Create interactive SVGs and restore saved sessions](./8_Interactive_SVG_Sessions.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

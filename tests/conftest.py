@@ -26,6 +26,16 @@ EXTERNAL_TEST_DIR_1 = Path("/home/kawato/study/2025-09-17_gbdraw_test")
 EXTERNAL_TEST_DIR_2 = Path("/home/kawato/study/2025-05-15_gbdraw")
 
 
+def pytest_addoption(parser):
+    """Register explicit opt-in options for write operations."""
+    parser.addoption(
+        "--update-reference-outputs",
+        action="store_true",
+        default=False,
+        help="Regenerate tracked SVG reference outputs.",
+    )
+
+
 def pytest_configure(config):
     """Configure pytest with custom markers."""
     config.addinivalue_line(
@@ -40,6 +50,19 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "linear: marks tests for linear diagrams"
     )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip reference generation unless its write operation was requested."""
+    if config.getoption("--update-reference-outputs"):
+        return
+
+    skip_generation = pytest.mark.skip(
+        reason="reference generation requires --update-reference-outputs"
+    )
+    for item in items:
+        if "reference_generation" in item.keywords:
+            item.add_marker(skip_generation)
 
 
 @pytest.fixture(scope="session")

@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import os
 import argparse
-from io import StringIO  
-import re  
+from io import StringIO
+import re
 from Bio import SeqIO
-from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import (
     SeqFeature, FeatureLocation, CompoundLocation,
@@ -18,7 +16,7 @@ def _get_args():
     parser.add_argument(
         '-i',
         '--input',
-        help='Genbank/DDBJ flatfile (required)',
+        help='GenBank/DDBJ flat file (required)',
         type=str,
         required=True)
     parser.add_argument(
@@ -27,7 +25,7 @@ def _get_args():
         "--out",
         "--output",
         metavar="FILE",
-        help="output Genbank file",
+        help="output GenBank file",
         required=True)
     parser.add_argument(
         "-s",
@@ -60,12 +58,12 @@ def check_start_end_coords(record, start, end):
     Also performs boundary checks.
     """
     record_len = len(record.seq)
-    
+
     # Convert 1-based inclusive start to 0-based slice start
     start_0 = start - 1
     if start_0 < 0:
         start_0 = 0
-    
+
     # 1-based inclusive end is the 0-based exclusive slice end
     end_0 = end
     if end_0 > record_len:
@@ -73,7 +71,7 @@ def check_start_end_coords(record, start, end):
 
     if start_0 >= end_0 and (start != 1 or end != record_len): # Allow full sequence
         raise ValueError(f"Start position ({start}) must be less than end position ({end}).")
-        
+
     return start_0, end_0
 
 def _crop_and_shift_location(loc_before, loc_current, loc_next, crop_start_0, crop_end_0):
@@ -81,8 +79,8 @@ def _crop_and_shift_location(loc_before, loc_current, loc_next, crop_start_0, cr
     Takes a single FeatureLocation (loc) and crops/shifts it
     relative to the crop window (crop_start_0, crop_end_0).
     Returns a new FeatureLocation with < and > boundaries if partial.
-    
-    This version relies on Biopython's Position arithmetic, 
+
+    This version relies on Biopython's Position arithmetic,
     which correctly preserves existing < and > markers when shifting.
     """
     new_seq_len = crop_end_0 - crop_start_0
@@ -117,7 +115,7 @@ def _crop_and_shift_location(loc_before, loc_current, loc_next, crop_start_0, cr
             final_start_pos = BeforePosition(max(0, loc_current.start - crop_start_0))
         else:
             final_start_pos = max(0, loc_current.start - crop_start_0)
-    
+
         return FeatureLocation(
             final_start_pos,
             final_end_pos,
@@ -136,44 +134,44 @@ def crop_and_shift_features(original_features, start_0, end_0):
             continue
 
         old_loc = old_feature.location
-        new_location = None 
-        
+        new_location = None
+
         if isinstance(old_loc, CompoundLocation):
             new_parts = []
             num_parts = len(old_loc.parts)
             for n in range(num_parts):
                 part = old_loc.parts[n]
-                
+
                 if not (part.start < end_0 and part.end > start_0):
                     continue
-                
+
                 part_before = old_loc.parts[n - 1] if n > 0 else None
                 part_next = old_loc.parts[n + 1] if n < (num_parts - 1) else None
-                
+
                 new_part = _crop_and_shift_location(part_before, part, part_next, start_0, end_0)
                 new_parts.append(new_part)
-            
+
             if not new_parts:
-                continue 
-            
+                continue
+
             if len(new_parts) == 1:
-                new_location = new_parts[0] 
+                new_location = new_parts[0]
             else:
                 new_location = CompoundLocation(new_parts, operator=old_loc.operator)
-        
-        else: 
+
+        else:
             part_before = None
             part_next = None
             new_location = _crop_and_shift_location(part_before, old_loc, part_next, start_0, end_0)
-        
+
         new_feature = SeqFeature(
             location=new_location,
             type=old_feature.type,
-            qualifiers=old_feature.qualifiers, 
+            qualifiers=old_feature.qualifiers,
             id=old_feature.id
         )
         new_features_list.append(new_feature)
-        
+
     return new_features_list
 
 
@@ -182,18 +180,18 @@ def write_cropped_genbank(record_to_write, out_filepath, original_accession, sta
     Writes the SeqRecord to a file, modifying the ACCESSION line
     to include the cropped REGION.
     """
-    temp_handle = StringIO()  
-    SeqIO.write(record_to_write, temp_handle, "genbank")  
-    content = temp_handle.getvalue()  
-    
-    # Add REGION to ACCESSION line
-    content = re.sub(  
-        rf'ACCESSION\s+{original_accession}',  
-        f'ACCESSION   {original_accession} REGION: {start_1based}..{end_1based}',  
-        content  
-    )  
+    temp_handle = StringIO()
+    SeqIO.write(record_to_write, temp_handle, "genbank")
+    content = temp_handle.getvalue()
 
-    with open(out_filepath, 'w') as f:  
+    # Add REGION to ACCESSION line
+    content = re.sub(
+        rf'ACCESSION\s+{original_accession}',
+        f'ACCESSION   {original_accession} REGION: {start_1based}..{end_1based}',
+        content
+    )
+
+    with open(out_filepath, 'w') as f:
         f.write(content)
 
 def main():
@@ -203,7 +201,7 @@ def main():
     out_gbk = args.output
     start_1 = args.start
     end_1 = args.end
-    
+
     # 2. Load and Validate
     record = gbk_to_seqrecord(in_gbk)
     start_0, end_0 = check_start_end_coords(record, start_1, end_1)
@@ -218,7 +216,7 @@ def main():
         dbxrefs=record.dbxrefs.copy(),
         annotations=record.annotations
     )
-    
+
     # 4. Process Features (Extracted Function)
     new_record.features = crop_and_shift_features(record.features, start_0, end_0)
 
@@ -228,4 +226,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    

@@ -174,7 +174,7 @@ def _load_conservation_file(path: str, blast_config: object) -> tuple[DataFrame 
         raw_df = pd.DataFrame(columns=COMPARISON_COLUMNS)
         return _filter_valid_dataframe(raw_df, blast_config), None
     except Exception as exc:
-        return None, f"error parsing conservation BLAST file {path}: {exc}"
+        return None, f"error parsing BLAST file for similarity ring {path}: {exc}"
 
 
 def load_conservation_sources(

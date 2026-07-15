@@ -184,7 +184,7 @@ def generate_circular_intron_path(
 ) -> list[str]:
     """
     Generates the SVG path description for an intron feature on a circular canvas.
-    
+
     Args:
         radius: Base radius of the circular canvas
         coord_dict: Dictionary with coord_strand, coord_start, coord_end
@@ -195,7 +195,7 @@ def generate_circular_intron_path(
         track_type: "tuckin", "middle", or "spreadout"
         strandedness: Whether strands are separated
         track_id: Track number for overlap resolution (0 = default track)
-    
+
     Returns:
         List with ["line", path_data]
     """
@@ -277,7 +277,7 @@ def generate_circular_arrowhead_path(
 ) -> list[str]:
     """
     Generates the SVG path description for an arrowhead feature on a circular canvas.
-    
+
     Args:
         radius: Base radius of the circular canvas
         coord_dict: Dictionary with coord_strand, coord_start, coord_end
@@ -289,7 +289,7 @@ def generate_circular_arrowhead_path(
         track_type: "tuckin", "middle", or "spreadout"
         strandedness: Whether strands are separated
         track_id: Track number for overlap resolution (0 = default track)
-    
+
     Returns:
         List with ["block", path_data]
     """
@@ -470,7 +470,7 @@ def generate_circular_rectangle_path(
 ) -> list[str]:
     """
     Generates the SVG path description for a rectangular feature on a circular canvas.
-    
+
     Args:
         radius: Base radius of the circular canvas
         coord_dict: Dictionary with coord_strand, coord_start, coord_end
@@ -481,7 +481,7 @@ def generate_circular_rectangle_path(
         track_type: "tuckin", "middle", or "spreadout"
         strandedness: Whether strands are separated
         track_id: Track number for overlap resolution (0 = default track)
-    
+
     Returns:
         List with ["block", path_data]
     """

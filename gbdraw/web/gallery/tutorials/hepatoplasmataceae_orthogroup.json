@@ -1,12 +1,12 @@
 {
   "id": "hepatoplasmataceae_orthogroup",
   "version": 1,
-  "title": "Reproduce the Hepatoplasmataceae orthogroup comparison in the web app",
-  "summary": "Build the five-genome Hepatoplasmataceae linear comparison with browser LOSATP orthogroup matching.",
+  "title": "Plot CDS protein-similarity links across five Hepatoplasmataceae genomes",
+  "summary": "Run LOSATP in the browser, assign CDS-derived proteins to gbdraw similarity groups, and draw links between group members in five Hepatoplasmataceae genomes.",
   "estimatedTime": "10-20 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Linear",
-  "primaryWorkflow": "LOSATP orthogroups",
+  "primaryWorkflow": "LOSATP similarity groups (Orthogroups mode)",
   "downloads": [
     {
       "label": "AP027078",
@@ -76,7 +76,7 @@
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-02-01-upload-row-context.webp",
             "alt": "Linear GenBank input row 1 with AP027078.gb uploaded and the organism, subtitle, region, and LOSAT filename controls visible.",
-            "caption": "The first uploaded row shows AP027078.gb in the real Linear input card; repeat the remaining files in the table order."
+            "caption": "The first uploaded row shows AP027078.gb in the Linear input card; repeat the remaining files in the table order."
           }
         }
       ]
@@ -90,7 +90,7 @@
           ["Execution", "Auto"],
           ["Total threads", "Safe"],
           ["Parallel runs", "Auto"],
-          ["Threads per run", "Auto for normal use, or 32 when you need to mirror the saved CLI command"]
+          ["Threads per run", "Auto for routine runs, or 32 when you need to mirror the saved CLI command"]
         ]
       },
       "operations": [
@@ -104,8 +104,8 @@
       ]
     },
     {
-      "title": "Keep orthogroup matching enabled",
-      "body": "Use Orthogroups when you want each ribbon to represent an orthogroup-backed protein relationship rather than a merged collinear block.",
+      "title": "Select the Orthogroups mode",
+      "body": "Use Orthogroups to draw links between proteins assigned to the same gbdraw similarity group rather than combining anchors into collinear blocks.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -116,7 +116,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "Orthogroup evidence is built from all record pairs; the diagram draws ribbons between adjacent displayed records. The companion collinear tutorial uses the same inputs but reduces adjacent orthogroup anchors into larger gene-order blocks.",
+      "note": "gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records. These groups support visualization but are not phylogeny-based orthology assignments. The companion collinear tutorial combines compatible runs of the same protein-match anchors into collinear blocks.",
       "operations": [
         {
           "title": "Orthogroups mode controls",
@@ -222,26 +222,26 @@
       ]
     },
     {
-      "title": "Generate and inspect the orthogroup overview",
-      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache. The generated preview should show many individual green pairwise ribbons instead of larger orientation-colored collinear blocks.",
+      "title": "Generate and inspect the similarity-group overview",
+      "body": "Click Generate Diagram. The first LOSATP search can take time; later runs reuse its results when the input files and LOSAT settings have not changed. The preview should show individual green similarity-group ribbons instead of larger orientation-colored collinear blocks.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-07-01-orthogroup-overview.webp",
-            "alt": "Generated five-genome Hepatoplasmataceae preview with dense green orthogroup ribbons, GC content and skew tracks, a ruler, and the legend.",
-            "caption": "The generated preview shows five genome records connected by dense green orthogroup ribbons."
+            "alt": "Generated five-genome Hepatoplasmataceae preview with dense green similarity-group ribbons, GC content and skew tracks, a ruler, and the legend.",
+            "caption": "The generated preview shows five genome records connected by dense green similarity-group ribbons."
           }
         }
       ]
     },
     {
-      "title": "Open an orthogroup match popup",
-      "body": "Click a pairwise ribbon in the interactive SVG to inspect the orthogroup ID, display name, member count, and record coverage. The member table remains available below the summary.",
+      "title": "Open a similarity-group match popup",
+      "body": "Click a pairwise ribbon in the interactive SVG to inspect the gbdraw group ID, display name, member count, and record coverage. The table below the summary lists the member proteins.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-08-01-orthogroup-popup.webp",
-            "alt": "Zoomed Hepatoplasmataceae orthogroup crop with the highlighted match ribbon and popup.",
+            "alt": "Zoomed Hepatoplasmataceae similarity-group crop with the highlighted match ribbon and popup.",
             "caption": "The highlighted og_244 ribbon remains visible beside its compact 30S ribosomal protein S11 summary."
           },
           "capture": {
@@ -297,13 +297,13 @@
   "postGenerationEdits": [
     {
       "title": "Inspect a CDS feature",
-      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, orthogroup membership, and protein ID.",
+      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, gbdraw group ID, and protein ID.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/post-02-01-feature-popup.webp",
-            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, orthogroup ID, and protein ID.",
-            "caption": "The Details tab identifies the DnaA CDS as orthogroup og_1 in AP027078.1."
+            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, gbdraw group ID, and protein ID.",
+            "caption": "The Details tab identifies the DnaA CDS as a member of gbdraw group og_1 in AP027078.1."
           },
           "capture": {
             "source": "webapp",
@@ -360,7 +360,7 @@
     },
     {
       "title": "Prefer Safe total threads",
-      "body": "Safe avoids consuming every logical CPU and is the best default when you want the browser to remain responsive."
+      "body": "Safe leaves some logical CPUs unused so the browser can remain responsive."
     },
     {
       "title": "Keep Threads per run on Auto",
@@ -372,7 +372,7 @@
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so iterative diagram styling is faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so styling edits avoid another search."
     }
   ],
   "troubleshooting": [
@@ -381,12 +381,12 @@
       "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
     },
     {
-      "title": "The first run feels slow",
+      "title": "The first run is slow",
       "body": "This example runs five genomes through LOSATP in the browser. Wait for the first cache entry before making styling-only changes."
     },
     {
       "title": "The output is too dense",
-      "body": "Raise identity, bitscore, or match length thresholds, lower the E-value cutoff, or use the collinear tutorial when you want larger block-level summaries."
+      "body": "Raise the identity, bit score, or match-length threshold, lower the E-value cutoff, or use the collinear tutorial when you want block-level summaries."
     },
     {
       "title": "The generated diagram differs from the Gallery image",

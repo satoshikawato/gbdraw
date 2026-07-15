@@ -22,8 +22,14 @@ pytest tests/ -v -m "not slow"
 # Full tests
 pytest tests/ -v
 
+# Compare generated SVGs with tracked references (read-only)
+pytest tests/test_output_comparison.py::TestOutputComparison -v
+
+# Update tracked references only for an intentional, reviewed geometry change
+pytest tests/test_output_comparison.py::TestGenerateReferences --update-reference-outputs -v
+
 # Lint
-ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
+ruff check gbdraw/
 
 # Prepare the generated browser wheel for offline web packaging/tests
 python tools/prepare_browser_wheel.py
@@ -50,6 +56,6 @@ python -m build
 - Keep the web UI as a single-page app with no build step; `gbdraw/web/index.html` hosts HTML/CSS/templates and loads ES modules from `gbdraw/web/js/` (`app.js` entry with `app/`, `services/`, `utils/`).
 - Keep larger UI modules split into focused subfolders under `gbdraw/web/js/app/` (for example `legend/`, `legend-layout/`, `feature-editor/`) and keep the `create*` entry points in the top-level `app/*.js` files.
 - If adding CDN dependencies, update the CSP in `gbdraw/web/index.html`.
-- If diagram output changes, update reference SVGs in `tests/reference_outputs/`.
+- Treat `tests/reference_outputs/` as read-only during normal tests. If diagram output changes intentionally, regenerate it with `--update-reference-outputs`, review the SVG diff, and rerun `TestOutputComparison`.
 - Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`.
 - Treat `gbdraw/web/gbdraw-<version>-py3-none-any.whl` as a generated, gitignored asset. Prepare it when tests or packaging need it, but do not commit it.

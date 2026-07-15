@@ -17,7 +17,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from gbdraw.session_io import load_session, session_mode, write_session_json  # noqa: E402
+from gbdraw.session_io import (  # noqa: E402
+    CURRENT_SESSION_VERSION,
+    load_session,
+    session_mode,
+    write_session_json,
+)
+from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 
 
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
@@ -25,12 +31,21 @@ SESSION_ROOT = GALLERY_ROOT / "sessions"
 
 GALLERY_SESSION_FILES = (
     "BGC0000708-BGC0000713.gbdraw-session.json",
+    "HmmtDNA_basic_circular.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
+    "lambda_basic_linear.gbdraw-session.json",
+)
+
+_DERIVABLE_CANONICAL_GALLERY_FIELDS = (
+    "files",
+    "features",
+    "losatCache",
+    "losatDerivedCache",
 )
 
 
@@ -91,11 +106,20 @@ def _preserve_gallery_cli_invocation(
     preserved_cli["schema"] = 1
     preserved_cli["mode"] = mode
     preserved_cli["args"] = _with_interactive_svg_format(list(source_cli["args"]))
-    preserved_cli["renderFormats"] = ["interactive-svg"]
+    preserved_cli["renderFormats"] = [INTERACTIVE_SVG_FORMAT]
     preserved_cli.setdefault("fileBindings", [])
     preserved_cli.setdefault("generatedBy", "gbdraw")
     refreshed_session["cliInvocation"] = preserved_cli
     return True
+
+
+def _prune_derivable_canonical_gallery_fields(session: dict[str, Any]) -> None:
+    """Keep bundled v31 sessions self-contained without duplicated caches."""
+
+    if session.get("version") != CURRENT_SESSION_VERSION:
+        return
+    for field in _DERIVABLE_CANONICAL_GALLERY_FIELDS:
+        session.pop(field, None)
 
 
 def _refresh_one_session(session_path: Path) -> None:
@@ -129,6 +153,8 @@ def _refresh_one_session(session_path: Path) -> None:
                 str(session_path),
                 "-f",
                 "interactive_svg",
+                "-o",
+                "out",
                 "--session_output",
                 str(refreshed_session),
             ],
@@ -142,6 +168,7 @@ def _refresh_one_session(session_path: Path) -> None:
             refreshed_payload,
             mode=mode,
         )
+        _prune_derivable_canonical_gallery_fields(refreshed_payload)
         write_session_json(refreshed_session, refreshed_payload)
         load_session(refreshed_session)
         shutil.move(str(refreshed_session), session_path)

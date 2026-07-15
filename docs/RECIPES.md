@@ -2,11 +2,11 @@
 
 # Recipes
 
-Quick copy-paste solutions for common tasks. For explanations and screenshots, see the [Tutorials](./TUTORIALS/TUTORIALS.md).
+Copy-paste command examples for common tasks. For explanations and screenshots, see the [command-line guides](./TUTORIALS/TUTORIALS.md).
 
-## Circular Diagrams
+## Circular diagrams
 
-### Basic circular plot
+### Basic circular genome diagram
 
 ```bash
 gbdraw circular --gbk genome.gb -o output -f svg
@@ -26,7 +26,7 @@ gbdraw circular --gbk genome.gb -o output -f svg --separate_strands -p orchid
 
 See [color_palette_examples.md](../examples/color_palette_examples.md) for the available palettes.
 
-### Add centered organism text
+### Add a center label
 
 ```bash
 gbdraw circular \
@@ -54,7 +54,7 @@ gbdraw circular \
 gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels
 ```
 
-`--track_type` selects a circular preset. Custom Track Slots can reorder tracks while inheriting omitted geometry from that preset; the circular axis stays fixed and is not configurable as a slot.
+`--track_type` selects a circular preset. Custom track slots can reorder tracks while inheriting omitted geometry from that preset; the circular axis stays fixed and is not configurable as a slot.
 
 ### Reorder circular tracks without calculating radii
 
@@ -98,9 +98,9 @@ gbdraw circular \
   --multi_record_size_mode auto
 ```
 
-## Linear Diagrams
+## Linear diagrams
 
-### Basic linear plot
+### Basic linear genome diagram
 
 ```bash
 gbdraw linear --gbk genome.gb -o output -f svg
@@ -176,9 +176,9 @@ gbdraw linear \
   -f svg
 ```
 
-See [Tutorial 5](./TUTORIALS/5_Table_Driven_Inputs.md) for GenBank, GFF3+FASTA, circular placement, conservation, and track-slot table examples.
+See [Use TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md) for examples covering GenBank, GFF3+FASTA, circular placement, BLAST similarity rings, and track slots.
 
-## Comparative Genomics
+## Comparative genomics
 
 ### Two-genome comparison
 
@@ -206,7 +206,7 @@ gbdraw linear \
   -f svg
 ```
 
-### Generated protein comparison without BLAST tables
+### Run a protein comparison from CDS annotations
 
 ```bash
 gbdraw linear \
@@ -218,7 +218,7 @@ gbdraw linear \
   -f svg
 ```
 
-Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. Do not combine these modes with `-b/--blast`. See [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
+Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The `orthogroup` mode creates gbdraw similarity groups for visualization; it does not infer phylogeny-based orthogroups. Do not combine these modes with `-b/--blast`. See [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
 
 ### Filter BLAST ribbons
 
@@ -234,7 +234,7 @@ gbdraw linear \
   -f svg
 ```
 
-### Circular conservation rings from BLAST
+### Circular BLAST similarity rings
 
 ```bash
 blastn -query comparison.fasta -subject reference.fasta -outfmt 7 -out comparison_vs_reference.blast.out
@@ -250,9 +250,9 @@ gbdraw circular \
   -f svg
 ```
 
-Use additional `--conservation_blast` files to add additional rings. Circular conservation uses raw HSP spans; reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
+Pass more `--conservation_blast` files to add rings. Each ring shows raw BLAST HSP spans, not an inferred measure of evolutionary conservation. Reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
 
-## Color and Label Tables
+## Color and label tables
 
 ### Override default feature colors
 
@@ -311,7 +311,7 @@ Then:
 gbdraw circular --gbk genome.gb --labels --label_table label_override.tsv -o output -f svg
 ```
 
-## GFF3 Input
+## GFF3 input
 
 ### Circular plot from GFF3 + FASTA
 
@@ -325,7 +325,7 @@ gbdraw circular --gff annotations.gff --fasta sequence.fasta -o output -f svg
 gbdraw linear --gff annotations.gff --fasta sequence.fasta -o output -f svg
 ```
 
-## Output Formats
+## Output formats
 
 ### Export to multiple formats
 
@@ -338,11 +338,11 @@ PNG, PDF, EPS, and PS require CairoSVG to be installed.
 ### Export standalone interactive SVG
 
 ```bash
-gbdraw circular --gbk genome.gb -o output -f interactive-svg
-gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg,interactive-svg
+gbdraw circular --gbk genome.gb -o output -f interactive_svg
+gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg,interactive_svg
 ```
 
-`interactive-svg` writes the normal `output.svg` plus `output.interactive.svg`.
+`interactive_svg` writes the normal `output.svg` plus `output.interactive.svg`. The older spelling `interactive-svg` remains accepted as a compatibility alias.
 It does not require CairoSVG, Node.js, Playwright, Chromium, or a web build step.
 Open the interactive file in a browser; some desktop SVG viewers block embedded scripts.
 

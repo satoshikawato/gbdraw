@@ -23,6 +23,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
 from gbdraw.analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot  # type: ignore[reportMissingImports]
 
 
@@ -58,6 +59,17 @@ class OutputOptions:
 
 
 @dataclass(frozen=True)
+class CircularMultiRecordOptions:
+    """Layout values used only by circular multi-record canvases."""
+
+    multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto"
+    multi_record_min_radius_ratio: float = 0.55
+    multi_record_column_gap_ratio: float = 0.10
+    multi_record_row_gap_ratio: float = 0.05
+    multi_record_positions: Sequence[str] | None = None
+
+
+@dataclass(frozen=True)
 class DiagramOptions:
     """Bundled options for diagram assembly helpers."""
 
@@ -71,6 +83,12 @@ class DiagramOptions:
     feature_table_file: str | None = None
     feature_visibility_table: DataFrame | None = None
     feature_visibility_table_file: str | None = None
+    label_whitelist_table: DataFrame | None = None
+    label_whitelist_file: str | None = None
+    qualifier_priority_table: DataFrame | None = None
+    qualifier_priority_file: str | None = None
+    label_override_table: DataFrame | None = None
+    label_override_file: str | None = None
     feature_shapes: Mapping[str, str] | None = None
     dinucleotide: str = "GC"
     window: int | None = None
@@ -127,7 +145,68 @@ class DiagramOptions:
     alignment_length: int = 0
 
 
+_DEFAULT_DIAGRAM_OPTIONS = DiagramOptions()
+_CIRCULAR_ONLY_DIAGRAM_OPTION_NAMES = (
+    "conservation_blast_files",
+    "conservation_dataframes",
+    "conservation_reference",
+    "conservation_labels",
+    "conservation_colors",
+    "conservation_ring_width",
+    "conservation_ring_gap",
+    "keep_full_definition_with_plot_title",
+    "species",
+    "strain",
+)
+_LINEAR_ONLY_DIAGRAM_OPTION_NAMES = (
+    "depth_track_heights",
+    "blast_files",
+    "protein_comparisons",
+    "orthogroups",
+    "protein_blastp_mode",
+    "pairwise_match_style",
+    "collinearity_blocks",
+    "collinearity_params",
+    "collinearity_unit_mode",
+    "collinearity_anchor_mode",
+    "collinearity_search_scope",
+    "collinearity_color_mode",
+    "losatp_bin",
+    "ncbi_blastp_bin",
+    "losatp_threads",
+    "protein_blastp_max_hits",
+    "protein_blastp_candidate_limit",
+    "orthogroup_membership_mode",
+    "orthogroup_member_max_hits",
+    "collinear_max_paralog_links_per_orthogroup",
+    "align_orthogroup_feature",
+)
+
+
+def _validate_diagram_options_mode(
+    options: DiagramOptions,
+    *,
+    mode: Literal["circular", "circular_multi", "linear"],
+) -> None:
+    incompatible_names = (
+        _CIRCULAR_ONLY_DIAGRAM_OPTION_NAMES
+        if mode == "linear"
+        else _LINEAR_ONLY_DIAGRAM_OPTION_NAMES
+    )
+    non_default_names = [
+        name
+        for name in incompatible_names
+        if getattr(options, name) != getattr(_DEFAULT_DIAGRAM_OPTIONS, name)
+    ]
+    if non_default_names:
+        raise ValidationError(
+            f"{mode} builder does not support non-default DiagramOptions fields: "
+            f"{', '.join(non_default_names)}"
+        )
+
+
 __all__ = [
+    "CircularMultiRecordOptions",
     "ColorOptions",
     "DiagramOptions",
     "OutputOptions",

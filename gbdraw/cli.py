@@ -4,9 +4,9 @@
 """
 Command-line Interface for Genome Diagram Generation (gbdraw)
 
-This script provides the command-line interface for `gbdraw`, a tool for generating 
-genome diagrams in circular or linear formats from GenBank/EMBL/DDBJ-format annotated 
-genomes. It supports various customization options, including color schemes, feature 
+This script provides the command-line interface for `gbdraw`, a tool for generating
+genome diagrams in circular or linear formats from GenBank/EMBL/DDBJ-format annotated
+genomes. It supports various customization options, including color schemes, feature
 inclusions, and skewness calculations.
 
 Functions:
@@ -48,7 +48,7 @@ def print_version() -> None:
 def find_free_port():
     """Find a free port on localhost"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0)) 
+        s.bind(('127.0.0.1', 0))
         return s.getsockname()[1]
 
 def start_local_server(directory: str):
@@ -57,9 +57,9 @@ def start_local_server(directory: str):
     """
 
     port = find_free_port()
-    
+
     handler = partial(IsolatedSimpleHTTPRequestHandler, directory=directory)
-    
+
     try:
         httpd = socketserver.TCPServer(("127.0.0.1", port), handler)
     except OSError as e:
@@ -70,7 +70,7 @@ def start_local_server(directory: str):
     print(f"✅ Local server started at: {url}")
     print(f"📂 Serving UI from: {directory}")
     print("Press Ctrl+C to stop the server.")
-    
+
     webbrowser.open(url)
 
     try:
@@ -107,7 +107,7 @@ def print_help_message() -> NoReturn:
     print("")
     print("Options (examples):")
     print("  --gbk                Input GenBank file(s)")
-    print("  --gff                Input GFF# file(s) (rquires --fasta; mutually exclusive with --gbk)")
+    print("  --gff                Input GFF3 file(s) (requires --fasta; mutually exclusive with --gbk)")
     print("  --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)")
     print("  -o, --output         Output file prefix (optional)")
     print("  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)")
@@ -167,7 +167,7 @@ def main() -> None:
             print("For example:")
             print("  gbdraw circular --gbk input.gb")
             print("  gbdraw linear --gbk input.gb")
-            print("  gbdraw gui")        
+            print("  gbdraw gui")
             sys.exit(1)
     except GbdrawError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

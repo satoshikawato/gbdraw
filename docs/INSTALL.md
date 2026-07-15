@@ -8,13 +8,13 @@
 
 | Method | Best for | Notes |
 | --- | --- | --- |
-| Hosted web app | Quick plotting with zero install | Runs at [gbdraw.app](https://gbdraw.app/) in your browser. |
-| Bioconda | Daily local use and reproducible environments | Recommended for most users. |
-| Source install | Development and testing current repository state | Uses `pip install -e ".[dev]"`. |
+| Hosted web app | Making a diagram without a local installation | Runs at [gbdraw.app](https://gbdraw.app/) in your browser. |
+| Bioconda | Routine command-line use and reproducible environments | Recommended for most users. |
+| Source install | Developing or testing the current checkout | Uses `pip install -e ".[dev]"`. |
 
-## 1. Hosted Web App
+## 1. Hosted web app
 
-If you want the fastest path to a figure, open:
+To create a figure without installing `gbdraw`, open:
 
 [https://gbdraw.app/](https://gbdraw.app/)
 
@@ -35,11 +35,11 @@ The same UI can also be launched locally after installation with:
 gbdraw gui
 ```
 
-Local `gbdraw gui` analysis runs on your machine. The interactive Gallery examples are hosted separately at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/) and are not bundled into local installs.
+Local `gbdraw gui` analysis runs on your machine. The interactive gallery examples are hosted separately at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/) and are not bundled into local installs.
 
-## 2. Bioconda Installation
+## 2. Bioconda installation
 
-Bioconda is the recommended local installation path for normal use.
+Bioconda is the recommended local installation path for routine command-line use.
 
 ```bash
 mamba create -n gbdraw -c conda-forge -c bioconda gbdraw
@@ -53,7 +53,7 @@ Optional: launch the local GUI:
 gbdraw gui
 ```
 
-## 3. Source Installation for Development
+## 3. Source installation for development
 
 Use a source install when you want the current repository state, need to run tests, or plan to contribute.
 
@@ -71,7 +71,7 @@ python -m gbdraw.cli -h
 pytest tests/ -v -m "not slow"
 ```
 
-## Optional: Non-SVG Export Support
+## Optional: non-SVG export support
 
 SVG export works with the base install. PNG, PDF, EPS, and PS export require CairoSVG:
 
@@ -81,7 +81,7 @@ python -m pip install -e ".[dev,export]"
 
 Depending on your platform, CairoSVG may also require system Cairo/Pango libraries.
 
-## Related Commands
+## Related commands
 
 ```bash
 gbdraw circular --gbk genome.gb -o output -f svg

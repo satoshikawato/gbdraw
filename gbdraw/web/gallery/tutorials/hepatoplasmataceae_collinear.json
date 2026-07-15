@@ -1,8 +1,8 @@
 {
   "id": "hepatoplasmataceae_collinear",
   "version": 1,
-  "title": "Reproduce the Hepatoplasmataceae collinear analysis in the web app",
-  "summary": "Build a five-genome linear comparison from GenBank inputs using browser LOSATP and collinear block reduction.",
+  "title": "Plot collinear protein-match blocks across five Hepatoplasmataceae genomes",
+  "summary": "Run LOSATP in the browser and combine compatible protein-match anchors into collinear blocks across five Hepatoplasmataceae genomes.",
   "estimatedTime": "10-20 min after inputs are available",
   "difficulty": "Advanced",
   "appMode": "Linear",
@@ -76,7 +76,7 @@
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-02-01-upload-row-context.webp",
             "alt": "Linear GenBank input row 1 with AP027078.gb uploaded and the organism, subtitle, region, and LOSAT filename controls visible.",
-            "caption": "The first uploaded row shows AP027078.gb in the real Linear input card; repeat the remaining files in the table order."
+            "caption": "The first uploaded row shows AP027078.gb in the Linear input card; repeat the remaining files in the table order."
           }
         }
       ]
@@ -104,7 +104,7 @@
       ]
     },
     {
-      "title": "Select collinear reduction",
+      "title": "Build collinear blocks",
       "body": "In LOSATP settings, set blastp mode to Collinear blocks. Use Orientation + identity for Color mode.",
       "table": {
         "columns": ["Setting", "Value"],
@@ -122,7 +122,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "These settings summarize orthogroup-backed protein anchors as gene-order-preserving ribbons.",
+      "note": "These settings combine compatible runs of protein-match anchors from gbdraw similarity groups into collinear blocks.",
       "operations": [
         {
           "title": "LOSATP collinear controls",
@@ -241,7 +241,7 @@
     },
     {
       "title": "Generate and inspect the diagram",
-      "body": "Click Generate Diagram. The first LOSATP run can take time; later runs with the same canonical inputs and LOSAT settings can reuse the raw LOSAT cache. The preview should show orientation-colored collinear blocks between adjacent records.",
+      "body": "Click Generate Diagram. The first LOSATP search can take time; later runs reuse its results when the input files and LOSAT settings have not changed. The preview should show orientation-colored collinear blocks between adjacent records.",
       "operations": [
         {
           "media": {
@@ -268,13 +268,13 @@
     },
     {
       "title": "Check collinear blocks",
-      "body": "Click a curved block ribbon between adjacent genomes to inspect its two records, intervals, orientation, and orthogroup count. Orientation + identity colors separate forward and reverse blocks while retaining identity information.",
+      "body": "Click a curved block ribbon between adjacent genomes to inspect its two records, intervals, orientation, and gbdraw group count. Orientation + identity colors separate forward and reverse blocks while retaining identity information.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-07-01-collinear-block-popup.webp",
             "alt": "Zoomed Hepatoplasmataceae collinear crop with the highlighted collinear block ribbon and popup.",
-            "caption": "The highlighted block_0024 ribbon remains visible beside its compact plus-orientation summary covering 15 orthogroups."
+            "caption": "The highlighted block_0024 ribbon remains visible beside its compact plus-orientation summary covering 15 gbdraw similarity groups."
           },
           "capture": {
             "source": "webapp",
@@ -328,13 +328,13 @@
   "postGenerationEdits": [
     {
       "title": "Inspect a CDS feature",
-      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, orthogroup membership, and protein ID.",
+      "body": "Click the DnaA CDS and open Details to inspect its label, record ID, feature type, location, gbdraw group ID, and protein ID.",
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/post-01-01-feature-popup.webp",
-            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, orthogroup ID, and protein ID.",
-            "caption": "The Details tab identifies the DnaA CDS as orthogroup og_1 in AP027078.1."
+            "alt": "Highlighted DnaA CDS beside a compact Details popup with its AP027078.1 record ID, feature type, location, gbdraw group ID, and protein ID.",
+            "caption": "The Details tab identifies the DnaA CDS as a member of gbdraw group og_1 in AP027078.1."
           },
           "capture": {
             "source": "webapp",
@@ -388,7 +388,7 @@
     },
     {
       "title": "Prefer Safe total threads",
-      "body": "Safe avoids consuming every logical CPU and is the best default when you want the browser to remain responsive."
+      "body": "Safe leaves some logical CPUs unused so the browser can remain responsive."
     },
     {
       "title": "Keep Threads per run on Auto",
@@ -400,7 +400,7 @@
     },
     {
       "title": "Reuse the cache",
-      "body": "Raw LOSAT results are reused when canonical inputs and LOSAT settings match, so iterative diagram styling is faster after the first run."
+      "body": "The app reuses LOSAT results when the input files and LOSAT settings have not changed, so styling edits avoid another search."
     }
   ],
   "troubleshooting": [
@@ -409,12 +409,12 @@
       "body": "Use Auto or Serial execution. Some browser contexts disable SharedArrayBuffer or cross-origin isolation, which prevents threaded WebAssembly."
     },
     {
-      "title": "The first run feels slow",
+      "title": "The first run is slow",
       "body": "This example runs five genomes through LOSATP in the browser. Wait for the first cache entry before making styling-only changes."
     },
     {
       "title": "The output is cluttered",
-      "body": "Raise Min block genes or identity thresholds to reduce weak blocks, then regenerate."
+      "body": "Raise Min block genes or the identity threshold to retain fewer blocks, then regenerate."
     },
     {
       "title": "The generated diagram differs from the Gallery image",
@@ -427,7 +427,7 @@
       "href": "./#hepatoplasmataceae_collinear"
     },
     {
-      "label": "Compare with the orthogroup example",
+      "label": "Compare with the protein-similarity example",
       "href": "./#hepatoplasmataceae_orthogroup"
     },
     {

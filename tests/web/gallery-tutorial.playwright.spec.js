@@ -97,13 +97,13 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*collinear analysis/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*collinear blocks/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app' })
+    page.getByRole('heading', { name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
-  await expect(page.getByText('Web app steps')).toBeVisible();
+  await expect(page.getByText('Reproduce the figure')).toBeVisible();
   await expect(page.getByText('Use browser LOSAT')).toBeVisible();
   await expect(page.getByText('Use Orientation + identity for Color mode.')).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
@@ -138,21 +138,21 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*orthogroup matches/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*protein similarity groups/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae orthogroup comparison in the web app' })
+    page.getByRole('heading', { name: 'Plot CDS protein-similarity links across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('row', { name: 'blastp mode Orthogroups' })).toBeVisible();
   await expect(
     tutorialPanel.getByText(
-      'Orthogroup evidence is built from all record pairs; the diagram draws ribbons between adjacent displayed records.'
+      'gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records.'
     )
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Minimum Identity 0' })).toBeVisible();
-  await expect(page.getByText('orthogroup ID, display name, member count')).toBeVisible();
+  await expect(page.getByText('gbdraw group ID, display name, member count')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(10);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
@@ -186,7 +186,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the aminoglycoside BGC comparison in the web app' })
+    page.getByRole('heading', { name: 'Compare five aminoglycoside biosynthetic gene clusters' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('heading', { name: 'Color rule basics' })).toBeVisible();
@@ -266,18 +266,19 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   expect(pageErrors).toEqual([]);
 });
 
-test('Gallery renders the WSSV conservation tutorial and media', async ({ page }) => {
+test('Gallery renders the WSSV nucleotide-similarity tutorial and media', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#WSSV_genome_comparison`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /White spot syndrome virus genome comparison/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /White spot syndrome virus nucleotide-similarity rings/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the WSSV circular conservation ring comparison in the web app' })
+    page.getByRole('heading', { name: 'Advanced session-based WSSV comparison case study' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(tutorialPanel.getByText('Load the bundled session first')).toBeVisible();
   await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
@@ -291,7 +292,7 @@ test('Gallery renders the WSSV conservation tutorial and media', async ({ page }
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('cell', { name: 'MG18PR-0187-N40S.fa' })).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(10);
+  await expect(mediaImages).toHaveCount(11);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-comparison-fasta-series.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-upload-fasta-comparisons.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-conservation-rings.webp"]')).toHaveCount(1);
@@ -327,7 +328,7 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the human mitochondrial AT skew diagram in the web app' })
+    page.getByRole('heading', { name: 'Human mitochondrial genome with an AT skew track' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('Open Custom Track Slots', { exact: true })).toBeVisible();
@@ -385,11 +386,11 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#majanivirus_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Large dsDNA viruses/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Majanivirus genomes.*protein similarity groups/i })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the large majanivirus orthogroup comparison in the web app' })
+    page.getByRole('heading', { name: 'Plot CDS protein-similarity links across nine majanivirus genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
@@ -454,7 +455,7 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
     page.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
@@ -531,13 +532,13 @@ test('Gallery shows an inline fallback when tutorial media fails to load', async
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app' })
+    page.getByRole('heading', { name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
   await page.locator('#tutorial-panel .tutorial-media').first().scrollIntoViewIfNeeded();
   await expect(
     page.getByText('Media unavailable: ./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp')
   ).toBeVisible();
-  await expect(page.getByText('Web app steps')).toBeVisible();
+  await expect(page.getByText('Reproduce the figure')).toBeVisible();
 });
 
 test('Gallery renders operation media and keeps it inside a mobile viewport', async ({ page }) => {
@@ -637,6 +638,26 @@ test('Gallery copy link button copies the selected sample URL', async ({ page })
 
   await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__copiedGalleryLink)).toBe(`${baseUrl}/gallery/#HmmtDNA_ATskew`);
+});
+
+test('Gallery orders Beginner examples first and distinguishes runnable commands', async ({ page }) => {
+  await page.goto(`${baseUrl}/gallery/`, { waitUntil: 'domcontentloaded' });
+
+  const cards = page.locator('.sample-card');
+  await expect(cards).toHaveCount(9);
+  await expect(cards.nth(0)).toContainText('Beginner');
+  await expect(cards.nth(0)).toContainText('Circular basics');
+  await expect(cards.nth(1)).toContainText('Linear basics');
+
+  await page.getByRole('tab', { name: 'Command' }).click();
+  await expect(page.getByText('Runnable', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy command' })).toBeEnabled();
+  await expect(page.locator('#command-block')).toContainText('-f interactive_svg');
+
+  await page.locator('[data-sample-id="WSSV_genome_comparison"]').click();
+  await expect(page.getByText('Provenance', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Provenance only' })).toBeDisabled();
+  await expect(page.locator('#command-note')).toContainText('not directly runnable');
 });
 
 test('Gallery tab controls support keyboard navigation', async ({ page }) => {
@@ -749,7 +770,7 @@ test('Gallery can preview draft tutorials when explicitly enabled', async ({ pag
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
     page.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
 });
@@ -784,7 +805,7 @@ test('Gallery ignores stale tutorial fetch results after sample changes', async 
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
 
@@ -792,12 +813,12 @@ test('Gallery ignores stale tutorial fetch results after sample changes', async 
   await collinearRequestFinished;
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('heading', {
-      name: 'Reproduce the Hepatoplasmataceae collinear analysis in the web app'
+      name: 'Plot collinear protein-match blocks across five Hepatoplasmataceae genomes'
     })
   ).toHaveCount(0);
 });
@@ -808,7 +829,7 @@ test('Gallery mobile controls and tutorial text do not overlap or overflow', asy
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
     page.getByRole('heading', {
-      name: 'Reproduce the Vibrio nigripulchritudo multi-record circular genome in the web app'
+      name: 'Vibrio nigripulchritudo chromosomes and plasmids on one canvas'
     })
   ).toBeVisible();
 

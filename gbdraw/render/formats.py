@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 SVG_FORMAT = "svg"
-INTERACTIVE_SVG_FORMAT = "interactive-svg"
+INTERACTIVE_SVG_FORMAT = "interactive_svg"
 PNG_FORMAT = "png"
 PDF_FORMAT = "pdf"
 EPS_FORMAT = "eps"
@@ -18,7 +18,7 @@ BASE_SVG_FORMATS = (SVG_FORMAT, INTERACTIVE_SVG_FORMAT)
 ACCEPTED_FORMATS = (*BASE_SVG_FORMATS, *CAIROSVG_FORMATS)
 
 _FORMAT_ALIASES = {
-    "interactive_svg": INTERACTIVE_SVG_FORMAT,
+    "interactive-svg": INTERACTIVE_SVG_FORMAT,
 }
 
 
