@@ -383,6 +383,22 @@ def test_web_feature_selector_helpers() -> None:
     subprocess.run([node, "tests/web/feature-selector.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_specific_rule_qualifier_accepts_suggestions_and_custom_values() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert '<datalist id="specific-rule-qualifier-options">' in index_html
+    assert index_html.count('list="specific-rule-qualifier-options"') == 2
+    assert 'v-for="value in specificRuleQualifierSuggestions"' in index_html
+    assert 'v-model="newSpecRule.qual"' in index_html
+    assert '<select v-model="newSpecRule.qual"' not in index_html
+    assert "collectSpecificColorQualifierSuggestions" in state_source
+    assert "specificRuleQualifierSuggestions" in app_setup_source
+
+
 def test_web_preview_runtime_helpers() -> None:
     node = shutil.which("node")
     if node is None:

@@ -15,8 +15,10 @@ await writeFile(
 );
 
 const {
+  SPECIFIC_COLOR_QUALIFIER_PRESETS,
   buildFeatureSelectorUniquenessIndex,
   buildSelectorSafetyUniquenessIndex,
+  collectSpecificColorQualifierSuggestions,
   exactRegexValue,
   selectFeatureSelector
 } = await import(pathToFileURL(join(tempDir, 'feature-selector.js')));
@@ -186,5 +188,21 @@ const makeFeature = (overrides = {}) => ({
 }
 
 assert.equal(exactRegexValue('YP_009725295.1'), '^YP_009725295\\.1$');
+
+{
+  const suggestions = collectSpecificColorQualifierSuggestions(
+    [
+      { qualifiers: { custom_tag: ['one'], color: ['#ff0000'] } },
+      { selector: { qualifiers: { VendorKey: ['two'] } } }
+    ],
+    [{ qual: 'rule_only' }, { qual: ' custom_tag ' }]
+  );
+  assert.equal(SPECIFIC_COLOR_QUALIFIER_PRESETS.includes('color'), true);
+  assert.deepEqual(suggestions.slice(0, SPECIFIC_COLOR_QUALIFIER_PRESETS.length), SPECIFIC_COLOR_QUALIFIER_PRESETS);
+  assert.equal(suggestions.includes('custom_tag'), true);
+  assert.equal(suggestions.includes('VendorKey'), true);
+  assert.equal(suggestions.includes('rule_only'), true);
+  assert.equal(suggestions.filter((value) => value === 'custom_tag').length, 1);
+}
 
 console.log('feature selector tests passed');

@@ -2713,12 +2713,16 @@
 
                             <div>
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported)."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
                                         <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple"></i> TSV</button>
                                         <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
                                     </div>
                                 </div>
+
+                                <datalist id="specific-rule-qualifier-options">
+                                    <option v-for="value in specificRuleQualifierSuggestions" :key="`specific-rule-qual-${value}`" :value="value"></option>
+                                </datalist>
 
                                 <div class="space-y-1 mb-3">
                                     <div v-for="(rule, i) in manualSpecificRules" :key="i" class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
@@ -2726,7 +2730,7 @@
                                             <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value)" class="form-input form-input-compact col-span-4">
                                                 <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                             </select>
-                                            <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value)" placeholder="Qualifier" class="form-input form-input-compact col-span-4">
+                                            <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4">
                                             <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value)" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1">
                                             <div class="col-span-3 flex items-center justify-end gap-0.5">
                                                 <button @click="moveSpecificRuleUp(i)" :disabled="i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
@@ -2747,7 +2751,7 @@
                                         <select v-model="newSpecRule.feat" class="form-input form-input-compact">
                                             <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                         </select>
-                                        <input v-model="newSpecRule.qual" placeholder="Qualifier" class="form-input form-input-compact">
+                                        <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact">
                                     </div>
                                     <div class="flex gap-1 mb-1">
                                         <input v-model="newSpecRule.val" placeholder="Regex (e.g. hypothetical)" class="form-input form-input-compact flex-grow">

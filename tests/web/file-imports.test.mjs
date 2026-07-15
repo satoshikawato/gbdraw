@@ -24,14 +24,14 @@ const { parseSpecificRules, serializeSpecificRules } = await import(
 );
 
 const rules = [
-  { feat: 'CDS', qual: 'product', val: '^alpha$', color: '#111111', cap: 'Alpha' },
-  { feat: 'tRNA', qual: 'gene', val: '^beta$', color: '#222222', cap: 'Beta' }
+  { feat: 'CDS', qual: 'custom_annotation', val: '^alpha$', color: '#111111', cap: 'Alpha' },
+  { feat: 'tRNA', qual: 'color', val: '^beta$', color: '#222222', cap: 'Beta' }
 ];
 
 assert.equal(
   serializeSpecificRules(rules),
-  'CDS\tproduct\t^alpha$\t#111111\tAlpha\n' +
-    'tRNA\tgene\t^beta$\t#222222\tBeta\n'
+  'CDS\tcustom_annotation\t^alpha$\t#111111\tAlpha\n' +
+    'tRNA\tcolor\t^beta$\t#222222\tBeta\n'
 );
 
 assert.deepEqual(
