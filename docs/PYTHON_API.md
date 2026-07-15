@@ -6,6 +6,8 @@ Use `gbdraw.api` as the supported library entry point. Imports from internal mod
 
 The [`DiagramOptions` field audit](./DIAGRAM_OPTIONS_AUDIT.md) lists all 70 fields,
 the builders that read them, their final consumers, and mode-specific constraints.
+The high-level builders reject non-default options that belong to another mode;
+this prevents a Circular-only or Linear-only value from being silently ignored.
 
 ## Capability matrix
 
@@ -127,6 +129,9 @@ For an in-process protein search, set `protein_blastp_mode` to `pairwise`, `orth
 ## Depth, conservation, and custom track slots
 
 Depth and conservation accept either file paths or DataFrames. Custom slots are parsed before assembly and can be carried in `TrackOptions`.
+For a single Circular record, use `depth_table`/`depth_file` or a one-element
+`depth_tables`/`depth_files` sequence. Mixed forms, empty sequences, and multiple
+plural entries raise `ValidationError` instead of selecting only the first entry.
 
 ```python
 from gbdraw.api import TrackOptions, parse_circular_track_slots

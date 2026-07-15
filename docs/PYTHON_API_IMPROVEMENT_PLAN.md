@@ -1,7 +1,7 @@
 # Python API Improvement Plan
 
 - 作成日: 2026-07-14
-- 更新日: 2026-07-14
+- 更新日: 2026-07-15
 - 対象バージョン: `0.14.0b0`
 - 監査スナップショット: branch `cli_tsv_inputs`, HEAD `8f952d4` の作業ツリー
 - 実装スナップショット: branch `cli_tsv_inputs`, HEAD `67cb66d` の作業ツリー
@@ -22,7 +22,7 @@ library contract に漏らさないため設計ゲートで停止し、非公開
 | P2 interactive SVG | 完了 | `InteractiveSvgContext`、`enrich_svg`、`build_interactive_svg_context` を公開し、bytes API へ context を追加 |
 | P2 table input | 完了 | records/conservation/circular-track の型・reader と 3 種の label reader、DataFrame/file options を公開 |
 | P2 multi-record Circular | 完了 | `CircularMultiRecordOptions` と `build_circular_multi_diagram` を追加 |
-| P3 session | 設計ゲート完了 | CLI 非依存の typed request model が揃うまで session orchestration を内部に維持 |
+| P3 session | 設計ゲート完了 | version 31 canonical request の両 mode round-trip が成立するまで session orchestration を内部に維持 |
 | P3 documentation | 完了 | capability matrix、主要 recipe、制約を追加し、全 Python code block を pytest から実行 |
 
 実装後の公開面は `gbdraw.api.__all__` が 87 symbol、`DiagramOptions` が 70 field、
@@ -30,13 +30,22 @@ library contract に漏らさないため設計ゲートで停止し、非公開
 
 検証結果:
 
-- follow-up targeted suite: `446 passed`
-- follow-up full non-slow suite: `1282 passed, 16 skipped, 6 deselected`
+- 実装時 follow-up targeted suite: `446 passed`
+- 実装時 follow-up full non-slow suite: `1282 passed, 16 skipped, 6 deselected`
 - export の最終修正後の関連 suite: `41 passed`
 - repository 全体の Ruff: 既存 85 件を解消し、`ruff check gbdraw/` が成功
 - reference SVG: 13 件の SHA-256 は不変。生成 test は opt-in、比較失敗時の actual SVG は
   temporary directory へ保存
 - release readiness: release note と `DiagramOptions` 70-field audit を追加
+
+2026-07-15 再検証:
+
+- 計画指定 targeted suite（Python API 文書内の全 code block を含む）: `507 passed`
+- full non-slow suite: `1383 passed, 16 skipped, 6 deselected`
+- `ruff check gbdraw/`: 成功
+- `tests/reference_outputs/`: tracked diff なし。comparison test も成功
+- public contract: 87 symbol、`DiagramOptions` 70 field、
+  `CircularMultiRecordOptions` 5 field を再確認
 
 今回得られた保守手順は
 [`maintain-python-api`](skills/maintain-python-api/SKILL.md) SKILL に整理した。
@@ -616,12 +625,12 @@ ruff check gbdraw/
 9. public contract、targeted test、full non-slow test、lint が通る。
 10. 高度機能の主要 recipe が文書から実行され、CI で検証される。
 
-2026-07-14 判定:
+2026-07-15 最終判定:
 
 - 1～10 は documented mode の範囲で完了した。
 - public contract、targeted test、full non-slow test、repository 全体 lint は成功した。
-- wrong-mode の non-default field を error にするかは
-  [`DIAGRAM_OPTIONS_AUDIT.md`](DIAGRAM_OPTIONS_AUDIT.md) の validation backlog とした。
+- wrong-mode の non-default field と単一 Circular depth input の fail-fast validation は
+  [`PYTHON_API_VALIDATION_PLAN.md`](PYTHON_API_VALIDATION_PLAN.md) で完了した。
 
 ## 12. 初回実装単位（完了）
 
@@ -650,5 +659,11 @@ ruff check gbdraw/
    段階的に解消する。
 4. **完了:** `DiagramOptions` 70 field の用途・利用箇所を監査する。分割は API と実装の合計コード量が
    明確に減る場合だけ提案する。
-5. **設計ゲート継続:** session bridge は Circular/Linear 共通の CLI 非依存 typed request model と pure conversion
-   を設計できた時点で ADR を更新して再開する。それまでは公開 symbol を追加しない。
+5. **E0 完了、公開ゲート継続:** version 27～30 の compatibility matrix で lossless typed
+   conversion が不可能と判定した。session-independent request model と version 31 canonical
+   payload を先に設計し、それまでは公開 symbol を追加しない。
+
+監査後の validation backlog と E0 は
+[`PYTHON_API_VALIDATION_PLAN.md`](PYTHON_API_VALIDATION_PLAN.md) で完了した。次の request/schema
+実装は [`PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md`](PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md)
+に記録した。

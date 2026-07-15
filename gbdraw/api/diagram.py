@@ -71,6 +71,7 @@ from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissi
 from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     CircularMultiRecordOptions,
     DiagramOptions,
+    _validate_diagram_options_mode,
 )
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.canvas.circular import resolve_circular_side_legend_geometry  # type: ignore[reportMissingImports]
@@ -155,6 +156,29 @@ _SVG_NUMBER_PATTERN = re.compile(r"[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?")
 _SVG_TRANSLATE_PATTERN = re.compile(
     r"translate\(\s*([-+0-9.eE]+)(?:[\s,]+([-+0-9.eE]+))?\s*\)"
 )
+
+def _resolve_single_circular_depth_options(
+    options: DiagramOptions,
+) -> tuple[DataFrame | None, str | None]:
+    singular_present = options.depth_table is not None or options.depth_file is not None
+    plural_present = options.depth_tables is not None or options.depth_files is not None
+    if singular_present and plural_present:
+        raise ValidationError(
+            "Single circular depth inputs cannot combine singular and plural forms."
+        )
+    if options.depth_table is not None and options.depth_file is not None:
+        raise ValidationError("Pass either the depth table form or depth file form, not both.")
+    if options.depth_tables is not None and options.depth_files is not None:
+        raise ValidationError("Pass either the depth table form or depth file form, not both.")
+    if options.depth_tables is not None:
+        if len(options.depth_tables) != 1:
+            raise ValidationError("Expected one depth table for one circular record.")
+        return options.depth_tables[0], None
+    if options.depth_files is not None:
+        if len(options.depth_files) != 1:
+            raise ValidationError("Expected one depth file for one circular record.")
+        return None, options.depth_files[0]
+    return options.depth_table, options.depth_file
 
 
 def _resolve_optional_table(
@@ -3498,6 +3522,8 @@ def build_circular_diagram(
     """Build a circular diagram using bundled DiagramOptions."""
 
     options = options or DiagramOptions()
+    _validate_diagram_options_mode(options, mode="circular")
+    depth_table, depth_file = _resolve_single_circular_depth_options(options)
     colors = options.colors
     output = options.output
     tracks = options.tracks
@@ -3526,16 +3552,8 @@ def build_circular_diagram(
         step=options.step,
         depth_window=options.depth_window,
         depth_step=options.depth_step,
-        depth_table=(
-            options.depth_table
-            if options.depth_table is not None
-            else (options.depth_tables[0] if options.depth_tables else None)
-        ),
-        depth_file=(
-            options.depth_file
-            if options.depth_file is not None
-            else (options.depth_files[0] if options.depth_files else None)
-        ),
+        depth_table=depth_table,
+        depth_file=depth_file,
         depth_track_tables=options.depth_track_tables,
         depth_track_files=options.depth_track_files,
         depth_track_labels=options.depth_track_labels,
@@ -3579,6 +3597,7 @@ def build_linear_diagram(
     """Build a linear diagram using bundled DiagramOptions."""
 
     options = options or DiagramOptions()
+    _validate_diagram_options_mode(options, mode="linear")
     colors = options.colors
     output = options.output
     tracks = options.tracks
@@ -3667,6 +3686,7 @@ def build_circular_multi_diagram(
     """Build a circular multi-record canvas using bundled public options."""
 
     options = options or DiagramOptions()
+    _validate_diagram_options_mode(options, mode="circular_multi")
     layout = layout or CircularMultiRecordOptions()
     colors = options.colors
     output = options.output

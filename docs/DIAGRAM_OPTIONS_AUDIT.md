@@ -13,9 +13,11 @@ forwarding test. No dead field was found. The audit found 31 mode-specific field
 two compatibility aliases, and two depth input forms whose behavior changes by
 mode. Those findings do not justify splitting the dataclass in this release.
 
-The main problem is discoverability. A caller can set a field for the wrong mode,
-and the current adapter may ignore it. The action for `0.14.0b0` is to keep the
-contract, publish the mode table below, and record validation work separately.
+The main problem found by the audit was discoverability: a caller could set a field
+for the wrong mode and the adapter could ignore it. The follow-up validation now
+makes the three high-level `build_*` helpers reject non-default mode-specific fields
+with `ValidationError`. The low-level mode-specific assemblers keep their existing
+signatures.
 
 ## Reading the tables
 
@@ -112,10 +114,10 @@ forms, raises `ValidationError`; no deprecation is proposed for the beta release
 | 33 | `depth_track_small_tick_intervals`; scalar sequence; `None` | CS, CM, L | track metadata normalization to depth axes | H-S, O-D | Audit | live; keep |
 | 34 | `depth_track_tick_font_sizes`; scalar sequence; `None` | CS, CM, L | track metadata normalization to depth axes | H-S, O-D | Audit | live; keep |
 
-For CS, `depth_table` and `depth_file` take precedence over their plural forms.
-When the singular value is absent, the adapter uses only the first plural entry.
-CM and L preserve the plural sequence. A later behavior change should reject more
-than one plural entry in CS instead of ignoring entries after index 0.
+For CS, the high-level builder accepts either one singular depth input or a
+one-element plural input. It rejects mixed forms, empty plural sequences, and
+plural sequences longer than one instead of ignoring entries after index 0. CM and
+L preserve the plural sequence.
 
 ## Conservation and title fields
 
@@ -187,17 +189,18 @@ Keep `DiagramOptions` intact for `0.14.0b0`. A split would add conversion code w
 39 fields remain shared, and there is no dead field to remove. The public
 `assemble_*` functions remain the lower-level escape hatch.
 
-The audit leaves three follow-up items:
+The audit produced three follow-up items:
 
-1. Reject a non-default mode-specific field when it is passed to the wrong builder,
-   or add support where that makes sense. This applies to circular conservation and
-   definition fields, linear comparison fields, and `depth_track_heights`.
-2. Reject CS `depth_tables` or `depth_files` sequences longer than one. The current
-   adapter uses index 0 and ignores later entries.
+1. **Completed:** reject a non-default mode-specific field when it is passed to the
+   wrong high-level builder. This applies to circular conservation and definition
+   fields, linear comparison fields, and `depth_track_heights`.
+2. **Completed:** reject ambiguous, empty, or multi-entry CS `depth_tables` and
+   `depth_files` inputs before assembly.
 3. Keep the aliases in fields 7 and 8 for the beta series. Any later deprecation
    needs a warning period and a major-release removal target.
 
-These are validation and compatibility tasks. They do not require a new option
-class, and no field should be removed as part of them.
+The validation behavior is specified in
+[`PYTHON_API_VALIDATION_PLAN.md`](PYTHON_API_VALIDATION_PLAN.md). It does not require
+a new option class, and no field was removed.
 
 [Python API](./PYTHON_API.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md) | [Follow-up plan](./PYTHON_API_FOLLOWUP_PLAN.md)

@@ -625,6 +625,90 @@ def test_diagram_options_forward_linear_only_non_default_values(
         _assert_forwarded_value(captured[assembler_name], expected)
 
 
+_LINEAR_ONLY_WRONG_MODE_CASES = [
+    (
+        field_name,
+        "unsupported" if field_name == "orthogroup_membership_mode" else value,
+    )
+    for field_name, value, _assembler_name, _expected in _LINEAR_ONLY_FORWARDING_CASES
+]
+
+
+@pytest.mark.parametrize("builder_name", ["circular", "circular_multi"])
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    _LINEAR_ONLY_WRONG_MODE_CASES,
+    ids=[case[0] for case in _LINEAR_ONLY_WRONG_MODE_CASES],
+)
+def test_circular_builders_reject_linear_only_non_default_options(
+    builder_name: str,
+    field_name: str,
+    value: object,
+) -> None:
+    with pytest.raises(ValidationError, match=rf"{builder_name}.*{field_name}"):
+        _call_high_level_builder(builder_name, DiagramOptions(**{field_name: value}))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    _CIRCULAR_ONLY_FORWARDING_CASES,
+    ids=[case[0] for case in _CIRCULAR_ONLY_FORWARDING_CASES],
+)
+def test_linear_builder_rejects_circular_only_non_default_options(
+    field_name: str,
+    value: object,
+) -> None:
+    with pytest.raises(ValidationError, match=rf"linear.*{field_name}"):
+        _call_high_level_builder("linear", DiagramOptions(**{field_name: value}))
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        (DiagramOptions(depth_tables=[]), "one depth table"),
+        (DiagramOptions(depth_tables=[_FORWARDING_TABLE, _FORWARDING_TABLE]), "one depth table"),
+        (DiagramOptions(depth_files=[]), "one depth file"),
+        (DiagramOptions(depth_files=["one.tsv", "two.tsv"]), "one depth file"),
+        (
+            DiagramOptions(depth_table=_FORWARDING_TABLE, depth_tables=[_FORWARDING_TABLE]),
+            "singular.*plural",
+        ),
+        (DiagramOptions(depth_file="one.tsv", depth_files=["two.tsv"]), "singular.*plural"),
+        (
+            DiagramOptions(depth_table=_FORWARDING_TABLE, depth_files=["two.tsv"]),
+            "singular.*plural",
+        ),
+        (
+            DiagramOptions(depth_tables=[_FORWARDING_TABLE], depth_files=["one.tsv"]),
+            "table.*file",
+        ),
+        (DiagramOptions(depth_table=_FORWARDING_TABLE, depth_file="one.tsv"), "table.*file"),
+    ],
+)
+def test_single_circular_builder_rejects_ambiguous_or_lossy_depth_options(
+    options: DiagramOptions,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assembly_called = False
+
+    def fake_assemble(*_args, **_kwargs):
+        nonlocal assembly_called
+        assembly_called = True
+        return object()
+
+    monkeypatch.setattr(
+        api_diagram_module,
+        "assemble_circular_diagram_from_record",
+        fake_assemble,
+    )
+
+    with pytest.raises(ValidationError, match=message):
+        _call_high_level_builder("circular", options)
+
+    assert not assembly_called
+
+
 def test_circular_multi_builder_forwards_layout_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

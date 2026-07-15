@@ -55,6 +55,19 @@ The CLI retains its warning-and-skip behavior when an optional binary converter 
 unavailable. The strict contract applies to the explicit Python library helper
 `save_figure_to`.
 
+### High-level builders reject options for the wrong mode
+
+Previously, a non-default Circular-only option passed to `build_linear_diagram`,
+or a Linear-only option passed to either Circular high-level builder, could be
+silently ignored. The three `build_*` helpers now raise `ValidationError` and name
+the incompatible fields. Move the option to the matching builder or leave it at
+its default when sharing an option bundle.
+
+`build_circular_diagram` also rejects ambiguous or lossy legacy depth inputs. Pass
+one of `depth_table`, `depth_file`, a one-element `depth_tables`, or a one-element
+`depth_files`; do not combine singular/plural or table/file forms. The low-level
+mode-specific assembler signatures are unchanged.
+
 ## Added public Python capabilities
 
 The following are available from `gbdraw.api`:
