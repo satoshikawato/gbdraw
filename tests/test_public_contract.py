@@ -122,7 +122,6 @@ def _cli_contract(module, minimal_args: list[str], representative_args: list[str
     return {
         "actions_sha256": _hash_json(_parser_actions(parser)),
         "defaults_sha256": _hash_json(_namespace_contract(module._get_args(minimal_args))),
-        "help_sha256": hashlib.sha256(parser.format_help().encode("utf-8")).hexdigest(),
         "representative_sha256": _hash_json(
             _namespace_contract(module._get_args(representative_args))
         ),
