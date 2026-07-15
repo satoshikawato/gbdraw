@@ -201,8 +201,8 @@ SUPPORT_ASSETS: dict[str, SupportAsset] = {
         filename="feature_visibility.tsv",
         content=(
             "record_id\tfeature_type\tqualifier\tvalue\taction\n"
+            "NC_012920.1\tD-loop\tlocation\t^0\\.\\.16569$\tshow\n"
             "NC_012920.1\tCDS\tproduct\t^cytochrome c oxidase subunit I$\toff\n"
-            "*\ttRNA\tproduct\t^tRNA-Leu$\tshow\n"
             "*\tCDS\tproduct\t^ATP synthase F0 subunit 6$\texclude_matching\n"
         ),
     ),
@@ -1269,6 +1269,47 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         ),
         description="README social preview collage.",
     )
+    figures["python_api_circular"] = _figure(
+        figure_id="python_api_circular",
+        output_path="examples/python-api-circular.png",
+        groups=("docs",),
+        required_inputs=("MjeNMV.gb",),
+        recipe=CliRecipe(
+            subcommand="circular",
+            gbk_files=("MjeNMV.gb",),
+            extra_args=(
+                "-k",
+                "CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region",
+                "--species",
+                "Example genome",
+                "--legend",
+                "right",
+            ),
+        ),
+        description="CLI-equivalent rendering of the documented circular Python API example.",
+    )
+    figures["python_api_linear"] = _figure(
+        figure_id="python_api_linear",
+        output_path="examples/python-api-linear.png",
+        groups=("docs",),
+        required_inputs=("MjeNMV.gb", "MelaMJNV.gb", "MjeNMV.MelaMJNV.tblastx.out"),
+        recipe=CliRecipe(
+            subcommand="linear",
+            gbk_files=("MjeNMV.gb", "MelaMJNV.gb"),
+            blast_files=("MjeNMV.MelaMJNV.tblastx.out",),
+            extra_args=(
+                "--evalue",
+                "1e-5",
+                "--bitscore",
+                "0",
+                "--identity",
+                "0",
+                "--show_gc",
+                "--show_skew",
+            ),
+        ),
+        description="CLI-equivalent rendering of the documented linear Python API example.",
+    )
 
     return figures
 
@@ -1715,11 +1756,13 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             gbk_files=("HmmtDNA.gbk",),
             extra_args=(
                 "-k",
-                "CDS,tRNA",
+                "CDS,rRNA,tRNA",
                 "--feature_shape",
                 "CDS=rectangle",
                 "--feature_shape",
-                "tRNA=arrow",
+                "rRNA=rectangle",
+                "--feature_shape",
+                "tRNA=rectangle",
                 "--labels",
                 "out",
                 "--track_type",
@@ -1737,11 +1780,15 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             file_args=(_file_arg("--feature_visibility_table", "feature_visibility.tsv"),),
             extra_args=(
                 "-k",
-                "CDS",
+                "CDS,rRNA,tRNA",
                 "--feature_shape",
                 "CDS=rectangle",
                 "--feature_shape",
-                "tRNA=arrow",
+                "rRNA=rectangle",
+                "--feature_shape",
+                "tRNA=rectangle",
+                "--feature_shape",
+                "D-loop=rectangle",
                 "--labels",
                 "out",
                 "--track_type",

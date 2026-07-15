@@ -22,18 +22,19 @@ If you are working from a source checkout, the same record is available as `test
 ```bash
 gbdraw circular \
   --gbk HmmtDNA.gbk \
-  -k CDS,tRNA \
+  -k CDS,rRNA,tRNA \
   --feature_shape CDS=rectangle \
-  --feature_shape tRNA=arrow \
+  --feature_shape rRNA=rectangle \
+  --feature_shape tRNA=rectangle \
   --labels out \
   --track_type middle \
   -o tutorial-9-feature-shapes \
   -f svg
 ```
 
-Shape overrides apply by feature type. In this result, blue CDS features are rectangles while yellow tRNAs retain arrowheads. Shape overrides do not change colors, labels, or feature selection by themselves.
+Shape overrides apply by feature type. In this result, the CDS, rRNA, and tRNA features are all rectangles, while their colors continue to distinguish the feature types. Shape overrides do not change colors, labels, or feature selection by themselves.
 
-![Human mitochondrial genome with rectangular blue CDS features and arrow-shaped yellow tRNA features](../../examples/tutorial-9-feature-shapes.svg)
+![Human mitochondrial genome with rectangular CDS, rRNA, and tRNA features](../../examples/tutorial-9-feature-shapes.svg)
 
 ## 3. Create a feature visibility table
 
@@ -41,8 +42,8 @@ Create `feature_visibility.tsv`:
 
 ```tsv
 record_id	feature_type	qualifier	value	action
+NC_012920.1	D-loop	location	^0\.\.16569$	show
 NC_012920.1	CDS	product	^cytochrome c oxidase subunit I$	off
-*	tRNA	product	^tRNA-Leu$	show
 *	CDS	product	^ATP synthase F0 subunit 6$	exclude_matching
 ```
 
@@ -61,19 +62,21 @@ Rules are checked from top to bottom, and the first matching row wins.
 ```bash
 gbdraw circular \
   --gbk HmmtDNA.gbk \
-  -k CDS \
+  -k CDS,rRNA,tRNA \
   --feature_visibility_table feature_visibility.tsv \
   --feature_shape CDS=rectangle \
-  --feature_shape tRNA=arrow \
+  --feature_shape rRNA=rectangle \
+  --feature_shape tRNA=rectangle \
+  --feature_shape D-loop=rectangle \
   --labels out \
   --track_type middle \
   -o tutorial-9-feature-visibility \
   -f svg
 ```
 
-The baseline selects only CDS features. The table hides cytochrome c oxidase subunit I and adds the two matching tRNA-Leu features; the shape overrides keep the visible CDS and tRNA types visually distinct:
+The baseline selects the usual CDS, rRNA, and tRNA features. The table adds the origin-spanning D-loop, hides cytochrome c oxidase subunit I, and leaves every other selected feature visible. The shape overrides render all four visible feature types as rectangles:
 
-![Human mitochondrial genome with rectangular CDS features after hiding one CDS and showing two arrow-shaped tRNA-Leu features](../../examples/tutorial-9-feature-visibility.svg)
+![Human mitochondrial genome with rectangular CDS, rRNA, tRNA, and added D-loop features](../../examples/tutorial-9-feature-visibility.svg)
 
 Actions:
 
@@ -88,9 +91,12 @@ Actions:
 ```bash
 gbdraw linear \
   --gbk HmmtDNA.gbk \
-  -k CDS \
+  -k CDS,rRNA,tRNA \
   --feature_visibility_table feature_visibility.tsv \
   --feature_shape CDS=rectangle \
+  --feature_shape rRNA=rectangle \
+  --feature_shape tRNA=rectangle \
+  --feature_shape D-loop=rectangle \
   --show_labels all \
   --label_blacklist NADH \
   -o human-mt-visibility-linear \
