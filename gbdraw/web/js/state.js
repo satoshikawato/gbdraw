@@ -6,6 +6,7 @@ import {
 import { createDefaultLinearDefinitionLineStyles } from './app/cli-args.js';
 import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
 import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
+import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
 import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
 const { ref, reactive, computed } = window.Vue;
@@ -612,6 +613,9 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
+const specificRuleQualifierSuggestions = computed(() =>
+  collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
+);
 const featureSelectorSafetyScope = ref([]); // Python selector scope before feature visibility filtering
 const featuresBySvgId = computed(() => {
   const indexed = new Map();
@@ -1125,6 +1129,7 @@ export const state = {
   manualSpecificRules,
   newSpecRule,
   specificRulePresets,
+  specificRuleQualifierSuggestions,
   selectedSpecificPreset,
   specificRulePresetLoading,
   downloadDpi,

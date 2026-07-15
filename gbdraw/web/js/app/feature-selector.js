@@ -1,10 +1,51 @@
 const FEATURE_ID_KEY_EMPTY = '';
 
+export const SPECIFIC_COLOR_QUALIFIER_PRESETS = Object.freeze([
+  'product',
+  'gene',
+  'locus_tag',
+  'protein_id',
+  'note',
+  'function',
+  'phrog',
+  'vfdb_short_name',
+  'AMR_Gene_Family',
+  'color'
+]);
+
 export const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const exactRegexValue = (value) => `^${escapeRegexLiteral(value)}$`;
 
 export const normalizeSelectorText = (value) => String(value ?? '').trim();
 export const normalizeFeatureIdKey = (value) => normalizeSelectorText(value).toLowerCase();
+
+export const collectSpecificColorQualifierSuggestions = (features = [], rules = []) => {
+  const suggestions = new Set(SPECIFIC_COLOR_QUALIFIER_PRESETS);
+  const addQualifier = (value) => {
+    const qualifier = normalizeSelectorText(value);
+    if (qualifier) suggestions.add(qualifier);
+  };
+  const addQualifierMap = (qualifiers) => {
+    if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) return;
+    Object.keys(qualifiers).forEach(addQualifier);
+  };
+
+  if (Array.isArray(features)) {
+    features.forEach((feature) => {
+      addQualifierMap(feature?.qualifiers);
+      addQualifierMap(feature?.selector?.qualifiers);
+    });
+  }
+  if (Array.isArray(rules)) {
+    rules.forEach((rule) => addQualifier(rule?.qual));
+  }
+
+  const presets = new Set(SPECIFIC_COLOR_QUALIFIER_PRESETS);
+  const custom = [...suggestions]
+    .filter((qualifier) => !presets.has(qualifier))
+    .sort((left, right) => left.localeCompare(right));
+  return [...SPECIFIC_COLOR_QUALIFIER_PRESETS, ...custom];
+};
 
 const firstText = (...values) => {
   for (const value of values) {
