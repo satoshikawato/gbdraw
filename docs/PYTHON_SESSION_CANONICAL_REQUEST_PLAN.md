@@ -3,7 +3,7 @@
 - 作成日: 2026-07-15
 - 対象: Workstream E1～E6、session version 31 の canonical typed request
 - 前提: [`Python Session Compatibility Matrix`](PYTHON_SESSION_COMPATIBILITY_MATRIX.md)
-- 状態: Phase R1～R2 完了。Phase R3 canonical payload codec が次の実装
+- 状態: Phase R1～R3 完了。Phase R4 validated document/materialization が次の実装
 
 ## 0. 目的と境界
 
@@ -147,6 +147,26 @@ normalization は pure function として個別 test できるようにする。
 
 ## 4. Phase R3: canonical payload schema 1
 
+状態: 完了。`gbdraw.session_request_codec` に internal codec を追加したが、root
+`gbdraw.api.__all__` からは export せず、session version も変更していない。
+
+実施結果:
+
+- `request -> JSON-compatible renderRequest + out-of-band resources` と、caller が materialize
+  した resource path から request を復元する codec を追加した。
+- payload は source path と output directory を保持せず、stable resource ID と caller 指定の
+  replay output directory を使用する。
+- GenBank、GFF3+FASTA、in-memory `SeqRecord`、table/file option resource、Circular multi layout、
+  output policy を schema 1 で往復する。
+- Linear comparison は nucleotide BLAST、precomputed protein、orthogroup result、collinearity
+  result、generated protein comparison request を別 kind として表現する。
+- DataFrame は canonical TSV、orthogroup/collinearity metadata は canonical JSON resource にし、
+  schema 1 の unknown field/schema/mode/kind と欠落 resource は typed codec error にする。
+- unknown field policy は silent discard を避ける strict reject とし、required object field は
+  欠落時に default 推測しない。
+- codec/request/API/session/public-contract targeted suite は 297 test、fast 全体 suite は
+  1399 passed（16 skipped、6 deselected）、SVG comparison は 13 test、`ruff check` は成功した。
+
 version 31 の top-level `renderRequest` は次を持つ。
 
 ```json
@@ -178,6 +198,9 @@ schema rule:
 codec は `request -> JSON-compatible payload -> request` の round-trip test を両 mode で持つ。
 
 ## 5. Phase R4: validated document and materialization
+
+状態: 次の実装。R3 codec は base64 decode、temporary directory、session envelope の lifecycle を
+所有しない。
 
 候補 lifecycle:
 

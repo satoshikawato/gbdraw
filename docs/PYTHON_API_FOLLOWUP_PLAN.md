@@ -3,7 +3,7 @@
 - 作成日: 2026-07-14
 - 対象: `docs/PYTHON_API_IMPROVEMENT_PLAN.md` の「13. 次の作業」
 - 対象バージョン: release readiness は `0.14.0b0`、session bridge は設計ゲート通過後のリリース
-- 状態: Workstream A～D、E0、E1 完了。Workstream E2 以降は canonical request 設計を継続
+- 状態: Workstream A～D、E0、canonical request Phase R1～R3 完了。Phase R4 以降を継続
 - 目的: Python API 改修後に残ったテスト安全性、リリース説明、lint debt、option 監査、session 公開境界を、既存契約を壊さず段階的に完了する
 
 ## 0. 結論
@@ -440,7 +440,7 @@ git diff --exit-code -- tests/reference_outputs/
 
 ## 7. Workstream E: CLI 非依存の session bridge
 
-状態: E0、E1、request render foundation 完了、public bridge は gated。version 27～30 から
+状態: E0、typed request、request render、canonical payload codec 完了、public bridge は gated。version 27～30 から
 lossless typed request を復元できないため公開 symbol は追加せず、version 31 canonical
 request の前提実装を進める。
 
@@ -708,8 +708,8 @@ A～D は release-readiness series、E は session-bridge series として分け
 `DiagramOptions` 監査後の validation と E0 compatibility matrix は
 [`PYTHON_API_VALIDATION_PLAN.md`](PYTHON_API_VALIDATION_PLAN.md) で完了した。E0 の結論に従い、
 次は [`PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md`](PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md) の
-Phase R3 として canonical payload schema 1 の codec を実装する。legacy replay の公開や
-version 31 bump は request/schema contract が固まるまで行わない。
+Phase R4 として validated document と resource materialization lifecycle を実装する。legacy
+replay の公開や version 31 bump は Python/Web の reader/writer gate が揃うまで行わない。
 
 ## 9. 共通検証ゲート
 
