@@ -1,8 +1,8 @@
-# ADR: Keep session orchestration outside the public Python API
+# ADR: Canonical session orchestration in the public Python API
 
-- Status: accepted, amended by E0 compatibility review
+- Status: accepted; version 31 bridge implemented
 - Date: 2026-07-14
-- Gate review: 2026-07-15、version 27～30 compatibility matrix 後も判断を維持
+- Gate review: 2026-07-15、version 31 canonical round-trip により公開 gate を開放
 - Related plan: `PYTHON_API_IMPROVEMENT_PLAN.md`, Phase 4
 
 ## Context
@@ -93,3 +93,21 @@ version 31 schema design, not a partial re-export of the current session helpers
 This is the explicit non-public outcome allowed by item 7 of the improvement plan's
 definition of done; exposing a CLI-coupled partial bridge would create a less stable
 contract than leaving the boundary internal.
+
+## Version 31 implementation amendment
+
+The prerequisites above are now satisfied for canonical version 31 documents. The
+public bridge consists of typed Circular/Linear requests, canonical document
+load/build/save functions, a context-owned resource materializer, typed conversion,
+and request/session render functions. `renderRequest` is authoritative for Python
+and Web replay; editor state and prior SVG results remain adjunct artifacts.
+
+Versions 27 through 30 deliberately remain outside public typed conversion. Their
+`cliInvocation` and GUI fallback paths are retained only for internal CLI
+compatibility. A caller attempting `session_to_request()` on those versions receives
+`SessionVersionError` rather than a guessed request.
+
+Every path embedded in a decoded request belongs to the active
+`materialize_session(...)` context. Callers must decode and render inside the
+`with` block; using the materialized session after exit raises
+`SessionResourceError`.

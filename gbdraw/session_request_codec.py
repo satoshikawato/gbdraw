@@ -394,7 +394,9 @@ def _encode_record(
     elif isinstance(source, InMemoryRecordSource):
         stream = StringIO()
         try:
-            SeqIO.write((source.record,), stream, "genbank")
+            serializable_record = deepcopy(source.record)
+            serializable_record.annotations.setdefault("molecule_type", "DNA")
+            SeqIO.write((serializable_record,), stream, "genbank")
         except Exception as exc:
             raise CanonicalRequestEncodingError(
                 f"Could not serialize in-memory record {index} as GenBank."

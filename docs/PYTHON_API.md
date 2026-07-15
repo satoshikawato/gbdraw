@@ -20,7 +20,8 @@ this prevents a Circular-only or Linear-only value from being silently ignored.
 | Label whitelist/priority/override TSV | `read_label_*_table`, `read_qualifier_priority_table` |
 | Rich standalone interactive SVG | `build_interactive_svg_context`, `render_to_bytes`, `save_figure_to` |
 | SVG and binary export | `render_to_bytes`, `save_figure_to` |
-| GUI/CLI session replay | Internal only; see [the session API ADR](./ADR_PYTHON_SESSION_API.md) |
+| Canonical session v31 load/save/replay | `load_session_document`, `materialize_session`, `session_to_request`, `render_session` |
+| Legacy session v27–30 replay | Internal CLI compatibility only; see [the session API ADR](./ADR_PYTHON_SESSION_API.md) |
 
 ## Circular example
 
@@ -222,6 +223,51 @@ except GbdrawError:
 
 assert png_bytes is None or png_bytes.startswith(b"\x89PNG")
 ```
+
+## Canonical session documents
+
+Version 31 sessions store a CLI-independent typed `renderRequest` and embedded
+resources. Decode and render inside the materialization context because every file
+path in the request is temporary and becomes invalid when the context exits.
+
+```python
+from gbdraw.api import (
+    CircularDiagramRequest,
+    InMemoryRecordSource,
+    RecordInput,
+    RenderOutputRequest,
+    load_session_document,
+    materialize_session,
+    render_session,
+    save_session_document,
+)
+
+session_path = output_dir / "api_canonical.gbdraw-session.json"
+session_request = CircularDiagramRequest(
+    records=(RecordInput(source=InMemoryRecordSource(record)),),
+    output=RenderOutputRequest(
+        output_prefix="api_canonical",
+        output_directory=output_dir,
+        overwrite=True,
+    ),
+)
+save_session_document(session_path, session_request)
+document = load_session_document(session_path)
+with materialize_session(document, output_directory=output_dir) as materialized:
+    result = render_session(materialized)
+
+assert all(path.exists() for path in result.output_paths)
+```
+
+Build a new document from a typed request with `build_session_document`, or write it
+atomically with `save_session_document`. `CircularDiagramRequest` and
+`LinearDiagramRequest` accept file-backed or in-memory record sources and a
+`RenderOutputRequest`. Versions 27–30 intentionally raise `SessionVersionError`
+from the public typed conversion; their legacy CLI replay is not a public API.
+
+Session failures are grouped under `SessionError`, with specific
+`SessionFormatError`, `SessionVersionError`, `SessionResourceError`,
+`SessionConversionError`, and `SessionRenderError` subclasses.
 
 ## Errors and stability
 

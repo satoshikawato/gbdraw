@@ -2,7 +2,7 @@
 
 - 調査日: 2026-07-15
 - 対象: session version 27～30、GUI-authored / CLI sidecar、Circular / Linear
-- 結論: internal replay は維持できるが、public typed request への lossless conversion は未達
+- 結論: version 27～30 は internal replay のみ。version 31 は canonical public typed conversion を提供
 - 関連 ADR: [`ADR_PYTHON_SESSION_API.md`](ADR_PYTHON_SESSION_API.md)
 
 ## 1. 判定基準

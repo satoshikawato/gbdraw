@@ -302,6 +302,14 @@ def test_web_cli_arg_helpers_omit_default_values() -> None:
     subprocess.run([node, "tests/web/cli-args.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_canonical_session_request_codec() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/session-request.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_losat_settings_preserve_requested_thread_count() -> None:
     node = shutil.which("node")
     if node is None:
@@ -837,6 +845,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
 
         assert svg_path.stat().st_size > 1024
         assert session_path.stat().st_size > 1024
+        assert session_path.stat().st_size < 100_000_000
         assert source_figure_path.stat().st_size > 1024
         assert thumbnail_path.stat().st_size > 1024
         assert '"format":"gbdraw-session"' in session_prefix

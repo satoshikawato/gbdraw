@@ -50,11 +50,15 @@ import {
   buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState
 } from '../app/session-feature-metadata.js';
+import {
+  buildCanonicalSessionRequest,
+  projectCanonicalSessionRequest
+} from './session-request.js';
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 30;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, SESSION_VERSION]);
+const SESSION_VERSION = 31;
+const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
 const LOSAT_DERIVED_CACHE_SCHEMA = 1;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -765,10 +769,17 @@ const normalizeSessionData = (data) => {
   if (!SUPPORTED_SESSION_VERSIONS.has(version)) {
     throw new Error(`Unsupported session version: ${version}.`);
   }
+  if (version === SESSION_VERSION) {
+    if (!isPlainObject(data.renderRequest)) {
+      throw new Error('Session version 31 requires a canonical renderRequest object.');
+    }
+    if (!isPlainObject(data.resources)) {
+      throw new Error('Session version 31 requires a canonical resources object.');
+    }
+  }
 
   return {
     ...data,
-    version: SESSION_VERSION,
     editorState: normalizeEditorStateData(data.editorState)
   };
 };
@@ -2378,6 +2389,8 @@ export const exportSession = async (titleOverride = null) => {
   const exportableCliInvocation = isCliInvocationSessionExportable(lastRunInvocation)
     ? cloneJsonData(lastRunInvocation)
     : undefined;
+  const serializedFiles = await serializeFiles();
+  const canonical = buildCanonicalSessionRequest({ state, filesData: serializedFiles });
   const sessionData = {
     format: 'gbdraw-session',
     version: SESSION_VERSION,
@@ -2415,7 +2428,9 @@ export const exportSession = async (titleOverride = null) => {
       pendingPaletteName: state.pendingPaletteName.value,
       pendingPaletteColors: cloneColors(state.pendingPaletteColors.value)
     },
-    files: await serializeFiles(),
+    renderRequest: canonical.renderRequest,
+    resources: canonical.resources,
+    files: serializedFiles,
     results: serializeResults(),
     features: {
       extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
@@ -2483,11 +2498,28 @@ export const importSession = async (e, options = {}) => {
     data = normalizeSessionData(data);
     resetSessionBaseline();
 
-    const ui = data.ui || {};
+    const canonicalProjection = data.version === SESSION_VERSION
+      ? projectCanonicalSessionRequest({
+          renderRequest: data.renderRequest,
+          resources: data.resources
+        })
+      : null;
+    const ui = {
+      ...(data.ui || {}),
+      ...(canonicalProjection ? { mode: canonicalProjection.mode } : {})
+    };
     state.sessionTitle.value = typeof data.title === 'string' ? data.title : '';
     if (ui.mode) state.mode.value = ui.mode;
-    if (ui.cInputType) state.cInputType.value = ui.cInputType;
-    if (ui.lInputType) state.lInputType.value = ui.lInputType;
+    if (canonicalProjection) {
+      if (canonicalProjection.mode === 'circular') {
+        state.cInputType.value = canonicalProjection.inputType;
+      } else {
+        state.lInputType.value = canonicalProjection.inputType;
+      }
+    } else {
+      if (ui.cInputType) state.cInputType.value = ui.cInputType;
+      if (ui.lInputType) state.lInputType.value = ui.lInputType;
+    }
     if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
     // The mode watcher clears feature/editor state. Let that reset finish before
     // restoring session-owned metadata such as extractedFeatures.
@@ -2516,7 +2548,12 @@ export const importSession = async (e, options = {}) => {
       ? normalizeCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition)
       : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
 
-    if (data.config) {
+    if (canonicalProjection) {
+      state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
+        canonicalProjection.config.form
+      );
+      applyConfigData(canonicalProjection.config);
+    } else if (data.config) {
       hydrateMissingMultiRecordPositionsFromCliInvocation(data.config, data.cliInvocation);
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
       validateImportedCircularTrackSlots(data.config);
@@ -2527,7 +2564,9 @@ export const importSession = async (e, options = {}) => {
     restoreSessionCircularLayoutCaches(ui);
     restoreSessionPlotTitlePositions(ui);
 
-    const { collapsedLinearSeqs } = applyFiles(data.files);
+    const { collapsedLinearSeqs } = applyFiles(
+      canonicalProjection ? canonicalProjection.files : data.files
+    );
     reconcileDepthTrackStateAfterSessionFiles();
     applyLosatCache(data.losatCache?.entries);
     applyLosatDerivedCache(data.losatDerivedCache?.entries);

@@ -9,7 +9,7 @@ import argparse
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import (
@@ -26,6 +26,9 @@ from gbdraw.session_io import (
     serialize_file_entry,
     write_session_json,
 )
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import DiagramRequest
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,7 @@ class DiagramRunResult:
     losat_cache_entries: tuple[Mapping[str, Any], ...] | None = None
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
+    canonical_request: DiagramRequest | None = None
 
 
 @dataclass(frozen=True)
@@ -268,6 +272,7 @@ def save_session_sidecar_if_requested(
         embedded_files=session_files,
         generated_at=datetime.now(timezone.utc),
         losat_cache_entries=run_result.losat_cache_entries,
+        canonical_request=run_result.canonical_request,
     )
     if run_result.feature_metadata:
         features_payload = payload.setdefault("features", {})
@@ -277,6 +282,97 @@ def save_session_sidecar_if_requested(
             ]
     write_session_json(sidecar_path, payload)
     return sidecar_path
+
+
+def render_canonical_session_if_present(
+    session: Mapping[str, Any],
+    *,
+    mode: Literal["circular", "linear"],
+    output_override: str | None,
+    format_override: str | None,
+    save_session: bool,
+    session_output: str | None,
+) -> bool:
+    """Render an authoritative version 31 request and bypass legacy CLI replay."""
+
+    from gbdraw.session import (
+        load_session_document,
+        materialize_session,
+        save_session_document,
+        session_to_request,
+        with_request_output,
+    )
+    from gbdraw.session_io import CURRENT_SESSION_VERSION
+
+    if session.get("version") != CURRENT_SESSION_VERSION:
+        return False
+    document = load_session_document(session)
+    if document.mode != mode:
+        raise ValidationError(
+            f"Session renderRequest mode is {document.mode!r}; expected {mode!r}."
+        )
+
+    output_path = Path(output_override) if output_override else None
+    output_directory = (
+        output_path.parent if output_path is not None and output_path.parent != Path("") else Path.cwd()
+    )
+    with materialize_session(
+        document,
+        output_directory=output_directory,
+    ) as materialized:
+        request = session_to_request(materialized)
+        request = with_request_output(
+            request,
+            output_prefix=output_path.name if output_path is not None else None,
+            output_directory=output_directory,
+            formats=format_override,
+        )
+        rendered = _render_request(request)
+
+        if save_session or session_output:
+            sidecar_path = (
+                Path(session_output)
+                if session_output
+                else output_directory / f"{request.output.output_prefix}.gbdraw-session.json"
+            )
+            adjunct = {
+                key: value
+                for key, value in document.to_dict().items()
+                if key
+                not in {
+                    "format",
+                    "version",
+                    "createdAt",
+                    "renderRequest",
+                    "resources",
+                }
+            }
+            svg_results = []
+            for output in rendered.output_paths:
+                if output.suffix.lower() != ".svg" or not output.is_file():
+                    continue
+                if output.name.lower().endswith(".interactive.svg"):
+                    continue
+                svg_results.append(
+                    {"name": output.stem, "content": output.read_text(encoding="utf-8")}
+                )
+            if svg_results:
+                adjunct["results"] = svg_results
+            save_session_document(
+                sidecar_path,
+                request,
+                title=str(document.to_dict().get("title") or request.output.output_prefix),
+                adjunct=adjunct,
+            )
+    return True
+
+
+def _render_request(request):
+    """Import the request renderer lazily to keep CLI session imports lightweight."""
+
+    from gbdraw.api.request_render import render_request
+
+    return render_request(request)
 
 
 def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
@@ -664,6 +760,7 @@ __all__ = [
     "make_rendered_svg",
     "parse_session_pre_args",
     "resolve_session_sidecar_path",
+    "render_canonical_session_if_present",
     "save_session_sidecar_if_requested",
     "strip_session_output_args",
     "validate_session_override_args",

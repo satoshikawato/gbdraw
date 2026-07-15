@@ -72,8 +72,44 @@ from .options import (
     TrackOptions,
 )
 from .render import parse_formats, render_to_bytes, save_figure, save_figure_to
+from .request_render import (
+    PreparedDiagramRequest,
+    RequestRenderResult,
+    build_request_diagram,
+    normalize_request_records,
+    render_request,
+)
+from .requests import (
+    CircularDiagramRequest,
+    DiagramRequest,
+    GenBankInputSource,
+    GffFastaInputSource,
+    InMemoryRecordSource,
+    LinearDiagramRequest,
+    RecordInput,
+    RecordInputSource,
+    RecordPresentation,
+    RenderOutputRequest,
+)
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from gbdraw.session import (
+    MaterializedSession,
+    SessionConversionError,
+    SessionDocument,
+    SessionError,
+    SessionFormatError,
+    SessionRenderError,
+    SessionResourceError,
+    SessionVersionError,
+    build_session_document,
+    load_session_document,
+    materialize_session,
+    render_session,
+    save_session_document,
+    session_to_request,
+    with_request_output,
+)
 from .tracks import (  # type: ignore[reportMissingImports]
     CircularTrackRendererName,
     CircularTrackSide,
@@ -173,6 +209,38 @@ __all__ = [
     "render_to_bytes",
     "save_figure",
     "save_figure_to",
+    # typed requests
+    "CircularDiagramRequest",
+    "DiagramRequest",
+    "GenBankInputSource",
+    "GffFastaInputSource",
+    "InMemoryRecordSource",
+    "LinearDiagramRequest",
+    "RecordInput",
+    "RecordInputSource",
+    "RecordPresentation",
+    "RenderOutputRequest",
+    "PreparedDiagramRequest",
+    "RequestRenderResult",
+    "build_request_diagram",
+    "normalize_request_records",
+    "render_request",
+    # canonical sessions
+    "MaterializedSession",
+    "SessionConversionError",
+    "SessionDocument",
+    "SessionError",
+    "SessionFormatError",
+    "SessionRenderError",
+    "SessionResourceError",
+    "SessionVersionError",
+    "build_session_document",
+    "load_session_document",
+    "materialize_session",
+    "render_session",
+    "save_session_document",
+    "session_to_request",
+    "with_request_output",
     # tracks (foundation)
     "CircularTrackRendererName",
     "CircularTrackSide",

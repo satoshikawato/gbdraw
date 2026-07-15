@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
 import gbdraw.circular as circular_cli_module
 from gbdraw.circular import circular_main
@@ -20,6 +22,12 @@ from gbdraw.cli_utils.session import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import read_records_table
 from gbdraw.render.formats import ACCEPTED_FORMATS
+from gbdraw.api.requests import (
+    CircularDiagramRequest,
+    InMemoryRecordSource,
+    LinearDiagramRequest,
+    RecordInput,
+)
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
@@ -48,12 +56,20 @@ def _file_entry(name: str, content: bytes) -> dict:
 def _minimal_session(files: dict, *, mode: str = "circular") -> dict:
     return {
         "format": SESSION_FORMAT,
-        "version": CURRENT_SESSION_VERSION,
+        "version": 30,
         "createdAt": "2026-06-22T00:00:00Z",
         "config": {"form": {"prefix": "out"}, "adv": {}},
         "ui": {"mode": mode, "cInputType": "gb", "lInputType": "gb"},
         "files": files,
     }
+
+
+def _canonical_request(mode: str):
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    record_input = RecordInput(source=InMemoryRecordSource(record))
+    if mode == "linear":
+        return LinearDiagramRequest(records=(record_input,))
+    return CircularDiagramRequest(records=(record_input,))
 
 
 def test_current_session_version_matches_web_config() -> None:
@@ -521,6 +537,7 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 6, 23),
+        canonical_request=_canonical_request("linear"),
     )
 
     config = payload["config"]
@@ -612,6 +629,7 @@ def test_cli_session_config_populates_safe_linear_row_fields() -> None:
             ]
         },
         generated_at=datetime(2026, 6, 23),
+        canonical_request=_canonical_request("linear"),
     )
 
     seqs = payload["files"]["linearSeqs"]
@@ -675,6 +693,7 @@ def test_cli_session_config_omits_ambiguous_multi_record_row_fields() -> None:
             ]
         },
         generated_at=datetime(2026, 6, 23),
+        canonical_request=_canonical_request("linear"),
     )
 
     seq = payload["files"]["linearSeqs"][0]

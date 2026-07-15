@@ -16,16 +16,19 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePath, PureWindowsPath
-from typing import Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 from .definition_line_styles import DEFINITION_LINE_KINDS, parse_definition_line_style_overrides
 from .exceptions import ValidationError
 from .io.regions import RegionSpec, parse_region_specs
 from .render.formats import normalize_format_token
 
+if TYPE_CHECKING:
+    from .api.requests import DiagramRequest
+
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 30
-SUPPORTED_SESSION_VERSIONS = frozenset({27, 28, 29, CURRENT_SESSION_VERSION})
+CURRENT_SESSION_VERSION = 31
+SUPPORTED_SESSION_VERSIONS = frozenset({27, 28, 29, 30, CURRENT_SESSION_VERSION})
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -68,7 +71,10 @@ def load_session(path: str | Path) -> dict[str, Any]:
 
     session_path = Path(path)
     try:
-        payload = json.loads(session_path.read_text(encoding="utf-8"))
+        payload = json.loads(
+            session_path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
     except json.JSONDecodeError as exc:
         raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
     except OSError as exc:
@@ -96,13 +102,34 @@ def validate_session(session: Mapping[str, Any]) -> None:
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
-    files = session.get("files")
-    if files is None or not isinstance(files, Mapping):
-        raise ValidationError("Session files are required for CLI regeneration.")
+    if version == CURRENT_SESSION_VERSION:
+        render_request = session.get("renderRequest")
+        resources = session.get("resources")
+        if not isinstance(render_request, Mapping):
+            raise ValidationError(
+                "Session version 31 requires a canonical renderRequest object."
+            )
+        if not isinstance(resources, Mapping):
+            raise ValidationError(
+                "Session version 31 requires a canonical resources object."
+            )
+        files = session.get("files")
+        if files is not None and not isinstance(files, Mapping):
+            raise ValidationError("Session files must be an object when present.")
+    else:
+        files = session.get("files")
+        if files is None or not isinstance(files, Mapping):
+            raise ValidationError("Session files are required for CLI regeneration.")
 
 
 def session_mode(session: Mapping[str, Any]) -> str | None:
     """Return the declared session mode when available."""
+
+    render_request = session.get("renderRequest")
+    if isinstance(render_request, Mapping):
+        mode = render_request.get("mode")
+        if mode in {"circular", "linear"}:
+            return str(mode)
 
     cli_invocation = session.get("cliInvocation")
     if isinstance(cli_invocation, Mapping):
@@ -115,6 +142,17 @@ def session_mode(session: Mapping[str, Any]) -> str | None:
         if mode in {"circular", "linear"}:
             return str(mode)
     return None
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object keys before the decoder can discard them."""
+
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValidationError(f"Session JSON contains a duplicate object key: {key!r}.")
+        result[key] = value
+    return result
 
 
 def safe_embedded_filename(name: object, *, fallback: str = "embedded-file") -> str:
@@ -245,6 +283,7 @@ def materialize_embedded_file(
     *,
     temp_dir: Path,
     role: str,
+    prefix_role: bool = True,
 ) -> Path:
     """Decode one embedded session file into temp_dir and return its path."""
 
@@ -252,7 +291,10 @@ def materialize_embedded_file(
     if not isinstance(entry, Mapping):
         raise ValidationError(f"Embedded file for {role} is missing or invalid.")
     filename = safe_embedded_filename(entry.get("name"), fallback=f"{role}.dat")
-    output_path = temp_dir / f"{safe_embedded_filename(role)}-{filename}"
+    output_name = (
+        f"{safe_embedded_filename(role)}-{filename}" if prefix_role else filename
+    )
+    output_path = temp_dir / output_name
     output_path = _assert_under_directory(output_path, temp_dir)
 
     if entry.get("encoding") == DEPTH_FILE_ENCODING:
@@ -299,6 +341,11 @@ def session_to_cli_args(
     """Convert a GUI/CLI session into normal CLI arguments and temp files."""
 
     validate_session(session)
+    if session.get("version") == CURRENT_SESSION_VERSION:
+        raise ValidationError(
+            "Version 31 renderRequest is authoritative and cannot be replayed through "
+            "legacy CLI arguments."
+        )
     if format_override is not None:
         format_override = ",".join(
             normalize_format_token(value) for value in format_override.split(",")
@@ -335,6 +382,7 @@ def build_session_json(
     embedded_files: Mapping[str, Any],
     generated_at: datetime,
     losat_cache_entries: Sequence[Mapping[str, Any]] | None = None,
+    canonical_request: DiagramRequest | None = None,
 ) -> dict[str, Any]:
     """Build a GUI-loadable session JSON payload from a CLI run."""
 
@@ -392,6 +440,24 @@ def build_session_json(
         "fileBindings": [_binding_to_json(binding) for binding in context.file_bindings],
         "generatedBy": "gbdraw",
     }
+    if canonical_request is not None:
+        from .session import build_session_document
+
+        canonical = build_session_document(
+            canonical_request,
+            created_at=generated_at,
+        ).to_dict()
+        payload["renderRequest"] = canonical["renderRequest"]
+        payload["resources"] = canonical["resources"]
+    elif context.source_session is not None and isinstance(
+        context.source_session.get("renderRequest"), Mapping
+    ) and isinstance(context.source_session.get("resources"), Mapping):
+        payload["renderRequest"] = _json_clone(context.source_session["renderRequest"])
+        payload["resources"] = _json_clone(context.source_session["resources"])
+    else:
+        raise ValidationError(
+            "A canonical typed request is required to write a version 31 session."
+        )
     return payload
 
 

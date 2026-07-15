@@ -132,6 +132,8 @@ def _refresh_one_session(session_path: Path) -> None:
                 str(session_path),
                 "-f",
                 "interactive_svg",
+                "-o",
+                "out",
                 "--session_output",
                 str(refreshed_session),
             ],

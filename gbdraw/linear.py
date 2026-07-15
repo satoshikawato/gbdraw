@@ -3,6 +3,7 @@
 
 
 import argparse
+import copy
 import hashlib
 import json
 import logging
@@ -23,6 +24,13 @@ from .render.formats import INTERACTIVE_SVG_FORMAT
 from .render.interactive_svg import InteractiveSvgContext
 from .render.interactive_context import build_interactive_svg_context
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
+from .api.options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
+from .api.requests import (
+    InMemoryRecordSource,
+    LinearDiagramRequest,
+    RecordInput,
+    RenderOutputRequest,
+)
 from .definition_line_styles import (
     parse_definition_line_style_assignment,
     parse_definition_line_style_overrides,
@@ -90,6 +98,7 @@ from .cli_utils.session import (
     collect_track_slot_geometry_records,
     make_rendered_svg,
     parse_session_pre_args,
+    render_canonical_session_if_present,
     save_session_sidecar_if_requested,
 )
 from .session_io import load_session, session_to_cli_args
@@ -1178,6 +1187,15 @@ def linear_main(cmd_args) -> None:
     if session_request is not None:
         with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
             session = load_session(session_request.session_path)
+            if render_canonical_session_if_present(
+                session,
+                mode="linear",
+                output_override=session_request.output,
+                format_override=session_request.format,
+                save_session=session_request.save_session,
+                session_output=session_request.session_output,
+            ):
+                return
             run_spec = session_to_cli_args(
                 session,
                 mode="linear",
@@ -1792,6 +1810,90 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         result_name=rendered_svg.svg_path.name,
     )
 
+    canonical_config = copy.deepcopy(config_dict)
+    canonical_filtering = canonical_config["labels"]["filtering"]
+    qualifier_priority_table = canonical_filtering.pop("qualifier_priority_df", None)
+    label_whitelist_table = canonical_filtering.pop("whitelist_df", None)
+    label_override_table = canonical_filtering.pop("label_override_df", None)
+    request_prefix = Path(rendered_svg.output_prefix).name
+    canonical_request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=InMemoryRecordSource(record)) for record in records
+        ),
+        options=DiagramOptions(
+            config=canonical_config,
+            colors=ColorOptions(
+                color_table=color_table,
+                default_colors=default_colors,
+                default_colors_palette=palette,
+            ),
+            tracks=TrackOptions(
+                linear_track_slots=linear_track_slot_specs,
+                linear_track_axis_index=linear_track_axis_index,
+            ),
+            output=OutputOptions(
+                output_prefix=request_prefix,
+                legend=legend,
+                plot_title_position=plot_title_position,
+            ),
+            selected_features_set=tuple(selected_features_set),
+            feature_visibility_table=feature_table,
+            label_whitelist_table=label_whitelist_table,
+            qualifier_priority_table=qualifier_priority_table,
+            label_override_table=label_override_table,
+            feature_shapes=feature_shapes or None,
+            dinucleotide=dinucleotide,
+            window=window,
+            step=step,
+            depth_window=depth_window,
+            depth_step=depth_step,
+            depth_files=tuple(depth_files) if depth_files else None,
+            depth_track_files=depth_track_files,
+            depth_track_labels=depth_track_labels,
+            depth_track_colors=depth_track_colors,
+            depth_track_heights=depth_track_heights,
+            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+            plot_title=plot_title or None,
+            plot_title_font_size=plot_title_font_size,
+            blast_files=tuple(blast_files) if blast_files else None,
+            protein_comparisons=(
+                tuple(collinearity_comparisons)
+                if collinearity_comparisons is not None
+                else None
+            ),
+            orthogroups=collinearity_orthogroups,
+            protein_blastp_mode=(
+                "none" if collinearity_comparisons is not None else protein_blastp_mode
+            ),
+            pairwise_match_style=pairwise_match_style,
+            collinearity_params=collinearity_params,
+            collinearity_unit_mode=collinear_unit_mode,
+            collinearity_anchor_mode=collinear_anchor_mode,
+            collinearity_search_scope=collinear_search_scope,
+            collinearity_color_mode=collinear_color_mode,
+            losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
+            losatp_threads=losatp_threads,
+            protein_blastp_max_hits=protein_blastp_max_hits,
+            protein_blastp_candidate_limit=protein_blastp_candidate_limit,
+            orthogroup_membership_mode=orthogroup_membership_mode,
+            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            collinear_max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
+            align_orthogroup_feature=align_orthogroup_feature or None,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        ),
+        output=RenderOutputRequest(
+            output_prefix=request_prefix,
+            formats=tuple(out_formats),
+            overwrite=True,
+        ),
+    )
+
     return DiagramRunResult(
         mode="linear",
         render_formats=tuple(out_formats),
@@ -1803,6 +1905,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             mode="linear",
             records=track_slot_geometry_records,
         ),
+        canonical_request=canonical_request,
     )
 
 

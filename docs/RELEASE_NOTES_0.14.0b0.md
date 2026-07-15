@@ -2,10 +2,22 @@
 
 # gbdraw 0.14.0b0 release notes
 
-`gbdraw.api` grows from 70 to 87 exported symbols in this beta. The new entries
-cover table readers, multi-record circular diagrams, and interactive SVG metadata.
+`gbdraw.api` grows from 70 to 117 exported symbols in this beta. The new entries
+cover table readers, multi-record circular diagrams, interactive SVG metadata,
+typed render requests, and canonical session documents.
 Two behavior fixes make accepted options and returned paths match the work
 performed by the library.
+
+## Canonical Python/Web sessions
+
+- Session version 31 adds a CLI-independent typed `renderRequest` and stable embedded
+  resource map shared by Python and the Web app.
+- `gbdraw.api` now exposes typed Circular/Linear requests, canonical session
+  load/build/save, context-owned materialization, conversion/render results, and
+  session-specific error classes.
+- Version 31 replay treats `renderRequest` as authoritative. Versions 27–30 retain
+  internal CLI compatibility but are intentionally not converted by the public typed
+  bridge.
 
 ## Behavior corrections
 

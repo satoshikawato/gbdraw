@@ -3,6 +3,7 @@
 
 import sys
 import argparse
+import copy
 import logging
 import math
 from pathlib import Path
@@ -27,6 +28,19 @@ from .render.interactive_context import build_interactive_svg_context
 from .api.diagram import (  # type: ignore[reportMissingImports]
     assemble_circular_diagram_from_record,
     assemble_circular_diagram_from_records,
+)
+from .api.options import (
+    CircularMultiRecordOptions,
+    ColorOptions,
+    DiagramOptions,
+    OutputOptions,
+    TrackOptions,
+)
+from .api.requests import (
+    CircularDiagramRequest,
+    InMemoryRecordSource,
+    RecordInput,
+    RenderOutputRequest,
 )
 from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -81,6 +95,7 @@ from .cli_utils.session import (
     collect_track_slot_geometry_records,
     make_rendered_svg,
     parse_session_pre_args,
+    render_canonical_session_if_present,
     save_session_sidecar_if_requested,
 )
 from .session_io import load_session, session_to_cli_args
@@ -619,6 +634,15 @@ def circular_main(cmd_args) -> None:
     if session_request is not None:
         with TemporaryDirectory(prefix="gbdraw-session-") as temp_dir:
             session = load_session(session_request.session_path)
+            if render_canonical_session_if_present(
+                session,
+                mode="circular",
+                output_override=session_request.output,
+                format_override=session_request.format,
+                save_session=session_request.save_session,
+                session_output=session_request.session_output,
+            ):
+                return
             run_spec = session_to_cli_args(
                 session,
                 mode="circular",
@@ -1165,6 +1189,88 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             )
             outputs.append(rendered_svg)
 
+    canonical_request = None
+    if len(gb_records) == 1 or multi_record_canvas:
+        canonical_config = copy.deepcopy(config_dict)
+        canonical_filtering = canonical_config["labels"]["filtering"]
+        qualifier_priority_table = canonical_filtering.pop("qualifier_priority_df", None)
+        label_whitelist_table = canonical_filtering.pop("whitelist_df", None)
+        label_override_table = canonical_filtering.pop("label_override_df", None)
+        request_prefix = Path(outputs[0].output_prefix).name if outputs else "out"
+        canonical_request = CircularDiagramRequest(
+            records=tuple(
+                RecordInput(source=InMemoryRecordSource(record))
+                for record in gb_records
+            ),
+            options=DiagramOptions(
+                config=canonical_config,
+                colors=ColorOptions(
+                    color_table=color_table,
+                    default_colors=default_colors,
+                    default_colors_palette=palette,
+                ),
+                tracks=TrackOptions(
+                    circular_track_slots=circular_track_slots_or_none,
+                    circular_track_axis_index=circular_track_axis_index,
+                    center_reserved_radius=center_reserved_radius,
+                ),
+                output=OutputOptions(
+                    output_prefix=request_prefix,
+                    legend=legend,
+                    plot_title_position=plot_title_position,
+                ),
+                selected_features_set=tuple(selected_features_set),
+                feature_visibility_table=feature_table,
+                label_whitelist_table=label_whitelist_table,
+                qualifier_priority_table=qualifier_priority_table,
+                label_override_table=label_override_table,
+                feature_shapes=feature_shapes or None,
+                dinucleotide=dinucleotide,
+                window=manual_window,
+                step=manual_step,
+                depth_window=depth_window,
+                depth_step=depth_step,
+                depth_table=depth_table,
+                depth_track_files=depth_track_files,
+                depth_track_labels=depth_track_labels,
+                depth_track_colors=depth_track_colors,
+                depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+                depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+                depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+                conservation_blast_files=conservation_blast_files,
+                conservation_reference=conservation_reference,
+                conservation_labels=conservation_labels,
+                conservation_colors=conservation_colors,
+                conservation_ring_width=conservation_ring_width,
+                conservation_ring_gap=conservation_ring_gap,
+                plot_title=plot_title or None,
+                plot_title_font_size=plot_title_font_size,
+                keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+                species=species or None,
+                strain=strain or None,
+                evalue=evalue,
+                bitscore=bitscore,
+                identity=identity,
+                alignment_length=alignment_length,
+            ),
+            layout=(
+                CircularMultiRecordOptions(
+                    multi_record_size_mode=multi_record_size_mode,
+                    multi_record_min_radius_ratio=multi_record_min_radius_ratio,
+                    multi_record_column_gap_ratio=multi_record_column_gap_ratio,
+                    multi_record_row_gap_ratio=multi_record_row_gap_ratio,
+                    multi_record_positions=multi_record_positions or None,
+                )
+                if multi_record_canvas
+                else None
+            ),
+            output=RenderOutputRequest(
+                output_prefix=request_prefix,
+                formats=tuple(out_formats),
+                overwrite=True,
+            ),
+        )
+
     return DiagramRunResult(
         mode="circular",
         render_formats=tuple(out_formats),
@@ -1174,6 +1280,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             mode="circular",
             records=track_slot_geometry_records,
         ),
+        canonical_request=canonical_request,
     )
 
 if __name__ == "__main__":
