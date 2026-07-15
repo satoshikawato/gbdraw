@@ -308,6 +308,24 @@ def test_web_canonical_session_request_codec() -> None:
         pytest.skip("node is not available")
 
     subprocess.run([node, "tests/web/session-request.test.mjs"], check=True, cwd=REPO_ROOT)
+    subprocess.run(
+        [
+            node,
+            "tests/web/session-request.test.mjs",
+            "--project-session",
+            str(
+                GALLERY_ROOT
+                / "sessions"
+                / "hepatoplasmataceae_orthogroup.gbdraw-session.json"
+            ),
+        ],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(
+        encoding="utf-8"
+    )
+    assert "files: serializedFiles" not in config_source
 
 
 def test_web_losat_settings_preserve_requested_thread_count() -> None:

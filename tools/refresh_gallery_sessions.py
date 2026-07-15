@@ -17,7 +17,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from gbdraw.session_io import load_session, session_mode, write_session_json  # noqa: E402
+from gbdraw.session_io import (  # noqa: E402
+    CURRENT_SESSION_VERSION,
+    load_session,
+    session_mode,
+    write_session_json,
+)
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 
 
@@ -34,6 +39,13 @@ GALLERY_SESSION_FILES = (
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
     "lambda_basic_linear.gbdraw-session.json",
+)
+
+_DERIVABLE_CANONICAL_GALLERY_FIELDS = (
+    "files",
+    "features",
+    "losatCache",
+    "losatDerivedCache",
 )
 
 
@@ -101,6 +113,15 @@ def _preserve_gallery_cli_invocation(
     return True
 
 
+def _prune_derivable_canonical_gallery_fields(session: dict[str, Any]) -> None:
+    """Keep bundled v31 sessions self-contained without duplicated caches."""
+
+    if session.get("version") != CURRENT_SESSION_VERSION:
+        return
+    for field in _DERIVABLE_CANONICAL_GALLERY_FIELDS:
+        session.pop(field, None)
+
+
 def _refresh_one_session(session_path: Path) -> None:
     session = load_session(session_path)
     mode = session_mode(session)
@@ -147,6 +168,7 @@ def _refresh_one_session(session_path: Path) -> None:
             refreshed_payload,
             mode=mode,
         )
+        _prune_derivable_canonical_gallery_fields(refreshed_payload)
         write_session_json(refreshed_session, refreshed_payload)
         load_session(refreshed_session)
         shutil.move(str(refreshed_session), session_path)

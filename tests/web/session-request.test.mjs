@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -97,5 +97,21 @@ assert.equal(projection.mode, 'circular');
 assert.equal(projection.inputType, 'gb');
 assert.equal(projection.files.c_gb.data, genbank.data);
 assert.equal(projection.config.form.prefix, 'web-session');
+
+const projectSessionIndex = process.argv.indexOf('--project-session');
+if (projectSessionIndex >= 0) {
+  const sessionPath = process.argv[projectSessionIndex + 1];
+  assert.ok(sessionPath, '--project-session requires a path');
+  const session = JSON.parse(await readFile(sessionPath, 'utf8'));
+  const projectedSession = projectCanonicalSessionRequest({
+    renderRequest: session.renderRequest,
+    resources: session.resources
+  });
+  assert.ok(['circular', 'linear'].includes(projectedSession.mode));
+  assert.ok(
+    projectedSession.files.c_gb || projectedSession.files.linearSeqs.length > 0,
+    'projected session must restore at least one input record'
+  );
+}
 
 if (process.argv.includes('--print')) console.log(JSON.stringify(canonical));

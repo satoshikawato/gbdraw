@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.refresh_gallery_sessions import (
+    _prune_derivable_canonical_gallery_fields,
     _preserve_gallery_cli_invocation,
     _with_interactive_svg_format,
 )
@@ -110,6 +111,28 @@ def test_preserve_gallery_cli_invocation_reports_missing_source_cli() -> None:
         "-f",
         "interactive_svg",
     ]
+
+
+def test_prune_derivable_canonical_gallery_fields_keeps_authority_and_preview() -> None:
+    session = {
+        "version": 31,
+        "renderRequest": {"schema": 1},
+        "resources": {"record-1-genbank": {}},
+        "results": [{"name": "preview", "content": "<svg/>"}],
+        "files": {"c_gb": {}},
+        "features": {"extractedFeatures": []},
+        "losatCache": {"entries": []},
+        "losatDerivedCache": {"entries": []},
+    }
+
+    _prune_derivable_canonical_gallery_fields(session)
+
+    assert session == {
+        "version": 31,
+        "renderRequest": {"schema": 1},
+        "resources": {"record-1-genbank": {}},
+        "results": [{"name": "preview", "content": "<svg/>"}],
+    }
 
 
 def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:

@@ -2430,7 +2430,6 @@ export const exportSession = async (titleOverride = null) => {
     },
     renderRequest: canonical.renderRequest,
     resources: canonical.resources,
-    files: serializedFiles,
     results: serializeResults(),
     features: {
       extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),

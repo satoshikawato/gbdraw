@@ -274,6 +274,7 @@ def save_session_sidecar_if_requested(
         losat_cache_entries=run_result.losat_cache_entries,
         canonical_request=run_result.canonical_request,
     )
+    payload.pop("files", None)
     if run_result.feature_metadata:
         features_payload = payload.setdefault("features", {})
         if isinstance(features_payload, dict):
@@ -345,6 +346,7 @@ def render_canonical_session_if_present(
                     "createdAt",
                     "renderRequest",
                     "resources",
+                    "files",
                 }
             }
             svg_results = []

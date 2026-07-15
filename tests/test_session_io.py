@@ -794,7 +794,8 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     payload = load_session(session_path)
     assert payload["format"] == SESSION_FORMAT
     assert payload["version"] == CURRENT_SESSION_VERSION
-    assert payload["files"]["c_gb"]["data"]
+    assert "files" not in payload
+    assert payload["resources"]["record-1-genbank"]["data"]
     assert "<svg" in payload["results"][0]["content"]
     assert payload["cliInvocation"]["mode"] == "circular"
     assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.c_gb"

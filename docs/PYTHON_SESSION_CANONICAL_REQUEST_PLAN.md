@@ -233,7 +233,8 @@ version bump は次を一つの change として行う。
    silent merge を行わない。
 6. version 27～30 の current internal replay/read compatibility を維持する。
 7. Python/Web schema fixture と browser round-trip test を同じ PR で更新する。
-8. bundled gallery session を canonical version 31 へ再生成する。
+8. bundled gallery session を canonical version 31 へ再生成し、canonical resources から
+   再構築できる legacy files・feature cache・LOSAT cache は同梱しない。
 
 version 27～30 を自動で canonical request に書き換える migration は、各 capability が
 lossless であると証明できた path に限定する。それ以外は legacy document のまま開き、
