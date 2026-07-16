@@ -20,12 +20,16 @@ this prevents a Circular-only or Linear-only value from being silently ignored.
 | Label whitelist/priority/override TSV | `read_label_*_table`, `read_qualifier_priority_table` |
 | Rich standalone interactive SVG | `build_interactive_svg_context`, `render_to_bytes`, `save_figure_to` |
 | SVG and binary export | `render_to_bytes`, `save_figure_to` |
-| Canonical session v31 load/save/replay | `load_session_document`, `materialize_session`, `session_to_request`, `render_session` |
-| Legacy session v27–30 replay | Internal CLI compatibility only; see [the session API ADR](./ADR_PYTHON_SESSION_API.md) |
+| Session v31 load/save/render | `load_session_document`, `materialize_session`, `session_to_request`, `render_session` |
 
 ## Circular example
 
-The example reads one GenBank record, builds a circular diagram, writes SVG, and also keeps SVG bytes in memory. Set `GBDRAW_EXAMPLE_GBK` when the input is not named `MjeNMV.gb`; the documentation test uses this variable to run the block against the repository fixture.
+The example reads one GenBank record, builds a circular diagram, writes SVG, and
+also keeps SVG bytes in memory. The bundled `MjeNMV.gb` record has `CDS`
+annotations but no rRNA or tRNA annotations, so the example selects only `CDS`.
+Set `GBDRAW_EXAMPLE_GBK` when the input is not named `MjeNMV.gb`; the
+documentation test uses this variable to run the block against the repository
+fixture.
 
 ```python
 import os
@@ -47,7 +51,7 @@ test_inputs_dir = Path(os.environ.get("GBDRAW_TEST_INPUTS_DIR", input_path.paren
 
 record = load_gbks([str(input_path)], mode="circular")[0]
 options = DiagramOptions(
-    selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region"],
+    selected_features_set=["CDS"],
     species="Example genome",
     output=OutputOptions(output_prefix="api_circular", legend="right"),
 )
@@ -232,7 +236,7 @@ except GbdrawError:
 assert png_bytes is None or png_bytes.startswith(b"\x89PNG")
 ```
 
-## Canonical session documents
+## Session files
 
 Version 31 sessions store a CLI-independent typed `renderRequest` and embedded
 resources. Decode and render inside the materialization context because every file
@@ -250,11 +254,11 @@ from gbdraw.api import (
     save_session_document,
 )
 
-session_path = output_dir / "api_canonical.gbdraw-session.json"
+session_path = output_dir / "api_session.gbdraw-session.json"
 session_request = CircularDiagramRequest(
     records=(RecordInput(source=InMemoryRecordSource(record)),),
     output=RenderOutputRequest(
-        output_prefix="api_canonical",
+        output_prefix="api_session",
         output_directory=output_dir,
         overwrite=True,
     ),
@@ -270,8 +274,15 @@ assert all(path.exists() for path in result.output_paths)
 Build a new document from a typed request with `build_session_document`, or write it
 atomically with `save_session_document`. `CircularDiagramRequest` and
 `LinearDiagramRequest` accept file-backed or in-memory record sources and a
-`RenderOutputRequest`. Versions 27–30 intentionally raise `SessionVersionError`
-from the public typed conversion; their legacy CLI replay is not a public API.
+`RenderOutputRequest`.
+
+The public Python functions in this section accept version 31 session files. Older
+files remain usable from the command line with the same diagram mode that created
+them, for example `gbdraw circular --session old.gbdraw-session.json` or
+`gbdraw linear --session old.gbdraw-session.json`. gbdraw 0.12.0 and 0.12.1 wrote
+version 29 files and accepted versions 27–29; gbdraw 0.13.0 wrote version 30 files
+and accepted versions 27–30. `session_to_request` cannot convert versions 27–30 and
+raises `SessionVersionError` for them.
 
 Session failures are grouped under `SessionError`, with specific
 `SessionFormatError`, `SessionVersionError`, `SessionResourceError`,

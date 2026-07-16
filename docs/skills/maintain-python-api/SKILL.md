@@ -71,13 +71,19 @@ public contracts and default diagrams remain stable.
   changes; never accept a broad snapshot rewrite blindly.
 - Re-export public table models and readers from `gbdraw.api.io` while sharing the
   existing CLI-compatible validation owner.
-- Do not expose session replay as CLI argument strings. Require CLI-independent
+- Do not expose session regeneration as CLI argument strings. Require CLI-independent
   typed request models and pure conversion first; otherwise record the non-public
   decision in an ADR.
 
 ## Keep documentation executable
 
 - Add capability-oriented recipes to `docs/PYTHON_API.md` using public imports.
+- Do not use `canonical` as a label for a format, request, document, or
+  implementation. State the exact version, field, precedence rule, or behavior.
+- Do not call a check a `smoke test`. Name the feature and expected result, and
+  report the exact command that checks it.
+- Inspect every fixture used by an example. Show only options that affect the
+  fixture and output; do not list feature types absent from the input record.
 - Make optional-tool examples deterministic with fixtures or precomputed data.
 - Remember that `tests/test_api_library_usage.py` executes every Python code block
   sequentially in one namespace. Make each block valid in that execution model.

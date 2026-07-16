@@ -4,20 +4,20 @@
 
 `gbdraw.api` grows from 70 to 117 exported symbols in this beta. The new entries
 cover table readers, multi-record circular diagrams, interactive SVG metadata,
-typed render requests, and canonical session documents.
+typed render requests, and version 31 session documents.
 Two behavior fixes make accepted options and returned paths match the work
 performed by the library.
 
-## Canonical Python/Web sessions
+## Python/Web session version 31
 
 - Session version 31 adds a CLI-independent typed `renderRequest` and stable embedded
   resource map shared by Python and the Web app.
-- `gbdraw.api` now exposes typed Circular/Linear requests, canonical session
+- `gbdraw.api` now exposes typed Circular/Linear requests, session
   load/build/save, context-owned materialization, conversion/render results, and
   session-specific error classes.
-- Version 31 replay treats `renderRequest` as authoritative. Versions 27–30 retain
-  internal CLI compatibility but are intentionally not converted by the public typed
-  bridge.
+- Version 31 rendering reads settings from `renderRequest`. Versions 27–30 can be
+  regenerated with the Circular or Linear CLI `--session` option, but are not
+  converted by the public typed bridge.
 
 ## Behavior corrections
 
@@ -116,14 +116,15 @@ capability matrix.
 
 ## Session API boundary
 
-The public session bridge begins with canonical version 31 documents.
+The public session bridge accepts version 31 documents.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-Versions 27 through 30 remain available for internal CLI replay only. Public typed
-conversion rejects them with `SessionVersionError` instead of reconstructing a
-request from legacy `cliInvocation` or GUI state. The
+Versions 27 through 30 can be regenerated with `gbdraw circular --session` or
+`gbdraw linear --session`. Public typed conversion rejects them with
+`SessionVersionError` instead of reconstructing a request from `cliInvocation` or
+GUI state. The
 [session API ADR](./ADR_PYTHON_SESSION_API.md) records the version 31 boundary and
 the temporary-resource lifetime contract.
 
