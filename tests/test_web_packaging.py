@@ -281,6 +281,26 @@ def test_index_links_to_hosted_interactive_gallery() -> None:
     assert 'rel="noopener noreferrer"' in match.group("attrs")
 
 
+def test_linear_record_selector_source_contract() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    watcher_js = (WEB_ROOT / "js" / "app" / "watchers.js").read_text(encoding="utf-8")
+
+    assert '<select\n                                                v-model="seq.region_record_id"' in index_html
+    assert '<input type="text" v-model="seq.region_record_id"' not in index_html
+    assert "Record (optional)" in index_html
+    assert "linearRecordOptions(seq)" in index_html
+    assert "linearRecordSelectorDisabled(seq)" in index_html
+    assert "def list_sequence_records(path, format):" in helper_js
+    assert 'format_map = {"genbank": "genbank", "fasta": "fasta"}' in helper_js
+    assert "def list_genbank_records(" not in helper_js
+    assert (WEB_ROOT / "js" / "app" / "record-discovery.js").is_file()
+    assert (WEB_ROOT / "js" / "app" / "linear-record-selector.js").is_file()
+    assert "createLinearRecordSelector" in app_setup_js
+    assert "refreshLinearRecordSelectors" in watcher_js
+
+
 def test_web_run_info_tab_source_contract() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
@@ -3755,6 +3775,8 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "vendor" / "phosphor-icons" / "regular" / "style.css",
         build_root / "gbdraw" / "web" / "js" / "workers" / "losat-threaded-worker.js",
         build_root / "gbdraw" / "web" / "js" / "workers" / "losat-wasi-thread-worker.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "record-discovery.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "linear-record-selector.js",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat.wasm",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat-threaded.wasm",
         *(build_root / "gbdraw" / "web" / path for path in verify_module.REQUIRED_UI_FONT_FILES),
@@ -3802,6 +3824,154 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         gallery_members = sorted(name for name in outer_names if name.startswith("gbdraw/web/gallery/"))
         assert browser_wheels == [browser_wheel_member]
         assert gallery_members == []
+        assert "gbdraw/web/js/app/record-discovery.js" in outer_names
+        assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
+
+
+@pytest.mark.slow
+def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    def write_genbank(path: Path, specs: list[tuple[str, int]]) -> None:
+        records = []
+        for index, (record_id, length) in enumerate(specs):
+            record = SeqRecord(
+                Seq(("ATGC" * ((length + 3) // 4))[:length]),
+                id=record_id,
+                name=record_id,
+                description=f"Record {index + 1}",
+            )
+            record.annotations["molecule_type"] = "DNA"
+            record.features = [
+                SeqFeature(
+                    FeatureLocation(0, length),
+                    type="source",
+                    qualifiers={"organism": [f"Organism {index + 1}"]},
+                ),
+                SeqFeature(FeatureLocation(0, min(80, length)), type="CDS"),
+            ]
+            records.append(record)
+        SeqIO.write(records, path, "genbank")
+
+    unique_gbk = tmp_path / "unique.gbk"
+    duplicate_gbk = tmp_path / "duplicate.gbk"
+    gff_path = tmp_path / "records.gff3"
+    fasta_path = tmp_path / "records.fasta"
+    session_path = tmp_path / "record-selector-session.json"
+    write_genbank(unique_gbk, [("RecA", 1234), ("RecB", 567)])
+    write_genbank(duplicate_gbk, [("RecA", 1234), ("RecA", 1100)])
+    gff_path.write_text("##gff-version 3\nFastaA\t.\tgene\t1\t4\t.\t+\t.\tID=gene1\n", encoding="utf-8")
+    fasta_path.write_text(">FastaA\nATGC\n>FastaB\nATGCGT\n", encoding="utf-8")
+
+    ensure_prepared_browser_wheel()
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__")
+        page.evaluate(
+            """() => {
+                window.__gbdrawDialogMessages = [];
+                window.alert = (message) => window.__gbdrawDialogMessages.push(String(message || ''));
+            }"""
+        )
+        page.locator("button.app-mode-button").filter(has_text="Linear").click()
+        page.wait_for_function("() => window.__GBDRAW_APP__?.pyodideReady", timeout=180_000)
+
+        page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(unique_gbk))
+        selector = page.locator("select[data-record-selector-uid]").first
+        page.wait_for_function(
+            """() => {
+                const select = document.querySelector('select[data-record-selector-uid]');
+                return select && !select.disabled && select.options.length === 3;
+            }""",
+            timeout=60_000,
+        )
+        assert selector.locator("option").all_text_contents() == [
+            "Automatic (no explicit selector)",
+            "RecA (1,234 bp)",
+            "RecB (567 bp)",
+        ]
+        selector.select_option("RecB")
+        assert page.evaluate("() => window.__GBDRAW_APP__.linearSeqs[0].region_record_id") == "RecB"
+
+        result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
+        assert result["status"] == "ok"
+        svg_content = page.evaluate("() => String(window.__GBDRAW_APP__.results[0]?.content || '')")
+        assert "567 bp" in svg_content
+        assert "1,234 bp" not in svg_content
+
+        page.evaluate(
+            """() => {
+                const seq = window.__GBDRAW_APP__.linearSeqs[0];
+                seq.region_start = 10;
+                seq.region_end = 20;
+            }"""
+        )
+        region_result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
+        assert region_result["status"] == "ok"
+        region_svg = page.evaluate("() => String(window.__GBDRAW_APP__.results[0]?.content || '')")
+        assert "10-20" in region_svg
+
+        page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(duplicate_gbk))
+        page.wait_for_function(
+            """() => {
+                const select = document.querySelector('select[data-record-selector-uid]');
+                return select && !select.disabled &&
+                    Array.from(select.options).some((option) => option.value === '#2');
+            }""",
+            timeout=60_000,
+        )
+        duplicate_labels = selector.locator("option").all_text_contents()
+        assert "RecA (1,234 bp) [#1]" in duplicate_labels
+        assert "RecA (1,100 bp) [#2]" in duplicate_labels
+        selector.select_option("#2")
+
+        page.evaluate("() => { window.__GBDRAW_APP__.sessionTitle = 'Record selector test'; }")
+        with page.expect_download() as download_info:
+            page.get_by_role("button", name="Save Session", exact=True).click()
+        download_info.value.save_as(session_path)
+
+        page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(unique_gbk))
+        page.locator('input[type="file"][accept=".json"]').set_input_files(str(session_path))
+        page.wait_for_function(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                const select = document.querySelector('select[data-record-selector-uid]');
+                return app?.linearSeqs?.[0]?.region_record_id === '#2' &&
+                    select && !select.disabled && select.value === '#2';
+            }""",
+            timeout=60_000,
+        )
+
+        page.locator('input[type="radio"][value="gff"]').check()
+        page.locator('input[type="file"][accept^=".gff,"]').first.set_input_files(str(gff_path))
+        page.locator('input[type="file"][accept^=".fa,"]').first.set_input_files(str(fasta_path))
+        page.wait_for_function(
+            """() => {
+                const select = document.querySelector('select[data-record-selector-uid]');
+                return select && !select.disabled &&
+                    Array.from(select.options).some((option) => option.value === 'FastaB');
+            }""",
+            timeout=60_000,
+        )
+        assert selector.locator("option").all_text_contents() == [
+            "Automatic (no explicit selector)",
+            "#2 (not found in current file)",
+            "FastaA (4 bp)",
+            "FastaB (6 bp)",
+        ]
+        browser.close()
 
 
 @pytest.mark.slow

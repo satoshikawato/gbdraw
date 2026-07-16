@@ -503,6 +503,39 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   return file;
 };
 
+const combineCircularGenbankResources = (resources, records) => {
+  const resourceIds = [];
+  const seen = new Set();
+  records.forEach((record) => {
+    const source = record?.source || {};
+    const resourceId = source.kind === 'genbank' ? String(source.resourceId || '').trim() : '';
+    if (!resourceId || seen.has(resourceId)) return;
+    seen.add(resourceId);
+    resourceIds.push(resourceId);
+  });
+  if (resourceIds.length === 0) return null;
+
+  const files = resourceIds.map((resourceId) => resourceAsLegacyFile(resources, resourceId));
+  if (files.length === 1) return files[0];
+  const binary = files
+    .map((file) => {
+      if (file.encoding && file.encoding !== 'base64') {
+        throw new Error(`Unsupported canonical resource encoding: ${file.encoding}`);
+      }
+      const decoded = atob(String(file.data || ''));
+      return decoded.endsWith('\n') ? decoded : `${decoded}\n`;
+    })
+    .join('');
+  return {
+    name: 'canonical-circular-records.gb',
+    type: 'text/plain',
+    size: binary.length,
+    lastModified: Math.max(0, ...files.map((file) => Number(file.lastModified) || 0)),
+    encoding: 'base64',
+    data: btoa(binary)
+  };
+};
+
 export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => {
   if (!renderRequest || renderRequest.schema !== CANONICAL_REQUEST_SCHEMA) {
     throw new Error('Unsupported canonical renderRequest schema.');
@@ -515,7 +548,7 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     const source = records[0]?.source || {};
-    if (source.kind === 'genbank') files.c_gb = resourceAsLegacyFile(resources, source.resourceId);
+    if (source.kind === 'genbank') files.c_gb = combineCircularGenbankResources(resources, records);
     if (source.kind === 'gffFasta') {
       files.c_gff = resourceAsLegacyFile(resources, source.gffResourceId);
       files.c_fasta = resourceAsLegacyFile(resources, source.fastaResourceId);

@@ -98,6 +98,58 @@ assert.equal(projection.inputType, 'gb');
 assert.equal(projection.files.c_gb.data, genbank.data);
 assert.equal(projection.config.form.prefix, 'web-session');
 
+const secondGenbank = {
+  ...genbank,
+  name: 'second.gb',
+  data: btoa(genbankText.replaceAll('WEBTEST', 'WEBTWO'))
+};
+const multiCircularProjection = projectCanonicalSessionRequest({
+  renderRequest: {
+    ...canonical.renderRequest,
+    records: [
+      canonical.renderRequest.records[0],
+      { ...canonical.renderRequest.records[0], source: { kind: 'genbank', resourceId: 'record-2-genbank' } }
+    ]
+  },
+  resources: {
+    ...canonical.resources,
+    'record-2-genbank': { kind: 'genbank', ...secondGenbank }
+  }
+});
+const combinedCircularGenbank = atob(multiCircularProjection.files.c_gb.data);
+assert.equal(combinedCircularGenbank.match(/^LOCUS/gm)?.length, 2);
+assert.match(combinedCircularGenbank, /WEBTEST/);
+assert.match(combinedCircularGenbank, /WEBTWO/);
+
+state.mode.value = 'linear';
+state.lInputType.value = 'gb';
+const linearFilesData = {
+  linearSeqs: [
+    { gb: genbank, region_record_id: '', region_start: null, region_end: null, region_reverse: false },
+    { gb: genbank, region_record_id: 'RecA', region_start: null, region_end: null, region_reverse: false },
+    { gb: genbank, region_record_id: '#2', region_start: 10, region_end: 20, region_reverse: true }
+  ]
+};
+const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.equal(linearCanonical.renderRequest.records[0].selector, null);
+assert.deepEqual(linearCanonical.renderRequest.records[1].selector, { kind: 'recordId', value: 'RecA' });
+assert.equal(linearCanonical.renderRequest.records[2].selector, null);
+assert.deepEqual(linearCanonical.renderRequest.records[2].region, {
+  selector: { kind: 'recordIndex', index: 1 },
+  start: 10,
+  end: 20,
+  reverseComplement: true
+});
+
+const linearProjection = projectCanonicalSessionRequest(linearCanonical);
+assert.deepEqual(
+  linearProjection.files.linearSeqs.map((seq) => seq.region_record_id),
+  ['', 'RecA', '#2']
+);
+assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
+assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
+assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
+
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];

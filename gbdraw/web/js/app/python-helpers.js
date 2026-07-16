@@ -1324,11 +1324,16 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
-def list_genbank_records(gb_path):
-    """List record selectors and IDs from a GenBank file."""
+def list_sequence_records(path, format):
+    """List record selectors, IDs, and lengths from a sequence file."""
     from Bio import SeqIO
     try:
-        records = list(SeqIO.parse(gb_path, "genbank"))
+        format_map = {"genbank": "genbank", "fasta": "fasta"}
+        if format not in format_map:
+            return json.dumps({"error": f"Unsupported format: {format}"})
+        records = list(SeqIO.parse(path, format_map[format]))
+        if not records:
+            return json.dumps({"error": "No records found"})
         payload = []
         for idx, record in enumerate(records):
             payload.append(
