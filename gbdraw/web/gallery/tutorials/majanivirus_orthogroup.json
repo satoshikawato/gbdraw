@@ -504,7 +504,7 @@
     },
     {
       "title": "Expected ribbons are missing",
-      "body": "Check that protein blastp mode is Orthogroups, the input order matches the Gallery session, and the bit score, E-value, and identity thresholds match the tutorial values."
+      "body": "Check that protein blastp mode is Orthogroups, then compare the input order and the bit score, E-value, and identity thresholds with the tutorial tables."
     },
     {
       "title": "The rows do not match the Gallery figure",

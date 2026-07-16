@@ -43,7 +43,7 @@ The most common causes are:
 2. The BLAST file order does not match the genome input order
 3. Filtering thresholds such as `--evalue`, `--bitscore`, `--identity`, or `--alignment_length` are too strict
 
-See [Draw genome comparison links from BLAST and protein searches](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
+See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
 ## Why is my circular BLAST similarity ring empty?
 

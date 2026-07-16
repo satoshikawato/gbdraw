@@ -16,7 +16,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 ## Tutorials
 
 - [Style a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md)
-- [Draw genome comparison links from BLAST and protein searches](./TUTORIALS/2_Comparative_Genomics.md)
+- [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md)
 - [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md)
 - [More command-line guides](./TUTORIALS/TUTORIALS.md): CDS protein matches, TSV manifests, read-depth tracks, linear layout, interactive SVG sessions, and feature visibility.
 
@@ -38,6 +38,6 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 - Hosted interactive SVG gallery and web tutorials: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
-- Protein-search modes: `--protein_blastp_mode pairwise` draws adjacent CDS protein matches, `orthogroup` assigns CDS-derived proteins to gbdraw similarity groups, and `collinear` combines compatible runs of protein-match anchors into collinear blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`. The similarity groups are not phylogeny-based orthogroups; see [the genome-comparison guide](./TUTORIALS/2_Comparative_Genomics.md#5-gbdraw-similarity-groups-and-collinear-blocks).
+- Protein-search modes: `--protein_blastp_mode pairwise` draws adjacent CDS protein matches, `orthogroup` assigns CDS-derived proteins to gbdraw similarity groups, and `collinear` combines compatible runs of protein-match anchors into collinear blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`. The similarity groups are not phylogeny-based orthogroups; see [the protein-comparison guide](./TUTORIALS/4_Protein_Comparisons.md#4-gbdraw-similarity-group-ribbons-orthogroup-mode).
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

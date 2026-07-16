@@ -2,12 +2,12 @@
   "id": "WSSV_genome_comparison",
   "version": 1,
   "title": "Advanced session-based WSSV comparison case study",
-  "summary": "Load the bundled session first to inspect a White spot syndrome virus reference and 20 prepared BLAST/LOSAT comparison rings. The original prepared-input command is provenance, not a directly runnable public recipe.",
+  "summary": "Load the bundled session first to inspect a White spot syndrome virus reference and 20 prepared BLAST/LOSAT comparison rings. The displayed prepared-input command documents provenance; it is not a directly runnable public recipe.",
   "estimatedTime": "Session inspection: under 5 min; input preparation: hours; search: 10-30 min; render and interaction: under 5 min",
   "difficulty": "Advanced",
   "appMode": "Circular",
   "primaryWorkflow": "Circular nucleotide-similarity rings with LOSAT blastn",
-  "requirements": ["Start by loading the bundled Gallery session. A manual rebuild requires preparing all 20 comparison assemblies; the public sources below do not form a complete exact-reproduction bundle."],
+  "requirements": ["Start by loading the bundled Gallery session. A manual rebuild requires all 20 prepared comparison assemblies, and several are available only inside that session."],
   "downloads": [
     {
       "label": "Bundled Gallery session",
@@ -317,7 +317,7 @@
     },
     {
       "title": "Add, name, and color the comparison series",
-      "body": "Add the 20 FASTA files in this order, then set each row label and color so the rings and left legend match the Gallery figure.",
+      "body": "Add the 20 FASTA files in this order, then set each row label and color so the rings and left legend follow the documented order.",
       "table": {
         "columns": ["Ring", "Comparison FASTA", "Label", "Color"],
         "rows": [

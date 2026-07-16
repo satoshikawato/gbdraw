@@ -116,13 +116,15 @@ capability matrix.
 
 ## Session API boundary
 
-GUI and CLI session replay remains an internal feature in this release. Session
-loading, validation, materialization, and replay are not exported from
-`gbdraw.api`, because the current replay representation depends on CLI argument
-names and positions.
+The public session bridge begins with canonical version 31 documents.
+`load_session_document`, `build_session_document`, `materialize_session`,
+`session_to_request`, and `render_session` are exported from `gbdraw.api` and use
+the typed `renderRequest` payload rather than CLI argument names or positions.
 
-The [session API ADR](./ADR_PYTHON_SESSION_API.md) records this decision and the
-typed-request-model requirements that must be met before a public session bridge
-is added. This boundary does not affect the existing CLI or GUI session workflow.
+Versions 27 through 30 remain available for internal CLI replay only. Public typed
+conversion rejects them with `SessionVersionError` instead of reconstructing a
+request from legacy `cliInvocation` or GUI state. The
+[session API ADR](./ADR_PYTHON_SESSION_API.md) records the version 31 boundary and
+the temporary-resource lifetime contract.
 
 [Home](./DOCS.md) | [Python API](./PYTHON_API.md) | [Export](./EXPORT.md)

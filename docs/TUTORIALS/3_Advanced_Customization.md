@@ -1,7 +1,7 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
 [< Back to the guide index](./TUTORIALS.md)
-[< Previous: Draw genome comparison links](./2_Comparative_Genomics.md) | [Next: Draw protein matches from CDS features >](./4_Protein_Comparisons.md)
+[< Previous: Draw precomputed BLAST links](./2_Comparative_Genomics.md) | [Next: Draw protein matches from CDS features >](./4_Protein_Comparisons.md)
 
 # Set feature colors and labels
 
@@ -297,10 +297,10 @@ For linear diagrams, the main selectors are:
 
 When each input needs its own selector, crop, label, or orientation, use a
 `--records_table` TSV manifest instead of parallel option lists. See
-[the genome-comparison guide](./2_Comparative_Genomics.md) and the
+[the linear layout guide](./7_Linear_Layout.md#7-select-records-regions-and-orientation) and the
 [CLI Reference](../CLI_Reference.md) for the full syntax.
 
 [< Back to the guide index](./TUTORIALS.md)
-[< Previous: Draw genome comparison links](./2_Comparative_Genomics.md) | [Next: Draw protein matches from CDS features >](./4_Protein_Comparisons.md)
+[< Previous: Draw precomputed BLAST links](./2_Comparative_Genomics.md) | [Next: Draw protein matches from CDS features >](./4_Protein_Comparisons.md)
 
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

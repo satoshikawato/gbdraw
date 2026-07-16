@@ -13,7 +13,7 @@
       "source": "NCBI Nucleotide",
       "accession": "NC_012920",
       "targetName": "HmmtDNA.gbk",
-      "note": "Download the complete human mitochondrial genome as a GenBank flat file and save it with this filename if you want to match the Gallery session."
+      "note": "Download the complete human mitochondrial genome as a GenBank flat file and save it as HmmtDNA.gbk, the filename stored in the Gallery session."
     },
     {
       "label": "Qualifier priority table",
@@ -61,7 +61,7 @@
     },
     {
       "title": "Set the basic circular layout",
-      "body": "Use the same compact circular defaults as the Gallery figure.",
+      "body": "Set Track Preset to Middle, Label Mode to Out, and Legend Position to Left.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [

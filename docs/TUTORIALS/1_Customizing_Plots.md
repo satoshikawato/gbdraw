@@ -1,6 +1,6 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw genome comparison links >](./2_Comparative_Genomics.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw precomputed BLAST links >](./2_Comparative_Genomics.md)
 
 [< Back to the guide index](./TUTORIALS.md)
 
@@ -129,9 +129,9 @@ Linear mode has its own input selectors:
 - `--reverse_complement`
 - `--region`
 
-See [Draw genome comparison links from BLAST and protein searches](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for details.
+See [Arrange linear tracks, record labels, and rulers](./7_Linear_Layout.md#7-select-records-regions-and-orientation) and the [CLI Reference](../CLI_Reference.md) for details.
 
-[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw genome comparison links >](./2_Comparative_Genomics.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw precomputed BLAST links >](./2_Comparative_Genomics.md)
 
 [< Back to the guide index](./TUTORIALS.md)
 
