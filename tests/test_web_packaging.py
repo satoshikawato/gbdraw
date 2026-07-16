@@ -4277,6 +4277,126 @@ def test_gallery_session_restore_smoke() -> None:
 
 
 @pytest.mark.slow
+def test_circular_radial_label_browser_flow_and_reflow() -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    ensure_prepared_browser_wheel()
+    input_path = REPO_ROOT / "tests" / "test_inputs" / "MjeNMV.gbk"
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__?.pyodideReady", timeout=180_000)
+        assert page.evaluate("() => window.__GBDRAW_APP__?.adv?.circular_label_placement") == "horizontal"
+        page.evaluate(
+            """async () => {
+                window.__GBDRAW_APP__.form.labels_mode = 'out';
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            }"""
+        )
+
+        controls = page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                const label = Array.from(document.querySelectorAll('label'))
+                    .find((candidate) => candidate.textContent.includes('Circular Label Placement'));
+                const select = label?.parentElement?.querySelector('select');
+                return {
+                    state: app?.adv?.circular_label_placement,
+                    value: select?.value,
+                    options: Array.from(select?.options || []).map((option) => option.value),
+                    geometryVisible: Array.from(document.querySelectorAll('h4'))
+                        .some((heading) => heading.textContent.includes('LABEL GEOMETRY'))
+                };
+            }"""
+        )
+        assert controls == {
+            "state": "horizontal",
+            "value": "horizontal",
+            "options": ["horizontal", "radial"],
+            "geometryVisible": True,
+        }
+
+        page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(input_path))
+        page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                app.form.labels_mode = 'both';
+                app.form.legend = 'none';
+                app.adv.label_rendering = 'external_only';
+                app.adv.circular_label_placement = 'radial';
+            }"""
+        )
+        page.wait_for_function(
+            """() => !Array.from(document.querySelectorAll('h4'))
+                .some((heading) => heading.textContent.includes('LABEL GEOMETRY'))"""
+        )
+
+        result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
+        assert result["status"] == "ok"
+        page.wait_for_function(
+            """() => window.__GBDRAW_APP__?.featureEditorStatus?.status === 'summary-ready' &&
+                Boolean(document.querySelector('#label_text text'))""",
+            timeout=180_000,
+        )
+        page.evaluate("() => window.__GBDRAW_APP__.syncLabelEditor()")
+        page.wait_for_function(
+            "() => Array.isArray(window.__GBDRAW_APP__?.editableLabels) && window.__GBDRAW_APP__.editableLabels.length > 0",
+            timeout=180_000,
+        )
+
+        def radial_stats() -> dict:
+            return page.evaluate(
+                """() => {
+                    const content = String(window.__GBDRAW_APP__.results?.[0]?.content || '');
+                    const document = new DOMParser().parseFromString(content, 'image/svg+xml');
+                    return {
+                        textCount: document.querySelectorAll('#label_text text[transform^="rotate("]').length,
+                        lineCount: document.querySelectorAll('#label_leaders line').length,
+                        content
+                    };
+                }"""
+            )
+
+        before = radial_stats()
+        assert before["textCount"] > 0
+        assert before["lineCount"] == 2 * before["textCount"]
+
+        edited_text = "radial browser reflow label with a deliberately long value"
+        edit_started = page.evaluate(
+            """async (nextText) => {
+                const app = window.__GBDRAW_APP__;
+                const entry = app.editableLabels.find((candidate) => candidate.featureId);
+                if (!entry) return false;
+                await app.requestLabelTextChangeByFeatureId(entry.featureId, nextText);
+                await app.handleLabelTextScopeChoice('single');
+                return true;
+            }""",
+            edited_text,
+        )
+        assert edit_started
+        page.wait_for_function(
+            """(nextText) => {
+                const app = window.__GBDRAW_APP__;
+                const content = String(app?.results?.[0]?.content || '');
+                return !app?.processing && !app?.labelReflowProcessing && content.includes(nextText);
+            }""",
+            arg=edited_text,
+            timeout=180_000,
+        )
+        after = radial_stats()
+        assert edited_text in after["content"]
+        assert after["textCount"] == before["textCount"]
+        assert after["lineCount"] == 2 * after["textCount"]
+        browser.close()
+
+
+@pytest.mark.slow
 def test_offline_gui_smoke_test_covers_palette_preview_behavior() -> None:
     if importlib.util.find_spec("playwright") is None:
         pytest.skip("playwright is not available in this environment")

@@ -373,6 +373,7 @@ export const createDefaultAdv = () => ({
   circular_label_spacing: null,
   linear_label_spacing: null,
   label_rendering: 'auto',
+  circular_label_placement: 'horizontal',
   label_placement: 'auto',
   label_rotation: null,
 

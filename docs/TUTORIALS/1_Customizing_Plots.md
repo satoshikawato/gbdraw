@@ -95,6 +95,19 @@ gbdraw circular \
 
 With the default `--label_rendering auto` mode, labels that fit are embedded in feature bodies and the remaining labels are routed outside the circle.
 
+External circular labels are horizontal by default. Use radial placement when each external label should follow the circle radius:
+
+```bash
+gbdraw circular \
+  --gbk tests/test_inputs/NC_001879.gbk \
+  --labels both \
+  --label_placement radial \
+  --qualifier_priority examples/qualifier_priority.tsv \
+  -o circular_radial_labels
+```
+
+Radial placement works with `auto`, `embedded_only`, and `external_only`. Unlike horizontal `--labels both`, radial placement keeps requested GC and GC-skew tracks and expands the radial/canvas geometry when inner or long labels need more room.
+
 ![Circular white spot syndrome virus genome with feature labels placed within and around the map](../../examples/WSSV_with_labels.svg)
 
 > [!WARNING]

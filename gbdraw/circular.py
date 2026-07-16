@@ -394,6 +394,12 @@ def _get_args(args) -> argparse.Namespace:
         choices=['auto', 'embedded_only', 'external_only'],
         default='auto',
         type=str)
+    parser.add_argument(
+        '--label_placement',
+        help='External circular label placement: "horizontal" or "radial". Default: "horizontal".',
+        choices=['horizontal', 'radial'],
+        default='horizontal',
+        type=str)
 
     add_label_args(parser)
 
@@ -755,6 +761,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     alignment_length: int = args.alignment_length
     labels_mode: str = args.labels
     label_rendering: str = args.label_rendering
+    circular_label_placement: str = args.label_placement
     show_labels: bool = labels_mode != "none"
     resolve_overlaps: bool = args.resolve_overlaps
     allow_inner_labels: bool = labels_mode == "both"
@@ -851,7 +858,11 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
     inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
-    if allow_inner_labels and not (suppress_gc and suppress_skew):
+    if (
+        circular_label_placement == "horizontal"
+        and allow_inner_labels
+        and not (suppress_gc and suppress_skew)
+    ):
 
         suppress_gc = True
         suppress_skew = True
@@ -944,6 +955,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         plot_title_font_size=plot_title_font_size,
         label_font_size=label_font_size,
         label_rendering=label_rendering,
+        circular_label_placement=circular_label_placement,
         label_blacklist=label_blacklist,
         label_whitelist=label_whitelist,
         label_table=label_table_path,

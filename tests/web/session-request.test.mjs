@@ -91,12 +91,20 @@ assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-gen
 assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
 assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
+assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
+
+state.adv.circular_label_placement = 'radial';
+const radialCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(radialCanonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'radial');
 
 const projection = projectCanonicalSessionRequest(canonical);
 assert.equal(projection.mode, 'circular');
 assert.equal(projection.inputType, 'gb');
 assert.equal(projection.files.c_gb.data, genbank.data);
 assert.equal(projection.config.form.prefix, 'web-session');
+assert.equal(projection.config.adv.circular_label_placement, 'horizontal');
+const radialProjection = projectCanonicalSessionRequest(radialCanonical);
+assert.equal(radialProjection.config.adv.circular_label_placement, 'radial');
 
 const secondGenbank = {
   ...genbank,

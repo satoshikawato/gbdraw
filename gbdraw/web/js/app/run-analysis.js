@@ -1317,6 +1317,7 @@ json.dumps({
         center_reserved_radius: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
+        circular_label_placement: false,
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
@@ -1351,6 +1352,7 @@ json.dumps({
   "center_reserved_radius": "--center_reserved_radius" in _source,
   "tick_label_font_size": "--tick_label_font_size" in _source,
   "circular_label_spacing": "--circular_label_spacing" in _source,
+  "circular_label_placement": "--label_placement" in _source,
   "label_rendering": "--label_rendering" in _source,
   "circular_track_slot": "--circular_track_slot" in _source,
   "circular_track_axis_index": "--circular_track_axis_index" in _source,
@@ -1381,6 +1383,7 @@ json.dumps({
         center_reserved_radius: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
+        circular_label_placement: false,
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
@@ -2345,6 +2348,19 @@ json.dumps({
             );
           }
           args.push('--label_rendering', normalizedLabelRendering);
+        }
+        const normalizedCircularLabelPlacement =
+          String(adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
+            ? 'radial'
+            : 'horizontal';
+        adv.circular_label_placement = normalizedCircularLabelPlacement;
+        if (labelsMode !== 'none' && normalizedCircularLabelPlacement === 'radial') {
+          if (!multiCanvasSupport.circular_label_placement) {
+            throw new Error(
+              'Current gbdraw wheel does not support Circular --label_placement. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--label_placement', normalizedCircularLabelPlacement);
         }
         if (form.suppress_gc) args.push('--suppress_gc');
         if (form.suppress_skew) args.push('--suppress_skew');

@@ -245,6 +245,9 @@ feature = ["note"]
 [labels.linear]
   placement = "auto"
   rotation = 0.0
+
+[labels.circular]
+  placement = "horizontal"
 [labels.spacing]
   circular = 3.0
   linear = 3.0

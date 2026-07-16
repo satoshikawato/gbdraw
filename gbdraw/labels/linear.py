@@ -8,7 +8,6 @@ This module contains the linear track-based label placement logic that used to l
 `gbdraw.labels.placement`.
 """
 
-import math
 from collections import defaultdict
 
 from .filtering import get_label_text  # type: ignore[reportMissingImports]
@@ -21,6 +20,13 @@ from ..core.sequence import determine_length_parameter  # type: ignore[reportMis
 from ..layout.linear_coords import normalize_position_to_linear_track  # type: ignore[reportMissingImports]
 from ..layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
 from ..layout.spatial import Aabb, AabbIndex, Interval, IntervalIndex
+from ..layout.text_geometry import (
+    aabb_from_points,
+    anchor_x_bounds,
+    convex_polygons_intersect,
+    text_box_corner_offsets,
+    translate_points,
+)
 
 
 def check_label_overlap(label1, label2):
@@ -108,11 +114,7 @@ def _insert_external_label_index(
 
 
 def _anchor_x_values(width_px: float, text_anchor: str) -> tuple[float, float]:
-    if text_anchor == "start":
-        return 0.0, width_px
-    if text_anchor == "end":
-        return -width_px, 0.0
-    return -width_px / 2.0, width_px / 2.0
+    return anchor_x_bounds(width_px, text_anchor)
 
 
 def _rotated_corner_offsets(
@@ -121,20 +123,7 @@ def _rotated_corner_offsets(
     rotation_deg: float,
     text_anchor: str,
 ) -> list[tuple[float, float]]:
-    half_height = height_px / 2.0
-    x_values = _anchor_x_values(width_px, text_anchor)
-    y_values = (-half_height, half_height)
-    radians = math.radians(rotation_deg)
-    sin_theta = math.sin(radians)
-    cos_theta = math.cos(radians)
-    return [
-        (
-            (x * cos_theta) - (y * sin_theta),
-            (x * sin_theta) + (y * cos_theta),
-        )
-        for x in x_values
-        for y in y_values
-    ]
+    return list(text_box_corner_offsets(width_px, height_px, rotation_deg, text_anchor))
 
 
 def _rotated_y_bounds_from_anchor(
@@ -156,9 +145,8 @@ def _rotated_bounds_from_anchor(
 ) -> tuple[float, float, float, float]:
     """Return min/max x/y offsets after rotation around the text anchor point."""
     offsets = _rotated_corner_offsets(width_px, height_px, rotation_deg, text_anchor)
-    x_offsets = [point[0] for point in offsets]
-    y_offsets = [point[1] for point in offsets]
-    return min(x_offsets), max(x_offsets), min(y_offsets), max(y_offsets)
+    min_x, min_y, max_x, max_y = aabb_from_points(offsets)
+    return min_x, max_x, min_y, max_y
 
 
 def _rotated_extreme_y_point_from_anchor(
@@ -201,15 +189,18 @@ def calculate_label_y_bounds(label: dict) -> tuple[float, float]:
 def _label_corners(label: dict, shift_y: float = 0.0) -> list[tuple[float, float]]:
     middle_x = float(label["middle_x"])
     middle_y = float(label["middle_y"]) + shift_y
-    return [
-        (middle_x + x_offset, middle_y + y_offset)
-        for x_offset, y_offset in _rotated_corner_offsets(
+    return list(
+        translate_points(
+            _rotated_corner_offsets(
             float(label["width_px"]),
             float(label["height_px"]),
             float(label.get("rotation_deg", 0.0)),
             str(label.get("text_anchor", "middle")),
+            ),
+            middle_x,
+            middle_y,
         )
-    ]
+    )
 
 
 def _project_polygon(points: list[tuple[float, float]], axis_x: float, axis_y: float) -> tuple[float, float]:
@@ -220,23 +211,7 @@ def _project_polygon(points: list[tuple[float, float]], axis_x: float, axis_y: f
 def _rotated_label_rects_intersect(label1: dict, label2: dict, label1_shift_y: float = 0.0) -> bool:
     rect1 = _label_corners(label1, shift_y=label1_shift_y)
     rect2 = _label_corners(label2)
-    for points in (rect1, rect2):
-        for idx, point in enumerate(points):
-            next_point = points[(idx + 1) % len(points)]
-            edge_x = next_point[0] - point[0]
-            edge_y = next_point[1] - point[1]
-            axis_x = -edge_y
-            axis_y = edge_x
-            axis_len = math.hypot(axis_x, axis_y)
-            if axis_len == 0.0:
-                continue
-            axis_x /= axis_len
-            axis_y /= axis_len
-            min1, max1 = _project_polygon(rect1, axis_x, axis_y)
-            min2, max2 = _project_polygon(rect2, axis_x, axis_y)
-            if max1 <= min2 or max2 <= min1:
-                return False
-    return True
+    return convex_polygons_intersect(rect1, rect2, touching=False)
 
 
 def _label_bounds_overlap(label1: dict, label2: dict, min_gap_px: float) -> bool:

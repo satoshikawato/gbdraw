@@ -5,6 +5,7 @@ from typing import Mapping
 
 from gbdraw.definition_line_styles import DEFINITION_LINE_KINDS, DEFINITION_LINE_STYLE_PROPERTIES
 from gbdraw.exceptions import ValidationError
+from gbdraw.labels.circular_types import normalize_circular_label_placement
 
 from .models import GbdrawConfig  # type: ignore[reportMissingImports]
 
@@ -67,6 +68,7 @@ def modify_config_dict(
     plot_title_font_size=None,
     label_font_size=None,
     circular_label_spacing=None,
+    circular_label_placement=None,
     linear_label_spacing=None,
     label_rendering=None,
     label_placement=None,
@@ -138,6 +140,9 @@ def modify_config_dict(
     legend_font_size=None,
     normalize_length=None,
 ) -> dict:
+
+    if circular_label_placement is not None:
+        circular_label_placement = normalize_circular_label_placement(circular_label_placement)
 
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -318,6 +323,7 @@ def modify_config_dict(
         "label_font_size_linear_short": "labels.font_size.linear.short",
         "label_font_size_linear_long": "labels.font_size.linear.long",
         "circular_label_spacing": "labels.spacing.circular",
+        "circular_label_placement": "labels.circular.placement",
         "linear_label_spacing": "labels.spacing.linear",
         "label_rendering": "labels.rendering",
         "label_placement": "labels.linear.placement",

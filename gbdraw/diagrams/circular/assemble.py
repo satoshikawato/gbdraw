@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import math
 import copy
+from dataclasses import replace
 from typing import Any, Optional, Callable, Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -37,6 +38,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
 from ...configurators.gc import _slot_skew_config
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
+from ...exceptions import ValidationError
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ...labels.circular import (  # type: ignore[reportMissingImports]
@@ -54,6 +56,7 @@ from ...legend.table import _unique_legend_key, prepare_legend_table  # type: ig
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
+    ScalarSpec,
 )
 from ...tracks.circular import tick_sides_for_tick_label_layout  # type: ignore[reportMissingImports]
 
@@ -235,6 +238,15 @@ def _label_unwrapped_angle(label: dict[str, Any], total_length: int) -> float:
 
 def _label_bbox_local(label: dict[str, Any], total_length: int, margin_px: float) -> tuple[float, float, float, float]:
     """Approximate label bbox in local (centered) coordinates."""
+    authoritative_aabb = label.get("aabb_local")
+    if authoritative_aabb is not None and len(authoritative_aabb) == 4:
+        half_margin = 0.5 * float(margin_px)
+        return (
+            float(authoritative_aabb[0]) - half_margin,
+            float(authoritative_aabb[1]) - half_margin,
+            float(authoritative_aabb[2]) + half_margin,
+            float(authoritative_aabb[3]) + half_margin,
+        )
     half_margin = 0.5 * margin_px
     start_x = float(label["start_x"])
     start_y = float(label["start_y"])
@@ -937,8 +949,10 @@ def _resolve_label_legend_collisions(
     if not _labels_collide_with_legend(external_labels, total_length, canvas_config, legend_config):
         return
 
-    if _try_shift_labels_away_from_legend(external_labels, total_length, canvas_config, legend_config):
-        return
+    is_radial = any(label.get("placement") == "radial" for label in external_labels)
+    if not is_radial:
+        if _try_shift_labels_away_from_legend(external_labels, total_length, canvas_config, legend_config):
+            return
     if _try_move_legend_away_from_labels(external_labels, total_length, canvas_config, legend_config):
         return
     _expand_canvas_for_legend(external_labels, total_length, canvas_config, legend_config)
@@ -2083,6 +2097,7 @@ def add_record_on_circular_canvas(
 
     precalculated_labels: list[dict[str, Any]] | None = None
     if show_external_labels and precomputed_feature_dict is not None:
+        label_candidate_cache: dict[str, object] = {}
         precalculated_labels = prepare_label_list(
             precomputed_feature_dict,
             len(gb_record.seq),
@@ -2097,19 +2112,212 @@ def add_record_on_circular_canvas(
             outer_arena=outer_arena,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
             feature_layout=radial_layout.features,
+            radial_layout=radial_layout,
             track_preset=_circular_preset_for_layout(canvas_config, cfg),
             feature_lane_direction=feature_lane_direction,
+            _candidate_cache=label_candidate_cache,
         )
+        if cfg.labels.circular.placement == "radial":
+            previous_growth: float | None = None
+            stagnant_passes = 0
+            preflight_tracks_frozen = False
+            while True:
+                required_growth = max(
+                    (
+                        float(label.get("required_radius_growth_px", 0.0))
+                        for label in precalculated_labels
+                        if not label.get("is_embedded")
+                    ),
+                    default=0.0,
+                )
+                if required_growth <= 1e-3:
+                    break
+                if previous_growth is not None and required_growth >= previous_growth - 1e-3:
+                    stagnant_passes += 1
+                else:
+                    stagnant_passes = 0
+                if stagnant_passes >= 2:
+                    fixed_inside_slots = [
+                        slot.id
+                        for slot in radial_layout.slots
+                        if slot.side == "inside" and (slot.explicit_anchor or slot.explicit_width)
+                    ]
+                    slot_context = ", ".join(fixed_inside_slots) or "center/feature interval"
+                    raise ValidationError(
+                        "radial inner labels cannot fit the fixed circular geometry: "
+                        f"slot={slot_context}, required_additional_px={required_growth:.3f}"
+                    )
+                previous_growth = required_growth
+
+                if not preflight_tracks_frozen:
+                    frozen_slots: list[CircularTrackSlot] = []
+                    for slot_index, slot in enumerate(layout_slots):
+                        resolved_slot = next(
+                            (
+                                candidate
+                                for candidate in radial_layout.slots
+                                if int(candidate.slot_index) == int(slot_index)
+                            ),
+                            None,
+                        )
+                        if (
+                            str(slot.renderer) != "features"
+                            and resolved_slot is not None
+                            and resolved_slot.anchor_radius_px is not None
+                        ):
+                            frozen_slots.append(
+                                replace(
+                                    slot,
+                                    radius=ScalarSpec(
+                                        float(resolved_slot.anchor_radius_px),
+                                        unit="px",
+                                    ),
+                                )
+                            )
+                        elif str(slot.renderer) == "features" and slot.radius is None and slot.side == "inside":
+                            # Radial inner labels need a real arena between features and
+                            # the frozen inner tracks. Move the automatic tuck-in feature
+                            # slot to the outside of the enlarged axis while preserving
+                            # its lane-direction payload.
+                            feature_params = dict(slot.params)
+                            feature_params["lane_direction"] = "outside"
+                            frozen_slots.append(
+                                replace(slot, side="outside", params=feature_params)
+                            )
+                        else:
+                            frozen_slots.append(slot)
+                    layout_slots = frozen_slots
+                    feature_slot = next(
+                        (
+                            slot
+                            for slot in layout_slots
+                            if slot.enabled and str(slot.renderer) == "features"
+                        ),
+                        None,
+                    )
+                    if feature_slot is not None:
+                        feature_lane_direction = str(
+                            feature_slot.params.get("lane_direction", feature_lane_direction)
+                        )
+                        setattr(
+                            canvas_config,
+                            "circular_feature_lane_direction",
+                            feature_lane_direction,
+                        )
+                    preflight_tracks_frozen = True
+
+                canvas_config.radius = float(canvas_config.radius) + required_growth
+                feature_track_ratio_factor_override = _slot_width_ratio_factor(
+                    feature_slot,
+                    base_radius_px=float(canvas_config.radius),
+                    base_track_ratio=float(canvas_config.track_ratio),
+                )
+                radial_layout = resolve_circular_radial_layout(
+                    total_length=len(gb_record.seq),
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                    slots=layout_slots,
+                    feature_dict=precomputed_feature_dict,
+                    show_features=show_features,
+                    show_ticks=show_ticks_track,
+                    definition_reserved_radius_px=definition_reserved_radius_px,
+                    feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+                    tick_track_channel_override=_tick_track_channel_override,
+                    preferred_anchor_slot_ids=preferred_anchor_slot_ids,
+                    depth_config=depth_config if show_depth_track else None,
+                )
+                setattr(canvas_config, "circular_radial_layout", radial_layout)
+                setattr(canvas_config, "circular_feature_layout", radial_layout.features)
+                resolved_track_slots = _resolved_slots_from_radial_layout(radial_layout, layout_slots)
+                setattr(
+                    canvas,
+                    "_gbdraw_track_slot_geometry",
+                    _serialize_circular_track_slot_geometry(
+                        gb_record=gb_record,
+                        radial_layout=radial_layout,
+                        layout_slots=layout_slots,
+                        base_radius_px=float(canvas_config.radius),
+                    ),
+                )
+                if radial_layout.features is not None:
+                    rendered_feature_band_all_tracks = (
+                        float(radial_layout.features.all_band_px.inner_px),
+                        float(radial_layout.features.all_band_px.outer_px),
+                    )
+                    resolved_feature_anchor_radius_px = float(radial_layout.features.anchor_radius_px)
+                    feature_track_ratio_factor_override = (
+                        float(radial_layout.features.width_px)
+                        / max(
+                            FEATURE_BAND_EPSILON,
+                            float(canvas_config.radius) * float(canvas_config.track_ratio),
+                        )
+                    )
+                if radial_layout.outer_content_radius_px > float(canvas_config.radius):
+                    if _expand_canvas_to_fit_radius(canvas_config, radial_layout.outer_content_radius_px):
+                        _sync_canvas_viewbox(canvas, canvas_config)
+
+                default_anchor_px, default_arc_outer_px = _default_outer_label_arena(
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                )
+                if default_arc_outer_px < default_anchor_px:
+                    default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px
+                outer_arena = (
+                    (default_anchor_px, default_arc_outer_px)
+                    if feature_width_override_requested
+                    else None
+                )
+                precalculated_labels = prepare_label_list(
+                    precomputed_feature_dict,
+                    len(gb_record.seq),
+                    (
+                        float(resolved_feature_anchor_radius_px)
+                        if resolved_feature_anchor_radius_px is not None
+                        else canvas_config.radius
+                    ),
+                    canvas_config.track_ratio,
+                    config_dict,
+                    cfg=cfg,
+                    outer_arena=outer_arena,
+                    feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+                    feature_layout=radial_layout.features,
+                    radial_layout=radial_layout,
+                    track_preset=_circular_preset_for_layout(canvas_config, cfg),
+                    feature_lane_direction=feature_lane_direction,
+                    _candidate_cache=label_candidate_cache,
+                )
+
+            gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(
+                gc_config=gc_config,
+                depth_config=depth_config if show_depth_track else None,
+                resolved_track_slots=resolved_track_slots,
+            )
+            tick_label_annulus_for_legend_bounds = None
+            for resolved_slot in resolved_track_slots:
+                if resolved_slot.renderer != "ticks":
+                    continue
+                tick_label_annulus = (
+                    float(resolved_slot.reserved_inner_radius_px),
+                    float(resolved_slot.reserved_outer_radius_px),
+                )
+                if tick_label_annulus_for_legend_bounds is None:
+                    tick_label_annulus_for_legend_bounds = tick_label_annulus
+                else:
+                    tick_label_annulus_for_legend_bounds = (
+                        min(float(tick_label_annulus_for_legend_bounds[0]), tick_label_annulus[0]),
+                        max(float(tick_label_annulus_for_legend_bounds[1]), tick_label_annulus[1]),
+                    )
         _resolve_label_legend_collisions(
             precalculated_labels,
             len(gb_record.seq),
             canvas_config,
             legend_config,
         )
-        assign_leader_start_points(
-            [label for label in precalculated_labels if not label.get("is_embedded")],
-            len(gb_record.seq),
-        )
+        if cfg.labels.circular.placement == "horizontal":
+            assign_leader_start_points(
+                [label for label in precalculated_labels if not label.get("is_embedded")],
+                len(gb_record.seq),
+            )
         _expand_canvas_to_fit_external_labels(
             precalculated_labels,
             len(gb_record.seq),

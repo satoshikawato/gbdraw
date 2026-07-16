@@ -121,6 +121,20 @@ TEST_CASES = {
         "gbk": "MjeNMV.gb",
         "args": ["--separate_strands", "--labels", "--legend", "none"],
     },
+    "circular_radial_labels": {
+        "type": "circular",
+        "gbk": "MjeNMV.gb",
+        "args": [
+            "--labels",
+            "both",
+            "--label_placement",
+            "radial",
+            "--label_rendering",
+            "external_only",
+            "--legend",
+            "none",
+        ],
+    },
     "circular_tuckin": {
         "type": "circular",
         "gbk": "MjeNMV.gb",

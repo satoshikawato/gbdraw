@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Any, Literal, Mapping
 
 from gbdraw.labels.policy import LabelRenderingPolicy, normalize_label_rendering
+from gbdraw.labels.circular_types import (
+    CircularLabelPlacement,
+    normalize_circular_label_placement,
+)
 
 from .common import ShortLongFloatConfig  # type: ignore[reportMissingImports]
 
@@ -109,6 +113,18 @@ class LabelsLinearConfig:
 
 
 @dataclass(frozen=True)
+class LabelsCircularConfig:
+    placement: CircularLabelPlacement
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "LabelsCircularConfig":
+        raw = d if isinstance(d, dict) else dict(d)
+        return cls(
+            placement=normalize_circular_label_placement(raw.get("placement", "horizontal")),
+        )
+
+
+@dataclass(frozen=True)
 class LabelsSpacingConfig:
     circular: float
     linear: float
@@ -141,6 +157,7 @@ class LabelsConfig:
     inner_arc_center_x: dict[str, dict[str, float]]
     inner_arc_angle: dict[str, dict[str, float]]
     unified_adjustment: LabelsUnifiedAdjustmentConfig
+    circular: LabelsCircularConfig
     linear: LabelsLinearConfig
     spacing: LabelsSpacingConfig
 
@@ -178,6 +195,7 @@ class LabelsConfig:
             inner_arc_center_x=_factor_2level(d["inner_arc_center_x"]),
             inner_arc_angle=_factor_2level(d.get("inner_arc_angle", {})),
             unified_adjustment=LabelsUnifiedAdjustmentConfig.from_dict(d.get("unified_adjustment", {})),
+            circular=LabelsCircularConfig.from_dict(d.get("circular", {})),
             linear=LabelsLinearConfig.from_dict(d.get("linear", {})),
             spacing=LabelsSpacingConfig.from_dict(d.get("spacing", {})),
         )
@@ -190,8 +208,8 @@ __all__ = [
     "LabelsFontSizeConfig",
     "LabelsStrokeColorConfig",
     "LabelsUnifiedAdjustmentConfig",
+    "LabelsCircularConfig",
     "LabelsLinearConfig",
     "LabelsSpacingConfig",
 ]
-
 

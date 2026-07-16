@@ -192,6 +192,7 @@ const buildConfigOverrides = (state) => {
     circular_label_spacing: circular ? optionalNumber(adv.circular_label_spacing) : null,
     linear_label_spacing: circular ? null : optionalNumber(adv.linear_label_spacing),
     label_rendering: adv.label_rendering || 'auto',
+    circular_label_placement: circular ? (adv.circular_label_placement || 'horizontal') : null,
     label_placement: circular ? null : (adv.label_placement || 'auto'),
     label_rotation: circular ? null : optionalNumber(adv.label_rotation),
     show_gc: circular ? !form.suppress_gc : Boolean(form.show_gc),
@@ -641,6 +642,17 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
     nt: options.dinucleotide || 'GC',
     window_size: options.window ?? null,
     step_size: options.step ?? null,
+    label_rendering: overrides.label_rendering || 'auto',
+    circular_label_placement: renderRequest.mode === 'circular'
+      ? (overrides.circular_label_placement || 'horizontal')
+      : 'horizontal',
+    label_placement: renderRequest.mode === 'linear' ? (overrides.label_placement || 'auto') : 'auto',
+    circular_label_spacing: renderRequest.mode === 'circular'
+      ? (overrides.circular_label_spacing ?? null)
+      : null,
+    linear_label_spacing: renderRequest.mode === 'linear'
+      ? (overrides.linear_label_spacing ?? null)
+      : null,
     plot_title_position: options.output?.plotTitlePosition || (renderRequest.mode === 'linear' ? 'bottom' : 'none'),
     plot_title_font_size: options.plotTitleFontSize ?? null,
     multi_record_size_mode: renderRequest.layout?.multiRecordSizeMode || 'auto',
