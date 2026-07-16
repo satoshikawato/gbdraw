@@ -114,6 +114,14 @@ def _get_location_parts(location: Any) -> list[Any]:
     return [location]
 
 
+def _iter_features(features: Any):
+    """Yield top-level and nested GFF features in source order."""
+
+    for feature in features or []:
+        yield feature
+        yield from _iter_features(getattr(feature, "sub_features", None))
+
+
 
 
 
@@ -224,7 +232,7 @@ def _build_selector_safety_scope(records: list[Any]) -> list[dict[str, object]]:
     for rec_idx, record in enumerate(records):
         record_id = record.id or f"Record_{rec_idx}"
         hash_record_id = record.id
-        for feat in getattr(record, "features", []) or []:
+        for feat in _iter_features(getattr(record, "features", None)):
             scope.append(
                 {
                     "record_id": record_id,
@@ -262,7 +270,7 @@ def extract_features_from_records_payload(
         organism = _get_record_organism(record)
         coord_base, coord_step = _read_record_coord_map(record)
         record_ids.append(record_id)
-        for feat in record.features:
+        for feat in _iter_features(record.features):
             if not should_render_feature(
                 feat,
                 selected_feature_set,
@@ -385,6 +393,55 @@ def extract_features_from_genbank_payload(
     )
 
 
+def extract_features_from_gff_fasta_payload(
+    gff_path: str | Path,
+    fasta_path: str | Path,
+    *,
+    mode: str = "linear",
+    region_spec: object | None = None,
+    record_selector: object | None = None,
+    reverse_flag: object | None = None,
+    selected_features: object | None = None,
+    feature_visibility_rules: list[dict[str, Any]] | None = None,
+    specific_color_rules: dict | None = None,
+) -> dict[str, object]:
+    """Extract the Rich Feature Popup payload from paired GFF3 and FASTA files."""
+
+    from gbdraw.io.genome import load_gff_fasta
+
+    normalized_mode = str(mode or "linear").strip().lower()
+    if normalized_mode not in {"circular", "linear"}:
+        raise ValueError(f"Unsupported GFF3 feature extraction mode: {mode}")
+
+    selector = _normalize_record_selector(record_selector)
+    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
+    records = load_gff_fasta(
+        [str(gff_path)],
+        [str(fasta_path)],
+        mode=normalized_mode,
+        keep_all_features=True,
+        record_selectors=[selector] if selector else None,
+        reverse_flags=[reverse],
+    )
+    if region_spec:
+        from gbdraw.io.regions import apply_region_specs, parse_region_specs
+
+        records = apply_region_specs(records, parse_region_specs([str(region_spec)]))
+    return extract_features_from_records_payload(
+        records,
+        selected_features=selected_features,
+        feature_visibility_rules=feature_visibility_rules,
+        specific_color_rules=specific_color_rules,
+    )
+
+
+def _read_feature_visibility_rules(path: object | None) -> list[dict[str, Any]] | None:
+    normalized_path = _normalize_optional_path(path)
+    if not normalized_path:
+        return None
+    return compile_feature_visibility_rules(read_feature_visibility_file(normalized_path))
+
+
 def extract_features_from_genbank_json(
     gb_path: str | Path,
     region_spec: object | None = None,
@@ -394,12 +451,7 @@ def extract_features_from_genbank_json(
     feature_visibility_table_path: object | None = None,
 ) -> str:
     try:
-        feature_visibility_rules = None
-        normalized_visibility_path = _normalize_optional_path(feature_visibility_table_path)
-        if normalized_visibility_path:
-            feature_visibility_rules = compile_feature_visibility_rules(
-                read_feature_visibility_file(normalized_visibility_path)
-            )
+        feature_visibility_rules = _read_feature_visibility_rules(feature_visibility_table_path)
         payload = extract_features_from_genbank_payload(
             gb_path,
             region_spec=region_spec,
@@ -407,6 +459,32 @@ def extract_features_from_genbank_json(
             reverse_flag=reverse_flag,
             selected_features=selected_features,
             feature_visibility_rules=feature_visibility_rules,
+        )
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+    return json.dumps(payload)
+
+
+def extract_features_from_gff_fasta_json(
+    gff_path: str | Path,
+    fasta_path: str | Path,
+    mode: str = "linear",
+    region_spec: object | None = None,
+    record_selector: object | None = None,
+    reverse_flag: object | None = None,
+    selected_features: object | None = None,
+    feature_visibility_table_path: object | None = None,
+) -> str:
+    try:
+        payload = extract_features_from_gff_fasta_payload(
+            gff_path,
+            fasta_path,
+            mode=mode,
+            region_spec=region_spec,
+            record_selector=record_selector,
+            reverse_flag=reverse_flag,
+            selected_features=selected_features,
+            feature_visibility_rules=_read_feature_visibility_rules(feature_visibility_table_path),
         )
     except Exception as exc:
         return json.dumps({"error": str(exc)})

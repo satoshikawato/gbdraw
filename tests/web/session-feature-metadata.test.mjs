@@ -31,7 +31,66 @@ const {
   collectRenderedFeatureIdentitiesFromSvg,
   migrateFeatureOverrideState
 } = await import(pathToFileURL(join(tempDir, 'app', 'session-feature-metadata.js')));
+const { extractFeatureMetadataForPreview } = await import(
+  pathToFileURL(join(tempDir, 'app', 'feature-metadata-extraction.js'))
+);
 const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir, 'services', 'diagram-generation.js')));
+
+{
+  const gffFile = { name: 'record.gff3' };
+  const fastaFile = { name: 'record.fna' };
+  let extractionRequest = null;
+  const metadata = await extractFeatureMetadataForPreview({
+    mode: 'circular',
+    cInputType: 'gff',
+    lInputType: 'gb',
+    circularFile: gffFile,
+    circularFastaFile: fastaFile,
+    readFeatureExtractionDataImpl: async (request) => {
+      extractionRequest = request;
+      return {
+        features: [{ id: 'feature-a', svg_id: 'stable-a', type: 'CDS' }],
+        record_ids: ['record-a'],
+        selector_safety_scope: []
+      };
+    }
+  });
+  assert.equal(extractionRequest.path, '/input.gff');
+  assert.equal(extractionRequest.file, gffFile);
+  assert.equal(extractionRequest.format, 'gff');
+  assert.equal(extractionRequest.fastaPath, '/input.fasta');
+  assert.equal(extractionRequest.fastaFile, fastaFile);
+  assert.equal(extractionRequest.mode, 'circular');
+  assert.equal(metadata.extractedFeatures.length, 1);
+}
+
+{
+  const requests = [];
+  const metadata = await extractFeatureMetadataForPreview({
+    mode: 'linear',
+    cInputType: 'gb',
+    lInputType: 'gff',
+    linearSeqs: [
+      { gff: { name: 'a.gff3' }, fasta: { name: 'a.fna' } },
+      { gff: { name: 'b.gff3' }, fasta: { name: 'b.fna' } }
+    ],
+    readFeatureExtractionDataImpl: async (request) => {
+      requests.push(request);
+      const index = requests.length - 1;
+      return {
+        features: [{ id: `feature-${index}`, svg_id: `stable-${index}`, record_id: `record-${index}` }],
+        record_ids: [`record-${index}`],
+        selector_safety_scope: []
+      };
+    }
+  });
+  assert.deepEqual(requests.map((request) => request.path), ['/seq_0.gff', '/seq_1.gff']);
+  assert.deepEqual(requests.map((request) => request.fastaPath), ['/seq_0.fasta', '/seq_1.fasta']);
+  assert.deepEqual(
+    metadata.extractedFeatures.map((feature) => feature.svg_id),
+    ['stable-0_record_1', 'stable-1_record_2']
+  );
+}
 
 {
   const legacyResults = [{ name: 'out.svg', content: '<svg />' }];

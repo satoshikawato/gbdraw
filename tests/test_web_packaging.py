@@ -1053,8 +1053,11 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "label: 'Record index'" not in svg_actions_source
     assert "label: 'Strand'" not in svg_actions_source
     assert "navigator.clipboard?.writeText" in app_setup_source
-    assert "from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json" in helper_source
+    assert "from gbdraw.web_support.feature_metadata import (" in helper_source
+    assert "extract_features_from_genbank_json" in helper_source
+    assert "extract_features_from_gff_fasta_json" in helper_source
     assert "return extract_features_from_genbank_json(" in helper_source
+    assert "return extract_features_from_gff_fasta_json(" in helper_source
     assert "location_parts" in feature_metadata_source
     assert "nucleotide_sequence" in feature_metadata_source
     assert "amino_acid_sequence" in feature_metadata_source
@@ -3971,6 +3974,112 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
             "FastaA (4 bp)",
             "FastaB (6 bp)",
         ]
+        browser.close()
+
+
+@pytest.mark.slow
+def test_linear_gff_feature_click_and_selection_smoke(tmp_path: Path) -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    gff_path = tmp_path / "selectable.gff3"
+    fasta_path = tmp_path / "selectable.fna"
+    gff_path.write_text(
+        "\n".join(
+            [
+                "##gff-version 3",
+                "##sequence-region GffRecord 1 90",
+                "GffRecord\ttest\tgene\t1\t30\t.\t+\t.\tID=gene1;Name=example",
+                "GffRecord\ttest\tCDS\t1\t30\t.\t+\t0\tID=cds1;Parent=gene1;gene=example;product=selectable%20protein",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fasta_path.write_text(">GffRecord\n" + ("ATG" * 30) + "\n", encoding="utf-8")
+
+    ensure_prepared_browser_wheel()
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__?.pyodideReady", timeout=180_000)
+        page.locator("button.app-mode-button").filter(has_text="Linear").click()
+        page.locator('input[type="radio"][value="gff"]').check()
+        page.locator('input[type="file"][accept^=".gff,"]').first.set_input_files(str(gff_path))
+        page.locator('input[type="file"][accept^=".fa,"]').first.set_input_files(str(fasta_path))
+
+        result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
+        assert result["status"] == "ok"
+        page.wait_for_function(
+            "() => Array.isArray(window.__GBDRAW_APP__?.extractedFeatures) && window.__GBDRAW_APP__.extractedFeatures.length > 0",
+            timeout=60_000,
+        )
+        target = page.evaluate(
+            """async () => {
+                const app = window.__GBDRAW_APP__;
+                const featureIds = new Set(app.extractedFeatures.map((feature) => String(feature.svg_id || '')));
+                const element = Array.from(document.querySelectorAll('[data-gbdraw-feature-id]'))
+                    .find((candidate) => featureIds.has(String(candidate.getAttribute('data-gbdraw-feature-id') || '')));
+                if (!element) return null;
+                element.scrollIntoView({ block: 'center', inline: 'center' });
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                const rect = element.getBoundingClientRect();
+                return {
+                    id: String(element.getAttribute('data-gbdraw-feature-id') || ''),
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2
+                };
+            }"""
+        )
+        assert target is not None
+
+        page.evaluate(
+            """({ id, x, y, ctrlKey }) => {
+                const element = Array.from(document.querySelectorAll('[data-gbdraw-feature-id]'))
+                    .find((candidate) => candidate.getAttribute('data-gbdraw-feature-id') === id);
+                element.dispatchEvent(new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: x,
+                    clientY: y,
+                    ctrlKey
+                }));
+            }""",
+            {**target, "ctrlKey": False},
+        )
+        page.wait_for_function(
+            "(id) => window.__GBDRAW_APP__?.clickedFeature?.svg_id === id",
+            arg=target["id"],
+            timeout=20_000,
+        )
+
+        page.evaluate("() => { window.__GBDRAW_APP__.clickedFeature = null; }")
+        page.evaluate(
+            """({ id, x, y }) => {
+                const element = Array.from(document.querySelectorAll('[data-gbdraw-feature-id]'))
+                    .find((candidate) => candidate.getAttribute('data-gbdraw-feature-id') === id);
+                element.dispatchEvent(new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: x,
+                    clientY: y,
+                    ctrlKey: true
+                }));
+            }""",
+            target,
+        )
+        page.wait_for_function(
+            "(id) => window.__GBDRAW_APP__?.selectedFeatureCount === 1 && window.__GBDRAW_APP__.selectedFeatureIds?.has(id)",
+            arg=target["id"],
+            timeout=20_000,
+        )
         browser.close()
 
 

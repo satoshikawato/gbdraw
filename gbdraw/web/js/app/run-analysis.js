@@ -1006,6 +1006,7 @@ export const createRunAnalysis = ({
         cInputType: context.cInputType,
         lInputType: context.lInputType,
         circularFile: context.circularFile,
+        circularFastaFile: context.circularFastaFile,
         linearSeqs: context.linearSeqs,
         regionSpecs: context.regionSpecs,
         recordSelectors: context.recordSelectors,
@@ -4160,8 +4161,11 @@ json.dumps({
         selectedFeatureRecordIdx.value = 0;
 
         const shouldExtractFeatures =
-          (mode.value === 'circular' && cInputType.value === 'gb') ||
-          (mode.value === 'linear' && lInputType.value === 'gb' && linearSeqs.length > 0);
+          (mode.value === 'circular' && (
+            (cInputType.value === 'gb' && Boolean(files.c_gb)) ||
+            (cInputType.value === 'gff' && Boolean(files.c_gff) && Boolean(files.c_fasta))
+          )) ||
+          (mode.value === 'linear' && ['gb', 'gff'].includes(lInputType.value) && linearSeqs.length > 0);
 
         if (shouldExtractFeatures) {
           setProcessingStatus('Indexing features...');
@@ -4170,8 +4174,13 @@ json.dumps({
             mode: mode.value,
             cInputType: cInputType.value,
             lInputType: lInputType.value,
-            circularFile: files.c_gb || null,
-            linearSeqs: linearSeqs.map((seq) => ({ gb: seq.gb || null })),
+            circularFile: cInputType.value === 'gff' ? files.c_gff || null : files.c_gb || null,
+            circularFastaFile: cInputType.value === 'gff' ? files.c_fasta || null : null,
+            linearSeqs: linearSeqs.map((seq) => ({
+              gb: seq.gb || null,
+              gff: seq.gff || null,
+              fasta: seq.fasta || null
+            })),
             regionSpecs: regionSpecs.map((spec) => ({ file: spec?.displayFile || spec?.file || null })),
             recordSelectors: [...recordSelectors],
             reverseFlags: [...reverseFlags],
