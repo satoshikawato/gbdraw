@@ -25,7 +25,7 @@
 - Comparative genomics tracks from BLAST outfmt 6 or 7
 - Browser-based GUI at [gbdraw.app](https://gbdraw.app/) and local GUI via `gbdraw gui`
 - Fine-grained control over colors, labels, legends, and track layout
-- Export to SVG, PNG, PDF, EPS and PS (EPS and PS require CairoSVG as dependency)
+- Export to SVG, PNG, PDF, EPS, and PS (EPS and PS require CairoSVG as a dependency)
 
 ## Documentation
 
@@ -87,6 +87,5 @@ https://github.com/satoshikawato/gbdraw/issues
 If you use `gbdraw` in your research, please cite the preprint:
 
 ```text
-Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. [https://doi.org/10.64898/2026.04.07.716863](https://doi.org/10.64898/2026.04.07.716863)
+Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
 ```
-

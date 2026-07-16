@@ -97,8 +97,8 @@
         {
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-02-01-record-text-row.webp",
-            "alt": "Linear GenBank row 1 with BGC0000708.gbk and its exact Organism / strain and Subtitle / title values.",
-            "caption": "Enter the row 1 values exactly, including the literal <i>Streptomyces lividus</i> markup, then repeat the table rows in order."
+            "alt": "Linear GenBank row 1 with BGC0000708.gbk and its Organism / strain and Subtitle / title values.",
+            "caption": "Enter the row 1 values from the table, including the literal <i>Streptomyces lividus</i> markup, then repeat the remaining rows in order."
           }
         }
       ]
@@ -243,7 +243,7 @@
     },
     {
       "title": "Set labels, colors, and figure layout",
-      "body": "Use the Gallery session settings, including the orange palette and a gray default for CDS features that match none of the specific color rules.",
+      "body": "Show labels on the first record, use gene for CDS label text, rotate labels by 45 degrees, and choose the orange palette. Set unmatched CDS features to #dddddd; the table lists the remaining layout values.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -335,7 +335,7 @@
     },
     {
       "title": "Add the plot title and record text",
-      "body": "Type the Plot Title exactly as shown, including the literal <i>Streptomyces</i> markup, and keep Plot Title Position at Bottom (Default).",
+      "body": "Copy the Plot Title from the table, including the literal <i>Streptomyces</i> markup, and keep Plot Title Position at Bottom (Default).",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -356,7 +356,7 @@
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
             "alt": "Compact Title and Legend controls with the Plot Title input, Bottom position, and linear definition-text settings.",
-            "caption": "Use the Plot Title field for the exact title in the table and keep the listed position and definition-text settings."
+            "caption": "Use the Plot Title field for the title in the table and keep the listed position and definition-text settings."
           },
           "capture": {
             "source": "webapp",

@@ -1,6 +1,6 @@
 [Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw genome comparison links >](./2_Comparative_Genomics.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw precomputed BLAST links >](./2_Comparative_Genomics.md)
 
 [< Back to the guide index](./TUTORIALS.md)
 
@@ -95,6 +95,19 @@ gbdraw circular \
 
 With the default `--label_rendering auto` mode, labels that fit are embedded in feature bodies and the remaining labels are routed outside the circle.
 
+External circular labels are horizontal by default. Use radial placement when each external label should follow the circle radius:
+
+```bash
+gbdraw circular \
+  --gbk tests/test_inputs/NC_001879.gbk \
+  --labels both \
+  --label_placement radial \
+  --qualifier_priority examples/qualifier_priority.tsv \
+  -o circular_radial_labels
+```
+
+Radial placement works with `auto`, `embedded_only`, and `external_only`. Unlike horizontal `--labels both`, radial placement keeps requested GC and GC-skew tracks and expands the radial/canvas geometry when inner or long labels need more room.
+
 ![Circular white spot syndrome virus genome with feature labels placed within and around the map](../../examples/WSSV_with_labels.svg)
 
 > [!WARNING]
@@ -129,9 +142,9 @@ Linear mode has its own input selectors:
 - `--reverse_complement`
 - `--region`
 
-See [Draw genome comparison links from BLAST and protein searches](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for details.
+See [Arrange linear tracks, record labels, and rulers](./7_Linear_Layout.md#7-select-records-regions-and-orientation) and the [CLI Reference](../CLI_Reference.md) for details.
 
-[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw genome comparison links >](./2_Comparative_Genomics.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Next: Draw precomputed BLAST links >](./2_Comparative_Genomics.md)
 
 [< Back to the guide index](./TUTORIALS.md)
 

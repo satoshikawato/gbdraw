@@ -87,6 +87,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--track_type TRACK_TYPE] [--resolve_overlaps]
               [--labels [{none,out,both}]]
               [--label_rendering {auto,embedded_only,external_only}]
+              [--label_placement {horizontal,radial}]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
@@ -265,6 +266,11 @@ options:
                         and routes the rest externally; "embedded_only" drops
                         external labels; "external_only" forces labels outside
                         feature bodies. Default: "auto".
+  --label_placement {horizontal,radial}
+                        External circular label placement. "horizontal" keeps
+                        text level; "radial" aligns text with the circle radius
+                        and keeps left-half text readable. Default:
+                        "horizontal".
   --label_whitelist LABEL_WHITELIST
                         Path to a TSV file for label whitelisting by regex
                         pattern (optional); mutually exclusive with

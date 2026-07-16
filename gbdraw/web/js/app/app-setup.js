@@ -53,6 +53,8 @@ import {
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
+import { createLinearRecordSelector } from './linear-record-selector.js';
+import { discoverSequenceRecords } from './record-discovery.js';
 import {
   conservationSourceDescriptors,
   defaultConservationSeriesLabel,
@@ -273,6 +275,15 @@ export const createAppSetup = () => {
 
   const pyodideManager = createPyodideManager({ state });
   const getPyodide = pyodideManager.getPyodide;
+  const linearRecordSelector = createLinearRecordSelector({
+    state,
+    reactive,
+    recordReader: (options) => discoverSequenceRecords({
+      ...options,
+      pyodide: getPyodide(),
+      writeFileToFs: pyodideManager.writeFileToFs
+    })
+  });
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   setPreviewRuntime(previewRuntime);
 
@@ -1039,6 +1050,7 @@ export const createAppSetup = () => {
     resultsManager,
     runLabelReflow,
     refreshCircularRecordOrder,
+    refreshLinearRecordSelectors: linearRecordSelector.refresh,
     resetPreviewViewport,
     previewRuntime,
     prepareDiagramGenerationWorker: async () => {
@@ -2215,6 +2227,10 @@ export const createAppSetup = () => {
     canMoveLinearSeqDown,
     moveLinearSeqUp,
     moveLinearSeqDown,
+    linearRecordOptions: linearRecordSelector.optionsFor,
+    linearRecordSelectorDisabled: linearRecordSelector.isDisabled,
+    linearRecordSelectorError: linearRecordSelector.errorFor,
+    linearRecordSelectorWarning: linearRecordSelector.warningFor,
     form,
     adv,
     optionalNumberInputValue,

@@ -281,6 +281,26 @@ def test_index_links_to_hosted_interactive_gallery() -> None:
     assert 'rel="noopener noreferrer"' in match.group("attrs")
 
 
+def test_linear_record_selector_source_contract() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    watcher_js = (WEB_ROOT / "js" / "app" / "watchers.js").read_text(encoding="utf-8")
+
+    assert '<select\n                                                v-model="seq.region_record_id"' in index_html
+    assert '<input type="text" v-model="seq.region_record_id"' not in index_html
+    assert "Record (optional)" in index_html
+    assert "linearRecordOptions(seq)" in index_html
+    assert "linearRecordSelectorDisabled(seq)" in index_html
+    assert "def list_sequence_records(path, format):" in helper_js
+    assert 'format_map = {"genbank": "genbank", "fasta": "fasta"}' in helper_js
+    assert "def list_genbank_records(" not in helper_js
+    assert (WEB_ROOT / "js" / "app" / "record-discovery.js").is_file()
+    assert (WEB_ROOT / "js" / "app" / "linear-record-selector.js").is_file()
+    assert "createLinearRecordSelector" in app_setup_js
+    assert "refreshLinearRecordSelectors" in watcher_js
+
+
 def test_web_run_info_tab_source_contract() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
@@ -1033,8 +1053,11 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "label: 'Record index'" not in svg_actions_source
     assert "label: 'Strand'" not in svg_actions_source
     assert "navigator.clipboard?.writeText" in app_setup_source
-    assert "from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json" in helper_source
+    assert "from gbdraw.web_support.feature_metadata import (" in helper_source
+    assert "extract_features_from_genbank_json" in helper_source
+    assert "extract_features_from_gff_fasta_json" in helper_source
     assert "return extract_features_from_genbank_json(" in helper_source
+    assert "return extract_features_from_gff_fasta_json(" in helper_source
     assert "location_parts" in feature_metadata_source
     assert "nucleotide_sequence" in feature_metadata_source
     assert "amino_acid_sequence" in feature_metadata_source
@@ -3755,6 +3778,8 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "vendor" / "phosphor-icons" / "regular" / "style.css",
         build_root / "gbdraw" / "web" / "js" / "workers" / "losat-threaded-worker.js",
         build_root / "gbdraw" / "web" / "js" / "workers" / "losat-wasi-thread-worker.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "record-discovery.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "linear-record-selector.js",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat.wasm",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat-threaded.wasm",
         *(build_root / "gbdraw" / "web" / path for path in verify_module.REQUIRED_UI_FONT_FILES),
@@ -3802,6 +3827,260 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         gallery_members = sorted(name for name in outer_names if name.startswith("gbdraw/web/gallery/"))
         assert browser_wheels == [browser_wheel_member]
         assert gallery_members == []
+        assert "gbdraw/web/js/app/record-discovery.js" in outer_names
+        assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
+
+
+@pytest.mark.slow
+def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    def write_genbank(path: Path, specs: list[tuple[str, int]]) -> None:
+        records = []
+        for index, (record_id, length) in enumerate(specs):
+            record = SeqRecord(
+                Seq(("ATGC" * ((length + 3) // 4))[:length]),
+                id=record_id,
+                name=record_id,
+                description=f"Record {index + 1}",
+            )
+            record.annotations["molecule_type"] = "DNA"
+            record.features = [
+                SeqFeature(
+                    FeatureLocation(0, length),
+                    type="source",
+                    qualifiers={"organism": [f"Organism {index + 1}"]},
+                ),
+                SeqFeature(FeatureLocation(0, min(80, length)), type="CDS"),
+            ]
+            records.append(record)
+        SeqIO.write(records, path, "genbank")
+
+    unique_gbk = tmp_path / "unique.gbk"
+    duplicate_gbk = tmp_path / "duplicate.gbk"
+    gff_path = tmp_path / "records.gff3"
+    fasta_path = tmp_path / "records.fasta"
+    session_path = tmp_path / "record-selector-session.json"
+    write_genbank(unique_gbk, [("RecA", 1234), ("RecB", 567)])
+    write_genbank(duplicate_gbk, [("RecA", 1234), ("RecA", 1100)])
+    gff_path.write_text("##gff-version 3\nFastaA\t.\tgene\t1\t4\t.\t+\t.\tID=gene1\n", encoding="utf-8")
+    fasta_path.write_text(">FastaA\nATGC\n>FastaB\nATGCGT\n", encoding="utf-8")
+
+    ensure_prepared_browser_wheel()
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__")
+        page.evaluate(
+            """() => {
+                window.__gbdrawDialogMessages = [];
+                window.alert = (message) => window.__gbdrawDialogMessages.push(String(message || ''));
+            }"""
+        )
+        page.locator("button.app-mode-button").filter(has_text="Linear").click()
+        page.wait_for_function("() => window.__GBDRAW_APP__?.pyodideReady", timeout=180_000)
+
+        page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(unique_gbk))
+        selector = page.locator("select[data-record-selector-uid]").first
+        page.wait_for_function(
+            """() => {
+                const select = document.querySelector('select[data-record-selector-uid]');
+                return select && !select.disabled && select.options.length === 3;
+            }""",
+            timeout=60_000,
+        )
+        assert selector.locator("option").all_text_contents() == [
+            "Automatic (no explicit selector)",
+            "RecA (1,234 bp)",
+            "RecB (567 bp)",
+        ]
+        selector.select_option("RecB")
+        assert page.evaluate("() => window.__GBDRAW_APP__.linearSeqs[0].region_record_id") == "RecB"
+
+        result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
+        assert result["status"] == "ok"
+        svg_content = page.evaluate("() => String(window.__GBDRAW_APP__.results[0]?.content || '')")
+        assert "567 bp" in svg_content
+        assert "1,234 bp" not in svg_content
+
+        page.evaluate(
+            """() => {
+                const seq = window.__GBDRAW_APP__.linearSeqs[0];
+                seq.region_start = 10;
+                seq.region_end = 20;
+            }"""
+        )
+        region_result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
+        assert region_result["status"] == "ok"
+        region_svg = page.evaluate("() => String(window.__GBDRAW_APP__.results[0]?.content || '')")
+        assert "10-20" in region_svg
+
+        page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(duplicate_gbk))
+        page.wait_for_function(
+            """() => {
+                const select = document.querySelector('select[data-record-selector-uid]');
+                return select && !select.disabled &&
+                    Array.from(select.options).some((option) => option.value === '#2');
+            }""",
+            timeout=60_000,
+        )
+        duplicate_labels = selector.locator("option").all_text_contents()
+        assert "RecA (1,234 bp) [#1]" in duplicate_labels
+        assert "RecA (1,100 bp) [#2]" in duplicate_labels
+        selector.select_option("#2")
+
+        page.evaluate("() => { window.__GBDRAW_APP__.sessionTitle = 'Record selector test'; }")
+        with page.expect_download() as download_info:
+            page.get_by_role("button", name="Save Session", exact=True).click()
+        download_info.value.save_as(session_path)
+
+        page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(unique_gbk))
+        page.locator('input[type="file"][accept=".json"]').set_input_files(str(session_path))
+        page.wait_for_function(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                const select = document.querySelector('select[data-record-selector-uid]');
+                return app?.linearSeqs?.[0]?.region_record_id === '#2' &&
+                    select && !select.disabled && select.value === '#2';
+            }""",
+            timeout=60_000,
+        )
+
+        page.locator('input[type="radio"][value="gff"]').check()
+        page.locator('input[type="file"][accept^=".gff,"]').first.set_input_files(str(gff_path))
+        page.locator('input[type="file"][accept^=".fa,"]').first.set_input_files(str(fasta_path))
+        page.wait_for_function(
+            """() => {
+                const select = document.querySelector('select[data-record-selector-uid]');
+                return select && !select.disabled &&
+                    Array.from(select.options).some((option) => option.value === 'FastaB');
+            }""",
+            timeout=60_000,
+        )
+        assert selector.locator("option").all_text_contents() == [
+            "Automatic (no explicit selector)",
+            "#2 (not found in current file)",
+            "FastaA (4 bp)",
+            "FastaB (6 bp)",
+        ]
+        browser.close()
+
+
+@pytest.mark.slow
+def test_linear_gff_feature_click_and_selection_smoke(tmp_path: Path) -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    gff_path = tmp_path / "selectable.gff3"
+    fasta_path = tmp_path / "selectable.fna"
+    gff_path.write_text(
+        "\n".join(
+            [
+                "##gff-version 3",
+                "##sequence-region GffRecord 1 90",
+                "GffRecord\ttest\tgene\t1\t30\t.\t+\t.\tID=gene1;Name=example",
+                "GffRecord\ttest\tCDS\t1\t30\t.\t+\t0\tID=cds1;Parent=gene1;gene=example;product=selectable%20protein",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fasta_path.write_text(">GffRecord\n" + ("ATG" * 30) + "\n", encoding="utf-8")
+
+    ensure_prepared_browser_wheel()
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__?.pyodideReady", timeout=180_000)
+        page.locator("button.app-mode-button").filter(has_text="Linear").click()
+        page.locator('input[type="radio"][value="gff"]').check()
+        page.locator('input[type="file"][accept^=".gff,"]').first.set_input_files(str(gff_path))
+        page.locator('input[type="file"][accept^=".fa,"]').first.set_input_files(str(fasta_path))
+
+        result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
+        assert result["status"] == "ok"
+        page.wait_for_function(
+            "() => Array.isArray(window.__GBDRAW_APP__?.extractedFeatures) && window.__GBDRAW_APP__.extractedFeatures.length > 0",
+            timeout=60_000,
+        )
+        target = page.evaluate(
+            """async () => {
+                const app = window.__GBDRAW_APP__;
+                const featureIds = new Set(app.extractedFeatures.map((feature) => String(feature.svg_id || '')));
+                const element = Array.from(document.querySelectorAll('[data-gbdraw-feature-id]'))
+                    .find((candidate) => featureIds.has(String(candidate.getAttribute('data-gbdraw-feature-id') || '')));
+                if (!element) return null;
+                element.scrollIntoView({ block: 'center', inline: 'center' });
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                const rect = element.getBoundingClientRect();
+                return {
+                    id: String(element.getAttribute('data-gbdraw-feature-id') || ''),
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2
+                };
+            }"""
+        )
+        assert target is not None
+
+        page.evaluate(
+            """({ id, x, y, ctrlKey }) => {
+                const element = Array.from(document.querySelectorAll('[data-gbdraw-feature-id]'))
+                    .find((candidate) => candidate.getAttribute('data-gbdraw-feature-id') === id);
+                element.dispatchEvent(new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: x,
+                    clientY: y,
+                    ctrlKey
+                }));
+            }""",
+            {**target, "ctrlKey": False},
+        )
+        page.wait_for_function(
+            "(id) => window.__GBDRAW_APP__?.clickedFeature?.svg_id === id",
+            arg=target["id"],
+            timeout=20_000,
+        )
+
+        page.evaluate("() => { window.__GBDRAW_APP__.clickedFeature = null; }")
+        page.evaluate(
+            """({ id, x, y }) => {
+                const element = Array.from(document.querySelectorAll('[data-gbdraw-feature-id]'))
+                    .find((candidate) => candidate.getAttribute('data-gbdraw-feature-id') === id);
+                element.dispatchEvent(new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: x,
+                    clientY: y,
+                    ctrlKey: true
+                }));
+            }""",
+            target,
+        )
+        page.wait_for_function(
+            "(id) => window.__GBDRAW_APP__?.selectedFeatureCount === 1 && window.__GBDRAW_APP__.selectedFeatureIds?.has(id)",
+            arg=target["id"],
+            timeout=20_000,
+        )
+        browser.close()
 
 
 @pytest.mark.slow
@@ -3994,6 +4273,126 @@ def test_gallery_session_restore_smoke() -> None:
             ]
             assert matching_console_errors == [], session_name
 
+        browser.close()
+
+
+@pytest.mark.slow
+def test_circular_radial_label_browser_flow_and_reflow() -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    ensure_prepared_browser_wheel()
+    input_path = REPO_ROOT / "tests" / "test_inputs" / "MjeNMV.gbk"
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__?.pyodideReady", timeout=180_000)
+        assert page.evaluate("() => window.__GBDRAW_APP__?.adv?.circular_label_placement") == "horizontal"
+        page.evaluate(
+            """async () => {
+                window.__GBDRAW_APP__.form.labels_mode = 'out';
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            }"""
+        )
+
+        controls = page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                const label = Array.from(document.querySelectorAll('label'))
+                    .find((candidate) => candidate.textContent.includes('Circular Label Placement'));
+                const select = label?.parentElement?.querySelector('select');
+                return {
+                    state: app?.adv?.circular_label_placement,
+                    value: select?.value,
+                    options: Array.from(select?.options || []).map((option) => option.value),
+                    geometryVisible: Array.from(document.querySelectorAll('h4'))
+                        .some((heading) => heading.textContent.includes('LABEL GEOMETRY'))
+                };
+            }"""
+        )
+        assert controls == {
+            "state": "horizontal",
+            "value": "horizontal",
+            "options": ["horizontal", "radial"],
+            "geometryVisible": True,
+        }
+
+        page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(input_path))
+        page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                app.form.labels_mode = 'both';
+                app.form.legend = 'none';
+                app.adv.label_rendering = 'external_only';
+                app.adv.circular_label_placement = 'radial';
+            }"""
+        )
+        page.wait_for_function(
+            """() => !Array.from(document.querySelectorAll('h4'))
+                .some((heading) => heading.textContent.includes('LABEL GEOMETRY'))"""
+        )
+
+        result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
+        assert result["status"] == "ok"
+        page.wait_for_function(
+            """() => window.__GBDRAW_APP__?.featureEditorStatus?.status === 'summary-ready' &&
+                Boolean(document.querySelector('#label_text text'))""",
+            timeout=180_000,
+        )
+        page.evaluate("() => window.__GBDRAW_APP__.syncLabelEditor()")
+        page.wait_for_function(
+            "() => Array.isArray(window.__GBDRAW_APP__?.editableLabels) && window.__GBDRAW_APP__.editableLabels.length > 0",
+            timeout=180_000,
+        )
+
+        def radial_stats() -> dict:
+            return page.evaluate(
+                """() => {
+                    const content = String(window.__GBDRAW_APP__.results?.[0]?.content || '');
+                    const document = new DOMParser().parseFromString(content, 'image/svg+xml');
+                    return {
+                        textCount: document.querySelectorAll('#label_text text[transform^="rotate("]').length,
+                        lineCount: document.querySelectorAll('#label_leaders line').length,
+                        content
+                    };
+                }"""
+            )
+
+        before = radial_stats()
+        assert before["textCount"] > 0
+        assert before["lineCount"] == 2 * before["textCount"]
+
+        edited_text = "radial browser reflow label with a deliberately long value"
+        edit_started = page.evaluate(
+            """async (nextText) => {
+                const app = window.__GBDRAW_APP__;
+                const entry = app.editableLabels.find((candidate) => candidate.featureId);
+                if (!entry) return false;
+                await app.requestLabelTextChangeByFeatureId(entry.featureId, nextText);
+                await app.handleLabelTextScopeChoice('single');
+                return true;
+            }""",
+            edited_text,
+        )
+        assert edit_started
+        page.wait_for_function(
+            """(nextText) => {
+                const app = window.__GBDRAW_APP__;
+                const content = String(app?.results?.[0]?.content || '');
+                return !app?.processing && !app?.labelReflowProcessing && content.includes(nextText);
+            }""",
+            arg=edited_text,
+            timeout=180_000,
+        )
+        after = radial_stats()
+        assert edited_text in after["content"]
+        assert after["textCount"] == before["textCount"]
+        assert after["lineCount"] == 2 * after["textCount"]
         browser.close()
 
 

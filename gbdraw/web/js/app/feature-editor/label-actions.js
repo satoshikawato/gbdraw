@@ -123,18 +123,34 @@ const setLabelText = (textEl, value) => {
 
 const hasExcludedAncestor = (textEl) => Boolean(textEl.closest(EXCLUDED_GROUP_SELECTOR));
 
+const getPhasedCircularFeatureLine = (svg, textEl) => {
+  const textGroup = textEl.closest('g[id="label_text"], g[id^="label_text_"]');
+  if (!textGroup) return null;
+  const textGroups = Array.from(svg.querySelectorAll('g[id="label_text"], g[id^="label_text_"]'));
+  const leaderGroups = Array.from(svg.querySelectorAll('g[id="label_leaders"], g[id^="label_leaders_"]'));
+  const groupIndex = textGroups.indexOf(textGroup);
+  if (groupIndex < 0 || groupIndex >= leaderGroups.length) return null;
+  const textIndex = Array.from(textGroup.querySelectorAll('text')).indexOf(textEl);
+  if (textIndex < 0) return null;
+  const leaderLines = Array.from(leaderGroups[groupIndex].querySelectorAll('line'));
+  return leaderLines[(2 * textIndex) + 1] || null;
+};
+
 const getCircularFeatureAnchor = (svg, textEl) => {
   const inLabelsGroup = Boolean(textEl.closest('g[id="labels"], g[id^="labels_"]'));
-  if (!inLabelsGroup) return null;
+  let featureLine = null;
+  if (inLabelsGroup) {
+    const prev = textEl.previousElementSibling;
+    const prev2 = prev ? prev.previousElementSibling : null;
+    const lines = [prev, prev2].filter(
+      (candidate) => candidate && candidate.tagName && candidate.tagName.toLowerCase() === 'line'
+    );
+    featureLine = lines[0] || null;
+  } else {
+    featureLine = getPhasedCircularFeatureLine(svg, textEl);
+  }
+  if (!featureLine) return null;
 
-  const prev = textEl.previousElementSibling;
-  const prev2 = prev ? prev.previousElementSibling : null;
-  const lines = [prev, prev2].filter(
-    (candidate) => candidate && candidate.tagName && candidate.tagName.toLowerCase() === 'line'
-  );
-  if (lines.length === 0) return null;
-
-  const featureLine = lines[0];
   const x2 = toNumber(featureLine.getAttribute('x2'), NaN);
   const y2 = toNumber(featureLine.getAttribute('y2'), NaN);
   if (!Number.isFinite(x2) || !Number.isFinite(y2)) return null;
@@ -157,6 +173,10 @@ const collectEditableLabelElements = (svg, mode) => {
 
   if (mode === 'circular') {
     svg.querySelectorAll('g[id="labels"] text, g[id^="labels_"] text').forEach((textEl) => {
+      if (hasExcludedAncestor(textEl)) return;
+      labels.add(textEl);
+    });
+    svg.querySelectorAll('g[id="label_text"] text, g[id^="label_text_"] text').forEach((textEl) => {
       if (hasExcludedAncestor(textEl)) return;
       labels.add(textEl);
     });

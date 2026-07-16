@@ -3,6 +3,8 @@ import { cloneJsonValue } from '../services/json-clone.js';
 
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 const featureExtractionCache = new WeakMap();
+const featureExtractionFileIds = new WeakMap();
+let nextFeatureExtractionFileId = 1;
 
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 
@@ -12,6 +14,15 @@ const normalizeRecordSelectorText = (value) => {
     return '';
   }
   return normalized;
+};
+
+const getFeatureExtractionFileId = (file) => {
+  if (!file || (typeof file !== 'object' && typeof file !== 'function')) return '';
+  if (!featureExtractionFileIds.has(file)) {
+    featureExtractionFileIds.set(file, nextFeatureExtractionFileId);
+    nextFeatureExtractionFileId += 1;
+  }
+  return featureExtractionFileIds.get(file);
 };
 
 export const cloneFeatureExtractionData = (data) => ({
@@ -33,14 +44,20 @@ export const buildFeatureExtractionCacheKey = ({
   recordSelector,
   reverseFlag,
   selectedFeatures,
-  featureVisibility
+  featureVisibility,
+  format = 'genbank',
+  mode = 'linear',
+  fastaFile = null
 }) =>
   JSON.stringify({
     regionSpec: String(regionSpec || ''),
     recordSelector: normalizeRecordSelectorText(recordSelector),
     reverseFlag: reverseFlag ? '1' : '0',
     selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : 'all',
-    featureVisibility: String(featureVisibility || '')
+    featureVisibility: String(featureVisibility || ''),
+    format: String(format || 'genbank'),
+    mode: String(mode || 'linear'),
+    fastaFileId: getFeatureExtractionFileId(fastaFile)
   });
 
 export const getCachedFeatureExtraction = (file, key) => {
@@ -64,6 +81,10 @@ export const setCachedFeatureExtraction = (file, key, value) => {
 export const readFeatureExtractionData = async ({
   path,
   file,
+  format = 'genbank',
+  fastaPath = null,
+  fastaFile = null,
+  mode = 'linear',
   regionSpec,
   recordSelector,
   reverseFlag,
@@ -79,7 +100,10 @@ export const readFeatureExtractionData = async ({
     recordSelector,
     reverseFlag,
     selectedFeatures,
-    featureVisibility: featureVisibilityTsv
+    featureVisibility: featureVisibilityTsv,
+    format,
+    mode,
+    fastaFile
   });
   const cached = getCachedFeatureExtraction(file, cacheKey);
   if (cached) {
@@ -90,6 +114,9 @@ export const readFeatureExtractionData = async ({
   if (!file) {
     throw new Error('Feature extraction input file is not available.');
   }
+  if (String(format || '').toLowerCase() === 'gff' && (!fastaPath || !fastaFile)) {
+    throw new Error('GFF3 feature extraction requires a paired FASTA file.');
+  }
 
   const startedAt = getNow();
   const buffer = await file.arrayBuffer();
@@ -98,6 +125,13 @@ export const readFeatureExtractionData = async ({
     name: file.name || path.split('/').pop() || 'input.gb',
     bytes: buffer
   }];
+  if (fastaPath && fastaFile) {
+    requestFiles.push({
+      path: fastaPath,
+      name: fastaFile.name || fastaPath.split('/').pop() || 'input.fasta',
+      bytes: await fastaFile.arrayBuffer()
+    });
+  }
   if (featureVisibilityTablePath && featureVisibilityTsv) {
     requestFiles.push({
       path: featureVisibilityTablePath,
@@ -108,6 +142,9 @@ export const readFeatureExtractionData = async ({
 
   const response = await runFeatureExtractionImpl({
     path,
+    format,
+    fastaPath,
+    mode,
     files: requestFiles,
     regionSpec: regionSpec || null,
     recordSelector: recordSelector || null,
@@ -192,6 +229,7 @@ export const extractFeatureMetadataForPreview = async ({
   cInputType,
   lInputType,
   circularFile,
+  circularFastaFile = null,
   linearSeqs = [],
   regionSpecs = null,
   recordSelectors = null,
@@ -205,10 +243,15 @@ export const extractFeatureMetadataForPreview = async ({
 }) => {
   const errors = [];
 
-  if (mode === 'circular' && cInputType === 'gb') {
+  if (mode === 'circular' && ['gb', 'gff'].includes(cInputType)) {
+    const isGff = cInputType === 'gff';
     const featData = await readFeatureExtractionDataImpl({
-      path: '/input.gb',
+      path: isGff ? '/input.gff' : '/input.gb',
       file: circularFile || null,
+      format: isGff ? 'gff' : 'genbank',
+      fastaPath: isGff ? '/input.fasta' : null,
+      fastaFile: isGff ? circularFastaFile : null,
+      mode: 'circular',
       regionSpec: null,
       recordSelector: null,
       reverseFlag: false,
@@ -249,7 +292,8 @@ export const extractFeatureMetadataForPreview = async ({
     };
   }
 
-  if (mode === 'linear' && lInputType === 'gb' && Array.isArray(linearSeqs) && linearSeqs.length > 0) {
+  if (mode === 'linear' && ['gb', 'gff'].includes(lInputType) && Array.isArray(linearSeqs) && linearSeqs.length > 0) {
+    const isGff = lInputType === 'gff';
     const regionContext = regionSpecs && recordSelectors && reverseFlags
       ? { regionSpecs, recordSelectors, reverseFlags }
       : buildLinearRegionExtractionContext(linearSeqs, lInputType);
@@ -261,8 +305,12 @@ export const extractFeatureMetadataForPreview = async ({
     for (let i = 0; i < linearSeqs.length; i += 1) {
       const seq = linearSeqs[i] || {};
       const featData = await readFeatureExtractionDataImpl({
-        path: `/seq_${i}.gb`,
-        file: seq.gb || null,
+        path: isGff ? `/seq_${i}.gff` : `/seq_${i}.gb`,
+        file: isGff ? seq.gff || null : seq.gb || null,
+        format: isGff ? 'gff' : 'genbank',
+        fastaPath: isGff ? `/seq_${i}.fasta` : null,
+        fastaFile: isGff ? seq.fasta || null : null,
+        mode: 'linear',
         regionSpec: extractionRegionSpec(regionContext.regionSpecs[i]),
         recordSelector: regionContext.recordSelectors[i] ?? '',
         reverseFlag: Boolean(regionContext.reverseFlags[i]),

@@ -122,6 +122,9 @@ const runGeneration = async ({
 
 const runFeatureExtraction = async ({
   path,
+  format = 'genbank',
+  fastaPath = null,
+  mode = 'linear',
   files = [],
   regionSpec = null,
   recordSelector = null,
@@ -134,22 +137,44 @@ const runFeatureExtraction = async ({
   }
   const normalizedPath = String(path || '').trim();
   if (!normalizedPath) {
-    throw new Error('Feature extraction requires a GenBank input path.');
+    throw new Error('Feature extraction requires an input path.');
+  }
+  const normalizedFormat = String(format || 'genbank').trim().toLowerCase();
+  const isGff = normalizedFormat === 'gff';
+  const normalizedFastaPath = String(fastaPath || '').trim();
+  if (isGff && !normalizedFastaPath) {
+    throw new Error('GFF3 feature extraction requires a FASTA input path.');
   }
 
   const { pyodide } = runtime;
   writeGenerationFiles(pyodide, files);
 
-  const extractFeatures = pyodide.globals.get('extract_features_from_genbank');
+  const extractFeatures = pyodide.globals.get(
+    isGff ? 'extract_features_from_gff_fasta' : 'extract_features_from_genbank'
+  );
   try {
-    const resultJson = extractFeatures(
-      normalizedPath,
-      regionSpec || null,
-      recordSelector || null,
-      reverseFlag ? '1' : '0',
-      Array.isArray(selectedFeatures) && selectedFeatures.length ? JSON.stringify(selectedFeatures) : null,
-      featureVisibilityTablePath || null
-    );
+    const selectedFeaturesJson = Array.isArray(selectedFeatures) && selectedFeatures.length
+      ? JSON.stringify(selectedFeatures)
+      : null;
+    const resultJson = isGff
+      ? extractFeatures(
+          normalizedPath,
+          normalizedFastaPath,
+          String(mode || 'linear'),
+          regionSpec || null,
+          recordSelector || null,
+          reverseFlag ? '1' : '0',
+          selectedFeaturesJson,
+          featureVisibilityTablePath || null
+        )
+      : extractFeatures(
+          normalizedPath,
+          regionSpec || null,
+          recordSelector || null,
+          reverseFlag ? '1' : '0',
+          selectedFeaturesJson,
+          featureVisibilityTablePath || null
+        );
     return JSON.parse(String(resultJson || 'null'));
   } finally {
     extractFeatures.destroy?.();

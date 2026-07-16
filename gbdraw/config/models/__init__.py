@@ -8,6 +8,7 @@ opt into these models for clearer typing and separation.
 from .canvas import CanvasConfig, CircularCanvasConfig, LinearCanvasConfig
 from .labels import (
     LabelsConfig,
+    LabelsCircularConfig,
     LabelsFilteringConfig,
     LabelsLengthThresholdConfig,
     LabelsLinearConfig,
@@ -21,6 +22,7 @@ __all__ = [
     "CircularCanvasConfig",
     "LinearCanvasConfig",
     "LabelsConfig",
+    "LabelsCircularConfig",
     "LabelsFilteringConfig",
     "LabelsLengthThresholdConfig",
     "LabelsLinearConfig",

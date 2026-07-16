@@ -135,6 +135,7 @@ class LabelsGroup:
                 outer_arena=self.outer_arena,
                 feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
                 feature_layout=self.feature_layout,
+                radial_layout=getattr(self.canvas_config, "circular_radial_layout", None),
                 track_preset=self.track_type,
                 feature_lane_direction=str(self.feature_lane_direction),
             )

@@ -61,6 +61,13 @@ def test_documented_python_api_example_runs(
     for index, block in enumerate(blocks, start=1):
         exec(compile(block, f"docs/PYTHON_API.md:block-{index}", "exec"), namespace)
 
+    documented_record = namespace["record"]
+    documented_options = namespace["options"]
+    assert isinstance(documented_record, SeqRecord)
+    assert isinstance(documented_options, DiagramOptions)
+    assert set(documented_options.selected_features_set) <= {
+        feature.type for feature in documented_record.features
+    }
     assert (temp_output_dir / "api_circular.svg").exists()
 
 

@@ -8,23 +8,28 @@ This module contains the circular/arc-based label placement logic that used to l
 `gbdraw.labels.placement`.
 """
 
+from __future__ import annotations
+
 import math
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
-from .filtering import get_label_text, preprocess_label_filtering
-from .policy import normalize_label_rendering
-from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ..features.coordinates import get_strand
+from .filtering import preprocess_label_filtering
+from .policy import normalize_label_rendering
+from .circular_candidates import build_circular_label_candidates
+from .circular_horizontal import keep_horizontal_layout
+from .circular_radial import place_radial_labels
+from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ..core.text import calculate_bbox_dimensions
 from ..core.sequence import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import calculate_feature_position_factors_circular
 from ..layout.spatial import Aabb, candidate_aabb_pairs
 from ..svg.arrows import calculate_circular_arrow_length
-from ..diagrams.circular.radial_layout import (  # type: ignore[reportMissingImports]
-    CircularFeatureLayout,
-    feature_radius_intervals,
-)
+
+if TYPE_CHECKING:
+    from ..diagrams.circular.radial_layout import CircularFeatureLayout, CircularRadialLayout
 
 # Keep dense large-font labels from being pushed excessively far from features.
 MIN_BBOX_GAP_RATIO = 0.01
@@ -1235,6 +1240,8 @@ def _build_feature_radius_intervals(
     if total_length <= 0:
         return []
     if feature_layout is not None:
+        from ..diagrams.circular.radial_layout import feature_radius_intervals
+
         return feature_radius_intervals(feature_dict, total_length, feature_layout)
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
@@ -4543,9 +4550,11 @@ def prepare_label_list(
     outer_arena: tuple[float, float] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_layout: CircularFeatureLayout | None = None,
+    radial_layout: CircularRadialLayout | None = None,
     track_preset: str | None = None,
     feature_lane_direction: str | None = None,
     label_font_size: float | None = None,
+    _candidate_cache: dict[str, object] | None = None,
 ):
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
     embedded_labels = []
@@ -4601,41 +4610,44 @@ def prepare_label_list(
     )
     circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
 
-    for feature_object in feature_dict.values():
-        feature_label_text = get_label_text(feature_object, label_filtering)
-        if feature_label_text == "":
+    cached_candidates = (
+        _candidate_cache.get("candidates")
+        if _candidate_cache is not None
+        else None
+    )
+    if isinstance(cached_candidates, tuple):
+        candidates = cached_candidates
+    else:
+        candidates = build_circular_label_candidates(
+            feature_dict,
+            total_length,
+            label_filtering,
+            font_family=font_family,
+            font_size=font_size,
+            measure_text=lambda text, family, size: calculate_bbox_dimensions(
+                text,
+                family,
+                size,
+                interval,
+            ),
+        )
+        if _candidate_cache is not None:
+            _candidate_cache["candidates"] = candidates
+    candidates_by_id = {candidate.stable_id: candidate for candidate in candidates}
+
+    for input_order, (stable_id, feature_object) in enumerate(feature_dict.items()):
+        candidate = candidates_by_id.get(str(stable_id))
+        if candidate is None:
             continue
         else:
+            feature_label_text = candidate.text
             label_entry = dict()
-            longest_segment_length = 0
-            longest_segment_start = 0
-            longest_segment_end = 0
-            longeset_segment_middle = 0
+            longest_segment_start = int(candidate.segment_start_bp)
+            longest_segment_end = int(candidate.segment_end_bp)
+            longeset_segment_middle = float(candidate.segment_middle_bp)
             is_embedded = False
             label_middle = 0
-            coordinate_strand: str = "undefined"
-            list_of_coordinates = feature_object.coordinates
-            origin_spanning_segment = _coalesce_origin_spanning_label_segment(feature_object, total_length)
-            if origin_spanning_segment is not None:
-                longest_segment_start, longest_segment_end, coordinate_strand = origin_spanning_segment
-                longeset_segment_middle = _segment_midpoint_bp(
-                    longest_segment_start,
-                    longest_segment_end,
-                    total_length,
-                )
-            else:
-                # `FeatureObject.strand` is derived at creation time; keep placement pure.
-                for coordinate in list_of_coordinates:
-                    coordinate_start = int(coordinate.start)
-                    coordinate_end = int(coordinate.end)
-                    coordinate_strand = get_strand(coordinate.strand)
-                    interval_length = abs(int(coordinate_end - coordinate_start) + 1)
-                    interval_middle = int(coordinate_end + coordinate_start) / 2
-                    if interval_length > longest_segment_length:
-                        longest_segment_start = coordinate_start
-                        longest_segment_end = coordinate_end
-                        longeset_segment_middle = interval_middle
-                        longest_segment_length = interval_length
+            coordinate_strand = candidate.strand
 
             # Get track_id for overlap resolution
             track_id = getattr(feature_object, 'feature_track_id', 0)
@@ -4653,7 +4665,8 @@ def prepare_label_list(
                 feature_outer_radius = float(lane.outer_px)
             # Store track_id in label entry for embedded label drawing
             label_entry["track_id"] = track_id
-            bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
+            bbox_width_px = candidate.width_px
+            bbox_height_px = candidate.height_px
             label_middle = longeset_segment_middle
             label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * radius)
             label_start = label_middle - (label_as_feature_length / 2)
@@ -4755,6 +4768,12 @@ def prepare_label_list(
             elif label_rendering == "embedded_only" and not is_embedded:
                 continue
             label_entry["label_text"] = feature_label_text
+            label_entry["stable_id"] = str(stable_id)
+            label_entry["input_order"] = int(input_order)
+            label_entry["preferred_middle"] = float(label_middle)
+            label_entry["preferred_angle_deg"] = (
+                360.0 * (float(label_middle) / float(total_length))
+            ) % 360.0
             label_entry["middle"] = label_middle
             label_entry["start"] = label_start
             label_entry["end"] = label_end
@@ -4794,6 +4813,62 @@ def prepare_label_list(
                     else:
                         label_entry["is_inner"] = True
                         inner_labels.append(label_entry)
+
+    if cfg.labels.circular.placement == "radial":
+        outer_reserved_radius_px = 0.0
+        if outer_arena is not None:
+            outer_reserved_radius_px = max(float(outer_arena[0]), float(outer_arena[1]))
+        if radial_layout is not None:
+            outer_reserved_radius_px = max(
+                outer_reserved_radius_px,
+                float(radial_layout.outer_content_radius_px),
+            )
+
+        inner_reserved_outer_radius_px = 0.0
+        if radial_layout is not None:
+            definition_band = radial_layout.definition_reserved_band_px
+            if definition_band is not None:
+                inner_reserved_outer_radius_px = max(
+                    inner_reserved_outer_radius_px,
+                    float(definition_band.outer_px),
+                )
+            feature_inner_radius = (
+                float(radial_layout.features.all_band_px.inner_px)
+                if radial_layout.features is not None
+                else float("inf")
+            )
+            for resolved_slot in radial_layout.slots:
+                if resolved_slot.renderer in {"features", "feature_labels"}:
+                    continue
+                reserved_band = resolved_slot.reserved_band_px
+                if reserved_band is None:
+                    continue
+                if float(reserved_band.outer_px) <= feature_inner_radius + 1e-6:
+                    inner_reserved_outer_radius_px = max(
+                        inner_reserved_outer_radius_px,
+                        float(reserved_band.outer_px),
+                    )
+
+        radial_result = place_radial_labels(
+            outer_labels,
+            inner_labels if allow_inner_labels else (),
+            total_length=total_length,
+            spacing_px=label_spacing_px,
+            outer_reserved_radius_px=outer_reserved_radius_px,
+            inner_reserved_outer_radius_px=inner_reserved_outer_radius_px,
+        )
+        external_labels = [dict(label) for label in radial_result.labels]
+        for label in external_labels:
+            label["layout_content_bounds"] = radial_result.content_bounds
+            label["required_radius_growth_px"] = radial_result.required_radius_growth_px
+            label["layout_collision_counts"] = (
+                radial_result.text_collision_count,
+                radial_result.leader_text_collision_count,
+                radial_result.leader_crossing_count,
+                radial_result.order_violation_count,
+            )
+        return embedded_labels + external_labels
+
     outer_labels_rearranged = rearrange_labels_fc(
         outer_labels,
         radius,
@@ -5004,7 +5079,7 @@ def prepare_label_list(
         key=lambda label: float(label["middle"]),
     )
     label_list_fc = embedded_labels + external_labels_ordered
-    return label_list_fc
+    return list(keep_horizontal_layout(label_list_fc).labels)
 
 
 __all__ = [
@@ -5026,4 +5101,3 @@ __all__ = [
     "x_overlap",
     "y_overlap",
 ]
-

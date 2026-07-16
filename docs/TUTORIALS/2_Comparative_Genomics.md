@@ -4,9 +4,7 @@
 
 # Draw genome comparison links from precomputed BLAST results
 
-**Question:** Where do two or more displayed nucleotide sequences have retained local similarity hits?
-
-After this guide, you can connect precomputed BLAST HSPs to the correct records, explain what each ribbon represents, and extend the comparison to more records without treating the hits as orthology or conservation calls.
+This guide connects precomputed BLAST high-scoring segment pairs (HSPs) to the correct records and explains what each ribbon represents. It also extends the comparison to more records without treating the hits as orthology or conservation calls.
 
 For searches over annotated CDS translations, use [Compare annotated CDS proteins](./4_Protein_Comparisons.md). That guide is the single place that explains the `pairwise`, `orthogroup`, and `collinear` protein-search modes.
 

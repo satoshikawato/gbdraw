@@ -15,7 +15,10 @@ import contextlib
 import logging
 from gbdraw.circular import _get_args as _get_circular_args, run_circular_from_namespace
 from gbdraw.linear import _get_args as _get_linear_args, run_linear_from_namespace
-from gbdraw.web_support.feature_metadata import extract_features_from_genbank_json
+from gbdraw.web_support.feature_metadata import (
+    extract_features_from_genbank_json,
+    extract_features_from_gff_fasta_json,
+)
 from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload as _serialize_shared_orthogroups_payload
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
@@ -1324,11 +1327,16 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
-def list_genbank_records(gb_path):
-    """List record selectors and IDs from a GenBank file."""
+def list_sequence_records(path, format):
+    """List record selectors, IDs, and lengths from a sequence file."""
     from Bio import SeqIO
     try:
-        records = list(SeqIO.parse(gb_path, "genbank"))
+        format_map = {"genbank": "genbank", "fasta": "fasta"}
+        if format not in format_map:
+            return json.dumps({"error": f"Unsupported format: {format}"})
+        records = list(SeqIO.parse(path, format_map[format]))
+        if not records:
+            return json.dumps({"error": "No records found"})
         payload = []
         for idx, record in enumerate(records):
             payload.append(
@@ -1504,6 +1512,19 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
         gb_path,
+        region_spec=region_spec,
+        record_selector=record_selector,
+        reverse_flag=reverse_flag,
+        selected_features=selected_features,
+        feature_visibility_table_path=feature_visibility_table_path,
+    )
+
+def extract_features_from_gff_fasta(gff_path, fasta_path, mode="linear", region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None):
+    """Extract feature info from paired GFF3 and FASTA files for UI display."""
+    return extract_features_from_gff_fasta_json(
+        gff_path,
+        fasta_path,
+        mode=mode,
         region_spec=region_spec,
         record_selector=record_selector,
         reverse_flag=reverse_flag,

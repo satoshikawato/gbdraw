@@ -68,6 +68,7 @@ import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
 } from './plot-title-position.js';
+import { discoverSequenceRecords } from './record-discovery.js';
 
 const hashText = async (text) => {
   if (globalThis.crypto?.subtle) {
@@ -737,6 +738,7 @@ export const createRunAnalysis = ({
   let pendingReflowReason = 'label-edit';
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
+  let circularRecordRefreshGeneration = 0;
   let activeLosatAbortController = null;
   let latestCliHelperFiles = [];
   let latestCliHelperArchiveName = 'out-cli-files.zip';
@@ -1004,6 +1006,7 @@ export const createRunAnalysis = ({
         cInputType: context.cInputType,
         lInputType: context.lInputType,
         circularFile: context.circularFile,
+        circularFastaFile: context.circularFastaFile,
         linearSeqs: context.linearSeqs,
         regionSpecs: context.regionSpecs,
         recordSelectors: context.recordSelectors,
@@ -1314,6 +1317,7 @@ json.dumps({
         center_reserved_radius: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
+        circular_label_placement: false,
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
@@ -1348,6 +1352,7 @@ json.dumps({
   "center_reserved_radius": "--center_reserved_radius" in _source,
   "tick_label_font_size": "--tick_label_font_size" in _source,
   "circular_label_spacing": "--circular_label_spacing" in _source,
+  "circular_label_placement": "--label_placement" in _source,
   "label_rendering": "--label_rendering" in _source,
   "circular_track_slot": "--circular_track_slot" in _source,
   "circular_track_axis_index": "--circular_track_axis_index" in _source,
@@ -1378,6 +1383,7 @@ json.dumps({
         center_reserved_radius: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
+        circular_label_placement: false,
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
@@ -1528,14 +1534,16 @@ json.dumps({
   };
 
   const refreshCircularRecordOrder = async () => {
+    const refreshGeneration = ++circularRecordRefreshGeneration;
     if (!Array.isArray(adv.multi_record_positions)) {
       adv.multi_record_positions = [];
     }
     const pyodide = getPyodide();
+    const sourceFile = files.c_gb;
     if (
       mode.value !== 'circular' ||
       cInputType.value !== 'gb' ||
-      !files.c_gb ||
+      !sourceFile ||
       !pyodideReady.value ||
       !pyodide
     ) {
@@ -1547,34 +1555,34 @@ json.dumps({
     }
 
     try {
-      await writeFileToFs(files.c_gb, '/input.gb');
-      const payloadRaw = pyodide.globals.get('list_genbank_records')('/input.gb');
-      const payload = JSON.parse(String(payloadRaw || '{}'));
-      if (payload?.error) {
-        console.warn('Failed to read circular record list:', payload.error);
-        circularRecordList.value = [];
-        adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
-        return;
-      }
-
-      const nextRecords = [];
-      const seenSelectors = new Set();
-      (Array.isArray(payload?.records) ? payload.records : []).forEach((entry, index) => {
-        const selector = String(entry?.selector ?? `#${index + 1}`).trim();
-        if (!selector || seenSelectors.has(selector)) return;
-        seenSelectors.add(selector);
-        const recordId = String(entry?.record_id ?? '').trim() || `Record_${index + 1}`;
-        const recordLength = Number(entry?.record_length ?? 0);
-        nextRecords.push({
-          selector,
-          record_id: recordId,
-          record_length: Number.isFinite(recordLength) && recordLength > 0 ? recordLength : null
-        });
+      const records = await discoverSequenceRecords({
+        file: sourceFile,
+        format: 'genbank',
+        pyodide,
+        writeFileToFs,
+        temporaryPath: `/record-discovery-circular-${refreshGeneration}.gb`
       });
+      if (
+        refreshGeneration !== circularRecordRefreshGeneration ||
+        mode.value !== 'circular' ||
+        cInputType.value !== 'gb' ||
+        files.c_gb !== sourceFile
+      ) return;
+      const nextRecords = records.map((entry) => ({
+        selector: entry.selector,
+        record_id: entry.recordId,
+        record_length: entry.recordLength
+      }));
       circularRecordList.value = nextRecords;
       const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...nextPositions);
     } catch (error) {
+      if (
+        refreshGeneration !== circularRecordRefreshGeneration ||
+        mode.value !== 'circular' ||
+        cInputType.value !== 'gb' ||
+        files.c_gb !== sourceFile
+      ) return;
       console.warn('Failed to refresh circular record order:', error);
       circularRecordList.value = [];
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
@@ -2340,6 +2348,19 @@ json.dumps({
             );
           }
           args.push('--label_rendering', normalizedLabelRendering);
+        }
+        const normalizedCircularLabelPlacement =
+          String(adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
+            ? 'radial'
+            : 'horizontal';
+        adv.circular_label_placement = normalizedCircularLabelPlacement;
+        if (labelsMode !== 'none' && normalizedCircularLabelPlacement === 'radial') {
+          if (!multiCanvasSupport.circular_label_placement) {
+            throw new Error(
+              'Current gbdraw wheel does not support Circular --label_placement. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--label_placement', normalizedCircularLabelPlacement);
         }
         if (form.suppress_gc) args.push('--suppress_gc');
         if (form.suppress_skew) args.push('--suppress_skew');
@@ -4156,8 +4177,11 @@ json.dumps({
         selectedFeatureRecordIdx.value = 0;
 
         const shouldExtractFeatures =
-          (mode.value === 'circular' && cInputType.value === 'gb') ||
-          (mode.value === 'linear' && lInputType.value === 'gb' && linearSeqs.length > 0);
+          (mode.value === 'circular' && (
+            (cInputType.value === 'gb' && Boolean(files.c_gb)) ||
+            (cInputType.value === 'gff' && Boolean(files.c_gff) && Boolean(files.c_fasta))
+          )) ||
+          (mode.value === 'linear' && ['gb', 'gff'].includes(lInputType.value) && linearSeqs.length > 0);
 
         if (shouldExtractFeatures) {
           setProcessingStatus('Indexing features...');
@@ -4166,8 +4190,13 @@ json.dumps({
             mode: mode.value,
             cInputType: cInputType.value,
             lInputType: lInputType.value,
-            circularFile: files.c_gb || null,
-            linearSeqs: linearSeqs.map((seq) => ({ gb: seq.gb || null })),
+            circularFile: cInputType.value === 'gff' ? files.c_gff || null : files.c_gb || null,
+            circularFastaFile: cInputType.value === 'gff' ? files.c_fasta || null : null,
+            linearSeqs: linearSeqs.map((seq) => ({
+              gb: seq.gb || null,
+              gff: seq.gff || null,
+              fasta: seq.fasta || null
+            })),
             regionSpecs: regionSpecs.map((spec) => ({ file: spec?.displayFile || spec?.file || null })),
             recordSelectors: [...recordSelectors],
             reverseFlags: [...reverseFlags],

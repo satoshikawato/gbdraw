@@ -2,7 +2,7 @@
 
 # Gallery
 
-Use this page to choose a visual capability, then use the reproducible recipes below when you need the exact inputs and settings. For diagrams with feature popups, match inspection, zoom controls, downloadable sessions, and guided browser tutorials, open the [interactive gallery](https://gbdraw.app/gallery/).
+This page links static figures to reproducible recipes with their inputs and settings. The [interactive gallery](https://gbdraw.app/gallery/) adds feature popups, match inspection, zoom controls, downloadable sessions, and browser tutorials.
 
 ## Capabilities
 
@@ -68,7 +68,7 @@ To deliberately refresh tracked figures after reviewing the output, add `--outpu
 
 ### Human mitochondrial genome labels
 
-Question: how can CDS labels use the `gene` qualifier while other feature types keep their defaults?
+Use a qualifier-priority table to take CDS label text from `gene` while keeping the default qualifiers for other feature types.
 
 ```bash
 python tools/reproduce_examples.py --figure HmmtDNA_qualifier_priority_soft_pastels
@@ -78,7 +78,7 @@ The recipe generates the qualifier-priority TSV and renders the circular figure.
 
 ### Escherichia and Shigella nucleotide matches
 
-Question: how do adjacent-genome BLAST HSPs appear in a two-record or multi-record layout?
+These recipes draw adjacent-genome BLAST HSPs in two-record and multi-record layouts.
 
 ```bash
 python tools/reproduce_examples.py \
@@ -90,7 +90,7 @@ The manifest records query and subject order for each search preparation. For in
 
 ### Majanivirus TBLASTX comparison
 
-Question: how can ten viral records be compared with precomputed translated nucleotide matches and product-based colors?
+This recipe compares ten viral records with precomputed translated-nucleotide matches and product-based colors.
 
 ```bash
 python tools/reproduce_examples.py --figure majani
@@ -113,9 +113,9 @@ python tools/reproduce_examples.py \
 
 The hosted gallery keeps the larger session-based workflows separate from the static recipes:
 
-- [Vibrio multi-record circular layout](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018) — six records on one canvas.
-- [Aminoglycoside biosynthetic gene clusters](https://gbdraw.app/gallery/#BGC0000708-BGC0000713) — protein search, similarity groups, qualifier colors, and legend editing.
-- [Hepatoplasmataceae similarity groups](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear) — the same records rendered with two different match representations.
-- [WSSV nucleotide-similarity rings](https://gbdraw.app/gallery/#WSSV_genome_comparison) — an advanced session-first case study. Its displayed command documents provenance but is not labeled as directly runnable because the complete exact public input bundle is unavailable.
+- [Vibrio multi-record circular layout](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018): six records on one canvas.
+- [Aminoglycoside biosynthetic gene clusters](https://gbdraw.app/gallery/#BGC0000708-BGC0000713): protein search, similarity groups, qualifier colors, and legend editing.
+- [Hepatoplasmataceae similarity groups](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear): the same records rendered with two different match representations.
+- [WSSV nucleotide-similarity rings](https://gbdraw.app/gallery/#WSSV_genome_comparison): an advanced session-first case study. Its displayed command documents provenance but is not labeled as directly runnable because some prepared inputs are available only in the bundled session.
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)

@@ -12,8 +12,10 @@ from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.features.ids import compute_feature_hash
+from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.regions import apply_region_specs, parse_region_specs
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
+from gbdraw.web_support.feature_metadata import extract_features_from_gff_fasta_payload
 from gbdraw.features.visibility import compile_feature_visibility_rules, should_render_feature
 
 
@@ -35,6 +37,25 @@ def _write_genbank(tmp_path: Path, record: SeqRecord) -> Path:
     path = tmp_path / "input.gb"
     SeqIO.write(record, path, "genbank")
     return path
+
+
+def _write_gff_fasta(tmp_path: Path) -> tuple[Path, Path]:
+    gff_path = tmp_path / "input.gff3"
+    fasta_path = tmp_path / "input.fasta"
+    gff_path.write_text(
+        "\n".join(
+            [
+                "##gff-version 3",
+                "##sequence-region GffRecord 1 30",
+                "GffRecord\ttest\tgene\t1\t12\t.\t+\t.\tID=gene1;Name=example",
+                "GffRecord\ttest\tCDS\t1\t12\t.\t+\t0\tID=cds1;Parent=gene1;gene=example;product=example%20protein",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fasta_path.write_text(">GffRecord\nATGAAATAAGGGCCCCCCCCCCCCCCCCCC\n", encoding="utf-8")
+    return gff_path, fasta_path
 
 
 def _extract_features(namespace: dict[str, object], path: Path) -> list[dict[str, object]]:
@@ -148,6 +169,52 @@ def test_importable_feature_metadata_matches_pyodide_wrapper(
     wrapper_payload = json.loads(python_helpers_namespace["extract_features_from_genbank"](str(path)))  # type: ignore[operator]
 
     assert wrapper_payload == extract_features_from_genbank_payload(path)
+
+
+def test_gff_fasta_feature_metadata_includes_nested_rendered_features(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    gff_path, fasta_path = _write_gff_fasta(tmp_path)
+
+    payload = extract_features_from_gff_fasta_payload(
+        gff_path,
+        fasta_path,
+        mode="linear",
+        selected_features=["CDS"],
+    )
+    features = payload["features"]
+
+    assert len(features) == 1
+    assert features[0]["type"] == "CDS"
+    assert features[0]["record_id"] == "GffRecord"
+    assert features[0]["gene"] == "example"
+    assert features[0]["product"] == "example protein"
+    assert features[0]["nucleotide_sequence"] == "ATGAAATAAGGG"
+
+    rendered_records = load_gff_fasta(
+        [str(gff_path)],
+        [str(fasta_path)],
+        mode="linear",
+        selected_features_set={"CDS"},
+    )
+    assert features[0]["svg_id"] == compute_feature_hash(
+        rendered_records[0].features[0],
+        record_id=rendered_records[0].id,
+    )
+
+    wrapper_payload = json.loads(
+        python_helpers_namespace["extract_features_from_gff_fasta"](  # type: ignore[operator]
+            str(gff_path),
+            str(fasta_path),
+            "linear",
+            None,
+            None,
+            None,
+            json.dumps(["CDS"]),
+        )
+    )
+    assert wrapper_payload == payload
 
 
 def test_web_feature_extraction_includes_qualifiers_locations_and_translation(

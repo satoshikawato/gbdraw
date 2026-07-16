@@ -930,6 +930,10 @@ export const applyConfigData = (data) => {
     state.adv.label_placement = 'above_feature';
   }
   state.adv.label_rendering = normalizeLabelRendering(state.adv.label_rendering);
+  state.adv.circular_label_placement =
+    String(state.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
+      ? 'radial'
+      : 'horizontal';
   if (state.adv.label_placement === 'above_feature') {
     state.adv.label_rendering = 'auto';
   }

@@ -837,6 +837,7 @@ def _append_circular_gui_args(
         ("gc_skew_radius_circular", "--gc_skew_radius"),
         ("tick_label_font_size", "--tick_label_font_size"),
         ("circular_label_spacing", "--circular_label_spacing"),
+        ("circular_label_placement", "--label_placement"),
     ):
         value = adv.get(key)
         if value not in (None, "", False):
@@ -2152,6 +2153,7 @@ def _populate_circular_cli_config(
         "multi_record_row_gap_ratio": ("--multi_record_row_gap_ratio", "--multi-record-row-gap-ratio"),
         "tick_label_font_size": ("--tick_label_font_size", "--tick-label-font-size"),
         "circular_label_spacing": ("--circular_label_spacing", "--circular-label-spacing"),
+        "circular_label_placement": ("--label_placement", "--label-placement"),
         "feature_width_circular": ("--feature_width", "--feature-width"),
         "gc_content_width_circular": ("--gc_content_width", "--gc-content-width"),
         "gc_content_radius_circular": ("--gc_content_radius", "--gc-content-radius"),

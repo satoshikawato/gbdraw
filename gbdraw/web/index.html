@@ -1563,8 +1563,25 @@
                                 <div class="grid grid-cols-1 gap-2">
                                     <div class="grid grid-cols-2 gap-2 items-end">
                                         <div>
-                                            <label class="text-[9px] block">Record ID (optional)</label>
-                                            <input type="text" v-model="seq.region_record_id" placeholder="NC_000913.3" class="form-input px-1 py-0.5 text-xs">
+                                            <label class="text-[9px] block">Record (optional)</label>
+                                            <select
+                                                v-model="seq.region_record_id"
+                                                :disabled="linearRecordSelectorDisabled(seq)"
+                                                :data-record-selector-uid="seq.uid"
+                                                class="form-select px-1 py-0.5 text-xs disabled:bg-slate-100 disabled:text-slate-500"
+                                            >
+                                                <option
+                                                    v-for="option in linearRecordOptions(seq)"
+                                                    :key="`${option.value}:${option.synthetic ? 'synthetic' : 'record'}`"
+                                                    :value="option.value"
+                                                >{{ option.label }}</option>
+                                            </select>
+                                            <p v-if="linearRecordSelectorError(seq)" class="mt-1 text-[9px] text-red-600">
+                                                {{ linearRecordSelectorError(seq) }}
+                                            </p>
+                                            <p v-else-if="linearRecordSelectorWarning(seq)" class="mt-1 text-[9px] text-amber-700">
+                                                {{ linearRecordSelectorWarning(seq) }}
+                                            </p>
                                         </div>
                                         <label class="flex items-center gap-2 text-[10px] text-slate-600 pb-1">
                                             <input type="checkbox" v-model="seq.region_reverse" class="form-checkbox"> Reverse complement
@@ -3038,6 +3055,16 @@
                                         <template v-if="mode === 'circular'">
                                             <div>
                                                 <label class="input-label text-[10px] mb-0">
+                                                    Circular Label Placement
+                                                    <help-tip text="Horizontal keeps external labels level; Radial aligns them with the circle radius."></help-tip>
+                                                </label>
+                                                <select v-model="adv.circular_label_placement" class="form-input form-input-compact">
+                                                    <option value="horizontal">Horizontal</option>
+                                                    <option value="radial">Radial</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="input-label text-[10px] mb-0">
                                                     Circular Label Spacing
                                                     <help-tip text="Minimum label-to-label vertical spacing for circular layouts in px."></help-tip>
                                                 </label>
@@ -3103,7 +3130,7 @@
                                     </div>
                                 </div>
 
-                                <div v-if="mode === 'circular'" class="pt-3 border-t border-slate-100">
+                                <div v-if="mode === 'circular' && adv.circular_label_placement !== 'radial'" class="pt-3 border-t border-slate-100">
                                     <h4 class="text-[11px] font-bold text-slate-500 mb-2">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>

@@ -172,6 +172,25 @@ class LabelDrawer:
         return group
 
     def add_label_on_the_rim(self, group, label, radius, record_length):
+        if label.get("placement") == "radial":
+            start_x = float(label.get("text_x", label["start_x"]))
+            start_y = float(label.get("text_y", label["start_y"]))
+            label_path = generate_text_path(
+                label["label_text"],
+                start_x,
+                start_y,
+                interval=0,
+                font_size=self.font_size,
+                font_weight="normal",
+                font=self.font_family,
+                dominant_baseline=str(label.get("dominant_baseline", "middle")),
+                text_anchor=str(label.get("text_anchor", "middle")),
+            )
+            rotation_deg = float(label.get("rotation_deg", 0.0))
+            label_path.rotate(rotation_deg, center=(start_x, start_y))
+            group.add(label_path)
+            return group
+
         anchor_value, baseline_value = self.set_feature_label_anchor_value(
             record_length, label["middle"], label["start_x"], label.get("is_inner", False)
         )

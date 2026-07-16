@@ -155,7 +155,7 @@
     },
     {
       "title": "Set the diagram layout",
-      "body": "Use the layout and track options that match the Gallery session.",
+      "body": "Use the ajisai palette, a Middle track layout, curved matches, and a ruler. Center the records, separate the strands, and show GC content and GC skew.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [

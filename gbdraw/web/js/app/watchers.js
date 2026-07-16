@@ -28,6 +28,7 @@ export const setupWatchers = ({
   resultsManager,
   runLabelReflow,
   refreshCircularRecordOrder,
+  refreshLinearRecordSelectors,
   resetPreviewViewport,
   previewRuntime = null,
   prepareDiagramGenerationWorker
@@ -47,6 +48,7 @@ export const setupWatchers = ({
     shouldDeferCircularPreviewUpdates,
     mode,
     cInputType,
+    lInputType,
     canvasPadding,
     skipCaptureBaseConfig,
     skipPositionReapply,
@@ -766,6 +768,22 @@ export const setupWatchers = ({
       if (typeof refreshCircularRecordOrder !== 'function') return;
       await refreshCircularRecordOrder();
     }
+  );
+  watch(
+    () => [
+      mode.value,
+      lInputType.value,
+      pyodideReady.value,
+      ...linearSeqs.flatMap((seq) => [
+        seq.uid,
+        lInputType.value === 'gff' ? seq.fasta : seq.gb
+      ])
+    ],
+    async () => {
+      if (typeof refreshLinearRecordSelectors !== 'function') return;
+      await refreshLinearRecordSelectors();
+    },
+    { immediate: true }
   );
 
   onMounted(async () => {

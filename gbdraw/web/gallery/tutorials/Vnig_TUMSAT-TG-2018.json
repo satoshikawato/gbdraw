@@ -235,7 +235,7 @@
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
             "alt": "Compact Title and Legend controls with the Vibrio plot-title field and Plot Title Position menu open with Bottom highlighted.",
-            "caption": "Enter the exact plot title from the table and choose the highlighted Bottom option."
+            "caption": "Enter the plot title from the table and choose the highlighted Bottom option."
           },
           "capture": {
             "source": "webapp",
