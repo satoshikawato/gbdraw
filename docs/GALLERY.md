@@ -81,9 +81,9 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
       CDS, rRNA, and tRNA features rendered as rectangles instead of directional arrows. See <a href="./TUTORIALS/9_Feature_Visibility_Shapes.md">Feature visibility and shapes</a>.
     </td>
     <td width="50%" valign="top">
-      <a href="../examples/palettes_combined_image_1.png"><img src="../examples/palettes_combined_image_1.png" alt="Contact sheet comparing gbdraw color palettes on circular genome maps" width="100%"></a><br>
+      <a href="https://gbdraw.app/gallery/palettes/"><img src="../examples/AP027078_tuckin_separate_strands_default.svg" alt="Circular genome map in the default gbdraw color palette" width="100%"></a><br>
       <strong>Built-in color palettes</strong><br>
-      A side-by-side palette comparison. Open the <a href="../examples/color_palette_examples.md">palette reference</a> for both circular and Linear examples and the underlying colors.
+      Choose any built-in palette and recolor one full-size Circular SVG immediately in the <a href="https://gbdraw.app/gallery/palettes/">Circular Palette Explorer</a>. The <a href="../examples/color_palette_examples.md">palette reference</a> lists the underlying colors.
     </td>
   </tr>
 </table>

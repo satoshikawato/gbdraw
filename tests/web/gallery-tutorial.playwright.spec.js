@@ -95,6 +95,57 @@ test.afterAll(async () => {
   await new Promise((resolveClose) => server.close(resolveClose));
 });
 
+test('Circular Palette Explorer recolors one semantic SVG across all built-in palettes', async ({ page }) => {
+  await page.goto(`${baseUrl}/gallery/palettes/`, { waitUntil: 'domcontentloaded' });
+
+  const paletteSelect = page.getByLabel('Palette', { exact: true });
+  await expect(paletteSelect).toBeEnabled();
+  await expect(paletteSelect.locator('option')).toHaveCount(55);
+  await expect(page.locator('#palette-preview svg')).toHaveCount(1);
+
+  const paletteMismatches = await page.evaluate(async () => {
+    const response = await fetch('./palettes.json');
+    const data = await response.json();
+    const select = document.querySelector('#palette-select');
+    const defaultPalette = data.palettes[data.defaultPalette];
+    const mismatches = [];
+    Object.entries(data.palettes).forEach(([name, palette]) => {
+      select.value = name;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      document.querySelectorAll('#palette-preview [data-palette-key]').forEach((element) => {
+        const role = element.dataset.paletteKey;
+        const attribute = element.dataset.paletteAttribute || 'fill';
+        const expected = String(
+          palette[role] || palette.default || defaultPalette[role] || defaultPalette.default
+        ).toLowerCase();
+        const actual = String(element.getAttribute(attribute) || '').toLowerCase();
+        if (actual !== expected) mismatches.push(`${name}:${role}:${actual}:${expected}`);
+      });
+    });
+    return mismatches;
+  });
+  expect(paletteMismatches).toEqual([]);
+
+  const cds = page.locator('#palette-preview [data-palette-key="CDS"]').first();
+  await paletteSelect.selectOption('default');
+  await expect(cds).toHaveAttribute('fill', '#54bcf8');
+
+  await paletteSelect.selectOption('orchid');
+  await expect(cds).toHaveAttribute('fill', '#c25792');
+  await expect(page.locator('#selected-palette-name')).toHaveText('orchid');
+  await expect(page).toHaveURL(`${baseUrl}/gallery/palettes/?palette=orchid`);
+
+  await paletteSelect.selectOption('ajisai');
+  const ncRnaSwatch = page.locator('.palette-swatch').filter({ hasText: 'ncRNA' });
+  await expect(ncRnaSwatch.locator('code')).toHaveText('#d3d3d3');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+});
+
 test('Gallery routes a sample path and tab hash while preserving Preview defaults', async ({ page }) => {
   await page.goto(`${baseUrl}/gallery/HmmtDNA_basic_circular#Tutorial`, { waitUntil: 'domcontentloaded' });
 

@@ -2,17 +2,11 @@
 
 This page is generated from [`gbdraw/data/color_palettes.toml`](../gbdraw/data/color_palettes.toml) by `python tools/generate_palette_page.py`. Choose a palette with `-p/--palette <name>`. The TOML file is the complete source of truth for every semantic color.
 
-gbdraw currently provides **55 palettes**. The contact sheets compare all of them without retaining a separate large SVG for every palette and layout.
+gbdraw currently provides **55 palettes**.
 
-## All palettes at a glance
+## Interactive Circular preview
 
-### Circular mode
-
-![Circular diagrams rendered with every built-in palette](./palettes_combined_image_1.png)
-
-### Linear comparison mode
-
-![Linear comparison diagrams rendered with every built-in palette](./palettes_combined_image_2.png)
+Open the [Circular Palette Explorer](https://gbdraw.app/gallery/palettes/) to choose a palette and recolor one full-size SVG immediately. The explorer keeps the diagram geometry fixed and loads the palette values generated from the TOML source.
 
 ## Representative full-size examples
 
@@ -99,12 +93,11 @@ The table keeps the most frequently compared roles visible. Open the TOML source
 ## Reproduce the images
 
 ```bash
-python tools/reproduce_examples.py --figure palettes_combined_image_1
-python tools/reproduce_examples.py --figure palettes_combined_image_2
-python tools/reproduce_examples.py --figure palette_circular_default --figure palette_linear_default
+python tools/reproduce_examples.py --figure palette_circular_default
+python tools/generate_palette_explorer_assets.py --source-svg _reproduced/examples/AP027078_tuckin_separate_strands_default.svg
 ```
 
-The two contact-sheet recipes render every palette directly from the TOML-backed CLI setting. Only the three representative pairs above are retained as standalone SVGs.
+The explorer stores one Circular SVG plus the TOML-derived palette definitions. Only the three representative Circular/Linear pairs above are retained as standalone examples.
 
 ## Accessibility
 

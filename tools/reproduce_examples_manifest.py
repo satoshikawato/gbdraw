@@ -33,8 +33,6 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
 }
 
 UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
-    "examples/Escherichia_Shigella_multi.svg": "Recipe-only multi-record companion to the published two-record figure.",
-    "examples/M16-5_fugaku.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NC_000921_spring.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NC_000962_psyche.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NC_001416.svg": "Static companion to the Beginner linear interactive Gallery example.",
@@ -47,8 +45,6 @@ UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
     ),
     "examples/NC_016510_mint.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NZ_CP010822_orange.svg": "Archived single-genome style recipe retained for reproducibility.",
-    "examples/Pandoravirus_salinus_forest.svg": "Archived large-genome style recipe retained for reproducibility.",
-    "examples/majani.svg": "Source panel used by the published social-preview composite.",
 }
 
 
@@ -1928,48 +1924,6 @@ def _palette_figures() -> dict[str, FigureSpec]:
             recipe=linear_recipe(palette_name),
             description=f"Linear palette example for {palette_name}.",
         )
-
-    figures["palettes_combined_image_1"] = _figure(
-        figure_id="palettes_combined_image_1",
-        output_path="examples/palettes_combined_image_1.png",
-        groups=("palettes", "composites"),
-        required_inputs=("AP027078.gb",),
-        recipe=CompositeRecipe(
-            kind="contact_sheet",
-            columns=11,
-            tile_size=(750, 750),
-            gap=0,
-            padding=0,
-            canvas_size=(8250, 3750),
-            panels=tuple(
-                CompositePanel(recipe=circular_recipe(palette_name))
-                for palette_name in palette_names
-            ),
-        ),
-        description="Circular palette contact sheet.",
-    )
-    figures["palettes_combined_image_2"] = _figure(
-        figure_id="palettes_combined_image_2",
-        output_path="examples/palettes_combined_image_2.png",
-        groups=("palettes", "composites"),
-        required_inputs=palette_base_inputs,
-        recipe=CompositeRecipe(
-            kind="contact_sheet",
-            columns=5,
-            tile_size=(750, 750),
-            gap=0,
-            padding=0,
-            canvas_size=(3750, 8250),
-            panels=tuple(
-                CompositePanel(
-                    recipe=linear_recipe(palette_name),
-                    preparations=palette_preparations,
-                )
-                for palette_name in palette_names
-            ),
-        ),
-        description="Linear palette contact sheet.",
-    )
 
     return figures
 
