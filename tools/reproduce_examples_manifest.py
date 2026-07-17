@@ -1929,48 +1929,6 @@ def _palette_figures() -> dict[str, FigureSpec]:
             description=f"Linear palette example for {palette_name}.",
         )
 
-    figures["palettes_combined_image_1"] = _figure(
-        figure_id="palettes_combined_image_1",
-        output_path="examples/palettes_combined_image_1.png",
-        groups=("palettes", "composites"),
-        required_inputs=("AP027078.gb",),
-        recipe=CompositeRecipe(
-            kind="contact_sheet",
-            columns=11,
-            tile_size=(750, 750),
-            gap=0,
-            padding=0,
-            canvas_size=(8250, 3750),
-            panels=tuple(
-                CompositePanel(recipe=circular_recipe(palette_name))
-                for palette_name in palette_names
-            ),
-        ),
-        description="Circular palette contact sheet.",
-    )
-    figures["palettes_combined_image_2"] = _figure(
-        figure_id="palettes_combined_image_2",
-        output_path="examples/palettes_combined_image_2.png",
-        groups=("palettes", "composites"),
-        required_inputs=palette_base_inputs,
-        recipe=CompositeRecipe(
-            kind="contact_sheet",
-            columns=5,
-            tile_size=(750, 750),
-            gap=0,
-            padding=0,
-            canvas_size=(3750, 8250),
-            panels=tuple(
-                CompositePanel(
-                    recipe=linear_recipe(palette_name),
-                    preparations=palette_preparations,
-                )
-                for palette_name in palette_names
-            ),
-        ),
-        description="Linear palette contact sheet.",
-    )
-
     return figures
 
 

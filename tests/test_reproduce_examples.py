@@ -16,6 +16,12 @@ from tools.reproduce_examples_manifest import (
     load_palette_names,
 )
 from tools.generate_palette_page import OUTPUT_PATH as PALETTE_PAGE, render_palette_page
+from tools.generate_palette_explorer_assets import (
+    JSON_OUTPUT_PATH as PALETTE_EXPLORER_JSON,
+    SVG_OUTPUT_PATH as PALETTE_EXPLORER_SVG,
+    palette_payload,
+    validate_svg,
+)
 
 
 PUBLIC_MARKDOWN = (
@@ -68,7 +74,7 @@ def test_manifest_counts_and_unique_paths() -> None:
         "palette_linear_ajisai",
         "palette_linear_soft_pastels",
     ]
-    assert len(figures) == 58 + 6 + 2
+    assert len(figures) == 58 + 6
 
     output_paths = [spec.output_path for spec in figures.values()]
     assert len(output_paths) == len(set(output_paths))
@@ -82,12 +88,23 @@ def test_palette_manifest_stays_in_sync_with_palette_file() -> None:
         assert f"palette_circular_{palette_name}" in figures
         assert f"palette_linear_{palette_name}" in figures
     assert len(palette_names) == 55
-    assert "palettes_combined_image_1" in figures
-    assert "palettes_combined_image_2" in figures
+    assert "palettes_combined_image_1" not in figures
+    assert "palettes_combined_image_2" not in figures
 
 
 def test_palette_page_is_generated_from_palette_file() -> None:
     assert PALETTE_PAGE.read_text(encoding="utf-8") == render_palette_page()
+
+
+def test_palette_explorer_uses_one_semantic_circular_svg() -> None:
+    payload = json.loads(PALETTE_EXPLORER_JSON.read_text(encoding="utf-8"))
+    assert payload == palette_payload()
+    assert len(payload["palettes"]) == 55
+    counts = validate_svg(PALETTE_EXPLORER_SVG)
+    assert counts["CDS"] > 0
+    assert counts["skew_high"] > 0
+    assert counts["skew_low"] > 0
+    assert counts["gc_content"] > 0
 
 
 def test_public_markdown_local_targets_exist() -> None:
