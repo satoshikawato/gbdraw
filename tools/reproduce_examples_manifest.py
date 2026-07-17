@@ -33,8 +33,6 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
 }
 
 UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
-    "examples/Escherichia_Shigella_multi.svg": "Recipe-only multi-record companion to the published two-record figure.",
-    "examples/M16-5_fugaku.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NC_000921_spring.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NC_000962_psyche.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NC_001416.svg": "Static companion to the Beginner linear interactive Gallery example.",
@@ -47,8 +45,6 @@ UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
     ),
     "examples/NC_016510_mint.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NZ_CP010822_orange.svg": "Archived single-genome style recipe retained for reproducibility.",
-    "examples/Pandoravirus_salinus_forest.svg": "Archived large-genome style recipe retained for reproducibility.",
-    "examples/majani.svg": "Source panel used by the published social-preview composite.",
 }
 
 
