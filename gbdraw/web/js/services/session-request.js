@@ -2,7 +2,10 @@ import { buildDefaultColorOverrideTsv } from '../app/color-utils.js';
 import { serializeSpecificRules } from '../app/file-imports.js';
 import { buildLabelOverrideTsv } from '../app/feature-editor/label-override-table.js';
 import { serializeFeatureVisibilityRules } from '../app/feature-visibility.js';
-import { buildCircularTrackSlotSpec } from '../app/circular-track-slots.js';
+import {
+  buildCircularTrackSlotSpec,
+  parseCircularTrackSlotSpecs
+} from '../app/circular-track-slots.js';
 import { buildLinearTrackSlotSpec } from '../app/linear-track-slots.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 
@@ -605,17 +608,20 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
       files.linearSeqs[index].depth = depth.length > 1 ? depth : (depth[0] || null);
     });
   }
-  if (options.colors?.defaultColorsFile?.resourceId) {
-    files.d_color = resourceAsLegacyFile(resources, options.colors.defaultColorsFile.resourceId);
+  const defaultColorsRef = options.colors?.defaultColorsFile || options.colors?.defaultColors;
+  if (defaultColorsRef?.resourceId) {
+    files.d_color = resourceAsLegacyFile(resources, defaultColorsRef.resourceId);
   }
-  if (options.colors?.colorTableFile?.resourceId) {
-    files.t_color = resourceAsLegacyFile(resources, options.colors.colorTableFile.resourceId);
+  const colorTableRef = options.colors?.colorTableFile || options.colors?.colorTable;
+  if (colorTableRef?.resourceId) {
+    files.t_color = resourceAsLegacyFile(resources, colorTableRef.resourceId);
   }
   if (options.labelWhitelistFile?.resourceId) {
     files.whitelist = resourceAsLegacyFile(resources, options.labelWhitelistFile.resourceId);
   }
-  if (options.qualifierPriorityFile?.resourceId) {
-    files.qualifier_priority = resourceAsLegacyFile(resources, options.qualifierPriorityFile.resourceId);
+  const qualifierPriorityRef = options.qualifierPriorityFile || options.qualifierPriorityTable;
+  if (qualifierPriorityRef?.resourceId) {
+    files.qualifier_priority = resourceAsLegacyFile(resources, qualifierPriorityRef.resourceId);
   }
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationBlastFiles)) {
     files.c_conservation_blasts = options.conservationBlastFiles
@@ -623,6 +629,7 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
       .filter(Boolean);
   }
   const overrides = options.configOverrides || {};
+  const tracks = options.tracks || {};
   const form = {
     prefix: renderRequest.output?.prefix || 'out',
     plot_title: options.plotTitle || '',
@@ -663,6 +670,13 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
     multi_record_min_radius_ratio: renderRequest.layout?.multiRecordMinRadiusRatio ?? 0.55,
     multi_record_column_gap_ratio: renderRequest.layout?.multiRecordColumnGapRatio ?? 0.10,
     multi_record_row_gap_ratio: renderRequest.layout?.multiRecordRowGapRatio ?? 0.05,
+    center_reserved_radius: tracks.centerReservedRadius ?? null,
+    circular_track_slots_enabled: renderRequest.mode === 'circular' && Array.isArray(tracks.circularTrackSlots),
+    circular_track_slots_schema_version: 4,
+    circular_track_slots_axis_index: tracks.circularTrackAxisIndex ?? null,
+    circular_track_slots: renderRequest.mode === 'circular'
+      ? parseCircularTrackSlotSpecs(tracks.circularTrackSlots, options.dinucleotide || 'GC', overrides.track_type || 'tuckin')
+      : [],
     multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((token) => {
       const split = String(token).lastIndexOf('@');
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };

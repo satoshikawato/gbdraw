@@ -2,11 +2,11 @@
   "id": "tobacco-chloroplast",
   "version": 1,
   "title": "Annotate the four regions of a tobacco chloroplast genome",
-  "summary": "Apply the chloroplast feature color table to NC_001879.2 and add LSC, SSC, IRa, and IRb as bracket annotations between the feature map and GC-content track.",
-  "estimatedTime": "5-10 min",
+  "summary": "Import the LSC, SSC, IRa, and IRb boundaries for NC_001879.2, bind them to a circular annotation track, and keep chloroplast feature colors, radial labels, and GC content visible.",
+  "estimatedTime": "10-15 min after the input is available",
   "difficulty": "Intermediate",
   "appMode": "Circular",
-  "primaryWorkflow": "Circular region annotations",
+  "primaryWorkflow": "Circular region annotations with custom track slots",
   "downloads": [
     {
       "label": "NC_001879.2",
@@ -27,41 +27,350 @@
       "source": "Gallery file",
       "targetName": "qualifier_priority.tsv",
       "href": "./files/qualifier_priority.tsv",
-      "note": "Uses gene names before old locus tags for feature labels."
+      "note": "Uses gene names before old locus tags for CDS labels."
     },
     {
       "label": "Plastome regions",
       "source": "Gallery file",
       "targetName": "nicotiana-tabacum-regions.tsv",
       "href": "./files/nicotiana-tabacum-regions.tsv",
-      "note": "Defines the four bracket annotations in one annotation set."
+      "note": "Defines the four bracket annotations in the plastome_regions annotation set."
     }
   ],
   "manualSteps": [
     {
-      "title": "Generate and inspect the four chloroplast regions",
-      "body": "Use the JLB, JSB, JSA, and JLA boundaries recorded for NC_001879.2. Coordinates are 1-based and inclusive. Run the displayed command with the four downloaded files in one directory, or load the bundled session in the web app to inspect the resolved annotations and generated SVG.",
+      "title": "Switch to Circular mode",
+      "body": "For exact reproduction, use Session in the Gallery and then Load Session in the web app. To build the figure manually, open gbdraw.app and select Circular before adding the plastid record.",
+      "operations": [
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-01-01-circular-mode.webp",
+            "alt": "Mode selector with Circular selected.",
+            "caption": "Select Circular."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": ".mode-switch",
+            "cropPadding": 14,
+            "actions": [
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.mode === 'circular'"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Upload the chloroplast GenBank record",
+      "body": "Upload NC_001879.gbk as the Circular GenBank input. The record must be NC_001879.2 because the region table uses its coordinate system.",
+      "operations": [
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-02-01-genbank-upload.webp",
+            "alt": "Circular Input Genomes card with NC_001879.gbk selected as the GenBank file.",
+            "caption": "Upload NC_001879.gbk in the Circular GenBank uploader."
+          },
+          "capture": {
+            "source": "webapp",
+            "cardTitle": "Input Genomes",
+            "cropPadding": 14,
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.c_gb; if (!file) throw new Error('Circular GenBank file was not restored.'); app.files.c_gb = new File([file], 'NC_001879.gbk', { type: file.type, lastModified: file.lastModified });"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.files?.c_gb?.name === 'NC_001879.gbk'"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Set the output name and center label",
+      "body": "Enter the output prefix and species text. Type the <i> tags literally so the generated center label italicizes the species name.",
       "table": {
-        "columns": ["Region", "Start", "End", "Length", "Mark"],
+        "columns": ["Setting", "Value"],
         "rows": [
-          ["LSC", "1", "86,686", "86,686 bp", "bracket"],
-          ["IRb", "86,687", "112,029", "25,343 bp", "bracket"],
-          ["SSC", "112,030", "130,600", "18,571 bp", "bracket"],
-          ["IRa", "130,601", "155,943", "25,343 bp", "bracket"]
+          ["Output Prefix", "tobacco-chloroplast"],
+          ["Species", "<i>Nicotiana tabacum</i>"],
+          ["Strain", "blank"],
+          ["Rich Feature Popup", "On"]
         ]
       },
       "operations": [
         {
           "media": {
-            "src": "./thumbnails/tobacco-chloroplast.webp",
-            "alt": "Nicotiana tabacum chloroplast map with LSC, SSC, IRa, and IRb bracket annotations inside the feature ring.",
-            "caption": "The completed map keeps chloroplast feature colors, radial gene labels, region brackets, and the GC-content track visible."
+            "src": "./media/tobacco-chloroplast/manual-03-01-basic-settings.webp",
+            "alt": "Basic card with tobacco-chloroplast as the output prefix and literal Nicotiana tabacum italic markup in Species.",
+            "caption": "Set Output Prefix to tobacco-chloroplast and enter the literal <i>Nicotiana tabacum</i> markup in Species."
+          },
+          "capture": {
+            "source": "webapp",
+            "cardTitle": "Basic",
+            "cropPadding": 14
+          }
+        }
+      ]
+    },
+    {
+      "title": "Configure the circular layout and labels",
+      "body": "Use strand-separated features, retain GC content, hide GC skew, and place labels on both sides of the feature ring. The four radius offsets are preserved by the bundled session and by the runnable command.",
+      "table": {
+        "columns": ["Setting", "Value"],
+        "rows": [
+          ["Track Preset", "Tuckin"],
+          ["Separate Strands", "On"],
+          ["Hide GC Content", "Off"],
+          ["Hide GC Skew", "On"],
+          ["Label Mode", "Both (Out + Inner)"],
+          ["Circular Label Placement", "Radial"],
+          ["Outer X / Y Offset", "0.90 / 0.90"],
+          ["Inner X / Y Offset", "0.975 / 0.975"],
+          ["Legend Position", "Upper Left"],
+          ["Definition Font Size", "28"]
+        ]
+      },
+      "operations": [
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-04-01-layout-options.webp",
+            "alt": "Layout controls with Separate Strands selected, Hide GC Content clear, and Hide GC Skew selected.",
+            "caption": "Turn on Separate Strands, keep GC content, and hide GC skew."
+          },
+          "capture": {
+            "source": "webapp",
+            "openDetails": ["Layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('.grid'); if (!summary || !options) throw new Error('Circular layout options not found.'); summary.dataset.capture = 'chloroplast-layout-summary'; options.dataset.capture = 'chloroplast-layout-options';"
+              }
+            ],
+            "clipSelectors": ["[data-capture='chloroplast-layout-summary']", "[data-capture='chloroplast-layout-options']"],
+            "cropPadding": 14
+          }
+        },
+        {
+          "title": "Label mode selector",
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-04-02-label-mode-both.webp",
+            "alt": "Labels card with the Label Mode menu open and Both Out plus Inner highlighted.",
+            "caption": "Open Label Mode and choose the highlighted Both (Out + Inner) option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Both (Out + Inner)",
+              "options": ["None", "Out", "Both (Out + Inner)"],
+              "label": "Label Mode"
+            },
+            "openDetails": ["Labels"]
+          }
+        },
+        {
+          "title": "Radial label placement",
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-04-03-label-placement-radial.webp",
+            "alt": "Labels card with the Circular Label Placement menu open and Radial highlighted.",
+            "caption": "Open Circular Label Placement and choose the highlighted Radial option."
+          },
+          "capture": {
+            "source": "webapp",
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Radial",
+              "options": ["Horizontal", "Radial"],
+              "label": "Circular Label Placement"
+            },
+            "openDetails": ["Labels"]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Load the color and label tables",
+      "body": "Open Colors and upload chloroplast_specific_table.tsv as Specific Table (-t). Open Labels and upload qualifier_priority.tsv as Priority File (TSV).",
+      "table": {
+        "columns": ["File", "UI control", "Purpose"],
+        "rows": [
+          ["chloroplast_specific_table.tsv", "Colors → Specific Table (-t)", "Color chloroplast gene groups and build the legend"],
+          ["qualifier_priority.tsv", "Labels → Priority File (TSV)", "Use gene before old_locus_tag for CDS labels"]
+        ]
+      },
+      "operations": [
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-05-01-specific-color-table.webp",
+            "alt": "Specific Table uploader in the Colors card with chloroplast_specific_table.tsv selected.",
+            "caption": "Upload chloroplast_specific_table.tsv as Specific Table (-t)."
+          },
+          "capture": {
+            "source": "webapp",
+            "openDetails": ["Colors"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.t_color; if (!file) throw new Error('Specific color table was not restored.'); app.files.t_color = new File([file], 'chloroplast_specific_table.tsv', { type: file.type, lastModified: file.lastModified }); const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Specific Table (-t)'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Specific Table uploader not found.'); root.dataset.capture = 'chloroplast-specific-table';"
+              }
+            ],
+            "selector": "[data-capture='chloroplast-specific-table']",
+            "cropPadding": 14
+          }
+        },
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-05-02-qualifier-priority.webp",
+            "alt": "Priority File uploader in the Labels card with qualifier_priority.tsv selected.",
+            "caption": "Upload qualifier_priority.tsv as Priority File (TSV)."
+          },
+          "capture": {
+            "source": "webapp",
+            "openDetails": ["Labels"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.qualifier_priority; if (!file) throw new Error('Qualifier priority table was not restored.'); app.files.qualifier_priority = new File([file], 'qualifier_priority.tsv', { type: file.type, lastModified: file.lastModified }); const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Priority File (TSV)'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Priority File uploader not found.'); root.dataset.capture = 'chloroplast-priority-table';"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.manualPriorityRules?.some((rule) => rule.feat === 'CDS' && rule.order === 'gene,old_locus_tag')"
+              }
+            ],
+            "selector": "[data-capture='chloroplast-priority-table']",
+            "cropPadding": 14
+          }
+        }
+      ]
+    },
+    {
+      "title": "Import the four plastome regions",
+      "body": "Open Region Annotations and import nicotiana-tabacum-regions.tsv. The import creates the plastome_regions set with four coordinate annotations. Coordinates are 1-based and inclusive.",
+      "table": {
+        "columns": ["Region", "Start", "End", "Length", "Mark", "Lane"],
+        "rows": [
+          ["LSC", "1", "86,686", "86,686 bp", "Bracket", "0"],
+          ["IRb", "86,687", "112,029", "25,343 bp", "Bracket", "0"],
+          ["SSC", "112,030", "130,600", "18,571 bp", "Bracket", "0"],
+          ["IRa", "130,601", "155,943", "25,343 bp", "Bracket", "0"]
+        ]
+      },
+      "note": "The four boundaries correspond to JLB, JSB, JSA, and JLA for NC_001879.2. Keep all four rows in one annotation set so one track can render them together.",
+      "operations": [
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-06-01-region-annotations.webp",
+            "alt": "Region Annotations card with the plastome_regions set and LSC, IRb, SSC, and IRa coordinate rows.",
+            "caption": "Import the TSV and verify the plastome_regions set contains the four bracket rows from the table."
+          },
+          "capture": {
+            "source": "webapp",
+            "cardTitle": "Region Annotations",
+            "openDetails": ["Region Annotations"],
+            "viewport": {
+              "width": 1400,
+              "height": 1200
+            },
+            "cropPadding": 14,
+            "actions": [
+              {
+                "type": "waitForFunction",
+                "script": "() => { const set = window.__GBDRAW_APP__?.annotationSets?.find((entry) => entry.id === 'plastome_regions'); return set?.annotations?.map((entry) => entry.id).join(',') === 'lsc,irb,ssc,ira'; }"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Bind the annotation set to the circular track stack",
+      "body": "Open Custom Track Slots in Layout. Keep the feature track on the axis, place plastome_regions inside it, and place GC content farther inward.",
+      "table": {
+        "columns": ["Slot id", "Renderer", "Position", "Radius", "Width", "Key settings"],
+        "rows": [
+          ["features", "Features", "On axis", "Auto", "Auto", "Lane direction: split"],
+          ["plastome_regions", "Annotations", "Inside", "0.65", "20 px", "Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px"],
+          ["gc_content", "Dinucleotide content", "Inside", "0.56", "0.08 R", "Dinucleotide: GC"]
+        ]
+      },
+      "operations": [
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-07-01-custom-track-slots.webp",
+            "alt": "Custom Track Slots stack with features on the axis, plastome_regions annotations inside, and GC content innermost.",
+            "caption": "Order the stack as features, plastome_regions, and gc_content, with the annotation row bound to plastome_regions."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": "#circular-custom-track-slots-panel",
+            "highlightSelector": "[data-capture='circular-track-slot-plastome_regions']",
+            "openDetails": ["Layout"],
+            "viewport": {
+              "width": 1400,
+              "height": 1200
+            },
+            "cropPadding": 12,
+            "waitForSelector": "[data-capture='circular-track-slot-plastome_regions']"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Generate and inspect the chloroplast map",
+      "body": "Click Generate Diagram. Verify that LSC, IRb, SSC, and IRa form one labeled bracket lane between the feature ring and GC-content track. The radial gene labels should remain visible on both sides of the feature ring.",
+      "operations": [
+        {
+          "media": {
+            "src": "./media/tobacco-chloroplast/manual-08-01-chloroplast-preview.webp",
+            "alt": "Generated Nicotiana tabacum chloroplast map with four region brackets between the feature ring and GC-content track.",
+            "caption": "The completed map shows the four labeled region brackets, chloroplast feature colors, radial gene labels, and the inner GC-content track."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": ".result-pane .shadow-xl.bg-white",
+            "viewport": {
+              "width": 1600,
+              "height": 1200
+            },
+            "cropPadding": 16,
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 0.55; app.canvasPan.x = 0; app.canvasPan.y = 0; } document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important');"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => ['lsc','irb','ssc','ira'].every((id) => document.querySelector(`[data-gbdraw-annotation-id='${id}']`))"
+              }
+            ],
+            "waitForSelector": "[data-gbdraw-annotation-id='lsc']"
           }
         }
       ]
     }
   ],
   "related": [
+    {
+      "label": "Customize circular plots",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/1_Customizing_Plots.md#6-mark-chloroplast-genome-regions"
+    },
     {
       "label": "Region annotation table reference",
       "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables"

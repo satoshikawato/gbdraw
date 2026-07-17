@@ -785,6 +785,46 @@ export const normalizeCircularTrackSlots = (slots, defaultNt = 'GC', preset = 't
   return base.map((slot, index) => normalizeCircularTrackSlot(slot, index, defaultNt, preset));
 };
 
+export const parseCircularTrackSlotSpec = (spec, index = 0, defaultNt = 'GC', preset = 'tuckin') => {
+  const text = String(spec || '').trim();
+  const atIndex = text.indexOf('@');
+  const head = (atIndex < 0 ? text : text.slice(0, atIndex)).trim();
+  const separatorIndex = head.indexOf(':');
+  const source = {
+    id: separatorIndex < 0 ? '' : head.slice(0, separatorIndex).trim(),
+    renderer: separatorIndex < 0 ? head : head.slice(separatorIndex + 1).trim(),
+    enabled: true,
+    params: {}
+  };
+
+  if (atIndex >= 0) {
+    text.slice(atIndex + 1).split(',').forEach((token) => {
+      const equalsIndex = token.indexOf('=');
+      if (equalsIndex < 0) return;
+      const key = token.slice(0, equalsIndex).trim();
+      const rawValue = token.slice(equalsIndex + 1).trim();
+      if (!key) return;
+      const value = rawValue === 'true' ? true : (rawValue === 'false' ? false : rawValue);
+      if (key === 'enabled') source.enabled = value !== false;
+      else if (key === 'w' || key === 'width') source.width = rawValue;
+      else if (key === 'r' || key === 'radius') source.radius = rawValue;
+      else if (key === 'inner_gap_px') source.inner_gap_px = rawValue;
+      else if (key === 'outer_gap_px') source.outer_gap_px = rawValue;
+      else if (key === 'side') source.side = rawValue;
+      else if (key === 'z') source.z = Number(rawValue);
+      else source.params[key] = value;
+    });
+  }
+
+  return normalizeCircularTrackSlot(source, index, defaultNt, preset);
+};
+
+export const parseCircularTrackSlotSpecs = (specs, defaultNt = 'GC', preset = 'tuckin') => (
+  Array.isArray(specs)
+    ? specs.map((spec, index) => parseCircularTrackSlotSpec(spec, index, defaultNt, preset))
+    : []
+);
+
 const appendOption = (options, key, value) => {
   const text = normalizeOptionalText(value);
   if (text === null) return;
