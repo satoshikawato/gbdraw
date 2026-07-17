@@ -6,7 +6,7 @@
 
 Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without installing `gbdraw`, or install it locally for pipeline integration, non-SVG export, or offline use.
 
-## Start here
+## Choose an entry point
 
 - [Installation](./INSTALL.md): choose between the hosted web app, Bioconda, or a local development install.
 - [Quickstart](./QUICKSTART.md): draw a circular genome diagram from a GenBank record.
@@ -32,7 +32,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 - [FAQ](./FAQ.md): common questions, limitations, and workarounds.
 - [About](./ABOUT.md): citation information and project background.
 
-## Interface guide
+## Choose an interface
 
 - Hosted web app: [https://gbdraw.app/](https://gbdraw.app/)
 - Hosted interactive SVG gallery and web tutorials: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)

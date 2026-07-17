@@ -4,7 +4,7 @@
 
 # Draw genome comparison links from precomputed BLAST results
 
-This guide connects precomputed BLAST high-scoring segment pairs (HSPs) to the correct records and explains what each ribbon represents. It also extends the comparison to more records without treating the hits as orthology or conservation calls.
+Connect precomputed BLAST high-scoring segment pairs (HSPs) to the correct records, then extend the comparison to more records. Each ribbon represents a retained HSP, not an orthology or conservation call.
 
 For searches over annotated CDS translations, use [Compare annotated CDS proteins](./4_Protein_Comparisons.md). That guide is the single place that explains the `pairwise`, `orthogroup`, and `collinear` protein-search modes.
 
@@ -90,7 +90,7 @@ Circular mode can place one outfmt 6/7 result per query around an annotated refe
 - [Table-driven circular comparison rings](./5_Table_Driven_Inputs.md#5-circular-blast-similarity-rings-with---conservation_table)
 - [WSSV advanced session-based case study](https://gbdraw.app/gallery/#WSSV_genome_comparison)
 
-## Next steps
+## Continue with protein or session workflows
 
 - Compare protein-search modes in [Compare annotated CDS proteins](./4_Protein_Comparisons.md).
 - Put per-record metadata and comparison inputs in [TSV manifests](./5_Table_Driven_Inputs.md).

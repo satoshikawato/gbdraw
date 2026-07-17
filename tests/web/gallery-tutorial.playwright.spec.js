@@ -54,7 +54,10 @@ test.beforeAll(async () => {
     server = createServer((request, response) => {
       const url = new URL(request.url || '/', 'http://127.0.0.1');
       const requestedPath = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.(?:\/|\\|$))+/, '');
-      const filePath = resolve(webRoot, requestedPath.replace(/^[/\\]+/, ''));
+      const isGalleryViewRoute = /^[/\\]gallery[/\\][^/.]+$/.test(requestedPath);
+      const filePath = isGalleryViewRoute
+        ? join(webRoot, 'gallery', 'index.html')
+        : resolve(webRoot, requestedPath.replace(/^[/\\]+/, ''));
       if (!filePath.startsWith(`${webRoot}${sep}`) && filePath !== webRoot) {
         response.writeHead(403);
         response.end('Forbidden');
@@ -92,12 +95,41 @@ test.afterAll(async () => {
   await new Promise((resolveClose) => server.close(resolveClose));
 });
 
+test('Gallery routes a sample path and tab hash while preserving Preview defaults', async ({ page }) => {
+  await page.goto(`${baseUrl}/gallery/HmmtDNA_basic_circular#Tutorial`, { waitUntil: 'domcontentloaded' });
+
+  const tutorialTab = page.getByRole('tab', { name: 'Tutorial' });
+  await expect(tutorialTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel', { name: 'Tutorial' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Create your first circular genome figure' })
+  ).toBeVisible();
+  await expect(page).toHaveURL(`${baseUrl}/gallery/HmmtDNA_basic_circular#Tutorial`);
+
+  await page.getByRole('tab', { name: 'Command' }).click();
+  await expect(page.getByRole('tabpanel', { name: 'Command' })).toBeVisible();
+  await expect(page).toHaveURL(`${baseUrl}/gallery/HmmtDNA_basic_circular#Command`);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('tabpanel', { name: 'Command' })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.getByRole('tabpanel', { name: 'Preview' })).toBeVisible();
+  await expect(page).toHaveURL(`${baseUrl}/gallery/HmmtDNA_basic_circular`);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('tabpanel', { name: 'Preview' })).toBeVisible();
+
+  await page.goto(`${baseUrl}/gallery/#HmmtDNA_basic_circular`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel', { name: 'Preview' })).toBeVisible();
+  await expect(page).toHaveURL(`${baseUrl}/gallery/#HmmtDNA_basic_circular`);
+});
+
 test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*collinear blocks/i })).toBeVisible();
+  await expect(page.locator('#selected-title')).toHaveText('Hepatoplasmataceae collinear protein-match blocks');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
@@ -138,7 +170,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#hepatoplasmataceae_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Hepatoplasmataceae.*protein similarity groups/i })).toBeVisible();
+  await expect(page.locator('#selected-title')).toHaveText('Hepatoplasmataceae CDS protein-similarity links');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
@@ -195,7 +227,7 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
       name: 'CDS gene ^dnaA$ #d95f02 DnaA'
     })
   ).toBeVisible();
-  await expect(page.getByText('antiSMASH gene-kind color rules')).toBeVisible();
+  await expect(tutorialPanel.getByText(/apply antiSMASH gene_kind color rules/)).toBeVisible();
   await expect(tutorialPanel.getByRole('columnheader', { name: 'Feature' }).first()).toBeVisible();
   await expect(tutorialPanel.getByRole('columnheader', { name: 'Qualifier' }).first()).toBeVisible();
   await expect(
@@ -278,8 +310,8 @@ test('Gallery renders the WSSV nucleotide-similarity tutorial and media', async 
     page.getByRole('heading', { name: 'Advanced session-based WSSV comparison case study' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
-  await expect(tutorialPanel.getByText('Load the bundled session first')).toBeVisible();
-  await expect(tutorialPanel.getByText('browser LOSAT blastn results')).toBeVisible();
+  await expect(tutorialPanel.getByText('Load the bundled session first', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByText(/prepared BLAST\/LOSAT comparison rings/)).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
       name: 'Ring Width 5'
@@ -374,7 +406,7 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#HmmtDNA_ATskew`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Homo sapiens.*AT skew/i })).toBeVisible();
+  await expect(page.locator('#selected-title')).toHaveText('Human mitochondrial genome (AT skew)');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
@@ -425,7 +457,7 @@ test('Gallery renders the human mitochondrial AT skew tutorial and media', async
 
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
-  await expect(filesPanel.getByText('HmmtDNA.gbk')).toBeVisible();
+  await expect(filesPanel.getByText('HmmtDNA.gbk', { exact: true })).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
@@ -436,7 +468,7 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#majanivirus_orthogroup`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Majanivirus genomes.*protein similarity groups/i })).toBeVisible();
+  await expect(page.locator('#selected-title')).toHaveText('Majanivirus CDS protein-similarity links');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
@@ -684,10 +716,13 @@ test('Gallery copy link button copies the selected sample URL', async ({ page })
   });
 
   await page.goto(`${baseUrl}/gallery/#HmmtDNA_ATskew`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
   await page.getByRole('button', { name: 'Copy' }).click();
 
   await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.__copiedGalleryLink)).toBe(`${baseUrl}/gallery/#HmmtDNA_ATskew`);
+  await expect.poll(() => page.evaluate(() => window.__copiedGalleryLink)).toBe(
+    `${baseUrl}/gallery/HmmtDNA_ATskew#Tutorial`
+  );
 });
 
 test('Gallery orders Beginner examples first and distinguishes runnable commands', async ({ page }) => {

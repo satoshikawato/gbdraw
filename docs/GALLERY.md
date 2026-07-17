@@ -2,126 +2,96 @@
 
 # Gallery
 
-This page links static figures to reproducible recipes with their inputs and settings. The [interactive gallery](https://gbdraw.app/gallery/) adds feature popups, match inspection, zoom controls, downloadable sessions, and browser tutorials.
+These figures were generated with gbdraw. Click any figure to open the full-size output.
 
-## Capabilities
+For zooming, feature popups, match inspection, and downloadable sessions, open the [interactive gallery](https://gbdraw.app/gallery/).
 
-### Circular genome overview
+## Circular genome maps
 
-Circular mode can separate strands, place labels inside and outside the ring, and add GC content or dinucleotide-skew tracks.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="../examples/NC_001879_regions.svg"><img src="../examples/NC_001879_regions.svg" alt="Circular Nicotiana tabacum chloroplast map with LSC, SSC, IRa, and IRb region brackets" width="100%"></a><br>
+      <strong><em>Nicotiana tabacum</em> chloroplast</strong><br>
+      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets. See the <a href="./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables">annotation-table tutorial</a> or open the <a href="https://gbdraw.app/gallery/#tobacco-chloroplast">interactive example</a>.
+    </td>
+    <td width="50%" valign="top">
+      <a href="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg"><img src="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg" alt="Circular human mitochondrial genome with labels placed inside and outside the feature ring" width="100%"></a><br>
+      <strong>Human mitochondrial genome</strong><br>
+      Qualifier-based labels placed inside and outside the ring with the <code>soft_pastels</code> palette. See <a href="./TUTORIALS/3_Advanced_Customization.md">Advanced customization</a>.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="../examples/M16-5_fugaku.svg"><img src="../examples/M16-5_fugaku.svg" alt="Compact circular genome map of Candidatus Sukunaarchaeum mirabile" width="100%"></a><br>
+      <strong><em>Ca.</em> Sukunaarchaeum mirabile</strong><br>
+      A compact archaeal genome using separated strands, a centered feature track, and the <code>fugaku</code> palette.
+    </td>
+    <td width="50%" valign="top">
+      <a href="../examples/Pandoravirus_salinus_forest.svg"><img src="../examples/Pandoravirus_salinus_forest.svg" alt="Circular Pandoravirus salinus genome map with dense feature tracks" width="100%"></a><br>
+      <strong><em>Pandoravirus salinus</em></strong><br>
+      A large viral genome with dense forward- and reverse-strand annotations using the <code>forest</code> palette.
+    </td>
+  </tr>
+</table>
 
-![Circular human mitochondrial genome with qualifier-based labels](../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
+## Comparative genomics
 
-### Linear genome comparison
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="../examples/Escherichia_Shigella_pair.svg"><img src="../examples/Escherichia_Shigella_pair.svg" alt="Linear comparison of Escherichia coli and Shigella dysenteriae with nucleotide match ribbons" width="100%"></a><br>
+      <strong><em>Escherichia coli</em> and <em>Shigella dysenteriae</em></strong><br>
+      A two-record Linear diagram with nucleotide-match ribbons and separated feature strands. See the <a href="./TUTORIALS/2_Comparative_Genomics.md">comparative-genomics tutorial</a>.
+    </td>
+    <td width="50%" valign="top">
+      <a href="../examples/Escherichia_Shigella_multi.svg"><img src="../examples/Escherichia_Shigella_multi.svg" alt="Four-record linear comparison of Escherichia and Shigella genomes" width="100%"></a><br>
+      <strong>Four-record <em>Escherichia</em>–<em>Shigella</em> comparison</strong><br>
+      Adjacent nucleotide comparisons across four bacterial records on one canvas.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <a href="../examples/majani.svg"><img src="../examples/majani.svg" alt="Ten-record linear comparison of majanivirus genomes with translated nucleotide match ribbons" width="100%"></a><br>
+      <strong>Majanivirus comparison</strong><br>
+      Ten viral records connected by translated-nucleotide matches, with product-based feature colors. For a protein-search version, open the <a href="https://gbdraw.app/gallery/#majanivirus_orthogroup">interactive case study</a>.
+    </td>
+  </tr>
+</table>
 
-Linear mode can align several records and connect nucleotide or protein matches. Use precomputed BLAST-family tables when the search is performed outside gbdraw, or use the built-in protein-search modes described in the [comparison tutorials](./TUTORIALS/2_Comparative_Genomics.md).
+## Labels, tracks, and visual styles
 
-![Linear Escherichia and Shigella comparison](../examples/Escherichia_Shigella_pair.svg)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="../examples/O157_H7_stx_whitelist.svg"><img src="../examples/O157_H7_stx_whitelist.svg" alt="Circular Escherichia coli O157 H7 genome with selected virulence-feature labels" width="100%"></a><br>
+      <strong>Selected virulence-feature labels</strong><br>
+      A label whitelist keeps attention on selected <em>E. coli</em> O157:H7 features. See <a href="./TUTORIALS/3_Advanced_Customization.md">Advanced customization</a>.
+    </td>
+    <td width="50%" valign="top">
+      <a href="../examples/tutorial-6-depth-circular.svg"><img src="../examples/tutorial-6-depth-circular.svg" alt="Circular bacterial genome with a blue read-depth track and quantitative tick labels" width="100%"></a><br>
+      <strong>Read-depth track</strong><br>
+      A circular depth profile with a quantitative axis and evenly spaced tick labels. See <a href="./TUTORIALS/6_Depth_Quantitative_Tracks.md">Depth and quantitative tracks</a>.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="../examples/tutorial-9-feature-shapes.svg"><img src="../examples/tutorial-9-feature-shapes.svg" alt="Human mitochondrial genome with rectangular CDS, rRNA, and tRNA features" width="100%"></a><br>
+      <strong>Feature-shape overrides</strong><br>
+      CDS, rRNA, and tRNA features rendered as rectangles instead of directional arrows. See <a href="./TUTORIALS/9_Feature_Visibility_Shapes.md">Feature visibility and shapes</a>.
+    </td>
+    <td width="50%" valign="top">
+      <a href="../examples/palettes_combined_image_1.png"><img src="../examples/palettes_combined_image_1.png" alt="Contact sheet comparing gbdraw color palettes on circular genome maps" width="100%"></a><br>
+      <strong>Built-in color palettes</strong><br>
+      A side-by-side palette comparison. Open the <a href="../examples/color_palette_examples.md">palette reference</a> for both circular and Linear examples and the underlying colors.
+    </td>
+  </tr>
+</table>
 
-### Feature filtering and color rules
+## Reproduce or adapt a figure
 
-Whitelist and blacklist tables control visible features. Default and qualifier-specific color tables keep the visual encoding explicit and reusable.
-
-![Filtered E. coli virulence-feature diagram](../examples/O157_H7_stx_whitelist.svg)
-
-### Quantitative tracks
-
-Depth, GC content, and dinucleotide-skew tracks can use quantitative axes and shared scales. See [Plot read depth and other numeric tracks](./TUTORIALS/6_Depth_Quantitative_Tracks.md).
-
-![Circular comparison of window and step settings](../examples/window_step_comparison.png)
-
-### Layout and typography
-
-Track placement, strand separation, label offsets, legend position, and font sizes can be adjusted independently.
-
-![Comparison of circular definition font sizes](../examples/definition_font_size_comparison.png)
-
-### Region annotations
-
-Coordinate ranges and feature-selected regions can be drawn as line, bracket, band, or hatched annotation tracks. Annotation sets can be reused in Circular and Linear layouts, including foreground or underlay overlays. See the [annotation table workflow](./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables) and the [Circular placement example](./TUTORIALS/1_Customizing_Plots.md#6-add-an-annotation-ring).
-
-### Palettes
-
-gbdraw includes palettes for different visual moods and contrast needs. The [palette reference](../examples/color_palette_examples.md) shows every palette in circular and linear contexts and lists its underlying colors.
-
-![Circular palette contact sheet](../examples/palettes_combined_image_1.png)
-
-## Reproducible recipes
-
-The repository contains a machine-readable figure manifest in [`tools/reproduce_examples_manifest.py`](../tools/reproduce_examples_manifest.py). The reproducer resolves inputs from `tests/test_inputs/` and `examples/`, creates small support TSV files, and reports any unavailable source instead of silently substituting it.
-
-List recipe readiness without rendering:
-
-```bash
-python tools/reproduce_examples.py --list
-```
-
-Render one recipe into `_reproduced/examples/`:
-
-```bash
-python tools/reproduce_examples.py --figure HmmtDNA_qualifier_priority_soft_pastels
-```
-
-Render all documentation figures:
-
-```bash
-python tools/reproduce_examples.py --group docs
-```
-
-To deliberately refresh tracked figures after reviewing the output, add `--output-root .`. Do not use that option merely to preview a change.
-
-### Human mitochondrial genome labels
-
-Use a qualifier-priority table to take CDS label text from `gene` while keeping the default qualifiers for other feature types.
-
-```bash
-python tools/reproduce_examples.py --figure HmmtDNA_qualifier_priority_soft_pastels
-```
-
-The recipe generates the qualifier-priority TSV and renders the circular figure. The browser equivalent is the [human mtDNA AT-skew tutorial](https://gbdraw.app/gallery/#HmmtDNA_ATskew).
-
-### Escherichia and Shigella nucleotide matches
-
-These recipes draw adjacent-genome BLAST HSPs in two-record and multi-record layouts.
-
-```bash
-python tools/reproduce_examples.py \
-  --figure Escherichia_Shigella_pair \
-  --figure Escherichia_Shigella_multi
-```
-
-The manifest records query and subject order for each search preparation. For interpretation details, see [Compare genomes with precomputed BLAST-family results](./TUTORIALS/2_Comparative_Genomics.md).
-
-### Majanivirus TBLASTX comparison
-
-This recipe compares ten viral records with precomputed translated-nucleotide matches and product-based colors.
-
-```bash
-python tools/reproduce_examples.py --figure majani
-```
-
-The static recipe uses adjacent-pair TBLASTX output. The [interactive nine-genome case study](https://gbdraw.app/gallery/#majanivirus_orthogroup) instead runs a protein search and assigns CDS-derived proteins to gbdraw similarity groups; those are distinct workflows.
-
-### Additional single-genome styles
-
-These recipes demonstrate chloroplast annotation colors, compact archaeal circular layout, and large viral genomes:
-
-```bash
-python tools/reproduce_examples.py \
-  --figure NC_001879_regions \
-  --figure NC_001879_color \
-  --figure M16-5_fugaku \
-  --figure Pandoravirus_salinus_forest
-```
-
-## Advanced interactive case studies
-
-The hosted gallery keeps the larger session-based workflows separate from the static recipes:
-
-- [Vibrio multi-record circular layout](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018): six records on one canvas.
-- [*Nicotiana tabacum* chloroplast regions](https://gbdraw.app/gallery/#tobacco-chloroplast): LSC, SSC, IRa, and IRb brackets with the chloroplast feature color table and GC-content track.
-- [Aminoglycoside biosynthetic gene clusters](https://gbdraw.app/gallery/#BGC0000708-BGC0000713): protein search, similarity groups, qualifier colors, and legend editing.
-- [Hepatoplasmataceae similarity groups](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear): the same records rendered with two different match representations.
-- [WSSV nucleotide-similarity rings](https://gbdraw.app/gallery/#WSSV_genome_comparison): an advanced session-first case study. Its displayed command documents provenance but is not labeled as directly runnable because some prepared inputs are available only in the bundled session.
+- Use the [web app](https://gbdraw.app/) to create a diagram in the browser.
+- Follow the [Quickstart](./QUICKSTART.md) for the shortest command-line workflow.
+- Browse the [Tutorials](./TUTORIALS/TUTORIALS.md) for complete workflows or [Recipes](./RECIPES.md) for short commands.
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)

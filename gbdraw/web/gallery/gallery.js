@@ -30,9 +30,37 @@ const tutorialContent = document.querySelector('#tutorial-content');
 const filesContent = document.querySelector('#files-content');
 const filesSummary = document.querySelector('#files-summary');
 
+const TAB_HASHES = {
+  preview: '',
+  tutorial: 'Tutorial',
+  command: 'Command',
+  files: 'Files'
+};
+
+const normalizeHash = () => decodeURIComponent(window.location.hash.replace(/^#/, '')).trim();
+
+const getTabFromHash = () => {
+  const value = normalizeHash().toLowerCase();
+  return Object.keys(TAB_HASHES).find((tabName) => tabName === value) || '';
+};
+
+const getSampleIdFromPath = () => {
+  const match = window.location.pathname.match(/\/gallery\/([^/]+)\/?$/i);
+  if (!match) return '';
+  const sampleId = decodeURIComponent(match[1]).trim();
+  return sampleId.includes('.') ? '' : sampleId;
+};
+
+const getLegacySampleIdFromHash = () => (getTabFromHash() ? '' : normalizeHash());
+
+const getGalleryRootPath = () => {
+  const match = window.location.pathname.match(/^(.*\/gallery)(?:\/[^/]*)?\/?$/i);
+  return match?.[1] || '/gallery';
+};
+
 let examples = [];
 let selectedId = '';
-let activeTab = 'preview';
+let activeTab = getTabFromHash() || 'preview';
 let copyStatusTimer = 0;
 let tutorialRequestToken = 0;
 let mediaLightbox = null;
@@ -40,15 +68,16 @@ let commonColorRuleGuide = null;
 let commonColorRuleGuidePromise = null;
 const tutorialCache = new Map();
 
-const normalizeHash = () => decodeURIComponent(window.location.hash.replace(/^#/, '')).trim();
-
 const getAbsoluteSampleUrl = (sample) => new URL(sample.svg, window.location.href).href;
 
-const getCurrentSampleUrl = (sample) => {
+const getSampleRouteUrl = (sample, tabName = activeTab) => {
   const url = new URL(window.location.href);
-  url.hash = sample.id;
-  return url.href;
+  url.pathname = `${getGalleryRootPath()}/${encodeURIComponent(sample.id)}`;
+  url.hash = TAB_HASHES[tabName] || '';
+  return url;
 };
+
+const getCurrentSampleUrl = (sample) => getSampleRouteUrl(sample).href;
 
 const clearChildren = (element) => {
   while (element.firstChild) {
@@ -815,7 +844,7 @@ const resetSamplePanels = (sample) => {
   }
 };
 
-const setActiveTab = (tabName) => {
+const setActiveTab = (tabName, { updateUrl = true } = {}) => {
   if (!tabPanels[tabName]) return;
   activeTab = tabName;
 
@@ -832,6 +861,9 @@ const setActiveTab = (tabName) => {
 
   const sample = selectedSample();
   if (!sample) return;
+  if (updateUrl) {
+    window.history.replaceState(null, '', getSampleRouteUrl(sample));
+  }
   if (activeTab === 'tutorial') {
     requestTutorialForSample(sample, { renderTutorialPanel: true });
   } else if (activeTab === 'files') {
@@ -839,7 +871,7 @@ const setActiveTab = (tabName) => {
   }
 };
 
-const selectSample = (id, { updateHash = true } = {}) => {
+const selectSample = (id, { updateUrl = true } = {}) => {
   const sample = examples.find((entry) => entry.id === id) || examples[0];
   if (!sample) return;
 
@@ -871,8 +903,8 @@ const selectSample = (id, { updateHash = true } = {}) => {
   updatePressedState();
   setLoading(sample);
 
-  if (updateHash && normalizeHash() !== sample.id) {
-    window.history.replaceState(null, '', `#${encodeURIComponent(sample.id)}`);
+  if (updateUrl) {
+    window.history.replaceState(null, '', getSampleRouteUrl(sample));
   }
 
   if (activeTab === 'tutorial') {
@@ -939,11 +971,26 @@ tabButtons.forEach((button, index) => {
   });
 });
 
-window.addEventListener('hashchange', () => {
-  selectSample(normalizeHash(), { updateHash: false });
-});
+const syncFromLocation = () => {
+  const tabName = getTabFromHash() || 'preview';
+  setActiveTab(tabName, { updateUrl: false });
 
-setActiveTab(activeTab);
+  const legacySampleId = getLegacySampleIdFromHash();
+  if (legacySampleId) {
+    selectSample(legacySampleId, { updateUrl: false });
+    return;
+  }
+
+  const pathSampleId = getSampleIdFromPath();
+  if (pathSampleId && pathSampleId !== selectedId) {
+    selectSample(pathSampleId, { updateUrl: false });
+  }
+};
+
+window.addEventListener('hashchange', syncFromLocation);
+window.addEventListener('popstate', syncFromLocation);
+
+setActiveTab(activeTab, { updateUrl: false });
 
 fetch('./examples.json', { cache: 'no-cache' })
   .then((response) => {
@@ -953,10 +1000,12 @@ fetch('./examples.json', { cache: 'no-cache' })
   .then((data) => {
     examples = Array.isArray(data) ? data : [];
     if (!examples.length) throw new Error('No gallery examples are configured.');
-    const initialId = normalizeHash() || examples[0]?.id || DEFAULT_SAMPLE_ID;
+    const pathSampleId = getSampleIdFromPath();
+    const legacySampleId = getLegacySampleIdFromHash();
+    const initialId = pathSampleId || legacySampleId || examples[0]?.id || DEFAULT_SAMPLE_ID;
     selectedId = initialId;
     renderSampleList();
-    selectSample(initialId);
+    selectSample(initialId, { updateUrl: !legacySampleId });
   })
   .catch((error) => {
     showError(error?.message || 'Could not load gallery examples.');

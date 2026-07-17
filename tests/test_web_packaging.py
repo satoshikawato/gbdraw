@@ -2195,9 +2195,7 @@ def test_wrangler_uses_cloudflare_bundle_directory() -> None:
     assert 'directory = "./dist/cloudflare-pages"' in wrangler_toml
     assert 'binding = "ASSETS"' in wrangler_toml
     assert 'not_found_handling = "single-page-application"' in wrangler_toml
-    assert '"/gallery/examples/*"' in wrangler_toml
-    assert '"/gallery/sessions/*"' in wrangler_toml
-    assert '"/gallery/media/*"' in wrangler_toml
+    assert '"/gallery/*"' in wrangler_toml
 
 
 def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
@@ -2215,6 +2213,8 @@ def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
     assert "Cross-Origin-Embedder-Policy" in source
     assert "Cross-Origin-Opener-Policy" in source
     assert "Cross-Origin-Resource-Policy" in source
+    assert "isGalleryViewRoute" in source
+    assert "'/gallery/index.html'" in source
 
 
 def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:

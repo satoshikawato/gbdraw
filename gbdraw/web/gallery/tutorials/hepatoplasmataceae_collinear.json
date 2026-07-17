@@ -410,7 +410,7 @@
     },
     {
       "title": "The first run is slow",
-      "body": "This example runs five genomes through LOSATP in the browser. Wait for the first cache entry before making styling-only changes."
+      "body": "LOSATP processes five genomes in the browser. Wait for the first cache entry before making styling-only changes."
     },
     {
       "title": "The output is cluttered",

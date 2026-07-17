@@ -120,7 +120,7 @@
           ["Minimum Length", "0"]
         ]
       },
-      "note": "This example compares CDS-derived proteins across related biosynthetic gene clusters. The Orthogroups mode uses retained protein-search hits to form gbdraw similarity groups across all five records and draws links between group members; it does not infer phylogeny-based orthogroups.",
+      "note": "The five records contain related biosynthetic gene clusters. Orthogroups mode uses retained protein-search hits to form gbdraw similarity groups across them and draws links between group members; it does not infer phylogeny-based orthogroups.",
       "operations": [
         {
           "title": "Run LOSAT settings panel",
@@ -546,7 +546,7 @@
     },
     {
       "title": "Inspect the feature qualifiers",
-      "body": "Click the livE CDS and open Qualifiers to inspect the gene and gene_kind values. In this example, gene supplies the livE label and gene_kind=biosynthetic matches the core biosynthetic color rule.",
+      "body": "Click the livE CDS and open Qualifiers to inspect the gene and gene_kind values. The gene value supplies the livE label, and gene_kind=biosynthetic matches the core biosynthetic color rule.",
       "operations": [
         {
           "media": {

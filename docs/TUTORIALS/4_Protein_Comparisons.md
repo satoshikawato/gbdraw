@@ -5,7 +5,7 @@
 
 # Draw protein matches from annotated CDS features
 
-This guide compares three representations of annotated CDS translations: individual pairwise hits, gbdraw similarity groups across records, and locally ordered collinear blocks. It also covers runtime selection. Each example builds a linear diagram by translating annotated CDS features before running the protein search. The similarity groups are search-derived visualization groups, not phylogeny-based orthogroups.
+Compare annotated CDS translations as individual pairwise hits, gbdraw similarity groups across records, or locally ordered collinear blocks. Each example builds a linear diagram by translating annotated CDS features before running the protein search. The runtime is configurable, and the similarity groups are search-derived visualization groups rather than phylogeny-based orthogroups.
 
 ## 1. Prepare annotated GenBank inputs
 
