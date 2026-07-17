@@ -338,9 +338,27 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   await expect(
     tutorialPanel.getByRole('heading', { name: 'Annotate the four regions of a tobacco chloroplast genome' })
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'LSC 1 86,686 86,686 bp bracket' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'IRb 86,687 112,029 25,343 bp bracket' })).toBeVisible();
-  await expect(tutorialPanel.locator('img[src$="thumbnails/tobacco-chloroplast.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.getByText('Switch to Circular mode', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByText('Import the four plastome regions', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByText('Bind the annotation set to the circular track stack', { exact: true })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'LSC 1 86,686 86,686 bp Bracket 0' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'IRb 86,687 112,029 25,343 bp Bracket 0' })).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'plastome_regions Annotations Inside 0.65 20 px Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px'
+    })
+  ).toBeVisible();
+  const tutorialImages = tutorialPanel.getByRole('img');
+  await expect(tutorialImages).toHaveCount(11);
+  await expect(tutorialPanel.locator('img[src$="thumbnails/tobacco-chloroplast.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-06-01-region-annotations.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-07-01-custom-track-slots.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-08-01-chloroplast-preview.webp"]')).toHaveCount(1);
+  for (let idx = 0; idx < await tutorialImages.count(); idx += 1) {
+    const image = tutorialImages.nth(idx);
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+  }
 
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });

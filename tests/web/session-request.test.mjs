@@ -126,6 +126,48 @@ assert.equal(projection.config.adv.circular_label_placement, 'horizontal');
 const radialProjection = projectCanonicalSessionRequest(radialCanonical);
 assert.equal(radialProjection.config.adv.circular_label_placement, 'radial');
 
+const customTrackProjection = projectCanonicalSessionRequest({
+  renderRequest: {
+    ...canonical.renderRequest,
+    diagramOptions: {
+      ...canonical.renderRequest.diagramOptions,
+      tracks: {
+        circularTrackSlots: [
+          'features:features@side=overlay,lane_direction=split',
+          'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,show_labels=true,padding_px=1,overflow=compress,inner_gap_px=1,outer_gap_px=1',
+          'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08'
+        ],
+        circularTrackAxisIndex: 0,
+        centerReservedRadius: 140
+      }
+    }
+  },
+  resources: canonical.resources
+});
+assert.equal(customTrackProjection.config.adv.circular_track_slots_enabled, true);
+assert.equal(customTrackProjection.config.adv.circular_track_slots_axis_index, 0);
+assert.equal(customTrackProjection.config.adv.center_reserved_radius, 140);
+assert.equal(customTrackProjection.config.adv.circular_track_slots.length, 3);
+assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
+  id: 'plastome_regions',
+  renderer: 'annotations',
+  enabled: true,
+  width: '20px',
+  radius: '0.65',
+  spacing: null,
+  inner_gap_px: '1',
+  outer_gap_px: '1',
+  side: 'inside',
+  z: 0,
+  params: {
+    set_id: 'plastome_regions',
+    show_labels: true,
+    padding_px: '1',
+    overflow: 'compress',
+    layer: 'foreground'
+  }
+});
+
 const secondGenbank = {
   ...genbank,
   name: 'second.gb',

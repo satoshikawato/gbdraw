@@ -823,6 +823,23 @@ const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
   return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
+const mergeStoredConfigWithCanonicalProjection = (projectedConfig, storedConfig) => {
+  if (!isPlainObject(storedConfig)) return projectedConfig;
+  return {
+    ...projectedConfig,
+    ...storedConfig,
+    form: {
+      ...(projectedConfig.form || {}),
+      ...(isPlainObject(storedConfig.form) ? storedConfig.form : {})
+    },
+    adv: {
+      ...(projectedConfig.adv || {}),
+      ...(isPlainObject(storedConfig.adv) ? storedConfig.adv : {})
+    },
+    annotationSets: projectedConfig.annotationSets
+  };
+};
+
 const syncActiveCircularLayoutCache = () => {
   const normalizedLegend = normalizeLegendPosition(state.form.legend, 'left');
   const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
@@ -2559,10 +2576,16 @@ export const importSession = async (e, options = {}) => {
       : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
 
     if (canonicalProjection) {
-      state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
-        canonicalProjection.config.form
+      const restoredConfig = mergeStoredConfigWithCanonicalProjection(
+        canonicalProjection.config,
+        data.config
       );
-      applyConfigData(canonicalProjection.config);
+      state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
+        restoredConfig.form
+      );
+      validateImportedCircularTrackSlots(restoredConfig);
+      validateImportedLinearTrackSlots(restoredConfig);
+      applyConfigData(restoredConfig);
     } else if (data.config) {
       hydrateMissingMultiRecordPositionsFromCliInvocation(data.config, data.cliInvocation);
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);

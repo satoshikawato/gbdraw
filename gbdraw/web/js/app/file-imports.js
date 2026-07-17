@@ -11,6 +11,7 @@ export const parseColorTable = (text) => {
     if (parts.length < 2) continue;
     const key = parts[0].trim();
     const color = parts[1].trim();
+    if (key.toLowerCase() === 'feature_type' && color.toLowerCase() === 'color') continue;
     if (key && (color.startsWith('#') || /^[a-z]+$/i.test(color))) {
       colors[key] = resolveColorToHex(color);
       count++;
@@ -29,6 +30,10 @@ export const parseSpecificRules = (text) => {
     if (!line.trim() || line.trim().startsWith('#')) continue;
     const parts = line.split('\t');
     if (parts.length < 4) continue;
+    if (
+      parts[0].trim().toLowerCase() === 'feature_type' &&
+      parts[1].trim().toLowerCase() === 'qualifier_key'
+    ) continue;
 
     const rule = {
       feat: parts[0].trim(),
@@ -70,6 +75,10 @@ export const parsePriorityRules = (text) => {
     if (!line.trim() || line.trim().startsWith('#')) continue;
     const parts = line.split('\t');
     if (parts.length < 2) continue;
+    if (
+      parts[0].trim().toLowerCase() === 'feature_type' &&
+      parts[1].trim().toLowerCase() === 'priorities'
+    ) continue;
     rules.push({ feat: parts[0].trim(), order: parts[1].trim() });
   }
 

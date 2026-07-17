@@ -1,6 +1,6 @@
 # Web Gallery Tutorial Audit Register
 
-Audit date: 2026-07-10
+Audit date: 2026-07-17
 
 Scope: all ready tutorials under `gbdraw/web/gallery/tutorials/`, their referenced WebP media, current web-app controls, saved Gallery sessions, and desktop/mobile Gallery rendering.
 
@@ -16,7 +16,7 @@ Scope: all ready tutorials under `gbdraw/web/gallery/tutorials/`, their referenc
 | `hepatoplasmataceae_orthogroup` | Correct Minimum Identity from 30 to 0, describe all-record orthogroup evidence, and use current layout labels. | Merge Generate with the overview, recapture the exact orthogroup and feature targets, add a layout overview, and remove generic legend/export/session media. |
 | `majanivirus_orthogroup` | Correct the intended LOSATP, layout, legend, pairwise, and user-enterable hex color values; explain that requested threads are capped by the Safe budget. | Consolidate the overlapping color-rule crops, replace stale LOSAT/final/popup states, add focused Right-legend and Pairwise Match crops, and remove generic post-generation media. |
 | `_common-color-rule-guide` | Use the actual `Legend Caption` label and anchored exact-match examples. | No media needed. |
-| `tobacco-chloroplast` | Add a focused chloroplast region-annotation walkthrough with the four coordinate rows as a table and keep the saved-session path explicit. | Add the generated final-result thumbnail only. The input values remain copyable in the table and command; no reconstructed or redundant operation screenshots are needed. |
+| `tobacco-chloroplast` | Replace the single-step summary with a full Circular workflow: input and supporting TSVs, core layout and label settings, the four coordinate rows, the annotation track binding, and generated-result inspection. Keep exact values in tables and explain the bundled-session path. | Replace the thumbnail-only operation with focused real-UI crops for mode, upload, basic settings, layout, labels, supporting TSVs, the four-row Region Annotations set, the three-row Custom Track Slots stack, and the completed preview. |
 
 ## Cross-tutorial cleanup
 
@@ -24,11 +24,11 @@ Scope: all ready tutorials under `gbdraw/web/gallery/tutorials/`, their referenc
 - Treat a good existing screenshot as the semantic-crop baseline. Compare replacements side by side at the same displayed size, and reject wider crops or popup crops that hide the selected feature/ribbon without adding necessary information.
 - Remove generic Export and Save Session strips whose controls render too small in operation cards and add no example-specific state.
 - Keep tables as the authoritative source for exact repeated values; use screenshots to identify the real control or visible result.
-- The final tutorial set references 80 unique operation images. Delete only media that has become unreferenced and rerun strict media validation plus desktop/mobile browser checks.
+- The current tutorial set references 94 unique operation images: 91 files under `gallery/media/` plus three intentional Gallery thumbnails. Delete only media that has become unreferenced and rerun strict media validation plus desktop/mobile browser checks.
 
 ## Verification
 
-- JSON parsing and strict capture/media validation pass for 80 operations and 80 operation images.
-- The tutorial media inventory is exact: 80 referenced WebP files, 80 files present, 0 missing, and 0 unreferenced.
-- The seven final contact sheets were inspected after recapture; AT skew and ticks retain their prior compact bitmaps, while RNR2 is now a shorter landscape crop with the selected l-rRNA highlighted beside the popup.
-- `tests/web/gallery-tutorial.playwright.spec.js` passes all 18 Chromium desktop/mobile tests.
+- JSON parsing and strict capture/media validation pass for 100 operations and 100 operation media entries.
+- The Gallery media inventory is exact: 91 referenced WebP files under `gallery/media/`, 91 files present, 0 missing, and 0 unreferenced. Three operations intentionally use Gallery thumbnails.
+- The tobacco chloroplast contact sheet and the full-size region, track-stack, and final-preview images were inspected after capture.
+- The focused tobacco chloroplast Chromium test passes, and a 390 px mobile check loads all 11 images with no horizontal document overflow or page errors.
