@@ -19,6 +19,15 @@ let remoteAssetsPromise;
 const isRemoteGalleryCandidate = (pathname) =>
   REMOTE_GALLERY_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
+const isGalleryViewRoute = (pathname) => /^\/gallery\/[^/.]+$/.test(pathname);
+
+const fetchGalleryShell = (request, env) => {
+  const shellUrl = new URL(request.url);
+  shellUrl.pathname = '/gallery/index.html';
+  shellUrl.hash = '';
+  return env.ASSETS.fetch(new Request(shellUrl, request));
+};
+
 const inferContentType = (pathname, upstreamHeaders) => {
   if (pathname.endsWith('.svg')) return 'image/svg+xml; charset=utf-8';
   if (pathname.endsWith('.json')) return 'application/json; charset=utf-8';
@@ -90,6 +99,9 @@ const fetchRemoteAsset = async (request, pathname, remoteUrl) => {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if ((request.method === 'GET' || request.method === 'HEAD') && isGalleryViewRoute(url.pathname)) {
+      return fetchGalleryShell(request, env);
+    }
     if ((request.method === 'GET' || request.method === 'HEAD') && isRemoteGalleryCandidate(url.pathname)) {
       const remoteAssets = await getRemoteAssets(request, env);
       const remoteUrl = remoteAssets[url.pathname.replace(/^\/+/, '')];

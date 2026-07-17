@@ -1,9 +1,116 @@
 {
-  "generated": [
-    "NC_001879_regions"
-  ],
+  "generated": [],
   "skipped_missing_inputs": [],
   "failed": [],
-  "aliases_used": [],
-  "missing_inputs": []
+  "aliases_used": [
+    {
+      "requested": "Escherichia_coli.gbk",
+      "resolved_to": "tests/test_inputs/MG1655.gbk",
+      "figures": [
+        "Escherichia_Shigella_multi",
+        "Escherichia_Shigella_pair"
+      ]
+    },
+    {
+      "requested": "NC_000913.gbk",
+      "resolved_to": "tests/test_inputs/MG1655.gbk",
+      "figures": [
+        "ecoli_k12_plot",
+        "ecoli_orchid",
+        "ecoli_with_title",
+        "quickstart_labeled_rna_features",
+        "skew_comparison",
+        "window_step_comparison"
+      ]
+    },
+    {
+      "requested": "NC_012920.gb",
+      "resolved_to": "tests/test_inputs/HmmtDNA.gbk",
+      "figures": [
+        "NC_012920_middle_qualifier_priority_inner_axis5_def28_italic"
+      ]
+    },
+    {
+      "requested": "O157_H7.gbk",
+      "resolved_to": "tests/test_inputs/Sakai.gbk",
+      "figures": [
+        "O157_H7_stx_whitelist"
+      ]
+    }
+  ],
+  "missing_inputs": [
+    {
+      "filename": "M16-5.gb",
+      "figures": [
+        "M16-5_fugaku"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    },
+    {
+      "filename": "NC_000921.gb",
+      "figures": [
+        "NC_000921_spring"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    },
+    {
+      "filename": "NC_000962.gb",
+      "figures": [
+        "NC_000962_psyche"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    },
+    {
+      "filename": "NC_005042.gb",
+      "figures": [
+        "NC_005042_pine_reflection"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    },
+    {
+      "filename": "NC_007205.gb",
+      "figures": [
+        "NC_007205_oceanic_voyage"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    },
+    {
+      "filename": "NC_016510.gb",
+      "figures": [
+        "NC_016510_mint"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    },
+    {
+      "filename": "NZ_CP010822.gb",
+      "figures": [
+        "NZ_CP010822_orange"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    },
+    {
+      "filename": "Pandoravirus_salinus.gb",
+      "figures": [
+        "Pandoravirus_salinus_forest"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    },
+    {
+      "filename": "Shigella_dysenteriae.gbk",
+      "figures": [
+        "Escherichia_Shigella_multi",
+        "Escherichia_Shigella_pair"
+      ],
+      "could_derive_if_base_inputs_present": false,
+      "base_inputs": []
+    }
+  ]
 }
