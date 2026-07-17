@@ -2,7 +2,7 @@
 
 # Gallery
 
-Examples of figures made with gbdraw. Click any figure to open the full-size output.
+These figures were generated with gbdraw. Click any figure to open the full-size output.
 
 For zooming, feature popups, match inspection, and downloadable sessions, open the [interactive gallery](https://gbdraw.app/gallery/).
 
@@ -88,7 +88,7 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
   </tr>
 </table>
 
-## Make your own
+## Reproduce or adapt a figure
 
 - Use the [web app](https://gbdraw.app/) to create a diagram in the browser.
 - Follow the [Quickstart](./QUICKSTART.md) for the shortest command-line workflow.

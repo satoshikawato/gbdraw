@@ -2,7 +2,7 @@
 
 # Draw an annotated GFF3 + FASTA assembly
 
-This guide pairs a GFF3 annotation with its FASTA sequence while preserving record identity, strand, phase, and CDS translation behavior. It uses a small two-contig fixture extracted from the RefSeq lambda phage record `NC_001416.1`. The fixture retains gene/CDS annotations on both strands and is stored under [`examples/gff3_lambda`](../examples/gff3_lambda/). NCBI sequence records are public-domain data; the extraction is included for documentation and tests.
+Pair a GFF3 annotation with its FASTA sequence while preserving record identity, strand, phase, and CDS translation behavior. The examples use a small two-contig fixture extracted from the RefSeq lambda phage record `NC_001416.1`. The fixture retains gene/CDS annotations on both strands and is stored under [`examples/gff3_lambda`](../examples/gff3_lambda/). NCBI sequence records are public-domain data; the extraction is included for documentation and tests.
 
 ## 1. Check record IDs
 

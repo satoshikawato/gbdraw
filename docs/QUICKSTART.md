@@ -4,9 +4,9 @@
 
 # Quickstart
 
-This under-10-minute quickstart draws one circular genome diagram with the CLI. If you prefer a GUI, use the [Beginner circular tutorial](https://gbdraw.app/gallery/#HmmtDNA_basic_circular) or run `gbdraw gui` locally.
+Draw one circular genome diagram with the CLI in under 10 minutes. For a GUI workflow, use the [Beginner circular tutorial](https://gbdraw.app/gallery/#HmmtDNA_basic_circular) or run `gbdraw gui` locally.
 
-## 1. Confirm the installation
+## 1. Check the installation
 
 Make sure `gbdraw` is available in your environment:
 
@@ -83,7 +83,7 @@ gbdraw circular \
 
 ![Circular E. coli K-12 genome diagram with an italic species name and strain in the center](../examples/ecoli_with_title.svg)
 
-## Next steps
+## Choose the next workflow
 
 - Create a one-record linear figure in the [Beginner linear Gallery tutorial](https://gbdraw.app/gallery/#lambda_basic_linear).
 - Select linear records or regions in [Arrange linear tracks, record labels, and rulers](./TUTORIALS/7_Linear_Layout.md#7-select-records-regions-and-orientation).
