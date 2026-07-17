@@ -6,7 +6,7 @@ import logging
 from typing import List, Dict, Set
 
 from Bio import SeqIO
-from Bio.SeqFeature import SeqFeature
+from Bio.SeqFeature import CompoundLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
 
@@ -154,6 +154,94 @@ def merge_gff_fasta_records(
     return merged_records
 
 
+def _gff3_feature_id(feature: SeqFeature) -> str | None:
+    """Return the canonical GFF3 ID for a parsed feature, if present."""
+    raw_id = feature.qualifiers.get("ID")
+    if isinstance(raw_id, (list, tuple)):
+        raw_id = raw_id[0] if raw_id else None
+    feature_id = str(raw_id or "").strip()
+    return feature_id or None
+
+
+def _merge_gff3_qualifiers(features: list[SeqFeature]) -> dict:
+    """Merge qualifiers while retaining each multipart CDS phase in part order."""
+    merged: dict = {}
+    for feature in features:
+        for key, raw_values in feature.qualifiers.items():
+            values = list(raw_values) if isinstance(raw_values, (list, tuple)) else [raw_values]
+            target_values = merged.setdefault(key, [])
+            for value in values:
+                if key == "phase" or value not in target_values:
+                    target_values.append(value)
+    return merged
+
+
+def _normalize_gff3_feature_list(features: list[SeqFeature]) -> tuple[list[SeqFeature], int]:
+    """Collapse same-ID GFF3 rows into multipart Biopython features."""
+    grouped_features: list[list[SeqFeature]] = []
+    group_indexes: dict[tuple[str, str], int] = {}
+
+    for feature in features:
+        feature_id = _gff3_feature_id(feature)
+        location = getattr(feature, "location", None)
+        if feature_id is None or location is None:
+            grouped_features.append([feature])
+            continue
+
+        key = (str(feature.type), feature_id)
+        group_index = group_indexes.get(key)
+        if group_index is None:
+            group_indexes[key] = len(grouped_features)
+            grouped_features.append([feature])
+        else:
+            grouped_features[group_index].append(feature)
+
+    normalized: list[SeqFeature] = []
+    merged_count = 0
+    for feature_group in grouped_features:
+        feature = feature_group[0]
+        if len(feature_group) > 1:
+            parts = [
+                part
+                for grouped_feature in feature_group
+                for part in grouped_feature.location.parts
+            ]
+            feature.location = CompoundLocation(parts, operator="join")
+            feature.qualifiers = _merge_gff3_qualifiers(feature_group)
+            feature.id = _gff3_feature_id(feature) or feature.id
+            feature.sub_features = [
+                sub_feature
+                for grouped_feature in feature_group
+                for sub_feature in (getattr(grouped_feature, "sub_features", None) or [])
+            ]
+            merged_count += 1
+
+        sub_features = getattr(feature, "sub_features", None) or []
+        if sub_features:
+            feature.sub_features, child_merge_count = _normalize_gff3_feature_list(sub_features)
+            merged_count += child_merge_count
+        normalized.append(feature)
+
+    return normalized, merged_count
+
+
+def _normalize_gff3_multipart_features(record: SeqRecord) -> SeqRecord:
+    """Normalize repeated GFF3 IDs into ``CompoundLocation`` features in-place.
+
+    GFF3 uses multiple rows with the same ID to represent a single discontinuous
+    feature. BCBio-GFF retains those rows as separate ``SeqFeature`` objects, so
+    normalize them before feature filtering and rendering.
+    """
+    record.features, merged_count = _normalize_gff3_feature_list(record.features)
+    if merged_count:
+        logger.info(
+            "INFO: Normalized %d multipart GFF3 feature(s) for record %s.",
+            merged_count,
+            record.id,
+        )
+    return record
+
+
 def scan_features_recursive(
     features: List[SeqFeature], feature_types_to_keep: Set[str]
 ) -> List[SeqFeature]:
@@ -228,12 +316,16 @@ def load_gff_fasta(
 
         try:
             logger.info("INFO: Loading GFF3 file {}".format(gff_file))
+            parsed_gff_records = [
+                _normalize_gff3_multipart_features(record) for record in GFF.parse(gff_file)
+            ]
             if keep_all_features or selected_features_set is None:
-                gff_records = list(GFF.parse(gff_file))
+                gff_records = parsed_gff_records
             else:
                 feature_types_to_keep = set(selected_features_set)
                 gff_records = [
-                    filter_features_by_type(record, feature_types_to_keep) for record in GFF.parse(gff_file)
+                    filter_features_by_type(record, feature_types_to_keep)
+                    for record in parsed_gff_records
                 ]
             logger.info("INFO: Loading FASTA file {}".format(fasta_file))
             fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
