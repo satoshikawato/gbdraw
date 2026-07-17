@@ -96,6 +96,25 @@ HMMTDNA_BASIC_COMMAND = (
     "--species '<i>Homo sapiens</i>'"
 )
 
+TOBACCO_CHLOROPLAST_COMMAND = (
+    "gbdraw circular --gbk NC_001879.gbk "
+    "--annotation_table nicotiana-tabacum-regions.tsv --separate_strands "
+    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin "
+    "-t chloroplast_specific_table.tsv --qualifier_priority qualifier_priority.tsv "
+    "--block_stroke_width 1 --block_stroke_color black --axis_stroke_width 3 "
+    "--line_stroke_width 2 --suppress_skew -p default --track_type tuckin "
+    "--labels both --label_placement radial --outer_label_x_radius_offset 0.90 "
+    "--outer_label_y_radius_offset 0.90 --inner_label_x_radius_offset 0.975 "
+    "--inner_label_y_radius_offset 0.975 --species '<i>Nicotiana tabacum</i>' "
+    "--definition_font_size 28 --legend upper_left "
+    "--circular_track_slot 'features:features@side=overlay,lane_direction=split' "
+    "--circular_track_slot "
+    "'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,"
+    "show_labels=true,padding_px=1,overflow=compress,inner_gap_px=1,outer_gap_px=1' "
+    "--circular_track_slot 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08' "
+    "-o tobacco-chloroplast -f interactive_svg"
+)
+
 LAMBDA_BASIC_COMMAND = (
     "gbdraw linear --gbk NC_001416.gb -o lambda_basic_linear -f interactive_svg "
     "--separate_strands --show_labels all --scale_style ruler --legend left"
@@ -195,6 +214,20 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command=HMMTDNA_ATSKEW_COMMAND,
     ),
     GallerySessionExample(
+        id="tobacco-chloroplast",
+        title="<i>Nicotiana tabacum</i> chloroplast genome regions",
+        tags=("Circular", "Organellar", "Intermediate"),
+        description="Mark LSC, SSC, IRa, and IRb as bracket annotations inside a color-coded chloroplast gene map.",
+        difficulty="Intermediate",
+        workflow="Circular region annotations",
+        input_summary="1 GenBank + 3 TSV files",
+        estimated_time="5-10 min",
+        display_order=40,
+        command_kind="runnable",
+        command_note="Download NC_001879.gbk and the three Gallery TSV files, then run the command in the same directory.",
+        command=TOBACCO_CHLOROPLAST_COMMAND,
+    ),
+    GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",
         title="<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         tags=("Circular", "Multi-record", "Intermediate"),
@@ -203,7 +236,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         workflow="Circular multi-record canvas",
         input_summary="1 multi-record GenBank file",
         estimated_time="5-15 min",
-        display_order=40,
+        display_order=50,
         command_kind="runnable",
         command_note="Download the pinned RefSeq assembly named in Files; no sequence search is required.",
     ),

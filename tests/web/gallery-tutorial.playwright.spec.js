@@ -319,6 +319,38 @@ test('Gallery renders the WSSV nucleotide-similarity tutorial and media', async 
   expect(pageErrors).toEqual([]);
 });
 
+test('Gallery restores the tobacco chloroplast region-annotation example', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto(`${baseUrl}/gallery/#tobacco-chloroplast`, { waitUntil: 'domcontentloaded' });
+  await expect(
+    page.getByRole('heading', { name: /Nicotiana tabacum chloroplast genome regions/i })
+  ).toBeVisible();
+  const preview = page.frameLocator('#demo-frame');
+  await expect(preview.locator('[data-gbdraw-annotation-id="lsc"]')).toHaveCount(1);
+  await expect(preview.locator('[data-gbdraw-annotation-id="irb"]')).toHaveCount(1);
+  await expect(preview.locator('[data-gbdraw-annotation-id="ssc"]')).toHaveCount(1);
+  await expect(preview.locator('[data-gbdraw-annotation-id="ira"]')).toHaveCount(1);
+
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(
+    tutorialPanel.getByRole('heading', { name: 'Annotate the four regions of a tobacco chloroplast genome' })
+  ).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'LSC 1 86,686 86,686 bp bracket' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'IRb 86,687 112,029 25,343 bp bracket' })).toBeVisible();
+  await expect(tutorialPanel.locator('img[src$="thumbnails/tobacco-chloroplast.webp"]')).toHaveCount(1);
+
+  await page.getByRole('tab', { name: 'Files' }).click();
+  const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
+  await expect(filesPanel.getByText('NC_001879.gbk')).toBeVisible();
+  await expect(filesPanel.getByText('nicotiana-tabacum-regions.tsv')).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+
+  expect(pageErrors).toEqual([]);
+});
+
 test('Gallery renders the human mitochondrial AT skew tutorial and media', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -644,7 +676,7 @@ test('Gallery orders Beginner examples first and distinguishes runnable commands
   await page.goto(`${baseUrl}/gallery/`, { waitUntil: 'domcontentloaded' });
 
   const cards = page.locator('.sample-card');
-  await expect(cards).toHaveCount(9);
+  await expect(cards).toHaveCount(10);
   await expect(cards.nth(0)).toContainText('Beginner');
   await expect(cards.nth(0)).toContainText('Circular basics');
   await expect(cards.nth(1)).toContainText('Linear basics');

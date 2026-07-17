@@ -79,7 +79,7 @@
     "featureSources": [
       "HmmtDNA.gbk"
     ],
-    "fileSizeLabel": "359 KB",
+    "fileSizeLabel": "360 KB",
     "command": "gbdraw circular -o HmmtDNA_ATskew --species '<i>Homo sapiens</i>' -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p ajisai --window 500 --step 50 --definition_font_size 28 --label_font_size 20 --track_type middle -l left --labels --qualifier_priority HmmtDNA_qualifier_priority.tsv --circular_track_axis_index 0 --circular_track_slot features:features@lane_direction=split --circular_track_slot gc_content:dinucleotide_content@w=0.1 --circular_track_slot gc_skew:dinucleotide_skew@w=0.1 --circular_track_slot 'a_skew_2:dinucleotide_skew@w=0.1,nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew' --circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out --gbk HmmtDNA.gbk -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Download both HmmtDNA.gbk and HmmtDNA_qualifier_priority.tsv from Files before running the command.",
@@ -90,6 +90,37 @@
     "estimatedTime": "5-10 min",
     "displayOrder": 30,
     "tutorial": "./tutorials/HmmtDNA_ATskew.json",
+    "tutorialStatus": "ready"
+  },
+  {
+    "id": "tobacco-chloroplast",
+    "title": "<i>Nicotiana tabacum</i> chloroplast genome regions",
+    "tags": [
+      "Circular",
+      "Organellar",
+      "Intermediate"
+    ],
+    "svg": "./examples/tobacco-chloroplast.svg",
+    "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+    "thumbnail": "./thumbnails/tobacco-chloroplast.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json",
+    "sourceOutput": "gbdraw/web/gallery/examples/tobacco-chloroplast.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/tobacco-chloroplast.svg",
+    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "NC_001879.gbk"
+    ],
+    "fileSizeLabel": "823 KB",
+    "command": "gbdraw circular --gbk NC_001879.gbk --annotation_table nicotiana-tabacum-regions.tsv --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin -t chloroplast_specific_table.tsv --qualifier_priority qualifier_priority.tsv --block_stroke_width 1 --block_stroke_color black --axis_stroke_width 3 --line_stroke_width 2 --suppress_skew -p default --track_type tuckin --labels both --label_placement radial --outer_label_x_radius_offset 0.90 --outer_label_y_radius_offset 0.90 --inner_label_x_radius_offset 0.975 --inner_label_y_radius_offset 0.975 --species '<i>Nicotiana tabacum</i>' --definition_font_size 28 --legend upper_left --circular_track_slot 'features:features@side=overlay,lane_direction=split' --circular_track_slot 'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,show_labels=true,padding_px=1,overflow=compress,inner_gap_px=1,outer_gap_px=1' --circular_track_slot 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08' -o tobacco-chloroplast -f interactive_svg",
+    "commandKind": "runnable",
+    "commandNote": "Download NC_001879.gbk and the three Gallery TSV files, then run the command in the same directory.",
+    "description": "Mark LSC, SSC, IRa, and IRb as bracket annotations inside a color-coded chloroplast gene map.",
+    "difficulty": "Intermediate",
+    "workflow": "Circular region annotations",
+    "inputSummary": "1 GenBank + 3 TSV files",
+    "estimatedTime": "5-10 min",
+    "displayOrder": 40,
+    "tutorial": "./tutorials/tobacco-chloroplast.json",
     "tutorialStatus": "ready"
   },
   {
@@ -110,7 +141,7 @@
     "featureSources": [
       "GCF_015097735.1_ASM1509773v1_genomic.gbff"
     ],
-    "fileSizeLabel": "30.8 MB",
+    "fileSizeLabel": "30.7 MB",
     "command": "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left --plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' --plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto --multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 --multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' --multi_record_position '#2@1' --multi_record_position '#3@2' --multi_record_position '#4@2' --multi_record_position '#5@2' --multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Download the pinned RefSeq assembly named in Files; no sequence search is required.",
@@ -119,7 +150,7 @@
     "workflow": "Circular multi-record canvas",
     "inputSummary": "1 multi-record GenBank file",
     "estimatedTime": "5-15 min",
-    "displayOrder": 40,
+    "displayOrder": 50,
     "tutorial": "./tutorials/Vnig_TUMSAT-TG-2018.json",
     "tutorialStatus": "ready"
   },
@@ -254,7 +285,7 @@
       "MeenMJNV.gb",
       "MejoMJNV.gb"
     ],
-    "fileSizeLabel": "11.6 MB",
+    "fileSizeLabel": "10.4 MB",
     "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup",
     "commandKind": "runnable",
     "commandNote": "Download the nine accession-pinned records and both repository-managed color tables from Files.",

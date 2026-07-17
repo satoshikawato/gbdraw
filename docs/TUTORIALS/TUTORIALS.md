@@ -19,7 +19,7 @@ Start with the question you need to answer. The filenames retain their numbers s
 
 ## Labels, colors, and feature visibility
 
-- [Style a circular plot](./1_Customizing_Plots.md): palettes, circular presets, titles, and labels.
+- [Style a circular plot](./1_Customizing_Plots.md): palettes, circular presets, titles, labels, and chloroplast region annotations.
 - [Set feature colors and labels](./3_Advanced_Customization.md): color tables, qualifier priority, filters, and label overrides.
 - [Control feature visibility and shapes](./9_Feature_Visibility_Shapes.md): per-feature display and geometry.
 

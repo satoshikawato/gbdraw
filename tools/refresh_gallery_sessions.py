@@ -28,6 +28,7 @@ GALLERY_SESSION_FILES = (
     "BGC0000708-BGC0000713.gbdraw-session.json",
     "HmmtDNA_basic_circular.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
+    "tobacco-chloroplast.gbdraw-session.json",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json",
