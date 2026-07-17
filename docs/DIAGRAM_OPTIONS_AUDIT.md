@@ -4,9 +4,9 @@
 
 - Date: 2026-07-14
 - Version: `0.14.0b0`
-- Contract: 70 fields in `gbdraw.api.DiagramOptions`
+- Contract: 71 fields in `gbdraw.api.DiagramOptions`
 
-## All 70 fields reach an owner
+## All 71 fields reach an owner
 
 Every field is read by at least one public `build_*` adapter and has a non-default
 forwarding test. No dead field was found. The audit found 31 mode-specific fields,
@@ -40,6 +40,7 @@ Owner codes identify the function or subsystem that consumes the normalized valu
 | `T` | plot-title resolvers, `DefinitionGroup`, canvas placement |
 | `P` | BLAST/protein comparison loaders, `BlastMatchConfigurator`, linear comparison groups |
 | `K` | protein grouping and collinearity builders/normalizers |
+| `A` | annotation table/materialized-set resolver, lane layout, and Circular/Linear annotation renderers |
 
 Forwarding test codes:
 
@@ -74,6 +75,7 @@ reference. CLI documentation may still describe the equivalent CLI option.
 | 2 | `config_overrides`; mapping; `None` | CS, CM, L | config resolver to `config_overrides` or merged `cfg` to `C` | H-S, O-C | Audit | live; keep |
 | 3 | `colors`; `ColorOptions`; `None` | CS, CM, L | bundle fields to color readers and `F` | H-B, O-F | Audit | live bundle; keep |
 | 4 | `tracks`; `TrackOptions`; `None` | CS, CM, L | mode-specific slot parser/axis normalizer to `F`, `G`, or `D` | H-B, O-F, O-G, O-D | API | live bundle; keep and document subfield modes |
+| 4a | `annotations`; `AnnotationOptions`; `None` | CS, CM, L | annotation source resolver and track binding to `A` | annotation track suites | API | live bundle; keep data separate from placement |
 | 5 | `output`; `OutputOptions`; `None` | CS, CM, L | prefix/legend/title position to canvas and `T` | H-B, O-T | API | live bundle; keep |
 | 6 | `selected_features_set`; sequence; `None` | CS, CM, L | same-name assembler argument to `F` | H-S, O-F | API | live; keep |
 | 7 | `feature_table`; DataFrame; `None` | CS, CM, L | `feature_table` to compatibility resolver to `F` | H-S, O-F | Audit | compatibility alias; keep |

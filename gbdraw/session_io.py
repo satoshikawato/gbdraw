@@ -27,8 +27,9 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 31
-SUPPORTED_SESSION_VERSIONS = frozenset({27, 28, 29, 30, CURRENT_SESSION_VERSION})
+CURRENT_SESSION_VERSION = 32
+CANONICAL_SESSION_MIN_VERSION = 31
+SUPPORTED_SESSION_VERSIONS = frozenset({27, 28, 29, 30, 31, CURRENT_SESSION_VERSION})
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -102,16 +103,16 @@ def validate_session(session: Mapping[str, Any]) -> None:
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
-    if version == CURRENT_SESSION_VERSION:
+    if version >= CANONICAL_SESSION_MIN_VERSION:
         render_request = session.get("renderRequest")
         resources = session.get("resources")
         if not isinstance(render_request, Mapping):
             raise ValidationError(
-                "Session version 31 requires a canonical renderRequest object."
+                f"Session version {version} requires a canonical renderRequest object."
             )
         if not isinstance(resources, Mapping):
             raise ValidationError(
-                "Session version 31 requires a canonical resources object."
+                f"Session version {version} requires a canonical resources object."
             )
         files = session.get("files")
         if files is not None and not isinstance(files, Mapping):
@@ -341,9 +342,9 @@ def session_to_cli_args(
     """Convert a GUI/CLI session into normal CLI arguments and temp files."""
 
     validate_session(session)
-    if session.get("version") == CURRENT_SESSION_VERSION:
+    if int(session.get("version", 0)) >= CANONICAL_SESSION_MIN_VERSION:
         raise ValidationError(
-            "Version 31 renderRequest is authoritative and cannot be replayed through "
+            "Canonical renderRequest sessions cannot be replayed through "
             "legacy CLI arguments."
         )
     if format_override is not None:
@@ -456,7 +457,7 @@ def build_session_json(
         payload["resources"] = _json_clone(context.source_session["resources"])
     else:
         raise ValidationError(
-            "A canonical typed request is required to write a version 31 session."
+            f"A canonical typed request is required to write a version {CURRENT_SESSION_VERSION} session."
         )
     return payload
 
@@ -2489,6 +2490,7 @@ def _as_list(value: Any) -> list[Any]:
 
 __all__ = [
     "CURRENT_SESSION_VERSION",
+    "CANONICAL_SESSION_MIN_VERSION",
     "DEPTH_FILE_ENCODING",
     "DEPTH_FILE_SCHEMA",
     "SESSION_FORMAT",

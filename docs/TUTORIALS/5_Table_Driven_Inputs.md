@@ -193,6 +193,42 @@ This writes `tutorial-circular-track-table.svg`. The result places GC content, G
 
 Keep slot structure in the dedicated columns: `id`, `renderer`, `side`, `r`, `w`, `spacing`, `inner_gap_px`, `outer_gap_px`, and `z`. Do not repeat these settings or their aliases in `params`, and do not put `lane_direction` or `lanes` in a feature row. Use `params` only for renderer-specific settings such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout`.
 
+## 7. Region annotation tables
+
+`--annotation_table` is shared by Circular and Linear mode. Each row belongs to an annotation set and must define exactly one coordinate target or one feature target.
+
+Create `annotations.tsv`:
+
+```tsv
+set_id	id	mark	record	start	end	coordinate_space	wraps_origin	out_of_bounds	feature_selector	envelope	circular_path	label	lane	legend_label	stroke	stroke_width	fill	fill_opacity	hatch_angle	hatch_spacing	hatch_color
+regions	control	band	NC_012920.1	1	576	source	false	clip				Control region		Mitochondrial regions	#9a3412	1.5	#fdba74	0.3	45	5	#9a3412
+genes	cox1	bracket	NC_012920.1						gene=COX1	outer_bounds	shortest	COX1	0		#1d4ed8	2					
+```
+
+Render both sets as separate circular rows:
+
+```bash
+gbdraw circular \
+  --gbk HmmtDNA.gbk \
+  --annotation_table annotations.tsv \
+  --circular_track_slot regions:annotations@set_id=regions,side=outside,w=28px \
+  --circular_track_slot genes:annotations@set_id=genes,side=outside,w=24px \
+  --circular_track_slot features:features@side=overlay \
+  --circular_track_slot ticks:ticks@side=inside \
+  -o HmmtDNA_annotations \
+  -f svg
+```
+
+Required columns are `set_id`, `id`, and `mark`. `mark` accepts `line`, `bracket`, or `band`.
+
+For a coordinate target, provide `start` and `end`. Optional coordinate fields are `record`, `coordinate_space` (`source` or `local`), `wraps_origin`, and `out_of_bounds` (`clip`, `skip`, or `error`). Coordinates are 1-based and inclusive. `record` accepts a record ID or a quoted `#index` selector.
+
+For a feature target, provide `feature_selector`. Separate multiple selectors with semicolons, for example `locus_tag=ABC_001;gene=repA`. `envelope` accepts `outer_bounds` or `segments`; `circular_path` accepts `shortest`, `forward`, or `reverse`.
+
+Optional presentation columns are `label`, `lane`, `legend_label`, `stroke`, `stroke_width`, `stroke_dasharray`, `line_cap`, `fill`, `fill_opacity`, `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`, `label_color`, `label_font_size`, `label_orientation`, `label_position`, and `label_offset`.
+
+`legend_label` is the only value that adds an annotation entry to the shared diagram legend. A normal bracket label does not create a duplicate legend entry.
+
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Draw protein matches from CDS features](./4_Protein_Comparisons.md) | [Next: Plot read depth and numeric tracks >](./6_Depth_Quantitative_Tracks.md)
 

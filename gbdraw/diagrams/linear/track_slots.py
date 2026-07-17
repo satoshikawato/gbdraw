@@ -89,7 +89,7 @@ def _track_extents_for_slot(
         return 0.5 * float(height), 0.5 * float(height)
     if slot.renderer == "dinucleotide_skew":
         return 0.5 * float(height), 0.5 * float(height)
-    if slot.renderer in {"depth", "spacer"}:
+    if slot.renderer in {"depth", "annotations", "spacer"}:
         return 0.0, float(height)
     return 0.0, 0.0
 
@@ -190,22 +190,32 @@ def resolve_linear_track_layout(
         canvas_config=canvas_config,
         cfg=cfg,
     )
-    overlay_resolved = [
-        LinearResolvedTrack(
+    overlay_resolved: list[LinearResolvedTrack] = []
+    anchor_by_id = {track.id: track for track in (*above_resolved, *below_resolved)}
+    for slot in overlay_slots:
+        height = _slot_height(slot, canvas_config=canvas_config) if slot.renderer == "annotations" else 0.0
+        anchor = anchor_by_id.get(str(slot.params.get("anchor_slot", "")))
+        anchor_center = 0.0
+        if anchor is not None:
+            anchor_center = 0.5 * (
+                (float(anchor.y_offset) - float(anchor.top_extent))
+                + (float(anchor.y_offset) + float(anchor.bottom_extent))
+            )
+        resolved_overlay = LinearResolvedTrack(
             slot_index=slot.slot_index,
             id=slot.id,
             renderer=slot.renderer,
             side=slot.side,
-            y_offset=0.0,
-            height=0.0,
+            y_offset=anchor_center - (0.5 * height),
+            height=float(height),
             spacing_after_px=0.0,
             top_extent=0.0,
-            bottom_extent=0.0,
+            bottom_extent=float(height),
             z=slot.z,
             params=dict(slot.params),
         )
-        for slot in overlay_slots
-    ]
+        overlay_resolved.append(resolved_overlay)
+        anchor_by_id[slot.id] = resolved_overlay
 
     resolved_by_index = {
         track.slot_index: track

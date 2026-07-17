@@ -4,11 +4,13 @@
 
 `gbdraw.api` grows from 70 to 117 exported symbols in this beta. The new entries
 cover table readers, multi-record circular diagrams, interactive SVG metadata,
-typed render requests, and version 31 session documents.
+typed render requests, annotation tracks, and version 32 session documents.
 Two behavior fixes make accepted options and returned paths match the work
 performed by the library.
 
-## Python/Web session version 31
+## Python/Web session version 32
+
+- Session version 32 stores materialized annotation sets, targets, styles, and annotation track bindings in the canonical request. Version 31 canonical sessions remain readable.
 
 - Session version 31 adds a CLI-independent typed `renderRequest` and stable embedded
   resource map shared by Python and the Web app.
@@ -99,6 +101,7 @@ The following are available from `gbdraw.api`:
   `read_qualifier_priority_table`, and `read_label_override_table`.
 - `DiagramOptions` fields for the DataFrame and file forms of label whitelist,
   qualifier-priority, and label-override inputs.
+- Region annotation models, TSV loading, coordinate/feature resolution, Circular and Linear annotation track rendering, and interactive SVG annotation metadata.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples and the full
 capability matrix.
@@ -116,7 +119,7 @@ capability matrix.
 
 ## Session API boundary
 
-The public session bridge accepts version 31 documents.
+The public session bridge accepts version 31 and 32 canonical documents.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.

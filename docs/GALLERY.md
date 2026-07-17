@@ -36,6 +36,10 @@ Track placement, strand separation, label offsets, legend position, and font siz
 
 ![Comparison of circular definition font sizes](../examples/definition_font_size_comparison.png)
 
+### Region annotations
+
+Coordinate ranges and feature-selected regions can be drawn as line, bracket, band, or hatched annotation tracks. Annotation sets can be reused in Circular and Linear layouts, including foreground or underlay overlays. See the [annotation table workflow](./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables) and the [Circular placement example](./TUTORIALS/1_Customizing_Plots.md#6-add-an-annotation-ring).
+
 ### Palettes
 
 gbdraw includes palettes for different visual moods and contrast needs. The [palette reference](../examples/color_palette_examples.md) shows every palette in circular and linear contexts and lists its underlying colors.

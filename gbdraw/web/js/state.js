@@ -119,6 +119,19 @@ const svgContent = computed(() => {
         'data-bitscore',
         'data-orientation',
         'data-reference-record-id',
+        'data-gbdraw-annotation-id',
+        'data-gbdraw-annotation-set-id',
+        'data-gbdraw-annotation-track-id',
+        'data-gbdraw-record-id',
+        'data-gbdraw-record-index',
+        'data-gbdraw-annotation-mark',
+        'data-gbdraw-annotation-label',
+        'data-annotation-set-id',
+        'data-annotation-track-id',
+        'data-annotation-record-id',
+        'data-annotation-record-index',
+        'data-annotation-mark',
+        'data-annotation-label',
         'fill',
         'fill-opacity',
         'stroke',
@@ -331,6 +344,8 @@ export const collapseEmptyLinearSeqList = (items) => {
 };
 
 const linearSeqs = reactive(normalizeLinearSeqList([]));
+const annotationSets = reactive([]);
+const selectedAnnotation = ref(null);
 
 const defaultDirectionalFeatureTypes = ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA'];
 
@@ -1094,6 +1109,8 @@ export const state = {
   losatProgram,
   files,
   circularConservation,
+  annotationSets,
+  selectedAnnotation,
   linearSeqs,
   form,
   adv,

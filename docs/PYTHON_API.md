@@ -4,7 +4,7 @@
 
 Use `gbdraw.api` as the supported library entry point. Imports from internal modules may change without the compatibility guarantees of this namespace.
 
-The [`DiagramOptions` field audit](./DIAGRAM_OPTIONS_AUDIT.md) lists all 70 fields,
+The [`DiagramOptions` field audit](./DIAGRAM_OPTIONS_AUDIT.md) lists all 71 fields,
 the builders that read them, their final consumers, and mode-specific constraints.
 The high-level builders reject non-default options that belong to another mode;
 this prevents a Circular-only or Linear-only value from being silently ignored.
@@ -16,11 +16,11 @@ this prevents a Circular-only or Linear-only value from being silently ignored.
 | Circular, one record | `build_circular_diagram` |
 | Circular, multi-record grid | `build_circular_multi_diagram` + `CircularMultiRecordOptions` |
 | Linear and pairwise comparison | `build_linear_diagram` + `DiagramOptions` |
-| Records, conservation, circular-track TSV | `read_*_table` in `gbdraw.api` |
+| Records, conservation, circular-track, annotation TSV | `read_*_table` in `gbdraw.api` |
 | Label whitelist/priority/override TSV | `read_label_*_table`, `read_qualifier_priority_table` |
 | Rich standalone interactive SVG | `build_interactive_svg_context`, `render_to_bytes`, `save_figure_to` |
 | SVG and binary export | `render_to_bytes`, `save_figure_to` |
-| Session v31 load/save/render | `load_session_document`, `materialize_session`, `session_to_request`, `render_session` |
+| Session v32 load/save/render | `load_session_document`, `materialize_session`, `session_to_request`, `render_session` |
 
 ## Circular example
 
@@ -177,6 +177,52 @@ conservation_canvas = build_circular_diagram(
 )
 assert render_to_bytes(conservation_canvas, "svg").startswith(b"<svg")
 ```
+
+## Region annotations
+
+Annotation data and track placement use separate typed objects. Targets can use 1-based inclusive coordinates or existing feature qualifiers.
+
+```python
+from gbdraw.api import (
+    AnnotationOptions,
+    AnnotationSet,
+    CoordinateSpan,
+    RegionAnnotation,
+    RegionAnnotationStyle,
+    TrackOptions,
+    parse_circular_track_slots,
+)
+
+regions = AnnotationSet(
+    id="review",
+    annotations=(
+        RegionAnnotation(
+            id="window",
+            target=CoordinateSpan(record=None, start=1000, end=5000),
+            label="Review window",
+            mark="band",
+            style=RegionAnnotationStyle(fill="#f59e0b", fill_opacity=0.25),
+            legend_label="Review region",
+        ),
+    ),
+)
+annotation_canvas = build_circular_diagram(
+    record,
+    options=DiagramOptions(
+        annotations=AnnotationOptions(sets=(regions,)),
+        tracks=TrackOptions(
+            circular_track_slots=parse_circular_track_slots([
+                "review:annotations@set_id=review,side=outside,w=28px",
+                "features:features@side=overlay,lane_direction=split",
+                "ticks:ticks@side=inside",
+            ])
+        ),
+    ),
+)
+assert render_to_bytes(annotation_canvas, "svg").startswith(b"<svg")
+```
+
+Use `FeatureSpan` with one or more `FeatureSelector` values when a region should follow feature coordinates after record selection, cropping, or reverse complementation. `AnnotationOptions` accepts exactly one source: materialized `sets`, a DataFrame in `table`, or `table_file`.
 
 ## Label tables and rich interactive SVG
 

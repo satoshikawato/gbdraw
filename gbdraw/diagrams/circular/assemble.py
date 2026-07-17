@@ -57,7 +57,20 @@ from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     ScalarSpec,
+    default_circular_track_slots,
+    normalize_circular_track_slots,
 )
+from ...annotations import (
+    AnnotationOptions,
+    ResolvedAnnotationBundle,
+    ResolvedAnnotationTrack,
+    annotation_track_params_from_mapping,
+    layout_annotation_track,
+    resolve_annotations,
+    sync_annotation_legend_entries,
+)
+from ...render.drawers.circular.annotations import draw_circular_annotation_track
+from .positioning import center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout  # type: ignore[reportMissingImports]
 
 from .builders import (
@@ -105,6 +118,85 @@ SINGLE_LEGEND_CONTENT_GAP_MIN_PX = 12.0
 
 
 logger = logging.getLogger(__name__)
+
+
+def _prepare_circular_annotation_tracks(
+    gb_record: SeqRecord,
+    annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
+    slots: list[CircularTrackSlot] | None,
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    record_index: int,
+    show_depth: bool,
+    depth_track_count: int,
+) -> tuple[list[CircularTrackSlot] | None, ResolvedAnnotationBundle, dict[str, ResolvedAnnotationTrack]]:
+    bundle = (
+        annotations
+        if isinstance(annotations, ResolvedAnnotationBundle)
+        else resolve_annotations(annotations, [gb_record], mode="circular")
+    )
+    if not bundle.set_ids and not bundle.annotations:
+        return slots, bundle, {}
+    relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
+    set_ids = bundle.set_ids or tuple(dict.fromkeys(item.set_id for item in bundle.annotations))
+    if slots is None:
+        slots = default_circular_track_slots(
+            show_features=True,
+            show_ticks=True,
+            show_depth=show_depth,
+            depth_track_count=depth_track_count,
+            show_gc=bool(canvas_config.show_gc),
+            show_skew=bool(canvas_config.show_skew),
+        )
+        slots = [
+            CircularTrackSlot(
+                id=f"annotations_{index + 1}",
+                renderer="annotations",
+                side="outside",
+                params={"set_id": set_id},
+            )
+            for index, set_id in enumerate(set_ids)
+        ] + slots
+    requested = {
+        str(slot.params.get("set_id", "")).strip()
+        for slot in slots
+        if str(slot.renderer).strip().lower() == "annotations"
+    }
+    unknown = requested - set(set_ids)
+    if unknown:
+        raise ValidationError(f"Annotation track references unknown set_id(s): {', '.join(sorted(unknown))}")
+    for set_id in set_ids:
+        if set_id not in requested:
+            logger.warning("Annotation set %s is not referenced by a circular track slot.", set_id)
+
+    record_lengths = {record_index: len(gb_record.seq)}
+    bp_per_px = {
+        record_index: len(gb_record.seq) / max(1.0, 2.0 * math.pi * float(canvas_config.radius))
+    }
+    updated: list[CircularTrackSlot] = []
+    layouts: dict[str, ResolvedAnnotationTrack] = {}
+    for slot in slots:
+        if str(slot.renderer).strip().lower() != "annotations":
+            updated.append(slot)
+            continue
+        params = annotation_track_params_from_mapping(slot.params)
+        available = slot.width.resolve(float(canvas_config.radius)) if slot.width is not None else None
+        layout = layout_annotation_track(
+            slot.id,
+            params.set_id,
+            relevant,
+            record_lengths=record_lengths,
+            params=params,
+            available_extent_px=available,
+            bp_per_px=bp_per_px,
+        )
+        layouts[slot.id] = layout
+        updated.append(
+            slot
+            if slot.width is not None
+            else replace(slot, width=ScalarSpec(layout.required_extent_px, "px"))
+        )
+    return updated, bundle, layouts
 
 
 def _circular_preset_for_layout(
@@ -1289,11 +1381,33 @@ def _draw_resolved_circular_slot(
     use_slot_group_id: bool = True,
     use_slot_tick_options: bool = True,
     use_feature_anchor_override: bool = True,
+    annotation_track_layouts: dict[str, ResolvedAnnotationTrack] | None = None,
+    annotation_record_index: int = 0,
 ) -> Drawing:
     """Draw one resolved circular slot."""
     renderer = str(resolved_slot.renderer)
     norm_factor_override = float(resolved_slot.anchor_radius_px) / float(canvas_config.radius)
     if renderer == "spacer":
+        return canvas
+
+    if renderer == "annotations":
+        annotation_layout = (annotation_track_layouts or {}).get(resolved_slot.id)
+        if annotation_layout is None:
+            return canvas
+        params = annotation_track_params_from_mapping(resolved_slot.params)
+        group = draw_circular_annotation_track(
+            canvas,
+            annotation_layout,
+            record_id=str(gb_record.id),
+            record_index=annotation_record_index,
+            record_length=len(gb_record.seq),
+            inner_radius_px=float(resolved_slot.draw_inner_radius_px),
+            outer_radius_px=float(resolved_slot.draw_outer_radius_px),
+            side=str(resolved_slot.side),
+            font_family=str(cfg.objects.text.font_family),
+            params=params,
+        )
+        canvas.add(center_group_on_canvas(group, canvas_config))
         return canvas
 
     if renderer == "features":
@@ -1844,6 +1958,8 @@ def add_record_on_circular_canvas(
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     _tick_track_channel_override: str | None = None,
+    annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
+    annotation_record_index: int = 0,
 ) -> Drawing:
     """
     Adds various record-related groups to a circular canvas.
@@ -1863,13 +1979,6 @@ def add_record_on_circular_canvas(
     Drawing: The updated SVG drawing with all record-related groups added.
     """
     cfg = cfg or canvas_config._cfg
-    effective_circular_track_slots = circular_track_slots
-    user_slot_mode = effective_circular_track_slots is not None
-    user_active_slot_renderers = {
-        str(slot.renderer)
-        for slot in (effective_circular_track_slots or [])
-        if slot.enabled
-    }
 
     raw_show_labels = cfg.canvas.show_labels
     show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
@@ -1880,6 +1989,21 @@ def add_record_on_circular_canvas(
             or (depth_config is not None and depth_df is not None)
         )
     )
+    effective_circular_track_slots, resolved_annotations, annotation_track_layouts = _prepare_circular_annotation_tracks(
+        gb_record,
+        annotations,
+        circular_track_slots,
+        canvas_config=canvas_config,
+        record_index=annotation_record_index,
+        show_depth=depth_enabled,
+        depth_track_count=max(1, len(depth_tracks or ())),
+    )
+    user_slot_mode = effective_circular_track_slots is not None
+    user_active_slot_renderers = {
+        str(slot.renderer)
+        for slot in (effective_circular_track_slots or [])
+        if slot.enabled
+    }
     if user_slot_mode:
         show_depth_track = bool("depth" in user_active_slot_renderers and depth_enabled)
         show_gc_track = bool("dinucleotide_content" in user_active_slot_renderers)
@@ -2395,6 +2519,8 @@ def add_record_on_circular_canvas(
             use_slot_group_id=user_slot_mode,
             use_slot_tick_options=user_slot_mode,
             use_feature_anchor_override=user_slot_mode,
+            annotation_track_layouts=annotation_track_layouts,
+            annotation_record_index=annotation_record_index,
         )
 
     if show_external_labels:
@@ -2488,6 +2614,8 @@ def assemble_circular_diagram(
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     _tick_track_channel_override: str | None = None,
+    annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
+    annotation_record_index: int = 0,
 ) -> Drawing:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -2510,7 +2638,15 @@ def assemble_circular_diagram(
 
     # Prefer a pre-parsed config model when available to avoid repeated from_dict() calls.
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    effective_circular_track_slots = circular_track_slots
+    effective_circular_track_slots, resolved_annotations, _annotation_layouts = _prepare_circular_annotation_tracks(
+        gb_record,
+        annotations,
+        circular_track_slots,
+        canvas_config=canvas_config,
+        record_index=annotation_record_index,
+        show_depth=bool(depth_config is not None and (depth_df is not None or depth_tracks)),
+        depth_track_count=max(1, len(depth_tracks or ())),
+    )
 
     legend_table: dict = {}
     if canvas_config.legend_position != "none":
@@ -2556,6 +2692,16 @@ def assemble_circular_diagram(
             conservation_tracks=conservation_tracks,
             conservation_min_identity=conservation_min_identity,
         )
+        normalized_annotation_slots = (
+            normalize_circular_track_slots(effective_circular_track_slots)
+            if effective_circular_track_slots is not None
+            else None
+        )
+        legend_table = sync_annotation_legend_entries(
+            legend_table,
+            resolved_annotations,
+            normalized_annotation_slots,
+        )
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         canvas_config.recalculate_canvas_dimensions(legend_config)
     canvas: Drawing = canvas_config.create_svg_canvas()
@@ -2589,6 +2735,8 @@ def assemble_circular_diagram(
         definition_group_id=definition_group_id,
         center_reserved_radius=center_reserved_radius,
         _tick_track_channel_override=_tick_track_channel_override,
+        annotations=resolved_annotations,
+        annotation_record_index=annotation_record_index,
     )
     return canvas
 

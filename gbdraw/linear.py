@@ -24,7 +24,8 @@ from .render.formats import INTERACTIVE_SVG_FORMAT
 from .render.interactive_svg import InteractiveSvgContext
 from .render.interactive_context import build_interactive_svg_context
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
-from .api.options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
+from .api.options import AnnotationOptions, ColorOptions, DiagramOptions, OutputOptions, TrackOptions
+from .annotations import read_annotation_table
 from .api.requests import (
     InMemoryRecordSource,
     LinearDiagramRequest,
@@ -413,6 +414,7 @@ def _build_interactive_svg_context(
     feature_visibility_rules=None,
     color_table=None,
     default_colors=None,
+    annotations=None,
 ) -> InteractiveSvgContext:
     try:
         return build_interactive_svg_context(
@@ -423,6 +425,8 @@ def _build_interactive_svg_context(
             default_colors=default_colors,
             orthogroups=orthogroups,
             linear_rendered_feature_ids=True,
+            annotations=annotations,
+            mode="linear",
         )
     except Exception as exc:
         logger.warning(
@@ -918,7 +922,7 @@ def _get_args(args) -> argparse.Namespace:
     )
     parser.add_argument(
         '--linear_track_slot',
-        help='Linear custom track slot: <slot_id>:<renderer>@key=value,key=value. Repeat to add slots.',
+        help='Linear custom track slot: <slot_id>:<renderer>@key=value,key=value. Repeat to add slots. The annotations renderer requires set_id from --annotation_table; overlay annotations also require anchor_slot and layer.',
         action='append',
         default=[],
         metavar='SLOT',
@@ -1357,6 +1361,11 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         user_defined_default_colors, palette, load_comparison)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
+    annotation_options = (
+        AnnotationOptions(sets=read_annotation_table(args.annotation_table, mode="linear"))
+        if args.annotation_table
+        else None
+    )
     feature_visibility_rules = compile_feature_visibility_rules(feature_table)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
@@ -1760,6 +1769,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_track_tick_font_sizes=depth_track_tick_font_sizes,
         linear_track_slots=linear_track_slot_specs,
         linear_track_axis_index=linear_track_axis_index,
+        annotation_options=annotation_options,
         plot_title=plot_title,
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,
@@ -1791,6 +1801,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             feature_visibility_rules=feature_visibility_rules,
             color_table=color_table,
             default_colors=default_colors,
+            annotations=annotation_options,
         )
         save_figure(
             canvas,
@@ -1831,6 +1842,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 linear_track_slots=linear_track_slot_specs,
                 linear_track_axis_index=linear_track_axis_index,
             ),
+            annotations=annotation_options,
             output=OutputOptions(
                 output_prefix=request_prefix,
                 legend=legend,

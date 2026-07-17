@@ -35,6 +35,7 @@ import {
   depthSlotTrackIndex,
   syncDepthSlotLabels
 } from './depth-track-state.js';
+import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
   collinearGroupScopeForEvidenceScope,
   normalizeCollinearAnchorMode,
@@ -697,6 +698,7 @@ export const createRunAnalysis = ({
     losatCache,
     losatDerivedCache,
     circularConservation,
+    annotationSets,
     orthogroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
@@ -1321,6 +1323,8 @@ json.dumps({
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
+        annotation_table: false,
+        annotations_renderer: false,
         records_table: false,
         conservation_blast: false,
         conservation_table: false,
@@ -1337,6 +1341,7 @@ json.dumps({
       const raw = pyodide.runPython(`
 import inspect, json
 import gbdraw.circular as _gbdraw_circular
+from gbdraw.tracks.circular import SUPPORTED_CIRCULAR_TRACK_RENDERERS as _circular_renderers
 _source = inspect.getsource(_gbdraw_circular._get_args)
 json.dumps({
   "circular": "--multi_record_canvas" in _source,
@@ -1356,6 +1361,8 @@ json.dumps({
   "label_rendering": "--label_rendering" in _source,
   "circular_track_slot": "--circular_track_slot" in _source,
   "circular_track_axis_index": "--circular_track_axis_index" in _source,
+  "annotation_table": "--annotation_table" in _source,
+  "annotations_renderer": "annotations" in _circular_renderers,
   "records_table": "--records_table" in _source,
   "conservation_blast": "--conservation_blast" in _source,
   "conservation_table": "--conservation_table" in _source,
@@ -1387,6 +1394,8 @@ json.dumps({
         label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false,
+        annotation_table: false,
+        annotations_renderer: false,
         records_table: false,
         conservation_blast: false,
         conservation_table: false,
@@ -1407,7 +1416,9 @@ json.dumps({
     if (!pyodide) {
       linearTrackSlotSupportCache = {
         linear_track_slot: false,
-        linear_track_axis_index: false
+        linear_track_axis_index: false,
+        annotation_table: false,
+        annotations_renderer: false
       };
       return linearTrackSlotSupportCache;
     }
@@ -1415,17 +1426,22 @@ json.dumps({
       const raw = pyodide.runPython(`
 import inspect, json
 import gbdraw.linear as _gbdraw_linear
+from gbdraw.tracks.linear import SUPPORTED_LINEAR_TRACK_RENDERERS as _linear_renderers
 _source = inspect.getsource(_gbdraw_linear._get_args)
 json.dumps({
   "linear_track_slot": "--linear_track_slot" in _source,
   "linear_track_axis_index": "--linear_track_axis_index" in _source,
+  "annotation_table": "--annotation_table" in _source,
+  "annotations_renderer": "annotations" in _linear_renderers,
 })
       `);
       linearTrackSlotSupportCache = JSON.parse(String(raw));
     } catch (_err) {
       linearTrackSlotSupportCache = {
         linear_track_slot: false,
-        linear_track_axis_index: false
+        linear_track_axis_index: false,
+        annotation_table: false,
+        annotations_renderer: false
       };
     }
     return linearTrackSlotSupportCache;
@@ -1776,6 +1792,7 @@ json.dumps({
         if (normalizedPath === '/web_label_table.tsv') return 'generatedFiles.web_label_table';
         if (normalizedPath === '/web_feature_visibility_table.tsv') return 'generatedFiles.web_feature_visibility_table';
         if (normalizedPath === '/web_feature_table.tsv') return 'generatedFiles.web_feature_visibility_table';
+        if (normalizedPath === '/web_annotations.tsv') return 'generatedFiles.web_annotations';
         const conservationMatch = normalizedPath.match(/^\/conservation_blast_(\d+)\.txt$/);
         if (conservationMatch) return `generatedFiles.circular_conservation_blasts[${Number(conservationMatch[1])}]`;
         const blastMatch = normalizedPath.match(/^\/blast_(\d+)\.txt$/);
@@ -1913,6 +1930,14 @@ json.dumps({
       if (tContent.trim() !== '') {
         stageTextFile('/combined_t.tsv', tContent);
         args.push('-t', '/combined_t.tsv');
+      }
+
+      if (Array.isArray(annotationSets) && annotationSets.length > 0) {
+        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(annotationSets), {
+          name: 'annotations.tsv',
+          slot: 'generatedFiles.web_annotations'
+        });
+        args.push('--annotation_table', '/web_annotations.tsv');
       }
 
       if (filterMode.value === 'Blacklist') {
@@ -2217,6 +2242,14 @@ json.dumps({
 
       if (mode.value === 'circular') {
         const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
+        if (
+          annotationSets.length > 0 &&
+          (!multiCanvasSupport.annotation_table || !multiCanvasSupport.annotations_renderer)
+        ) {
+          throw new Error(
+            'Current gbdraw wheel does not support region annotations. Rebuild and redeploy the web wheel.'
+          );
+        }
         const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
         const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
@@ -2887,6 +2920,15 @@ json.dumps({
           losatCacheInfo.value = [];
         }
       } else {
+        const linearTrackSupport = getLinearTrackSlotOptionSupport();
+        if (
+          annotationSets.length > 0 &&
+          (!linearTrackSupport.annotation_table || !linearTrackSupport.annotations_renderer)
+        ) {
+          throw new Error(
+            'Current gbdraw wheel does not support region annotations. Rebuild and redeploy the web wheel.'
+          );
+        }
         if (selectedFeatureShapes.length > 0) {
           const shapeOptionSupport = getFeatureShapeOptionSupport();
           if (!shapeOptionSupport.linear) {
@@ -2913,7 +2955,7 @@ json.dumps({
         let linearTrackSlotAxisIndex = null;
         let linearSlotNeedsDepth = false;
         if (useLinearTrackSlots) {
-          const support = getLinearTrackSlotOptionSupport();
+          const support = linearTrackSupport;
           if (!support.linear_track_slot || !support.linear_track_axis_index) {
             throw new Error(
               'Current gbdraw wheel does not support --linear_track_slot and --linear_track_axis_index. Rebuild and redeploy the web wheel.'

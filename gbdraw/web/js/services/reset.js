@@ -136,6 +136,8 @@ export const resetSettings = (state) => {
   replaceReactiveObject(state.adv, createDefaultAdv());
   replaceReactiveObject(state.losat, createDefaultLosat());
   replaceReactiveObject(state.circularConservation, createDefaultCircularConservation());
+  replaceReactiveArray(state.annotationSets);
+  state.selectedAnnotation.value = null;
   state.blastSource.value = 'losat';
   state.losatProgram.value = 'blastn';
 

@@ -17,6 +17,16 @@ from gbdraw.analysis.collinearity import (
     LosslessCollinearityParameters,
 )
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
+from gbdraw.annotations import (
+    AnnotationOptions,
+    AnnotationSet,
+    CoordinateSpan,
+    FeatureSelector,
+    FeatureSpan,
+    HatchStyle,
+    RegionAnnotation,
+    RegionAnnotationStyle,
+)
 from gbdraw.api.options import (
     CircularMultiRecordOptions,
     ColorOptions,
@@ -368,6 +378,67 @@ def test_in_memory_record_is_encoded_as_a_genbank_resource(tmp_path: Path) -> No
         output_directory=tmp_path / "output",
     )
     assert isinstance(decoded.records[0].source, GenBankInputSource)
+
+
+def test_annotation_targets_and_styles_round_trip(tmp_path: Path) -> None:
+    record = SeqRecord(
+        Seq("ATGCGC" * 20),
+        id="memory-record",
+        annotations={"molecule_type": "DNA"},
+    )
+    annotations = AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "review",
+                (
+                    RegionAnnotation(
+                        "coordinates",
+                        CoordinateSpan(
+                            parse_record_selector("#1"),
+                            2,
+                            20,
+                            coordinate_space="local",
+                        ),
+                        label="Review",
+                        mark="band",
+                        style=RegionAnnotationStyle(
+                            fill="#88aaff",
+                            hatch=HatchStyle(angle=30, cross=True),
+                        ),
+                        legend_label="Reviewed",
+                        metadata={"owner": "curation"},
+                    ),
+                    RegionAnnotation(
+                        "features",
+                        FeatureSpan(
+                            parse_record_selector("memory-record"),
+                            (FeatureSelector("dnaA", "gene"),),
+                            envelope="segments",
+                            circular_path="forward",
+                        ),
+                    ),
+                ),
+                legend_label="Review regions",
+            ),
+        )
+    )
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(record)),),
+        options=DiagramOptions(annotations=annotations),
+    )
+
+    encoded = encode_canonical_request(request)
+    payload = encoded.payload["diagramOptions"]["annotations"]
+    assert payload["sets"][0]["annotations"][0]["target"]["kind"] == "coordinateSpan"
+    assert payload["sets"][0]["annotations"][1]["target"]["kind"] == "featureSpan"
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "annotations"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.options.annotations == annotations
+    assert encode_canonical_request(decoded).payload == encoded.payload
 
 
 def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:

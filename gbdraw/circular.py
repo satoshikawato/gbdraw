@@ -30,12 +30,14 @@ from .api.diagram import (  # type: ignore[reportMissingImports]
     assemble_circular_diagram_from_records,
 )
 from .api.options import (
+    AnnotationOptions,
     CircularMultiRecordOptions,
     ColorOptions,
     DiagramOptions,
     OutputOptions,
     TrackOptions,
 )
+from .annotations import read_annotation_table
 from .api.requests import (
     CircularDiagramRequest,
     InMemoryRecordSource,
@@ -112,6 +114,7 @@ def _build_interactive_svg_context(
     feature_table=None,
     color_table=None,
     default_colors=None,
+    annotations=None,
 ) -> InteractiveSvgContext:
     try:
         return build_interactive_svg_context(
@@ -120,6 +123,8 @@ def _build_interactive_svg_context(
             feature_table=feature_table,
             color_table=color_table,
             default_colors=default_colors,
+            annotations=annotations,
+            mode="circular",
         )
     except Exception as exc:
         logger.warning(
@@ -441,7 +446,7 @@ def _get_args(args) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--circular_track_slot',
-        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, spacing, side, and z for explicit overrides. Implicit inside numeric/depth slots auto-compress and never move outside automatically.',
+        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, spacing, side, and z for explicit overrides. The annotations renderer requires set_id from --annotation_table; overlay annotations also require anchor_slot and layer. Implicit inside numeric/depth slots auto-compress and never move outside automatically.',
         action='append',
         default=[])
     parser.add_argument(
@@ -772,6 +777,11 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     feature_table_path: str = args.feature_table
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
+    annotation_options = (
+        AnnotationOptions(sets=read_annotation_table(args.annotation_table, mode="circular"))
+        if args.annotation_table
+        else None
+    )
     scale_interval: Optional[int] = args.scale_interval
     tick_label_font_size: Optional[float] = args.tick_label_font_size
     circular_label_spacing: Optional[float] = args.circular_label_spacing
@@ -1089,6 +1099,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             cfg=cfg,
             circular_track_slots=circular_track_slots_or_none,
             circular_track_axis_index=circular_track_axis_index,
+            annotation_options=annotation_options,
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -1101,6 +1112,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 feature_table=feature_table,
                 color_table=color_table,
                 default_colors=default_colors,
+                annotations=annotation_options,
             )
             save_figure(
                 canvas,
@@ -1170,6 +1182,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 cfg=cfg,
                 circular_track_slots=circular_track_slots_or_none,
                 circular_track_axis_index=circular_track_axis_index,
+                annotation_options=annotation_options,
                 evalue=evalue,
                 bitscore=bitscore,
                 identity=identity,
@@ -1182,6 +1195,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                     feature_table=feature_table,
                     color_table=color_table,
                     default_colors=default_colors,
+                    annotations=annotation_options,
                 )
                 save_figure(
                     canvas,
@@ -1226,6 +1240,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                     circular_track_axis_index=circular_track_axis_index,
                     center_reserved_radius=center_reserved_radius,
                 ),
+                annotations=annotation_options,
                 output=OutputOptions(
                     output_prefix=request_prefix,
                     legend=legend,

@@ -96,6 +96,7 @@ export const createFeatureSvgActions = ({
     clickedFeaturePos,
     clickedPairwiseMatch,
     clickedPairwiseMatchPos,
+    selectedAnnotation,
     featurePopupSize,
     featureSelectionDrag,
     skipCaptureBaseConfig,
@@ -990,6 +991,20 @@ export const createFeatureSvgActions = ({
           } else if (isBackgroundPreviewClick(e.target, svg)) {
             featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           }
+          return;
+        }
+        const annotationEl = e.target?.closest?.('[data-gbdraw-annotation-id]');
+        if (annotationEl && svg.contains(annotationEl)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (selectedAnnotation) {
+            selectedAnnotation.value = {
+              id: annotationEl.getAttribute('data-gbdraw-annotation-id') || '',
+              setId: annotationEl.getAttribute('data-gbdraw-annotation-set-id') || '',
+              trackId: annotationEl.getAttribute('data-gbdraw-annotation-track-id') || ''
+            };
+          }
+          hideHoverSummary();
           return;
         }
 

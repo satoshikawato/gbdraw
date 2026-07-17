@@ -134,7 +134,31 @@ The output remains a labeled, strand-separated feature map.
 
 ![Simplified circular white spot syndrome virus map without GC tracks, GC skew, or a legend](../../examples/WSSV_filtered.svg)
 
-## 6. When you move to linear mode
+## 6. Add an annotation ring
+
+Region annotations are independent of GenBank features. Create a TSV file with one or more named sets, then bind a set to an `annotations` track slot.
+
+```bash
+cat > regions.tsv <<'EOF'
+set_id	id	mark	start	end	label	fill	fill_opacity	legend_label
+review	ori-window	band	3923760	3925800	Replication origin window	#f59e0b	0.25	Review region
+EOF
+
+gbdraw circular \
+  --gbk NC_000913.gbk \
+  --annotation_table regions.tsv \
+  --circular_track_slot review:annotations@set_id=review,side=outside,w=28px,overflow=compress \
+  --circular_track_slot features:features@side=overlay \
+  --circular_track_slot ticks:ticks@side=inside \
+  -o ecoli_annotated \
+  -f svg
+```
+
+Coordinates in annotation tables are 1-based and inclusive. Use `wraps_origin=true` with `start > end` for an origin-spanning circular annotation. Annotation slots default to the outside when no custom slot list is supplied. See [Use TSV manifests for CLI inputs](./5_Table_Driven_Inputs.md#7-region-annotation-tables) for feature targets, styles, and the complete table schema.
+
+In the web app, open **Region Annotations**, add or import a set, then choose **Annotations** in **Custom Track Slots** and bind the track to that set.
+
+## 7. When you move to linear mode
 
 Linear mode has its own input selectors:
 

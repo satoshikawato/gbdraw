@@ -58,7 +58,22 @@ from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px  # type: ignore[reportMissingImports]
 from ...labels.linear import calculate_label_y_bounds  # type: ignore[reportMissingImports]
-from ...tracks import LinearTrackSlot, ScalarSpec, normalize_linear_track_slots_with_axis
+from ...tracks import (
+    LinearTrackSlot,
+    ScalarSpec,
+    default_linear_track_slots,
+    normalize_linear_track_slots_with_axis,
+)
+from ...annotations import (
+    AnnotationOptions,
+    ResolvedAnnotationBundle,
+    ResolvedAnnotationTrack,
+    annotation_track_params_from_mapping,
+    layout_annotation_track,
+    resolve_annotations,
+    sync_annotation_legend_entries,
+)
+from ...render.drawers.linear.annotations import draw_linear_annotation_track
 
 from .builders import (
     add_comparison_on_linear_canvas,
@@ -90,6 +105,89 @@ from .track_slots import LinearResolvedTrack, LinearTrackLayout, resolve_linear_
 
 
 logger = logging.getLogger(__name__)
+
+
+def _prepare_linear_annotation_tracks(
+    records: list[SeqRecord],
+    annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
+    slots: list[LinearTrackSlot] | None,
+    *,
+    canvas_config: LinearCanvasConfigurator,
+    record_depth_tracks: list[list[DepthTrackSpec]] | None,
+) -> tuple[list[LinearTrackSlot] | None, ResolvedAnnotationBundle, dict[str, ResolvedAnnotationTrack]]:
+    bundle = (
+        annotations
+        if isinstance(annotations, ResolvedAnnotationBundle)
+        else resolve_annotations(annotations, records, mode="linear")
+    )
+    if not bundle.set_ids and not bundle.annotations:
+        return slots, bundle, {}
+    set_ids = bundle.set_ids or tuple(dict.fromkeys(item.set_id for item in bundle.annotations))
+    if slots is None:
+        slots = default_linear_track_slots(
+            show_features=True,
+            show_depth=bool(record_depth_tracks),
+            depth_track_count=max((len(items) for items in (record_depth_tracks or ())), default=1),
+            show_gc=bool(canvas_config.show_gc),
+            show_skew=bool(canvas_config.show_skew),
+            track_layout=str(canvas_config.track_layout),
+        )
+        slots = [
+            LinearTrackSlot(
+                id=f"annotations_{index + 1}",
+                renderer="annotations",
+                side="above",
+                params={"set_id": set_id},
+            )
+            for index, set_id in enumerate(set_ids)
+        ] + slots
+
+    requested_set_ids = {
+        str(slot.params.get("set_id", "")).strip()
+        for slot in slots
+        if str(slot.renderer).strip().lower() == "annotations"
+    }
+    unknown = requested_set_ids - set(set_ids)
+    if unknown:
+        raise ValueError(f"Annotation track references unknown set_id(s): {', '.join(sorted(unknown))}")
+    for set_id in set_ids:
+        if set_id not in requested_set_ids:
+            logger.warning("Annotation set %s is not referenced by a linear track slot.", set_id)
+
+    record_lengths = {index: len(record.seq) for index, record in enumerate(records)}
+    bp_per_px = {
+        index: len(record.seq)
+        / max(
+            1.0,
+            float(canvas_config.alignment_width)
+            * (1.0 if canvas_config.normalize_length else len(record.seq) / max(1, canvas_config.longest_genome)),
+        )
+        for index, record in enumerate(records)
+    }
+    updated_slots: list[LinearTrackSlot] = []
+    layouts: dict[str, ResolvedAnnotationTrack] = {}
+    for slot in slots:
+        if str(slot.renderer).strip().lower() != "annotations":
+            updated_slots.append(slot)
+            continue
+        params = annotation_track_params_from_mapping(slot.params)
+        available = slot.height.resolve(1.0) if slot.height is not None else None
+        layout = layout_annotation_track(
+            slot.id,
+            params.set_id,
+            bundle.annotations,
+            record_lengths=record_lengths,
+            params=params,
+            available_extent_px=available,
+            bp_per_px=bp_per_px,
+        )
+        layouts[slot.id] = layout
+        updated_slots.append(
+            slot
+            if slot.height is not None
+            else replace(slot, height=ScalarSpec(layout.required_extent_px, "px"))
+        )
+    return updated_slots, bundle, layouts
 
 
 def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> bool:
@@ -684,6 +782,7 @@ def assemble_linear_diagram(
     record_depth_tracks: list[list[DepthTrackSpec]] | None = None,
     linear_track_slots: list[LinearTrackSlot] | None = None,
     linear_track_axis_index: int | None = None,
+    annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     plot_title: str | None = None,
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
@@ -702,6 +801,13 @@ def assemble_linear_diagram(
             records,
             depth_track_tables=[[table] for table in depth_tables],
         )
+    linear_track_slots, resolved_annotations, annotation_track_layouts = _prepare_linear_annotation_tracks(
+        records,
+        annotations,
+        linear_track_slots,
+        canvas_config=canvas_config,
+        record_depth_tracks=record_depth_tracks,
+    )
     normalized_linear_track_slots = (
         normalize_linear_track_slots_with_axis(
             linear_track_slots,
@@ -943,6 +1049,11 @@ def assemble_linear_diagram(
             legend_table,
             linear_track_slots=normalized_linear_track_slots,
             skew_config=skew_config,
+        )
+        legend_table = sync_annotation_legend_entries(
+            legend_table,
+            resolved_annotations,
+            normalized_linear_track_slots,
         )
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
@@ -1374,6 +1485,35 @@ def assemble_linear_diagram(
                     record_label_heights_below=record_label_heights_below,
                     record_label_heights_above=record_label_heights_above,
                 )
+                if slot.renderer == "annotations":
+                    annotation_layout = annotation_track_layouts.get(slot.id)
+                    if annotation_layout is None:
+                        continue
+                    params = annotation_track_params_from_mapping(slot.params)
+                    bar_length = float(canvas_config.alignment_width) * (
+                        1.0
+                        if canvas_config.normalize_length
+                        else len(record.seq) / max(1, canvas_config.longest_genome)
+                    )
+                    annotation_group = draw_linear_annotation_track(
+                        canvas,
+                        annotation_layout,
+                        record_id=str(record.id),
+                        record_index=record_index,
+                        record_length=len(record.seq),
+                        bar_length_px=bar_length,
+                        y_offset_px=0.0,
+                        side=slot.side,
+                        height_px=slot.height,
+                        font_family=str(cfg.objects.text.font_family),
+                        params=params,
+                    )
+                    annotation_group.translate(
+                        offset_x + canvas_config.horizontal_offset,
+                        offset_y + float(track_offset_y),
+                    )
+                    canvas.add(annotation_group)
+                    continue
                 if slot.renderer == "depth":
                     track_index = int(slot.params.get("track_index", 0))
                     if track_index < 0 or track_index >= len(shared_depth_tracks):

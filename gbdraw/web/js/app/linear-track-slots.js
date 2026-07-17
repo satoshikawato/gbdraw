@@ -16,6 +16,7 @@ const SUPPORTED_RENDERERS = [
   'dinucleotide_content',
   'dinucleotide_skew',
   'depth',
+  'annotations',
   'spacer'
 ];
 
@@ -26,6 +27,7 @@ const RENDERER_LABELS = {
   dinucleotide_content: 'Dinucleotide content',
   dinucleotide_skew: 'Dinucleotide skew',
   depth: 'Depth',
+  annotations: 'Annotations',
   spacer: 'Spacer'
 };
 
@@ -41,6 +43,7 @@ const DEFAULT_SLOT_IDS = {
   dinucleotide_content: 'gc_content',
   dinucleotide_skew: 'gc_skew',
   depth: 'depth',
+  annotations: 'annotations',
   spacer: 'spacer'
 };
 
@@ -127,7 +130,10 @@ const defaultSlot = (renderer, overrides = {}) => {
     id: String(overrides.id || DEFAULT_SLOT_IDS[normalizedRenderer] || normalizedRenderer),
     renderer: normalizedRenderer,
     enabled: overrides.enabled !== false,
-    side: normalizeSide(overrides.side, normalizedRenderer === 'features' ? 'overlay' : 'below'),
+    side: normalizeSide(
+      overrides.side,
+      normalizedRenderer === 'features' ? 'overlay' : (normalizedRenderer === 'annotations' ? 'above' : 'below')
+    ),
     height: normalizePxText(overrides.height),
     spacing: normalizePxText(overrides.spacing),
     z: Number.isInteger(Number(overrides.z)) ? Number(overrides.z) : 0,
@@ -223,18 +229,26 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
           normalizeSkewColorParams(params);
         }
       }
+      if (renderer === 'annotations') {
+        params.set_id = String(params.set_id || '').trim();
+        params.overflow = ['error', 'compress', 'clip'].includes(String(params.overflow || '').toLowerCase())
+          ? String(params.overflow).toLowerCase()
+          : 'error';
+        params.show_labels = params.show_labels !== false && String(params.show_labels).toLowerCase() !== 'false';
+        params.layer = String(params.layer || '').toLowerCase() === 'underlay' ? 'underlay' : 'foreground';
+      }
       let id = String(slot.id || DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`).trim();
       if (!id) id = `slot_${index + 1}`;
       if (usedIds.has(id)) id = `${id}_${index + 1}`;
       usedIds.add(id);
       const side = renderer === 'features'
         ? normalizeSide(slot.side, sideForLinearTrackLayout(trackLayout))
-        : normalizeSide(slot.side, 'below');
+        : normalizeSide(slot.side, renderer === 'annotations' ? 'above' : 'below');
       return {
         id,
         renderer,
         enabled: slot.enabled !== false,
-        side: renderer !== 'features' && side === 'overlay' ? 'below' : side,
+        side: renderer !== 'features' && renderer !== 'annotations' && side === 'overlay' ? 'below' : side,
         height: normalizePxText(slot.height),
         spacing: normalizePxText(slot.spacing),
         z: Number.isInteger(Number(slot.z)) ? Number(slot.z) : 0,
@@ -255,7 +269,7 @@ export const effectiveLinearSlotPlacement = (slot) => {
   if (!slot) return 'below';
   const renderer = normalizeRenderer(slot.renderer);
   const side = normalizePlacement(slot.side, renderer === 'features' ? 'overlay' : 'below');
-  if (renderer === 'features' && side === 'overlay') return 'overlay';
+  if ((renderer === 'features' || renderer === 'annotations') && side === 'overlay') return 'overlay';
   return side === 'above' ? 'above' : 'below';
 };
 
@@ -281,7 +295,7 @@ export const syncLinearSlotPlacementFromSide = (slot, placement) => {
   if (!slot) return;
   const renderer = normalizeRenderer(slot.renderer);
   const normalizedPlacement = normalizePlacement(placement, renderer === 'features' ? 'overlay' : 'below');
-  slot.side = renderer === 'features' || normalizedPlacement !== 'overlay'
+  slot.side = renderer === 'features' || renderer === 'annotations' || normalizedPlacement !== 'overlay'
     ? normalizedPlacement
     : 'below';
 };
@@ -291,6 +305,7 @@ export const syncLinearSlotsFromAxisIndex = (slots, axisIndex) => {
   const resolvedAxis = resolveLinearTrackAxisIndex(normalizedSlots, axisIndex);
   normalizedSlots.forEach((slot, index) => {
     if (!slot) return;
+    if (normalizeRenderer(slot.renderer) === 'annotations' && effectiveLinearSlotPlacement(slot) === 'overlay') return;
     const isOnAxisFeature = (
       index === resolvedAxis &&
       normalizeRenderer(slot.renderer) === 'features' &&
@@ -353,6 +368,12 @@ export const buildLinearTrackSlotSpec = (slot, { includeEnabled = false, include
         parts.push(`negative_color=${String(params.negative_color).trim()}`);
       }
     }
+  }
+  if (normalized.renderer === 'annotations') {
+    ['set_id', 'lane_gap_px', 'padding_px', 'overflow', 'anchor_slot', 'layer'].forEach((key) => {
+      if (normalizeOptionalText(params[key])) parts.push(`${key}=${String(params[key]).trim()}`);
+    });
+    parts.push(`show_labels=${params.show_labels === false ? 'false' : 'true'}`);
   }
   if (normalizeOptionalText(params.legend_label)) {
     parts.push(`legend_label=${String(params.legend_label).trim()}`);
@@ -586,7 +607,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     const normalized = normalizedSlotsForCurrentState();
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
     const slot = normalized[idx];
-    return slot?.renderer === 'features' && effectiveLinearSlotPlacement(slot) !== 'overlay';
+    return ['features', 'annotations'].includes(slot?.renderer) && effectiveLinearSlotPlacement(slot) !== 'overlay';
   };
 
   const moveLinearTrackSlotToPlacement = (index, placement) => {
@@ -596,7 +617,15 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     if (idx >= adv.linear_track_slots.length) return;
     const targetPlacement = normalizePlacement(placement);
     const movingSlot = adv.linear_track_slots[idx];
-    if (targetPlacement === 'overlay' && normalizeRenderer(movingSlot?.renderer) !== 'features') return;
+    const movingRenderer = normalizeRenderer(movingSlot?.renderer);
+    if (targetPlacement === 'overlay' && !['features', 'annotations'].includes(movingRenderer)) return;
+    if (targetPlacement === 'overlay' && movingRenderer === 'annotations') {
+      syncLinearSlotPlacementFromSide(movingSlot, 'overlay');
+      movingSlot.params = cloneParams(movingSlot.params);
+      if (!normalizeOptionalText(movingSlot.params.anchor_slot)) movingSlot.params.anchor_slot = 'features';
+      normalizeCurrentSlots();
+      return;
+    }
 
     if (targetPlacement === 'overlay') {
       const movedPreviousPlacement = effectiveLinearSlotPlacement(movingSlot);
@@ -670,7 +699,14 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     if (slot.renderer === 'dinucleotide_content' || slot.renderer === 'dinucleotide_skew') {
       slot.params.nt = normalizeNt(slot.params.nt, adv.nt);
     }
-    if (slot.renderer !== 'features' && slot.side === 'overlay') slot.side = 'below';
+    if (slot.renderer === 'annotations') {
+      slot.side = slot.side === 'overlay' ? 'overlay' : 'above';
+      slot.params.set_id = String(slot.params.set_id || state.annotationSets?.[0]?.id || '');
+      slot.params.overflow = 'error';
+      slot.params.show_labels = true;
+      slot.params.layer = 'foreground';
+    }
+    if (slot.renderer !== 'features' && slot.renderer !== 'annotations' && slot.side === 'overlay') slot.side = 'below';
     normalizeCurrentSlots();
   };
 

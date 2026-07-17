@@ -69,6 +69,7 @@ from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ign
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.api.options import (  # type: ignore[reportMissingImports]
+    AnnotationOptions,
     CircularMultiRecordOptions,
     DiagramOptions,
     _validate_diagram_options_mode,
@@ -100,6 +101,7 @@ from gbdraw.diagrams.circular import assemble_circular_diagram  # type: ignore[r
 from gbdraw.diagrams.circular.positioning import place_definition_group_on_size  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
     configure_pairwise_identity_legend_from_comparisons,
@@ -1800,6 +1802,7 @@ def assemble_linear_diagram_from_records(
     depth_track_tick_font_sizes: Sequence[float | str | None] | None = None,
     linear_track_slots: Sequence[str | LinearTrackSlot] | None = None,
     linear_track_axis_index: int | None = None,
+    annotation_options: AnnotationOptions | None = None,
     plot_title: str | None = None,
     plot_title_position: Literal["center", "top", "bottom"] = "bottom",
     plot_title_font_size: float | None = None,
@@ -2173,6 +2176,7 @@ def assemble_linear_diagram_from_records(
         record_depth_tracks=record_depth_tracks,
         linear_track_slots=parsed_linear_track_slots,
         linear_track_axis_index=resolved_linear_track_axis_index,
+        annotations=annotation_options,
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
@@ -2236,6 +2240,7 @@ def assemble_circular_diagram_from_record(
     center_reserved_radius: float | None = None,
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
+    annotation_options: AnnotationOptions | None = None,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
     identity: float = 70.0,
@@ -2246,6 +2251,8 @@ def assemble_circular_diagram_from_record(
     _precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
     _shared_depth_max: float | None = None,
     _precomputed_conservation_tracks: Sequence[ConservationTrack] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
+    _annotation_record_index: int = 0,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -2594,6 +2601,8 @@ def assemble_circular_diagram_from_record(
         cfg=cfg,
         circular_track_slots=parsed_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
+        annotations=_resolved_annotations or annotation_options,
+        annotation_record_index=_annotation_record_index,
         dinucleotide_content_dataframes=dinucleotide_content_dataframes,
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position="center",
@@ -2677,6 +2686,7 @@ def assemble_circular_diagram_from_records(
     multi_record_positions: Sequence[str] | None = None,
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
+    annotation_options: AnnotationOptions | None = None,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
     identity: float = 70.0,
@@ -2686,6 +2696,7 @@ def assemble_circular_diagram_from_records(
     """Build and assemble a circular diagram grid from multiple records."""
     if not records:
         raise ValidationError("records is empty")
+    resolved_annotations = resolve_annotations(annotation_options, records, mode="circular")
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
@@ -2775,6 +2786,8 @@ def assemble_circular_diagram_from_records(
             center_reserved_radius=center_reserved_radius,
             circular_track_slots=circular_track_slots,
             circular_track_axis_index=circular_track_axis_index,
+            _resolved_annotations=resolved_annotations,
+            _annotation_record_index=0,
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -2841,6 +2854,21 @@ def assemble_circular_diagram_from_records(
     records = [records[idx] for idx in ordered_indices]
     if record_depth_tracks is not None:
         record_depth_tracks = [record_depth_tracks[idx] for idx in ordered_indices]
+    if ordered_indices != list(range(len(ordered_indices))):
+        display_index_by_input = {
+            input_index: display_index
+            for display_index, input_index in enumerate(ordered_indices)
+        }
+        resolved_annotations = replace(
+            resolved_annotations,
+            annotations=tuple(
+                replace(
+                    annotation,
+                    record_index=display_index_by_input[annotation.record_index],
+                )
+                for annotation in resolved_annotations.annotations
+            ),
+        )
 
     conservation_mode = normalize_conservation_reference(conservation_reference)
     conservation_load_result = _load_conservation_result(
@@ -3026,6 +3054,8 @@ def assemble_circular_diagram_from_records(
             center_reserved_radius=center_reserved_radius,
             circular_track_slots=parsed_circular_track_slots,
             circular_track_axis_index=circular_track_axis_index,
+            _resolved_annotations=resolved_annotations,
+            _annotation_record_index=record_index,
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -3585,6 +3615,7 @@ def build_circular_diagram(
         center_reserved_radius=tracks.center_reserved_radius if tracks else None,
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
+        annotation_options=options.annotations,
         cfg=cfg,
     )
 
@@ -3662,6 +3693,7 @@ def build_linear_diagram(
         depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
         linear_track_slots=tracks.linear_track_slots if tracks else None,
         linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
+        annotation_options=options.annotations,
         plot_title=options.plot_title,
         plot_title_position=(
             output.plot_title_position
@@ -3751,6 +3783,7 @@ def build_circular_multi_diagram(
         multi_record_positions=layout.multi_record_positions,
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
+        annotation_options=options.annotations,
         evalue=options.evalue,
         bitscore=options.bitscore,
         identity=options.identity,

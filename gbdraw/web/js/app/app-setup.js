@@ -51,6 +51,7 @@ import {
   estimateCircularConservationLayoutWarning
 } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
+import { createAnnotationEditor } from './annotations.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
@@ -116,6 +117,8 @@ export const createAppSetup = () => {
     losatProgram,
     files,
     circularConservation,
+    annotationSets,
+    selectedAnnotation,
     linearSeqs,
     form,
     adv,
@@ -427,6 +430,7 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
+  const annotationEditor = createAnnotationEditor({ state });
   const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(state));
   const losatSettings = createLosatSettings({ state });
   const autoValueDisplay = createAutoValueDisplay(state);
@@ -2182,6 +2186,17 @@ export const createAppSetup = () => {
     losatProgram,
     files,
     circularConservation,
+    annotationSets,
+    selectedAnnotation,
+    addAnnotationSet: annotationEditor.addAnnotationSet,
+    renameAnnotationSet: annotationEditor.renameAnnotationSet,
+    duplicateAnnotationSet: annotationEditor.duplicateAnnotationSet,
+    removeAnnotationSet: annotationEditor.removeAnnotationSet,
+    addCoordinateAnnotation: annotationEditor.addCoordinateAnnotation,
+    addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
+    removeAnnotation: annotationEditor.removeAnnotation,
+    setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
+    importAnnotationTableFile: annotationEditor.importAnnotationTableFile,
     circularConservationLayoutWarning,
     circularConservationFastaInput,
     circularConservationSeriesRows,

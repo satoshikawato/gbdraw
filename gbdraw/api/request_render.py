@@ -270,6 +270,8 @@ def _interactive_context(
         default_colors=default_colors,
         orthogroups=options.orthogroups,
         linear_rendered_feature_ids=prepared.mode == "linear",
+        annotations=options.annotations,
+        mode=prepared.mode,
     )
 
 

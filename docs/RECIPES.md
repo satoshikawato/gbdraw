@@ -178,6 +178,28 @@ gbdraw linear \
 
 See [Use TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md) for examples covering GenBank, GFF3+FASTA, circular placement, BLAST similarity rings, and track slots.
 
+### Highlight named regions
+
+Create `annotations.tsv`:
+
+```tsv
+set_id	id	mark	start	end	label	fill	fill_opacity	legend_label
+review	window	band	1000	5000	Review window	#f59e0b	0.25	Review region
+```
+
+```bash
+gbdraw circular \
+  --gbk genome.gb \
+  --annotation_table annotations.tsv \
+  --circular_track_slot review:annotations@set_id=review,side=outside,w=28px \
+  --circular_track_slot features:features@side=overlay \
+  --circular_track_slot ticks:ticks@side=inside \
+  -o annotated \
+  -f svg
+```
+
+For a Linear row, replace the circular slots with `--linear_track_slot review:annotations@set_id=review,side=above,h=28px` and a feature slot.
+
 ## Comparative genomics
 
 ### Two-genome comparison

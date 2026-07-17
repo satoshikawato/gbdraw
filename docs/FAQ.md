@@ -35,6 +35,12 @@ Use a feature-specific color table with `-t`. This matches selected features by 
 
 See [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md) and [Recipes](./RECIPES.md).
 
+## How do I mark a coordinate range or a group of features?
+
+Use `--annotation_table` and bind each `set_id` to an `annotations` custom track slot. Coordinate targets are 1-based and inclusive. Feature targets use the qualifiers already loaded from GenBank or GFF3, such as `locus_tag=ABC_001`.
+
+The same table works in Circular and Linear mode. See [Region annotation tables](./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables).
+
 ## My comparative diagram has no ribbons. What is usually wrong?
 
 The most common causes are:

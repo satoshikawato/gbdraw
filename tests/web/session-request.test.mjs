@@ -60,7 +60,8 @@ const state = {
   blastSource: ref('files'),
   losatProgram: ref('blastn'),
   losat: { blastp: {} },
-  selectedOrthogroupAlignmentFeature: ref('')
+  selectedOrthogroupAlignmentFeature: ref(''),
+  annotationSets: []
 };
 const genbankText = `LOCUS       WEBTEST                    4 bp    DNA     linear   UNK 01-JAN-1980
 DEFINITION  Web canonical session fixture.
@@ -92,6 +93,25 @@ assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
 assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
 assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
+
+state.annotationSets = [{
+  id: 'review',
+  annotations: [{
+    id: 'window',
+    target: { kind: 'coordinateSpan', record: null, start: 1, end: 4, coordinateSpace: 'source', wrapsOrigin: false, outOfBounds: 'clip' },
+    label: 'Window', mark: 'band', lane: null, style: null, legendLabel: null, metadata: {}
+  }],
+  defaultStyle: {
+    stroke: '#404040', strokeWidth: 1.5, strokeDasharray: [], lineCap: 'tick', fill: null,
+    fillOpacity: 0.2, hatch: null, labelColor: '#202020', labelFontSize: null,
+    labelOrientation: 'auto', labelPosition: 'center', labelOffset: 4
+  },
+  legendLabel: null
+}];
+const annotationCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(annotationCanonical.renderRequest.diagramOptions.annotations.sets[0].id, 'review');
+assert.equal(projectCanonicalSessionRequest(annotationCanonical).config.annotationSets[0].annotations[0].id, 'window');
+state.annotationSets = [];
 
 state.adv.circular_label_placement = 'radial';
 const radialCanonical = buildCanonicalSessionRequest({ state, filesData });

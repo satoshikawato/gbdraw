@@ -52,7 +52,7 @@ def test_session_document_round_trip_owns_resource_lifetime(
     )
     document = build_session_document(request, title="round-trip")
 
-    assert document.version == 31
+    assert document.version == 32
     assert document.mode == mode
     assert document.has_canonical_request is True
     assert document.to_dict()["resources"]["record-1-genbank"]["encoding"] == "base64"
@@ -89,7 +89,7 @@ def test_session_document_save_load_and_render(tmp_path: Path) -> None:
     session_path = tmp_path / "canonical.gbdraw-session.json"
     save_session_document(session_path, request)
     assert session_path.read_text(encoding="utf-8").startswith(
-        '{"format":"gbdraw-session","version":31,'
+        '{"format":"gbdraw-session","version":32,'
     )
     document = load_session_document(session_path)
 
