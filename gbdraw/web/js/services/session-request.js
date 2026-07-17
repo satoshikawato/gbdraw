@@ -4,6 +4,7 @@ import { buildLabelOverrideTsv } from '../app/feature-editor/label-override-tabl
 import { serializeFeatureVisibilityRules } from '../app/feature-visibility.js';
 import { buildCircularTrackSlotSpec } from '../app/circular-track-slots.js';
 import { buildLinearTrackSlotSpec } from '../app/linear-track-slots.js';
+import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 1;
 
@@ -452,6 +453,9 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
     identity: Number(state.adv.identity),
     alignmentLength: Number(state.adv.alignment_length) || 0
   };
+  if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
+    diagramOptions.annotations = annotationOptionsPayload(state.annotationSets);
+  }
   if (state.mode.value === 'circular') {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(state.adv.keep_full_definition_with_plot_title);
     diagramOptions.species = String(state.form.species || '').trim() || null;
@@ -668,6 +672,10 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
     mode: renderRequest.mode,
     inputType: records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb',
     files,
-    config: { form, adv }
+    config: {
+      form,
+      adv,
+      annotationSets: normalizeAnnotationSets(options.annotations?.sets)
+    }
   };
 };

@@ -53,6 +53,21 @@
       "OrthologEdge",
       "OrthologPath",
       "normalize_orthogroup_membership_mode",
+      "AnnotationOptions",
+      "AnnotationSet",
+      "AnnotationTrackParams",
+      "CoordinateSpan",
+      "FeatureSelector",
+      "FeatureSpan",
+      "HatchStyle",
+      "RegionAnnotation",
+      "RegionAnnotationStyle",
+      "ResolvedAnnotationBundle",
+      "ResolvedRegionAnnotation",
+      "annotation_sets_from_dataframe",
+      "parse_feature_selector",
+      "read_annotation_table",
+      "resolve_annotations",
       "CircularMultiRecordOptions",
       "ColorOptions",
       "DiagramOptions",
@@ -119,16 +134,16 @@
       "parse_linear_track_slot",
       "parse_linear_track_slots"
     ],
-    "contract_sha256": "9c300a152b2a9a481fa9e1d55b2aa5bba5abf3043e9f717f60cde08ef5a10891"
+    "contract_sha256": "15844470edb5840de08877a181db38a372e27cab9dd666f6bdaf0adaf17fc93f"
   },
   "circular_cli": {
-    "actions_sha256": "610948dd01ae68c82e7c6b93f3b164c6228279db88007fec31294235e1e2c494",
-    "defaults_sha256": "f383d5cd1490c00f3421ca86997abde8aae372feef6faea6349d3620bcc4a6f5",
-    "representative_sha256": "961b7104f01cdcd638c3e59ba7ec2843e32d5e58cb2848ecf30da85277bb91f2"
+    "actions_sha256": "a1910704143163104f985926e58c8ca2829904195eda1ae43c66a8903e13842b",
+    "defaults_sha256": "d1bc6be48776afb90736220f386804bc06bb84d4ae0a4820c0dc710119f7446b",
+    "representative_sha256": "fbb101f0f442762f75a970b77abc40e8438b34a0fe355f5ff655ab7822655a26"
   },
   "linear_cli": {
-    "actions_sha256": "33253b4c154a10a7504448f788852d493b0dc89920f0eefb4d1e7e1855085c49",
-    "defaults_sha256": "c25aa526eeed5d68e67440f48afc55932d9c9411dc019d3e24d8f1920544ad9d",
-    "representative_sha256": "2dd759bd427b76f1e976177e35c6b2e91f5538a16a8120b78aac563fe41f6e87"
+    "actions_sha256": "909f39ee39615d983eef3fb09fd34010f52beed5d8d71c4c5400460890cecfcb",
+    "defaults_sha256": "7ddfa57dca5932ce33770786744d8c50b0792f13e3bcd56564f3c2dde24d1e33",
+    "representative_sha256": "f72a742b9491e7073bbb9e4aab23dd2781573f30d9425239a0cc4a48118350dc"
   }
 }

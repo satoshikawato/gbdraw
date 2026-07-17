@@ -16,6 +16,7 @@ Scope: all ready tutorials under `gbdraw/web/gallery/tutorials/`, their referenc
 | `hepatoplasmataceae_orthogroup` | Correct Minimum Identity from 30 to 0, describe all-record orthogroup evidence, and use current layout labels. | Merge Generate with the overview, recapture the exact orthogroup and feature targets, add a layout overview, and remove generic legend/export/session media. |
 | `majanivirus_orthogroup` | Correct the intended LOSATP, layout, legend, pairwise, and user-enterable hex color values; explain that requested threads are capped by the Safe budget. | Consolidate the overlapping color-rule crops, replace stale LOSAT/final/popup states, add focused Right-legend and Pairwise Match crops, and remove generic post-generation media. |
 | `_common-color-rule-guide` | Use the actual `Legend Caption` label and anchored exact-match examples. | No media needed. |
+| `tobacco-chloroplast` | Add a focused chloroplast region-annotation walkthrough with the four coordinate rows as a table and keep the saved-session path explicit. | Add the generated final-result thumbnail only. The input values remain copyable in the table and command; no reconstructed or redundant operation screenshots are needed. |
 
 ## Cross-tutorial cleanup
 

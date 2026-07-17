@@ -1,0 +1,74 @@
+{
+  "id": "tobacco-chloroplast",
+  "version": 1,
+  "title": "Annotate the four regions of a tobacco chloroplast genome",
+  "summary": "Apply the chloroplast feature color table to NC_001879.2 and add LSC, SSC, IRa, and IRb as bracket annotations between the feature map and GC-content track.",
+  "estimatedTime": "5-10 min",
+  "difficulty": "Intermediate",
+  "appMode": "Circular",
+  "primaryWorkflow": "Circular region annotations",
+  "downloads": [
+    {
+      "label": "NC_001879.2",
+      "source": "DDBJ / ENA / GenBank",
+      "accession": "NC_001879.2",
+      "targetName": "NC_001879.gbk",
+      "note": "Download the complete Nicotiana tabacum plastid record as a GenBank flat file."
+    },
+    {
+      "label": "Chloroplast feature colors",
+      "source": "Gallery file",
+      "targetName": "chloroplast_specific_table.tsv",
+      "href": "./files/chloroplast_specific_table.tsv",
+      "note": "Maps chloroplast gene groups to the colors used by the figure."
+    },
+    {
+      "label": "Qualifier priority",
+      "source": "Gallery file",
+      "targetName": "qualifier_priority.tsv",
+      "href": "./files/qualifier_priority.tsv",
+      "note": "Uses gene names before old locus tags for feature labels."
+    },
+    {
+      "label": "Plastome regions",
+      "source": "Gallery file",
+      "targetName": "nicotiana-tabacum-regions.tsv",
+      "href": "./files/nicotiana-tabacum-regions.tsv",
+      "note": "Defines the four bracket annotations in one annotation set."
+    }
+  ],
+  "manualSteps": [
+    {
+      "title": "Generate and inspect the four chloroplast regions",
+      "body": "Use the JLB, JSB, JSA, and JLA boundaries recorded for NC_001879.2. Coordinates are 1-based and inclusive. Run the displayed command with the four downloaded files in one directory, or load the bundled session in the web app to inspect the resolved annotations and generated SVG.",
+      "table": {
+        "columns": ["Region", "Start", "End", "Length", "Mark"],
+        "rows": [
+          ["LSC", "1", "86,686", "86,686 bp", "bracket"],
+          ["IRb", "86,687", "112,029", "25,343 bp", "bracket"],
+          ["SSC", "112,030", "130,600", "18,571 bp", "bracket"],
+          ["IRa", "130,601", "155,943", "25,343 bp", "bracket"]
+        ]
+      },
+      "operations": [
+        {
+          "media": {
+            "src": "./thumbnails/tobacco-chloroplast.webp",
+            "alt": "Nicotiana tabacum chloroplast map with LSC, SSC, IRa, and IRb bracket annotations inside the feature ring.",
+            "caption": "The completed map keeps chloroplast feature colors, radial gene labels, region brackets, and the GC-content track visible."
+          }
+        }
+      ]
+    }
+  ],
+  "related": [
+    {
+      "label": "Region annotation table reference",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    }
+  ]
+}

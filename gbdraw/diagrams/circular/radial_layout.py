@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Collection, Literal, Mapping, Sequence, TypeAlias
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
@@ -917,7 +917,8 @@ def _candidate_widths(intent: _RadialSlotIntent) -> list[tuple[float, bool]]:
 
 
 def _slot_reserves(intent: _RadialSlotIntent) -> bool:
-    del intent
+    if intent.renderer == "annotations" and intent.side == "overlay":
+        return False
     return True
 
 
@@ -1744,7 +1745,7 @@ def _minimum_future_inside_width_px(
         footprint_widths = [width]
         if resolved.packing_band_px is not None:
             footprint_widths.append(float(resolved.packing_band_px.width_px))
-        if resolved.reserved_band_px is not None:
+        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
             footprint_widths.append(float(resolved.reserved_band_px.width_px))
         return max(footprint_widths)
 
@@ -2285,6 +2286,34 @@ def resolve_circular_radial_layout(
                     inside_max_outer,
                     float(resolved.packing_band_px.inner_px) - max(0.0, float(intent.inner_gap_px)),
                 )
+
+    by_id = {slot.id: slot for slot in resolved_by_index.values()}
+    for intent in intents:
+        if intent.renderer != "annotations" or intent.side != "overlay":
+            continue
+        resolved = resolved_by_index.get(intent.slot_index)
+        anchor_id = str(intent.params.get("anchor_slot", "")).strip()
+        anchor = by_id.get(anchor_id)
+        if resolved is None or anchor is None:
+            continue
+        anchor_band = anchor.draw_band_px or anchor.packing_band_px
+        anchor_radius = (
+            float(anchor_band.center_px)
+            if anchor_band is not None
+            else float(anchor.anchor_radius_px or axis_radius_px)
+        )
+        width = max(0.0, float(resolved.resolved_width_px or intent.width_px))
+        draw_band = _band_from_center_width(anchor_radius, width)
+        anchored = replace(
+            resolved,
+            anchor_radius_px=anchor_radius,
+            anchor_offset_px=anchor_radius - axis_radius_px,
+            packing_band_px=None,
+            draw_band_px=draw_band,
+            reserved_band_px=None,
+        )
+        resolved_by_index[intent.slot_index] = anchored
+        by_id[intent.slot_id] = anchored
 
     resolved_slots = tuple(resolved_by_index[index] for index in sorted(resolved_by_index))
     _validate_same_side_order(resolved_slots, intent_by_index, movable_by_index)

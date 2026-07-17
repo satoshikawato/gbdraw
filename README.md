@@ -23,6 +23,7 @@
 
 - Circular and linear genome diagrams from annotated sequence files
 - Comparative genomics tracks from BLAST outfmt 6 or 7
+- Reusable coordinate- and feature-targeted annotation tracks
 - Browser-based GUI at [gbdraw.app](https://gbdraw.app/) and local GUI via `gbdraw gui`
 - Fine-grained control over colors, labels, legends, and track layout
 - Export to SVG, PNG, PDF, EPS, and PS (EPS and PS require CairoSVG as a dependency)

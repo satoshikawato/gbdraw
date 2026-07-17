@@ -429,6 +429,13 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
         help=argparse.SUPPRESS,
         type=str,
         default=argparse.SUPPRESS)
+    parser.add_argument(
+        '--annotation_table',
+        '--annotation-table',
+        dest='annotation_table',
+        help='Path to a TSV file defining region annotation sets and marks (optional)',
+        type=str,
+        default='')
 
 
 def add_legend_args(parser: argparse.ArgumentParser, choices_help: str = '"right", "left", "none"') -> None:

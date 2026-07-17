@@ -1628,6 +1628,58 @@
                     </div>
                 </div>
 
+                <div class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-brackets-curly"></i> Region Annotations <help-tip text="Create reusable coordinate- or feature-targeted annotation sets, then add an Annotations row in Custom Track Slots."></help-tip></summary>
+                        <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
+                            <div class="flex gap-1">
+                                <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()"><i class="ph ph-plus"></i> Add set</button>
+                                <label class="btn btn-secondary text-[10px] flex-1 cursor-pointer"><i class="ph ph-upload-simple"></i> Import TSV<input type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile"></label>
+                            </div>
+                            <div v-if="annotationSets.length === 0" class="rounded border border-dashed border-slate-200 p-2 text-[10px] text-slate-400">No annotation sets.</div>
+                            <div v-for="set in annotationSets" :key="set.id" class="rounded border border-slate-200 bg-white p-2 space-y-2">
+                                <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
+                                    <input :value="set.id" @change="renameAnnotationSet(set, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" aria-label="Annotation set id">
+                                    <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" title="Duplicate set"><i class="ph ph-copy"></i></button>
+                                    <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" title="Delete set"><i class="ph ph-trash"></i></button>
+                                </div>
+                                <input v-model.trim="set.legendLabel" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)">
+                                <div v-for="item in set.annotations" :key="item.id" class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
+                                    <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
+                                        <input v-model.trim="item.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id">
+                                        <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                            <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
+                                        </select>
+                                        <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation"><i class="ph ph-trash"></i></button>
+                                    </div>
+                                    <div v-if="item.target.kind === 'coordinateSpan'" class="grid grid-cols-2 gap-1">
+                                        <input type="number" min="1" v-model.number="item.target.start" class="form-input px-1 py-0.5 text-[10px]" placeholder="Start (1-based)">
+                                        <input type="number" min="1" v-model.number="item.target.end" class="form-input px-1 py-0.5 text-[10px]" placeholder="End (inclusive)">
+                                    </div>
+                                    <div v-else class="grid grid-cols-2 gap-1">
+                                        <input v-model.trim="item.target.selectors[0].key" class="form-input px-1 py-0.5 text-[10px]" placeholder="Qualifier (e.g. locus_tag)">
+                                        <input v-model.trim="item.target.selectors[0].value" class="form-input px-1 py-0.5 text-[10px]" placeholder="Feature value">
+                                    </div>
+                                    <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
+                                        <input v-model="item.label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Label">
+                                        <select v-model="item.mark" class="form-input px-1 py-0.5 text-[10px]"><option value="line">Line</option><option value="bracket">Bracket</option><option value="band">Band</option></select>
+                                        <input type="number" min="0" v-model.number="item.lane" class="form-input w-14 px-1 py-0.5 text-[10px]" placeholder="Lane">
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-1 items-center">
+                                        <input type="color" v-model="set.defaultStyle.stroke" class="form-input h-7 p-0" title="Stroke color">
+                                        <input type="color" :value="set.defaultStyle.fill || '#94a3b8'" @input="set.defaultStyle.fill = $event.target.value" class="form-input h-7 p-0" title="Fill color">
+                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean(set.defaultStyle.hatch)" @change="set.defaultStyle.hatch = $event.target.checked ? { angle: 45, spacing: 5, color: set.defaultStyle.stroke, width: 1, cross: false } : null"> Hatch</label>
+                                    </div>
+                                </div>
+                                <div class="flex gap-1">
+                                    <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addCoordinateAnnotation(set)"><i class="ph ph-plus"></i> Coordinates</button>
+                                    <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addSelectedFeatureAnnotations(set)" :disabled="selectedFeatureCount === 0"><i class="ph ph-selection"></i> Selected features</button>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
                         <summary><i class="ph ph-arrows-left-right"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison FASTA. Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
@@ -1929,7 +1981,7 @@
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1)" :disabled="!canMoveLinearTrackSlot(entry.index, 1)" title="Move down within side"><i class="ph ph-arrow-down"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index)" :disabled="!canMoveLinearTrackSlotAbove(entry.index)" title="Move above Axis"><i class="ph ph-arrow-line-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index)" :disabled="!canMoveLinearTrackSlotBelow(entry.index)" title="Move below Axis"><i class="ph ph-arrow-line-down"></i></button>
-                                                            <button v-if="entry.slot.renderer === 'features'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index)" :disabled="!canMoveLinearTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
+                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index)" :disabled="!canMoveLinearTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index)" title="Duplicate"><i class="ph ph-copy"></i></button>
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index)" title="Delete"><i class="ph ph-trash"></i></button>
                                                         </div>
@@ -1957,12 +2009,12 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
+                                                    <div v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" class="grid grid-cols-1 gap-1">
                                                         <select
                                                             :value="entry.slot.side"
                                                             @change="updateLinearTrackSlotPlacement(entry.slot, $event.target.value)"
                                                             class="form-input px-1 py-0.5 text-[10px]"
-                                                            title="Feature placement"
+                                                            title="Track placement"
                                                         >
                                                             <option value="above">Above axis</option>
                                                             <option value="overlay">On axis</option>
@@ -1971,6 +2023,16 @@
                                                     </div>
                                                     <div v-else class="rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[10px] font-medium text-slate-500" :title="linearTrackSlotPlacementLabel(entry.slot)">
                                                         {{ linearTrackSlotPlacementLabel(entry.slot) }}
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'annotations'" class="grid grid-cols-2 gap-1">
+                                                        <select v-model="entry.slot.params.set_id" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set">
+                                                            <option value="">Select annotation set</option>
+                                                            <option v-for="set in annotationSets" :key="`linear-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
+                                                        </select>
+                                                        <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]" title="Overflow behavior"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
+                                                        <input v-if="entry.slot.side === 'overlay'" v-model.trim="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" placeholder="Anchor slot id">
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" class="form-input px-1 py-0.5 text-[10px]"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
+                                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels"> Labels</label>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
@@ -2220,7 +2282,7 @@
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1)" :disabled="!canMoveCircularTrackSlot(entry.index, 1)" title="Move inward"><i class="ph ph-arrow-down"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!canMoveCircularTrackSlotOutside(entry.index)" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index)" :disabled="!canMoveCircularTrackSlotInside(entry.index)" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
-                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
+                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : 'Duplicate'"><i class="ph ph-copy"></i></button>
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash"></i></button>
                                                         </div>
@@ -2289,6 +2351,17 @@
                                                             <option value="tick_only">Ticks only</option>
                                                             <option value="label_only">Labels only</option>
                                                         </select>
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'annotations'" class="grid grid-cols-2 gap-1">
+                                                        <select v-model="entry.slot.params.set_id" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set">
+                                                            <option value="">Select annotation set</option>
+                                                            <option v-for="set in annotationSets" :key="`circular-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
+                                                        </select>
+                                                        <select v-model="entry.slot.side" class="form-input px-1 py-0.5 text-[10px]" title="Placement"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
+                                                        <input v-if="entry.slot.side === 'overlay'" v-model.trim="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" placeholder="Anchor slot id">
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" class="form-input px-1 py-0.5 text-[10px]"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
+                                                        <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
+                                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels"> Labels</label>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">

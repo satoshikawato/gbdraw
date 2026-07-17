@@ -10,6 +10,7 @@ from .parsing import (
     strip_inline_comment as _strip_inline_comment,
 )
 from .scalars import ScalarSpec
+from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 
 
 LinearTrackRendererName = Literal[
@@ -17,6 +18,7 @@ LinearTrackRendererName = Literal[
     "dinucleotide_content",
     "dinucleotide_skew",
     "depth",
+    "annotations",
     "spacer",
 ]
 
@@ -28,6 +30,7 @@ SUPPORTED_LINEAR_TRACK_RENDERERS: frozenset[str] = frozenset(
         "dinucleotide_content",
         "dinucleotide_skew",
         "depth",
+        "annotations",
         "spacer",
     }
 )
@@ -104,6 +107,7 @@ class NormalizedLinearTrackSlot:
     z: int
     reserve: bool
     params: Mapping[str, Any]
+    annotation: AnnotationTrackParams | None = None
 
 
 def _normalize_renderer(raw: str) -> str:
@@ -312,9 +316,9 @@ def linear_track_slots_with_axis_side(
         derived_side = _axis_derived_side(slot_index, axis_index)
         explicit_side = _normalize_side_value(slot.side) if slot.side is not None else None
         if explicit_side == "overlay":
-            if renderer != "features":
-                raise ValueError("side=overlay is only supported for features slots")
-            if slot_index != axis_index:
+            if renderer not in {"features", "annotations"}:
+                raise ValueError("side=overlay is only supported for features and annotations slots")
+            if renderer == "features" and slot_index != axis_index:
                 raise ValueError(
                     _axis_side_conflict_message(
                         slot_id=str(slot.id),
@@ -378,9 +382,12 @@ def normalize_linear_track_slots(slots: Sequence[LinearTrackSlot]) -> list[Norma
         if not slot.enabled:
             continue
 
-        side = _normalize_side_value(slot.side) if slot.side is not None else "below"
-        if side == "overlay" and renderer != "features":
-            raise ValueError("side=overlay is only supported for features slots")
+        side = _normalize_side_value(slot.side) if slot.side is not None else (
+            "above" if renderer == "annotations" else "below"
+        )
+        if side == "overlay" and renderer not in {"features", "annotations"}:
+            raise ValueError("side=overlay is only supported for features and annotations slots")
+        annotation_params: AnnotationTrackParams | None = None
         if renderer == "features":
             feature_slot_count += 1
             if feature_slot_count > 1:
@@ -404,6 +411,12 @@ def normalize_linear_track_slots(slots: Sequence[LinearTrackSlot]) -> list[Norma
             if track_index < 0:
                 raise ValueError(f"depth slot '{slot.id}' track_index must be >= 0")
             params["track_index"] = track_index
+        elif renderer == "annotations":
+            annotation_params = annotation_track_params_from_mapping(params)
+            if side == "overlay" and annotation_params.anchor_slot is None:
+                raise ValueError(f"annotation slot '{slot.id}' with side=overlay requires anchor_slot")
+            if side != "overlay" and annotation_params.anchor_slot is not None:
+                raise ValueError(f"annotation slot '{slot.id}' uses anchor_slot without side=overlay")
         elif renderer in {"features", "spacer"}:
             pass
 
@@ -417,10 +430,26 @@ def normalize_linear_track_slots(slots: Sequence[LinearTrackSlot]) -> list[Norma
                 height=slot.height,
                 spacing=slot.spacing,
                 z=int(slot.z),
-                reserve=(renderer != "spacer"),
+                reserve=(renderer != "spacer" and side != "overlay"),
                 params=params,
+                annotation=annotation_params,
             )
         )
+    by_id = {slot.id: slot for slot in normalized}
+    for slot in normalized:
+        if slot.renderer != "annotations" or slot.side != "overlay" or slot.annotation is None:
+            continue
+        anchor = by_id.get(str(slot.annotation.anchor_slot))
+        if anchor is None and len(slots) == 1:
+            continue
+        if anchor is None:
+            raise ValueError(f"annotation slot '{slot.id}' references unknown anchor_slot={slot.annotation.anchor_slot!r}")
+        if anchor.renderer == "spacer":
+            raise ValueError(f"annotation slot '{slot.id}' anchor '{anchor.id}' has no drawable band")
+        if slot.annotation.layer == "underlay" and slot.z >= anchor.z:
+            raise ValueError(f"annotation underlay slot '{slot.id}' must have z less than anchor '{anchor.id}'")
+        if slot.annotation.layer == "foreground" and slot.z <= anchor.z:
+            raise ValueError(f"annotation foreground slot '{slot.id}' must have z greater than anchor '{anchor.id}'")
     return normalized
 
 

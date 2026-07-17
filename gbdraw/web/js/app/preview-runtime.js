@@ -1,24 +1,9 @@
-const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
-const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
-const FEATURE_SELECTOR = [
-  `path[${FEATURE_ID_ATTRIBUTE}]`,
-  `polygon[${FEATURE_ID_ATTRIBUTE}]`,
-  `rect[${FEATURE_ID_ATTRIBUTE}]`,
-  'path[id^="f"]',
-  'polygon[id^="f"]',
-  'rect[id^="f"]'
-].join(', ');
-
-const normalizeFeatureIdentity = (value) =>
-  String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
-
-const getFeatureIdentity = (element) =>
-  normalizeFeatureIdentity(
-    element?.getAttribute?.(FEATURE_ID_ATTRIBUTE) ||
-    element?.getAttribute?.('id') ||
-    element?.id ||
-    ''
-  );
+import {
+  FEATURE_SELECTOR,
+  filterFeatureFillTargets,
+  getFeatureIdentity,
+  normalizeFeatureIdentity
+} from './feature-dom.js';
 
 const normalizeVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -181,7 +166,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     normalized.forEach((change) => {
       const color = String(change?.color || '').trim();
       if (!color) return;
-      getFeatureElements(change.featureId).forEach((element) => {
+      filterFeatureFillTargets(getFeatureElements(change.featureId)).forEach((element) => {
         element.setAttribute('fill', color);
         updated += 1;
       });

@@ -1,0 +1,5 @@
+set_id	id	mark	record	start	end	coordinate_space	wraps_origin	label	lane	stroke	stroke_width	line_cap	label_color	label_font_size	label_orientation	label_offset
+plastome_regions	lsc	bracket	NC_001879.2	1	86686	source	false	LSC	0	#202020	3	tick	#202020	14	tangent	7
+plastome_regions	irb	bracket	NC_001879.2	86687	112029	source	false	IRb	0	#202020	3	tick	#202020	14	tangent	7
+plastome_regions	ssc	bracket	NC_001879.2	112030	130600	source	false	SSC	0	#202020	3	tick	#202020	14	tangent	7
+plastome_regions	ira	bracket	NC_001879.2	130601	155943	source	false	IRa	0	#202020	3	tick	#202020	14	tangent	7

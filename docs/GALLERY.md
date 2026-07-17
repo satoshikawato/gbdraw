@@ -36,6 +36,10 @@ Track placement, strand separation, label offsets, legend position, and font siz
 
 ![Comparison of circular definition font sizes](../examples/definition_font_size_comparison.png)
 
+### Region annotations
+
+Coordinate ranges and feature-selected regions can be drawn as line, bracket, band, or hatched annotation tracks. Annotation sets can be reused in Circular and Linear layouts, including foreground or underlay overlays. See the [annotation table workflow](./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables) and the [Circular placement example](./TUTORIALS/1_Customizing_Plots.md#6-add-an-annotation-ring).
+
 ### Palettes
 
 gbdraw includes palettes for different visual moods and contrast needs. The [palette reference](../examples/color_palette_examples.md) shows every palette in circular and linear contexts and lists its underlying colors.
@@ -104,6 +108,7 @@ These recipes demonstrate chloroplast annotation colors, compact archaeal circul
 
 ```bash
 python tools/reproduce_examples.py \
+  --figure NC_001879_regions \
   --figure NC_001879_color \
   --figure M16-5_fugaku \
   --figure Pandoravirus_salinus_forest
@@ -114,6 +119,7 @@ python tools/reproduce_examples.py \
 The hosted gallery keeps the larger session-based workflows separate from the static recipes:
 
 - [Vibrio multi-record circular layout](https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018): six records on one canvas.
+- [*Nicotiana tabacum* chloroplast regions](https://gbdraw.app/gallery/#tobacco-chloroplast): LSC, SSC, IRa, and IRb brackets with the chloroplast feature color table and GC-content track.
 - [Aminoglycoside biosynthetic gene clusters](https://gbdraw.app/gallery/#BGC0000708-BGC0000713): protein search, similarity groups, qualifier colors, and legend editing.
 - [Hepatoplasmataceae similarity groups](https://gbdraw.app/gallery/#hepatoplasmataceae_orthogroup) and [collinear blocks](https://gbdraw.app/gallery/#hepatoplasmataceae_collinear): the same records rendered with two different match representations.
 - [WSSV nucleotide-similarity rings](https://gbdraw.app/gallery/#WSSV_genome_comparison): an advanced session-first case study. Its displayed command documents provenance but is not labeled as directly runnable because some prepared inputs are available only in the bundled session.

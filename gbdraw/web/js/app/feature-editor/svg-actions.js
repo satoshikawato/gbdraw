@@ -7,29 +7,15 @@ import {
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import {
+  FEATURE_ID_ATTRIBUTE,
+  FEATURE_SELECTOR,
+  filterFeatureFillTargets,
+  getFeatureIdentity,
+  normalizeFeatureIdentity
+} from '../feature-dom.js';
 
-export const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
-export const FEATURE_SELECTOR = [
-  `path[${FEATURE_ID_ATTRIBUTE}]`,
-  `polygon[${FEATURE_ID_ATTRIBUTE}]`,
-  `rect[${FEATURE_ID_ATTRIBUTE}]`,
-  'path[id^="f"]',
-  'polygon[id^="f"]',
-  'rect[id^="f"]'
-].join(', ');
-
-const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
-
-export const normalizeFeatureIdentity = (value) =>
-  String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
-
-export const getFeatureIdentity = (element) =>
-  normalizeFeatureIdentity(
-    element?.getAttribute?.(FEATURE_ID_ATTRIBUTE) ||
-    element?.getAttribute?.('id') ||
-    element?.id ||
-    ''
-  );
+export { FEATURE_ID_ATTRIBUTE, FEATURE_SELECTOR, getFeatureIdentity, normalizeFeatureIdentity };
 
 const featureElementIndexCache = new WeakMap();
 
@@ -72,6 +58,9 @@ export const getFeatureElements = (svg, featureId, featureIndex = null) => {
   return byId ? [byId] : [];
 };
 
+export const getFeatureFillElements = (svg, featureId, featureIndex = null) =>
+  filterFeatureFillTargets(getFeatureElements(svg, featureId, featureIndex));
+
 export const createFeatureSvgActions = ({
   state,
   getFeatureColor,
@@ -96,6 +85,7 @@ export const createFeatureSvgActions = ({
     clickedFeaturePos,
     clickedPairwiseMatch,
     clickedPairwiseMatchPos,
+    selectedAnnotation,
     featurePopupSize,
     featureSelectionDrag,
     skipCaptureBaseConfig,
@@ -423,7 +413,7 @@ export const createFeatureSvgActions = ({
     hideHoverSummary();
     if (clickedPairwiseMatch) clickedPairwiseMatch.value = null;
     const featureElements = getFeatureElements(svg, feat.svg_id);
-    const featureElement = featureElements[0] || null;
+    const featureElement = getFeatureFillElements(svg, feat.svg_id)[0] || featureElements[0] || null;
     clickedFeature.value = buildClickedFeaturePayload(feat, featureElement);
     if (featurePopupSize) {
       featurePopupSize.width = 0;
@@ -640,7 +630,7 @@ export const createFeatureSvgActions = ({
     if (!svg) return;
 
     try {
-      const elements = getFeatureElements(svg, svgId);
+      const elements = getFeatureFillElements(svg, svgId);
       let updated = elements.length > 0;
 
       if (updated) {
@@ -992,6 +982,20 @@ export const createFeatureSvgActions = ({
           }
           return;
         }
+        const annotationEl = e.target?.closest?.('[data-gbdraw-annotation-id]');
+        if (annotationEl && svg.contains(annotationEl)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (selectedAnnotation) {
+            selectedAnnotation.value = {
+              id: annotationEl.getAttribute('data-gbdraw-annotation-id') || '',
+              setId: annotationEl.getAttribute('data-gbdraw-annotation-set-id') || '',
+              trackId: annotationEl.getAttribute('data-gbdraw-annotation-track-id') || ''
+            };
+          }
+          hideHoverSummary();
+          return;
+        }
 
         const featureEl = getFeatureClickTarget(e, svg);
         if (featureEl) {
@@ -1092,6 +1096,7 @@ export const createFeatureSvgActions = ({
     applyVisibilityPreviewChanges,
     attachSvgFeatureHandlers,
     getFeatureElements,
+    getFeatureFillElements,
     openFeatureEditorForFeature
   };
 };

@@ -230,6 +230,11 @@ def test_linear_multipart_feature_paths_have_unique_dom_ids_and_shared_feature_i
         f"{feature_id}__line1",
         f"{feature_id}__part2",
     ]
+    assert [path.attrib.get("data-gbdraw-feature-part") for path in feature_paths] == [
+        "block",
+        "connector",
+        "block",
+    ]
     assert feature_paths[1].attrib.get("fill") == "none"
     assert len(path_ids) == len(set(path_ids))
 
@@ -312,9 +317,18 @@ def test_circular_multipart_feature_connector_shares_feature_id() -> None:
         for path in root.findall(".//svg:path", ns)
         if path.attrib.get("data-gbdraw-feature-id") == feature_id
     ]
-    connector_paths = [path for path in feature_paths if path.attrib.get("fill") == "none"]
+    block_paths = [
+        path for path in feature_paths if path.attrib.get("data-gbdraw-feature-part") == "block"
+    ]
+    connector_paths = [
+        path for path in feature_paths if path.attrib.get("data-gbdraw-feature-part") == "connector"
+    ]
 
-    assert connector_paths
+    assert [path.attrib.get("id") for path in block_paths] == [
+        f"{feature_id}__part1",
+        f"{feature_id}__part2",
+    ]
+    assert connector_paths[0].attrib.get("fill") == "none"
     assert connector_paths[0].attrib.get("id") == f"{feature_id}__line1"
 
 

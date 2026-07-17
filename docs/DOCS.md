@@ -18,7 +18,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 - [Style a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md)
 - [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md)
 - [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md)
-- [More command-line guides](./TUTORIALS/TUTORIALS.md): CDS protein matches, TSV manifests, read-depth tracks, linear layout, interactive SVG sessions, and feature visibility.
+- [More command-line guides](./TUTORIALS/TUTORIALS.md): CDS protein matches, TSV manifests and region annotations, read-depth tracks, linear layout, interactive SVG sessions, and feature visibility.
 
 ## Reference
 

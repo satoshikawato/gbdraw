@@ -22,7 +22,8 @@ INTERACTIVE_SCRIPT_ID = "gbdraw-interactive-feature-script"
 INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
 
-_FEATURE_PART_SUFFIX_RE = re.compile(r"__part\d+$")
+_FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
+_FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
 _FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
 _ASSET_IDS = {
     INTERACTIVE_METADATA_ID,
@@ -50,6 +51,7 @@ class InteractiveSvgContext:
     orthogroups: Sequence[Mapping[str, object]] = ()
     legend_entries: Sequence[Mapping[str, object]] = ()
     current_colors: Mapping[str, str] = field(default_factory=dict)
+    annotations: Sequence[Mapping[str, object]] = ()
 
 
 @dataclass
@@ -75,7 +77,7 @@ def _add_class_token(element: ET.Element, token: str) -> None:
 
 
 def _normalize_feature_id(value: object | None) -> str:
-    return _FEATURE_PART_SUFFIX_RE.sub("", str(value or "").strip())
+    return _FEATURE_ELEMENT_SUFFIX_RE.sub("", str(value or "").strip())
 
 
 def _element_feature_id(element: ET.Element) -> str:
@@ -114,6 +116,13 @@ def _is_feature_candidate(element: ET.Element) -> bool:
     return bool(element.get("data-gbdraw-feature-id") or element_id.startswith("f"))
 
 
+def _is_feature_fill_target(element: ET.Element) -> bool:
+    explicit_part = str(element.get("data-gbdraw-feature-part") or "").strip()
+    if explicit_part:
+        return explicit_part == "block"
+    return _FEATURE_CONNECTOR_SUFFIX_RE.search(str(element.get("id") or "")) is None
+
+
 def _is_match_candidate(element: ET.Element) -> bool:
     if _local_name(element.tag) != "path":
         return False
@@ -133,7 +142,12 @@ def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEn
         if not _is_feature_candidate(element):
             continue
         svg_id = _element_feature_id(element)
-        if not svg_id or svg_id in entries:
+        if not svg_id:
+            continue
+        existing = entries.get(svg_id)
+        if existing is not None and (
+            _is_feature_fill_target(existing.element) or not _is_feature_fill_target(element)
+        ):
             continue
         entries[svg_id] = _RenderedFeatureEntry(
             svg_id=svg_id,
@@ -2069,6 +2083,40 @@ def enrich_svg(
     features = _feature_payloads(root, context)
     orthogroups = _orthogroup_payloads(features, context)
     matches = _match_payloads(root, features, orthogroups)
+    annotation_context = {
+        (
+            str(item.get("record_index", "")),
+            str(item.get("track_id", "")),
+            str(item.get("set_id", "")),
+            str(item.get("id", "")),
+        ): dict(item)
+        for item in context.annotations
+    }
+    annotations: list[dict[str, object]] = []
+    for element in root.iter():
+        annotation_id = str(element.get("data-gbdraw-annotation-id") or "")
+        if not annotation_id:
+            continue
+        key = (
+            str(element.get("data-gbdraw-record-index") or ""),
+            str(element.get("data-gbdraw-annotation-track-id") or ""),
+            str(element.get("data-gbdraw-annotation-set-id") or ""),
+            annotation_id,
+        )
+        payload = annotation_context.get(key, annotation_context.get((key[0], "", key[2], key[3]), {})).copy()
+        payload.update(
+            {
+                "dom_id": str(element.get("id") or ""),
+                "id": annotation_id,
+                "set_id": key[2],
+                "track_id": key[1],
+                "record_id": str(element.get("data-gbdraw-record-id") or ""),
+                "record_index": int(key[0]) if key[0].isdigit() else key[0],
+                "mark": str(element.get("data-gbdraw-annotation-mark") or payload.get("mark") or ""),
+                "label": str(element.get("data-gbdraw-annotation-label") or payload.get("label") or ""),
+            }
+        )
+        annotations.append(payload)
 
     try:
         metadata_payload = json.dumps(
@@ -2078,6 +2126,7 @@ def enrich_svg(
                 "features": features,
                 "orthogroups": orthogroups,
                 "matches": matches,
+                "annotations": annotations,
             },
             ensure_ascii=False,
             separators=(",", ":"),

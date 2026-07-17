@@ -51,6 +51,7 @@ GALLERY_SESSION_FILES = [
     "BGC0000708-BGC0000713.gbdraw-session.json",
     "HmmtDNA_basic_circular.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
+    "tobacco-chloroplast.gbdraw-session.json",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json",
@@ -848,6 +849,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "HmmtDNA_basic_circular",
         "lambda_basic_linear",
         "HmmtDNA_ATskew",
+        "tobacco-chloroplast",
         "Vnig_TUMSAT-TG-2018",
         "hepatoplasmataceae_collinear",
         "hepatoplasmataceae_orthogroup",
@@ -865,6 +867,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "Human mitochondrial genome: first circular figure",
         "Lambda phage: first linear figure",
         "Human mitochondrial genome (AT skew)",
+        "<i>Nicotiana tabacum</i> chloroplast genome regions",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         "Hepatoplasmataceae collinear protein-match blocks",
         "Hepatoplasmataceae CDS protein-similarity links",
@@ -957,6 +960,11 @@ def test_interactive_gallery_examples_are_wired() -> None:
 def test_runnable_gallery_support_downloads_exist() -> None:
     expected_local_downloads = {
         "HmmtDNA_ATskew": {"./files/HmmtDNA_qualifier_priority.tsv"},
+        "tobacco-chloroplast": {
+            "./files/chloroplast_specific_table.tsv",
+            "./files/qualifier_priority.tsv",
+            "./files/nicotiana-tabacum-regions.tsv",
+        },
         "BGC0000708-BGC0000713": {
             "./files/BGC0000708-BGC0000713_default_colors.tsv",
             "./files/BGC0000708-BGC0000713_specific_colors.tsv",
@@ -1159,6 +1167,34 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
             assert session.get("losatDerivedCache", {}).get("entries"), session_name
         if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
             assert pairwise_ids or collinearity_ids, session_name
+
+
+def test_tobacco_gallery_session_keeps_chloroplast_region_annotations() -> None:
+    session = json.loads(
+        (GALLERY_ROOT / "sessions" / "tobacco-chloroplast.gbdraw-session.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    annotation_sets = (
+        session.get("renderRequest", {})
+        .get("diagramOptions", {})
+        .get("annotations", {})
+        .get("sets", [])
+    )
+    assert len(annotation_sets) == 1
+    assert annotation_sets[0]["id"] == "plastome_regions"
+    annotations = annotation_sets[0]["annotations"]
+    assert [annotation["label"] for annotation in annotations] == ["LSC", "IRb", "SSC", "IRa"]
+    actual_spans = [
+        (annotation["target"]["start"], annotation["target"]["end"])
+        for annotation in annotations
+    ]
+    assert actual_spans == [
+        (1, 86686),
+        (86687, 112029),
+        (112030, 130600),
+        (130601, 155943),
+    ]
 
 
 def test_vnig_gallery_session_multirecord_positions_are_restoreable() -> None:
@@ -2212,6 +2248,7 @@ def test_web_linear_run_ignores_hidden_circular_species_strain_args() -> None:
 
 def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() -> None:
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    feature_dom_source = (WEB_ROOT / "js" / "app" / "feature-dom.js").read_text(encoding="utf-8")
     svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
     label_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "label-actions.js").read_text(encoding="utf-8")
     color_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "color-actions.js").read_text(encoding="utf-8")
@@ -2222,16 +2259,18 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     standalone_source = _standalone_interactivity_source()
 
     assert "'data-gbdraw-feature-id'" in state_source
-    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source
+    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in feature_dom_source
+    assert "FEATURE_PART_ATTRIBUTE = 'data-gbdraw-feature-part'" in feature_dom_source
     assert "normalizeFeatureIdentity" in svg_actions_source
-    assert "FEATURE_SELECTOR = [" in svg_actions_source
-    assert "`path[${FEATURE_ID_ATTRIBUTE}]`" in svg_actions_source
-    assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in svg_actions_source
+    assert "FEATURE_SELECTOR = [" in feature_dom_source
+    assert "`path[${FEATURE_ID_ATTRIBUTE}]`" in feature_dom_source
+    assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in feature_dom_source
+    assert "isFeatureFillTarget" in feature_dom_source
     assert "svg.querySelectorAll(FEATURE_SELECTOR)" in svg_actions_source
     assert "getFeatureIdentity(element)" in svg_actions_source
     assert "getFeatureHoverKey(getFeatureIdentity(relatedFeature))" in svg_actions_source
     assert "getFeatureIdentity(el)" in label_actions_source
-    assert "getFeatureElements(svg, feat.svg_id)" in color_actions_source
+    assert "getFeatureFillElements(svg, feat.svg_id)" in color_actions_source
     assert "getFeatureElements(svg, svgId)" in color_actions_source
     assert "getFeatureElements(svg, svgId)" in stroke_actions_source
     assert "getFeatureIdentity(path)" in svg_styles_source

@@ -65,11 +65,28 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     normalize_orthogroup_membership_mode,
 )
 from .options import (
+    AnnotationOptions,
     CircularMultiRecordOptions,
     ColorOptions,
     DiagramOptions,
     OutputOptions,
     TrackOptions,
+)
+from gbdraw.annotations import (
+    AnnotationSet,
+    AnnotationTrackParams,
+    CoordinateSpan,
+    FeatureSelector,
+    FeatureSpan,
+    HatchStyle,
+    RegionAnnotation,
+    RegionAnnotationStyle,
+    ResolvedAnnotationBundle,
+    ResolvedRegionAnnotation,
+    annotation_sets_from_dataframe,
+    parse_feature_selector,
+    read_annotation_table,
+    resolve_annotations,
 )
 from .render import parse_formats, render_to_bytes, save_figure, save_figure_to
 from .request_render import (
@@ -196,6 +213,21 @@ __all__ = [
     "OrthologPath",
     "normalize_orthogroup_membership_mode",
     # options
+    "AnnotationOptions",
+    "AnnotationSet",
+    "AnnotationTrackParams",
+    "CoordinateSpan",
+    "FeatureSelector",
+    "FeatureSpan",
+    "HatchStyle",
+    "RegionAnnotation",
+    "RegionAnnotationStyle",
+    "ResolvedAnnotationBundle",
+    "ResolvedRegionAnnotation",
+    "annotation_sets_from_dataframe",
+    "parse_feature_selector",
+    "read_annotation_table",
+    "resolve_annotations",
     "CircularMultiRecordOptions",
     "ColorOptions",
     "DiagramOptions",

@@ -39,6 +39,7 @@ Options (examples):
   --conservation_blast BLAST result file(s) for circular similarity rings (-outfmt 6 or 7)
   --conservation_table TSV manifest for circular BLAST similarity rings
   --circular_track_table TSV manifest for circular track slots
+  --annotation_table    TSV table for coordinate- or feature-targeted region annotations
 
 Additional Information:
   - For full documentation, visit: https://github.com/satoshikawato/gbdraw/
@@ -287,6 +288,9 @@ options:
   --feature_visibility_table FEATURE_VISIBILITY_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
+  --annotation_table, --annotation-table ANNOTATION_TABLE
+                        Path to a TSV file defining region annotation sets and
+                        marks (optional)
   --outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET
                         Outer label x-radius offset factor (float; default
                         from config)
@@ -322,7 +326,10 @@ options:
                         --track_type preset at render time. Inside numeric/depth
                         slots with no explicit r or w auto-compress when needed
                         and never move outside automatically. z only controls
-                        SVG layering.
+                        SVG layering. The annotations renderer requires
+                        set_id. Use lane_gap_px, padding_px, overflow,
+                        show_labels, and optional style_override parameters.
+                        An overlay also requires anchor_slot and layer.
   --circular_track_table TSV
                         TSV manifest for circular track slots and axis
                         placement.
@@ -388,6 +395,17 @@ options:
 Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for these rings, so provide precomputed BLAST output.
 
 ## TSV manifest inputs
+
+### Region annotations
+
+Both modes accept `--annotation_table PATH` (alias `--annotation-table`). The table requires `set_id`, `id`, and `mark`; `mark` is `line`, `bracket`, or `band`. Each row must provide exactly one target:
+
+- coordinate: `start` and `end`, with optional `record`, `coordinate_space`, `wraps_origin`, and `out_of_bounds`;
+- feature: `feature_selector`, with optional `record`, `envelope`, and `circular_path`.
+
+Coordinates are 1-based and inclusive. Separate multiple feature selectors with semicolons. Optional display columns are `label`, `lane`, `legend_label`, `stroke`, `stroke_width`, `stroke_dasharray`, `line_cap`, `fill`, `fill_opacity`, `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`, `label_color`, `label_font_size`, `label_orientation`, `label_position`, and `label_offset`.
+
+Bind a set to a custom slot with `set_id=<set_id>`. When annotations are supplied without custom slots, one outside/above annotation slot is synthesized for each set while the normal default tracks remain present.
 
 The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
 
@@ -834,7 +852,9 @@ options:
   --linear_track_slot SLOT
                         Linear custom track slot:
                         <slot_id>:<renderer>@key=value,key=value. Repeat to
-                        add slots.
+                        add slots. The annotations renderer requires set_id.
+                        Use h for explicit height; an overlay also requires
+                        anchor_slot and layer.
   --linear_track_axis_index LINEAR_TRACK_AXIS_INDEX
                         Axis boundary index for linear custom track slots.
   --ruler_on_axis       Use each record axis as the ruler in linear mode.
@@ -867,6 +887,9 @@ options:
   --feature_visibility_table FEATURE_VISIBILITY_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
+  --annotation_table, --annotation-table ANNOTATION_TABLE
+                        Path to a TSV file defining region annotation sets and
+                        marks (optional)
   --feature_height FEATURE_HEIGHT
                         Feature vertical width (optional; float; default: 80
                         (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes

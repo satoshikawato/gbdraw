@@ -134,7 +134,60 @@ The output remains a labeled, strand-separated feature map.
 
 ![Simplified circular white spot syndrome virus map without GC tracks, GC skew, or a legend](../../examples/WSSV_filtered.svg)
 
-## 6. When you move to linear mode
+## 6. Mark chloroplast genome regions
+
+Region annotations are independent of GenBank features. This example adds LSC, SSC, IRa, and IRb brackets to the *Nicotiana tabacum* chloroplast map while retaining its feature colors and inner GC-content track.
+
+The repository includes the NC_001879.2 GenBank record, chloroplast color rules, label priority, and region table. The four intervals follow the JLB, JSB, JSA, and JLA boundaries in the record:
+
+| Region | Start | End | Length |
+| --- | ---: | ---: | ---: |
+| LSC | 1 | 86,686 | 86,686 bp |
+| IRb | 86,687 | 112,029 | 25,343 bp |
+| SSC | 112,030 | 130,600 | 18,571 bp |
+| IRa | 130,601 | 155,943 | 25,343 bp |
+
+Run the example from the repository root:
+
+```bash
+gbdraw circular \
+  --gbk tests/test_inputs/NC_001879.gbk \
+  --annotation_table examples/nicotiana-tabacum-regions.tsv \
+  -t examples/chloroplast_specific_table.tsv \
+  --qualifier_priority examples/qualifier_priority.tsv \
+  -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
+  --separate_strands \
+  --block_stroke_width 1 \
+  --block_stroke_color black \
+  --axis_stroke_width 3 \
+  --line_stroke_width 2 \
+  --track_type tuckin \
+  --labels both \
+  --label_placement radial \
+  --outer_label_x_radius_offset 0.90 \
+  --outer_label_y_radius_offset 0.90 \
+  --inner_label_x_radius_offset 0.975 \
+  --inner_label_y_radius_offset 0.975 \
+  --suppress_skew \
+  --species "<i>Nicotiana tabacum</i>" \
+  --definition_font_size 28 \
+  --legend upper_left \
+  --circular_track_slot 'features:features@side=overlay,lane_direction=split' \
+  --circular_track_slot 'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,show_labels=true,padding_px=1,overflow=compress,inner_gap_px=1,outer_gap_px=1' \
+  --circular_track_slot 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08' \
+  -o NC_001879_regions \
+  -f svg
+```
+
+![Nicotiana tabacum chloroplast map with bracket annotations for LSC, SSC, IRa, and IRb](../../examples/NC_001879_regions.svg)
+
+The brackets share one compact annotation lane between the feature map and GC-content track. Radial feature labels allow the GC track to remain visible with `--labels both`. Open the [interactive Gallery version](https://gbdraw.app/gallery/#tobacco-chloroplast) to inspect the same plot as an interactive SVG or restore its saved session.
+
+Coordinates in annotation tables are 1-based and inclusive. Use `wraps_origin=true` with `start > end` for an origin-spanning circular annotation. See [Use TSV manifests for CLI inputs](./5_Table_Driven_Inputs.md#7-region-annotation-tables) for feature targets, styles, and the complete table schema.
+
+In the web app, open **Region Annotations**, import `nicotiana-tabacum-regions.tsv`, then choose **Annotations** in **Custom Track Slots** and bind the track to `plastome_regions`.
+
+## 7. When you move to linear mode
 
 Linear mode has its own input selectors:
 

@@ -1,5 +1,7 @@
 {
-  "generated": [],
+  "generated": [
+    "NC_001879_regions"
+  ],
   "skipped_missing_inputs": [],
   "failed": [],
   "aliases_used": [],

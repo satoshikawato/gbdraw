@@ -25,6 +25,7 @@ from gbdraw.analysis.protein_colinearity import OrthogroupResult  # type: ignore
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot  # type: ignore[reportMissingImports]
+from gbdraw.annotations import AnnotationOptions
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ class DiagramOptions:
     config_overrides: Mapping[str, object] | None = None
     colors: ColorOptions | None = None
     tracks: TrackOptions | None = None
+    annotations: AnnotationOptions | None = None
     output: OutputOptions | None = None
     selected_features_set: Sequence[str] | None = None
     feature_table: DataFrame | None = None
@@ -207,6 +209,7 @@ def _validate_diagram_options_mode(
 
 __all__ = [
     "CircularMultiRecordOptions",
+    "AnnotationOptions",
     "ColorOptions",
     "DiagramOptions",
     "OutputOptions",

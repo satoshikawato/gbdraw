@@ -40,6 +40,16 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
+from gbdraw.annotations import (
+    AnnotationOptions,
+    AnnotationSet,
+    CoordinateSpan,
+    FeatureSelector,
+    FeatureSpan,
+    HatchStyle,
+    RegionAnnotation,
+    RegionAnnotationStyle,
+)
 
 from .api.options import (
     CircularMultiRecordOptions,
@@ -689,6 +699,8 @@ def _encode_option_value(
         return _encode_colors(value, resources=resources)
     if name == "tracks":
         return _encode_tracks(value)
+    if name == "annotations":
+        return _encode_annotations(value, resources=resources)
     if name == "output":
         return _encode_assembly_output(value)
     if name in _TABLE_FIELDS:
@@ -724,6 +736,8 @@ def _decode_option_value(
         return _decode_colors(value, resource_paths=resource_paths)
     if name == "tracks":
         return _decode_tracks(value)
+    if name == "annotations":
+        return _decode_annotations(value, resource_paths=resource_paths)
     if name == "output":
         return _decode_assembly_output(value)
     if name in _TABLE_FIELDS:
@@ -891,6 +905,221 @@ def _decode_tracks(value: object) -> TrackOptions:
     return result
 
 
+def _encode_annotation_style(style: RegionAnnotationStyle) -> dict[str, Any]:
+    return {
+        "stroke": style.stroke,
+        "strokeWidth": style.stroke_width,
+        "strokeDasharray": list(style.stroke_dasharray),
+        "lineCap": style.line_cap,
+        "fill": style.fill,
+        "fillOpacity": style.fill_opacity,
+        "hatch": (
+            {
+                "angle": style.hatch.angle,
+                "spacing": style.hatch.spacing,
+                "color": style.hatch.color,
+                "width": style.hatch.width,
+                "cross": style.hatch.cross,
+            }
+            if style.hatch is not None
+            else None
+        ),
+        "labelColor": style.label_color,
+        "labelFontSize": style.label_font_size,
+        "labelOrientation": style.label_orientation,
+        "labelPosition": style.label_position,
+        "labelOffset": style.label_offset,
+    }
+
+
+def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationStyle:
+    payload = _object(
+        value,
+        path=path,
+        required={
+            "stroke", "strokeWidth", "strokeDasharray", "lineCap", "fill",
+            "fillOpacity", "hatch", "labelColor", "labelFontSize",
+            "labelOrientation", "labelPosition", "labelOffset",
+        },
+    )
+    hatch_payload = payload["hatch"]
+    hatch = None
+    if hatch_payload is not None:
+        raw_hatch = _object(
+            hatch_payload,
+            path=f"{path}.hatch",
+            required={"angle", "spacing", "color", "width", "cross"},
+        )
+        hatch = HatchStyle(**raw_hatch)
+    dasharray = _array(payload["strokeDasharray"], path=f"{path}.strokeDasharray")
+    return RegionAnnotationStyle(
+        stroke=payload["stroke"],
+        stroke_width=payload["strokeWidth"],
+        stroke_dasharray=tuple(dasharray),
+        line_cap=payload["lineCap"],
+        fill=payload["fill"],
+        fill_opacity=payload["fillOpacity"],
+        hatch=hatch,
+        label_color=payload["labelColor"],
+        label_font_size=payload["labelFontSize"],
+        label_orientation=payload["labelOrientation"],
+        label_position=payload["labelPosition"],
+        label_offset=payload["labelOffset"],
+    )
+
+
+def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[str, Any]:
+    if not isinstance(value, AnnotationOptions):
+        raise CanonicalRequestEncodingError("diagramOptions.annotations must be AnnotationOptions.")
+    sets = []
+    for annotation_set in value.sets:
+        items = []
+        for annotation in annotation_set.annotations:
+            target = annotation.target
+            if isinstance(target, CoordinateSpan):
+                target_payload = {
+                    "kind": "coordinateSpan",
+                    "record": _encode_selector(target.record),
+                    "start": target.start,
+                    "end": target.end,
+                    "coordinateSpace": target.coordinate_space,
+                    "wrapsOrigin": target.wraps_origin,
+                    "outOfBounds": target.out_of_bounds,
+                }
+            elif isinstance(target, FeatureSpan):
+                target_payload = {
+                    "kind": "featureSpan",
+                    "record": _encode_selector(target.record),
+                    "selectors": [
+                        {"key": selector.key, "value": selector.value}
+                        for selector in target.selectors
+                    ],
+                    "envelope": target.envelope,
+                    "circularPath": target.circular_path,
+                }
+            else:  # pragma: no cover - RegionAnnotation validates the union.
+                raise CanonicalRequestEncodingError("Unsupported annotation target.")
+            items.append(
+                {
+                    "id": annotation.id,
+                    "target": target_payload,
+                    "label": annotation.label,
+                    "mark": annotation.mark,
+                    "lane": annotation.lane,
+                    "style": _encode_annotation_style(annotation.style) if annotation.style else None,
+                    "legendLabel": annotation.legend_label,
+                    "metadata": dict(annotation.metadata),
+                }
+            )
+        sets.append(
+            {
+                "id": annotation_set.id,
+                "annotations": items,
+                "defaultStyle": _encode_annotation_style(annotation_set.default_style),
+                "legendLabel": annotation_set.legend_label,
+            }
+        )
+    return {
+        "sets": sets,
+        "table": (
+            _table_ref("annotations-table", value.table, resources=resources)
+            if value.table is not None else None
+        ),
+        "tableFile": (
+            _file_ref("annotations-table-file", value.table_file, resources=resources)
+            if value.table_file is not None else None
+        ),
+    }
+
+
+def _decode_annotations(
+    value: object,
+    *,
+    resource_paths: Mapping[str, str | Path],
+) -> AnnotationOptions:
+    path = "renderRequest.diagramOptions.annotations"
+    payload = _object(value, path=path, required={"sets", "table", "tableFile"})
+    raw_sets = _array(payload["sets"], path=f"{path}.sets")
+    sets: list[AnnotationSet] = []
+    for set_index, raw_set in enumerate(raw_sets):
+        set_path = f"{path}.sets[{set_index}]"
+        set_payload = _object(
+            raw_set,
+            path=set_path,
+            required={"id", "annotations", "defaultStyle", "legendLabel"},
+        )
+        raw_items = _array(set_payload["annotations"], path=f"{set_path}.annotations")
+        annotations: list[RegionAnnotation] = []
+        for item_index, raw_item in enumerate(raw_items):
+            item_path = f"{set_path}.annotations[{item_index}]"
+            item = _object(
+                raw_item,
+                path=item_path,
+                required={"id", "target", "label", "mark", "lane", "style", "legendLabel", "metadata"},
+            )
+            target_payload = _object(item["target"], path=f"{item_path}.target", required={"kind"}, exact=False)
+            kind = target_payload["kind"]
+            if kind == "coordinateSpan":
+                _require_exact_fields(
+                    target_payload,
+                    path=f"{item_path}.target",
+                    required={"kind", "record", "start", "end", "coordinateSpace", "wrapsOrigin", "outOfBounds"},
+                )
+                target = CoordinateSpan(
+                    record=_decode_selector(target_payload["record"], path=f"{item_path}.target.record"),
+                    start=target_payload["start"],
+                    end=target_payload["end"],
+                    coordinate_space=target_payload["coordinateSpace"],
+                    wraps_origin=target_payload["wrapsOrigin"],
+                    out_of_bounds=target_payload["outOfBounds"],
+                )
+            elif kind == "featureSpan":
+                _require_exact_fields(
+                    target_payload,
+                    path=f"{item_path}.target",
+                    required={"kind", "record", "selectors", "envelope", "circularPath"},
+                )
+                raw_selectors = _array(target_payload["selectors"], path=f"{item_path}.target.selectors")
+                selectors = tuple(
+                    FeatureSelector(**_object(raw, path=f"{item_path}.target.selectors[{index}]", required={"key", "value"}))
+                    for index, raw in enumerate(raw_selectors)
+                )
+                target = FeatureSpan(
+                    record=_decode_selector(target_payload["record"], path=f"{item_path}.target.record"),
+                    selectors=selectors,
+                    envelope=target_payload["envelope"],
+                    circular_path=target_payload["circularPath"],
+                )
+            else:
+                raise CanonicalRequestDecodingError(f"Unsupported annotation target kind at {item_path}: {kind!r}.")
+            metadata = _object(item["metadata"], path=f"{item_path}.metadata")
+            annotations.append(
+                RegionAnnotation(
+                    id=item["id"], target=target, label=item["label"], mark=item["mark"],
+                    lane=item["lane"],
+                    style=(_decode_annotation_style(item["style"], path=f"{item_path}.style") if item["style"] is not None else None),
+                    legend_label=item["legendLabel"], metadata=metadata,
+                )
+            )
+        sets.append(
+            AnnotationSet(
+                id=set_payload["id"],
+                annotations=tuple(annotations),
+                default_style=_decode_annotation_style(set_payload["defaultStyle"], path=f"{set_path}.defaultStyle"),
+                legend_label=set_payload["legendLabel"],
+            )
+        )
+    table = (
+        _decode_table_ref(payload["table"], name="annotations-table", resource_paths=resource_paths)
+        if payload["table"] is not None else None
+    )
+    table_file = (
+        str(_decode_file_ref(payload["tableFile"], name="annotations-table-file", resource_paths=resource_paths))
+        if payload["tableFile"] is not None else None
+    )
+    return AnnotationOptions(sets=tuple(sets), table=table, table_file=table_file)
+
+
 def _encode_track_slots(value: object) -> list[Any] | None:
     if value is None:
         return None
@@ -919,6 +1148,10 @@ def _encode_track_slot(
         raw = getattr(slot, item.name)
         if isinstance(raw, ScalarSpec):
             raw = {"value": raw.value, "unit": raw.unit}
+        elif item.name == "params" and isinstance(raw, MappingABC):
+            raw = dict(raw)
+            if isinstance(raw.get("style_override"), RegionAnnotationStyle):
+                raw["style_override"] = _encode_annotation_style(raw["style_override"])
         result[_camel(item.name)] = _json_value(raw, path=f"trackSlot.{_camel(item.name)}")
     return result
 
@@ -962,6 +1195,13 @@ def _decode_track_slots(
             )
             for key, name in field_map.items()
         }
+        if str(kwargs.get("renderer", "")).strip().lower() == "annotations":
+            params = dict(kwargs.get("params") or {})
+            if isinstance(params.get("style_override"), MappingABC):
+                params["style_override"] = _decode_annotation_style(
+                    params["style_override"], path=f"{slot_path}.params.style_override"
+                )
+            kwargs["params"] = params
         result.append(cls(**kwargs))
     return tuple(result)
 

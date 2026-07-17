@@ -148,7 +148,8 @@ const actions = createFeatureColorActions({
   },
   featureSvgActions: {
     applyInstantPreview: () => {},
-    getFeatureElements: () => []
+    getFeatureElements: () => [],
+    getFeatureFillElements: () => []
   }
 });
 

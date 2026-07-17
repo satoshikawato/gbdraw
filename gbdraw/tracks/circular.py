@@ -12,6 +12,7 @@ from .parsing import (
     strip_inline_comment as _strip_inline_comment,
 )
 from .scalars import ScalarSpec
+from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 
 
 CircularTrackRendererName = Literal[
@@ -21,6 +22,7 @@ CircularTrackRendererName = Literal[
     "dinucleotide_skew",
     "depth",
     "sequence_conservation",
+    "annotations",
     "spacer",
 ]
 
@@ -34,6 +36,7 @@ SUPPORTED_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
         "dinucleotide_skew",
         "depth",
         "sequence_conservation",
+        "annotations",
         "spacer",
     }
 )
@@ -142,6 +145,7 @@ class NormalizedCircularTrackSlot:
     compress: bool
     reserve: bool
     params: Mapping[str, Any]
+    annotation: AnnotationTrackParams | None = None
 
 
 def _normalize_renderer(raw: str) -> str:
@@ -454,7 +458,7 @@ def _slot_with_axis_derived_side(slot: CircularTrackSlot, slot_index: int, axis_
         params["lane_direction"] = lane or derived_side
         return replace(slot, renderer=renderer, side=derived_side, params=params)
 
-    if renderer == "ticks" and explicit_side == "overlay":
+    if renderer in {"ticks", "annotations"} and explicit_side == "overlay":
         return replace(slot, renderer=renderer, side="overlay", params=params)
 
     if explicit_side is not None and explicit_side != derived_side:
@@ -521,8 +525,11 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
                     "use slot-level radius, width, spacing, side, and z fields"
                 )
         params = dict(raw_params)
-        side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+        side = _normalize_side_value(slot.side) if slot.side is not None else (
+            "outside" if renderer == "annotations" else "inside"
+        )
         reserve = side == "overlay"
+        annotation_params: AnnotationTrackParams | None = None
 
         if renderer == "features":
             side, reserve, params = _normalized_feature_side_and_params(slot, params)
@@ -540,6 +547,14 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
                 params = _normalize_dinucleotide_skew_color_params(params)
         elif renderer == "spacer":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+        elif renderer == "annotations":
+            side = _normalize_side_value(slot.side) if slot.side is not None else "outside"
+            annotation_params = annotation_track_params_from_mapping(params)
+            reserve = side != "overlay"
+            if side == "overlay" and annotation_params.anchor_slot is None:
+                raise ValueError(f"annotation slot '{slot.id}' with side=overlay requires anchor_slot")
+            if side != "overlay" and annotation_params.anchor_slot is not None:
+                raise ValueError(f"annotation slot '{slot.id}' uses anchor_slot without side=overlay")
 
         auto_compress = bool(params.pop("_auto_compress", False))
         if slot.spacing is not None and (slot.inner_gap_px is not None or slot.outer_gap_px is not None):
@@ -579,8 +594,24 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
                 compress=compress,
                 reserve=reserve,
                 params=params,
+                annotation=annotation_params,
             )
         )
+    by_id = {slot.id: slot for slot in normalized}
+    for slot in normalized:
+        if slot.renderer != "annotations" or slot.side != "overlay" or slot.annotation is None:
+            continue
+        anchor = by_id.get(str(slot.annotation.anchor_slot))
+        if anchor is None and len(slots) == 1:
+            continue
+        if anchor is None:
+            raise ValueError(f"annotation slot '{slot.id}' references unknown anchor_slot={slot.annotation.anchor_slot!r}")
+        if anchor.renderer in {"ticks", "spacer"}:
+            raise ValueError(f"annotation slot '{slot.id}' anchor '{anchor.id}' has no drawable band")
+        if slot.annotation.layer == "underlay" and slot.z >= anchor.z:
+            raise ValueError(f"annotation underlay slot '{slot.id}' must have z less than anchor '{anchor.id}'")
+        if slot.annotation.layer == "foreground" and slot.z <= anchor.z:
+            raise ValueError(f"annotation foreground slot '{slot.id}' must have z greater than anchor '{anchor.id}'")
     return normalized
 
 

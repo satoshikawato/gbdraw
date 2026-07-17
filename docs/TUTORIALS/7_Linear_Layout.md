@@ -135,6 +135,21 @@ The axis index is the boundary in the slot list. Here the feature slot overlays 
 
 ![Linear MjeNMV diagram with an overlay feature slot followed by custom-height GC content and GC skew slots](../../examples/tutorial-7-linear-track-slots.svg)
 
+Add a reusable annotation row with the same table used in Circular mode:
+
+```bash
+gbdraw linear \
+  --gbk MjeNMV.gb \
+  --annotation_table annotations.tsv \
+  --linear_track_slot notes:annotations@set_id=regions,side=above,h=28px,spacing=6px \
+  --linear_track_slot features:features@side=overlay \
+  --linear_track_axis_index 1 \
+  -o MjeNMV_annotated \
+  -f svg
+```
+
+Leave `h` out to size the row from its lanes and labels. For an overlay, set `side=overlay`, `anchor_slot=<slot_id>`, and `layer=underlay` or `foreground`. An underlay slot must have a lower `z` value than its anchor; a foreground slot must have a higher value. `overflow=error`, `compress`, or `clip` controls what happens when an explicit height is too small.
+
 ## 7. Select records, regions, and orientation
 
 Use these repeatable options when a file contains several records or when only part of a record belongs in the figure:

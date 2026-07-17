@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 import cairosvg
 from PIL import Image, ImageDraw, ImageFont
 
+from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from gbdraw.session_io import write_session_json
 
@@ -24,6 +26,9 @@ SOURCE_ROOT = GALLERY_ROOT / "sources"
 THUMBNAIL_ROOT = GALLERY_ROOT / "thumbnails"
 
 GENOME_SUFFIXES = (".gb", ".gbk", ".gbff")
+_RENDERED_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
+_SVG_PART_SUFFIX_RE = re.compile(r"__part\d+$")
+_SVG_FEATURE_ID_RE = re.compile(r'data-gbdraw-feature-id=["\']([^"\']+)["\']')
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,25 @@ HMMTDNA_BASIC_COMMAND = (
     "gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA_basic_circular "
     "-f interactive_svg --separate_strands --track_type middle --labels out "
     "--species '<i>Homo sapiens</i>'"
+)
+
+TOBACCO_CHLOROPLAST_COMMAND = (
+    "gbdraw circular --gbk NC_001879.gbk "
+    "--annotation_table nicotiana-tabacum-regions.tsv --separate_strands "
+    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin "
+    "-t chloroplast_specific_table.tsv --qualifier_priority qualifier_priority.tsv "
+    "--block_stroke_width 1 --block_stroke_color black --axis_stroke_width 3 "
+    "--line_stroke_width 2 --suppress_skew -p default --track_type tuckin "
+    "--labels both --label_placement radial --outer_label_x_radius_offset 0.90 "
+    "--outer_label_y_radius_offset 0.90 --inner_label_x_radius_offset 0.975 "
+    "--inner_label_y_radius_offset 0.975 --species '<i>Nicotiana tabacum</i>' "
+    "--definition_font_size 28 --legend upper_left "
+    "--circular_track_slot 'features:features@side=overlay,lane_direction=split' "
+    "--circular_track_slot "
+    "'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,"
+    "show_labels=true,padding_px=1,overflow=compress,inner_gap_px=1,outer_gap_px=1' "
+    "--circular_track_slot 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08' "
+    "-o tobacco-chloroplast -f interactive_svg"
 )
 
 LAMBDA_BASIC_COMMAND = (
@@ -195,6 +219,20 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command=HMMTDNA_ATSKEW_COMMAND,
     ),
     GallerySessionExample(
+        id="tobacco-chloroplast",
+        title="<i>Nicotiana tabacum</i> chloroplast genome regions",
+        tags=("Circular", "Organellar", "Intermediate"),
+        description="Mark LSC, SSC, IRa, and IRb as bracket annotations inside a color-coded chloroplast gene map.",
+        difficulty="Intermediate",
+        workflow="Circular region annotations",
+        input_summary="1 GenBank + 3 TSV files",
+        estimated_time="5-10 min",
+        display_order=40,
+        command_kind="runnable",
+        command_note="Download NC_001879.gbk and the three Gallery TSV files, then run the command in the same directory.",
+        command=TOBACCO_CHLOROPLAST_COMMAND,
+    ),
+    GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",
         title="<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         tags=("Circular", "Multi-record", "Intermediate"),
@@ -203,7 +241,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         workflow="Circular multi-record canvas",
         input_summary="1 multi-record GenBank file",
         estimated_time="5-15 min",
-        display_order=40,
+        display_order=50,
         command_kind="runnable",
         command_note="Download the pinned RefSeq assembly named in Files; no sequence search is required.",
     ),
@@ -412,12 +450,98 @@ def _session_interactive_context(session: dict[str, Any]) -> InteractiveSvgConte
     )
 
 
+def _stable_feature_id(feature: dict[str, Any]) -> str:
+    stable_id = str(
+        feature.get("stable_svg_id") or feature.get("stable_feature_id") or ""
+    ).strip()
+    return stable_id or _RENDERED_RECORD_SUFFIX_RE.sub(
+        "", str(feature.get("svg_id") or "").strip()
+    )
+
+
+def _legacy_multipart_feature_id(feature: dict[str, Any]) -> str:
+    parts = feature.get("location_parts")
+    if not isinstance(parts, list) or len(parts) < 2 or not isinstance(parts[0], dict):
+        return ""
+    first = parts[0]
+    strand = {"+": 1, "-": -1}.get(str(first.get("strand") or "").strip())
+    try:
+        return compute_feature_hash_from_parts(
+            str(feature.get("type") or ""),
+            int(first["start"]),
+            int(first["end"]),
+            strand,
+            record_id=str(feature.get("record_id") or "") or None,
+        )
+    except (KeyError, TypeError, ValueError):
+        return ""
+
+
+def _legacy_multipart_feature_aliases(session: dict[str, Any]) -> dict[str, str]:
+    feature_state = session.get("features") if isinstance(session.get("features"), dict) else {}
+    features = feature_state.get("extractedFeatures")
+    candidates: dict[str, set[str]] = {}
+    for feature in (features if isinstance(features, list) else ()):
+        if not isinstance(feature, dict):
+            continue
+        legacy_id = _legacy_multipart_feature_id(feature)
+        stable_id = _stable_feature_id(feature)
+        if legacy_id and stable_id and legacy_id != stable_id:
+            candidates.setdefault(legacy_id, set()).add(stable_id)
+    return {
+        legacy_id: next(iter(stable_ids))
+        for legacy_id, stable_ids in candidates.items()
+        if len(stable_ids) == 1
+    }
+
+
+def _migrate_legacy_multipart_feature_ids(source: str, session: dict[str, Any]) -> str:
+    migrated = source
+    for legacy_id, stable_id in _legacy_multipart_feature_aliases(session).items():
+        migrated = migrated.replace(legacy_id, stable_id)
+    return migrated
+
+
+def _validate_source_feature_ids(
+    example: GallerySessionExample,
+    session: dict[str, Any],
+    source: str,
+) -> None:
+    feature_state = session.get("features") if isinstance(session.get("features"), dict) else {}
+    features = feature_state.get("extractedFeatures")
+    metadata_ids = {
+        candidate
+        for feature in (features if isinstance(features, list) else ())
+        if isinstance(feature, dict)
+        for candidate in (
+            str(feature.get("svg_id") or "").strip(),
+            _stable_feature_id(feature),
+        )
+        if candidate
+    }
+    rendered_ids = {
+        _SVG_PART_SUFFIX_RE.sub("", match)
+        for match in _SVG_FEATURE_ID_RE.findall(source)
+    }
+    missing_ids = sorted(rendered_ids - metadata_ids)
+    if missing_ids:
+        preview = ", ".join(missing_ids[:5])
+        raise ValueError(
+            f"{example.id} source SVG contains {len(missing_ids)} feature ID(s) "
+            f"without session metadata: {preview}"
+        )
+
+
 def _read_or_create_source_svg(example: GallerySessionExample, session: dict[str, Any]) -> str:
     if example.source_svg_path.exists():
-        return example.source_svg_path.read_text(encoding="utf-8")
-    source = _session_result_svg(session, example)
-    example.source_svg_path.write_text(source, encoding="utf-8")
-    return source
+        source = example.source_svg_path.read_text(encoding="utf-8")
+    else:
+        source = _session_result_svg(session, example)
+    migrated = _migrate_legacy_multipart_feature_ids(source, session)
+    _validate_source_feature_ids(example, session, migrated)
+    if migrated != source or not example.source_svg_path.exists():
+        example.source_svg_path.write_text(migrated, encoding="utf-8")
+    return migrated
 
 
 def _write_gallery_svg(

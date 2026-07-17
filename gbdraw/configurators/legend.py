@@ -57,6 +57,16 @@ class LegendDrawingConfigurator:
         return bbox_width_px, bbox_height_px
 
     def recalculate_legend_dimensions(self, legend_table, canvas_config):
+        if not legend_table:
+            self.has_gradient = False
+            self.pairwise_legend_width = 0
+            self.legend_width = 0
+            self.legend_height = 0
+            self.total_feature_legend_width = 0
+            self.num_of_lines = 0
+            self.num_of_columns = 0
+            self.num_of_items_per_line = 0
+            return self
         if canvas_config.__class__.__name__ == "CircularCanvasConfigurator":
             layout = build_circular_legend_layout(
                 legend_table,

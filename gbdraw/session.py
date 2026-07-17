@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
+    CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
     SESSION_FORMAT,
     _reject_duplicate_json_keys,
@@ -102,9 +103,9 @@ class SessionDocument:
 
     @property
     def has_canonical_request(self) -> bool:
-        """Whether this document can enter the version 31 typed bridge."""
+        """Whether this document can enter the canonical typed bridge."""
 
-        return self.version == CURRENT_SESSION_VERSION and isinstance(
+        return self.version >= CANONICAL_SESSION_MIN_VERSION and isinstance(
             self._data.get("renderRequest"), Mapping
         )
 
@@ -278,7 +279,7 @@ def materialize_session(
 
 
 def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
-    """Decode a version 31 canonical request within its resource lifetime."""
+    """Decode a canonical request within its resource lifetime."""
 
     if not isinstance(materialized, MaterializedSession):
         raise SessionConversionError("A MaterializedSession is required.")
@@ -287,7 +288,7 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
             "Materialized session resources are no longer active; decode inside the context."
         )
     document = materialized.document
-    if document.version != CURRENT_SESSION_VERSION or not document.has_canonical_request:
+    if not document.has_canonical_request:
         raise SessionVersionError(
             "Sessions version 27 through 30 support internal CLI replay only and do not "
             "have a public typed-request conversion."
@@ -329,7 +330,7 @@ def build_session_document(
     created_at: datetime | None = None,
     adjunct: Mapping[str, Any] | None = None,
 ) -> SessionDocument:
-    """Build a version 31 document from one typed request.
+    """Build a current-version document from one typed request.
 
     ``adjunct`` may contain Web/editor artifacts such as ``ui`` or ``results``;
     it cannot replace canonical envelope fields.
@@ -380,7 +381,7 @@ def save_session_document(
     created_at: datetime | None = None,
     adjunct: Mapping[str, Any] | None = None,
 ) -> SessionDocument:
-    """Build and atomically write a version 31 canonical session document."""
+    """Build and atomically write a current-version canonical session document."""
 
     document = build_session_document(
         request,
@@ -426,7 +427,7 @@ def _validate_document(data: Mapping[str, Any]) -> None:
         validate_session(data)
     except ValidationError as exc:
         raise _classify_validation_error(exc) from exc
-    if data.get("version") != CURRENT_SESSION_VERSION:
+    if int(data.get("version", 0)) < CANONICAL_SESSION_MIN_VERSION:
         return
     resources = data.get("resources")
     assert isinstance(resources, Mapping)
@@ -494,7 +495,7 @@ def _materialize_resources(
     *,
     temp_directory: Path,
 ) -> dict[str, Path]:
-    if document.version != CURRENT_SESSION_VERSION:
+    if document.version < CANONICAL_SESSION_MIN_VERSION:
         return {}
     raw_resources = document._data.get("resources")
     assert isinstance(raw_resources, Mapping)

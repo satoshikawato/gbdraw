@@ -54,11 +54,12 @@ import {
   buildCanonicalSessionRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
+import { normalizeAnnotationSets } from '../app/annotations/state.js';
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 31;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, SESSION_VERSION]);
+const SESSION_VERSION = 32;
+const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, 31, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
 const LOSAT_DERIVED_CACHE_SCHEMA = 1;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -657,6 +658,7 @@ export const buildConfigData = () => ({
   blastSource: state.blastSource.value,
   losatProgram: state.losatProgram.value,
   circularConservation: state.circularConservation,
+  annotationSets: normalizeAnnotationSets(state.annotationSets),
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
     orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
@@ -769,12 +771,12 @@ const normalizeSessionData = (data) => {
   if (!SUPPORTED_SESSION_VERSIONS.has(version)) {
     throw new Error(`Unsupported session version: ${version}.`);
   }
-  if (version === SESSION_VERSION) {
+  if (version >= 31) {
     if (!isPlainObject(data.renderRequest)) {
-      throw new Error('Session version 31 requires a canonical renderRequest object.');
+      throw new Error(`Session version ${version} requires a canonical renderRequest object.`);
     }
     if (!isPlainObject(data.resources)) {
-      throw new Error('Session version 31 requires a canonical resources object.');
+      throw new Error(`Session version ${version} requires a canonical resources object.`);
     }
   }
 
@@ -925,6 +927,11 @@ const restoreSessionCircularLayoutCaches = (ui = {}) => {
 export const applyConfigData = (data) => {
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
+  state.annotationSets.splice(
+    0,
+    state.annotationSets.length,
+    ...normalizeAnnotationSets(data.annotationSets)
+  );
   state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
   if (state.adv.label_placement === 'on_feature') {
     state.adv.label_placement = 'above_feature';

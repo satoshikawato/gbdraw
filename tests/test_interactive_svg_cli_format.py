@@ -150,6 +150,8 @@ def test_enrich_svg_embeds_valid_regexp_escape_runtime() -> None:
 
 def test_enrich_svg_generates_fallback_feature_payload() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
+      <path id="fabc12345__line1" data-gbdraw-feature-id="fabc12345"
+        data-gbdraw-feature-part="connector" fill="none" d="M 1 1 A 2 2 0 0 1 2 2" />
       <path id="fabc12345__part1" data-gbdraw-feature-id="fabc12345" fill="#54bcf8" d="M 1 1 L 2 2" />
     </svg>"""
 

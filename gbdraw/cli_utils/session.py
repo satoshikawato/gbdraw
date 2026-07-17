@@ -294,7 +294,7 @@ def render_canonical_session_if_present(
     save_session: bool,
     session_output: str | None,
 ) -> bool:
-    """Render an authoritative version 31 request and bypass legacy CLI replay."""
+    """Render an authoritative canonical request and bypass legacy CLI replay."""
 
     from gbdraw.session import (
         load_session_document,
@@ -303,9 +303,9 @@ def render_canonical_session_if_present(
         session_to_request,
         with_request_output,
     )
-    from gbdraw.session_io import CURRENT_SESSION_VERSION
+    from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
 
-    if session.get("version") != CURRENT_SESSION_VERSION:
+    if int(session.get("version", 0)) < CANONICAL_SESSION_MIN_VERSION:
         return False
     document = load_session_document(session)
     if document.mode != mode:

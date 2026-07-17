@@ -12,6 +12,7 @@ from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.interactive_svg import InteractiveSvgContext
+from gbdraw.annotations import AnnotationOptions, resolve_annotations
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 from gbdraw.web_support.orthogroup_metadata import (
     enrich_features_with_orthogroups,
@@ -29,6 +30,8 @@ def build_interactive_svg_context(
     default_colors: DataFrame | None = None,
     orthogroups: object | None = None,
     linear_rendered_feature_ids: bool = False,
+    annotations: AnnotationOptions | None = None,
+    mode: str | None = None,
 ) -> InteractiveSvgContext:
     """Build rich popup metadata from rendered records.
 
@@ -82,9 +85,35 @@ def build_interactive_svg_context(
         if orthogroup_payload:
             features = enrich_features_with_orthogroups(features, orthogroup_payload)
 
+    annotation_payload: list[dict[str, object]] = []
+    if annotations is not None:
+        resolved = resolve_annotations(
+            annotations,
+            record_list,
+            mode=mode or ("linear" if linear_rendered_feature_ids else "circular"),
+        )
+        annotation_payload = [
+            {
+                "id": item.id,
+                "set_id": item.set_id,
+                "track_id": "",
+                "record_index": item.record_index,
+                "segments": [list(segment) for segment in item.segments],
+                "midpoint_bp": item.midpoint_bp,
+                "span_bp": item.span_bp,
+                "label": item.label,
+                "mark": item.mark,
+                "lane": item.lane,
+                "legend_label": item.legend_label,
+                "metadata": dict(item.metadata),
+            }
+            for item in resolved.annotations
+        ]
+
     return InteractiveSvgContext(
         features=features,
         orthogroups=orthogroup_payload,
+        annotations=annotation_payload,
     )
 
 
