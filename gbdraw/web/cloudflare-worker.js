@@ -5,6 +5,19 @@ const REMOTE_GALLERY_PREFIXES = [
   '/gallery/sources/',
   '/gallery/media/',
 ];
+const GALLERY_ROOT_PATH = '/gallery/';
+const PALETTE_EXPLORER_PATH = '/gallery/palettes';
+const PALETTE_EXPLORER_INDEX_PATH = '/gallery/palettes/index.html';
+const GALLERY_STATIC_SEGMENTS = new Set([
+  'examples',
+  'files',
+  'media',
+  'palettes',
+  'sessions',
+  'sources',
+  'thumbnails',
+  'tutorials',
+]);
 const REMOTE_CACHE_CONTROL = 'public, max-age=86400';
 const SVG_CONTENT_SECURITY_POLICY = [
   "default-src 'self' data: blob:",
@@ -19,14 +32,30 @@ let remoteAssetsPromise;
 const isRemoteGalleryCandidate = (pathname) =>
   REMOTE_GALLERY_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
-const isGalleryViewRoute = (pathname) => /^\/gallery\/[^/.]+$/.test(pathname);
-
-const fetchGalleryShell = (request, env) => {
-  const shellUrl = new URL(request.url);
-  shellUrl.pathname = '/gallery/index.html';
-  shellUrl.hash = '';
-  return env.ASSETS.fetch(new Request(shellUrl, request));
+const isGalleryViewRoute = (pathname) => {
+  const match = pathname.match(/^\/gallery\/([^/.]+)\/?$/);
+  return Boolean(match && !GALLERY_STATIC_SEGMENTS.has(match[1].toLowerCase()));
 };
+
+const redirectToPath = (request, pathname) => {
+  const redirectUrl = new URL(request.url);
+  redirectUrl.pathname = pathname;
+  redirectUrl.hash = '';
+  return Response.redirect(redirectUrl.toString(), 308);
+};
+
+const fetchAssetAtPath = (request, env, pathname) => {
+  const assetUrl = new URL(request.url);
+  assetUrl.pathname = pathname;
+  assetUrl.search = '';
+  assetUrl.hash = '';
+  return env.ASSETS.fetch(new Request(assetUrl, request));
+};
+
+const fetchGalleryShell = (request, env) => fetchAssetAtPath(request, env, GALLERY_ROOT_PATH);
+
+const fetchPaletteExplorer = (request, env) =>
+  fetchAssetAtPath(request, env, PALETTE_EXPLORER_INDEX_PATH);
 
 const inferContentType = (pathname, upstreamHeaders) => {
   if (pathname.endsWith('.svg')) return 'image/svg+xml; charset=utf-8';
@@ -99,10 +128,20 @@ const fetchRemoteAsset = async (request, pathname, remoteUrl) => {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if ((request.method === 'GET' || request.method === 'HEAD') && isGalleryViewRoute(url.pathname)) {
+    const isReadRequest = request.method === 'GET' || request.method === 'HEAD';
+    if (isReadRequest && url.pathname === PALETTE_EXPLORER_PATH) {
+      return redirectToPath(request, `${PALETTE_EXPLORER_PATH}/`);
+    }
+    if (isReadRequest && url.pathname === `${PALETTE_EXPLORER_PATH}/`) {
+      return fetchPaletteExplorer(request, env);
+    }
+    if (isReadRequest && isGalleryViewRoute(url.pathname)) {
+      if (url.pathname.endsWith('/')) {
+        return redirectToPath(request, url.pathname.slice(0, -1));
+      }
       return fetchGalleryShell(request, env);
     }
-    if ((request.method === 'GET' || request.method === 'HEAD') && isRemoteGalleryCandidate(url.pathname)) {
+    if (isReadRequest && isRemoteGalleryCandidate(url.pathname)) {
       const remoteAssets = await getRemoteAssets(request, env);
       const remoteUrl = remoteAssets[url.pathname.replace(/^\/+/, '')];
       if (remoteUrl) {

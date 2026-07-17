@@ -2214,7 +2214,20 @@ def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
     assert "Cross-Origin-Opener-Policy" in source
     assert "Cross-Origin-Resource-Policy" in source
     assert "isGalleryViewRoute" in source
-    assert "'/gallery/index.html'" in source
+    assert "'/gallery/'" in source
+    assert "'/gallery/palettes/index.html'" in source
+
+
+def test_cloudflare_worker_routes_gallery_pages_and_static_assets() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/cloudflare-worker.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
 
 
 def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:

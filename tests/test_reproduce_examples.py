@@ -93,7 +93,10 @@ def test_palette_manifest_stays_in_sync_with_palette_file() -> None:
 
 
 def test_palette_page_is_generated_from_palette_file() -> None:
-    assert PALETTE_PAGE.read_text(encoding="utf-8") == render_palette_page()
+    rendered = render_palette_page()
+    assert PALETTE_PAGE.read_text(encoding="utf-8") == rendered
+    assert '<span style="color:' not in rendered
+    assert r'$\textcolor{#54bcf8}{\blacksquare}$' in rendered
 
 
 def test_palette_explorer_uses_one_semantic_circular_svg() -> None:

@@ -22,7 +22,7 @@ def _cell(palette: dict[str, str], key: str) -> str:
     color = palette.get(key, "—")
     if color == "—":
         return color
-    return f'<span style="color:{color}">■</span> `{color}`'
+    return rf'$\textcolor{{{color}}}{{\blacksquare}}$ `{color}`'
 
 
 def render_palette_page() -> str:
