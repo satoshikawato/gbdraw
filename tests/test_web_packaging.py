@@ -2215,7 +2215,7 @@ def test_cloudflare_worker_proxies_remote_gallery_assets() -> None:
     assert "Cross-Origin-Resource-Policy" in source
     assert "isGalleryViewRoute" in source
     assert "'/gallery/'" in source
-    assert "'/gallery/palettes/index.html'" in source
+    assert "PALETTE_EXPLORER_ASSET_PATH = '/gallery/palettes/'" in source
 
 
 def test_cloudflare_worker_routes_gallery_pages_and_static_assets() -> None:

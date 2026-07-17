@@ -27,6 +27,7 @@ gbdraw/web/*.whl
 *.html
 !gbdraw/web/index.html
 !gbdraw/web/gallery/index.html
+!gbdraw/web/gallery/palettes/index.html
 *.tar.gz
 !gbdraw/web/open-source-notices.html
 gbdraw/web/*.whl

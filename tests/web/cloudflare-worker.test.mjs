@@ -36,10 +36,10 @@ const dispatch = (path, options = {}) =>
 {
   const response = await dispatch('/gallery/palettes/?palette=orchid');
   assert.equal(response.status, 200);
-  assert.equal(await response.text(), 'asset:/gallery/palettes/index.html');
+  assert.equal(await response.text(), 'asset:/gallery/palettes/');
   assert.deepEqual(assetRequests.pop(), {
     method: 'GET',
-    pathname: '/gallery/palettes/index.html',
+    pathname: '/gallery/palettes/',
     search: '',
   });
 }
@@ -88,7 +88,7 @@ for (const path of [
   assert.equal(response.status, 200);
   assert.deepEqual(assetRequests.pop(), {
     method: 'HEAD',
-    pathname: '/gallery/palettes/index.html',
+    pathname: '/gallery/palettes/',
     search: '',
   });
 }

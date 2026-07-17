@@ -7,7 +7,7 @@ const REMOTE_GALLERY_PREFIXES = [
 ];
 const GALLERY_ROOT_PATH = '/gallery/';
 const PALETTE_EXPLORER_PATH = '/gallery/palettes';
-const PALETTE_EXPLORER_INDEX_PATH = '/gallery/palettes/index.html';
+const PALETTE_EXPLORER_ASSET_PATH = '/gallery/palettes/';
 const GALLERY_STATIC_SEGMENTS = new Set([
   'examples',
   'files',
@@ -55,7 +55,7 @@ const fetchAssetAtPath = (request, env, pathname) => {
 const fetchGalleryShell = (request, env) => fetchAssetAtPath(request, env, GALLERY_ROOT_PATH);
 
 const fetchPaletteExplorer = (request, env) =>
-  fetchAssetAtPath(request, env, PALETTE_EXPLORER_INDEX_PATH);
+  fetchAssetAtPath(request, env, PALETTE_EXPLORER_ASSET_PATH);
 
 const inferContentType = (pathname, upstreamHeaders) => {
   if (pathname.endsWith('.svg')) return 'image/svg+xml; charset=utf-8';
@@ -132,7 +132,7 @@ export default {
     if (isReadRequest && url.pathname === PALETTE_EXPLORER_PATH) {
       return redirectToPath(request, `${PALETTE_EXPLORER_PATH}/`);
     }
-    if (isReadRequest && url.pathname === `${PALETTE_EXPLORER_PATH}/`) {
+    if (isReadRequest && url.pathname === PALETTE_EXPLORER_ASSET_PATH) {
       return fetchPaletteExplorer(request, env);
     }
     if (isReadRequest && isGalleryViewRoute(url.pathname)) {

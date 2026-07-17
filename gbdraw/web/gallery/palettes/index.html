@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';">
+    <title>gbdraw Circular Palette Explorer</title>
+    <link rel="icon" href="../../assets/gbdraw-logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="../gallery.css">
+    <link rel="stylesheet" href="./palette-explorer.css">
+    <script type="module" src="./palette-explorer.js"></script>
+</head>
+<body>
+    <header class="site-header">
+        <div class="site-header__inner">
+            <a class="brand" href="../../" aria-label="gbdraw web app">
+                <img src="../../assets/gbdraw-logo-title.png" alt="gbdraw" class="brand__logo">
+            </a>
+            <h1>gbdraw Circular Palette Explorer</h1>
+            <nav class="site-nav" aria-label="Primary">
+                <a href="../">Interactive Gallery</a>
+                <a href="https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md">Palette reference</a>
+                <a href="https://github.com/satoshikawato/gbdraw">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="palette-layout">
+        <section class="palette-controls" aria-labelledby="palette-heading">
+            <p class="palette-eyebrow">Built-in color palettes</p>
+            <h2 id="palette-heading">Choose one palette</h2>
+            <p class="palette-intro">The diagram geometry stays fixed. Selecting a palette recolors the same SVG immediately.</p>
+
+            <div class="palette-field">
+                <label for="palette-select">Palette</label>
+                <select id="palette-select" disabled>
+                    <option>Loading palettes...</option>
+                </select>
+            </div>
+
+            <div class="palette-stepper" aria-label="Browse palettes">
+                <button id="previous-palette" class="action-button" type="button" disabled>Previous</button>
+                <span id="palette-position" aria-live="polite"></span>
+                <button id="next-palette" class="action-button" type="button" disabled>Next</button>
+            </div>
+
+            <div id="palette-swatches" class="palette-swatches" aria-label="Selected palette colors"></div>
+
+            <div class="palette-command">
+                <span>CLI</span>
+                <code id="palette-command">gbdraw circular ... -p default</code>
+            </div>
+        </section>
+
+        <section class="palette-viewer" aria-labelledby="preview-heading">
+            <div class="palette-viewer__heading">
+                <div>
+                    <p class="palette-eyebrow">Circular preview</p>
+                    <h2 id="preview-heading"><code id="selected-palette-name">default</code></h2>
+                </div>
+                <p id="palette-status" class="palette-status" role="status">Loading the base SVG...</p>
+            </div>
+            <div id="palette-preview" class="palette-preview" aria-busy="true"></div>
+        </section>
+    </main>
+
+    <noscript>
+        <p class="noscript">JavaScript is required to switch palettes.</p>
+    </noscript>
+</body>
+</html>
