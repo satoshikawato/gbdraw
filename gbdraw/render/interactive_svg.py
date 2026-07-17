@@ -22,7 +22,8 @@ INTERACTIVE_SCRIPT_ID = "gbdraw-interactive-feature-script"
 INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
 
-_FEATURE_PART_SUFFIX_RE = re.compile(r"__part\d+$")
+_FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
+_FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
 _FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
 _ASSET_IDS = {
     INTERACTIVE_METADATA_ID,
@@ -76,7 +77,7 @@ def _add_class_token(element: ET.Element, token: str) -> None:
 
 
 def _normalize_feature_id(value: object | None) -> str:
-    return _FEATURE_PART_SUFFIX_RE.sub("", str(value or "").strip())
+    return _FEATURE_ELEMENT_SUFFIX_RE.sub("", str(value or "").strip())
 
 
 def _element_feature_id(element: ET.Element) -> str:
@@ -115,6 +116,13 @@ def _is_feature_candidate(element: ET.Element) -> bool:
     return bool(element.get("data-gbdraw-feature-id") or element_id.startswith("f"))
 
 
+def _is_feature_fill_target(element: ET.Element) -> bool:
+    explicit_part = str(element.get("data-gbdraw-feature-part") or "").strip()
+    if explicit_part:
+        return explicit_part == "block"
+    return _FEATURE_CONNECTOR_SUFFIX_RE.search(str(element.get("id") or "")) is None
+
+
 def _is_match_candidate(element: ET.Element) -> bool:
     if _local_name(element.tag) != "path":
         return False
@@ -134,7 +142,12 @@ def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEn
         if not _is_feature_candidate(element):
             continue
         svg_id = _element_feature_id(element)
-        if not svg_id or svg_id in entries:
+        if not svg_id:
+            continue
+        existing = entries.get(svg_id)
+        if existing is not None and (
+            _is_feature_fill_target(existing.element) or not _is_feature_fill_target(element)
+        ):
             continue
         entries[svg_id] = _RenderedFeatureEntry(
             svg_id=svg_id,

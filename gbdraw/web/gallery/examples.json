@@ -141,7 +141,7 @@
     "featureSources": [
       "GCF_015097735.1_ASM1509773v1_genomic.gbff"
     ],
-    "fileSizeLabel": "30.7 MB",
+    "fileSizeLabel": "30.8 MB",
     "command": "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left --plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' --plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto --multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 --multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' --multi_record_position '#2@1' --multi_record_position '#3@2' --multi_record_position '#4@2' --multi_record_position '#5@2' --multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Download the pinned RefSeq assembly named in Files; no sequence search is required.",
@@ -285,7 +285,7 @@
       "MeenMJNV.gb",
       "MejoMJNV.gb"
     ],
-    "fileSizeLabel": "10.4 MB",
+    "fileSizeLabel": "11.6 MB",
     "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup",
     "commandKind": "runnable",
     "commandNote": "Download the nine accession-pinned records and both repository-managed color tables from Files.",

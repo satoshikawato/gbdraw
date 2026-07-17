@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from gbdraw.features.ids import compute_feature_hash_from_parts
+from tools.prepare_interactive_gallery_assets import (
+    EXAMPLES,
+    _migrate_legacy_multipart_feature_ids,
+    _validate_source_feature_ids,
+)
 from tools.refresh_gallery_sessions import (
     _preserve_gallery_cli_invocation,
     _with_interactive_svg_format,
@@ -119,10 +127,48 @@ def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
 
     assert "def _read_or_create_source_svg(" in source
     assert "if example.source_svg_path.exists():" in source
-    assert "example.source_svg_path.write_text(source" in source
+    assert "example.source_svg_path.write_text(migrated" in source
+    assert "_validate_source_feature_ids(example, session, migrated)" in source
     assert "def _sync_session_result_svg(" in source
     assert "write_session_json(example.session_path, session)" in source
     assert "_sync_session_result_svg(example, session, source)" in source
     assert "_write_gallery_svg(example, session, source)" in source
     assert 'entry["tutorial"] = f"./tutorials/{example.id}.json"' in source
     assert 'entry["tutorialStatus"] = "ready"' in source
+
+
+def test_gallery_source_migrates_legacy_multipart_feature_ids() -> None:
+    feature = {
+        "svg_id": "fcurrent_record_1",
+        "stable_svg_id": "fcurrent",
+        "record_id": "record-1",
+        "type": "CDS",
+        "location_parts": [
+            {"start": 10, "end": 20, "strand": "+"},
+            {"start": 30, "end": 40, "strand": "+"},
+        ],
+    }
+    legacy_id = compute_feature_hash_from_parts(
+        "CDS",
+        10,
+        20,
+        1,
+        record_id="record-1",
+    )
+    session = {"features": {"extractedFeatures": [feature]}}
+    source = (
+        f'<svg><path id="{legacy_id}__part1" '
+        f'data-gbdraw-feature-id="{legacy_id}" /></svg>'
+    )
+
+    migrated = _migrate_legacy_multipart_feature_ids(source, session)
+
+    assert legacy_id not in migrated
+    assert 'id="fcurrent__part1"' in migrated
+    assert 'data-gbdraw-feature-id="fcurrent"' in migrated
+
+    _validate_source_feature_ids(EXAMPLES[0], session, migrated)
+    with pytest.raises(ValueError, match="without session metadata"):
+        _validate_source_feature_ids(
+            EXAMPLES[0], session, source.replace(legacy_id, "forphan")
+        )

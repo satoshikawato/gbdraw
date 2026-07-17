@@ -1,0 +1,506 @@
+##gff-version 3
+#!gff-spec-version 1.21
+#!processor NCBI annotwriter
+##sequence-region NC_013668.3 1 248526
+##species https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=150286
+NC_013668.3	RefSeq	region	1	248526	.	+	.	ID=NC_013668.3:1..248526;Dbxref=taxon:150286;acronym=AngHV-1;collection-date=19-May-1998;country=Netherlands;gbkey=Src;genome=genomic;mol_type=genomic DNA;nat-host=Anguilla anguilla;strain=500138
+NC_013668.3	RefSeq	repeat_region	1	10634	.	+	.	ID=id-NC_013668.3:1..10634;gbkey=repeat_region;rpt_type=terminal
+NC_013668.3	RefSeq	gene	585	4171	.	-	.	ID=gene-AngHV1_ORF1_1;Dbxref=GeneID:8683576;Name=AngHV1_ORF1_1;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF1_1
+NC_013668.3	RefSeq	CDS	3138	4171	.	-	0	ID=cds-YP_003358140.2;Parent=gene-AngHV1_ORF1_1;Dbxref=GenBank:YP_003358140.2,GeneID:8683576;Name=YP_003358140.2;gbkey=CDS;locus_tag=AngHV1_ORF1_1;product=protein ORF1;protein_id=YP_003358140.2
+NC_013668.3	RefSeq	CDS	1938	2852	.	-	1	ID=cds-YP_003358140.2;Parent=gene-AngHV1_ORF1_1;Dbxref=GenBank:YP_003358140.2,GeneID:8683576;Name=YP_003358140.2;gbkey=CDS;locus_tag=AngHV1_ORF1_1;product=protein ORF1;protein_id=YP_003358140.2
+NC_013668.3	RefSeq	CDS	793	1810	.	-	1	ID=cds-YP_003358140.2;Parent=gene-AngHV1_ORF1_1;Dbxref=GenBank:YP_003358140.2,GeneID:8683576;Name=YP_003358140.2;gbkey=CDS;locus_tag=AngHV1_ORF1_1;product=protein ORF1;protein_id=YP_003358140.2
+NC_013668.3	RefSeq	polyA_site	585	585	.	-	.	ID=id-AngHV1_ORF1_1;Parent=gene-AngHV1_ORF1_1;Dbxref=GeneID:8683576;gbkey=polyA_site;locus_tag=AngHV1_ORF1_1
+NC_013668.3	RefSeq	polyA_signal_sequence	597	602	.	-	.	ID=id-AngHV1_ORF1_1-2;Parent=gene-AngHV1_ORF1_1;Dbxref=GeneID:8683576;gbkey=regulatory;locus_tag=AngHV1_ORF1_1;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	4497	5826	.	-	.	ID=gene-AngHV1_ORF3_1;Dbxref=GeneID:8683435;Name=AngHV1_ORF3_1;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF3_1
+NC_013668.3	RefSeq	CDS	4933	5826	.	-	0	ID=cds-YP_003358142.1;Parent=gene-AngHV1_ORF3_1;Dbxref=GenBank:YP_003358142.1,GeneID:8683435;Name=YP_003358142.1;Note=ORF3 family;gbkey=CDS;locus_tag=AngHV1_ORF3_1;product=protein ORF3;protein_id=YP_003358142.1
+NC_013668.3	RefSeq	polyA_site	4497	4497	.	-	.	ID=id-AngHV1_ORF3_1;Parent=gene-AngHV1_ORF3_1;Dbxref=GeneID:8683435;gbkey=polyA_site;locus_tag=AngHV1_ORF3_1
+NC_013668.3	RefSeq	polyA_site	4833	4833	.	-	.	ID=id-AngHV1_ORF3_1-2;Parent=gene-AngHV1_ORF3_1;Dbxref=GeneID:8683435;gbkey=polyA_site;locus_tag=AngHV1_ORF3_1
+NC_013668.3	RefSeq	polyA_signal_sequence	4517	4522	.	-	.	ID=id-AngHV1_ORF3_1-3;Parent=gene-AngHV1_ORF3_1;Dbxref=GeneID:8683435;gbkey=regulatory;locus_tag=AngHV1_ORF3_1;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	polyA_signal_sequence	4847	4852	.	-	.	ID=id-AngHV1_ORF3_1-4;Parent=gene-AngHV1_ORF3_1;Dbxref=GeneID:8683435;gbkey=regulatory;locus_tag=AngHV1_ORF3_1;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	6015	7061	.	-	.	ID=gene-AngHV1_ORF4_1;Dbxref=GeneID:8683436;Name=AngHV1_ORF4_1;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF4_1
+NC_013668.3	RefSeq	CDS	6300	7061	.	-	0	ID=cds-YP_003358143.1;Parent=gene-AngHV1_ORF4_1;Dbxref=GenBank:YP_003358143.1,GeneID:8683436;Name=YP_003358143.1;gbkey=CDS;locus_tag=AngHV1_ORF4_1;product=protein ORF4;protein_id=YP_003358143.1
+NC_013668.3	RefSeq	polyA_site	6015	6015	.	-	.	ID=id-AngHV1_ORF4_1;Parent=gene-AngHV1_ORF4_1;Dbxref=GeneID:8683436;gbkey=polyA_site;locus_tag=AngHV1_ORF4_1
+NC_013668.3	RefSeq	polyA_signal_sequence	6031	6036	.	-	.	ID=id-AngHV1_ORF4_1-2;Parent=gene-AngHV1_ORF4_1;Dbxref=GeneID:8683436;gbkey=regulatory;locus_tag=AngHV1_ORF4_1;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	7383	7929	.	-	.	ID=gene-AngHV1_ORF5_1;Dbxref=GeneID:8683437;Name=AngHV1_ORF5_1;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF5_1
+NC_013668.3	RefSeq	CDS	7423	7929	.	-	0	ID=cds-YP_003358144.1;Parent=gene-AngHV1_ORF5_1;Dbxref=GenBank:YP_003358144.1,GeneID:8683437;Name=YP_003358144.1;gbkey=CDS;locus_tag=AngHV1_ORF5_1;product=deoxyuridine triphosphatase;protein_id=YP_003358144.1
+NC_013668.3	RefSeq	polyA_site	7383	7383	.	-	.	ID=id-AngHV1_ORF5_1;Parent=gene-AngHV1_ORF5_1;Dbxref=GeneID:8683437;gbkey=polyA_site;locus_tag=AngHV1_ORF5_1
+NC_013668.3	RefSeq	polyA_signal_sequence	7397	7402	.	-	.	ID=id-AngHV1_ORF5_1-2;Parent=gene-AngHV1_ORF5_1;Dbxref=GeneID:8683437;gbkey=regulatory;locus_tag=AngHV1_ORF5_1;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	8398	10144	.	+	.	ID=gene-AngHV1_ORF6A_1;Dbxref=GeneID:12930112;Name=AngHV1_ORF6A_1;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF6A_1
+NC_013668.3	RefSeq	CDS	8398	8474	.	+	0	ID=cds-YP_006347575.1;Parent=gene-AngHV1_ORF6A_1;Dbxref=GenBank:YP_006347575.1,GeneID:12930112;Name=YP_006347575.1;gbkey=CDS;locus_tag=AngHV1_ORF6A_1;product=protein ORF6A;protein_id=YP_006347575.1
+NC_013668.3	RefSeq	CDS	8715	10026	.	+	1	ID=cds-YP_006347575.1;Parent=gene-AngHV1_ORF6A_1;Dbxref=GenBank:YP_006347575.1,GeneID:12930112;Name=YP_006347575.1;gbkey=CDS;locus_tag=AngHV1_ORF6A_1;product=protein ORF6A;protein_id=YP_006347575.1
+NC_013668.3	RefSeq	polyA_site	10144	10144	.	+	.	ID=id-AngHV1_ORF6A_1;Parent=gene-AngHV1_ORF6A_1;Dbxref=GeneID:12930112;gbkey=polyA_site;locus_tag=AngHV1_ORF6A_1
+NC_013668.3	RefSeq	polyA_signal_sequence	10125	10130	.	+	.	ID=id-AngHV1_ORF6A_1-2;Parent=gene-AngHV1_ORF6A_1;Dbxref=GeneID:12930112;gbkey=regulatory;locus_tag=AngHV1_ORF6A_1;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	11144	11840	.	+	.	ID=gene-AngHV1_ORF8;Dbxref=GeneID:8683440;Name=AngHV1_ORF8;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF8
+NC_013668.3	RefSeq	CDS	11144	11779	.	+	0	ID=cds-YP_003358147.2;Parent=gene-AngHV1_ORF8;Dbxref=GenBank:YP_003358147.2,GeneID:8683440;Name=YP_003358147.2;gbkey=CDS;locus_tag=AngHV1_ORF8;product=membrane protein ORF8;protein_id=YP_003358147.2
+NC_013668.3	RefSeq	polyA_site	11840	11840	.	+	.	ID=id-AngHV1_ORF8;Parent=gene-AngHV1_ORF8;Dbxref=GeneID:8683440;gbkey=polyA_site;locus_tag=AngHV1_ORF8
+NC_013668.3	RefSeq	polyA_signal_sequence	11820	11825	.	+	.	ID=id-AngHV1_ORF8-2;Parent=gene-AngHV1_ORF8;Dbxref=GeneID:8683440;gbkey=regulatory;locus_tag=AngHV1_ORF8;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	11846	39483	.	-	.	ID=gene-AngHV1_ORF10;Dbxref=GeneID:8683442;Name=AngHV1_ORF10;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF10
+NC_013668.3	RefSeq	CDS	38524	39483	.	-	0	ID=cds-YP_003358149.1;Parent=gene-AngHV1_ORF10;Dbxref=GenBank:YP_003358149.1,GeneID:8683442;Name=YP_003358149.1;gbkey=CDS;locus_tag=AngHV1_ORF10;product=DNA packaging terminase subunit 1;protein_id=YP_003358149.1
+NC_013668.3	RefSeq	CDS	16289	16702	.	-	0	ID=cds-YP_003358149.1;Parent=gene-AngHV1_ORF10;Dbxref=GenBank:YP_003358149.1,GeneID:8683442;Name=YP_003358149.1;gbkey=CDS;locus_tag=AngHV1_ORF10;product=DNA packaging terminase subunit 1;protein_id=YP_003358149.1
+NC_013668.3	RefSeq	CDS	15971	16187	.	-	0	ID=cds-YP_003358149.1;Parent=gene-AngHV1_ORF10;Dbxref=GenBank:YP_003358149.1,GeneID:8683442;Name=YP_003358149.1;gbkey=CDS;locus_tag=AngHV1_ORF10;product=DNA packaging terminase subunit 1;protein_id=YP_003358149.1
+NC_013668.3	RefSeq	CDS	14481	14866	.	-	2	ID=cds-YP_003358149.1;Parent=gene-AngHV1_ORF10;Dbxref=GenBank:YP_003358149.1,GeneID:8683442;Name=YP_003358149.1;gbkey=CDS;locus_tag=AngHV1_ORF10;product=DNA packaging terminase subunit 1;protein_id=YP_003358149.1
+NC_013668.3	RefSeq	CDS	12101	12487	.	-	0	ID=cds-YP_003358149.1;Parent=gene-AngHV1_ORF10;Dbxref=GenBank:YP_003358149.1,GeneID:8683442;Name=YP_003358149.1;gbkey=CDS;locus_tag=AngHV1_ORF10;product=DNA packaging terminase subunit 1;protein_id=YP_003358149.1
+NC_013668.3	RefSeq	polyA_site	11846	11846	.	-	.	ID=id-AngHV1_ORF10;Parent=gene-AngHV1_ORF10;Dbxref=GeneID:8683442;gbkey=polyA_site;locus_tag=AngHV1_ORF10
+NC_013668.3	RefSeq	polyA_signal_sequence	11861	11866	.	-	.	ID=id-AngHV1_ORF10-2;Parent=gene-AngHV1_ORF10;Dbxref=GeneID:8683442;gbkey=regulatory;locus_tag=AngHV1_ORF10;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	12672	13578	.	+	.	ID=gene-AngHV1_ORF11;Dbxref=GeneID:8683443;Name=AngHV1_ORF11;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF11
+NC_013668.3	RefSeq	CDS	12672	13466	.	+	0	ID=cds-YP_003358150.2;Parent=gene-AngHV1_ORF11;Dbxref=GenBank:YP_003358150.2,GeneID:8683443;Name=YP_003358150.2;Note=ORF11 family;gbkey=CDS;locus_tag=AngHV1_ORF11;product=membrane protein ORF11;protein_id=YP_003358150.2
+NC_013668.3	RefSeq	polyA_site	13505	13505	.	+	.	ID=id-AngHV1_ORF11;Parent=gene-AngHV1_ORF11;Dbxref=GeneID:8683443;gbkey=polyA_site;locus_tag=AngHV1_ORF11
+NC_013668.3	RefSeq	polyA_site	13578	13578	.	+	.	ID=id-AngHV1_ORF11-2;Parent=gene-AngHV1_ORF11;Dbxref=GeneID:8683443;gbkey=polyA_site;locus_tag=AngHV1_ORF11
+NC_013668.3	RefSeq	polyA_signal_sequence	13487	13492	.	+	.	ID=id-AngHV1_ORF11-3;Parent=gene-AngHV1_ORF11;Dbxref=GeneID:8683443;gbkey=regulatory;locus_tag=AngHV1_ORF11;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	polyA_signal_sequence	13561	13566	.	+	.	ID=id-AngHV1_ORF11-4;Parent=gene-AngHV1_ORF11;Dbxref=GeneID:8683443;gbkey=regulatory;locus_tag=AngHV1_ORF11;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	13657	14475	.	+	.	ID=gene-AngHV1_ORF12;Dbxref=GeneID:8683444;Name=AngHV1_ORF12;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF12
+NC_013668.3	RefSeq	CDS	13657	14451	.	+	0	ID=cds-YP_003358151.1;Parent=gene-AngHV1_ORF12;Dbxref=GenBank:YP_003358151.1,GeneID:8683444;Name=YP_003358151.1;Note=ORF11 family;gbkey=CDS;locus_tag=AngHV1_ORF12;product=membrane protein ORF12;protein_id=YP_003358151.1
+NC_013668.3	RefSeq	polyA_site	14475	14475	.	+	.	ID=id-AngHV1_ORF12;Parent=gene-AngHV1_ORF12;Dbxref=GeneID:8683444;gbkey=polyA_site;locus_tag=AngHV1_ORF12
+NC_013668.3	RefSeq	polyA_signal_sequence	14458	14463	.	+	.	ID=id-AngHV1_ORF12-2;Parent=gene-AngHV1_ORF12;Dbxref=GeneID:8683444;gbkey=regulatory;locus_tag=AngHV1_ORF12;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	15047	15968	.	+	.	ID=gene-AngHV1_ORF13;Dbxref=GeneID:8683445;Name=AngHV1_ORF13;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF13
+NC_013668.3	RefSeq	CDS	15047	15865	.	+	0	ID=cds-YP_003358152.1;Parent=gene-AngHV1_ORF13;Dbxref=GenBank:YP_003358152.1,GeneID:8683445;Name=YP_003358152.1;Note=ORF13 family;gbkey=CDS;locus_tag=AngHV1_ORF13;product=protein ORF13;protein_id=YP_003358152.1
+NC_013668.3	RefSeq	polyA_site	15968	15968	.	+	.	ID=id-AngHV1_ORF13;Parent=gene-AngHV1_ORF13;Dbxref=GeneID:8683445;gbkey=polyA_site;locus_tag=AngHV1_ORF13
+NC_013668.3	RefSeq	polyA_signal_sequence	15950	15955	.	+	.	ID=id-AngHV1_ORF13-2;Parent=gene-AngHV1_ORF13;Dbxref=GeneID:8683445;gbkey=regulatory;locus_tag=AngHV1_ORF13;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	16816	18324	.	+	.	ID=gene-AngHV1_ORF14;Dbxref=GeneID:8683446;Name=AngHV1_ORF14;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF14
+NC_013668.3	RefSeq	CDS	16816	17649	.	+	0	ID=cds-YP_003358153.1;Parent=gene-AngHV1_ORF14;Dbxref=GenBank:YP_003358153.1,GeneID:8683446;Name=YP_003358153.1;Note=ORF3 family;gbkey=CDS;locus_tag=AngHV1_ORF14;product=protein ORF14;protein_id=YP_003358153.1
+NC_013668.3	RefSeq	gene	17739	18324	.	+	.	ID=gene-AngHV1_ORF15;Dbxref=GeneID:8683447;Name=AngHV1_ORF15;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF15
+NC_013668.3	RefSeq	CDS	17739	18305	.	+	0	ID=cds-YP_003358154.1;Parent=gene-AngHV1_ORF15;Dbxref=GenBank:YP_003358154.1,GeneID:8683447;Name=YP_003358154.1;gbkey=CDS;locus_tag=AngHV1_ORF15;product=guanosine triphosphatase;protein_id=YP_003358154.1
+NC_013668.3	RefSeq	polyA_site	18324	18324	.	+	.	ID=id-AngHV1_ORF15;Parent=gene-AngHV1_ORF15;Dbxref=GeneID:8683447;Note=ORF14%2C ORF15;gbkey=polyA_site;locus_tag=AngHV1_ORF15
+NC_013668.3	RefSeq	polyA_signal_sequence	18305	18310	.	+	.	ID=id-AngHV1_ORF15-2;Parent=gene-AngHV1_ORF15;Dbxref=GeneID:8683447;Note=ORF14%2C ORF15;gbkey=regulatory;locus_tag=AngHV1_ORF15;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	18378	19297	.	-	.	ID=gene-AngHV1_ORF16;Dbxref=GeneID:8683448;Name=AngHV1_ORF16;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF16
+NC_013668.3	RefSeq	CDS	18416	19297	.	-	0	ID=cds-YP_003358155.1;Parent=gene-AngHV1_ORF16;Dbxref=GenBank:YP_003358155.1,GeneID:8683448;Name=YP_003358155.1;Note=ORF13 family;gbkey=CDS;locus_tag=AngHV1_ORF16;product=protein ORF16;protein_id=YP_003358155.1
+NC_013668.3	RefSeq	polyA_site	18378	18378	.	-	.	ID=id-AngHV1_ORF16;Parent=gene-AngHV1_ORF16;Dbxref=GeneID:8683448;gbkey=polyA_site;locus_tag=AngHV1_ORF16
+NC_013668.3	RefSeq	polyA_signal_sequence	18390	18395	.	-	.	ID=id-AngHV1_ORF16-2;Parent=gene-AngHV1_ORF16;Dbxref=GeneID:8683448;gbkey=regulatory;locus_tag=AngHV1_ORF16;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	19358	26333	.	-	.	ID=gene-AngHV1_ORF18;Dbxref=GeneID:8683450;Name=AngHV1_ORF18;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF18
+NC_013668.3	RefSeq	CDS	20157	26333	.	-	0	ID=cds-YP_003358157.2;Parent=gene-AngHV1_ORF18;Dbxref=GenBank:YP_003358157.2,GeneID:8683450;Name=YP_003358157.2;gbkey=CDS;locus_tag=AngHV1_ORF18;product=protein ORF18;protein_id=YP_003358157.2
+NC_013668.3	RefSeq	gene	19358	20085	.	-	.	ID=gene-AngHV1_ORF17;Dbxref=GeneID:8683449;Name=AngHV1_ORF17;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF17
+NC_013668.3	RefSeq	CDS	19396	20085	.	-	0	ID=cds-YP_003358156.1;Parent=gene-AngHV1_ORF17;Dbxref=GenBank:YP_003358156.1,GeneID:8683449;Name=YP_003358156.1;Note=ORF13 family;gbkey=CDS;locus_tag=AngHV1_ORF17;product=protein ORF17;protein_id=YP_003358156.1
+NC_013668.3	RefSeq	polyA_site	19358	19358	.	-	.	ID=id-AngHV1_ORF17;Parent=gene-AngHV1_ORF17;Dbxref=GeneID:8683449;Note=ORF17%2C ORF18;gbkey=polyA_site;locus_tag=AngHV1_ORF17
+NC_013668.3	RefSeq	polyA_signal_sequence	19379	19384	.	-	.	ID=id-AngHV1_ORF17-2;Parent=gene-AngHV1_ORF17;Dbxref=GeneID:8683449;Note=ORF17%2C ORF18;gbkey=regulatory;locus_tag=AngHV1_ORF17;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	26461	30878	.	+	.	ID=gene-AngHV1_ORF19;Dbxref=GeneID:8683451;Name=AngHV1_ORF19;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF19
+NC_013668.3	RefSeq	CDS	26461	29118	.	+	0	ID=cds-YP_003358158.1;Parent=gene-AngHV1_ORF19;Dbxref=GenBank:YP_003358158.1,GeneID:8683451;Name=YP_003358158.1;gbkey=CDS;locus_tag=AngHV1_ORF19;product=protein ORF19;protein_id=YP_003358158.1
+NC_013668.3	RefSeq	gene	29121	30878	.	+	.	ID=gene-AngHV1_ORF20;Dbxref=GeneID:8683452;Name=AngHV1_ORF20;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF20
+NC_013668.3	RefSeq	CDS	29121	30791	.	+	0	ID=cds-YP_003358159.1;Parent=gene-AngHV1_ORF20;Dbxref=GenBank:YP_003358159.1,GeneID:8683452;Name=YP_003358159.1;gbkey=CDS;locus_tag=AngHV1_ORF20;product=protein ORF20;protein_id=YP_003358159.1
+NC_013668.3	RefSeq	polyA_site	30878	30878	.	+	.	ID=id-AngHV1_ORF20;Parent=gene-AngHV1_ORF20;Dbxref=GeneID:8683452;Note=ORF19%2C ORF20;gbkey=polyA_site;locus_tag=AngHV1_ORF20
+NC_013668.3	RefSeq	polyA_signal_sequence	30855	30860	.	+	.	ID=id-AngHV1_ORF20-2;Parent=gene-AngHV1_ORF20;Dbxref=GeneID:8683452;Note=ORF19%2C ORF20;gbkey=regulatory;locus_tag=AngHV1_ORF20;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	30934	33831	.	+	.	ID=gene-AngHV1_ORF21;Dbxref=GeneID:8683453;Name=AngHV1_ORF21;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF21
+NC_013668.3	RefSeq	CDS	30934	33366	.	+	0	ID=cds-YP_003358160.1;Parent=gene-AngHV1_ORF21;Dbxref=GenBank:YP_003358160.1,GeneID:8683453;Name=YP_003358160.1;gbkey=CDS;locus_tag=AngHV1_ORF21;product=helicase-primase primase subunit;protein_id=YP_003358160.1
+NC_013668.3	RefSeq	polyA_site	33831	33831	.	+	.	ID=id-AngHV1_ORF21;Parent=gene-AngHV1_ORF21;Dbxref=GeneID:8683453;Note=readthrough probable;gbkey=polyA_site;locus_tag=AngHV1_ORF21
+NC_013668.3	RefSeq	polyA_signal_sequence	33806	33811	.	+	.	ID=id-AngHV1_ORF21-2;Parent=gene-AngHV1_ORF21;Dbxref=GeneID:8683453;gbkey=regulatory;locus_tag=AngHV1_ORF21;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	33234	37102	.	+	.	ID=gene-AngHV1_ORF22;Dbxref=GeneID:8683454;Name=AngHV1_ORF22;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF22
+NC_013668.3	RefSeq	CDS	33234	34901	.	+	0	ID=cds-YP_003358161.2;Parent=gene-AngHV1_ORF22;Dbxref=GenBank:YP_003358161.2,GeneID:8683454;Name=YP_003358161.2;gbkey=CDS;locus_tag=AngHV1_ORF22;product=protein Allo64;protein_id=YP_003358161.2
+NC_013668.3	RefSeq	gene	34828	37102	.	+	.	ID=gene-AngHV1_ORF23;Dbxref=GeneID:8683455;Name=AngHV1_ORF23;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF23
+NC_013668.3	RefSeq	CDS	34828	37053	.	+	0	ID=cds-YP_003358162.2;Parent=gene-AngHV1_ORF23;Dbxref=GenBank:YP_003358162.2,GeneID:8683455;Name=YP_003358162.2;gbkey=CDS;locus_tag=AngHV1_ORF23;product=protein ORF23;protein_id=YP_003358162.2
+NC_013668.3	RefSeq	polyA_signal_sequence	37086	37091	.	+	.	ID=id-AngHV1_ORF23;Parent=gene-AngHV1_ORF23;Dbxref=GeneID:8683455;Note=ORF22%2C ORF23;gbkey=regulatory;locus_tag=AngHV1_ORF23;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	37100	38517	.	+	.	ID=gene-AngHV1_ORF24;Dbxref=GeneID:8683456;Name=AngHV1_ORF24;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF24
+NC_013668.3	RefSeq	CDS	37100	37888	.	+	0	ID=cds-YP_003358163.1;Parent=gene-AngHV1_ORF24;Dbxref=GenBank:YP_003358163.1,GeneID:8683456;Name=YP_003358163.1;Note=ORF13 family;gbkey=CDS;locus_tag=AngHV1_ORF24;product=protein ORF24;protein_id=YP_003358163.1
+NC_013668.3	RefSeq	polyA_site	37102	37102	.	+	.	ID=id-AngHV1_ORF24;Parent=gene-AngHV1_ORF24;Dbxref=GeneID:8683456;Note=ORF22%2C ORF23%3B probable readthrough from ORF21;gbkey=polyA_site;locus_tag=AngHV1_ORF24
+NC_013668.3	RefSeq	gene	37970	38517	.	+	.	ID=gene-AngHV1_ORF25;Dbxref=GeneID:12930108;Name=AngHV1_ORF25;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF25
+NC_013668.3	RefSeq	CDS	37970	38467	.	+	0	ID=cds-YP_006355432.1;Parent=gene-AngHV1_ORF25;Dbxref=GenBank:YP_006355432.1,GeneID:12930108;Name=YP_006355432.1;Note=contains a signal peptide%3B involved in immune regulation;gbkey=CDS;locus_tag=AngHV1_ORF25;product=interleukin-10;protein_id=YP_006355432.1
+NC_013668.3	RefSeq	polyA_site	38517	38517	.	+	.	ID=id-AngHV1_ORF25;Parent=gene-AngHV1_ORF25;Dbxref=GeneID:12930108;Note=ORF24%2C ORF25;gbkey=polyA_site;locus_tag=AngHV1_ORF25
+NC_013668.3	RefSeq	sequence_alteration	37970	37970	.	+	.	ID=id-AngHV1_ORF25-2;Dbxref=GeneID:12930108;frequency=0.74;gbkey=variation;locus_tag=AngHV1_ORF25;replace=g
+NC_013668.3	RefSeq	polyA_signal_sequence	38495	38500	.	+	.	ID=id-AngHV1_ORF25-3;Parent=gene-AngHV1_ORF25;Dbxref=GeneID:12930108;Note=ORF24%2C ORF25;gbkey=regulatory;locus_tag=AngHV1_ORF25;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	39508	40534	.	+	.	ID=gene-AngHV1_ORF26;Dbxref=GeneID:8683458;Name=AngHV1_ORF26;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF26
+NC_013668.3	RefSeq	CDS	39508	40002	.	+	0	ID=cds-YP_003358165.1;Parent=gene-AngHV1_ORF26;Dbxref=GenBank:YP_003358165.1,GeneID:8683458;Name=YP_003358165.1;gbkey=CDS;locus_tag=AngHV1_ORF26;product=protein ORF26;protein_id=YP_003358165.1
+NC_013668.3	RefSeq	gene	40004	40534	.	+	.	ID=gene-AngHV1_ORF27;Dbxref=GeneID:8683459;Name=AngHV1_ORF27;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF27
+NC_013668.3	RefSeq	CDS	40004	40474	.	+	0	ID=cds-YP_003358166.1;Parent=gene-AngHV1_ORF27;Dbxref=GenBank:YP_003358166.1,GeneID:8683459;Name=YP_003358166.1;gbkey=CDS;locus_tag=AngHV1_ORF27;product=protein ORF27;protein_id=YP_003358166.1
+NC_013668.3	RefSeq	polyA_site	40534	40534	.	+	.	ID=id-AngHV1_ORF27;Parent=gene-AngHV1_ORF27;Dbxref=GeneID:8683459;Note=ORF26%2C ORF27;gbkey=polyA_site;locus_tag=AngHV1_ORF27
+NC_013668.3	RefSeq	polyA_signal_sequence	40516	40521	.	+	.	ID=id-AngHV1_ORF27-2;Parent=gene-AngHV1_ORF27;Dbxref=GeneID:8683459;Note=ORF26%2C ORF27;gbkey=regulatory;locus_tag=AngHV1_ORF27;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	40528	42152	.	-	.	ID=gene-AngHV1_ORF28;Dbxref=GeneID:8683460;Name=AngHV1_ORF28;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF28
+NC_013668.3	RefSeq	CDS	40587	42152	.	-	0	ID=cds-YP_003358167.1;Parent=gene-AngHV1_ORF28;Dbxref=GenBank:YP_003358167.1,GeneID:8683460;Name=YP_003358167.1;gbkey=CDS;locus_tag=AngHV1_ORF28;product=protein ORF28;protein_id=YP_003358167.1
+NC_013668.3	RefSeq	polyA_site	40528	40528	.	-	.	ID=id-AngHV1_ORF28;Parent=gene-AngHV1_ORF28;Dbxref=GeneID:8683460;gbkey=polyA_site;locus_tag=AngHV1_ORF28
+NC_013668.3	RefSeq	polyA_signal_sequence	40543	40548	.	-	.	ID=id-AngHV1_ORF28-2;Parent=gene-AngHV1_ORF28;Dbxref=GeneID:8683460;gbkey=regulatory;locus_tag=AngHV1_ORF28;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	42200	43241	.	-	.	ID=gene-AngHV1_ORF29;Dbxref=GeneID:8683461;Name=AngHV1_ORF29;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF29
+NC_013668.3	RefSeq	CDS	42303	43241	.	-	0	ID=cds-YP_003358168.1;Parent=gene-AngHV1_ORF29;Dbxref=GenBank:YP_003358168.1,GeneID:8683461;Name=YP_003358168.1;gbkey=CDS;locus_tag=AngHV1_ORF29;product=uracil-DNA glycosylase;protein_id=YP_003358168.1
+NC_013668.3	RefSeq	polyA_site	42200	42200	.	-	.	ID=id-AngHV1_ORF29;Parent=gene-AngHV1_ORF29;Dbxref=GeneID:8683461;gbkey=polyA_site;locus_tag=AngHV1_ORF29
+NC_013668.3	RefSeq	polyA_signal_sequence	42214	42219	.	-	.	ID=id-AngHV1_ORF29-2;Parent=gene-AngHV1_ORF29;Dbxref=GeneID:8683461;gbkey=regulatory;locus_tag=AngHV1_ORF29;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	43256	46557	.	+	.	ID=gene-AngHV1_ORF30;Dbxref=GeneID:8683462;Name=AngHV1_ORF30;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF30
+NC_013668.3	RefSeq	CDS	43256	46450	.	+	0	ID=cds-YP_003358169.1;Parent=gene-AngHV1_ORF30;Dbxref=GenBank:YP_003358169.1,GeneID:8683462;Name=YP_003358169.1;gbkey=CDS;locus_tag=AngHV1_ORF30;product=protein ORF30;protein_id=YP_003358169.1
+NC_013668.3	RefSeq	polyA_site	46557	46557	.	+	.	ID=id-AngHV1_ORF30;Parent=gene-AngHV1_ORF30;Dbxref=GeneID:8683462;gbkey=polyA_site;locus_tag=AngHV1_ORF30
+NC_013668.3	RefSeq	polyA_signal_sequence	46541	46546	.	+	.	ID=id-AngHV1_ORF30-2;Parent=gene-AngHV1_ORF30;Dbxref=GeneID:8683462;gbkey=regulatory;locus_tag=AngHV1_ORF30;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	46593	49397	.	+	.	ID=gene-AngHV1_ORF31;Dbxref=GeneID:8683463;Name=AngHV1_ORF31;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF31
+NC_013668.3	RefSeq	CDS	46593	48779	.	+	0	ID=cds-YP_003358170.1;Parent=gene-AngHV1_ORF31;Dbxref=GenBank:YP_003358170.1,GeneID:8683463;Name=YP_003358170.1;gbkey=CDS;locus_tag=AngHV1_ORF31;product=protein ORF31;protein_id=YP_003358170.1
+NC_013668.3	RefSeq	gene	48776	49397	.	+	.	ID=gene-AngHV1_ORF32;Dbxref=GeneID:8683464;Name=AngHV1_ORF32;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF32
+NC_013668.3	RefSeq	CDS	48776	49312	.	+	0	ID=cds-YP_003358171.1;Parent=gene-AngHV1_ORF32;Dbxref=GenBank:YP_003358171.1,GeneID:8683464;Name=YP_003358171.1;gbkey=CDS;locus_tag=AngHV1_ORF32;product=protein ORF32;protein_id=YP_003358171.1
+NC_013668.3	RefSeq	polyA_site	49351	49351	.	+	.	ID=id-AngHV1_ORF32;Parent=gene-AngHV1_ORF32;Dbxref=GeneID:8683464;Note=ORF31%2C ORF32;gbkey=polyA_site;locus_tag=AngHV1_ORF32
+NC_013668.3	RefSeq	polyA_site	49397	49397	.	+	.	ID=id-AngHV1_ORF32-2;Parent=gene-AngHV1_ORF32;Dbxref=GeneID:8683464;Note=ORF31%2C ORF32;gbkey=polyA_site;locus_tag=AngHV1_ORF32
+NC_013668.3	RefSeq	polyA_signal_sequence	49334	49339	.	+	.	ID=id-AngHV1_ORF32-3;Parent=gene-AngHV1_ORF32;Dbxref=GeneID:8683464;Note=ORF31%2C ORF32;gbkey=regulatory;locus_tag=AngHV1_ORF32;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	polyA_signal_sequence	49378	49383	.	+	.	ID=id-AngHV1_ORF32-4;Parent=gene-AngHV1_ORF32;Dbxref=GeneID:8683464;Note=ORF31%2C ORF32;gbkey=regulatory;locus_tag=AngHV1_ORF32;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	49464	49960	.	-	.	ID=gene-AngHV1_ORF33;Dbxref=GeneID:8683465;Name=AngHV1_ORF33;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF33
+NC_013668.3	RefSeq	CDS	49493	49960	.	-	0	ID=cds-YP_003358172.1;Parent=gene-AngHV1_ORF33;Dbxref=GenBank:YP_003358172.1,GeneID:8683465;Name=YP_003358172.1;gbkey=CDS;locus_tag=AngHV1_ORF33;product=protein ORF33;protein_id=YP_003358172.1
+NC_013668.3	RefSeq	polyA_site	49464	49464	.	-	.	ID=id-AngHV1_ORF33;Parent=gene-AngHV1_ORF33;Dbxref=GeneID:8683465;gbkey=polyA_site;locus_tag=AngHV1_ORF33
+NC_013668.3	RefSeq	polyA_signal_sequence	49476	49481	.	-	.	ID=id-AngHV1_ORF33-2;Parent=gene-AngHV1_ORF33;Dbxref=GeneID:8683465;gbkey=regulatory;locus_tag=AngHV1_ORF33;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	50113	56376	.	+	.	ID=gene-AngHV1_ORF34;Dbxref=GeneID:8683466;Name=AngHV1_ORF34;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF34
+NC_013668.3	RefSeq	CDS	50113	55392	.	+	0	ID=cds-YP_003358173.1;Parent=gene-AngHV1_ORF34;Dbxref=GenBank:YP_003358173.1,GeneID:8683466;Name=YP_003358173.1;gbkey=CDS;locus_tag=AngHV1_ORF34;product=protein ORF34;protein_id=YP_003358173.1
+NC_013668.3	RefSeq	gene	55397	56376	.	+	.	ID=gene-AngHV1_ORF35;Dbxref=GeneID:8683467;Name=AngHV1_ORF35;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF35
+NC_013668.3	RefSeq	CDS	55397	56287	.	+	0	ID=cds-YP_003358174.1;Parent=gene-AngHV1_ORF35;Dbxref=GenBank:YP_003358174.1,GeneID:8683467;Name=YP_003358174.1;gbkey=CDS;locus_tag=AngHV1_ORF35;product=protein ORF35;protein_id=YP_003358174.1
+NC_013668.3	RefSeq	polyA_site	56376	56376	.	+	.	ID=id-AngHV1_ORF35;Parent=gene-AngHV1_ORF35;Dbxref=GeneID:8683467;Note=ORF34%2C ORF35;gbkey=polyA_site;locus_tag=AngHV1_ORF35
+NC_013668.3	RefSeq	polyA_signal_sequence	56357	56362	.	+	.	ID=id-AngHV1_ORF35-2;Parent=gene-AngHV1_ORF35;Dbxref=GeneID:8683467;Note=ORF34%2C ORF35;gbkey=regulatory;locus_tag=AngHV1_ORF35;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	56380	60447	.	-	.	ID=gene-AngHV1_ORF38;Dbxref=GeneID:8683470;Name=AngHV1_ORF38;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF38
+NC_013668.3	RefSeq	CDS	59290	60447	.	-	0	ID=cds-YP_003358177.1;Parent=gene-AngHV1_ORF38;Dbxref=GenBank:YP_003358177.1,GeneID:8683470;Name=YP_003358177.1;gbkey=CDS;locus_tag=AngHV1_ORF38;product=protein ORF38;protein_id=YP_003358177.1
+NC_013668.3	RefSeq	gene	56380	59181	.	-	.	ID=gene-AngHV1_ORF37;Dbxref=GeneID:8683469;Name=AngHV1_ORF37;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF37
+NC_013668.3	RefSeq	CDS	57550	59181	.	-	0	ID=cds-YP_003358176.1;Parent=gene-AngHV1_ORF37;Dbxref=GenBank:YP_003358176.1,GeneID:8683469;Name=YP_003358176.1;gbkey=CDS;locus_tag=AngHV1_ORF37;product=helicase-primase helicase subunit;protein_id=YP_003358176.1
+NC_013668.3	RefSeq	gene	56380	57550	.	-	.	ID=gene-AngHV1_ORF36;Dbxref=GeneID:8683468;Name=AngHV1_ORF36;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF36
+NC_013668.3	RefSeq	CDS	56435	57550	.	-	0	ID=cds-YP_003358175.1;Parent=gene-AngHV1_ORF36;Dbxref=GenBank:YP_003358175.1,GeneID:8683468;Name=YP_003358175.1;gbkey=CDS;locus_tag=AngHV1_ORF36;product=capsid triplex subunit 2;protein_id=YP_003358175.1
+NC_013668.3	RefSeq	polyA_site	56380	56380	.	-	.	ID=id-AngHV1_ORF36;Parent=gene-AngHV1_ORF36;Dbxref=GeneID:8683468;Note=ORF36%2C ORF37%2C ORF38;gbkey=polyA_site;locus_tag=AngHV1_ORF36
+NC_013668.3	RefSeq	polyA_signal_sequence	56397	56402	.	-	.	ID=id-AngHV1_ORF36-2;Parent=gene-AngHV1_ORF36;Dbxref=GeneID:8683468;Note=ORF36%2C ORF37%2C ORF38;gbkey=regulatory;locus_tag=AngHV1_ORF36;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	60507	62265	.	+	.	ID=gene-AngHV1_ORF39;Dbxref=GeneID:8683471;Name=AngHV1_ORF39;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF39
+NC_013668.3	RefSeq	CDS	60507	62183	.	+	0	ID=cds-YP_003358178.1;Parent=gene-AngHV1_ORF39;Dbxref=GenBank:YP_003358178.1,GeneID:8683471;Name=YP_003358178.1;gbkey=CDS;locus_tag=AngHV1_ORF39;product=protein ORF39;protein_id=YP_003358178.1
+NC_013668.3	RefSeq	polyA_site	62265	62265	.	+	.	ID=id-AngHV1_ORF39;Parent=gene-AngHV1_ORF39;Dbxref=GeneID:8683471;gbkey=polyA_site;locus_tag=AngHV1_ORF39
+NC_013668.3	RefSeq	polyA_signal_sequence	62243	62248	.	+	.	ID=id-AngHV1_ORF39-2;Parent=gene-AngHV1_ORF39;Dbxref=GeneID:8683471;gbkey=regulatory;locus_tag=AngHV1_ORF39;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	62323	68468	.	+	.	ID=gene-AngHV1_ORF40;Dbxref=GeneID:8683472;Name=AngHV1_ORF40;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF40
+NC_013668.3	RefSeq	CDS	62323	66774	.	+	0	ID=cds-YP_003358179.1;Parent=gene-AngHV1_ORF40;Dbxref=GenBank:YP_003358179.1,GeneID:8683472;Name=YP_003358179.1;gbkey=CDS;locus_tag=AngHV1_ORF40;product=protein ORF40;protein_id=YP_003358179.1
+NC_013668.3	RefSeq	gene	66777	68468	.	+	.	ID=gene-AngHV1_ORF41;Dbxref=GeneID:8683473;Name=AngHV1_ORF41;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF41
+NC_013668.3	RefSeq	CDS	66777	67337	.	+	0	ID=cds-YP_003358180.1;Parent=gene-AngHV1_ORF41;Dbxref=GenBank:YP_003358180.1,GeneID:8683473;Name=YP_003358180.1;gbkey=CDS;locus_tag=AngHV1_ORF41;product=protein ORF41;protein_id=YP_003358180.1
+NC_013668.3	RefSeq	gene	67309	68468	.	+	.	ID=gene-AngHV1_ORF42;Dbxref=GeneID:8683474;Name=AngHV1_ORF42;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF42
+NC_013668.3	RefSeq	CDS	67309	68433	.	+	0	ID=cds-YP_003358181.1;Parent=gene-AngHV1_ORF42;Dbxref=GenBank:YP_003358181.1,GeneID:8683474;Name=YP_003358181.1;gbkey=CDS;locus_tag=AngHV1_ORF42;product=capsid triplex subunit 1;protein_id=YP_003358181.1
+NC_013668.3	RefSeq	polyA_site	68468	68468	.	+	.	ID=id-AngHV1_ORF42;Parent=gene-AngHV1_ORF42;Dbxref=GeneID:8683474;Note=ORF40%2C ORF41%2C ORF42;gbkey=polyA_site;locus_tag=AngHV1_ORF42
+NC_013668.3	RefSeq	polyA_signal_sequence	68450	68455	.	+	.	ID=id-AngHV1_ORF42-2;Parent=gene-AngHV1_ORF42;Dbxref=GeneID:8683474;Note=ORF40%2C ORF41%2C ORF42;gbkey=regulatory;locus_tag=AngHV1_ORF42;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	68472	71622	.	-	.	ID=gene-AngHV1_ORF44;Dbxref=GeneID:8683476;Name=AngHV1_ORF44;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF44
+NC_013668.3	RefSeq	CDS	69010	71622	.	-	0	ID=cds-YP_003358183.1;Parent=gene-AngHV1_ORF44;Dbxref=GenBank:YP_003358183.1,GeneID:8683476;Name=YP_003358183.1;gbkey=CDS;locus_tag=AngHV1_ORF44;product=protein ORF44;protein_id=YP_003358183.1
+NC_013668.3	RefSeq	gene	68472	69008	.	-	.	ID=gene-AngHV1_ORF43;Dbxref=GeneID:8683475;Name=AngHV1_ORF43;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF43
+NC_013668.3	RefSeq	CDS	68535	69008	.	-	0	ID=cds-YP_003358182.1;Parent=gene-AngHV1_ORF43;Dbxref=GenBank:YP_003358182.1,GeneID:8683475;Name=YP_003358182.1;gbkey=CDS;locus_tag=AngHV1_ORF43;product=protein ORF43;protein_id=YP_003358182.1
+NC_013668.3	RefSeq	polyA_site	68472	68472	.	-	.	ID=id-AngHV1_ORF43;Parent=gene-AngHV1_ORF43;Dbxref=GeneID:8683475;Note=ORF43%2C ORF44;gbkey=polyA_site;locus_tag=AngHV1_ORF43
+NC_013668.3	RefSeq	polyA_signal_sequence	68486	68491	.	-	.	ID=id-AngHV1_ORF43-2;Parent=gene-AngHV1_ORF43;Dbxref=GeneID:8683475;Note=ORF43%2C ORF44;gbkey=regulatory;locus_tag=AngHV1_ORF43;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	71845	77464	.	+	.	ID=gene-AngHV1_ORF45;Dbxref=GeneID:8683477;Name=AngHV1_ORF45;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF45
+NC_013668.3	RefSeq	CDS	71845	75258	.	+	0	ID=cds-YP_003358184.2;Parent=gene-AngHV1_ORF45;Dbxref=GenBank:YP_003358184.2,GeneID:8683477;Name=YP_003358184.2;gbkey=CDS;locus_tag=AngHV1_ORF45;product=protein ORF45;protein_id=YP_003358184.2
+NC_013668.3	RefSeq	gene	75251	77464	.	+	.	ID=gene-AngHV1_ORF46;Dbxref=GeneID:8683478;Name=AngHV1_ORF46;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF46
+NC_013668.3	RefSeq	CDS	75251	75883	.	+	0	ID=cds-YP_003358185.1;Parent=gene-AngHV1_ORF46;Dbxref=GenBank:YP_003358185.1,GeneID:8683478;Name=YP_003358185.1;gbkey=CDS;locus_tag=AngHV1_ORF46;product=protein ORF46;protein_id=YP_003358185.1
+NC_013668.3	RefSeq	gene	75856	77464	.	+	.	ID=gene-AngHV1_ORF47;Dbxref=GeneID:8683479;Name=AngHV1_ORF47;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF47
+NC_013668.3	RefSeq	CDS	75856	77403	.	+	0	ID=cds-YP_003358186.2;Parent=gene-AngHV1_ORF47;Dbxref=GenBank:YP_003358186.2,GeneID:8683479;Name=YP_003358186.2;gbkey=CDS;locus_tag=AngHV1_ORF47;product=protein ORF47;protein_id=YP_003358186.2
+NC_013668.3	RefSeq	polyA_site	77464	77464	.	+	.	ID=id-AngHV1_ORF47;Parent=gene-AngHV1_ORF47;Dbxref=GeneID:8683479;Note=ORF45%2C ORF46%2C ORF47;gbkey=polyA_site;locus_tag=AngHV1_ORF47
+NC_013668.3	RefSeq	polyA_signal_sequence	77447	77452	.	+	.	ID=id-AngHV1_ORF47-2;Parent=gene-AngHV1_ORF47;Dbxref=GeneID:8683479;Note=ORF45%2C ORF46%2C ORF47;gbkey=regulatory;locus_tag=AngHV1_ORF47;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	77515	80349	.	+	.	ID=gene-AngHV1_ORF48;Dbxref=GeneID:8683480;Name=AngHV1_ORF48;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF48
+NC_013668.3	RefSeq	CDS	77515	80256	.	+	0	ID=cds-YP_003358187.1;Parent=gene-AngHV1_ORF48;Dbxref=GenBank:YP_003358187.1,GeneID:8683480;Name=YP_003358187.1;gbkey=CDS;locus_tag=AngHV1_ORF48;product=protein ORF48;protein_id=YP_003358187.1
+NC_013668.3	RefSeq	polyA_site	80349	80349	.	+	.	ID=id-AngHV1_ORF48;Parent=gene-AngHV1_ORF48;Dbxref=GeneID:8683480;gbkey=polyA_site;locus_tag=AngHV1_ORF48
+NC_013668.3	RefSeq	polyA_signal_sequence	80331	80336	.	+	.	ID=id-AngHV1_ORF48-2;Parent=gene-AngHV1_ORF48;Dbxref=GeneID:8683480;gbkey=regulatory;locus_tag=AngHV1_ORF48;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	80367	81840	.	+	.	ID=gene-AngHV1_ORF49;Dbxref=GeneID:8683481;Name=AngHV1_ORF49;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF49
+NC_013668.3	RefSeq	CDS	80367	81056	.	+	0	ID=cds-YP_003358188.1;Parent=gene-AngHV1_ORF49;Dbxref=GenBank:YP_003358188.1,GeneID:8683481;Name=YP_003358188.1;gbkey=CDS;locus_tag=AngHV1_ORF49;product=membrane protein ORF49;protein_id=YP_003358188.1
+NC_013668.3	RefSeq	gene	80989	81840	.	+	.	ID=gene-AngHV1_ORF50;Dbxref=GeneID:8683482;Name=AngHV1_ORF50;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF50
+NC_013668.3	RefSeq	CDS	80989	81741	.	+	0	ID=cds-YP_003358189.2;Parent=gene-AngHV1_ORF50;Dbxref=GenBank:YP_003358189.2,GeneID:8683482;Name=YP_003358189.2;gbkey=CDS;locus_tag=AngHV1_ORF50;product=membrane protein ORF50;protein_id=YP_003358189.2
+NC_013668.3	RefSeq	polyA_site	81840	81840	.	+	.	ID=id-AngHV1_ORF50;Parent=gene-AngHV1_ORF50;Dbxref=GeneID:8683482;Note=ORF49%2C ORF50;gbkey=polyA_site;locus_tag=AngHV1_ORF50
+NC_013668.3	RefSeq	polyA_signal_sequence	81821	81826	.	+	.	ID=id-AngHV1_ORF50-2;Parent=gene-AngHV1_ORF50;Dbxref=GeneID:8683482;Note=ORF49%2C ORF50;gbkey=regulatory;locus_tag=AngHV1_ORF50;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	81849	82741	.	-	.	ID=gene-AngHV1_ORF51;Dbxref=GeneID:8683483;Name=AngHV1_ORF51;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF51
+NC_013668.3	RefSeq	CDS	82022	82741	.	-	0	ID=cds-YP_003358190.2;Parent=gene-AngHV1_ORF51;Dbxref=GenBank:YP_003358190.2,GeneID:8683483;Name=YP_003358190.2;gbkey=CDS;locus_tag=AngHV1_ORF51;product=membrane protein ORF51;protein_id=YP_003358190.2
+NC_013668.3	RefSeq	polyA_site	81849	81849	.	-	.	ID=id-AngHV1_ORF51;Parent=gene-AngHV1_ORF51;Dbxref=GeneID:8683483;gbkey=polyA_site;locus_tag=AngHV1_ORF51
+NC_013668.3	RefSeq	polyA_signal_sequence	81861	81866	.	-	.	ID=id-AngHV1_ORF51-2;Parent=gene-AngHV1_ORF51;Dbxref=GeneID:8683483;gbkey=regulatory;locus_tag=AngHV1_ORF51;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	82815	84956	.	+	.	ID=gene-AngHV1_ORF52;Dbxref=GeneID:8683484;Name=AngHV1_ORF52;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF52
+NC_013668.3	RefSeq	CDS	82815	83933	.	+	0	ID=cds-YP_003358191.1;Parent=gene-AngHV1_ORF52;Dbxref=GenBank:YP_003358191.1,GeneID:8683484;Name=YP_003358191.1;gbkey=CDS;locus_tag=AngHV1_ORF52;product=protein Allo60;protein_id=YP_003358191.1
+NC_013668.3	RefSeq	gene	84043	84956	.	+	.	ID=gene-AngHV1_ORF53;Dbxref=GeneID:8683485;Name=AngHV1_ORF53;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF53
+NC_013668.3	RefSeq	CDS	84043	84846	.	+	0	ID=cds-YP_003358192.1;Parent=gene-AngHV1_ORF53;Dbxref=GenBank:YP_003358192.1,GeneID:8683485;Name=YP_003358192.1;gbkey=CDS;locus_tag=AngHV1_ORF53;product=protein ORF53;protein_id=YP_003358192.1
+NC_013668.3	RefSeq	polyA_site	84956	84956	.	+	.	ID=id-AngHV1_ORF53;Parent=gene-AngHV1_ORF53;Dbxref=GeneID:8683485;Note=ORF52%2C ORF53;gbkey=polyA_site;locus_tag=AngHV1_ORF53
+NC_013668.3	RefSeq	polyA_signal_sequence	84939	84944	.	+	.	ID=id-AngHV1_ORF53-2;Parent=gene-AngHV1_ORF53;Dbxref=GeneID:8683485;Note=ORF52%2C ORF53;gbkey=regulatory;locus_tag=AngHV1_ORF53;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	84986	86178	.	+	.	ID=gene-AngHV1_ORF54;Dbxref=GeneID:8683486;Name=AngHV1_ORF54;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF54
+NC_013668.3	RefSeq	CDS	84986	86056	.	+	0	ID=cds-YP_003358193.1;Parent=gene-AngHV1_ORF54;Dbxref=GenBank:YP_003358193.1,GeneID:8683486;Name=YP_003358193.1;gbkey=CDS;locus_tag=AngHV1_ORF54;product=protein ORF54;protein_id=YP_003358193.1
+NC_013668.3	RefSeq	polyA_site	86178	86178	.	+	.	ID=id-AngHV1_ORF54;Parent=gene-AngHV1_ORF54;Dbxref=GeneID:8683486;gbkey=polyA_site;locus_tag=AngHV1_ORF54
+NC_013668.3	RefSeq	polyA_signal_sequence	86158	86163	.	+	.	ID=id-AngHV1_ORF54-2;Parent=gene-AngHV1_ORF54;Dbxref=GeneID:8683486;gbkey=regulatory;locus_tag=AngHV1_ORF54;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	86174	91392	.	-	.	ID=gene-AngHV1_ORF55;Dbxref=GeneID:8683487;Name=AngHV1_ORF55;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF55
+NC_013668.3	RefSeq	CDS	86230	91392	.	-	0	ID=cds-YP_003358194.1;Parent=gene-AngHV1_ORF55;Dbxref=GenBank:YP_003358194.1,GeneID:8683487;Name=YP_003358194.1;gbkey=CDS;locus_tag=AngHV1_ORF55;product=DNA polymerase catalytic subunit;protein_id=YP_003358194.1
+NC_013668.3	RefSeq	polyA_site	86174	86174	.	-	.	ID=id-AngHV1_ORF55;Parent=gene-AngHV1_ORF55;Dbxref=GeneID:8683487;gbkey=polyA_site;locus_tag=AngHV1_ORF55
+NC_013668.3	RefSeq	polyA_signal_sequence	86190	86195	.	-	.	ID=id-AngHV1_ORF55-2;Parent=gene-AngHV1_ORF55;Dbxref=GeneID:8683487;gbkey=regulatory;locus_tag=AngHV1_ORF55;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	91633	92178	.	+	.	ID=gene-AngHV1_ORF56;Dbxref=GeneID:8683488;Name=AngHV1_ORF56;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF56
+NC_013668.3	RefSeq	CDS	91633	92133	.	+	0	ID=cds-YP_003358195.1;Parent=gene-AngHV1_ORF56;Dbxref=GenBank:YP_003358195.1,GeneID:8683488;Name=YP_003358195.1;gbkey=CDS;locus_tag=AngHV1_ORF56;product=protein ORF56;protein_id=YP_003358195.1
+NC_013668.3	RefSeq	polyA_site	92178	92178	.	+	.	ID=id-AngHV1_ORF56;Parent=gene-AngHV1_ORF56;Dbxref=GeneID:8683488;gbkey=polyA_site;locus_tag=AngHV1_ORF56
+NC_013668.3	RefSeq	polyA_signal_sequence	92159	92164	.	+	.	ID=id-AngHV1_ORF56-2;Parent=gene-AngHV1_ORF56;Dbxref=GeneID:8683488;gbkey=regulatory;locus_tag=AngHV1_ORF56;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	92183	94973	.	-	.	ID=gene-AngHV1_ORF58;Dbxref=GeneID:8683490;Name=AngHV1_ORF58;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF58
+NC_013668.3	RefSeq	CDS	94248	94973	.	-	0	ID=cds-YP_003358197.1;Parent=gene-AngHV1_ORF58;Dbxref=GenBank:YP_003358197.1,GeneID:8683490;Name=YP_003358197.1;gbkey=CDS;locus_tag=AngHV1_ORF58;product=protein ORF58;protein_id=YP_003358197.1
+NC_013668.3	RefSeq	gene	92183	94390	.	-	.	ID=gene-AngHV1_ORF57;Dbxref=GeneID:8683489;Name=AngHV1_ORF57;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF57
+NC_013668.3	RefSeq	CDS	92243	94390	.	-	0	ID=cds-YP_003358196.1;Parent=gene-AngHV1_ORF57;Dbxref=GenBank:YP_003358196.1,GeneID:8683489;Name=YP_003358196.1;gbkey=CDS;locus_tag=AngHV1_ORF57;product=capsid maturation protease;protein_id=YP_003358196.1
+NC_013668.3	RefSeq	CDS	92243	93286	.	-	0	ID=cds-YP_006347576.1;Parent=gene-AngHV1_ORF57;Dbxref=GenBank:YP_006347576.1,GeneID:8683489;Name=YP_006347576.1;gbkey=CDS;locus_tag=AngHV1_ORF57;product=capsid scaffold protein;protein_id=YP_006347576.1
+NC_013668.3	RefSeq	polyA_site	92183	92183	.	-	.	ID=id-AngHV1_ORF57;Parent=gene-AngHV1_ORF57;Dbxref=GeneID:8683489;Note=ORF57%2C ORF57.5%2C ORF58;gbkey=polyA_site;locus_tag=AngHV1_ORF57
+NC_013668.3	RefSeq	polyA_signal_sequence	92197	92202	.	-	.	ID=id-AngHV1_ORF57-2;Parent=gene-AngHV1_ORF57;Dbxref=GeneID:8683489;Note=ORF57%2C ORF57.5%2C ORF58;gbkey=regulatory;locus_tag=AngHV1_ORF57;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	94994	95631	.	+	.	ID=gene-AngHV1_ORF59;Dbxref=GeneID:8683491;Name=AngHV1_ORF59;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF59
+NC_013668.3	RefSeq	CDS	94994	95560	.	+	0	ID=cds-YP_003358198.1;Parent=gene-AngHV1_ORF59;Dbxref=GenBank:YP_003358198.1,GeneID:8683491;Name=YP_003358198.1;gbkey=CDS;locus_tag=AngHV1_ORF59;product=protein ORF59;protein_id=YP_003358198.1
+NC_013668.3	RefSeq	polyA_site	95631	95631	.	+	.	ID=id-AngHV1_ORF59;Parent=gene-AngHV1_ORF59;Dbxref=GeneID:8683491;gbkey=polyA_site;locus_tag=AngHV1_ORF59
+NC_013668.3	RefSeq	polyA_signal_sequence	95613	95618	.	+	.	ID=id-AngHV1_ORF59-2;Parent=gene-AngHV1_ORF59;Dbxref=GeneID:8683491;gbkey=regulatory;locus_tag=AngHV1_ORF59;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	95585	98565	.	-	.	ID=gene-AngHV1_ORF62;Dbxref=GeneID:8683494;Name=AngHV1_ORF62;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF62
+NC_013668.3	RefSeq	CDS	97861	98565	.	-	0	ID=cds-YP_003358201.1;Parent=gene-AngHV1_ORF62;Dbxref=GenBank:YP_003358201.1,GeneID:8683494;Name=YP_003358201.1;gbkey=CDS;locus_tag=AngHV1_ORF62;product=protein ORF62;protein_id=YP_003358201.1
+NC_013668.3	RefSeq	gene	95585	97751	.	-	.	ID=gene-AngHV1_ORF61;Dbxref=GeneID:8683493;Name=AngHV1_ORF61;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF61
+NC_013668.3	RefSeq	CDS	96318	97751	.	-	0	ID=cds-YP_003358200.1;Parent=gene-AngHV1_ORF61;Dbxref=GenBank:YP_003358200.1,GeneID:8683493;Name=YP_003358200.1;gbkey=CDS;locus_tag=AngHV1_ORF61;product=protein ORF61;protein_id=YP_003358200.1
+NC_013668.3	RefSeq	gene	95585	96187	.	-	.	ID=gene-AngHV1_ORF60;Dbxref=GeneID:8683492;Name=AngHV1_ORF60;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF60
+NC_013668.3	RefSeq	CDS	95672	96187	.	-	0	ID=cds-YP_003358199.1;Parent=gene-AngHV1_ORF60;Dbxref=GenBank:YP_003358199.1,GeneID:8683492;Name=YP_003358199.1;gbkey=CDS;locus_tag=AngHV1_ORF60;product=protein ORF60;protein_id=YP_003358199.1
+NC_013668.3	RefSeq	polyA_site	95585	95585	.	-	.	ID=id-AngHV1_ORF60;Parent=gene-AngHV1_ORF60;Dbxref=GeneID:8683492;Note=ORF60%2C ORF61%2C ORF62;gbkey=polyA_site;locus_tag=AngHV1_ORF60
+NC_013668.3	RefSeq	polyA_site	95638	95638	.	-	.	ID=id-AngHV1_ORF60-2;Parent=gene-AngHV1_ORF60;Dbxref=GeneID:8683492;Note=ORF60%2C ORF61%2C ORF62;gbkey=polyA_site;locus_tag=AngHV1_ORF60
+NC_013668.3	RefSeq	polyA_signal_sequence	95598	95603	.	-	.	ID=id-AngHV1_ORF60-3;Parent=gene-AngHV1_ORF60;Dbxref=GeneID:8683492;Note=ORF60%2C ORF61%2C ORF62;gbkey=regulatory;locus_tag=AngHV1_ORF60;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	polyA_signal_sequence	95651	95656	.	-	.	ID=id-AngHV1_ORF60-4;Parent=gene-AngHV1_ORF60;Dbxref=GeneID:8683492;Note=ORF60%2C ORF61%2C ORF62;gbkey=regulatory;locus_tag=AngHV1_ORF60;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	98571	99973	.	+	.	ID=gene-AngHV1_ORF63;Dbxref=GeneID:8683495;Name=AngHV1_ORF63;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF63
+NC_013668.3	RefSeq	CDS	98571	99263	.	+	0	ID=cds-YP_003358202.1;Parent=gene-AngHV1_ORF63;Dbxref=GenBank:YP_003358202.1,GeneID:8683495;Name=YP_003358202.1;gbkey=CDS;locus_tag=AngHV1_ORF63;product=protein ORF63;protein_id=YP_003358202.1
+NC_013668.3	RefSeq	gene	99221	99973	.	+	.	ID=gene-AngHV1_ORF64;Dbxref=GeneID:8683496;Name=AngHV1_ORF64;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF64
+NC_013668.3	RefSeq	CDS	99221	99949	.	+	0	ID=cds-YP_003358203.1;Parent=gene-AngHV1_ORF64;Dbxref=GenBank:YP_003358203.1,GeneID:8683496;Name=YP_003358203.1;gbkey=CDS;locus_tag=AngHV1_ORF64;product=membrane protein ORF64;protein_id=YP_003358203.1
+NC_013668.3	RefSeq	polyA_site	99973	99973	.	+	.	ID=id-AngHV1_ORF64;Parent=gene-AngHV1_ORF64;Dbxref=GeneID:8683496;Note=ORF63%2C ORF64;gbkey=polyA_site;locus_tag=AngHV1_ORF64
+NC_013668.3	RefSeq	polyA_signal_sequence	99950	99955	.	+	.	ID=id-AngHV1_ORF64-2;Parent=gene-AngHV1_ORF64;Dbxref=GeneID:8683496;Note=ORF63%2C ORF64;gbkey=regulatory;locus_tag=AngHV1_ORF64;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	99977	102284	.	-	.	ID=gene-AngHV1_ORF65;Dbxref=GeneID:8683497;Name=AngHV1_ORF65;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF65
+NC_013668.3	RefSeq	CDS	100032	102248	.	-	0	ID=cds-YP_003358204.2;Parent=gene-AngHV1_ORF65;Dbxref=GenBank:YP_003358204.2,GeneID:8683497;Name=YP_003358204.2;Note=TNFR family;gbkey=CDS;locus_tag=AngHV1_ORF65;product=membrane protein ORF65;protein_id=YP_003358204.2
+NC_013668.3	RefSeq	polyA_site	99977	99977	.	-	.	ID=id-AngHV1_ORF65;Parent=gene-AngHV1_ORF65;Dbxref=GeneID:8683497;gbkey=polyA_site;locus_tag=AngHV1_ORF65
+NC_013668.3	RefSeq	polyA_signal_sequence	99998	100003	.	-	.	ID=id-AngHV1_ORF65-2;Parent=gene-AngHV1_ORF65;Dbxref=GeneID:8683497;gbkey=regulatory;locus_tag=AngHV1_ORF65;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	102577	103861	.	+	.	ID=gene-AngHV1_ORF66;Dbxref=GeneID:8683498;Name=AngHV1_ORF66;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF66
+NC_013668.3	RefSeq	CDS	102577	103752	.	+	0	ID=cds-YP_003358205.1;Parent=gene-AngHV1_ORF66;Dbxref=GenBank:YP_003358205.1,GeneID:8683498;Name=YP_003358205.1;gbkey=CDS;locus_tag=AngHV1_ORF66;product=membrane protein ORF66;protein_id=YP_003358205.1
+NC_013668.3	RefSeq	polyA_site	103861	103861	.	+	.	ID=id-AngHV1_ORF66;Parent=gene-AngHV1_ORF66;Dbxref=GeneID:8683498;gbkey=polyA_site;locus_tag=AngHV1_ORF66
+NC_013668.3	RefSeq	polyA_signal_sequence	103842	103847	.	+	.	ID=id-AngHV1_ORF66-2;Parent=gene-AngHV1_ORF66;Dbxref=GeneID:8683498;gbkey=regulatory;locus_tag=AngHV1_ORF66;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	103995	108295	.	+	.	ID=gene-AngHV1_ORF67;Dbxref=GeneID:8683499;Name=AngHV1_ORF67;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF67
+NC_013668.3	RefSeq	CDS	103995	108197	.	+	0	ID=cds-YP_003358206.1;Parent=gene-AngHV1_ORF67;Dbxref=GenBank:YP_003358206.1,GeneID:8683499;Name=YP_003358206.1;gbkey=CDS;locus_tag=AngHV1_ORF67;product=membrane protein ORF67;protein_id=YP_003358206.1
+NC_013668.3	RefSeq	polyA_site	108295	108295	.	+	.	ID=id-AngHV1_ORF67;Parent=gene-AngHV1_ORF67;Dbxref=GeneID:8683499;gbkey=polyA_site;locus_tag=AngHV1_ORF67
+NC_013668.3	RefSeq	polyA_signal_sequence	108278	108283	.	+	.	ID=id-AngHV1_ORF67-2;Parent=gene-AngHV1_ORF67;Dbxref=GeneID:8683499;gbkey=regulatory;locus_tag=AngHV1_ORF67;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	108255	109144	.	-	.	ID=gene-AngHV1_ORF68;Dbxref=GeneID:8683500;Name=AngHV1_ORF68;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF68
+NC_013668.3	RefSeq	CDS	108320	109144	.	-	0	ID=cds-YP_003358207.1;Parent=gene-AngHV1_ORF68;Dbxref=GenBank:YP_003358207.1,GeneID:8683500;Name=YP_003358207.1;Note=ORF68 family;gbkey=CDS;locus_tag=AngHV1_ORF68;product=protein ORF68;protein_id=YP_003358207.1
+NC_013668.3	RefSeq	polyA_site	108255	108255	.	-	.	ID=id-AngHV1_ORF68;Parent=gene-AngHV1_ORF68;Dbxref=GeneID:8683500;gbkey=polyA_site;locus_tag=AngHV1_ORF68
+NC_013668.3	RefSeq	polyA_signal_sequence	108269	108274	.	-	.	ID=id-AngHV1_ORF68-2;Parent=gene-AngHV1_ORF68;Dbxref=GeneID:8683500;gbkey=regulatory;locus_tag=AngHV1_ORF68;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	109204	110200	.	-	.	ID=gene-AngHV1_ORF70;Dbxref=GeneID:8683502;Name=AngHV1_ORF70;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF70
+NC_013668.3	RefSeq	CDS	109811	110200	.	-	0	ID=cds-YP_003358209.1;Parent=gene-AngHV1_ORF70;Dbxref=GenBank:YP_003358209.1,GeneID:8683502;Name=YP_003358209.1;Note=ORF68 family;gbkey=CDS;locus_tag=AngHV1_ORF70;product=protein ORF70;protein_id=YP_003358209.1
+NC_013668.3	RefSeq	gene	109204	109733	.	-	.	ID=gene-AngHV1_ORF69;Dbxref=GeneID:8683501;Name=AngHV1_ORF69;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF69
+NC_013668.3	RefSeq	CDS	109296	109733	.	-	0	ID=cds-YP_003358208.2;Parent=gene-AngHV1_ORF69;Dbxref=GenBank:YP_003358208.2,GeneID:8683501;Name=YP_003358208.2;Note=ORF68 family;gbkey=CDS;locus_tag=AngHV1_ORF69;product=protein ORF69;protein_id=YP_003358208.2
+NC_013668.3	RefSeq	polyA_site	109204	109204	.	-	.	ID=id-AngHV1_ORF69;Parent=gene-AngHV1_ORF69;Dbxref=GeneID:8683501;Note=ORF69%2C ORF70;gbkey=polyA_site;locus_tag=AngHV1_ORF69
+NC_013668.3	RefSeq	polyA_signal_sequence	109218	109223	.	-	.	ID=id-AngHV1_ORF69-2;Parent=gene-AngHV1_ORF69;Dbxref=GeneID:8683501;Note=ORF69%2C ORF70;gbkey=regulatory;locus_tag=AngHV1_ORF69;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	110348	111734	.	-	.	ID=gene-AngHV1_ORF71;Dbxref=GeneID:8683503;Name=AngHV1_ORF71;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF71
+NC_013668.3	RefSeq	CDS	111668	111734	.	-	0	ID=cds-YP_003358210.2;Parent=gene-AngHV1_ORF71;Dbxref=GenBank:YP_003358210.2,GeneID:8683503;Name=YP_003358210.2;gbkey=CDS;locus_tag=AngHV1_ORF71;product=membrane protein ORF71;protein_id=YP_003358210.2
+NC_013668.3	RefSeq	CDS	111311	111583	.	-	2	ID=cds-YP_003358210.2;Parent=gene-AngHV1_ORF71;Dbxref=GenBank:YP_003358210.2,GeneID:8683503;Name=YP_003358210.2;gbkey=CDS;locus_tag=AngHV1_ORF71;product=membrane protein ORF71;protein_id=YP_003358210.2
+NC_013668.3	RefSeq	CDS	110381	111234	.	-	2	ID=cds-YP_003358210.2;Parent=gene-AngHV1_ORF71;Dbxref=GenBank:YP_003358210.2,GeneID:8683503;Name=YP_003358210.2;gbkey=CDS;locus_tag=AngHV1_ORF71;product=membrane protein ORF71;protein_id=YP_003358210.2
+NC_013668.3	RefSeq	polyA_site	110348	110348	.	-	.	ID=id-AngHV1_ORF71;Parent=gene-AngHV1_ORF71;Dbxref=GeneID:8683503;gbkey=polyA_site;locus_tag=AngHV1_ORF71
+NC_013668.3	RefSeq	polyA_signal_sequence	110365	110370	.	-	.	ID=id-AngHV1_ORF71-2;Parent=gene-AngHV1_ORF71;Dbxref=GeneID:8683503;Note=rare variant;gbkey=regulatory;locus_tag=AngHV1_ORF71;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	111957	115274	.	-	.	ID=gene-AngHV1_ORF74;Dbxref=GeneID:8683506;Name=AngHV1_ORF74;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF74
+NC_013668.3	RefSeq	CDS	112599	115274	.	-	0	ID=cds-YP_003358213.1;Parent=gene-AngHV1_ORF74;Dbxref=GenBank:YP_003358213.1,GeneID:8683506;Name=YP_003358213.1;gbkey=CDS;locus_tag=AngHV1_ORF74;product=protein ORF74;protein_id=YP_003358213.1
+NC_013668.3	RefSeq	gene	111957	112473	.	-	.	ID=gene-AngHV1_ORF73;Dbxref=GeneID:8683505;Name=AngHV1_ORF73;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF73
+NC_013668.3	RefSeq	CDS	112036	112473	.	-	0	ID=cds-YP_003358212.1;Parent=gene-AngHV1_ORF73;Dbxref=GenBank:YP_003358212.1,GeneID:8683505;Name=YP_003358212.1;Note=ORF68 family;gbkey=CDS;locus_tag=AngHV1_ORF73;product=protein ORF73;protein_id=YP_003358212.1
+NC_013668.3	RefSeq	polyA_site	111957	111957	.	-	.	ID=id-AngHV1_ORF73;Parent=gene-AngHV1_ORF73;Dbxref=GeneID:8683505;Note=ORF73%2C ORF74;gbkey=polyA_site;locus_tag=AngHV1_ORF73
+NC_013668.3	RefSeq	polyA_signal_sequence	111973	111978	.	-	.	ID=id-AngHV1_ORF73-2;Parent=gene-AngHV1_ORF73;Dbxref=GeneID:8683505;Note=ORF73%2C ORF74;gbkey=regulatory;locus_tag=AngHV1_ORF73;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	115506	116518	.	+	.	ID=gene-AngHV1_ORF75;Dbxref=GeneID:8683507;Name=AngHV1_ORF75;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF75
+NC_013668.3	RefSeq	CDS	115506	116411	.	+	0	ID=cds-YP_003358214.1;Parent=gene-AngHV1_ORF75;Dbxref=GenBank:YP_003358214.1,GeneID:8683507;Name=YP_003358214.1;gbkey=CDS;locus_tag=AngHV1_ORF75;product=thymidylate synthase;protein_id=YP_003358214.1
+NC_013668.3	RefSeq	polyA_site	116447	116447	.	+	.	ID=id-AngHV1_ORF75;Parent=gene-AngHV1_ORF75;Dbxref=GeneID:8683507;gbkey=polyA_site;locus_tag=AngHV1_ORF75
+NC_013668.3	RefSeq	polyA_site	116518	116518	.	+	.	ID=id-AngHV1_ORF75-2;Parent=gene-AngHV1_ORF75;Dbxref=GeneID:8683507;gbkey=polyA_site;locus_tag=AngHV1_ORF75
+NC_013668.3	RefSeq	polyA_signal_sequence	116428	116433	.	+	.	ID=id-AngHV1_ORF75-3;Parent=gene-AngHV1_ORF75;Dbxref=GeneID:8683507;gbkey=regulatory;locus_tag=AngHV1_ORF75;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	polyA_signal_sequence	116498	116503	.	+	.	ID=id-AngHV1_ORF75-4;Parent=gene-AngHV1_ORF75;Dbxref=GeneID:8683507;gbkey=regulatory;locus_tag=AngHV1_ORF75;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	116452	117418	.	-	.	ID=gene-AngHV1_ORF76;Dbxref=GeneID:8683508;Name=AngHV1_ORF76;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF76
+NC_013668.3	RefSeq	CDS	116561	117418	.	-	0	ID=cds-YP_003358215.1;Parent=gene-AngHV1_ORF76;Dbxref=GenBank:YP_003358215.1,GeneID:8683508;Name=YP_003358215.1;gbkey=CDS;locus_tag=AngHV1_ORF76;product=protein ORF76;protein_id=YP_003358215.1
+NC_013668.3	RefSeq	polyA_site	116452	116452	.	-	.	ID=id-AngHV1_ORF76;Parent=gene-AngHV1_ORF76;Dbxref=GeneID:8683508;gbkey=polyA_site;locus_tag=AngHV1_ORF76
+NC_013668.3	RefSeq	polyA_site	116523	116523	.	-	.	ID=id-AngHV1_ORF76-2;Parent=gene-AngHV1_ORF76;Dbxref=GeneID:8683508;gbkey=polyA_site;locus_tag=AngHV1_ORF76
+NC_013668.3	RefSeq	polyA_signal_sequence	116466	116471	.	-	.	ID=id-AngHV1_ORF76-3;Parent=gene-AngHV1_ORF76;Dbxref=GeneID:8683508;gbkey=regulatory;locus_tag=AngHV1_ORF76;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	polyA_signal_sequence	116537	116542	.	-	.	ID=id-AngHV1_ORF76-4;Parent=gene-AngHV1_ORF76;Dbxref=GeneID:8683508;gbkey=regulatory;locus_tag=AngHV1_ORF76;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	117520	118722	.	-	.	ID=gene-AngHV1_ORF78;Dbxref=GeneID:8683510;Name=AngHV1_ORF78;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF78
+NC_013668.3	RefSeq	CDS	118273	118722	.	-	0	ID=cds-YP_003358217.1;Parent=gene-AngHV1_ORF78;Dbxref=GenBank:YP_003358217.1,GeneID:8683510;Name=YP_003358217.1;gbkey=CDS;locus_tag=AngHV1_ORF78;product=membrane protein ORF78;protein_id=YP_003358217.1
+NC_013668.3	RefSeq	gene	117520	118272	.	-	.	ID=gene-AngHV1_ORF77;Dbxref=GeneID:8683509;Name=AngHV1_ORF77;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF77
+NC_013668.3	RefSeq	CDS	117607	118272	.	-	0	ID=cds-YP_003358216.2;Parent=gene-AngHV1_ORF77;Dbxref=GenBank:YP_003358216.2,GeneID:8683509;Name=YP_003358216.2;gbkey=CDS;locus_tag=AngHV1_ORF77;product=thymidylate kinase;protein_id=YP_003358216.2
+NC_013668.3	RefSeq	polyA_site	117520	117520	.	-	.	ID=id-AngHV1_ORF77;Parent=gene-AngHV1_ORF77;Dbxref=GeneID:8683509;Note=ORF77%2C ORF78;gbkey=polyA_site;locus_tag=AngHV1_ORF77
+NC_013668.3	RefSeq	polyA_signal_sequence	117536	117541	.	-	.	ID=id-AngHV1_ORF77-2;Parent=gene-AngHV1_ORF77;Dbxref=GeneID:8683509;Note=ORF77%2C ORF78;gbkey=regulatory;locus_tag=AngHV1_ORF77;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	118872	119726	.	+	.	ID=gene-AngHV1_ORF79;Dbxref=GeneID:8683511;Name=AngHV1_ORF79;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF79
+NC_013668.3	RefSeq	CDS	118872	119714	.	+	0	ID=cds-YP_003358218.1;Parent=gene-AngHV1_ORF79;Dbxref=GenBank:YP_003358218.1,GeneID:8683511;Name=YP_003358218.1;Note=dGK family;gbkey=CDS;locus_tag=AngHV1_ORF79;product=deoxyguanosine kinase 1;protein_id=YP_003358218.1
+NC_013668.3	RefSeq	polyA_site	119726	119726	.	+	.	ID=id-AngHV1_ORF79;Parent=gene-AngHV1_ORF79;Dbxref=GeneID:8683511;gbkey=polyA_site;locus_tag=AngHV1_ORF79
+NC_013668.3	RefSeq	polyA_signal_sequence	119710	119715	.	+	.	ID=id-AngHV1_ORF79-2;Parent=gene-AngHV1_ORF79;Dbxref=GeneID:8683511;gbkey=regulatory;locus_tag=AngHV1_ORF79;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	119734	121938	.	-	.	ID=gene-AngHV1_ORF80;Dbxref=GeneID:8683512;Name=AngHV1_ORF80;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF80
+NC_013668.3	RefSeq	CDS	119797	121938	.	-	0	ID=cds-YP_003358219.1;Parent=gene-AngHV1_ORF80;Dbxref=GenBank:YP_003358219.1,GeneID:8683512;Name=YP_003358219.1;Note=TNFR family;gbkey=CDS;locus_tag=AngHV1_ORF80;product=membrane protein ORF80;protein_id=YP_003358219.1
+NC_013668.3	RefSeq	polyA_site	119734	119734	.	-	.	ID=id-AngHV1_ORF80;Parent=gene-AngHV1_ORF80;Dbxref=GeneID:8683512;gbkey=polyA_site;locus_tag=AngHV1_ORF80
+NC_013668.3	RefSeq	polyA_signal_sequence	119747	119752	.	-	.	ID=id-AngHV1_ORF80-2;Parent=gene-AngHV1_ORF80;Dbxref=GeneID:8683512;gbkey=regulatory;locus_tag=AngHV1_ORF80;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	122033	125774	.	-	.	ID=gene-AngHV1_ORF82;Dbxref=GeneID:8683514;Name=AngHV1_ORF82;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF82
+NC_013668.3	RefSeq	CDS	123459	125774	.	-	0	ID=cds-YP_003358221.1;Parent=gene-AngHV1_ORF82;Dbxref=GenBank:YP_003358221.1,GeneID:8683514;Name=YP_003358221.1;gbkey=CDS;locus_tag=AngHV1_ORF82;product=protein Allo54;protein_id=YP_003358221.1
+NC_013668.3	RefSeq	gene	122033	123499	.	-	.	ID=gene-AngHV1_ORF81;Dbxref=GeneID:8683513;Name=AngHV1_ORF81;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF81
+NC_013668.3	RefSeq	CDS	122108	123499	.	-	0	ID=cds-YP_003358220.1;Parent=gene-AngHV1_ORF81;Dbxref=GenBank:YP_003358220.1,GeneID:8683513;Name=YP_003358220.1;gbkey=CDS;locus_tag=AngHV1_ORF81;product=protein ORF81;protein_id=YP_003358220.1
+NC_013668.3	RefSeq	polyA_site	122033	122033	.	-	.	ID=id-AngHV1_ORF81;Parent=gene-AngHV1_ORF81;Dbxref=GeneID:8683513;Note=ORF81%2C ORF82;gbkey=polyA_site;locus_tag=AngHV1_ORF81
+NC_013668.3	RefSeq	polyA_signal_sequence	122048	122053	.	-	.	ID=id-AngHV1_ORF81-2;Parent=gene-AngHV1_ORF81;Dbxref=GeneID:8683513;Note=ORF81%2C ORF82;gbkey=regulatory;locus_tag=AngHV1_ORF81;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	125882	136580	.	+	.	ID=gene-AngHV1_ORF83;Dbxref=GeneID:8683515;Name=AngHV1_ORF83;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF83
+NC_013668.3	RefSeq	CDS	125882	136060	.	+	0	ID=cds-YP_003358222.1;Parent=gene-AngHV1_ORF83;Dbxref=GenBank:YP_003358222.1,GeneID:8683515;Name=YP_003358222.1;gbkey=CDS;locus_tag=AngHV1_ORF83;product=protein ORF83;protein_id=YP_003358222.1
+NC_013668.3	RefSeq	gene	136039	136580	.	+	.	ID=gene-AngHV1_ORF84;Dbxref=GeneID:8683516;Name=AngHV1_ORF84;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF84
+NC_013668.3	RefSeq	CDS	136039	136548	.	+	0	ID=cds-YP_003358223.1;Parent=gene-AngHV1_ORF84;Dbxref=GenBank:YP_003358223.1,GeneID:8683516;Name=YP_003358223.1;gbkey=CDS;locus_tag=AngHV1_ORF84;product=protein ORF84;protein_id=YP_003358223.1
+NC_013668.3	RefSeq	polyA_site	136580	136580	.	+	.	ID=id-AngHV1_ORF84;Parent=gene-AngHV1_ORF84;Dbxref=GeneID:8683516;Note=ORF83%2C ORF84;gbkey=polyA_site;locus_tag=AngHV1_ORF84
+NC_013668.3	RefSeq	polyA_signal_sequence	136562	136567	.	+	.	ID=id-AngHV1_ORF84-2;Parent=gene-AngHV1_ORF84;Dbxref=GeneID:8683516;Note=ORF83%2C ORF84;gbkey=regulatory;locus_tag=AngHV1_ORF84;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	136575	138168	.	-	.	ID=gene-AngHV1_ORF85;Dbxref=GeneID:8683517;Name=AngHV1_ORF85;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF85
+NC_013668.3	RefSeq	CDS	136675	138168	.	-	0	ID=cds-YP_003358224.1;Parent=gene-AngHV1_ORF85;Dbxref=GenBank:YP_003358224.1,GeneID:8683517;Name=YP_003358224.1;gbkey=CDS;locus_tag=AngHV1_ORF85;product=protein ORF85;protein_id=YP_003358224.1
+NC_013668.3	RefSeq	polyA_site	136575	136575	.	-	.	ID=id-AngHV1_ORF85;Parent=gene-AngHV1_ORF85;Dbxref=GeneID:8683517;gbkey=polyA_site;locus_tag=AngHV1_ORF85
+NC_013668.3	RefSeq	polyA_signal_sequence	136589	136594	.	-	.	ID=id-AngHV1_ORF85-2;Parent=gene-AngHV1_ORF85;Dbxref=GeneID:8683517;gbkey=regulatory;locus_tag=AngHV1_ORF85;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	138396	142583	.	+	.	ID=gene-AngHV1_ORF86;Dbxref=GeneID:8683518;Name=AngHV1_ORF86;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF86
+NC_013668.3	RefSeq	CDS	138396	142490	.	+	0	ID=cds-YP_003358225.1;Parent=gene-AngHV1_ORF86;Dbxref=GenBank:YP_003358225.1,GeneID:8683518;Name=YP_003358225.1;gbkey=CDS;locus_tag=AngHV1_ORF86;product=protein ORF86;protein_id=YP_003358225.1
+NC_013668.3	RefSeq	polyA_site	142583	142583	.	+	.	ID=id-AngHV1_ORF86;Parent=gene-AngHV1_ORF86;Dbxref=GeneID:8683518;gbkey=polyA_site;locus_tag=AngHV1_ORF86
+NC_013668.3	RefSeq	polyA_signal_sequence	142564	142569	.	+	.	ID=id-AngHV1_ORF86-2;Parent=gene-AngHV1_ORF86;Dbxref=GeneID:8683518;gbkey=regulatory;locus_tag=AngHV1_ORF86;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	142850	145080	.	+	.	ID=gene-AngHV1_ORF87;Dbxref=GeneID:8683519;Name=AngHV1_ORF87;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF87
+NC_013668.3	RefSeq	CDS	142850	144976	.	+	0	ID=cds-YP_003358226.1;Parent=gene-AngHV1_ORF87;Dbxref=GenBank:YP_003358226.1,GeneID:8683519;Name=YP_003358226.1;Note=PK family;gbkey=CDS;locus_tag=AngHV1_ORF87;product=protein ORF87;protein_id=YP_003358226.1
+NC_013668.3	RefSeq	polyA_site	145080	145080	.	+	.	ID=id-AngHV1_ORF87;Parent=gene-AngHV1_ORF87;Dbxref=GeneID:8683519;gbkey=polyA_site;locus_tag=AngHV1_ORF87
+NC_013668.3	RefSeq	polyA_signal_sequence	145065	145070	.	+	.	ID=id-AngHV1_ORF87-2;Parent=gene-AngHV1_ORF87;Dbxref=GeneID:8683519;gbkey=regulatory;locus_tag=AngHV1_ORF87;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	145410	148648	.	-	.	ID=gene-AngHV1_ORF89;Dbxref=GeneID:8683521;Name=AngHV1_ORF89;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF89
+NC_013668.3	RefSeq	CDS	147044	148648	.	-	0	ID=cds-YP_003358228.1;Parent=gene-AngHV1_ORF89;Dbxref=GenBank:YP_003358228.1,GeneID:8683521;Name=YP_003358228.1;gbkey=CDS;locus_tag=AngHV1_ORF89;product=protein ORF89;protein_id=YP_003358228.1
+NC_013668.3	RefSeq	gene	145410	147111	.	-	.	ID=gene-AngHV1_ORF88;Dbxref=GeneID:8683520;Name=AngHV1_ORF88;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF88
+NC_013668.3	RefSeq	CDS	145447	147111	.	-	0	ID=cds-YP_003358227.1;Parent=gene-AngHV1_ORF88;Dbxref=GenBank:YP_003358227.1,GeneID:8683520;Name=YP_003358227.1;gbkey=CDS;locus_tag=AngHV1_ORF88;product=protein ORF88;protein_id=YP_003358227.1
+NC_013668.3	RefSeq	polyA_site	145410	145410	.	-	.	ID=id-AngHV1_ORF88;Parent=gene-AngHV1_ORF88;Dbxref=GeneID:8683520;Note=ORF88%2C ORF89;gbkey=polyA_site;locus_tag=AngHV1_ORF88
+NC_013668.3	RefSeq	polyA_signal_sequence	145423	145428	.	-	.	ID=id-AngHV1_ORF88-2;Parent=gene-AngHV1_ORF88;Dbxref=GeneID:8683520;Note=ORF88%2C ORF89;gbkey=regulatory;locus_tag=AngHV1_ORF88;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	148814	149465	.	-	.	ID=gene-AngHV1_ORF90;Dbxref=GeneID:8683522;Name=AngHV1_ORF90;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF90
+NC_013668.3	RefSeq	CDS	149349	149465	.	-	0	ID=cds-YP_003358229.2;Parent=gene-AngHV1_ORF90;Dbxref=GenBank:YP_003358229.2,GeneID:8683522;Name=YP_003358229.2;gbkey=CDS;locus_tag=AngHV1_ORF90;product=nucleoside diphosphate kinase;protein_id=YP_003358229.2
+NC_013668.3	RefSeq	CDS	148854	149249	.	-	0	ID=cds-YP_003358229.2;Parent=gene-AngHV1_ORF90;Dbxref=GenBank:YP_003358229.2,GeneID:8683522;Name=YP_003358229.2;gbkey=CDS;locus_tag=AngHV1_ORF90;product=nucleoside diphosphate kinase;protein_id=YP_003358229.2
+NC_013668.3	RefSeq	polyA_site	148814	148814	.	-	.	ID=id-AngHV1_ORF90;Parent=gene-AngHV1_ORF90;Dbxref=GeneID:8683522;gbkey=polyA_site;locus_tag=AngHV1_ORF90
+NC_013668.3	RefSeq	polyA_signal_sequence	148825	148830	.	-	.	ID=id-AngHV1_ORF90-2;Parent=gene-AngHV1_ORF90;Dbxref=GeneID:8683522;gbkey=regulatory;locus_tag=AngHV1_ORF90;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	149527	152499	.	+	.	ID=gene-AngHV1_ORF91;Dbxref=GeneID:8683523;Name=AngHV1_ORF91;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF91
+NC_013668.3	RefSeq	CDS	149527	152349	.	+	0	ID=cds-YP_003358230.1;Parent=gene-AngHV1_ORF91;Dbxref=GenBank:YP_003358230.1,GeneID:8683523;Name=YP_003358230.1;Note=PK family;gbkey=CDS;locus_tag=AngHV1_ORF91;product=protein ORF91;protein_id=YP_003358230.1
+NC_013668.3	RefSeq	polyA_site	152499	152499	.	+	.	ID=id-AngHV1_ORF91;Parent=gene-AngHV1_ORF91;Dbxref=GeneID:8683523;gbkey=polyA_site;locus_tag=AngHV1_ORF91
+NC_013668.3	RefSeq	polyA_signal_sequence	152473	152478	.	+	.	ID=id-AngHV1_ORF91-2;Parent=gene-AngHV1_ORF91;Dbxref=GeneID:8683523;gbkey=regulatory;locus_tag=AngHV1_ORF91;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	152529	155002	.	+	.	ID=gene-AngHV1_ORF92;Dbxref=GeneID:8683524;Name=AngHV1_ORF92;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF92
+NC_013668.3	RefSeq	CDS	152529	154280	.	+	0	ID=cds-YP_003358231.2;Parent=gene-AngHV1_ORF92;Dbxref=GenBank:YP_003358231.2,GeneID:8683524;Name=YP_003358231.2;gbkey=CDS;locus_tag=AngHV1_ORF92;product=protein ORF92;protein_id=YP_003358231.2
+NC_013668.3	RefSeq	gene	154441	155002	.	+	.	ID=gene-AngHV1_ORF92A;Dbxref=GeneID:12930109;Name=AngHV1_ORF92A;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF92A
+NC_013668.3	RefSeq	CDS	154441	154521	.	+	0	ID=cds-YP_006347577.1;Parent=gene-AngHV1_ORF92A;Dbxref=GenBank:YP_006347577.1,GeneID:12930109;Name=YP_006347577.1;gbkey=CDS;locus_tag=AngHV1_ORF92A;product=membrane protein ORF92A;protein_id=YP_006347577.1
+NC_013668.3	RefSeq	CDS	154652	154894	.	+	0	ID=cds-YP_006347577.1;Parent=gene-AngHV1_ORF92A;Dbxref=GenBank:YP_006347577.1,GeneID:12930109;Name=YP_006347577.1;gbkey=CDS;locus_tag=AngHV1_ORF92A;product=membrane protein ORF92A;protein_id=YP_006347577.1
+NC_013668.3	RefSeq	polyA_site	155002	155002	.	+	.	ID=id-AngHV1_ORF92A;Parent=gene-AngHV1_ORF92A;Dbxref=GeneID:12930109;Note=ORF92%2C ORF92A;gbkey=polyA_site;locus_tag=AngHV1_ORF92A
+NC_013668.3	RefSeq	polyA_signal_sequence	154980	154985	.	+	.	ID=id-AngHV1_ORF92A-2;Parent=gene-AngHV1_ORF92A;Dbxref=GeneID:12930109;Note=ORF92%2C ORF92A;gbkey=regulatory;locus_tag=AngHV1_ORF92A;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	155073	155830	.	+	.	ID=gene-AngHV1_ORF92B;Dbxref=GeneID:12930110;Name=AngHV1_ORF92B;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF92B
+NC_013668.3	RefSeq	CDS	155073	155777	.	+	0	ID=cds-YP_006347578.1;Parent=gene-AngHV1_ORF92B;Dbxref=GenBank:YP_006347578.1,GeneID:12930110;Name=YP_006347578.1;gbkey=CDS;locus_tag=AngHV1_ORF92B;product=protein ORF92B;protein_id=YP_006347578.1
+NC_013668.3	RefSeq	polyA_site	155830	155830	.	+	.	ID=id-AngHV1_ORF92B;Parent=gene-AngHV1_ORF92B;Dbxref=GeneID:12930110;gbkey=polyA_site;locus_tag=AngHV1_ORF92B
+NC_013668.3	RefSeq	polyA_signal_sequence	155812	155817	.	+	.	ID=id-AngHV1_ORF92B-2;Parent=gene-AngHV1_ORF92B;Dbxref=GeneID:12930110;gbkey=regulatory;locus_tag=AngHV1_ORF92B;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	155869	158264	.	+	.	ID=gene-AngHV1_ORF93;Dbxref=GeneID:8683525;Name=AngHV1_ORF93;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF93
+NC_013668.3	RefSeq	CDS	155869	156864	.	+	0	ID=cds-YP_003358232.1;Parent=gene-AngHV1_ORF93;Dbxref=GenBank:YP_003358232.1,GeneID:8683525;Name=YP_003358232.1;gbkey=CDS;locus_tag=AngHV1_ORF93;product=membrane protein ORF93;protein_id=YP_003358232.1
+NC_013668.3	RefSeq	gene	157083	158264	.	+	.	ID=gene-AngHV1_ORF94;Dbxref=GeneID:8683526;Name=AngHV1_ORF94;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF94
+NC_013668.3	RefSeq	CDS	157083	158165	.	+	0	ID=cds-YP_003358233.2;Parent=gene-AngHV1_ORF94;Dbxref=GenBank:YP_003358233.2,GeneID:8683526;Name=YP_003358233.2;gbkey=CDS;locus_tag=AngHV1_ORF94;product=membrane protein ORF94;protein_id=YP_003358233.2
+NC_013668.3	RefSeq	polyA_site	158264	158264	.	+	.	ID=id-AngHV1_ORF94;Parent=gene-AngHV1_ORF94;Dbxref=GeneID:8683526;Note=ORF93%2C ORF94;gbkey=polyA_site;locus_tag=AngHV1_ORF94
+NC_013668.3	RefSeq	polyA_signal_sequence	158247	158252	.	+	.	ID=id-AngHV1_ORF94-2;Parent=gene-AngHV1_ORF94;Dbxref=GeneID:8683526;Note=ORF93%2C ORF94;gbkey=regulatory;locus_tag=AngHV1_ORF94;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	158201	159419	.	-	.	ID=gene-AngHV1_ORF95;Dbxref=GeneID:8683527;Name=AngHV1_ORF95;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF95
+NC_013668.3	RefSeq	CDS	158292	159419	.	-	0	ID=cds-YP_003358234.1;Parent=gene-AngHV1_ORF95;Dbxref=GenBank:YP_003358234.1,GeneID:8683527;Name=YP_003358234.1;gbkey=CDS;locus_tag=AngHV1_ORF95;product=membrane protein ORF95;protein_id=YP_003358234.1
+NC_013668.3	RefSeq	polyA_site	158201	158201	.	-	.	ID=id-AngHV1_ORF95;Parent=gene-AngHV1_ORF95;Dbxref=GeneID:8683527;gbkey=polyA_site;locus_tag=AngHV1_ORF95
+NC_013668.3	RefSeq	polyA_signal_sequence	158214	158219	.	-	.	ID=id-AngHV1_ORF95-2;Parent=gene-AngHV1_ORF95;Dbxref=GeneID:8683527;gbkey=regulatory;locus_tag=AngHV1_ORF95;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	159533	160557	.	-	.	ID=gene-AngHV1_ORF96;Dbxref=GeneID:8683528;Name=AngHV1_ORF96;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF96
+NC_013668.3	RefSeq	CDS	159571	160557	.	-	0	ID=cds-YP_003358235.1;Parent=gene-AngHV1_ORF96;Dbxref=GenBank:YP_003358235.1,GeneID:8683528;Name=YP_003358235.1;gbkey=CDS;locus_tag=AngHV1_ORF96;product=ribonucleotide reductase subunit 2;protein_id=YP_003358235.1
+NC_013668.3	RefSeq	polyA_site	159533	159533	.	-	.	ID=id-AngHV1_ORF96;Parent=gene-AngHV1_ORF96;Dbxref=GeneID:8683528;gbkey=polyA_site;locus_tag=AngHV1_ORF96
+NC_013668.3	RefSeq	polyA_signal_sequence	159548	159553	.	-	.	ID=id-AngHV1_ORF96-2;Parent=gene-AngHV1_ORF96;Dbxref=GeneID:8683528;gbkey=regulatory;locus_tag=AngHV1_ORF96;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	160682	162193	.	-	.	ID=gene-AngHV1_ORF97;Dbxref=GeneID:8683529;Name=AngHV1_ORF97;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF97
+NC_013668.3	RefSeq	CDS	160727	162193	.	-	0	ID=cds-YP_003358236.1;Parent=gene-AngHV1_ORF97;Dbxref=GenBank:YP_003358236.1,GeneID:8683529;Name=YP_003358236.1;gbkey=CDS;locus_tag=AngHV1_ORF97;product=protein ORF97;protein_id=YP_003358236.1
+NC_013668.3	RefSeq	polyA_site	160682	160682	.	-	.	ID=id-AngHV1_ORF97;Parent=gene-AngHV1_ORF97;Dbxref=GeneID:8683529;gbkey=polyA_site;locus_tag=AngHV1_ORF97
+NC_013668.3	RefSeq	polyA_signal_sequence	160698	160703	.	-	.	ID=id-AngHV1_ORF97-2;Parent=gene-AngHV1_ORF97;Dbxref=GeneID:8683529;gbkey=regulatory;locus_tag=AngHV1_ORF97;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	162484	168795	.	+	.	ID=gene-AngHV1_ORF98;Dbxref=GeneID:8683530;Name=AngHV1_ORF98;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF98
+NC_013668.3	RefSeq	CDS	162484	167244	.	+	0	ID=cds-YP_003358237.1;Parent=gene-AngHV1_ORF98;Dbxref=GenBank:YP_003358237.1,GeneID:8683530;Name=YP_003358237.1;gbkey=CDS;locus_tag=AngHV1_ORF98;product=protein Allo56;protein_id=YP_003358237.1
+NC_013668.3	RefSeq	gene	167404	168795	.	+	.	ID=gene-AngHV1_ORF99;Dbxref=GeneID:8683531;Name=AngHV1_ORF99;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF99
+NC_013668.3	RefSeq	CDS	167404	168777	.	+	0	ID=cds-YP_003358238.1;Parent=gene-AngHV1_ORF99;Dbxref=GenBank:YP_003358238.1,GeneID:8683531;Name=YP_003358238.1;gbkey=CDS;locus_tag=AngHV1_ORF99;product=protein ORF99;protein_id=YP_003358238.1
+NC_013668.3	RefSeq	polyA_site	168795	168795	.	+	.	ID=id-AngHV1_ORF99;Parent=gene-AngHV1_ORF99;Dbxref=GeneID:8683531;Note=ORF98%2C ORF99;gbkey=polyA_site;locus_tag=AngHV1_ORF99
+NC_013668.3	RefSeq	polyA_signal_sequence	168776	168781	.	+	.	ID=id-AngHV1_ORF99-2;Parent=gene-AngHV1_ORF99;Dbxref=GeneID:8683531;Note=ORF98%2C ORF99;gbkey=regulatory;locus_tag=AngHV1_ORF99;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	168802	173203	.	-	.	ID=gene-AngHV1_ORF100;Dbxref=GeneID:8683532;Name=AngHV1_ORF100;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF100
+NC_013668.3	RefSeq	CDS	172973	173203	.	-	0	ID=cds-YP_003358239.2;Parent=gene-AngHV1_ORF100;Dbxref=GenBank:YP_003358239.2,GeneID:8683532;Name=YP_003358239.2;gbkey=CDS;locus_tag=AngHV1_ORF100;product=protein Allo37;protein_id=YP_003358239.2
+NC_013668.3	RefSeq	CDS	171325	172163	.	-	0	ID=cds-YP_003358239.2;Parent=gene-AngHV1_ORF100;Dbxref=GenBank:YP_003358239.2,GeneID:8683532;Name=YP_003358239.2;gbkey=CDS;locus_tag=AngHV1_ORF100;product=protein Allo37;protein_id=YP_003358239.2
+NC_013668.3	RefSeq	CDS	168856	169861	.	-	1	ID=cds-YP_003358239.2;Parent=gene-AngHV1_ORF100;Dbxref=GenBank:YP_003358239.2,GeneID:8683532;Name=YP_003358239.2;gbkey=CDS;locus_tag=AngHV1_ORF100;product=protein Allo37;protein_id=YP_003358239.2
+NC_013668.3	RefSeq	polyA_site	168802	168802	.	-	.	ID=id-AngHV1_ORF100;Parent=gene-AngHV1_ORF100;Dbxref=GeneID:8683532;gbkey=polyA_site;locus_tag=AngHV1_ORF100
+NC_013668.3	RefSeq	polyA_signal_sequence	168816	168821	.	-	.	ID=id-AngHV1_ORF100-2;Parent=gene-AngHV1_ORF100;Dbxref=GeneID:8683532;gbkey=regulatory;locus_tag=AngHV1_ORF100;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	169960	171336	.	+	.	ID=gene-AngHV1_ORF101;Dbxref=GeneID:8683533;Name=AngHV1_ORF101;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF101
+NC_013668.3	RefSeq	CDS	169960	171249	.	+	0	ID=cds-YP_003358240.2;Parent=gene-AngHV1_ORF101;Dbxref=GenBank:YP_003358240.2,GeneID:8683533;Name=YP_003358240.2;Note=TNFR family;gbkey=CDS;locus_tag=AngHV1_ORF101;product=membrane protein ORF101;protein_id=YP_003358240.2
+NC_013668.3	RefSeq	polyA_site	171336	171336	.	+	.	ID=id-AngHV1_ORF101;Parent=gene-AngHV1_ORF101;Dbxref=GeneID:8683533;gbkey=polyA_site;locus_tag=AngHV1_ORF101
+NC_013668.3	RefSeq	polyA_signal_sequence	171313	171318	.	+	.	ID=id-AngHV1_ORF101-2;Parent=gene-AngHV1_ORF101;Dbxref=GeneID:8683533;gbkey=regulatory;locus_tag=AngHV1_ORF101;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	172285	172962	.	+	.	ID=gene-AngHV1_ORF102;Dbxref=GeneID:8683534;Name=AngHV1_ORF102;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF102
+NC_013668.3	RefSeq	CDS	172285	172944	.	+	0	ID=cds-YP_003358241.1;Parent=gene-AngHV1_ORF102;Dbxref=GenBank:YP_003358241.1,GeneID:8683534;Name=YP_003358241.1;gbkey=CDS;locus_tag=AngHV1_ORF102;product=membrane protein ORF102;protein_id=YP_003358241.1
+NC_013668.3	RefSeq	polyA_site	172962	172962	.	+	.	ID=id-AngHV1_ORF102;Parent=gene-AngHV1_ORF102;Dbxref=GeneID:8683534;gbkey=polyA_site;locus_tag=AngHV1_ORF102
+NC_013668.3	RefSeq	polyA_signal_sequence	172940	172945	.	+	.	ID=id-AngHV1_ORF102-2;Parent=gene-AngHV1_ORF102;Dbxref=GeneID:8683534;gbkey=regulatory;locus_tag=AngHV1_ORF102;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	173181	178357	.	+	.	ID=gene-AngHV1_ORF103;Dbxref=GeneID:8683535;Name=AngHV1_ORF103;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF103
+NC_013668.3	RefSeq	CDS	173181	173819	.	+	0	ID=cds-YP_003358242.1;Parent=gene-AngHV1_ORF103;Dbxref=GenBank:YP_003358242.1,GeneID:8683535;Name=YP_003358242.1;gbkey=CDS;locus_tag=AngHV1_ORF103;product=protein ORF103;protein_id=YP_003358242.1
+NC_013668.3	RefSeq	gene	173824	178357	.	+	.	ID=gene-AngHV1_ORF104;Dbxref=GeneID:8683536;Name=AngHV1_ORF104;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF104
+NC_013668.3	RefSeq	CDS	173824	177606	.	+	0	ID=cds-YP_003358243.1;Parent=gene-AngHV1_ORF104;Dbxref=GenBank:YP_003358243.1,GeneID:8683536;Name=YP_003358243.1;gbkey=CDS;locus_tag=AngHV1_ORF104;product=major capsid protein;protein_id=YP_003358243.1
+NC_013668.3	RefSeq	gene	177612	178357	.	+	.	ID=gene-AngHV1_ORF105;Dbxref=GeneID:8683537;Name=AngHV1_ORF105;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF105
+NC_013668.3	RefSeq	CDS	177612	178283	.	+	0	ID=cds-YP_003358244.1;Parent=gene-AngHV1_ORF105;Dbxref=GenBank:YP_003358244.1,GeneID:8683537;Name=YP_003358244.1;gbkey=CDS;locus_tag=AngHV1_ORF105;product=protein ORF105;protein_id=YP_003358244.1
+NC_013668.3	RefSeq	polyA_site	178357	178357	.	+	.	ID=id-AngHV1_ORF105;Parent=gene-AngHV1_ORF105;Dbxref=GeneID:8683537;Note=ORF103%2C ORF104%2C ORF105;gbkey=polyA_site;locus_tag=AngHV1_ORF105
+NC_013668.3	RefSeq	polyA_signal_sequence	178332	178337	.	+	.	ID=id-AngHV1_ORF105-2;Parent=gene-AngHV1_ORF105;Dbxref=GeneID:8683537;Note=ORF103%2C ORF104%2C ORF105;gbkey=regulatory;locus_tag=AngHV1_ORF105;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	178392	182755	.	-	.	ID=gene-AngHV1_ORF106;Dbxref=GeneID:8683538;Name=AngHV1_ORF106;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF106
+NC_013668.3	RefSeq	CDS	178457	182755	.	-	0	ID=cds-YP_003358245.1;Parent=gene-AngHV1_ORF106;Dbxref=GenBank:YP_003358245.1,GeneID:8683538;Name=YP_003358245.1;gbkey=CDS;locus_tag=AngHV1_ORF106;product=protein ORF106;protein_id=YP_003358245.1
+NC_013668.3	RefSeq	polyA_site	178392	178392	.	-	.	ID=id-AngHV1_ORF106;Parent=gene-AngHV1_ORF106;Dbxref=GeneID:8683538;gbkey=polyA_site;locus_tag=AngHV1_ORF106
+NC_013668.3	RefSeq	polyA_signal_sequence	178406	178411	.	-	.	ID=id-AngHV1_ORF106-2;Parent=gene-AngHV1_ORF106;Dbxref=GeneID:8683538;gbkey=regulatory;locus_tag=AngHV1_ORF106;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	182991	187348	.	+	.	ID=gene-AngHV1_ORF107;Dbxref=GeneID:8683539;Name=AngHV1_ORF107;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF107
+NC_013668.3	RefSeq	CDS	182991	187172	.	+	0	ID=cds-YP_003358246.1;Parent=gene-AngHV1_ORF107;Dbxref=GenBank:YP_003358246.1,GeneID:8683539;Name=YP_003358246.1;gbkey=CDS;locus_tag=AngHV1_ORF107;product=protein ORF107;protein_id=YP_003358246.1
+NC_013668.3	RefSeq	polyA_site	187348	187348	.	+	.	ID=id-AngHV1_ORF107;Parent=gene-AngHV1_ORF107;Dbxref=GeneID:8683539;gbkey=polyA_site;locus_tag=AngHV1_ORF107
+NC_013668.3	RefSeq	polyA_signal_sequence	187329	187334	.	+	.	ID=id-AngHV1_ORF107-2;Parent=gene-AngHV1_ORF107;Dbxref=GeneID:8683539;gbkey=regulatory;locus_tag=AngHV1_ORF107;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	187364	190548	.	+	.	ID=gene-AngHV1_ORF108;Dbxref=GeneID:8683540;Name=AngHV1_ORF108;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF108
+NC_013668.3	RefSeq	CDS	187364	190429	.	+	0	ID=cds-YP_003358247.2;Parent=gene-AngHV1_ORF108;Dbxref=GenBank:YP_003358247.2,GeneID:8683540;Name=YP_003358247.2;Note=TNFR family;gbkey=CDS;locus_tag=AngHV1_ORF108;product=membrane protein ORF108;protein_id=YP_003358247.2
+NC_013668.3	RefSeq	polyA_site	190548	190548	.	+	.	ID=id-AngHV1_ORF108;Parent=gene-AngHV1_ORF108;Dbxref=GeneID:8683540;gbkey=polyA_site;locus_tag=AngHV1_ORF108
+NC_013668.3	RefSeq	polyA_signal_sequence	190531	190536	.	+	.	ID=id-AngHV1_ORF108-2;Parent=gene-AngHV1_ORF108;Dbxref=GeneID:8683540;gbkey=regulatory;locus_tag=AngHV1_ORF108;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	190607	193002	.	+	.	ID=gene-AngHV1_ORF109;Dbxref=GeneID:8683541;Name=AngHV1_ORF109;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF109
+NC_013668.3	RefSeq	CDS	190607	192958	.	+	0	ID=cds-YP_003358248.1;Parent=gene-AngHV1_ORF109;Dbxref=GenBank:YP_003358248.1,GeneID:8683541;Name=YP_003358248.1;Note=ORF109 family;gbkey=CDS;locus_tag=AngHV1_ORF109;product=membrane protein ORF109;protein_id=YP_003358248.1
+NC_013668.3	RefSeq	polyA_site	193002	193002	.	+	.	ID=id-AngHV1_ORF109;Parent=gene-AngHV1_ORF109;Dbxref=GeneID:8683541;gbkey=polyA_site;locus_tag=AngHV1_ORF109
+NC_013668.3	RefSeq	polyA_signal_sequence	192981	192986	.	+	.	ID=id-AngHV1_ORF109-2;Parent=gene-AngHV1_ORF109;Dbxref=GeneID:8683541;gbkey=regulatory;locus_tag=AngHV1_ORF109;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	194161	199700	.	+	.	ID=gene-AngHV1_ORF110;Dbxref=GeneID:8683542;Name=AngHV1_ORF110;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF110
+NC_013668.3	RefSeq	CDS	194161	197328	.	+	0	ID=cds-YP_003358249.1;Parent=gene-AngHV1_ORF110;Dbxref=GenBank:YP_003358249.1,GeneID:8683542;Name=YP_003358249.1;gbkey=CDS;locus_tag=AngHV1_ORF110;product=protein ORF110;protein_id=YP_003358249.1
+NC_013668.3	RefSeq	gene	197557	199700	.	+	.	ID=gene-AngHV1_ORF111;Dbxref=GeneID:8683543;Name=AngHV1_ORF111;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF111
+NC_013668.3	RefSeq	CDS	197557	199533	.	+	0	ID=cds-YP_003358250.1;Parent=gene-AngHV1_ORF111;Dbxref=GenBank:YP_003358250.1,GeneID:8683543;Name=YP_003358250.1;gbkey=CDS;locus_tag=AngHV1_ORF111;product=protein ORF111;protein_id=YP_003358250.1
+NC_013668.3	RefSeq	polyA_site	199700	199700	.	+	.	ID=id-AngHV1_ORF111;Parent=gene-AngHV1_ORF111;Dbxref=GeneID:8683543;Note=ORF110%2C ORF111;gbkey=polyA_site;locus_tag=AngHV1_ORF111
+NC_013668.3	RefSeq	polyA_signal_sequence	199680	199685	.	+	.	ID=id-AngHV1_ORF111-2;Parent=gene-AngHV1_ORF111;Dbxref=GeneID:8683543;Note=ORF110%2C ORF111;gbkey=regulatory;locus_tag=AngHV1_ORF111;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	199686	202302	.	+	.	ID=gene-AngHV1_ORF112;Dbxref=GeneID:8683544;Name=AngHV1_ORF112;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF112
+NC_013668.3	RefSeq	CDS	199686	200109	.	+	0	ID=cds-YP_003358251.2;Parent=gene-AngHV1_ORF112;Dbxref=GenBank:YP_003358251.2,GeneID:8683544;Name=YP_003358251.2;gbkey=CDS;locus_tag=AngHV1_ORF112;product=protein ORF112;protein_id=YP_003358251.2
+NC_013668.3	RefSeq	CDS	200193	200614	.	+	2	ID=cds-YP_003358251.2;Parent=gene-AngHV1_ORF112;Dbxref=GenBank:YP_003358251.2,GeneID:8683544;Name=YP_003358251.2;gbkey=CDS;locus_tag=AngHV1_ORF112;product=protein ORF112;protein_id=YP_003358251.2
+NC_013668.3	RefSeq	gene	200530	202302	.	+	.	ID=gene-AngHV1_ORF113;Dbxref=GeneID:8683545;Name=AngHV1_ORF113;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF113
+NC_013668.3	RefSeq	CDS	200530	202269	.	+	0	ID=cds-YP_003358252.1;Parent=gene-AngHV1_ORF113;Dbxref=GenBank:YP_003358252.1,GeneID:8683545;Name=YP_003358252.1;gbkey=CDS;locus_tag=AngHV1_ORF113;product=protein ORF113;protein_id=YP_003358252.1
+NC_013668.3	RefSeq	polyA_site	202302	202302	.	+	.	ID=id-AngHV1_ORF113;Parent=gene-AngHV1_ORF113;Dbxref=GeneID:8683545;Note=ORF112%2C ORF113;gbkey=polyA_site;locus_tag=AngHV1_ORF113
+NC_013668.3	RefSeq	polyA_signal_sequence	202281	202286	.	+	.	ID=id-AngHV1_ORF113-2;Parent=gene-AngHV1_ORF113;Dbxref=GeneID:8683545;Note=ORF112%2C ORF113;gbkey=regulatory;locus_tag=AngHV1_ORF113;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	202307	202926	.	-	.	ID=gene-AngHV1_ORF114;Dbxref=GeneID:8683546;Name=AngHV1_ORF114;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF114
+NC_013668.3	RefSeq	CDS	202384	202926	.	-	0	ID=cds-YP_003358253.1;Parent=gene-AngHV1_ORF114;Dbxref=GenBank:YP_003358253.1,GeneID:8683546;Name=YP_003358253.1;gbkey=CDS;locus_tag=AngHV1_ORF114;product=protein ORF114;protein_id=YP_003358253.1
+NC_013668.3	RefSeq	polyA_site	202307	202307	.	-	.	ID=id-AngHV1_ORF114;Parent=gene-AngHV1_ORF114;Dbxref=GeneID:8683546;gbkey=polyA_site;locus_tag=AngHV1_ORF114
+NC_013668.3	RefSeq	polyA_signal_sequence	202320	202325	.	-	.	ID=id-AngHV1_ORF114-2;Parent=gene-AngHV1_ORF114;Dbxref=GeneID:8683546;gbkey=regulatory;locus_tag=AngHV1_ORF114;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	203040	203433	.	+	.	ID=gene-AngHV1_ORF115;Dbxref=GeneID:8683547;Name=AngHV1_ORF115;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF115
+NC_013668.3	RefSeq	CDS	203040	203357	.	+	0	ID=cds-YP_003358254.1;Parent=gene-AngHV1_ORF115;Dbxref=GenBank:YP_003358254.1,GeneID:8683547;Name=YP_003358254.1;gbkey=CDS;locus_tag=AngHV1_ORF115;product=protein ORF115;protein_id=YP_003358254.1
+NC_013668.3	RefSeq	polyA_site	203433	203433	.	+	.	ID=id-AngHV1_ORF115;Parent=gene-AngHV1_ORF115;Dbxref=GeneID:8683547;gbkey=polyA_site;locus_tag=AngHV1_ORF115
+NC_013668.3	RefSeq	polyA_signal_sequence	203414	203419	.	+	.	ID=id-AngHV1_ORF115-2;Parent=gene-AngHV1_ORF115;Dbxref=GeneID:8683547;gbkey=regulatory;locus_tag=AngHV1_ORF115;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	203448	206178	.	-	.	ID=gene-AngHV1_ORF116;Dbxref=GeneID:8683548;Name=AngHV1_ORF116;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF116
+NC_013668.3	RefSeq	CDS	203509	206178	.	-	0	ID=cds-YP_003358255.2;Parent=gene-AngHV1_ORF116;Dbxref=GenBank:YP_003358255.2,GeneID:8683548;Name=YP_003358255.2;gbkey=CDS;locus_tag=AngHV1_ORF116;product=ribonucleotide reductase subunit 1;protein_id=YP_003358255.2
+NC_013668.3	RefSeq	polyA_site	203448	203448	.	-	.	ID=id-AngHV1_ORF116;Parent=gene-AngHV1_ORF116;Dbxref=GeneID:8683548;gbkey=polyA_site;locus_tag=AngHV1_ORF116
+NC_013668.3	RefSeq	polyA_signal_sequence	203455	203460	.	-	.	ID=id-AngHV1_ORF116-2;Parent=gene-AngHV1_ORF116;Dbxref=GeneID:8683548;gbkey=regulatory;locus_tag=AngHV1_ORF116;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	206376	206987	.	-	.	ID=gene-AngHV1_ORF117;Dbxref=GeneID:8683549;Name=AngHV1_ORF117;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF117
+NC_013668.3	RefSeq	CDS	206415	206987	.	-	0	ID=cds-YP_003358256.1;Parent=gene-AngHV1_ORF117;Dbxref=GenBank:YP_003358256.1,GeneID:8683549;Name=YP_003358256.1;gbkey=CDS;locus_tag=AngHV1_ORF117;product=protein ORF117;protein_id=YP_003358256.1
+NC_013668.3	RefSeq	polyA_site	206376	206376	.	-	.	ID=id-AngHV1_ORF117;Parent=gene-AngHV1_ORF117;Dbxref=GeneID:8683549;gbkey=polyA_site;locus_tag=AngHV1_ORF117
+NC_013668.3	RefSeq	polyA_site	206983	206983	.	-	.	ID=id-AngHV1_ORF117-2;Parent=gene-AngHV1_ORF117;Dbxref=GeneID:8683549;gbkey=polyA_site;locus_tag=AngHV1_ORF117
+NC_013668.3	RefSeq	polyA_signal_sequence	206393	206398	.	-	.	ID=id-AngHV1_ORF117-3;Parent=gene-AngHV1_ORF117;Dbxref=GeneID:8683549;gbkey=regulatory;locus_tag=AngHV1_ORF117;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	206983	207613	.	-	.	ID=gene-AngHV1_ORF118;Dbxref=GeneID:8683550;Name=AngHV1_ORF118;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF118
+NC_013668.3	RefSeq	CDS	207038	207613	.	-	0	ID=cds-YP_003358257.1;Parent=gene-AngHV1_ORF118;Dbxref=GenBank:YP_003358257.1,GeneID:8683550;Name=YP_003358257.1;gbkey=CDS;locus_tag=AngHV1_ORF118;product=protein ORF118;protein_id=YP_003358257.1
+NC_013668.3	RefSeq	polyA_signal_sequence	206996	207001	.	-	.	ID=id-AngHV1_ORF118;Parent=gene-AngHV1_ORF118;Dbxref=GeneID:8683550;gbkey=regulatory;locus_tag=AngHV1_ORF118;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	207622	211537	.	+	.	ID=gene-AngHV1_ORF119;Dbxref=GeneID:8683551;Name=AngHV1_ORF119;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF119
+NC_013668.3	RefSeq	CDS	207622	208305	.	+	0	ID=cds-YP_003358258.1;Parent=gene-AngHV1_ORF119;Dbxref=GenBank:YP_003358258.1,GeneID:8683551;Name=YP_003358258.1;gbkey=CDS;locus_tag=AngHV1_ORF119;product=dihydrofolate reductase;protein_id=YP_003358258.1
+NC_013668.3	RefSeq	gene	208302	211537	.	+	.	ID=gene-AngHV1_ORF120;Dbxref=GeneID:8683552;Name=AngHV1_ORF120;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF120
+NC_013668.3	RefSeq	CDS	208302	211445	.	+	0	ID=cds-YP_003358259.1;Parent=gene-AngHV1_ORF120;Dbxref=GenBank:YP_003358259.1,GeneID:8683552;Name=YP_003358259.1;gbkey=CDS;locus_tag=AngHV1_ORF120;product=protein ORF120;protein_id=YP_003358259.1
+NC_013668.3	RefSeq	polyA_site	211537	211537	.	+	.	ID=id-AngHV1_ORF120;Parent=gene-AngHV1_ORF120;Dbxref=GeneID:8683552;Note=ORF119%2C ORF120;gbkey=polyA_site;locus_tag=AngHV1_ORF120
+NC_013668.3	RefSeq	polyA_signal_sequence	211513	211518	.	+	.	ID=id-AngHV1_ORF120-2;Parent=gene-AngHV1_ORF120;Dbxref=GeneID:8683552;Note=ORF119%2C ORF120;gbkey=regulatory;locus_tag=AngHV1_ORF120;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	211751	213652	.	+	.	ID=gene-AngHV1_ORF121;Dbxref=GeneID:8683553;Name=AngHV1_ORF121;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF121
+NC_013668.3	RefSeq	CDS	211751	212935	.	+	0	ID=cds-YP_003358260.1;Parent=gene-AngHV1_ORF121;Dbxref=GenBank:YP_003358260.1,GeneID:8683553;Name=YP_003358260.1;Note=TNFR family;gbkey=CDS;locus_tag=AngHV1_ORF121;product=protein ORF121;protein_id=YP_003358260.1
+NC_013668.3	RefSeq	gene	213023	213652	.	+	.	ID=gene-AngHV1_ORF122;Dbxref=GeneID:8683554;Name=AngHV1_ORF122;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF122
+NC_013668.3	RefSeq	CDS	213023	213580	.	+	0	ID=cds-YP_003358261.1;Parent=gene-AngHV1_ORF122;Dbxref=GenBank:YP_003358261.1,GeneID:8683554;Name=YP_003358261.1;gbkey=CDS;locus_tag=AngHV1_ORF122;product=protein ORF122;protein_id=YP_003358261.1
+NC_013668.3	RefSeq	polyA_site	213652	213652	.	+	.	ID=id-AngHV1_ORF122;Parent=gene-AngHV1_ORF122;Dbxref=GeneID:8683554;Note=ORF121%2C ORF122;gbkey=polyA_site;locus_tag=AngHV1_ORF122
+NC_013668.3	RefSeq	polyA_signal_sequence	213633	213638	.	+	.	ID=id-AngHV1_ORF122-2;Parent=gene-AngHV1_ORF122;Dbxref=GeneID:8683554;Note=ORF121%2C ORF122;gbkey=regulatory;locus_tag=AngHV1_ORF122;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	213730	215604	.	+	.	ID=gene-AngHV1_ORF123;Dbxref=GeneID:8683555;Name=AngHV1_ORF123;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF123
+NC_013668.3	RefSeq	CDS	213730	214521	.	+	0	ID=cds-YP_003358262.1;Parent=gene-AngHV1_ORF123;Dbxref=GenBank:YP_003358262.1,GeneID:8683555;Name=YP_003358262.1;Note=dGK family;gbkey=CDS;locus_tag=AngHV1_ORF123;product=deoxyguanosine kinase 2;protein_id=YP_003358262.1
+NC_013668.3	RefSeq	gene	214736	215604	.	+	.	ID=gene-AngHV1_ORF124;Dbxref=GeneID:8683556;Name=AngHV1_ORF124;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF124
+NC_013668.3	RefSeq	CDS	214736	215566	.	+	0	ID=cds-YP_003358263.1;Parent=gene-AngHV1_ORF124;Dbxref=GenBank:YP_003358263.1,GeneID:8683556;Name=YP_003358263.1;Note=TNFR family;gbkey=CDS;locus_tag=AngHV1_ORF124;product=membrane protein ORF124;protein_id=YP_003358263.1
+NC_013668.3	RefSeq	polyA_site	215604	215604	.	+	.	ID=id-AngHV1_ORF124;Parent=gene-AngHV1_ORF124;Dbxref=GeneID:8683556;Note=ORF123%2C ORF124;gbkey=polyA_site;locus_tag=AngHV1_ORF124
+NC_013668.3	RefSeq	polyA_signal_sequence	215584	215589	.	+	.	ID=id-AngHV1_ORF124-2;Parent=gene-AngHV1_ORF124;Dbxref=GeneID:8683556;gbkey=regulatory;locus_tag=AngHV1_ORF124;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	215815	219125	.	+	.	ID=gene-AngHV1_ORF125;Dbxref=GeneID:8683557;Name=AngHV1_ORF125;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF125
+NC_013668.3	RefSeq	CDS	215815	219054	.	+	0	ID=cds-YP_003358264.1;Parent=gene-AngHV1_ORF125;Dbxref=GenBank:YP_003358264.1,GeneID:8683557;Name=YP_003358264.1;Note=ORF109 family;gbkey=CDS;locus_tag=AngHV1_ORF125;product=membrane protein ORF125;protein_id=YP_003358264.1
+NC_013668.3	RefSeq	polyA_site	219125	219125	.	+	.	ID=id-AngHV1_ORF125;Parent=gene-AngHV1_ORF125;Dbxref=GeneID:8683557;gbkey=polyA_site;locus_tag=AngHV1_ORF125
+NC_013668.3	RefSeq	polyA_signal_sequence	219109	219114	.	+	.	ID=id-AngHV1_ORF125-2;Parent=gene-AngHV1_ORF125;Dbxref=GeneID:8683557;gbkey=regulatory;locus_tag=AngHV1_ORF125;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	220270	221069	.	+	.	ID=gene-AngHV1_ORF126;Dbxref=GeneID:8683558;Name=AngHV1_ORF126;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF126
+NC_013668.3	RefSeq	CDS	220270	220887	.	+	0	ID=cds-YP_003358265.1;Parent=gene-AngHV1_ORF126;Dbxref=GenBank:YP_003358265.1,GeneID:8683558;Name=YP_003358265.1;gbkey=CDS;locus_tag=AngHV1_ORF126;product=protein ORF126;protein_id=YP_003358265.1
+NC_013668.3	RefSeq	polyA_site	221069	221069	.	+	.	ID=id-AngHV1_ORF126;Parent=gene-AngHV1_ORF126;Dbxref=GeneID:8683558;gbkey=polyA_site;locus_tag=AngHV1_ORF126
+NC_013668.3	RefSeq	polyA_signal_sequence	221047	221052	.	+	.	ID=id-AngHV1_ORF126-2;Parent=gene-AngHV1_ORF126;Dbxref=GeneID:8683558;gbkey=regulatory;locus_tag=AngHV1_ORF126;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	221281	224489	.	-	.	ID=gene-AngHV1_ORF127;Dbxref=GeneID:8683559;Name=AngHV1_ORF127;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF127
+NC_013668.3	RefSeq	CDS	223119	224489	.	-	0	ID=cds-YP_003358266.2;Parent=gene-AngHV1_ORF127;Dbxref=GenBank:YP_003358266.2,GeneID:8683559;Name=YP_003358266.2;gbkey=CDS;locus_tag=AngHV1_ORF127;product=protein ORF127;protein_id=YP_003358266.2
+NC_013668.3	RefSeq	CDS	222245	222990	.	-	0	ID=cds-YP_003358266.2;Parent=gene-AngHV1_ORF127;Dbxref=GenBank:YP_003358266.2,GeneID:8683559;Name=YP_003358266.2;gbkey=CDS;locus_tag=AngHV1_ORF127;product=protein ORF127;protein_id=YP_003358266.2
+NC_013668.3	RefSeq	CDS	221435	222143	.	-	1	ID=cds-YP_003358266.2;Parent=gene-AngHV1_ORF127;Dbxref=GenBank:YP_003358266.2,GeneID:8683559;Name=YP_003358266.2;gbkey=CDS;locus_tag=AngHV1_ORF127;product=protein ORF127;protein_id=YP_003358266.2
+NC_013668.3	RefSeq	polyA_site	221281	221281	.	-	.	ID=id-AngHV1_ORF127;Parent=gene-AngHV1_ORF127;Dbxref=GeneID:8683559;gbkey=polyA_site;locus_tag=AngHV1_ORF127
+NC_013668.3	RefSeq	polyA_signal_sequence	221292	221297	.	-	.	ID=id-AngHV1_ORF127-2;Parent=gene-AngHV1_ORF127;Dbxref=GeneID:8683559;gbkey=regulatory;locus_tag=AngHV1_ORF127;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	224617	226888	.	-	.	ID=gene-AngHV1_ORF130;Dbxref=GeneID:8683562;Name=AngHV1_ORF130;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF130
+NC_013668.3	RefSeq	CDS	224864	226888	.	-	0	ID=cds-YP_003358269.1;Parent=gene-AngHV1_ORF130;Dbxref=GenBank:YP_003358269.1,GeneID:8683562;Name=YP_003358269.1;gbkey=CDS;locus_tag=AngHV1_ORF130;product=protein ORF130;protein_id=YP_003358269.1
+NC_013668.3	RefSeq	polyA_site	224617	224617	.	-	.	ID=id-AngHV1_ORF130;Parent=gene-AngHV1_ORF130;Dbxref=GeneID:8683562;gbkey=polyA_site;locus_tag=AngHV1_ORF130
+NC_013668.3	RefSeq	polyA_signal_sequence	224630	224635	.	-	.	ID=id-AngHV1_ORF130-2;Parent=gene-AngHV1_ORF130;Dbxref=GeneID:8683562;gbkey=regulatory;locus_tag=AngHV1_ORF130;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	227069	232679	.	-	.	ID=gene-AngHV1_ORF131;Dbxref=GeneID:8683563;Name=AngHV1_ORF131;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF131
+NC_013668.3	RefSeq	CDS	228535	232679	.	-	0	ID=cds-YP_003358270.2;Parent=gene-AngHV1_ORF131;Dbxref=GenBank:YP_003358270.2,GeneID:8683563;Name=YP_003358270.2;gbkey=CDS;locus_tag=AngHV1_ORF131;product=protein ORF131;protein_id=YP_003358270.2
+NC_013668.3	RefSeq	CDS	228091	228420	.	-	1	ID=cds-YP_003358270.2;Parent=gene-AngHV1_ORF131;Dbxref=GenBank:YP_003358270.2,GeneID:8683563;Name=YP_003358270.2;gbkey=CDS;locus_tag=AngHV1_ORF131;product=protein ORF131;protein_id=YP_003358270.2
+NC_013668.3	RefSeq	CDS	227295	227970	.	-	1	ID=cds-YP_003358270.2;Parent=gene-AngHV1_ORF131;Dbxref=GenBank:YP_003358270.2,GeneID:8683563;Name=YP_003358270.2;gbkey=CDS;locus_tag=AngHV1_ORF131;product=protein ORF131;protein_id=YP_003358270.2
+NC_013668.3	RefSeq	polyA_site	227069	227069	.	-	.	ID=id-AngHV1_ORF131;Parent=gene-AngHV1_ORF131;Dbxref=GeneID:8683563;gbkey=polyA_site;locus_tag=AngHV1_ORF131
+NC_013668.3	RefSeq	polyA_signal_sequence	227080	227085	.	-	.	ID=id-AngHV1_ORF131-2;Parent=gene-AngHV1_ORF131;Dbxref=GeneID:8683563;gbkey=regulatory;locus_tag=AngHV1_ORF131;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	233494	238020	.	+	.	ID=gene-AngHV1_ORF134;Dbxref=GeneID:8683568;Name=AngHV1_ORF134;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF134
+NC_013668.3	RefSeq	CDS	233494	234296	.	+	0	ID=cds-YP_003358275.2;Parent=gene-AngHV1_ORF134;Dbxref=GenBank:YP_003358275.2,GeneID:8683568;Name=YP_003358275.2;gbkey=CDS;locus_tag=AngHV1_ORF134;product=protein ORF134;protein_id=YP_003358275.2
+NC_013668.3	RefSeq	CDS	234913	235104	.	+	1	ID=cds-YP_003358275.2;Parent=gene-AngHV1_ORF134;Dbxref=GenBank:YP_003358275.2,GeneID:8683568;Name=YP_003358275.2;gbkey=CDS;locus_tag=AngHV1_ORF134;product=protein ORF134;protein_id=YP_003358275.2
+NC_013668.3	RefSeq	CDS	235251	237390	.	+	1	ID=cds-YP_003358275.2;Parent=gene-AngHV1_ORF134;Dbxref=GenBank:YP_003358275.2,GeneID:8683568;Name=YP_003358275.2;gbkey=CDS;locus_tag=AngHV1_ORF134;product=protein ORF134;protein_id=YP_003358275.2
+NC_013668.3	RefSeq	polyA_site	238020	238020	.	+	.	ID=id-AngHV1_ORF134;Parent=gene-AngHV1_ORF134;Dbxref=GeneID:8683568;gbkey=polyA_site;locus_tag=AngHV1_ORF134
+NC_013668.3	RefSeq	polyA_signal_sequence	238003	238008	.	+	.	ID=id-AngHV1_ORF134-2;Parent=gene-AngHV1_ORF134;Dbxref=GeneID:8683568;gbkey=regulatory;locus_tag=AngHV1_ORF134;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	repeat_region	237893	248526	.	+	.	ID=id-NC_013668.3:237893..248526;gbkey=repeat_region;rpt_type=terminal
+NC_013668.3	RefSeq	gene	238477	242063	.	-	.	ID=gene-AngHV1_ORF1_2;Dbxref=GeneID:8683569;Name=AngHV1_ORF1_2;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF1_2
+NC_013668.3	RefSeq	CDS	241030	242063	.	-	0	ID=cds-YP_003358276.2;Parent=gene-AngHV1_ORF1_2;Dbxref=GenBank:YP_003358276.2,GeneID:8683569;Name=YP_003358276.2;gbkey=CDS;locus_tag=AngHV1_ORF1_2;product=protein ORF1;protein_id=YP_003358276.2
+NC_013668.3	RefSeq	CDS	239830	240744	.	-	1	ID=cds-YP_003358276.2;Parent=gene-AngHV1_ORF1_2;Dbxref=GenBank:YP_003358276.2,GeneID:8683569;Name=YP_003358276.2;gbkey=CDS;locus_tag=AngHV1_ORF1_2;product=protein ORF1;protein_id=YP_003358276.2
+NC_013668.3	RefSeq	CDS	238685	239702	.	-	1	ID=cds-YP_003358276.2;Parent=gene-AngHV1_ORF1_2;Dbxref=GenBank:YP_003358276.2,GeneID:8683569;Name=YP_003358276.2;gbkey=CDS;locus_tag=AngHV1_ORF1_2;product=protein ORF1;protein_id=YP_003358276.2
+NC_013668.3	RefSeq	polyA_site	238477	238477	.	-	.	ID=id-AngHV1_ORF1_2;Parent=gene-AngHV1_ORF1_2;Dbxref=GeneID:8683569;gbkey=polyA_site;locus_tag=AngHV1_ORF1_2
+NC_013668.3	RefSeq	polyA_signal_sequence	238489	238594	.	-	.	ID=id-AngHV1_ORF1_2-2;Parent=gene-AngHV1_ORF1_2;Dbxref=GeneID:8683569;gbkey=regulatory;locus_tag=AngHV1_ORF1_2;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	242389	243718	.	-	.	ID=gene-AngHV1_ORF3_2;Dbxref=GeneID:8683571;Name=AngHV1_ORF3_2;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF3_2
+NC_013668.3	RefSeq	CDS	242825	243718	.	-	0	ID=cds-YP_003358278.1;Parent=gene-AngHV1_ORF3_2;Dbxref=GenBank:YP_003358278.1,GeneID:8683571;Name=YP_003358278.1;Note=ORF3 family;gbkey=CDS;locus_tag=AngHV1_ORF3_2;product=protein ORF3;protein_id=YP_003358278.1
+NC_013668.3	RefSeq	polyA_site	242389	242389	.	-	.	ID=id-AngHV1_ORF3_2;Parent=gene-AngHV1_ORF3_2;Dbxref=GeneID:8683571;gbkey=polyA_site;locus_tag=AngHV1_ORF3_2
+NC_013668.3	RefSeq	polyA_site	242725	242725	.	-	.	ID=id-AngHV1_ORF3_2-2;Parent=gene-AngHV1_ORF3_2;Dbxref=GeneID:8683571;gbkey=polyA_site;locus_tag=AngHV1_ORF3_2
+NC_013668.3	RefSeq	polyA_signal_sequence	242409	242414	.	-	.	ID=id-AngHV1_ORF3_2-3;Parent=gene-AngHV1_ORF3_2;Dbxref=GeneID:8683571;gbkey=regulatory;locus_tag=AngHV1_ORF3_2;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	polyA_signal_sequence	242739	242744	.	-	.	ID=id-AngHV1_ORF3_2-4;Parent=gene-AngHV1_ORF3_2;Dbxref=GeneID:8683571;gbkey=regulatory;locus_tag=AngHV1_ORF3_2;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	243907	244953	.	-	.	ID=gene-AngHV1_ORF4_2;Dbxref=GeneID:8683572;Name=AngHV1_ORF4_2;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF4_2
+NC_013668.3	RefSeq	CDS	244192	244953	.	-	0	ID=cds-YP_003358279.1;Parent=gene-AngHV1_ORF4_2;Dbxref=GenBank:YP_003358279.1,GeneID:8683572;Name=YP_003358279.1;gbkey=CDS;locus_tag=AngHV1_ORF4_2;product=protein ORF4;protein_id=YP_003358279.1
+NC_013668.3	RefSeq	polyA_site	243907	243907	.	-	.	ID=id-AngHV1_ORF4_2;Parent=gene-AngHV1_ORF4_2;Dbxref=GeneID:8683572;gbkey=polyA_site;locus_tag=AngHV1_ORF4_2
+NC_013668.3	RefSeq	polyA_signal_sequence	243923	243928	.	-	.	ID=id-AngHV1_ORF4_2-2;Parent=gene-AngHV1_ORF4_2;Dbxref=GeneID:8683572;gbkey=regulatory;locus_tag=AngHV1_ORF4_2;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	245275	245821	.	-	.	ID=gene-AngHV1_ORF5_2;Dbxref=GeneID:8683573;Name=AngHV1_ORF5_2;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF5_2
+NC_013668.3	RefSeq	CDS	245315	245821	.	-	0	ID=cds-YP_003358280.1;Parent=gene-AngHV1_ORF5_2;Dbxref=GenBank:YP_003358280.1,GeneID:8683573;Name=YP_003358280.1;gbkey=CDS;locus_tag=AngHV1_ORF5_2;product=deoxyuridine triphosphatase;protein_id=YP_003358280.1
+NC_013668.3	RefSeq	polyA_site	245275	245275	.	-	.	ID=id-AngHV1_ORF5_2;Parent=gene-AngHV1_ORF5_2;Dbxref=GeneID:8683573;gbkey=polyA_site;locus_tag=AngHV1_ORF5_2
+NC_013668.3	RefSeq	polyA_signal_sequence	245289	245294	.	-	.	ID=id-AngHV1_ORF5_2-2;Parent=gene-AngHV1_ORF5_2;Dbxref=GeneID:8683573;gbkey=regulatory;locus_tag=AngHV1_ORF5_2;regulatory_class=polyA_signal_sequence
+NC_013668.3	RefSeq	gene	246290	248037	.	+	.	ID=gene-AngHV1_ORF6A_2;Dbxref=GeneID:12930111;Name=AngHV1_ORF6A_2;gbkey=Gene;gene_biotype=protein_coding;locus_tag=AngHV1_ORF6A_2
+NC_013668.3	RefSeq	CDS	246290	246366	.	+	0	ID=cds-YP_006347579.1;Parent=gene-AngHV1_ORF6A_2;Dbxref=GenBank:YP_006347579.1,GeneID:12930111;Name=YP_006347579.1;gbkey=CDS;locus_tag=AngHV1_ORF6A_2;product=protein ORF6A;protein_id=YP_006347579.1
+NC_013668.3	RefSeq	CDS	246607	247918	.	+	1	ID=cds-YP_006347579.1;Parent=gene-AngHV1_ORF6A_2;Dbxref=GenBank:YP_006347579.1,GeneID:12930111;Name=YP_006347579.1;gbkey=CDS;locus_tag=AngHV1_ORF6A_2;product=protein ORF6A;protein_id=YP_006347579.1
+NC_013668.3	RefSeq	polyA_site	248037	248037	.	+	.	ID=id-AngHV1_ORF6A_2;Parent=gene-AngHV1_ORF6A_2;Dbxref=GeneID:12930111;gbkey=polyA_site;locus_tag=AngHV1_ORF6A_2
+NC_013668.3	RefSeq	polyA_signal_sequence	248017	248022	.	+	.	ID=id-AngHV1_ORF6A_2-2;Parent=gene-AngHV1_ORF6A_2;Dbxref=GeneID:12930111;gbkey=regulatory;locus_tag=AngHV1_ORF6A_2;regulatory_class=polyA_signal_sequence
+

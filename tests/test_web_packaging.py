@@ -2248,6 +2248,7 @@ def test_web_linear_run_ignores_hidden_circular_species_strain_args() -> None:
 
 def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() -> None:
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    feature_dom_source = (WEB_ROOT / "js" / "app" / "feature-dom.js").read_text(encoding="utf-8")
     svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
     label_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "label-actions.js").read_text(encoding="utf-8")
     color_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "color-actions.js").read_text(encoding="utf-8")
@@ -2258,16 +2259,18 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     standalone_source = _standalone_interactivity_source()
 
     assert "'data-gbdraw-feature-id'" in state_source
-    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in svg_actions_source
+    assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in feature_dom_source
+    assert "FEATURE_PART_ATTRIBUTE = 'data-gbdraw-feature-part'" in feature_dom_source
     assert "normalizeFeatureIdentity" in svg_actions_source
-    assert "FEATURE_SELECTOR = [" in svg_actions_source
-    assert "`path[${FEATURE_ID_ATTRIBUTE}]`" in svg_actions_source
-    assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in svg_actions_source
+    assert "FEATURE_SELECTOR = [" in feature_dom_source
+    assert "`path[${FEATURE_ID_ATTRIBUTE}]`" in feature_dom_source
+    assert "element?.getAttribute?.(FEATURE_ID_ATTRIBUTE)" in feature_dom_source
+    assert "isFeatureFillTarget" in feature_dom_source
     assert "svg.querySelectorAll(FEATURE_SELECTOR)" in svg_actions_source
     assert "getFeatureIdentity(element)" in svg_actions_source
     assert "getFeatureHoverKey(getFeatureIdentity(relatedFeature))" in svg_actions_source
     assert "getFeatureIdentity(el)" in label_actions_source
-    assert "getFeatureElements(svg, feat.svg_id)" in color_actions_source
+    assert "getFeatureFillElements(svg, feat.svg_id)" in color_actions_source
     assert "getFeatureElements(svg, svgId)" in color_actions_source
     assert "getFeatureElements(svg, svgId)" in stroke_actions_source
     assert "getFeatureIdentity(path)" in svg_styles_source

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 import cairosvg
 from PIL import Image, ImageDraw, ImageFont
 
+from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from gbdraw.session_io import write_session_json
 
@@ -24,6 +26,9 @@ SOURCE_ROOT = GALLERY_ROOT / "sources"
 THUMBNAIL_ROOT = GALLERY_ROOT / "thumbnails"
 
 GENOME_SUFFIXES = (".gb", ".gbk", ".gbff")
+_RENDERED_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
+_SVG_PART_SUFFIX_RE = re.compile(r"__part\d+$")
+_SVG_FEATURE_ID_RE = re.compile(r'data-gbdraw-feature-id=["\']([^"\']+)["\']')
 
 
 @dataclass(frozen=True)
@@ -445,12 +450,98 @@ def _session_interactive_context(session: dict[str, Any]) -> InteractiveSvgConte
     )
 
 
+def _stable_feature_id(feature: dict[str, Any]) -> str:
+    stable_id = str(
+        feature.get("stable_svg_id") or feature.get("stable_feature_id") or ""
+    ).strip()
+    return stable_id or _RENDERED_RECORD_SUFFIX_RE.sub(
+        "", str(feature.get("svg_id") or "").strip()
+    )
+
+
+def _legacy_multipart_feature_id(feature: dict[str, Any]) -> str:
+    parts = feature.get("location_parts")
+    if not isinstance(parts, list) or len(parts) < 2 or not isinstance(parts[0], dict):
+        return ""
+    first = parts[0]
+    strand = {"+": 1, "-": -1}.get(str(first.get("strand") or "").strip())
+    try:
+        return compute_feature_hash_from_parts(
+            str(feature.get("type") or ""),
+            int(first["start"]),
+            int(first["end"]),
+            strand,
+            record_id=str(feature.get("record_id") or "") or None,
+        )
+    except (KeyError, TypeError, ValueError):
+        return ""
+
+
+def _legacy_multipart_feature_aliases(session: dict[str, Any]) -> dict[str, str]:
+    feature_state = session.get("features") if isinstance(session.get("features"), dict) else {}
+    features = feature_state.get("extractedFeatures")
+    candidates: dict[str, set[str]] = {}
+    for feature in (features if isinstance(features, list) else ()):
+        if not isinstance(feature, dict):
+            continue
+        legacy_id = _legacy_multipart_feature_id(feature)
+        stable_id = _stable_feature_id(feature)
+        if legacy_id and stable_id and legacy_id != stable_id:
+            candidates.setdefault(legacy_id, set()).add(stable_id)
+    return {
+        legacy_id: next(iter(stable_ids))
+        for legacy_id, stable_ids in candidates.items()
+        if len(stable_ids) == 1
+    }
+
+
+def _migrate_legacy_multipart_feature_ids(source: str, session: dict[str, Any]) -> str:
+    migrated = source
+    for legacy_id, stable_id in _legacy_multipart_feature_aliases(session).items():
+        migrated = migrated.replace(legacy_id, stable_id)
+    return migrated
+
+
+def _validate_source_feature_ids(
+    example: GallerySessionExample,
+    session: dict[str, Any],
+    source: str,
+) -> None:
+    feature_state = session.get("features") if isinstance(session.get("features"), dict) else {}
+    features = feature_state.get("extractedFeatures")
+    metadata_ids = {
+        candidate
+        for feature in (features if isinstance(features, list) else ())
+        if isinstance(feature, dict)
+        for candidate in (
+            str(feature.get("svg_id") or "").strip(),
+            _stable_feature_id(feature),
+        )
+        if candidate
+    }
+    rendered_ids = {
+        _SVG_PART_SUFFIX_RE.sub("", match)
+        for match in _SVG_FEATURE_ID_RE.findall(source)
+    }
+    missing_ids = sorted(rendered_ids - metadata_ids)
+    if missing_ids:
+        preview = ", ".join(missing_ids[:5])
+        raise ValueError(
+            f"{example.id} source SVG contains {len(missing_ids)} feature ID(s) "
+            f"without session metadata: {preview}"
+        )
+
+
 def _read_or_create_source_svg(example: GallerySessionExample, session: dict[str, Any]) -> str:
     if example.source_svg_path.exists():
-        return example.source_svg_path.read_text(encoding="utf-8")
-    source = _session_result_svg(session, example)
-    example.source_svg_path.write_text(source, encoding="utf-8")
-    return source
+        source = example.source_svg_path.read_text(encoding="utf-8")
+    else:
+        source = _session_result_svg(session, example)
+    migrated = _migrate_legacy_multipart_feature_ids(source, session)
+    _validate_source_feature_ids(example, session, migrated)
+    if migrated != source or not example.source_svg_path.exists():
+        example.source_svg_path.write_text(migrated, encoding="utf-8")
+    return migrated
 
 
 def _write_gallery_svg(

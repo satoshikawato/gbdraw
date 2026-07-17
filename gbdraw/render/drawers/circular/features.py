@@ -56,6 +56,7 @@ class FeatureDrawer:
         stroke_width_specified: Optional[float] = None,
         feature_data_id: Optional[str] = None,
         dom_element_id: Optional[str] = None,
+        feature_part: Optional[str] = None,
     ) -> None:
         stroke_color: str = (
             stroke_color_specified if stroke_color_specified is not None else self.default_stroke_color
@@ -76,6 +77,8 @@ class FeatureDrawer:
         if feature_data_id:
             path.attribs["data-gbdraw-feature-id"] = feature_data_id
             path.attribs["id"] = dom_element_id or feature_data_id
+            if feature_part:
+                path.attribs["data-gbdraw-feature-part"] = feature_part
         group.add(path)
 
     def draw(
@@ -129,6 +132,8 @@ class FeatureDrawer:
 
         # Keep intron lines behind blocks for the same feature by drawing lines first.
         ordered_types: tuple[str, ...] = ("line", "block", "label")
+        block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
+        block_index = 0
         line_index = 0
         for expected_type in ordered_types:
             for gene_path in gene_paths:
@@ -139,7 +144,22 @@ class FeatureDrawer:
                     continue
                 path_data = gene_path[1]
                 if path_type == "block":
-                    self.draw_path(path_data, group, fill_color=feature_object.color, feature_data_id=feature_data_id)
+                    block_index += 1
+                    dom_element_id = None
+                    if feature_data_id:
+                        dom_element_id = (
+                            feature_data_id
+                            if block_count <= 1
+                            else f"{feature_data_id}__part{block_index}"
+                        )
+                    self.draw_path(
+                        path_data,
+                        group,
+                        fill_color=feature_object.color,
+                        feature_data_id=feature_data_id,
+                        dom_element_id=dom_element_id,
+                        feature_part="block",
+                    )
                 elif path_type == "line":
                     line_index += 1
                     dom_element_id = f"{feature_data_id}__line{line_index}" if feature_data_id else None
@@ -151,6 +171,7 @@ class FeatureDrawer:
                         stroke_width_specified=self.intron_stroke_width,
                         feature_data_id=feature_data_id,
                         dom_element_id=dom_element_id,
+                        feature_part="connector",
                     )
                 elif path_type == "label":
                     for element in path_data:

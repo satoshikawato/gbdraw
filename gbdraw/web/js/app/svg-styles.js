@@ -4,7 +4,17 @@ import {
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
 } from './color-utils.js';
-import { FEATURE_SELECTOR, getFeatureElementIndex, getFeatureElements, getFeatureIdentity } from './feature-editor/svg-actions.js';
+import {
+  FEATURE_SELECTOR,
+  getFeatureElementIndex,
+  getFeatureFillElements,
+  getFeatureIdentity
+} from './feature-editor/svg-actions.js';
+import {
+  FEATURE_PART_CONNECTOR,
+  getFeaturePart,
+  isFeatureFillTarget
+} from './feature-dom.js';
 import { ruleMatchesFeature } from './feature-utils.js';
 import { parseTransformXY } from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
@@ -183,6 +193,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     let updatedCount = 0;
 
     featurePaths.forEach((path) => {
+      if (!isFeatureFillTarget(path)) return;
       const svgId = getFeatureIdentity(path);
       const feat = featureLookup.get(svgId);
       if (!feat) return;
@@ -426,7 +437,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
         }
       }
 
-      const elements = getFeatureElements(svg, feat.svg_id, featureElementIndex);
+      const elements = getFeatureFillElements(svg, feat.svg_id, featureElementIndex);
       if (elements.length > 0) {
         const newColor = matchingRule ? matchingRule.color : appliedPaletteColors.value[feat.type] || '#cccccc';
         elements.forEach((el) => {
@@ -458,7 +469,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     let updatedCount = 0;
 
     if (adv.block_stroke_color || adv.block_stroke_width !== null) {
-      const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
+      const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).filter(isFeatureFillTarget);
       featurePaths.forEach((path) => {
         if (adv.block_stroke_color) {
           path.setAttribute('stroke', adv.block_stroke_color);
@@ -502,20 +513,17 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     });
 
     if (adv.line_stroke_color || adv.line_stroke_width !== null) {
-      const allPaths = svg.querySelectorAll('path');
-      allPaths.forEach((path) => {
-        const fill = path.getAttribute('fill');
-        const stroke = path.getAttribute('stroke');
-        const id = path.getAttribute('id') || '';
-        if ((fill === 'none' || !fill) && stroke && !id.startsWith('f')) {
-          if (adv.line_stroke_color) {
-            path.setAttribute('stroke', adv.line_stroke_color);
-            updatedCount++;
-          }
-          if (adv.line_stroke_width !== null) {
-            path.setAttribute('stroke-width', adv.line_stroke_width);
-            updatedCount++;
-          }
+      const connectorPaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).filter(
+        (path) => getFeaturePart(path) === FEATURE_PART_CONNECTOR
+      );
+      connectorPaths.forEach((path) => {
+        if (adv.line_stroke_color) {
+          path.setAttribute('stroke', adv.line_stroke_color);
+          updatedCount++;
+        }
+        if (adv.line_stroke_width !== null) {
+          path.setAttribute('stroke-width', adv.line_stroke_width);
+          updatedCount++;
         }
       });
     }
