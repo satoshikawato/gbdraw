@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import gbdraw.api as public_api
+import gbdraw as public_api
+import gbdraw.api  # noqa: F401 - preserve the historical CLI contract import order
 import gbdraw.circular as circular_cli
 import gbdraw.linear as linear_cli
 

@@ -2,11 +2,26 @@
 
 # gbdraw 0.14.0b0 release notes
 
-`gbdraw.api` grows from 70 to 117 exported symbols in this beta. The new entries
-cover table readers, multi-record circular diagrams, interactive SVG metadata,
-typed render requests, annotation tracks, and version 32 session documents.
-Two behavior fixes make accepted options and returned paths match the work
-performed by the library.
+This beta introduces a small top-level Python interface for new library users.
+`draw_circular` and `draw_linear` return a first-party `Diagram`, mode-specific
+options replace the shared 71-field option bundle, and one Circular function now
+handles both single and multi-record input. Lower-level request, session, table,
+and rendering components remain available from `gbdraw.api` for integrations.
+
+## New top-level Python interface
+
+- Import the main drawing workflow from `gbdraw`, not `gbdraw.api`.
+- Use `read_genbank` or `read_gff`, then call `draw_circular` or `draw_linear`.
+- Pass `CircularOptions` or `LinearOptions`; wrong-mode fields are absent instead
+  of being accepted and rejected later.
+- Pass one `SeqRecord` or a sequence to the same drawing function.
+- Use `CircularLayout` only for a multi-record grid.
+- Call `Diagram.to_svg()`, `Diagram.to_bytes()`, or `Diagram.save(path)` without
+  handling `svgwrite.Drawing` directly.
+- `Diagram.save(path)` writes exactly the requested path. It does not create an
+  additional base SVG when saving another format.
+
+See the [Python API guide](./PYTHON_API.md) for executable examples.
 
 ## Python/Web session version 32
 
@@ -82,9 +97,10 @@ one of `depth_table`, `depth_file`, a one-element `depth_tables`, or a one-eleme
 `depth_files`; do not combine singular/plural or table/file forms. The low-level
 mode-specific assembler signatures are unchanged.
 
-## Added public Python capabilities
+## Added lower-level integration capabilities
 
-The following are available from `gbdraw.api`:
+The following remain available from `gbdraw.api` for CLI, web, session, and custom
+integration work:
 
 - Circular multi-record layout: `CircularMultiRecordOptions` and
   `build_circular_multi_diagram`.
@@ -103,10 +119,9 @@ The following are available from `gbdraw.api`:
   qualifier-priority, and label-override inputs.
 - Region annotation models, TSV loading, coordinate/feature resolution, Circular and Linear annotation track rendering, and interactive SVG annotation metadata.
 
-See the [Python API guide](./PYTHON_API.md) for executable examples and the full
-capability matrix.
+New drawing code should prefer the top-level interface described above.
 
-## Compatibility and migration
+## Lower-level compatibility
 
 - Existing `assemble_circular_diagram_from_record`,
   `assemble_circular_diagram_from_records`, and
