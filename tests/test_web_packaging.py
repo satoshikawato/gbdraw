@@ -837,7 +837,11 @@ def test_interactive_gallery_shell_is_static_and_sandboxed() -> None:
     assert "allow-same-origin" not in gallery_html
     assert 'id="demo-frame"' in gallery_html
     assert 'id="session-link"' in gallery_html
+    assert 'id="tag-filter-list"' in gallery_html
+    assert 'id="clear-tag-filters"' in gallery_html
     assert "fetch('./examples.json'" in gallery_js
+    assert "activeTagFilters" in gallery_js
+    assert "filteredExamples" in gallery_js
     assert "frame.src = sample.svg" in gallery_js
     assert "sample.session" in gallery_js
     assert "Vnig_TUMSAT-TG-2018" in gallery_js
@@ -876,6 +880,45 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "WSSV_genome_comparison",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
+    expected_tags = {
+        "HmmtDNA_basic_circular": ["Circular", "Interactive SVG"],
+        "lambda_basic_linear": ["Linear", "Interactive SVG"],
+        "HmmtDNA_ATskew": ["Circular", "Interactive SVG"],
+        "tobacco-chloroplast": ["Circular", "Interactive SVG"],
+        "Vnig_TUMSAT-TG-2018": ["Circular", "Multi-record", "Interactive SVG"],
+        "hepatoplasmataceae_collinear": [
+            "Linear",
+            "Collinear groups",
+            "LOSAT",
+            "Interactive SVG",
+        ],
+        "vibrio-harveyi-group-collinear": [
+            "Linear",
+            "Multi-record",
+            "Collinear groups",
+            "LOSAT",
+            "Static SVG",
+        ],
+        "hepatoplasmataceae_orthogroup": [
+            "Linear",
+            "Similarity groups",
+            "LOSAT",
+            "Interactive SVG",
+        ],
+        "BGC0000708-BGC0000713": [
+            "Linear",
+            "Similarity groups",
+            "LOSAT",
+            "Interactive SVG",
+        ],
+        "majanivirus_orthogroup": [
+            "Linear",
+            "Similarity groups",
+            "LOSAT",
+            "Interactive SVG",
+        ],
+        "WSSV_genome_comparison": ["Circular", "LOSAT", "Interactive SVG"],
+    }
 
     assert [entry["id"] for entry in examples] == expected_ids
     assert [entry["displayOrder"] for entry in examples] == sorted(
@@ -897,15 +940,15 @@ def test_interactive_gallery_examples_are_wired() -> None:
     for entry in examples:
         assert entry["title"]
         assert entry["description"]
-        assert entry["difficulty"] in {"Beginner", "Intermediate", "Advanced"}
+        assert "difficulty" not in entry
         assert entry["workflow"]
         assert entry["inputSummary"]
-        assert entry["estimatedTime"]
+        assert "estimatedTime" not in entry
         assert isinstance(entry["displayOrder"], int)
         assert entry["commandKind"] in {"runnable", "provenance"}
         assert entry["commandNote"]
         assert not entry.get("interactiveStep")
-        assert entry["tags"]
+        assert entry["tags"] == expected_tags[entry["id"]]
         assert entry["command"].startswith("gbdraw ")
         assert "interactive-svg" not in entry["command"]
         assert entry["fileSizeLabel"]
@@ -971,7 +1014,6 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert b"WEBP" in thumbnail_header
         _assert_white_gallery_thumbnail(thumbnail_path)
 
-    assert [entry["difficulty"] for entry in examples[:2]] == ["Beginner", "Beginner"]
     provenance = [entry for entry in examples if entry["commandKind"] == "provenance"]
     assert [entry["id"] for entry in provenance] == ["WSSV_genome_comparison"]
     assert "not directly runnable" in provenance[0]["commandNote"]

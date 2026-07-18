@@ -29,9 +29,17 @@
         <aside class="sample-panel" aria-labelledby="sample-list-title">
             <div class="panel-heading">
                 <h2 id="sample-list-title">Examples</h2>
-                <span id="sample-count" class="sample-count"></span>
+                <span id="sample-count" class="sample-count" aria-live="polite"></span>
+            </div>
+            <div class="tag-filter">
+                <div class="tag-filter__heading">
+                    <span id="tag-filter-label" class="tag-filter__label">Filter by tag</span>
+                    <button id="clear-tag-filters" class="tag-filter__clear" type="button" hidden>Clear</button>
+                </div>
+                <div id="tag-filter-list" class="tag-filter__list" role="group" aria-labelledby="tag-filter-label"></div>
             </div>
             <div id="sample-list" class="sample-list" role="list"></div>
+            <p id="no-tag-matches" class="no-tag-matches" hidden>No examples match the selected tags.</p>
         </aside>
 
         <section class="viewer-panel" aria-live="polite">

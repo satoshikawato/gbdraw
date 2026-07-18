@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Compare five aminoglycoside biosynthetic gene clusters",
   "summary": "Run LOSATP in the browser, assign CDS-derived proteins from five biosynthetic gene clusters to gbdraw similarity groups, apply antiSMASH gene_kind color rules, and label the first record.",
-  "estimatedTime": "10-20 min after inputs are available",
-  "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP similarity groups (Orthogroups mode) with feature color rules",
   "requirements": ["GenBank features that retain antiSMASH qualifiers such as gene_kind."],

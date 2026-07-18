@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Create your first circular genome figure",
   "summary": "Upload one small GenBank record, choose a circular preset, show feature labels and GC tracks, and export the result without running a sequence search.",
-  "estimatedTime": "Under 5 min",
-  "difficulty": "Beginner",
   "appMode": "Circular",
   "primaryWorkflow": "Circular basics",
   "downloads": [

@@ -417,7 +417,7 @@ test('Gallery renders the WSSV nucleotide-similarity tutorial and media', async 
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Advanced session-based WSSV comparison case study' })
+    page.getByRole('heading', { name: 'Session-based WSSV comparison case study' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByText('Load the bundled session first', { exact: true })).toBeVisible();
@@ -835,14 +835,50 @@ test('Gallery copy link button copies the selected sample URL', async ({ page })
   );
 });
 
-test('Gallery orders Beginner examples first and distinguishes runnable commands', async ({ page }) => {
+test('Gallery uses workflow tags and distinguishes runnable commands', async ({ page }) => {
   await page.goto(`${baseUrl}/gallery/`, { waitUntil: 'domcontentloaded' });
 
   const cards = page.locator('.sample-card');
-  await expect(cards).toHaveCount(10);
-  await expect(cards.nth(0)).toContainText('Beginner');
+  await expect(cards).toHaveCount(11);
+  await expect(cards.nth(0)).not.toContainText('Beginner');
+  await expect(cards.nth(0)).not.toContainText('Under 5 min');
+  await expect(cards.nth(0).locator('.tag')).toHaveText(['Circular', 'Interactive SVG']);
   await expect(cards.nth(0)).toContainText('Circular basics');
   await expect(cards.nth(1)).toContainText('Linear basics');
+
+  const tagFilters = page.getByRole('group', { name: 'Filter by tag' });
+  await tagFilters.getByRole('button', { name: 'Linear', exact: true }).click();
+  await expect(cards).toHaveCount(6);
+  await expect(page.locator('#sample-count')).toHaveText('6 of 11 examples');
+  await tagFilters.getByRole('button', { name: 'LOSAT', exact: true }).click();
+  await expect(cards).toHaveCount(5);
+  await expect(page.locator('#sample-count')).toHaveText('5 of 11 examples');
+  await expect(cards.locator('.tag-row')).toContainText(['LOSAT', 'LOSAT', 'LOSAT', 'LOSAT', 'LOSAT']);
+  await tagFilters.getByRole('button', { name: 'Circular', exact: true }).click();
+  await expect(cards).toHaveCount(0);
+  await expect(page.locator('#no-tag-matches')).toBeVisible();
+  await expect(page.locator('#sample-count')).toHaveText('0 of 11 examples');
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await expect(cards).toHaveCount(11);
+  await expect(page.locator('#sample-count')).toHaveText('11 examples');
+
+  const staticCard = page.locator('[data-sample-id="vibrio-harveyi-group-collinear"]');
+  await expect(staticCard.locator('.tag')).toHaveText([
+    'Linear',
+    'Multi-record',
+    'Collinear groups',
+    'LOSAT',
+    'Static SVG'
+  ]);
+  await staticCard.click();
+  await page.locator('#selected-tags').getByRole('button', { name: 'Static SVG' }).click();
+  await expect(cards).toHaveCount(1);
+  await expect(tagFilters.getByRole('button', { name: 'Static SVG' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await page.locator('[data-sample-id="HmmtDNA_basic_circular"]').click();
 
   await page.getByRole('tab', { name: 'Command' }).click();
   await expect(page.getByText('Runnable', { exact: true })).toBeVisible();

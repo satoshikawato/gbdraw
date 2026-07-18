@@ -1,10 +1,8 @@
 {
   "id": "WSSV_genome_comparison",
   "version": 1,
-  "title": "Advanced session-based WSSV comparison case study",
+  "title": "Session-based WSSV comparison case study",
   "summary": "Load the bundled session first to inspect a White spot syndrome virus reference and 20 prepared BLAST/LOSAT comparison rings. The displayed prepared-input command documents provenance; it is not a directly runnable public recipe.",
-  "estimatedTime": "Session inspection: under 5 min; input preparation: hours; search: 10-30 min; render and interaction: under 5 min",
-  "difficulty": "Advanced",
   "appMode": "Circular",
   "primaryWorkflow": "Circular nucleotide-similarity rings with LOSAT blastn",
   "requirements": ["Start by loading the bundled Gallery session. A manual rebuild requires all 20 prepared comparison assemblies, and several are available only inside that session."],

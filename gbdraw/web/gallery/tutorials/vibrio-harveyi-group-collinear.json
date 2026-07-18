@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Compare every replicon across five Vibrio Harveyi-group assemblies",
   "summary": "Arrange 11 chromosomes and plasmids from five RefSeq assemblies as five Linear rows, run LOSATP collinear analysis between adjacent rows, and color the resulting blocks by orientation and identity.",
-  "estimatedTime": "Session: under 5 min; full browser search: 20-40 min",
-  "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "Multi-record LOSATP collinear blocks",
   "downloads": [

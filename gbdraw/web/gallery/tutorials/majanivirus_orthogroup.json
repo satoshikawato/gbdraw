@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Plot CDS protein-similarity links across nine majanivirus genomes",
   "summary": "Run LOSATP in the browser, assign CDS-derived proteins from nine majanivirus genomes to gbdraw similarity groups, apply product-based feature colors, and draw curved links between group members.",
-  "estimatedTime": "15-40 min after inputs are available",
-  "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP similarity-group comparison (Orthogroups mode)",
   "downloads": [

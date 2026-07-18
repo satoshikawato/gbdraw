@@ -4,8 +4,7 @@
     "title": "Human mitochondrial genome: first circular figure",
     "tags": [
       "Circular",
-      "GenBank",
-      "Beginner"
+      "Interactive SVG"
     ],
     "svg": "./examples/HmmtDNA_basic_circular.svg",
     "svgType": "interactive",
@@ -23,10 +22,8 @@
     "commandKind": "runnable",
     "commandNote": "Download HmmtDNA.gbk from the Files tab, then run this command in the same directory.",
     "description": "Create a first circular genome figure from one small GenBank record without running a sequence search.",
-    "difficulty": "Beginner",
     "workflow": "Circular basics",
     "inputSummary": "1 GenBank file",
-    "estimatedTime": "Under 5 min",
     "displayOrder": 10,
     "tutorial": "./tutorials/HmmtDNA_basic_circular.json",
     "tutorialStatus": "ready"
@@ -36,8 +33,7 @@
     "title": "Lambda phage: first linear figure",
     "tags": [
       "Linear",
-      "GenBank",
-      "Beginner"
+      "Interactive SVG"
     ],
     "svg": "./examples/lambda_basic_linear.svg",
     "svgType": "interactive",
@@ -55,10 +51,8 @@
     "commandKind": "runnable",
     "commandNote": "Download NC_001416.gb from the Files tab, then run this command in the same directory.",
     "description": "Create a labeled linear genome figure and learn strand separation, the ruler, and SVG export.",
-    "difficulty": "Beginner",
     "workflow": "Linear basics",
     "inputSummary": "1 GenBank file",
-    "estimatedTime": "Under 5 min",
     "displayOrder": 20,
     "tutorial": "./tutorials/lambda_basic_linear.json",
     "tutorialStatus": "ready"
@@ -68,8 +62,7 @@
     "title": "Human mitochondrial genome (AT skew)",
     "tags": [
       "Circular",
-      "GenBank",
-      "Intermediate"
+      "Interactive SVG"
     ],
     "svg": "./examples/HmmtDNA_ATskew.svg",
     "svgType": "interactive",
@@ -87,10 +80,8 @@
     "commandKind": "runnable",
     "commandNote": "Download both HmmtDNA.gbk and HmmtDNA_qualifier_priority.tsv from Files before running the command.",
     "description": "Add an AT skew ring and qualifier-based labels to a compact circular mitochondrial diagram.",
-    "difficulty": "Intermediate",
     "workflow": "Circular quantitative tracks",
     "inputSummary": "1 GenBank + 1 qualifier TSV",
-    "estimatedTime": "5-10 min",
     "displayOrder": 30,
     "tutorial": "./tutorials/HmmtDNA_ATskew.json",
     "tutorialStatus": "ready"
@@ -100,8 +91,7 @@
     "title": "<i>Nicotiana tabacum</i> chloroplast genome regions",
     "tags": [
       "Circular",
-      "Organellar",
-      "Intermediate"
+      "Interactive SVG"
     ],
     "svg": "./examples/tobacco-chloroplast.svg",
     "svgType": "interactive",
@@ -119,10 +109,8 @@
     "commandKind": "runnable",
     "commandNote": "Download NC_001879.gbk and the three Gallery TSV files, then run the command in the same directory.",
     "description": "Mark LSC, SSC, IRa, and IRb as bracket annotations inside a color-coded chloroplast gene map.",
-    "difficulty": "Intermediate",
     "workflow": "Circular region annotations",
     "inputSummary": "1 GenBank + 3 TSV files",
-    "estimatedTime": "5-10 min",
     "displayOrder": 40,
     "tutorial": "./tutorials/tobacco-chloroplast.json",
     "tutorialStatus": "ready"
@@ -133,7 +121,7 @@
     "tags": [
       "Circular",
       "Multi-record",
-      "Intermediate"
+      "Interactive SVG"
     ],
     "svg": "./examples/Vnig_TUMSAT-TG-2018.svg",
     "svgType": "interactive",
@@ -151,10 +139,8 @@
     "commandKind": "runnable",
     "commandNote": "Download the pinned RefSeq assembly named in Files; no sequence search is required.",
     "description": "Arrange two chromosomes and four plasmids from one multi-record GenBank file on a shared circular canvas.",
-    "difficulty": "Intermediate",
     "workflow": "Circular multi-record canvas",
     "inputSummary": "1 multi-record GenBank file",
-    "estimatedTime": "5-15 min",
     "displayOrder": 50,
     "tutorial": "./tutorials/Vnig_TUMSAT-TG-2018.json",
     "tutorialStatus": "ready"
@@ -164,8 +150,9 @@
     "title": "Hepatoplasmataceae collinear protein-match blocks",
     "tags": [
       "Linear",
-      "Collinear",
-      "Advanced"
+      "Collinear groups",
+      "LOSAT",
+      "Interactive SVG"
     ],
     "svg": "./examples/hepatoplasmataceae_collinear.svg",
     "svgType": "interactive",
@@ -187,10 +174,8 @@
     "commandKind": "runnable",
     "commandNote": "Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
     "description": "Combine compatible protein-match anchors into collinear blocks across five related genomes.",
-    "difficulty": "Advanced",
     "workflow": "LOSATP collinear blocks",
     "inputSummary": "5 GenBank files",
-    "estimatedTime": "10-20 min plus search",
     "displayOrder": 60,
     "tutorial": "./tutorials/hepatoplasmataceae_collinear.json",
     "tutorialStatus": "ready"
@@ -201,8 +186,9 @@
     "tags": [
       "Linear",
       "Multi-record",
-      "Collinear",
-      "Advanced"
+      "Collinear groups",
+      "LOSAT",
+      "Static SVG"
     ],
     "svg": "./examples/vibrio-harveyi-group-collinear.svg",
     "svgType": "static",
@@ -224,10 +210,8 @@
     "commandKind": "runnable",
     "commandNote": "Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
     "description": "Compare all 11 replicons from five Harveyi-group Vibrio assemblies as five multi-record rows.",
-    "difficulty": "Advanced",
     "workflow": "Multi-record LOSATP collinear blocks",
     "inputSummary": "5 multi-record GenBank files; 11 replicons",
-    "estimatedTime": "Session: under 5 min; full search: 20-40 min",
     "displayOrder": 65,
     "tutorial": "./tutorials/vibrio-harveyi-group-collinear.json",
     "tutorialStatus": "ready"
@@ -238,7 +222,8 @@
     "tags": [
       "Linear",
       "Similarity groups",
-      "Advanced"
+      "LOSAT",
+      "Interactive SVG"
     ],
     "svg": "./examples/hepatoplasmataceae_orthogroup.svg",
     "svgType": "interactive",
@@ -260,10 +245,8 @@
     "commandKind": "runnable",
     "commandNote": "Download the five accession-pinned GenBank inputs from Files. The CLI value remains orthogroup for compatibility.",
     "description": "Compare the same five genomes with similarity-group links instead of collinear blocks.",
-    "difficulty": "Advanced",
     "workflow": "LOSATP similarity groups",
     "inputSummary": "5 GenBank files",
-    "estimatedTime": "10-20 min plus search",
     "displayOrder": 70,
     "tutorial": "./tutorials/hepatoplasmataceae_orthogroup.json",
     "tutorialStatus": "ready"
@@ -274,7 +257,8 @@
     "tags": [
       "Linear",
       "Similarity groups",
-      "Advanced"
+      "LOSAT",
+      "Interactive SVG"
     ],
     "svg": "./examples/BGC0000708-BGC0000713.svg",
     "svgType": "interactive",
@@ -296,10 +280,8 @@
     "commandKind": "runnable",
     "commandNote": "Files provides the five MIBiG records and all three repository-managed TSV files used by the command.",
     "description": "Compare five biosynthetic gene clusters while preserving antiSMASH categories and concise gene labels.",
-    "difficulty": "Advanced",
     "workflow": "LOSATP similarity groups and color rules",
     "inputSummary": "5 GenBank + 3 color/label TSV files",
-    "estimatedTime": "10-20 min plus search",
     "displayOrder": 80,
     "tutorial": "./tutorials/BGC0000708-BGC0000713.json",
     "tutorialStatus": "ready"
@@ -310,7 +292,8 @@
     "tags": [
       "Linear",
       "Similarity groups",
-      "Advanced"
+      "LOSAT",
+      "Interactive SVG"
     ],
     "svg": "./examples/majanivirus_orthogroup.svg",
     "svgType": "interactive",
@@ -336,10 +319,8 @@
     "commandKind": "runnable",
     "commandNote": "Download the nine accession-pinned records and both repository-managed color tables from Files.",
     "description": "Inspect dense protein-similarity links and product-based feature colors across nine viral genomes.",
-    "difficulty": "Advanced",
     "workflow": "LOSATP similarity groups",
     "inputSummary": "9 GenBank + 2 color TSV files",
-    "estimatedTime": "15-40 min plus search",
     "displayOrder": 90,
     "tutorial": "./tutorials/majanivirus_orthogroup.json",
     "tutorialStatus": "ready"
@@ -350,7 +331,7 @@
     "tags": [
       "Circular",
       "LOSAT",
-      "Advanced"
+      "Interactive SVG"
     ],
     "svg": "./examples/WSSV_genome_comparison.svg",
     "svgType": "interactive",
@@ -368,10 +349,8 @@
     "commandKind": "provenance",
     "commandNote": "This records the original prepared-input workflow and is not directly runnable from public downloads. Load the bundled session first; Shantou2019 has no recorded public accession.",
     "description": "Inspect one viral reference against 20 prepared assemblies as concentric BLAST/LOSAT comparison rings.",
-    "difficulty": "Advanced",
     "workflow": "Session-based circular comparison case study",
     "inputSummary": "Bundled session; prepared 20-assembly input set not fully public",
-    "estimatedTime": "Session: under 5 min; preparation/search: hours",
     "displayOrder": 100,
     "tutorial": "./tutorials/WSSV_genome_comparison.json",
     "tutorialStatus": "ready"

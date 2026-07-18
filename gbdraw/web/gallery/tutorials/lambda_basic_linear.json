@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Create your first linear genome figure",
   "summary": "Upload one small phage GenBank record, separate the strands, show labels and a ruler, and export the result without running a sequence search.",
-  "estimatedTime": "Under 5 min",
-  "difficulty": "Beginner",
   "appMode": "Linear",
   "primaryWorkflow": "Linear basics",
   "downloads": [

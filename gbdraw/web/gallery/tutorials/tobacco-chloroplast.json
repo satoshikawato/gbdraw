@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Annotate the four regions of a tobacco chloroplast genome",
   "summary": "Import the LSC, SSC, IRa, and IRb boundaries for NC_001879.2, bind them to a circular annotation track, and keep chloroplast feature colors, radial labels, and GC content visible.",
-  "estimatedTime": "10-15 min after the input is available",
-  "difficulty": "Intermediate",
   "appMode": "Circular",
   "primaryWorkflow": "Circular region annotations with custom track slots",
   "downloads": [
