@@ -228,9 +228,11 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   await expect(
     tutorialPanel.getByRole('heading', { name: 'Compare every replicon across five Vibrio Harveyi-group assemblies' })
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: /11.*NZ_CP125877\.1.*5.*3/ })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: /3.*NZ_CP125877\.1.*1.*3/ })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: /11.*NC_022359\.1.*5.*2/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'CDS Rectangle' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Plot Title <i>Vibrio</i> Harveyi group' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Evidence scope Adjacent pairs' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Plot Title Blank' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
   await expect(tutorialPanel.getByText('The SB1 assembly contains two chromosomes plus plasmid p1')).toBeVisible();
@@ -242,8 +244,10 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   await expect(mediaImages).toHaveCount(10);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-record-row.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-01-record-layout.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-03-adjacent-pairs.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-05-01-rectangle-features.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-collinear-overview.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-07-01-bottom-title.webp"]')).toHaveCount(0);
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -254,10 +258,19 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('GCF_000196095.1_ASM19609v1_genomic.gbff')).toBeVisible();
   await expect(filesPanel.getByText('GCF_030060435.1_ASM3006043v1_genomic.gbff')).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
-  expect(
-    statSync(join(webRoot, 'gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json')).size
-  ).toBeLessThan(100 * 1024 * 1024);
+  await expect(filesPanel.getByRole('link', { name: 'SVG', exact: true })).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Interactive SVG' })).toHaveCount(0);
+  await expect(filesPanel.getByRole('link', { name: 'Session JSON (gzip)' })).toBeVisible();
+  const sample = readGalleryExamples().find((entry) => entry.id === 'vibrio-harveyi-group-collinear');
+  expect(sample?.svgType).toBe('static');
+  const svgPath = join(webRoot, 'gallery/examples/vibrio-harveyi-group-collinear.svg');
+  const svgSource = readFileSync(svgPath, 'utf8');
+  expect(svgSource).not.toContain('<script');
+  expect(svgSource).not.toContain('data-gbdraw-interactive-svg');
+  expect(statSync(svgPath).size).toBeLessThan(100 * 1024 * 1024);
+  await page.getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.locator('#preview-note')).toContainText('static SVG');
+  await expect(page.locator('#demo-frame')).toHaveAttribute('title', /Static gbdraw SVG/);
 
   expect(pageErrors).toEqual([]);
 });

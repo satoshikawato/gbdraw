@@ -1422,6 +1422,33 @@ def test_build_blocks_from_hits_adjacent_scope_ignores_non_adjacent_tables() -> 
 
 
 @pytest.mark.linear
+def test_build_blocks_from_hits_adjacent_scope_uses_explicit_adjacent_row_pairs() -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]})]),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["c0"], "protein_id": ["c0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 2): pd.DataFrame.from_records([_hit_row("a0", "c0")], columns=COMPARISON_COLUMNS),
+    }
+
+    result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        directional_hits,
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(min_anchors=1),
+        edge_mode="one_to_one",
+        search_scope="adjacent",
+        comparison_pairs=((0, 2),),
+    )
+
+    assert len(result.blocks) == 1
+    assert result.blocks[0].query_record_index == 0
+    assert result.blocks[0].subject_record_index == 2
+
+
+@pytest.mark.linear
 def test_build_blocks_from_hits_all_scope_uses_non_adjacent_connectivity_only_as_evidence() -> None:
     records = [
         _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),

@@ -22,6 +22,7 @@ GALLERY_REMOTE_ASSET_LIMIT_BYTES = 25 * 1024 * 1024
 GALLERY_REMOTE_ASSET_PATTERNS = (
     "gallery/examples/*.svg",
     "gallery/sessions/*.gbdraw-session.json",
+    "gallery/sessions/*.gbdraw-session.json.gz",
     "gallery/sources/*.svg",
     "gallery/media/**/*",
 )

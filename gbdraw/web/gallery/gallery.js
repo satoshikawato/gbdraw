@@ -10,6 +10,7 @@ const selectedTags = document.querySelector('#selected-tags');
 const fileSize = document.querySelector('#file-size');
 const frame = document.querySelector('#demo-frame');
 const frameLoading = document.querySelector('#frame-loading');
+const previewNote = document.querySelector('#preview-note');
 const commandBlock = document.querySelector('#command-block code');
 const commandKind = document.querySelector('#command-kind');
 const commandNote = document.querySelector('#command-note');
@@ -137,6 +138,7 @@ const canLoadTutorial = (sample) => {
 };
 
 const selectedSample = () => examples.find((entry) => entry.id === selectedId);
+const sampleIsInteractive = (sample) => asText(sample?.svgType).toLowerCase() !== 'static';
 
 const pluralize = (count, singular, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
@@ -604,12 +606,12 @@ const renderTutorial = (tutorial, sample) => {
 const renderArtifactList = (parent, sample) => {
   const artifacts = [
     {
-      label: 'Interactive SVG',
+      label: sampleIsInteractive(sample) ? 'Interactive SVG' : 'SVG',
       href: sample.svg,
       note: sample.sourceOutput || ''
     },
     {
-      label: 'Session JSON',
+      label: sample.session?.endsWith('.gz') ? 'Session JSON (gzip)' : 'Session JSON',
       href: sample.session,
       note: sample.sourceSession || ''
     },
@@ -720,7 +722,7 @@ const renderTags = (parent, tags) => {
 
 const setLoading = (sample) => {
   frameLoading.hidden = false;
-  frame.title = `Interactive gbdraw SVG demo: ${plainTitle(sample)}`;
+  frame.title = `${sampleIsInteractive(sample) ? 'Interactive' : 'Static'} gbdraw SVG: ${plainTitle(sample)}`;
 };
 
 const updateActionLinks = (sample) => {
@@ -898,6 +900,9 @@ const selectSample = (id, { updateUrl = true } = {}) => {
     : 'This command needs prepared inputs that are not fully public.';
   interactiveStep.textContent = sample.interactiveStep || '';
   interactiveStep.hidden = !sample.interactiveStep;
+  previewNote.textContent = sampleIsInteractive(sample)
+    ? 'This JavaScript-enabled SVG is embedded in a sandboxed iframe.'
+    : 'This static SVG is embedded in a sandboxed iframe; it contains no JavaScript controls.';
   updateActionLinks(sample);
   resetSamplePanels(sample);
   updatePressedState();

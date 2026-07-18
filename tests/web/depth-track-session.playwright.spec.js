@@ -91,7 +91,7 @@ test('WSSV depth session removes stale circular depth metadata and slots', async
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
-  await page.locator('input[accept=".json"]').first().setInputFiles(sessionPath);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return Array.isArray(app?.files?.c_depth) && app.files.c_depth.length === 2;
@@ -160,7 +160,7 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
     window.__GBDRAW_APP__.pyodideReady = true;
   });
 
-  await page.locator('input[accept=".json"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
   await page.waitForTimeout(250);
 
@@ -236,7 +236,7 @@ test('BGC session selected feature Hide undo redo keeps visibility and legend st
     window.__GBDRAW_APP__.pyodideReady = true;
   });
 
-  await page.locator('input[accept=".json"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
   await page.waitForTimeout(250);
 

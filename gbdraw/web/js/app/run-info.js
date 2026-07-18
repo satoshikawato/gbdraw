@@ -167,7 +167,7 @@ export const buildRunInfo = ({
       'Use "Download CLI Files" to save those file(s) next to the uploaded inputs before running the command in a terminal.'
     );
     notes.push(
-      'If you save a .gbdraw-session.json and load it back in the web app, the uploaded inputs, results, and LOSAT cache are restored from the JSON; these TSV files do not need to be saved separately for session restore.'
+      'If you save a .gbdraw-session.json.gz and load it back in the web app, the uploaded inputs, results, and LOSAT cache are restored from the compressed JSON; these TSV files do not need to be saved separately for session restore.'
     );
   }
   if (unresolvedFileArgs.length > 0) {
@@ -182,7 +182,7 @@ export const buildRunInfo = ({
 
   const commandArgs = ['gbdraw', normalizedMode, ...argsWithFormat];
   const sessionCommand = isCliInvocationSessionExportable(invocation)
-    ? buildShellCommand(['gbdraw', normalizedMode, '--session', 'session.gbdraw-session.json'])
+    ? buildShellCommand(['gbdraw', normalizedMode, '--session', 'session.gbdraw-session.json.gz'])
     : '';
 
   return {

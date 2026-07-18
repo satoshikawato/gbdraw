@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
-    <title>gbdraw Interactive SVG Gallery</title>
+    <title>gbdraw SVG Gallery</title>
     <link rel="icon" href="../assets/gbdraw-logo.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./gallery.css">
     <script type="module" src="./gallery.js"></script>
@@ -15,7 +15,7 @@
             <a class="brand" href="../" aria-label="gbdraw web app">
                 <img src="../assets/gbdraw-logo-title.png" alt="gbdraw" class="brand__logo">
             </a>
-            <h1>gbdraw Interactive SVG Gallery</h1>
+            <h1>gbdraw SVG Gallery</h1>
             <nav class="site-nav" aria-label="Primary">
                 <a href="../">gbdraw.app</a>
                 <a href="./palettes/">Palettes</a>
@@ -69,7 +69,7 @@
                 </div>
 
                 <div class="notes-panel">
-                    <p>GitHub-rendered documentation shows static previews only. This page embeds the JavaScript-enabled SVG artifacts in sandboxed iframes.</p>
+                    <p id="preview-note">The selected SVG is embedded in a sandboxed iframe.</p>
                     <a href="https://github.com/satoshikawato/gbdraw/blob/main/docs/GALLERY.md">Command-focused examples in docs/GALLERY.md</a>
                 </div>
             </section>

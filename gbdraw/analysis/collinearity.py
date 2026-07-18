@@ -1733,12 +1733,18 @@ def _filter_hit_tables_by_search_scope(
     *,
     record_count: int,
     scope: CollinearitySearchScope | str,
+    comparison_pairs: Sequence[tuple[int, int]] | None = None,
 ) -> dict[tuple[int, int], DataFrame]:
     normalized_scope = normalize_collinearity_search_scope(str(scope))
     if normalized_scope == "all":
         return dict(hit_tables)
-    allowed_pairs = set(
-        iter_collinearity_search_pairs(record_count, scope=normalized_scope)
+    allowed_pairs = (
+        {
+            tuple(sorted((int(query_index), int(subject_index))))
+            for query_index, subject_index in comparison_pairs
+        }
+        if comparison_pairs is not None
+        else set(iter_collinearity_search_pairs(record_count, scope=normalized_scope))
     )
     return {
         (query_index, subject_index): hits
@@ -2054,6 +2060,11 @@ def build_orthogroup_collinearity_blocks_from_hits(
         directional_tables,
         record_count=record_count,
         scope=normalized_search_scope,
+        comparison_pairs=(
+            normalized_comparison_pairs
+            if normalized_search_scope == "adjacent" and comparison_pairs is not None
+            else None
+        ),
     )
     if normalized_edge_mode == "rbh":
         edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
@@ -2202,10 +2213,15 @@ def build_orthogroup_collinearity_blocks(
             identity=identity,
             alignment_length=alignment_length,
         )
-    for query_index, subject_index in iter_collinearity_search_pairs(
-        len(records),
-        scope=normalized_search_scope,
-    ):
+    search_pairs = (
+        tuple(
+            tuple(sorted((int(query_index), int(subject_index))))
+            for query_index, subject_index in comparison_pairs
+        )
+        if normalized_search_scope == "adjacent" and comparison_pairs is not None
+        else iter_collinearity_search_pairs(len(records), scope=normalized_search_scope)
+    )
+    for query_index, subject_index in search_pairs:
         query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
         subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_index])
         forward_hits = _run_losatp_search(

@@ -321,6 +321,45 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
+def test_collinear_pipeline_ignores_legacy_derived_comparison_pairs(
+    tmp_path: Path,
+) -> None:
+    gbk_a = _source_file(tmp_path / "a.gbk")
+    gbk_b = _source_file(tmp_path / "b.gbk")
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(source=GenBankInputSource(gbk_a)),
+            RecordInput(source=GenBankInputSource(gbk_b)),
+        ),
+        options=DiagramOptions(
+            protein_blastp_mode="collinear",
+            collinearity_search_scope="all",
+        ),
+    )
+    encoded = encode_canonical_request(request)
+    pipeline = next(
+        item
+        for item in encoded.payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    pipeline["pairs"] = [{"queryRecordIndex": 0, "subjectRecordIndex": 1}]
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized-legacy"),
+        output_directory=tmp_path / "replay-legacy",
+    )
+
+    assert decoded.options.protein_blastp_mode == "collinear"
+    assert decoded.options.protein_comparison_pairs is None
+    reencoded_pipeline = next(
+        item
+        for item in encode_canonical_request(decoded).payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    assert reencoded_pipeline["pairs"] == []
+
+
 def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None:
     source = _source_file(tmp_path / "record.gbk")
     table_file = _source_file(tmp_path / "rules.tsv", "key\tvalue\nCDS\tkeep\n")

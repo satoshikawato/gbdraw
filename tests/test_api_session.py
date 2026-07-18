@@ -101,6 +101,18 @@ def test_session_document_save_load_and_render(tmp_path: Path) -> None:
     assert result.output_paths[0].is_file()
 
 
+def test_session_document_gzip_save_load(tmp_path: Path) -> None:
+    request = CircularDiagramRequest(records=(_record(),))
+    session_path = tmp_path / "canonical.gbdraw-session.json.gz"
+
+    save_session_document(session_path, request)
+    document = load_session_document(session_path)
+
+    assert session_path.read_bytes().startswith(b"\x1f\x8b")
+    assert document.version == 32
+    assert document.mode == "circular"
+
+
 def test_legacy_session_has_no_public_typed_conversion(tmp_path: Path) -> None:
     document = load_session_document(
         {

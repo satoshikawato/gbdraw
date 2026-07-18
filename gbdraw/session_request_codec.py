@@ -1649,7 +1649,8 @@ def _decode_pipeline(
     setting_fields = tuple(name for name in _PIPELINE_FIELDS if name != "protein_blastp_mode")
     field_map = {_camel(name): name for name in setting_fields}
     _require_exact_fields(settings, path=f"{path}.settings", required=set(field_map))
-    result = {"protein_blastp_mode": item["mode"]}
+    mode = item["mode"]
+    result = {"protein_blastp_mode": mode}
     if schema >= 2:
         pairs = _array(item["pairs"], path=f"{path}.pairs")
         decoded_pairs: list[tuple[int, int]] = []
@@ -1670,7 +1671,12 @@ def _decode_pipeline(
                     ),
                 )
             )
-        result["protein_comparison_pairs"] = tuple(decoded_pairs) if decoded_pairs else None
+        # Early schema-2 writers also stored the derived row-adjacent search pairs
+        # used by collinear mode here.  The public option is pairwise-only; current
+        # collinear rendering derives those pairs from the saved layout instead.
+        result["protein_comparison_pairs"] = (
+            tuple(decoded_pairs) if decoded_pairs and mode == "pairwise" else None
+        )
     for key, name in field_map.items():
         raw = settings[key]
         result[name] = (

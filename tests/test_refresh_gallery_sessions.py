@@ -12,6 +12,7 @@ from tools.prepare_interactive_gallery_assets import (
 )
 from tools.refresh_gallery_sessions import (
     _preserve_gallery_cli_invocation,
+    _session_path,
     _with_interactive_svg_format,
 )
 
@@ -32,6 +33,12 @@ def test_with_interactive_svg_format_replaces_existing_format() -> None:
         "-f",
         "interactive_svg",
     ]
+
+
+def test_session_path_prefers_existing_compressed_gallery_session() -> None:
+    path = _session_path("vibrio-harveyi-group-collinear")
+
+    assert path.name == "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
 
 
 def test_preserve_gallery_cli_invocation_keeps_original_render_args() -> None:
@@ -143,6 +150,11 @@ def test_gallery_source_migrates_legacy_multipart_feature_ids() -> None:
         "stable_svg_id": "fcurrent",
         "record_id": "record-1",
         "type": "CDS",
+        "start": 10,
+        "end": 40,
+        "qualifiers": {},
+        "nucleotide_sequence": "ATGC",
+        "amino_acid_sequence": "M",
         "location_parts": [
             {"start": 10, "end": 20, "strand": "+"},
             {"start": 30, "end": 40, "strand": "+"},
@@ -172,3 +184,20 @@ def test_gallery_source_migrates_legacy_multipart_feature_ids() -> None:
         _validate_source_feature_ids(
             EXAMPLES[0], session, source.replace(legacy_id, "forphan")
         )
+
+
+def test_gallery_source_rejects_feature_metadata_without_popup_details() -> None:
+    session = {
+        "features": {
+            "extractedFeatures": [
+                {"svg_id": "fcurrent_record_1", "stable_svg_id": "fcurrent"}
+            ]
+        }
+    }
+    source = (
+        '<svg><path id="fcurrent_record_1" '
+        'data-gbdraw-feature-id="fcurrent_record_1" /></svg>'
+    )
+
+    with pytest.raises(ValueError, match="without popup details"):
+        _validate_source_feature_ids(EXAMPLES[0], session, source)

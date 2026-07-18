@@ -46,7 +46,7 @@ Use [precomputed BLAST comparisons](./TUTORIALS/2_Comparative_Genomics.md) when 
 
 - Use SVG or PDF for editable vector output; use PNG only when a raster format is required.
 - Use `interactive_svg` when feature or match popups are part of the deliverable.
-- Save a `.gbdraw-session.json` file when the browser state, inputs, and post-generation edits must be restored.
+- Save a `.gbdraw-session.json.gz` file from the web app when browser state, inputs, and post-generation edits must be restored. The CLI reads both forms, writes `.gbdraw-session.json` by default, and writes gzip when an explicit `--session_output` path ends in `.gz`.
 - Store the command, input accessions/checksums, search settings, and gbdraw version with publication figures.
 
 See [Export for publication](./EXPORT.md) and [interactive SVG/session workflows](./TUTORIALS/8_Interactive_SVG_Sessions.md).

@@ -54,6 +54,7 @@ import {
   buildCanonicalSessionRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
+import { downloadCompressedSession, readSessionText } from './session-file.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 
 const { nextTick } = window.Vue;
@@ -314,18 +315,6 @@ const hydrateMissingMultiRecordPositionsFromCliInvocation = (config, cliInvocati
   config.adv = adv;
 };
 
-const downloadJson = (data, filename, { pretty = true } = {}) => {
-  const blob = new Blob([pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data)], {
-    type: 'application/json'
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '')
     .replace(/[^\w.-]+/g, '_')
@@ -335,9 +324,9 @@ const makeSafeFilename = (name) => {
 
 const buildSessionFilename = (title) => {
   const base = String(title || '').trim();
-  if (!base) return 'gbdraw_session.json';
+  if (!base) return 'gbdraw_session.json.gz';
   const safe = makeSafeFilename(base);
-  return `${safe}.gbdraw-session.json`;
+  return `${safe}.gbdraw-session.json.gz`;
 };
 
 const normalizeLegendPosition = (value, fallback = 'left') => {
@@ -2585,21 +2574,16 @@ export const exportSession = async (titleOverride = null) => {
     const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
     if (!proceed) return;
   }
+  await downloadCompressedSession(sessionData, sessionFilename);
   lastSessionFilename = sessionFilename;
-  downloadJson(sessionData, sessionFilename, { pretty: false });
 };
 
 export const importSession = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
 
-  if (file.size > 200 * 1024 * 1024) {
-    alert('Session file is too large.');
-    return { status: 'error' };
-  }
-
   try {
-    const text = await file.text();
+    const text = await readSessionText(file);
     let data = JSON.parse(text, (key, value) => {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         return undefined;
