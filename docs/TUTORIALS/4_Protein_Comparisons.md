@@ -123,6 +123,8 @@ Use precomputed BLAST tables when you need to preserve an existing result, use c
 
 Do not combine `-b/--blast` with `--protein_blastp_mode`. The CLI rejects that combination because the two options define different comparison sources.
 
+For a typed Python request with multi-record rows, use `DiagramOptions(protein_blastp_mode="pairwise", protein_comparison_pairs=((0, 2), (1, 3)))` to run only the declared record pairs. Pair indices are zero-based and must connect adjacent layout rows. Supplying no `protein_comparison_pairs` preserves the legacy adjacent-record behavior. See the [Python API multi-record example](../PYTHON_API.md#linear-multi-record-layout-and-selected-comparisons).
+
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Set feature colors and labels](./3_Advanced_Customization.md) | [Next: Use TSV manifests >](./5_Table_Driven_Inputs.md)
 

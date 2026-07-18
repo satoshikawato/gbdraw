@@ -15,6 +15,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import (
     read_circular_track_table,
     read_conservation_table,
+    read_comparisons_table,
     read_records_table,
 )
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
@@ -533,6 +534,8 @@ def _is_cli_table_option(mode: Literal["circular", "linear"], token: str) -> boo
         return True
     if mode == "circular" and token in {"--conservation_table", "--circular_track_table"}:
         return True
+    if mode == "linear" and token == "--comparisons_table":
+        return True
     return False
 
 
@@ -543,6 +546,8 @@ def _cli_table_kind(token: str) -> str:
         return "conservation"
     if token == "--circular_track_table":
         return "circular_track"
+    if token == "--comparisons_table":
+        return "comparisons"
     return "unknown"
 
 
@@ -553,6 +558,8 @@ def _read_cli_table_dependencies(token: str, path: object):
         return read_conservation_table(str(path)).path_dependencies
     if token == "--circular_track_table":
         return read_circular_track_table(str(path)).path_dependencies
+    if token == "--comparisons_table":
+        return read_comparisons_table(str(path)).path_dependencies
     return ()
 
 

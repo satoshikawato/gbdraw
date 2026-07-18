@@ -171,6 +171,28 @@ gbdraw linear \
 
 Do not reuse full-record BLAST coordinates after cropping or reversing inputs unless the comparison data were generated for the displayed coordinate system. For larger sets, put selectors, regions, orientation, and order in a [`--records_table`](./5_Table_Driven_Inputs.md#2-linear---records_table-for-genbank-rows).
 
+## 8. Place several records on one row
+
+Assign every displayed record to a row with `--multi_record_position`. Input order determines the left-to-right order within a row:
+
+```bash
+gbdraw linear \
+  --gbk MjeNMV.gb PemoMJNVA.gb MelaMJNV.gb PeseMJNV.gb \
+  --multi_record_position '#1@1' \
+  --multi_record_position '#2@1' \
+  --multi_record_position '#3@2' \
+  --multi_record_position '#4@2' \
+  --linear_record_gap 28 \
+  --scale_style ruler \
+  --ruler_on_axis \
+  -o linear_multi_rows \
+  -f svg
+```
+
+The solver uses one common bp/px scale for every record. A ruler starts from zero on each record, while `--linear_record_gap` is a fixed pixel gap that does not change with sequence length. `--normalize_length` is rejected because it would assign incompatible per-record widths.
+
+For stable left-to-right ordering and per-record labels, prefer `row` and `column` in a [`--records_table`](./5_Table_Driven_Inputs.md#2-linear---records_table-for-genbank-rows). Add selected cross-row BLAST edges with [`--comparisons_table`](./2_Comparative_Genomics.md#6-compare-selected-pairs-across-multi-record-rows).
+
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Plot read depth and numeric tracks](./6_Depth_Quantitative_Tracks.md) | [Next: Create interactive SVGs >](./8_Interactive_SVG_Sessions.md)
 

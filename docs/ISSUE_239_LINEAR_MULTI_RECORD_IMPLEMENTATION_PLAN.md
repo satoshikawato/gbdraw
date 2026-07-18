@@ -5,7 +5,7 @@
 - 対象バージョン: `0.14.0b0` 以降
 - 設計スナップショット: branch `main`, HEAD `99d7813` の作業ツリー
 - 対象 Issue: [#239 Multiple records on a single line; multi-multi comparison](https://github.com/satoshikawato/gbdraw/issues/239)
-- 状態: 描画アーキテクチャ境界を含めて設計改定済み、未実装
+- 状態: 実装・検証済み
 - 目的: Linear mode で複数 record を同じ row に配置し、隣接 row 間の任意の record pair を共通スケールで比較できるようにする
 
 ## 1. 結論
@@ -902,18 +902,22 @@ diffを先に用意する。一度に全rendererを書き換えず、同じmappe
 
 Issue #239 は次をすべて満たしたとき完了とする。
 
-- [ ] Linear mode で同じ row に複数 record を配置できる。
-- [ ] 全 record が一つの共通 bp/px スケールを使う。
-- [ ] record-local ruler を既存 option で表示できる。
-- [ ] selected N-to-M comparisons が隣接 row 間の正しいrecordへ接続される。
-- [ ] feature、label、GC、skew、depth、annotation、custom track slot が配置に追従する。
-- [ ] CLI records/comparisons table、Python API、Web が同じ結果を生成する。
-- [ ] crop、reverse complement、duplicate ID が明示的なcontractとtestで扱われる。
-- [ ] schema 1 / legacy Web sessionを復元できる。
-- [ ] one-record-per-row の既存 SVG に意図しない差分がない。
-- [ ] SVG、interactive SVG、PNG、PDF exportを確認している。
-- [ ] focused tests、reference comparison、browser flowが通る。
-- [ ] Tutorials、CLI Reference、Recipes、Galleryが実装と一致する。
+- [x] Linear mode で同じ row に複数 record を配置できる。
+- [x] 全 record が一つの共通 bp/px スケールを使う。
+- [x] record-local ruler を既存 option で表示できる。
+- [x] selected N-to-M comparisons が隣接 row 間の正しいrecordへ接続される。
+- [x] feature、label、GC、skew、depth、annotation、custom track slot が配置に追従する。
+- [x] CLI records/comparisons table、Python API、Web が同じ結果を生成する。
+- [x] crop、reverse complement、duplicate ID が明示的なcontractとtestで扱われる。
+- [x] schema 1 / legacy Web sessionを復元できる。
+- [x] one-record-per-row の既存 SVG に意図しない差分がない。
+- [x] SVG、interactive SVG、PNG、PDF exportを確認している。
+- [x] focused tests、reference comparison、browser flowが通る。
+- [x] Tutorials、CLI Reference、Recipes、Galleryが実装と一致する。
+
+検証では既存 14 reference SVG を更新せず比較し、Web unit tests と Chromium の 2x2 row / N-to-M
+comparison flow を実行した。再生成可能な example は `examples/linear_multi_records.tsv`、
+`examples/linear_multi_comparisons.tsv`、`examples/linear_multi_record.svg` に収録した。
 
 ## 15. 推奨する最初のPR境界
 

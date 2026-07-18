@@ -72,8 +72,11 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     AnnotationOptions,
     CircularMultiRecordOptions,
     DiagramOptions,
+    LinearMultiRecordOptions,
     _validate_diagram_options_mode,
 )
+from gbdraw.linear_comparison import LinearComparison
+from gbdraw.layout.linear_multi_record import resolve_record_row_positions
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.canvas.circular import resolve_circular_side_legend_geometry  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -1749,9 +1752,12 @@ def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
     blast_files: Optional[Sequence[str]] = None,
+    linear_comparisons: Sequence[LinearComparison] | None = None,
+    layout: LinearMultiRecordOptions | None = None,
     protein_comparisons: Sequence[DataFrame] | None = None,
     orthogroups: OrthogroupResult | None = None,
     protein_blastp_mode: ProteinBlastpMode | str = "none",
+    protein_comparison_pairs: Sequence[tuple[int, int]] | None = None,
     pairwise_match_style: Literal["ribbon", "curve"] | str = "ribbon",
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None,
     collinearity_params: CollinearityParameters | LosslessCollinearityParameters | None = None,
@@ -1824,9 +1830,49 @@ def assemble_linear_diagram_from_records(
     """
     if not records:
         raise ValidationError("records is empty")
+    if layout is not None and not isinstance(layout, LinearMultiRecordOptions):
+        raise ValidationError("layout must be LinearMultiRecordOptions or None")
+    if linear_comparisons is not None and not all(
+        isinstance(item, LinearComparison) for item in linear_comparisons
+    ):
+        raise ValidationError("linear_comparisons must contain LinearComparison values")
+    normalized_protein_pairs: tuple[tuple[int, int], ...] | None = None
+    if protein_comparison_pairs is not None:
+        normalized_pairs: list[tuple[int, int]] = []
+        for pair in protein_comparison_pairs:
+            if (
+                not isinstance(pair, Sequence)
+                or len(pair) != 2
+                or not all(isinstance(index, int) and not isinstance(index, bool) for index in pair)
+            ):
+                raise ValidationError("protein_comparison_pairs must contain integer index pairs")
+            query_index, subject_index = int(pair[0]), int(pair[1])
+            if query_index < 0 or subject_index < 0 or query_index >= len(records) or subject_index >= len(records):
+                raise ValidationError("protein_comparison_pairs contains an out-of-range record index")
+            if query_index == subject_index:
+                raise ValidationError("protein_comparison_pairs cannot compare a record to itself")
+            normalized_pairs.append((query_index, subject_index))
+        if len(set(normalized_pairs)) != len(normalized_pairs):
+            raise ValidationError("protein_comparison_pairs must not contain duplicates")
+        normalized_protein_pairs = tuple(normalized_pairs)
+        _ordered_indices, pair_rows = resolve_record_row_positions(
+            records,
+            layout.multi_record_positions if layout is not None else None,
+        )
+        for query_index, subject_index in normalized_protein_pairs:
+            if abs(pair_rows[query_index] - pair_rows[subject_index]) != 1:
+                raise ValidationError(
+                    "protein_comparison_pairs must connect records in adjacent rows: "
+                    f"query=#{query_index + 1} row={pair_rows[query_index] + 1}, "
+                    f"subject=#{subject_index + 1} row={pair_rows[subject_index] + 1}."
+                )
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
+    if normalized_protein_pairs is not None and normalized_protein_blastp_mode != "pairwise":
+        raise ValidationError("protein_comparison_pairs requires protein_blastp_mode='pairwise'")
+    if normalized_protein_pairs is not None and linear_comparisons:
+        raise ValidationError("Pass either protein_comparison_pairs or linear_comparisons, not both")
     normalized_pairwise_match_style = _resolve_pairwise_match_style(pairwise_match_style)
     normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(
         str(collinearity_anchor_mode)
@@ -1856,7 +1902,12 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("protein_blastp_mode cannot be used with blast_files.")
     if normalized_protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("protein_blastp_mode requires at least two records")
-    has_precomputed_comparisons = bool(blast_files or protein_comparisons is not None or collinearity_blocks is not None)
+    has_precomputed_comparisons = bool(
+        blast_files
+        or linear_comparisons
+        or protein_comparisons is not None
+        or collinearity_blocks is not None
+    )
     if (
         align_orthogroup_feature
         and normalized_protein_blastp_mode != "orthogroup"
@@ -1882,6 +1933,7 @@ def assemble_linear_diagram_from_records(
     if default_colors is None:
         has_comparisons = bool(
             blast_files
+            or linear_comparisons
             or protein_comparisons
             or collinearity_blocks
             or normalized_protein_blastp_mode != "none"
@@ -1977,6 +2029,7 @@ def assemble_linear_diagram_from_records(
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
     resolved_protein_comparisons: list[DataFrame] | None = None
+    resolved_linear_comparisons: list[LinearComparison] = list(linear_comparisons or ())
     resolved_orthogroups: OrthogroupResult | None = orthogroups
     if protein_comparisons is not None:
         resolved_protein_comparisons = list(protein_comparisons)
@@ -1993,20 +2046,44 @@ def assemble_linear_diagram_from_records(
             color_mode=normalized_collinearity_color_mode,
         )
     elif normalized_protein_blastp_mode == "pairwise":
-        protein_blastp_result = build_pairwise_protein_blastp_comparisons(
-            records,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            max_hits=int(protein_blastp_max_hits),
-            candidate_limit=protein_blastp_candidate_limit,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-            feature_visibility_rules=feature_visibility_rules,
-        )
-        resolved_protein_comparisons = protein_blastp_result.comparisons
+        pair_inputs = normalized_protein_pairs
+        if pair_inputs is not None:
+            for query_index, subject_index in pair_inputs:
+                protein_blastp_result = build_pairwise_protein_blastp_comparisons(
+                    (records[query_index], records[subject_index]),
+                    losatp_bin=losatp_bin,
+                    ncbi_blastp_bin=ncbi_blastp_bin,
+                    losatp_threads=losatp_threads,
+                    max_hits=int(protein_blastp_max_hits),
+                    candidate_limit=protein_blastp_candidate_limit,
+                    evalue=evalue,
+                    bitscore=bitscore,
+                    identity=identity,
+                    alignment_length=alignment_length,
+                    feature_visibility_rules=feature_visibility_rules,
+                )
+                resolved_linear_comparisons.append(
+                    LinearComparison(
+                        query_index,
+                        subject_index,
+                        protein_blastp_result.comparisons[0],
+                    )
+                )
+        else:
+            protein_blastp_result = build_pairwise_protein_blastp_comparisons(
+                records,
+                losatp_bin=losatp_bin,
+                ncbi_blastp_bin=ncbi_blastp_bin,
+                losatp_threads=losatp_threads,
+                max_hits=int(protein_blastp_max_hits),
+                candidate_limit=protein_blastp_candidate_limit,
+                evalue=evalue,
+                bitscore=bitscore,
+                identity=identity,
+                alignment_length=alignment_length,
+                feature_visibility_rules=feature_visibility_rules,
+            )
+            resolved_protein_comparisons = protein_blastp_result.comparisons
     elif normalized_protein_blastp_mode == "orthogroup":
         protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons(
             records,
@@ -2113,7 +2190,7 @@ def assemble_linear_diagram_from_records(
         legend=legend,
         output_prefix=output_prefix,
         cfg=cfg,
-        has_comparisons=bool(blast_files or resolved_protein_comparisons),
+        has_comparisons=bool(blast_files or resolved_linear_comparisons or resolved_protein_comparisons),
         depth_track_count=max(1, depth_track_count(record_depth_tracks)),
         depth_track_heights=_depth_track_heights_from_specs(record_depth_tracks),
     )
@@ -2181,6 +2258,8 @@ def assemble_linear_diagram_from_records(
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
         comparison_dataframes=resolved_protein_comparisons,
+        linear_comparisons=resolved_linear_comparisons or None,
+        linear_layout=layout,
         orthogroups=resolved_orthogroups,
         align_orthogroup_feature=align_orthogroup_feature,
         cfg=cfg,
@@ -3624,6 +3703,7 @@ def build_linear_diagram(
     records: Sequence[SeqRecord],
     *,
     options: DiagramOptions | None = None,
+    layout: LinearMultiRecordOptions | None = None,
 ) -> Drawing:
     """Build a linear diagram using bundled DiagramOptions."""
 
@@ -3640,9 +3720,12 @@ def build_linear_diagram(
     return assemble_linear_diagram_from_records(
         records,
         blast_files=options.blast_files,
+        linear_comparisons=options.linear_comparisons,
+        layout=layout,
         protein_comparisons=options.protein_comparisons,
         orthogroups=options.orthogroups,
         protein_blastp_mode=options.protein_blastp_mode,
+        protein_comparison_pairs=options.protein_comparison_pairs,
         pairwise_match_style=options.pairwise_match_style,
         collinearity_blocks=options.collinearity_blocks,
         collinearity_params=options.collinearity_params,

@@ -659,6 +659,20 @@ export const buildConfigData = () => ({
   losatProgram: state.losatProgram.value,
   circularConservation: state.circularConservation,
   annotationSets: normalizeAnnotationSets(state.annotationSets),
+  linearRecordLayout: {
+    enabled: Boolean(state.linearRecordLayoutEnabled.value),
+    recordGap: Number(state.linearRecordGap.value) || 0,
+    rows: (state.linearRecordRows || []).map((entry) => ({
+      uid: String(entry?.uid || ''),
+      row: Number(entry?.row) || 1
+    })),
+    comparisons: (state.linearComparisons || []).map((comparison) => ({
+      id: String(comparison?.id || ''),
+      queryUid: String(comparison?.queryUid || ''),
+      subjectUid: String(comparison?.subjectUid || ''),
+      source: String(comparison?.source || 'upload')
+    }))
+  },
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
     orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
@@ -948,6 +962,34 @@ export const applyConfigData = (data) => {
     0,
     state.annotationSets.length,
     ...normalizeAnnotationSets(data.annotationSets)
+  );
+  const linearLayout = data.linearRecordLayout && typeof data.linearRecordLayout === 'object'
+    ? data.linearRecordLayout
+    : null;
+  state.linearRecordLayoutEnabled.value = Boolean(linearLayout?.enabled);
+  const linearRecordGap = Number(linearLayout?.recordGap);
+  state.linearRecordGap.value = Number.isFinite(linearRecordGap) && linearRecordGap >= 0
+    ? linearRecordGap
+    : 24;
+  state.linearRecordRows.splice(
+    0,
+    state.linearRecordRows.length,
+    ...(Array.isArray(linearLayout?.rows) ? linearLayout.rows : [])
+      .map((entry) => ({ uid: String(entry?.uid || ''), row: Number(entry?.row) }))
+      .filter((entry) => entry.uid && Number.isInteger(entry.row) && entry.row > 0)
+  );
+  state.linearComparisons.splice(
+    0,
+    state.linearComparisons.length,
+    ...(Array.isArray(linearLayout?.comparisons) ? linearLayout.comparisons : [])
+      .map((comparison, index) => ({
+        id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
+        queryUid: String(comparison?.queryUid || ''),
+        subjectUid: String(comparison?.subjectUid || ''),
+        source: String(comparison?.source || 'upload'),
+        file: null
+      }))
+      .filter((comparison) => comparison.queryUid && comparison.subjectUid)
   );
   state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
   if (state.adv.label_placement === 'on_feature') {
@@ -1728,6 +1770,15 @@ export const serializeFiles = async () => {
       region_reverse: !!seq.region_reverse
     }))
   );
+  const linearComparisons = await Promise.all(
+    (state.linearComparisons || []).map(async (comparison) => ({
+      id: String(comparison?.id || ''),
+      queryUid: String(comparison?.queryUid || ''),
+      subjectUid: String(comparison?.subjectUid || ''),
+      source: String(comparison?.source || 'upload'),
+      file: await serializeFile(comparison?.file)
+    }))
+  );
 
   return {
     c_gb: await serializeFile(state.files.c_gb),
@@ -1741,7 +1792,8 @@ export const serializeFiles = async () => {
     blacklist: await serializeFile(state.files.blacklist),
     whitelist: await serializeFile(state.files.whitelist),
     qualifier_priority: await serializeFile(state.files.qualifier_priority),
-    linearSeqs
+    linearSeqs,
+    linearComparisons
   };
 };
 
@@ -1761,6 +1813,8 @@ const applyFiles = (filesData) => {
 
   if (!filesData) {
     state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
+    state.linearRecordRows.splice(0);
+    state.linearComparisons.splice(0);
     return { collapsedLinearSeqs: false };
   }
 
@@ -1801,6 +1855,43 @@ const applyFiles = (filesData) => {
     const collapsed = collapseEmptyLinearSeqList(loadedLinearSeqs);
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
     state.linearSeqs.splice(0, state.linearSeqs.length, ...collapsed);
+    const rowByUid = new Map(state.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
+    state.linearRecordRows.splice(
+      0,
+      state.linearRecordRows.length,
+      ...state.linearSeqs.map((seq, index) => ({
+        uid: seq.uid,
+        row: Number.isInteger(Number(rowByUid.get(seq.uid)?.row)) && Number(rowByUid.get(seq.uid)?.row) > 0
+          ? Number(rowByUid.get(seq.uid).row)
+          : index + 1
+      }))
+    );
+    if (Array.isArray(filesData.linearComparisons)) {
+      state.linearComparisons.splice(
+        0,
+        state.linearComparisons.length,
+        ...filesData.linearComparisons.map((comparison, index) => ({
+          id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
+          queryUid: String(comparison?.queryUid || ''),
+          subjectUid: String(comparison?.subjectUid || ''),
+          source: String(comparison?.source || 'upload'),
+          file: deserializeFile(comparison?.file)
+        })).filter((comparison) => comparison.queryUid && comparison.subjectUid)
+      );
+    } else {
+      const migratedComparisons = state.linearSeqs.slice(0, -1)
+        .map((seq, index) => seq.blast ? ({
+          id: `linear-comparison-legacy-${index + 1}`,
+          queryUid: seq.uid,
+          subjectUid: state.linearSeqs[index + 1].uid,
+          source: 'upload',
+          file: seq.blast
+        }) : null)
+        .filter(Boolean);
+      if (migratedComparisons.length > 0) {
+        state.linearComparisons.splice(0, state.linearComparisons.length, ...migratedComparisons);
+      }
+    }
     return { collapsedLinearSeqs };
   }
 

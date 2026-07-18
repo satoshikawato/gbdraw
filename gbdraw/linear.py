@@ -13,9 +13,11 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Mapping, Optional, Sequence
+import pandas as pd
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
-from .io.cli_tables import read_records_table
+from .io.cli_tables import read_comparisons_table, read_records_table
+from .io.comparisons import COMPARISON_COLUMNS
 from .io.genome import load_gbks, load_gff_fasta
 from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
@@ -24,7 +26,16 @@ from .render.formats import INTERACTIVE_SVG_FORMAT
 from .render.interactive_svg import InteractiveSvgContext
 from .render.interactive_context import build_interactive_svg_context
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
-from .api.options import AnnotationOptions, ColorOptions, DiagramOptions, OutputOptions, TrackOptions
+from .api.options import (
+    AnnotationOptions,
+    ColorOptions,
+    DiagramOptions,
+    LinearMultiRecordOptions,
+    OutputOptions,
+    TrackOptions,
+)
+from .linear_comparison import LinearComparison
+from .layout.linear_multi_record import parse_record_row_position, resolve_record_row_positions
 from .annotations import read_annotation_table
 from .api.requests import (
     InMemoryRecordSource,
@@ -511,6 +522,93 @@ def _parse_definition_line_style_arg(value: str) -> str:
     return value
 
 
+def _parse_linear_multi_record_position(value: str) -> str:
+    try:
+        parse_record_row_position(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return str(value).strip()
+
+
+def _resolve_linear_comparison_selector(
+    records: Sequence,
+    selector: str,
+    *,
+    table_path: str,
+    row_number: int,
+    column: str,
+) -> int:
+    if selector.startswith("#"):
+        try:
+            index = int(selector[1:]) - 1
+        except ValueError as exc:
+            raise ValidationError(
+                f"{table_path}: row {row_number}, column {column!r}: "
+                f"invalid record selector {selector!r}."
+            ) from exc
+        if 0 <= index < len(records):
+            return index
+    else:
+        matches = [index for index, record in enumerate(records) if str(record.id) == selector]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ValidationError(
+                f"{table_path}: row {row_number}, column {column!r}: selector "
+                f"{selector!r} matched multiple record IDs; use #index."
+            )
+    raise ValidationError(
+        f"{table_path}: row {row_number}, column {column!r}: unresolved record "
+        f"selector {selector!r}."
+    )
+
+
+def _linear_comparisons_from_table(table, records, rows_by_record) -> list[LinearComparison]:
+    comparisons: list[LinearComparison] = []
+    for row in table.rows:
+        query_index = _resolve_linear_comparison_selector(
+            records,
+            row.query,
+            table_path=table.table_path,
+            row_number=row.row_number,
+            column="query",
+        )
+        subject_index = _resolve_linear_comparison_selector(
+            records,
+            row.subject,
+            table_path=table.table_path,
+            row_number=row.row_number,
+            column="subject",
+        )
+        query_row = int(rows_by_record[query_index])
+        subject_row = int(rows_by_record[subject_index])
+        if query_index == subject_index:
+            raise ValidationError(
+                f"{table.table_path}: row {row.row_number}, column 'subject': "
+                "query and subject resolved to the same record."
+            )
+        if query_row == subject_row or abs(query_row - subject_row) != 1:
+            topology = "different rows" if query_row == subject_row else "adjacent rows"
+            raise ValidationError(
+                f"{table.table_path}: row {row.row_number}, column 'subject': query "
+                f"row {query_row + 1} and subject row {subject_row + 1} must be in {topology}."
+            )
+        try:
+            matches = pd.read_csv(
+                row.blast,
+                sep="\t",
+                comment="#",
+                names=COMPARISON_COLUMNS,
+            )
+        except Exception as exc:
+            raise ValidationError(
+                f"{table.table_path}: row {row.row_number}, column 'blast': "
+                f"could not parse {row.blast}."
+            ) from exc
+        comparisons.append(LinearComparison(query_index, subject_index, matches))
+    return comparisons
+
+
 
 
 
@@ -541,6 +639,27 @@ def _get_args(args) -> argparse.Namespace:
         metavar="TSV",
         help="TSV manifest for row-based input records and per-record options.",
         type=str)
+    parser.add_argument(
+        "--multi_record_position",
+        metavar="SELECTOR@ROW",
+        action="append",
+        default=[],
+        type=_parse_linear_multi_record_position,
+        help="Place a record in a Linear row; repeat once for every loaded record.",
+    )
+    parser.add_argument(
+        "--linear_record_gap",
+        metavar="PX",
+        type=float,
+        default=24.0,
+        help="Gap in pixels between records in the same Linear row (default: 24).",
+    )
+    parser.add_argument(
+        "--comparisons_table",
+        metavar="TSV",
+        type=str,
+        help="TSV manifest with blast, query, and subject columns.",
+    )
     parser.add_argument(
         '-b',
         '--blast',
@@ -1055,6 +1174,15 @@ def _get_args(args) -> argparse.Namespace:
                     f"--records_table cannot be combined with --{option_name}; "
                     f"use the records table {option_name} column instead."
                 )
+    if args.records_table and args.multi_record_position:
+        parser.error(
+            "--records_table cannot be combined with --multi_record_position; "
+            "use row and column table columns instead."
+        )
+    if args.comparisons_table and args.blast:
+        parser.error("--comparisons_table cannot be combined with -b/--blast")
+    if not math.isfinite(args.linear_record_gap) or args.linear_record_gap < 0:
+        parser.error("--linear_record_gap must be a finite non-negative number")
     if args.protein_blastp_mode != "none" and args.blast:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
     if args.protein_blastp_max_hits <= 0:
@@ -1254,7 +1382,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         or source_losat_entries
     )
     out_file_prefix: str = args.output
-    blast_files: str = args.blast
+    blast_files: list[str] | None = args.blast
+    comparisons_table = (
+        read_comparisons_table(args.comparisons_table)
+        if args.comparisons_table
+        else None
+    )
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
     losatp_bin: str = args.losatp_bin
     ncbi_blastp_bin: str | None = getattr(args, "ncbi_blastp_bin", None)
@@ -1352,7 +1485,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files or protein_blastp_mode != "none":
+    if blast_files or comparisons_table is not None or protein_blastp_mode != "none":
         load_comparison = True
     else:
         load_comparison = False
@@ -1522,8 +1655,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     record_subtitle_values: list[str]
     region_arg_values: list[str]
     if records_table:
-        if records_table.has_multi_record_placement:
-            logger.info("Ignoring records table row/column values in linear mode.")
         if records_table.input_kind == "gbk":
             args.gbk = records_table.gbk_files
             args.gff = None
@@ -1635,6 +1766,34 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
             )
+    linear_positions = (
+        records_table.multi_record_positions()
+        if records_table is not None and records_table.has_multi_record_placement
+        else list(args.multi_record_position or [])
+    )
+    _ordered_record_indices, rows_by_record = resolve_record_row_positions(
+        records,
+        linear_positions or None,
+    )
+    multi_record_rows = len(set(rows_by_record)) < len(records)
+    if multi_record_rows and blast_files:
+        raise ValidationError(
+            "-b/--blast is ambiguous when a Linear row contains multiple records; "
+            "use --comparisons_table with explicit query and subject selectors."
+        )
+    explicit_linear_comparisons = (
+        _linear_comparisons_from_table(comparisons_table, records, rows_by_record)
+        if comparisons_table is not None
+        else None
+    )
+    linear_layout = (
+        LinearMultiRecordOptions(
+            record_gap_px=float(args.linear_record_gap),
+            multi_record_positions=tuple(linear_positions) if linear_positions else None,
+        )
+        if linear_positions
+        else None
+    )
     linear_record_metadata = _linear_session_record_metadata(records, linear_source_paths)
     if protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("--protein_blastp_mode requires at least two linear records.")
@@ -1746,6 +1905,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     canvas = assemble_linear_diagram_from_records(
         records=records,
         blast_files=blast_files,
+        linear_comparisons=explicit_linear_comparisons,
+        layout=linear_layout,
         config_dict=config_dict,
         color_table=color_table,
         default_colors=default_colors,
@@ -1829,7 +1990,11 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     request_prefix = Path(rendered_svg.output_prefix).name
     canonical_request = LinearDiagramRequest(
         records=tuple(
-            RecordInput(source=InMemoryRecordSource(record)) for record in records
+            RecordInput(
+                source=InMemoryRecordSource(record),
+                record_key=f"record-{index + 1}",
+            )
+            for index, record in enumerate(records)
         ),
         options=DiagramOptions(
             config=canonical_config,
@@ -1870,6 +2035,11 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             plot_title=plot_title or None,
             plot_title_font_size=plot_title_font_size,
             blast_files=tuple(blast_files) if blast_files else None,
+            linear_comparisons=(
+                tuple(explicit_linear_comparisons)
+                if explicit_linear_comparisons is not None
+                else None
+            ),
             protein_comparisons=(
                 tuple(collinearity_comparisons)
                 if collinearity_comparisons is not None
@@ -1899,6 +2069,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             identity=identity,
             alignment_length=alignment_length,
         ),
+        layout=linear_layout,
         output=RenderOutputRequest(
             output_prefix=request_prefix,
             formats=tuple(out_formats),

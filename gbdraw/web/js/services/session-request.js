@@ -9,7 +9,7 @@ import {
 import { buildLinearTrackSlotSpec } from '../app/linear-track-slots.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 1;
+export const CANONICAL_REQUEST_SCHEMA = 2;
 
 const safePrefix = (value) => {
   const normalized = String(value || '').trim().replace(/[\\/]+/g, '_');
@@ -133,6 +133,7 @@ const buildRecords = ({ state, filesData, resources }) => {
           };
       const region = linearRegionPayload(seq);
       return {
+        recordKey: String(seq.uid || `record-${index + 1}`),
         source,
         selector: region ? null : selectorPayload(seq.region_record_id),
         region,
@@ -165,7 +166,8 @@ const buildRecords = ({ state, filesData, resources }) => {
   const selectedRecords = state.form.multi_record_canvas && knownRecords.length > 0
     ? knownRecords
     : [null];
-  return selectedRecords.map((record) => ({
+  return selectedRecords.map((record, index) => ({
+    recordKey: `record-${index + 1}`,
     source,
     selector: selectorPayload(record?.selector),
     region: null,
@@ -366,19 +368,51 @@ const buildTracks = (state) => {
 const buildComparisons = ({ state, filesData, resources }) => {
   if (state.mode.value !== 'linear') return [];
   const comparisons = [];
-  (filesData.linearSeqs || []).forEach((seq, index) => {
-    if (!seq.blast) return;
+  const indexByUid = new Map((filesData.linearSeqs || []).map((seq, index) => [String(seq.uid || ''), index]));
+  const explicitComparisons = Array.isArray(filesData.linearComparisons)
+    ? filesData.linearComparisons
+    : [];
+  explicitComparisons.forEach((comparison, index) => {
+    if (!comparison?.file) return;
+    const queryRecordIndex = indexByUid.get(String(comparison.queryUid || ''));
+    const subjectRecordIndex = indexByUid.get(String(comparison.subjectUid || ''));
+    if (!Number.isInteger(queryRecordIndex) || !Number.isInteger(subjectRecordIndex)) return;
     const id = `comparison-nucleotide-${index + 1}`;
     comparisons.push({
       kind: 'nucleotideBlast',
-      resourceId: resources.addFile(id, 'nucleotide-blast', seq.blast)
+      resourceId: resources.addFile(id, 'nucleotide-blast', comparison.file),
+      queryRecordIndex,
+      subjectRecordIndex
     });
   });
-  if (state.blastSource.value === 'losat' && state.losatProgram.value === 'blastp') {
+  if (explicitComparisons.length === 0) {
+    (filesData.linearSeqs || []).forEach((seq, index) => {
+      if (!seq.blast || index + 1 >= filesData.linearSeqs.length) return;
+      const id = `comparison-nucleotide-${index + 1}`;
+      comparisons.push({
+        kind: 'nucleotideBlast',
+        resourceId: resources.addFile(id, 'nucleotide-blast', seq.blast),
+        queryRecordIndex: index,
+        subjectRecordIndex: index + 1
+      });
+    });
+  }
+  const generatedPairs = explicitComparisons
+    .filter((comparison) => comparison?.source === 'losat')
+    .map((comparison) => ({
+      queryRecordIndex: indexByUid.get(String(comparison.queryUid || '')),
+      subjectRecordIndex: indexByUid.get(String(comparison.subjectUid || ''))
+    }))
+    .filter((pair) => Number.isInteger(pair.queryRecordIndex) && Number.isInteger(pair.subjectRecordIndex));
+  if (
+    state.losatProgram.value === 'blastp' &&
+    (generatedPairs.length > 0 || state.blastSource.value === 'losat')
+  ) {
     const blastp = state.losat.blastp || {};
     comparisons.push({
       kind: 'generatedProteinComparison',
       mode: String(blastp.mode || 'orthogroup'),
+      pairs: generatedPairs,
       settings: {
         collinearityParams: {
           kind: 'lossless',
@@ -409,8 +443,21 @@ const buildComparisons = ({ state, filesData, resources }) => {
   return comparisons;
 };
 
-const buildLayout = (state) => {
-  if (state.mode.value !== 'circular' || !state.form.multi_record_canvas) return {};
+const buildLayout = (state, filesData) => {
+  if (state.mode.value === 'linear') {
+    if (!state.linearRecordLayoutEnabled?.value) return {};
+    const rows = new Map(
+      (state.linearRecordRows || []).map((entry) => [String(entry?.uid || ''), Number(entry?.row)])
+    );
+    return {
+      recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0),
+      multiRecordPositions: (filesData.linearSeqs || []).map((sequence, index) => {
+        const row = rows.get(String(sequence?.uid || ''));
+        return `#${index + 1}@${Number.isInteger(row) && row > 0 ? row : index + 1}`;
+      })
+    };
+  }
+  if (!state.form.multi_record_canvas) return {};
   const positions = Array.isArray(state.adv.multi_record_positions)
     ? state.adv.multi_record_positions
         .map((entry) => {
@@ -491,7 +538,7 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
       mode: state.mode.value,
       records,
       diagramOptions,
-      layout: buildLayout(state),
+      layout: buildLayout(state, filesData),
       comparisons: buildComparisons({ state, filesData, resources }),
       output: {
         prefix: safePrefix(state.form.prefix),
@@ -545,7 +592,7 @@ const combineCircularGenbankResources = (resources, records) => {
 };
 
 export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => {
-  if (!renderRequest || renderRequest.schema !== CANONICAL_REQUEST_SCHEMA) {
+  if (!renderRequest || ![1, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
   }
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
@@ -567,7 +614,7 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
       const region = record.region || null;
       const selector = region?.selector || record.selector;
       return {
-        uid: `canonical-seq-${index + 1}`,
+        uid: String(record.recordKey || `canonical-seq-${index + 1}`),
         gb: source.kind === 'genbank' ? resourceAsLegacyFile(resources, source.resourceId) : null,
         gff: source.kind === 'gffFasta' ? resourceAsLegacyFile(resources, source.gffResourceId) : null,
         fasta: source.kind === 'gffFasta' ? resourceAsLegacyFile(resources, source.fastaResourceId) : null,
@@ -583,11 +630,43 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
         region_reverse: Boolean(region?.reverseComplement || record.presentation?.reverseComplement)
       };
     });
+    files.linearComparisons = [];
     (renderRequest.comparisons || [])
       .filter((comparison) => comparison?.kind === 'nucleotideBlast')
       .forEach((comparison, index) => {
-        if (!files.linearSeqs[index]) return;
-        files.linearSeqs[index].blast = resourceAsLegacyFile(resources, comparison.resourceId);
+        const queryIndex = Number.isInteger(Number(comparison.queryRecordIndex))
+          ? Number(comparison.queryRecordIndex)
+          : index;
+        const subjectIndex = Number.isInteger(Number(comparison.subjectRecordIndex))
+          ? Number(comparison.subjectRecordIndex)
+          : index + 1;
+        const file = resourceAsLegacyFile(resources, comparison.resourceId);
+        if (files.linearSeqs[queryIndex] && subjectIndex === queryIndex + 1) {
+          files.linearSeqs[queryIndex].blast = file;
+        }
+        if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
+        files.linearComparisons.push({
+          id: `linear-comparison-canonical-${index + 1}`,
+          queryUid: files.linearSeqs[queryIndex].uid,
+          subjectUid: files.linearSeqs[subjectIndex].uid,
+          source: 'upload',
+          file
+        });
+      });
+    (renderRequest.comparisons || [])
+      .filter((comparison) => comparison?.kind === 'generatedProteinComparison')
+      .flatMap((comparison) => Array.isArray(comparison.pairs) ? comparison.pairs : [])
+      .forEach((pair, index) => {
+        const queryIndex = Number(pair?.queryRecordIndex);
+        const subjectIndex = Number(pair?.subjectRecordIndex);
+        if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
+        files.linearComparisons.push({
+          id: `linear-comparison-canonical-losat-${index + 1}`,
+          queryUid: files.linearSeqs[queryIndex].uid,
+          subjectUid: files.linearSeqs[subjectIndex].uid,
+          source: 'losat',
+          file: null
+        });
       });
   }
 
@@ -682,6 +761,20 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
     })
   };
+  const linearLayout = renderRequest.mode === 'linear' && renderRequest.schema >= 2
+    ? {
+        enabled: Object.keys(renderRequest.layout || {}).length > 0,
+        recordGap: renderRequest.layout?.recordGapPx ?? 24,
+        rows: (renderRequest.layout?.multiRecordPositions || []).map((token, index) => {
+          const split = String(token).lastIndexOf('@');
+          return {
+            uid: files.linearSeqs[index]?.uid || '',
+            row: Number(String(token).slice(split + 1)) || index + 1
+          };
+        }),
+        comparisons: (files.linearComparisons || []).map(({ file: _file, ...comparison }) => comparison)
+      }
+    : undefined;
   return {
     mode: renderRequest.mode,
     inputType: records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb',
@@ -689,6 +782,7 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
     config: {
       form,
       adv,
+      linearRecordLayout: linearLayout,
       annotationSets: normalizeAnnotationSets(options.annotations?.sets)
     }
   };

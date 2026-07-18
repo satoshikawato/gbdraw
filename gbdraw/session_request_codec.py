@@ -1,6 +1,6 @@
 """Internal codec for canonical, CLI-independent render request payloads.
 
-Schema 1 is intentionally strict: unknown fields are rejected instead of being
+Canonical request schemas are intentionally strict: unknown fields are rejected instead of being
 silently discarded.  File content is represented by stable resource IDs; this
 module does not own session envelopes, base64 encoding, or temporary files.
 """
@@ -39,6 +39,8 @@ from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImpor
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.linear_comparison import LinearComparison
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.annotations import (
     AnnotationOptions,
@@ -55,6 +57,7 @@ from .api.options import (
     CircularMultiRecordOptions,
     ColorOptions,
     DiagramOptions,
+    LinearMultiRecordOptions,
     OutputOptions,
     TrackOptions,
 )
@@ -71,7 +74,7 @@ from .api.requests import (
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 1
+CANONICAL_REQUEST_SCHEMA = 2
 UNKNOWN_FIELD_POLICY = "reject"
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -81,7 +84,14 @@ _TOP_LEVEL_FIELDS = frozenset(
 _DEFAULT_OPTIONS = DiagramOptions()
 
 _COMPARISON_SOURCE_FIELDS = frozenset(
-    {"blast_files", "protein_comparisons", "orthogroups", "collinearity_blocks"}
+    {
+        "blast_files",
+        "linear_comparisons",
+        "protein_comparisons",
+        "protein_comparison_pairs",
+        "orthogroups",
+        "collinearity_blocks",
+    }
 )
 _PIPELINE_FIELDS = (
     "protein_blastp_mode",
@@ -262,7 +272,7 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         raise CanonicalRequestEncodingError("Unsupported typed diagram request.")
     _validate_dataclass_contract(request.options, path="diagramOptions", error="encode")
     _validate_dataclass_contract(request.output, path="output", error="encode")
-    if isinstance(request, CircularDiagramRequest) and request.layout is not None:
+    if request.layout is not None:
         _validate_dataclass_contract(request.layout, path="layout", error="encode")
 
     resources = _ResourceBuilder()
@@ -295,7 +305,7 @@ def decode_canonical_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
 ) -> DiagramRequest:
-    """Decode schema 1 and normalize all validation failures to codec errors."""
+    """Decode canonical schemas 1 or 2 and normalize validation failures."""
 
     try:
         return _decode_canonical_request(
@@ -317,13 +327,13 @@ def _decode_canonical_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
 ) -> DiagramRequest:
-    """Decode schema 1 using caller-owned materialized resources and output directory."""
+    """Decode a supported schema using caller-owned materialized resources."""
 
     top = _object(payload, path="renderRequest", required=_TOP_LEVEL_FIELDS)
     schema = top["schema"]
     if not isinstance(schema, int) or isinstance(schema, bool):
         raise CanonicalRequestDecodingError("renderRequest.schema must be an integer.")
-    if schema != CANONICAL_REQUEST_SCHEMA:
+    if schema not in {1, CANONICAL_REQUEST_SCHEMA}:
         raise CanonicalRequestDecodingError(
             f"Unsupported canonical request schema: {schema!r}."
         )
@@ -347,26 +357,35 @@ def _decode_canonical_request(
             "renderRequest.records must be a non-empty array."
         )
     records = tuple(
-        _decode_record(value, index=index, resource_paths=resource_paths)
+        _decode_record(value, index=index, schema=schema, resource_paths=resource_paths)
         for index, value in enumerate(raw_records, start=1)
     )
     options_kwargs = _decode_diagram_options(
         top["diagramOptions"], resource_paths=resource_paths
     )
     comparison_kwargs = _decode_comparisons(
-        top["comparisons"], mode=mode, resource_paths=resource_paths
+        top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths
     )
     options = DiagramOptions(**options_kwargs, **comparison_kwargs)
     _validate_dataclass_contract(options, path="diagramOptions", error="decode")
     output = _decode_output(top["output"], output_directory=output_directory)
 
     if mode == "linear":
-        layout = _object(top["layout"], path="renderRequest.layout")
-        if layout:
-            raise CanonicalRequestDecodingError(
-                "A linear canonical request must have an empty layout object."
-            )
-        return LinearDiagramRequest(records=records, options=options, output=output)
+        if schema == 1:
+            layout_payload = _object(top["layout"], path="renderRequest.layout")
+            if layout_payload:
+                raise CanonicalRequestDecodingError(
+                    "A schema 1 Linear canonical request must have an empty layout object."
+                )
+            linear_layout = None
+        else:
+            linear_layout = _decode_linear_layout(top["layout"])
+        return LinearDiagramRequest(
+            records=records,
+            options=options,
+            layout=linear_layout,
+            output=output,
+        )
 
     layout = _decode_circular_layout(top["layout"])
     return CircularDiagramRequest(
@@ -423,6 +442,7 @@ def _encode_record(
 
     presentation = record.presentation
     return {
+        "recordKey": record.record_key or f"record-{index}",
         "source": source_payload,
         "selector": _encode_selector(record.selector),
         "region": _encode_region(record.region),
@@ -440,14 +460,14 @@ def _decode_record(
     value: object,
     *,
     index: int,
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> RecordInput:
     path = f"renderRequest.records[{index - 1}]"
-    item = _object(
-        value,
-        path=path,
-        required={"source", "selector", "region", "presentation"},
-    )
+    required = {"source", "selector", "region", "presentation"}
+    if schema >= 2:
+        required.add("recordKey")
+    item = _object(value, path=path, required=required)
     source_payload = _object(
         item["source"], path=f"{path}.source", required={"kind"}, exact=False
     )
@@ -512,6 +532,11 @@ def _decode_record(
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
         region=_decode_region(item["region"], path=f"{path}.region"),
         presentation=presentation,
+        record_key=(
+            _required_string(item["recordKey"], f"{path}.recordKey")
+            if schema >= 2
+            else f"record-{index}"
+        ),
     )
 
 
@@ -590,6 +615,17 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
 
 
 def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
+    if isinstance(request, LinearDiagramRequest):
+        if request.layout is None:
+            return {}
+        return {
+            "recordGapPx": request.layout.record_gap_px,
+            "multiRecordPositions": (
+                list(request.layout.multi_record_positions)
+                if request.layout.multi_record_positions is not None
+                else None
+            ),
+        }
     if not isinstance(request, CircularDiagramRequest) or request.layout is None:
         return {}
     layout = request.layout
@@ -631,6 +667,31 @@ def _decode_circular_layout(value: object) -> CircularMultiRecordOptions | None:
         multi_record_min_radius_ratio=layout["multiRecordMinRadiusRatio"],
         multi_record_column_gap_ratio=layout["multiRecordColumnGapRatio"],
         multi_record_row_gap_ratio=layout["multiRecordRowGapRatio"],
+        multi_record_positions=tuple(positions) if positions is not None else None,
+    )
+    _validate_dataclass_contract(result, path="layout", error="decode")
+    return result
+
+
+def _decode_linear_layout(value: object) -> LinearMultiRecordOptions | None:
+    layout = _object(value, path="renderRequest.layout")
+    if not layout:
+        return None
+    _require_exact_fields(
+        layout,
+        path="renderRequest.layout",
+        required={"recordGapPx", "multiRecordPositions"},
+    )
+    positions = layout["multiRecordPositions"]
+    if positions is not None and (
+        not isinstance(positions, list)
+        or not all(isinstance(item, str) for item in positions)
+    ):
+        raise CanonicalRequestDecodingError(
+            "renderRequest.layout.multiRecordPositions must be a string array or null."
+        )
+    result = LinearMultiRecordOptions(
+        record_gap_px=layout["recordGapPx"],
         multi_record_positions=tuple(positions) if positions is not None else None,
     )
     _validate_dataclass_contract(result, path="layout", error="decode")
@@ -1311,11 +1372,31 @@ def _encode_comparisons(
     if mode == "circular":
         return []
     result: list[dict[str, Any]] = []
+    for index, comparison in enumerate(options.linear_comparisons or (), start=1):
+        ref = _table_ref(
+            f"comparison-explicit-{index}", comparison.matches, resources=resources
+        )
+        result.append(
+            {
+                "kind": "precomputedProteinComparison",
+                "resourceId": ref["resourceId"],
+                "encoding": "canonicalTsv",
+                "queryRecordIndex": comparison.query_record_index,
+                "subjectRecordIndex": comparison.subject_record_index,
+            }
+        )
     for index, path in enumerate(options.blast_files or (), start=1):
         resource_id = resources.add_path(
             f"comparison-nucleotide-{index}", kind="nucleotide-blast", value=path
         )
-        result.append({"kind": "nucleotideBlast", "resourceId": resource_id})
+        result.append(
+            {
+                "kind": "nucleotideBlast",
+                "resourceId": resource_id,
+                "queryRecordIndex": index - 1,
+                "subjectRecordIndex": index,
+            }
+        )
     for index, table in enumerate(options.protein_comparisons or (), start=1):
         ref = _table_ref(f"comparison-protein-{index}", table, resources=resources)
         result.append(
@@ -1323,6 +1404,8 @@ def _encode_comparisons(
                 "kind": "precomputedProteinComparison",
                 "resourceId": ref["resourceId"],
                 "encoding": "canonicalTsv",
+                "queryRecordIndex": index - 1,
+                "subjectRecordIndex": index,
             }
         )
     if options.orthogroups is not None:
@@ -1364,7 +1447,7 @@ def _encode_comparisons(
     if any(
         not _same_default(getattr(options, name), getattr(_DEFAULT_OPTIONS, name))
         for name in _PIPELINE_FIELDS
-    ):
+    ) or options.protein_comparison_pairs is not None:
         settings = {
             _camel(name): _encode_pipeline_value(name, getattr(options, name))
             for name in _PIPELINE_FIELDS
@@ -1374,6 +1457,13 @@ def _encode_comparisons(
             {
                 "kind": "generatedProteinComparison",
                 "mode": options.protein_blastp_mode,
+                "pairs": [
+                    {
+                        "queryRecordIndex": int(pair[0]),
+                        "subjectRecordIndex": int(pair[1]),
+                    }
+                    for pair in (options.protein_comparison_pairs or ())
+                ],
                 "settings": settings,
             }
         )
@@ -1384,6 +1474,7 @@ def _decode_comparisons(
     value: object,
     *,
     mode: Literal["circular", "linear"],
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> dict[str, Any]:
     comparisons = _array(value, path="renderRequest.comparisons")
@@ -1393,6 +1484,7 @@ def _decode_comparisons(
         )
     blast_files: list[str] = []
     protein_tables: list[DataFrame] = []
+    explicit_comparisons: list[LinearComparison] = []
     result: dict[str, Any] = {}
     singleton_kinds: set[str] = set()
     for index, raw in enumerate(comparisons):
@@ -1400,34 +1492,73 @@ def _decode_comparisons(
         item = _object(raw, path=path, required={"kind"}, exact=False)
         kind = item["kind"]
         if kind == "nucleotideBlast":
-            _require_exact_fields(item, path=path, required={"kind", "resourceId"})
-            blast_files.append(
-                str(
-                    _resolve_resource(
-                        item["resourceId"],
-                        path=f"{path}.resourceId",
-                        resource_paths=resource_paths,
+            required = {"kind", "resourceId"}
+            if schema >= 2:
+                required |= {"queryRecordIndex", "subjectRecordIndex"}
+            _require_exact_fields(item, path=path, required=required)
+            resource_path = _resolve_resource(
+                item["resourceId"],
+                path=f"{path}.resourceId",
+                resource_paths=resource_paths,
+            )
+            if schema >= 2:
+                try:
+                    table = read_csv(
+                        resource_path,
+                        sep="\t",
+                        comment="#",
+                        names=COMPARISON_COLUMNS,
                     )
+                except Exception as exc:
+                    raise CanonicalRequestDecodingError(
+                        f"Could not decode BLAST resource for {path}."
+                    ) from exc
+                query_index = _non_negative_index(
+                    item["queryRecordIndex"], f"{path}.queryRecordIndex"
                 )
-            )
+                subject_index = _non_negative_index(
+                    item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
+                )
+                if query_index == len(blast_files) and subject_index == query_index + 1:
+                    blast_files.append(str(resource_path))
+                else:
+                    explicit_comparisons.append(
+                        LinearComparison(query_index, subject_index, table)
+                    )
+            else:
+                blast_files.append(str(resource_path))
         elif kind == "precomputedProteinComparison":
-            _require_exact_fields(
-                item, path=path, required={"kind", "resourceId", "encoding"}
-            )
+            required = {"kind", "resourceId", "encoding"}
+            if schema >= 2:
+                required |= {"queryRecordIndex", "subjectRecordIndex"}
+            _require_exact_fields(item, path=path, required=required)
             if item["encoding"] != "canonicalTsv":
                 raise CanonicalRequestDecodingError(
                     f"Unsupported protein comparison encoding at {path}."
                 )
-            protein_tables.append(
-                _read_canonical_table(
-                    _resolve_resource(
-                        item["resourceId"],
-                        path=f"{path}.resourceId",
-                        resource_paths=resource_paths,
-                    ),
-                    context=path,
-                )
+            table = _read_canonical_table(
+                _resolve_resource(
+                    item["resourceId"],
+                    path=f"{path}.resourceId",
+                    resource_paths=resource_paths,
+                ),
+                context=path,
             )
+            if schema >= 2:
+                query_index = _non_negative_index(
+                    item["queryRecordIndex"], f"{path}.queryRecordIndex"
+                )
+                subject_index = _non_negative_index(
+                    item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
+                )
+                if query_index == len(protein_tables) and subject_index == query_index + 1:
+                    protein_tables.append(table)
+                else:
+                    explicit_comparisons.append(
+                        LinearComparison(query_index, subject_index, table)
+                    )
+            else:
+                protein_tables.append(table)
         elif kind == "orthogroupResult":
             _check_singleton_kind(kind, singleton_kinds, path=path)
             _require_exact_fields(
@@ -1468,7 +1599,7 @@ def _decode_comparisons(
             )
         elif kind == "generatedProteinComparison":
             _check_singleton_kind(kind, singleton_kinds, path=path)
-            result.update(_decode_pipeline(item, path=path))
+            result.update(_decode_pipeline(item, path=path, schema=schema))
         else:
             raise CanonicalRequestDecodingError(
                 f"Unsupported comparison kind at {path}: {kind!r}."
@@ -1477,6 +1608,8 @@ def _decode_comparisons(
         result["blast_files"] = tuple(blast_files)
     if protein_tables:
         result["protein_comparisons"] = tuple(protein_tables)
+    if explicit_comparisons:
+        result["linear_comparisons"] = tuple(explicit_comparisons)
     return result
 
 
@@ -1505,13 +1638,39 @@ def _encode_pipeline_value(name: str, value: object) -> Any:
     return _json_value(value, path=f"comparisons.settings.{_camel(name)}")
 
 
-def _decode_pipeline(item: Mapping[str, Any], *, path: str) -> dict[str, Any]:
-    _require_exact_fields(item, path=path, required={"kind", "mode", "settings"})
+def _decode_pipeline(
+    item: Mapping[str, Any], *, path: str, schema: int
+) -> dict[str, Any]:
+    required = {"kind", "mode", "settings"}
+    if schema >= 2:
+        required.add("pairs")
+    _require_exact_fields(item, path=path, required=required)
     settings = _object(item["settings"], path=f"{path}.settings")
     setting_fields = tuple(name for name in _PIPELINE_FIELDS if name != "protein_blastp_mode")
     field_map = {_camel(name): name for name in setting_fields}
     _require_exact_fields(settings, path=f"{path}.settings", required=set(field_map))
     result = {"protein_blastp_mode": item["mode"]}
+    if schema >= 2:
+        pairs = _array(item["pairs"], path=f"{path}.pairs")
+        decoded_pairs: list[tuple[int, int]] = []
+        for index, raw_pair in enumerate(pairs):
+            pair_path = f"{path}.pairs[{index}]"
+            pair = _object(
+                raw_pair,
+                path=pair_path,
+                required={"queryRecordIndex", "subjectRecordIndex"},
+            )
+            decoded_pairs.append(
+                (
+                    _non_negative_index(
+                        pair["queryRecordIndex"], f"{pair_path}.queryRecordIndex"
+                    ),
+                    _non_negative_index(
+                        pair["subjectRecordIndex"], f"{pair_path}.subjectRecordIndex"
+                    ),
+                )
+            )
+        result["protein_comparison_pairs"] = tuple(decoded_pairs) if decoded_pairs else None
     for key, name in field_map.items():
         raw = settings[key]
         result[name] = (
@@ -2025,6 +2184,13 @@ def _optional_integer(value: object, path: str) -> int | None:
     return None if value is None else _integer(value, path)
 
 
+def _non_negative_index(value: object, path: str) -> int:
+    index = _integer(value, path)
+    if index < 0:
+        raise CanonicalRequestDecodingError(f"{path} must be non-negative.")
+    return index
+
+
 def _boolean(value: object, path: str) -> bool:
     if not isinstance(value, bool):
         raise CanonicalRequestDecodingError(f"{path} must be a boolean.")
@@ -2035,6 +2201,12 @@ def _optional_string(value: object, path: str) -> str | None:
     if value is not None and not isinstance(value, str):
         raise CanonicalRequestDecodingError(f"{path} must be a string or null.")
     return value
+
+
+def _required_string(value: object, path: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise CanonicalRequestDecodingError(f"{path} must be a non-empty string.")
+    return value.strip()
 
 
 def _check_singleton_kind(kind: str, seen: set[str], *, path: str) -> None:

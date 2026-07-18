@@ -10,6 +10,7 @@ final canvas sizing.
 from __future__ import annotations
 
 import math
+from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
@@ -141,6 +142,7 @@ def _precalculate_label_dimensions(
     cfg: GbdrawConfig | None = None,
     precomputed_feature_dicts: list[FeatureDict] | None = None,
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
+    sequence_widths: Sequence[float] | None = None,
 ) -> tuple[float, list[list[dict]], list[float]]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
 
@@ -194,16 +196,21 @@ def _precalculate_label_dimensions(
             )
 
         record_length = len(record.seq)
-        if normalize_length:
+        if sequence_widths is not None:
+            alignment_width = float(sequence_widths[i])
+            genome_size_normalization_factor = 1.0
+        elif normalize_length:
+            alignment_width = canvas_config.alignment_width
             genome_size_normalization_factor = 1.0
         else:
+            alignment_width = canvas_config.alignment_width
             genome_size_normalization_factor = record_length / canvas_config.longest_genome
 
         # Label x-positions must use the same final axis width as record rendering.
         label_list = prepare_label_list_linear(
             feature_dict,
             record_length,
-            canvas_config.alignment_width,
+            alignment_width,
             genome_size_normalization_factor,
             canvas_config.cds_height,
             canvas_config.strandedness,

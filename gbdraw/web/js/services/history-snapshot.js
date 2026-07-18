@@ -316,6 +316,10 @@ const buildFilesData = (state, fileStore) => ({
     region_start: seq.region_start ?? null,
     region_end: seq.region_end ?? null,
     region_reverse: Boolean(seq.region_reverse)
+  })),
+  linearComparisons: Array.from(state.linearComparisons || []).map((comparison) => ({
+    id: String(comparison?.id || ''),
+    file: fileStore.describeValue(comparison?.file)
   }))
 });
 
@@ -361,6 +365,15 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
     ? normalizeLinearSeqList(rows)
     : rows;
   state.linearSeqs.splice(0, state.linearSeqs.length, ...normalized);
+  if (state.linearComparisons && typeof state.linearComparisons.splice === 'function') {
+    const comparisonFiles = new Map(
+      (Array.isArray(filesData?.linearComparisons) ? filesData.linearComparisons : [])
+        .map((comparison) => [String(comparison?.id || ''), restore(comparison?.file)])
+    );
+    state.linearComparisons.forEach((comparison) => {
+      comparison.file = comparisonFiles.get(String(comparison?.id || '')) || null;
+    });
+  }
 };
 
 export const createHistorySnapshotService = ({

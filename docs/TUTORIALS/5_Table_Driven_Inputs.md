@@ -48,6 +48,33 @@ This writes `majani_records_table.svg`.
 
 Each `region` cell is scoped to its own row. Use only coordinates such as `1000-9000`, `1000..9000`, or `1000-9000:rc`; do not prefix them with a record ID, `#` index, or file selector. When `order` is present, explicit positive integers sort first in numeric order. Blank `order` cells follow and preserve their table row order; equal explicit values also preserve table row order.
 
+For a Linear multi-record layout, add positive `row` and `column` values for every record. `column` orders records from left to right; all rows share one bp/px scale. The equivalent command-line form is repeatable `--multi_record_position '#1@1'`, but it cannot be combined with table placement.
+
+### Explicit Linear comparisons table
+
+Create `linear_comparisons.tsv` when a layout needs selected N-to-M links instead of legacy adjacent-record order:
+
+```tsv
+blast	query	subject
+MjeNMV.MelaMJNV.tblastx.out	#1	#3
+PemoMJNVA.PeseMJNV.tblastx.out	#2	#4
+```
+
+The paths are relative to `linear_comparisons.tsv`. `query` and `subject` accept `#index` or a unique displayed record ID. Both endpoints must be different and in adjacent rows. Do not combine `--comparisons_table` with `-b/--blast`.
+
+The checked-in examples [`linear_multi_records.tsv`](../../examples/linear_multi_records.tsv) and [`linear_multi_comparisons.tsv`](../../examples/linear_multi_comparisons.tsv) can be rendered directly:
+
+```bash
+gbdraw linear \
+  --records_table examples/linear_multi_records.tsv \
+  --comparisons_table examples/linear_multi_comparisons.tsv \
+  --linear_record_gap 28 \
+  --identity 97 \
+  --alignment_length 500 \
+  -o linear_multi_record \
+  -f svg
+```
+
 ## 3. Linear `--records_table` for GFF3 + FASTA rows
 
 Create a small pair of GFF3 + FASTA inputs:

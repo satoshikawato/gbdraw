@@ -29,6 +29,7 @@ class DepthGroup:
         depth_df: DataFrame | None = None,
         group_id: str = "depth",
         axis_group_id: str = "depth_axis",
+        sequence_width: float | None = None,
     ) -> None:
         self.depth_group = Group(id=group_id)
         self.start_x = float(start_x)
@@ -37,13 +38,17 @@ class DepthGroup:
         self.depth_config = depth_config
         self.gb_record = gb_record
         self.track_height = float(track_height)
-        self.alignment_width = float(alignment_width)
+        self.alignment_width = (
+            float(sequence_width) if sequence_width is not None else float(alignment_width)
+        )
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.bool_normalize_length = cfg.canvas.linear.normalize_length
         self.record_len = len(self.gb_record.seq)
         self.axis_group_id = str(axis_group_id)
         self.genome_size_normalization_factor = (
-            1.0 if self.bool_normalize_length else self.record_len / self.longest_record_len
+            1.0
+            if sequence_width is not None or self.bool_normalize_length
+            else self.record_len / self.longest_record_len
         )
         if depth_df is not None:
             self.depth_df = depth_df

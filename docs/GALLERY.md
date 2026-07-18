@@ -52,6 +52,13 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
   </tr>
   <tr>
     <td colspan="2" valign="top">
+      <a href="../examples/linear_multi_record.svg"><img src="../examples/linear_multi_record.svg" alt="Four majanivirus records arranged in two rows with two selected cross-row comparisons" width="100%"></a><br>
+      <strong>Multi-record rows with explicit comparison pairs</strong><br>
+      Four viral records share one base-pair scale in a 2 × 2 layout. Two comparison-table rows connect selected query/subject pairs across the adjacent rows. See the <a href="./TUTORIALS/2_Comparative_Genomics.md#6-compare-selected-pairs-across-multi-record-rows">comparative-genomics tutorial</a>.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
       <a href="../examples/majani.svg"><img src="../examples/majani.svg" alt="Ten-record linear comparison of majanivirus genomes with translated nucleotide match ribbons" width="100%"></a><br>
       <strong>Majanivirus comparison</strong><br>
       Ten viral records connected by translated-nucleotide matches, with product-based feature colors. For a protein-search version, open the <a href="https://gbdraw.app/gallery/#majanivirus_orthogroup">interactive case study</a>.
