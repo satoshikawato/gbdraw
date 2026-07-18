@@ -1,10 +1,11 @@
 # Issue #239 Linear Multi-Record Layout Implementation Plan
 
 - 作成日: 2026-07-17
+- 改定日: 2026-07-18
 - 対象バージョン: `0.14.0b0` 以降
-- 設計スナップショット: branch `main`, HEAD `0e4730c` の作業ツリー
+- 設計スナップショット: branch `main`, HEAD `99d7813` の作業ツリー
 - 対象 Issue: [#239 Multiple records on a single line; multi-multi comparison](https://github.com/satoshikawato/gbdraw/issues/239)
-- 状態: 設計方針合意済み、未実装
+- 状態: 実装・検証済み
 - 目的: Linear mode で複数 record を同じ row に配置し、隣接 row 間の任意の record pair を共通スケールで比較できるようにする
 
 ## 1. 結論
@@ -31,21 +32,31 @@ Row 3             [record F]   [record G]
 4. 隣接 row 間で、明示された任意の record pair に BLAST / protein comparison を描ける。
 5. 既存の feature、label、GC、GC skew、depth、annotation、custom track slot を record ごとに維持する。
 6. `--records_table` の既存 `row` / `column` を Linear mode でも有効にする。
-7. CLI、Python API、Web、canonical request、session、interactive SVG が同じ endpoint contract を保持する。
-8. 従来の「1 row に 1 record」と隣接比較の出力を変更しない。
+7. record identity、比較座標、comparison source/result を正規化した一つの内部 contract を使う。
+8. CLI、Python API、Web、canonical request、session、interactive SVG が同じ stable record key を保持する。
+9. input adapter、domain normalization、measurement、layout、SVG rendering を分離する。
+10. 従来の「1 row に 1 record」と隣接比較の出力を変更しない。
 
 この文書の phase はレビュー可能な実装順序を示す。途中 phase の機能を Issue #239 完了とは扱わず、
 全受け入れ基準を満たした時点で完成とする。
+
+この改定では、Issue #239 専用の条件分岐を既存 assembly へ積み増すのではなく、Linear に限定した
+狭い内部境界を先に導入する。全 drawing element を統一する scene graph、plugin API、汎用
+constraint solver は導入しない。
 
 ## 2. 設計上の決定
 
 ### 2.1 用語
 
 - `record`: 一つの表示対象 `SeqRecord`。crop / reverse complement 後の表示 record を含む。
+- `record key`: record の論理 identity を表す不変の opaque string。配列 index、record ID、表示順とは別物。
 - `row`: 同じ Y 軸上に配置する一つ以上の record の集合。
 - `column`: 同じ row 内の左から右への順序。
+- `comparison spec`: endpoint と input source / generated analysis intent を持つ、解析前の比較要求。
+- `comparison edge`: endpoint と display-local に正規化済みの match を持つ、描画可能な比較結果。
+- `measurement`: text bbox、track extent、label candidate など、SVG を作らずに得た layout 制約。
 - `placement`: record の row、column、X 座標、Y 座標、描画幅、上下 extent を解決した値。
-- `comparison`: query record、subject record、match table を持つ明示的な比較 edge。
+- `layout plan`: placement、comparison anchor、canvas bounds を解決した immutable な Linear 描画計画。
 
 コード、CLI、Web、文書で `lane` と `row` を混在させず、公開用語は既存
 `--records_table` に合わせて `row` とする。内部 helper 名では `lane_layout` を使用してもよい。
@@ -73,7 +84,13 @@ record_width    = displayed_record_length * px_per_bp
 ```
 
 装飾テキストの左右 overhang は record の bp 幅に加えず、placement の外側 inset として扱う。
-これによりラベル幅が配列長の視覚表現を変えない。
+`px_per_bp` は配列長、基準 alignment width、要求 gap だけから決める。header、ruler、feature label の
+overhang が要求 gap を超える場合は effective gap または外側 canvas bounds を拡張し、text 幅を理由に
+`px_per_bp` を再計算しない。これによりラベル幅が配列長の視覚表現を変えない。
+
+`base_alignment_width <= row_gap_total` となる row は正の scale を持てないため、record count、gap、
+available width を含む `ValidationError` にする。固定 canvas width に収めるための自動 font 縮小や
+text 切り捨ては行わない。
 
 既存 `normalize_length=True` は record ごとに幅を正規化するため、同じ row に複数 record がある
 layout とは意味が衝突する。初回実装では、いずれかの row に複数 record があり、かつ
@@ -122,7 +139,58 @@ multi-record layout で ruler を表示する場合は record-local ruler を au
 - identity、orientation、collinearity color の既存設定を維持する。
 - Web の hover / click 強調は既存 interactive match metadata を使い、新しい selection engine を作らない。
 
-### 2.6 非目標
+### 2.6 内部アーキテクチャ境界
+
+Issue #239 では次の一方向 pipeline を導入する。
+
+```text
+CLI / typed API / canonical request / Web / legacy session
+                            |
+                            v
+                      input adapters
+                            |
+                            v
+                  normalized Linear domain model
+                  - stable RecordKey
+                  - displayed coordinate map
+                  - comparison specs
+                            |
+                 +----------+----------+
+                 |                     |
+                 v                     v
+          analysis / loading       intrinsic measurement
+                 |                     |
+                 v                     v
+          comparison edges ------> layout solver
+                                       |
+                                       v
+                               LinearLayoutPlan
+                                       |
+                                       v
+                                  SVG rendering
+```
+
+- legacy array order、file path、CLI namespace、Web state は adapter より下流へ渡さない。
+- renderer は raw comparison file、raw DataFrame、schema version、record adjacency を解釈しない。
+- layout solver は SVG element を生成せず、immutable な plan を返す。
+- renderer は plan を再解釈せず、配置済み geometry を SVG に変換する。
+- compatibility adapter は境界に残してよいが、新しい domain model に legacy field を追加しない。
+
+### 2.7 Circular との境界
+
+domain / layout / render の分離は Circular にも有効だが、Issue #239 で Circular layout と renderer を
+同時に移行しない。
+
+- `RecordKey`、displayed coordinate の基本規約、bbox / point のような安定 primitive は mode-neutral とする。
+- canonical schema 2 の record entry は Circular / Linear の双方で `recordKey` を持つ。
+- Linear 固有の `LinearDiagramModel`、`LinearRecordMeasurement`、`LinearLayoutPlan` を Circular へ流用しない。
+- Circular multi-record placement、label placement、canvas sizing は既存 path を compatibility façade の後ろに残す。
+- `CircularLayoutPlan` の導入は、Circular 側の具体的な変更要求と characterization test を用意した別 PR / Issue で判断する。
+
+これにより共通 identity と serialization は二重化せず、Issue #239 のために Circular geometry まで広く
+変更することも避ける。
+
+### 2.8 非目標
 
 - MCScanX の解析 algorithm や file format を再実装しない。
 - 一般-purpose graph layout framework を導入しない。
@@ -130,6 +198,9 @@ multi-record layout で ruler を表示する場合は record-local ruler を au
 - record ごとの独立スケール、broken axis、log scale を追加しない。
 - 長い label を自動要約、翻訳、または任意位置へ route しない。
 - N 対 M の全組合せを常に自動実行しない。利用者が選択または batch action で明示する。
+- 全描画要素を継承させる `Drawable` 基底 class を追加しない。
+- Linear と Circular を統合する汎用 `LayoutEngine` や独自 scene graph を追加しない。
+- third-party plugin 用の公開 drawing API を固定しない。
 
 ## 3. 現状と変更境界
 
@@ -140,6 +211,8 @@ multi-record layout で ruler を表示する場合は record-local ruler を au
   同じ row 内の複数 record を表現できない。
 - `PairWiseMatchGroup` は `comparison_count - 1` と `comparison_count` から q/s record を推定する。
 - comparison file の並び順が record N と N+1 の対応を暗黙に表す。
+- comparison、label、placement の複数箇所で dict / DataFrame / array order が実質的な interface になっている。
+- label placement は `alignment_width` に依存するため、最終 label extent を scale 決定前に一回で求められない。
 - `--records_table` は `row` / `column` を読み込めるが、Linear mode は値を無視する。
 - `RecordPresentation` と canonical request は `gridRow` / `gridColumn` をすでに保持できるが、
   `LinearDiagramRequest` は placement を拒否する。
@@ -148,8 +221,10 @@ multi-record layout で ruler を表示する場合は record-local ruler を au
 ### 3.2 変更する範囲
 
 - Linear record placement と canvas dimension calculation。
+- stable `RecordKey` と display-local coordinate contract。
+- Linear の正規化済み domain model、measurement、layout plan。
 - record ごとの coordinate mapping と ruler placement。
-- explicit comparison endpoints と comparison path geometry。
+- comparison spec / edge の分離、explicit endpoints、comparison path geometry。
 - `--records_table`、新しい comparison manifest、CLI validation。
 - typed Python request、canonical request schema、session migration。
 - Web の record row assignment と comparison pair editor。
@@ -164,40 +239,53 @@ multi-record layout で ruler を表示する場合は record-local ruler を au
 - pairwise identity / collinearity color calculation。
 - output format と export path。
 - Circular multi-record layout の見た目と option semantics。
+- Circular layout / renderer の内部構造。
+- 既存 public API の一括廃止またはplugin API化。
 
 ## 4. Target architecture
 
 ```text
-records + RecordPresentation(row/column)
-                    |
-                    v
-       resolve record row/order selectors
-                    |
-                    v
-       calculate LinearRecordPlacement[]
-       - one shared px_per_bp
-       - row widths and offsets
-       - record-local coordinate mapper
-       - top/bottom comparison anchors
-                    |
-          +---------+---------+
-          |                   |
-          v                   v
-  record/track renderers   explicit comparisons
-          |                   |
-          |            resolve q/s placements
-          |                   |
-          |                   v
-          |          PairWiseMatchGroup
-          |          receives endpoints
-          +---------+---------+
-                    |
-                    v
+external inputs
+      |
+      v
+adapter + validation
+      |
+      v
+LinearDiagramModel
+- ResolvedLinearRecord(record_key, displayed record, coordinate map)
+- LinearComparisonSpec(record keys, source / generated intent)
+      |
+      +--------------------+
+      |                    |
+      v                    v
+comparison normalization  intrinsic measurement
+      |                    |
+      v                    v
+LinearComparisonEdge[]   LinearRecordMeasurement[]
+      |                    |
+      +----------+---------+
+                 |
+                 v
+          solve_linear_layout()
+                 |
+                 v
+          LinearLayoutPlan
+          - placements by RecordKey
+          - one shared px_per_bp
+          - placed labels / headers / rulers
+          - comparison anchors
+          - final canvas bounds
+                 |
+                 v
+       record / track / comparison renderers
+                 |
+                 v
           static / interactive SVG
 ```
 
-assembly は orchestration、layout module は pure geometry、render group は SVG construction を所有する。
-file parsing、selector resolution、geometry、drawing を一つの class にまとめない。
+assembly は orchestration、adapter は外部表現の変換、domain normalization は identity と座標、measurement は
+intrinsic geometry、layout module は配置済み plan、render group は SVG construction を所有する。file parsing、
+selector resolution、analysis、geometry、drawing を一つの class にまとめない。
 
 ## 5. Domain contracts
 
@@ -814,18 +902,22 @@ diffを先に用意する。一度に全rendererを書き換えず、同じmappe
 
 Issue #239 は次をすべて満たしたとき完了とする。
 
-- [ ] Linear mode で同じ row に複数 record を配置できる。
-- [ ] 全 record が一つの共通 bp/px スケールを使う。
-- [ ] record-local ruler を既存 option で表示できる。
-- [ ] selected N-to-M comparisons が隣接 row 間の正しいrecordへ接続される。
-- [ ] feature、label、GC、skew、depth、annotation、custom track slot が配置に追従する。
-- [ ] CLI records/comparisons table、Python API、Web が同じ結果を生成する。
-- [ ] crop、reverse complement、duplicate ID が明示的なcontractとtestで扱われる。
-- [ ] schema 1 / legacy Web sessionを復元できる。
-- [ ] one-record-per-row の既存 SVG に意図しない差分がない。
-- [ ] SVG、interactive SVG、PNG、PDF exportを確認している。
-- [ ] focused tests、reference comparison、browser flowが通る。
-- [ ] Tutorials、CLI Reference、Recipes、Galleryが実装と一致する。
+- [x] Linear mode で同じ row に複数 record を配置できる。
+- [x] 全 record が一つの共通 bp/px スケールを使う。
+- [x] record-local ruler を既存 option で表示できる。
+- [x] selected N-to-M comparisons が隣接 row 間の正しいrecordへ接続される。
+- [x] feature、label、GC、skew、depth、annotation、custom track slot が配置に追従する。
+- [x] CLI records/comparisons table、Python API、Web が同じ結果を生成する。
+- [x] crop、reverse complement、duplicate ID が明示的なcontractとtestで扱われる。
+- [x] schema 1 / legacy Web sessionを復元できる。
+- [x] one-record-per-row の既存 SVG に意図しない差分がない。
+- [x] SVG、interactive SVG、PNG、PDF exportを確認している。
+- [x] focused tests、reference comparison、browser flowが通る。
+- [x] Tutorials、CLI Reference、Recipes、Galleryが実装と一致する。
+
+検証では既存 14 reference SVG を更新せず比較し、Web unit tests と Chromium の 2x2 row / N-to-M
+comparison flow を実行した。再生成可能な example は `examples/linear_multi_records.tsv`、
+`examples/linear_multi_comparisons.tsv`、`examples/linear_multi_record.svg` に収録した。
 
 ## 15. 推奨する最初のPR境界
 

@@ -44,6 +44,8 @@ class GallerySessionExample:
     display_order: int
     command_kind: str
     command_note: str
+    feature_sources: tuple[str, ...] = ()
+    sync_result_svg: bool = True
     interactive_step: str = ""
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
     command: str = ""
@@ -143,6 +145,25 @@ BGC_COMMAND = (
     "--definition_line_style 'accession:size=20,color=#7b7c7d' "
     "--definition_line_style 'length:size=20,color=#7b7c7d' "
     "-l bottom -o BGC0000708-BGC0000713"
+)
+
+VIBRIO_HARVEYI_GROUP_COMMAND = (
+    "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv "
+    "--linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis "
+    "--scale_interval 750000 --separate_strands --hide_accession --hide_length "
+    "--definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' "
+    "--definition_line_style 'subtitle:size=16' --keep_definition_left_aligned "
+    "--protein_blastp_mode collinear --collinear_search_scope all "
+    "--protein_blastp_candidate_limit 5 --collinear_min_anchors 3 "
+    "--collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 "
+    "--collinear_color_mode orientation_identity --pairwise_match_style curve "
+    "--losatp_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle "
+    "--feature_shape tRNA=rectangle --feature_shape tmRNA=rectangle "
+    "--feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle "
+    "--feature_shape repeat_region=rectangle --block_stroke_width 0 "
+    "--axis_stroke_width 2 --line_stroke_width 1 --legend bottom "
+    "--plot_title '<i>Vibrio</i> Harveyi group' --plot_title_position bottom "
+    "-o vibrio-harveyi-group-collinear -f interactive_svg"
 )
 
 WSSV_CONSERVATION_LABELS = (
@@ -257,6 +278,28 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=60,
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
+    ),
+    GallerySessionExample(
+        id="vibrio-harveyi-group-collinear",
+        title="<i>Vibrio</i> Harveyi group multi-record collinearity",
+        tags=("Linear", "Multi-record", "Collinear", "Advanced"),
+        description="Compare all 11 replicons from five Harveyi-group Vibrio assemblies as five multi-record rows.",
+        difficulty="Advanced",
+        workflow="Multi-record LOSATP collinear blocks",
+        input_summary="5 multi-record GenBank files; 11 replicons",
+        estimated_time="Session: under 5 min; full search: 20-40 min",
+        display_order=65,
+        command_kind="runnable",
+        command_note="Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
+        command=VIBRIO_HARVEYI_GROUP_COMMAND,
+        feature_sources=(
+            "GCF_000196095.1_ASM19609v1_genomic.gbff",
+            "GCF_000354175.2_ASM35417v2_genomic.gbff",
+            "GCF_002906475.1_ASM290647v1_genomic.gbff",
+            "GCF_002021755.1_ASM202175v1_genomic.gbff",
+            "GCF_030060435.1_ASM3006043v1_genomic.gbff",
+        ),
+        sync_result_svg=False,
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_orthogroup",
@@ -639,7 +682,8 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
     for example in EXAMPLES:
         session = _load_session(example)
         source = _read_or_create_source_svg(example, session)
-        _sync_session_result_svg(example, session, source)
+        if example.sync_result_svg:
+            _sync_session_result_svg(example, session, source)
         _write_gallery_svg(example, session, source)
         _validate_source_assets(example)
         _render_thumbnail(example)
@@ -655,7 +699,7 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
             "sourceOutput": str(example.output_svg_path.relative_to(REPO_ROOT)),
             "sourceFigure": str(example.source_svg_path.relative_to(REPO_ROOT)),
             "sourceNote": example.source_note,
-            "featureSources": _session_feature_sources(session),
+            "featureSources": list(example.feature_sources) or _session_feature_sources(session),
             "fileSizeLabel": _format_size(example.gallery_svg_path.stat().st_size),
             "command": _example_command(example, session),
             "commandKind": example.command_kind,

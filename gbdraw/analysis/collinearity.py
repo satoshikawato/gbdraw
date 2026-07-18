@@ -2012,6 +2012,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int = 5,
     max_paralog_links_per_orthogroup: int = 2,
+    comparison_pairs: Sequence[tuple[int, int]] | None = None,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
 ) -> CollinearityResult:
     """Call lossless Orthogroup-sourced collinearity blocks from filtered hits."""
@@ -2032,6 +2033,23 @@ def build_orthogroup_collinearity_blocks_from_hits(
     if resolved_max_paralog_links <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     record_count = len(records) if records is not None else len(extraction.proteins_by_record)
+    if comparison_pairs is None:
+        normalized_comparison_pairs = tuple(
+            (record_index, record_index + 1)
+            for record_index in range(max(0, record_count - 1))
+        )
+    else:
+        normalized_pairs: list[tuple[int, int]] = []
+        for raw_pair in comparison_pairs:
+            if len(raw_pair) != 2:
+                raise ValidationError("comparison_pairs must contain record-index pairs.")
+            query_index, subject_index = sorted((int(raw_pair[0]), int(raw_pair[1])))
+            if query_index < 0 or subject_index >= record_count or query_index == subject_index:
+                raise ValidationError("comparison_pairs contains an invalid record-index pair.")
+            normalized_pairs.append((query_index, subject_index))
+        if len(set(normalized_pairs)) != len(normalized_pairs):
+            raise ValidationError("comparison_pairs must not contain duplicates.")
+        normalized_comparison_pairs = tuple(normalized_pairs)
     directional_tables = _filter_hit_tables_by_search_scope(
         directional_tables,
         record_count=record_count,
@@ -2047,7 +2065,10 @@ def build_orthogroup_collinearity_blocks_from_hits(
             max_related_edges_per_orthogroup=resolved_max_paralog_links,
         )
         orthogroups = edge_selection.orthogroups
-        adjacent_edges_by_pair = edge_selection.adjacent_anchor_edges_by_pair
+        comparison_edges_by_pair = {
+            pair: edge_selection.all_edges_by_pair.get(pair, _empty_hits())
+            for pair in normalized_comparison_pairs
+        }
     else:
         edge_tables = _select_orthogroup_edges(directional_tables, edge_mode=normalized_edge_mode)
         if normalized_membership_mode == "rbh":
@@ -2066,15 +2087,12 @@ def build_orthogroup_collinearity_blocks_from_hits(
                 max_related_edges_per_orthogroup=resolved_max_paralog_links,
             )
             orthogroups = seed_selection.orthogroups
-        adjacent_edges_by_pair = {
-            pair: table
-            for pair, table in edge_tables.items()
-            if int(pair[1]) == int(pair[0]) + 1
+        comparison_edges_by_pair = {
+            pair: edge_tables.get(pair, _empty_hits())
+            for pair in normalized_comparison_pairs
         }
-        for query_index in range(max(0, record_count - 1)):
-            adjacent_edges_by_pair.setdefault((query_index, query_index + 1), _empty_hits())
     anchors = orthogroup_edges_to_lossless_collinearity_anchors(
-        adjacent_edges_by_pair,
+        comparison_edges_by_pair,
         extraction.protein_map,
         orthogroups,
     )
@@ -2121,6 +2139,7 @@ def build_orthogroup_collinearity_blocks(
     unit_mode: CollinearityUnitMode | str = "auto",
     edge_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
+    comparison_pairs: Sequence[tuple[int, int]] | None = None,
     runner: LosatpRunner | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
@@ -2258,6 +2277,7 @@ def build_orthogroup_collinearity_blocks(
         orthogroup_membership_mode=normalized_membership_mode,
         orthogroup_member_max_hits=int(orthogroup_member_max_hits),
         max_paralog_links_per_orthogroup=resolved_max_paralog_links,
+        comparison_pairs=comparison_pairs,
     )
 
 
@@ -2379,14 +2399,14 @@ def _joined_anchor_values(anchors: Sequence[CollinearityAnchor], attr: str) -> s
     return ";".join(values)
 
 
-def convert_collinearity_blocks_to_comparisons(
+def convert_collinearity_blocks_to_pair_comparisons(
     result: CollinearityResult,
     *,
     records: Sequence[SeqRecord] | None = None,
     record_ids: Sequence[str] | None = None,
     color_mode: CollinearityColorMode | str = "orientation",
-) -> list[DataFrame]:
-    """Convert accepted blocks into existing linear comparison rows.
+) -> dict[tuple[int, int], DataFrame]:
+    """Convert accepted blocks into comparison frames keyed by record endpoints.
 
     The native TSV keeps anchor-level details, but the diagram should display a
     collinear block as one continuous span ribbon.  The existing comparison
@@ -2402,13 +2422,13 @@ def convert_collinearity_blocks_to_comparisons(
         for block in result.blocks:
             record_count = max(record_count, int(block.query_record_index) + 1, int(block.subject_record_index) + 1)
     if record_count < 2:
-        return []
+        return {}
 
-    rows_by_pair: list[list[dict[str, object]]] = [[] for _ in range(record_count - 1)]
+    rows_by_pair: dict[tuple[int, int], list[dict[str, object]]] = {}
     for block in result.blocks:
-        pair_index = int(block.query_record_index)
-        if int(block.subject_record_index) != pair_index + 1:
-            raise ValidationError("Collinearity rendering supports adjacent record pairs only.")
+        pair = (int(block.query_record_index), int(block.subject_record_index))
+        if pair[0] < 0 or pair[1] >= record_count or pair[0] >= pair[1]:
+            raise ValidationError("Collinearity block contains invalid record endpoints.")
         if not block.anchors:
             continue
         first_anchor = block.anchors[0]
@@ -2428,7 +2448,7 @@ def convert_collinearity_blocks_to_comparisons(
             subject_start, subject_end = subject_max, subject_min
         else:
             subject_start, subject_end = subject_min, subject_max
-        rows_by_pair[pair_index].append(
+        rows_by_pair.setdefault(pair, []).append(
             {
                 "query": query_name,
                 "subject": subject_name,
@@ -2474,9 +2494,40 @@ def convert_collinearity_blocks_to_comparisons(
             }
         )
 
+    return {
+        pair: pd.DataFrame.from_records(rows, columns=COLLINEARITY_COMPARISON_COLUMNS)
+        for pair, rows in sorted(rows_by_pair.items())
+    }
+
+
+def convert_collinearity_blocks_to_comparisons(
+    result: CollinearityResult,
+    *,
+    records: Sequence[SeqRecord] | None = None,
+    record_ids: Sequence[str] | None = None,
+    color_mode: CollinearityColorMode | str = "orientation",
+) -> list[DataFrame]:
+    """Convert accepted blocks into legacy adjacent-record comparison frames."""
+
+    pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
+        result,
+        records=records,
+        record_ids=record_ids,
+        color_mode=color_mode,
+    )
+    record_count = len(records) if records is not None else len(_record_ids(records, record_ids))
+    if records is None:
+        for query_index, subject_index in pair_comparisons:
+            record_count = max(record_count, query_index + 1, subject_index + 1)
+    non_adjacent = [pair for pair in pair_comparisons if pair[1] != pair[0] + 1]
+    if non_adjacent:
+        raise ValidationError("Collinearity rendering supports adjacent record pairs only.")
     return [
-        pd.DataFrame.from_records(rows, columns=COLLINEARITY_COMPARISON_COLUMNS)
-        for rows in rows_by_pair
+        pair_comparisons.get(
+            (record_index, record_index + 1),
+            pd.DataFrame(columns=COLLINEARITY_COMPARISON_COLUMNS),
+        )
+        for record_index in range(max(0, record_count - 1))
     ]
 
 
@@ -2505,6 +2556,7 @@ __all__ = [
     "cluster_lossless_collinearity_anchors",
     "collapse_nearby_duplicate_anchors",
     "convert_collinearity_blocks_to_comparisons",
+    "convert_collinearity_blocks_to_pair_comparisons",
     "deduplicate_unit_pair_anchors",
     "iter_collinearity_search_pairs",
     "normalize_collinearity_anchor_mode",

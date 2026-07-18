@@ -334,6 +334,56 @@ Session failures are grouped under `SessionError`, with specific
 `SessionFormatError`, `SessionVersionError`, `SessionResourceError`,
 `SessionConversionError`, and `SessionRenderError` subclasses.
 
+## Linear multi-record layout and selected comparisons
+
+Use a non-`None` `LinearMultiRecordOptions` to authorize row placement. `grid_row` groups records vertically and `grid_column` orders them from left to right. Stable `record_key` values survive canonical request and session round-trips.
+
+```python
+from pathlib import Path
+
+from gbdraw.api import (
+    DiagramOptions,
+    GenBankInputSource,
+    LinearDiagramRequest,
+    LinearMultiRecordOptions,
+    RecordInput,
+    RecordPresentation,
+    RenderOutputRequest,
+)
+
+paths = [
+    examples_dir / name
+    for name in ("MjeNMV.gb", "PemoMJNVA.gb", "MelaMJNV.gb", "PeseMJNV.gb")
+]
+placements = ((1, 1), (1, 2), (2, 1), (2, 2))
+records = tuple(
+    RecordInput(
+        source=GenBankInputSource(path),
+        record_key=f"record-{index + 1}",
+        presentation=RecordPresentation(grid_row=row, grid_column=column),
+    )
+    for index, (path, (row, column)) in enumerate(zip(paths, placements))
+)
+
+request = LinearDiagramRequest(
+    records=records,
+    layout=LinearMultiRecordOptions(record_gap_px=28),
+    options=DiagramOptions(
+        protein_blastp_mode="pairwise",
+        protein_comparison_pairs=((0, 2), (1, 3)),
+    ),
+    output=RenderOutputRequest(
+        output_prefix="selected_pairs",
+        output_directory=output_dir,
+        formats=("svg",),
+        overwrite=True,
+    ),
+)
+assert request.options.protein_comparison_pairs == ((0, 2), (1, 3))
+```
+
+For precomputed matches, construct `LinearComparison(query_record_index, subject_record_index, matches)` values and pass them as `DiagramOptions(linear_comparisons=...)`. The `matches` DataFrame uses the canonical comparison columns exported as `COMPARISON_COLUMNS`. Same-row, self, and row-skipping comparisons raise `ValidationError`.
+
 ## Errors and stability
 
 Catch `gbdraw.exceptions.GbdrawError` for expected gbdraw failures and `ValidationError` for invalid inputs or options. `ExportError` is a `GbdrawError` subclass used for converter failures. Treat exported names in `gbdraw.api` as the stable-ish public surface; option fields may grow additively, while internal assembly modules are not API documentation.

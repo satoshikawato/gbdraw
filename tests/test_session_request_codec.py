@@ -458,7 +458,7 @@ def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=2), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=3), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),

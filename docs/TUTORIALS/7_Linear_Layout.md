@@ -171,6 +171,69 @@ gbdraw linear \
 
 Do not reuse full-record BLAST coordinates after cropping or reversing inputs unless the comparison data were generated for the displayed coordinate system. For larger sets, put selectors, regions, orientation, and order in a [`--records_table`](./5_Table_Driven_Inputs.md#2-linear---records_table-for-genbank-rows).
 
+## 8. Place several records on one row
+
+Assign every displayed record to a row with `--multi_record_position`. Input order determines the left-to-right order within a row:
+
+```bash
+gbdraw linear \
+  --gbk MjeNMV.gb PemoMJNVA.gb MelaMJNV.gb PeseMJNV.gb \
+  --multi_record_position '#1@1' \
+  --multi_record_position '#2@1' \
+  --multi_record_position '#3@2' \
+  --multi_record_position '#4@2' \
+  --linear_record_gap 28 \
+  --scale_style ruler \
+  --ruler_on_axis \
+  -o linear_multi_rows \
+  -f svg
+```
+
+The solver uses one common bp/px scale for every record. A ruler starts from zero on each record, while `--linear_record_gap` is a fixed pixel gap that does not change with sequence length. `--normalize_length` is rejected because it would assign incompatible per-record widths.
+
+For stable left-to-right ordering and per-record labels, prefer `row` and `column` in a [`--records_table`](./5_Table_Driven_Inputs.md#2-linear---records_table-for-genbank-rows). Add selected cross-row BLAST edges with [`--comparisons_table`](./2_Comparative_Genomics.md#6-compare-selected-pairs-across-multi-record-rows).
+
+### Two strains with multiple replicons
+
+In a source checkout, the checked-in [`vibrio-nigripulchritudo-linear-records.tsv`](../../examples/vibrio-nigripulchritudo-linear-records.tsv) reads `tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff` and `tests/test_inputs/GCF_000801275.2_ASM80127v1_genomic.gbff`. It selects all six replicons from *Vibrio nigripulchritudo* TUMSAT-TG-2018 and both chromosomes from strain SFn1, places one strain on each row, and orders its replicons by `column`. Run the command from the repository root.
+
+```bash
+gbdraw linear \
+  --records_table examples/vibrio-nigripulchritudo-linear-records.tsv \
+  --linear_record_gap 48 \
+  --track_layout above \
+  --scale_style ruler \
+  --ruler_on_axis \
+  --scale_interval 750000 \
+  --separate_strands \
+  --show_gc \
+  --hide_accession \
+  --hide_length \
+  --definition_font_size 8 \
+  --keep_definition_left_aligned \
+  --protein_blastp_mode collinear \
+  --collinear_search_scope all \
+  --protein_blastp_candidate_limit 5 \
+  --collinear_min_anchors 3 \
+  --collinear_max_unit_gap 2 \
+  --collinear_max_diagonal_drift 2 \
+  --collinear_color_mode orientation_identity \
+  --pairwise_match_style curve \
+  --losatp_threads 8 \
+  --plot_title "Vibrio nigripulchritudo replicons: LOSATP collinear blocks" \
+  --plot_title_position top \
+  -o vibrio-nigripulchritudo-multi-record \
+  -f svg
+```
+
+![LOSATP collinear blocks between two Vibrio nigripulchritudo strains arranged by replicon](../../examples/vibrio-nigripulchritudo-multi-record.svg)
+
+The first row contains two chromosomes and four plasmids; the second contains two chromosomes. Every record uses the same bp/px scale, so the short plasmids remain visibly smaller than the chromosomes. The `above` track layout keeps the feature tracks above their axis rulers. With `--keep_definition_left_aligned`, each row's leading `record_label` and `record_subtitle` are placed together in the left definition column; labels for later chromosomes and plasmids remain above their records. Record-local labels are drawn in front of comparison ribbons, so they do not create an empty band between the ribbons and feature tracks.
+
+`--collinear_search_scope all` makes LOSATP search every record pair. In a multi-record layout, gbdraw omits same-row ribbons and renders accepted blocks only between adjacent rows. This example therefore searches all 6 × 2 cross-strain replicon pairs. With the documented three-anchor threshold, the checked-in SVG contains 100 blocks across five endpoint pairs, including TUMSAT-TG-2018 chromosome 2 to SFn1 chromosome 1. The bundled LOSATP runtime is selected automatically; `--losatp_threads` controls its worker count.
+
+For a larger five-species workflow, open the [<i>Vibrio</i> Harveyi group Gallery tutorial](https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear). It keeps all 11 replicons from five RefSeq assemblies, uses one species per row, and documents every web setting used for the collinear figure.
+
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Plot read depth and numeric tracks](./6_Depth_Quantitative_Tracks.md) | [Next: Create interactive SVGs >](./8_Interactive_SVG_Sessions.md)
 

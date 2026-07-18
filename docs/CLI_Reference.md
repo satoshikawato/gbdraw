@@ -36,6 +36,9 @@ Options (examples):
   -o, --output         Output file prefix (optional)
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
   --records_table      TSV manifest for row-based input records
+  --multi_record_position  Linear record placement as SELECTOR@ROW (repeatable)
+  --linear_record_gap  Fixed pixel gap between records in one Linear row
+  --comparisons_table  Linear BLAST manifest with explicit query/subject endpoints
   --conservation_blast BLAST result file(s) for circular similarity rings (-outfmt 6 or 7)
   --conservation_table TSV manifest for circular BLAST similarity rings
   --circular_track_table TSV manifest for circular track slots
@@ -426,10 +429,12 @@ Allowed columns:
 | `region` | optional | Row-scoped crop such as `1000-9000`, `1000..9000`, or `1000-9000:rc`. Do not include a record ID, record index, or file selector; the crop always applies to the record selected by this row. |
 | `reverse_complement` | optional | Row-scoped reverse-complement flag. True values include `1`, `true`, `yes`, `y`, `on`; false values include blank, `0`, `false`, `no`, `n`, `off`, `none`, `null`, `-`. |
 | `order` | optional | Positive integer used to sort rows before loading. Explicit values sort first in numeric order; blank values follow in table row order. Equal explicit values preserve table row order. |
-| `row` | optional | Circular multi-record canvas row, used with `--multi_record_canvas`. |
-| `column` | optional | Positive integer used to order records within a multi-record row. |
+| `row` | optional | Positive multi-record row. In Circular mode it requires `--multi_record_canvas`; in Linear mode it enables multi-record row layout. |
+| `column` | optional | Positive integer used to order records from left to right within a multi-record row. |
 
-One row represents one displayed record. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. In circular mode, put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
+One table row represents one displayed record. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. Put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
+
+For Linear input without a records table, repeat `--multi_record_position SELECTOR@ROW` once for every loaded record. `SELECTOR` uses the usual record selector syntax, including `#1`; quote values containing `#` in a shell. Records assigned to one row share one bp/px scale and are ordered by input order. `--linear_record_gap` controls only the fixed gap between them. Multi-record rows cannot be combined with `--normalize_length`.
 
 Minimal GenBank records table:
 
@@ -497,6 +502,24 @@ gbdraw circular \
   --track_type tuckin \
   -o Vnig_TUMSAT-TG-2018 \
   -f interactive_svg
+```
+
+### `--comparisons_table`
+
+Use `--comparisons_table` in Linear mode when comparison endpoints are not implied by adjacent input order. The UTF-8 TSV has exactly three required columns:
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `blast` | yes | BLAST outfmt 6 or 7 path, resolved relative to the table. |
+| `query` | yes | Displayed query record selector, such as `#1` or a unique record ID. |
+| `subject` | yes | Displayed subject record selector. |
+
+Endpoints must be different records in adjacent rows. Any number of selected pairs may connect the same two rows, and repeated rows for the same pair are merged after the shared filters are applied. The table cannot be combined with legacy `-b/--blast`. Legacy BLAST arguments remain adjacency-based and are rejected when a Linear row contains more than one record.
+
+```tsv
+blast	query	subject
+MjeNMV.MelaMJNV.tblastx.out	#1	#3
+PemoMJNVA.PeseMJNV.tblastx.out	#2	#4
 ```
 
 ### `--conservation_table`
@@ -631,7 +654,9 @@ one file to reuse it for every record, or one file per record.
 
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-b [BLAST ...]] [-t TABLE]
+              [--fasta [FASTA_FILE ...]] [--records_table TSV]
+              [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
+              [--comparisons_table TSV] [-b [BLAST ...]] [-t TABLE]
               [--losatp_bin LOSATP_BIN]
               [--ncbi_blastp_bin NCBI_BLASTP_BIN]
               [--losatp_threads LOSATP_THREADS]
@@ -651,7 +676,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--show_gc_content_axis] [--hide_gc_content_axis]
               [--show_gc_content_ticks] [--hide_gc_content_ticks]
               [--show_skew]
-              [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
+              [--align_center] [--keep_definition_left_aligned]
+              [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
               [--pairwise_match_style {ribbon,curve}]
               [-k FEATURES] [--feature_shape TYPE=SHAPE]
@@ -706,6 +732,14 @@ options:
                         FASTA file (required with --gff)
   --records_table TSV   TSV manifest for row-based input records and per-
                         record options.
+  --multi_record_position SELECTOR@ROW
+                        Place a record in a Linear row; repeat once for every
+                        loaded record.
+  --linear_record_gap PX
+                        Gap in pixels between records in the same Linear row
+                        (default: 24).
+  --comparisons_table TSV
+                        TSV manifest with blast, query, and subject columns.
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
@@ -725,6 +759,11 @@ options:
                         Protein blastp comparison mode: none, pairwise
                         adjacent ribbons, all-record similarity groups
                         (orthogroup), or collinear blocks (default: none).
+  --collinear_search_scope {adjacent,all}
+                        Collinear protein blastp scope: adjacent input pairs
+                        or all record pairs. With multi-record rows, all
+                        renders only pairs across adjacent rows (default:
+                        adjacent).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block. The default 1 includes singleton
@@ -774,6 +813,11 @@ options:
                         Show or hide GC content percent-mode ticks and labels.
   --show_skew           plot GC skew below genome (default: False).
   --align_center        Align genomes to the center (default: False).
+  --keep_definition_left_aligned
+                        Keep linear record definitions in the left column. With
+                        multi-record rows, the leading record label becomes the
+                        row definition while remaining record text stays above
+                        its record (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)
   --bitscore BITSCORE   bitscore threshold (default=50)
   --identity IDENTITY   identity threshold (default=0)

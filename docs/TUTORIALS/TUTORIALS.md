@@ -16,6 +16,7 @@ Start with the question you need to answer. The filenames retain their numbers s
 - [Draw precomputed BLAST HSPs](./2_Comparative_Genomics.md): understand query/subject order, HSP ribbons, and multi-record comparisons.
 - [Compare annotated CDS proteins](./4_Protein_Comparisons.md): choose pairwise links, similarity groups (`orthogroup` CLI mode), or collinear blocks.
 - [Use table-driven inputs](./5_Table_Driven_Inputs.md): keep many records and comparison rings reproducible in TSV manifests.
+- [Compare all replicons from five <i>Vibrio</i> Harveyi-group assemblies](https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear): build a five-row, 11-replicon LOSATP collinear diagram with a complete web workflow.
 
 ## Labels, colors, and feature visibility
 

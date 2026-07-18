@@ -22,6 +22,8 @@
       "CircularTrackTable",
       "ConservationTable",
       "ConservationTableRow",
+      "ComparisonTable",
+      "ComparisonTableRow",
       "RecordsTable",
       "RecordsTableRow",
       "RegionSpec",
@@ -36,6 +38,7 @@
       "parse_region_specs",
       "read_circular_track_table",
       "read_conservation_table",
+      "read_comparisons_table",
       "read_label_override_table",
       "read_label_whitelist_table",
       "read_qualifier_priority_table",
@@ -69,6 +72,11 @@
       "read_annotation_table",
       "resolve_annotations",
       "CircularMultiRecordOptions",
+      "LinearMultiRecordOptions",
+      "LinearComparison",
+      "LinearLayoutPlan",
+      "LinearRecordPlacement",
+      "RecordKey",
       "ColorOptions",
       "DiagramOptions",
       "OutputOptions",
@@ -134,7 +142,7 @@
       "parse_linear_track_slot",
       "parse_linear_track_slots"
     ],
-    "contract_sha256": "15844470edb5840de08877a181db38a372e27cab9dd666f6bdaf0adaf17fc93f"
+    "contract_sha256": "9e4c1ccaea5b86eb11086b38690cf48d0011b273b282cc407718ae4367df1cce"
   },
   "circular_cli": {
     "actions_sha256": "a1910704143163104f985926e58c8ca2829904195eda1ae43c66a8903e13842b",
@@ -142,8 +150,8 @@
     "representative_sha256": "fbb101f0f442762f75a970b77abc40e8438b34a0fe355f5ff655ab7822655a26"
   },
   "linear_cli": {
-    "actions_sha256": "909f39ee39615d983eef3fb09fd34010f52beed5d8d71c4c5400460890cecfcb",
-    "defaults_sha256": "7ddfa57dca5932ce33770786744d8c50b0792f13e3bcd56564f3c2dde24d1e33",
-    "representative_sha256": "f72a742b9491e7073bbb9e4aab23dd2781573f30d9425239a0cc4a48118350dc"
+    "actions_sha256": "4c069d3732db23ed29d3c2f35667517ff7569b22345682476e03efa10bbfb816",
+    "defaults_sha256": "34e62e6d88c081b049b2c4f0fa65124dc52f3ad8a21a03c3646f31bcd4ff039a",
+    "representative_sha256": "e3944b3365f76970d6ac215535ad23278f8c5aec6281296c123453d075348704"
   }
 }

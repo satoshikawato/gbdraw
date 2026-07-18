@@ -69,6 +69,26 @@ class ConservationTable:
 
 
 @dataclass(frozen=True)
+class ComparisonTableRow:
+    row_index: int
+    row_number: int
+    blast: str
+    query: str
+    subject: str
+
+
+@dataclass(frozen=True)
+class ComparisonTable:
+    table_path: str
+    rows: tuple[ComparisonTableRow, ...]
+    path_dependencies: tuple[TablePathDependency, ...]
+
+    @property
+    def dependency_paths(self) -> tuple[str, ...]:
+        return tuple(dep.path for dep in self.path_dependencies)
+
+
+@dataclass(frozen=True)
 class CircularTrackTable:
     table_path: str
     slot_specs: tuple[str, ...]
@@ -180,6 +200,7 @@ class _TrackRow:
 
 
 _CONSERVATION_COLUMNS = frozenset({"blast", "label", "color"})
+_COMPARISON_COLUMNS = frozenset({"blast", "query", "subject"})
 _CIRCULAR_TRACK_COLUMNS = frozenset(
     {
         "id",
@@ -493,6 +514,74 @@ def read_records_table(path: str) -> RecordsTable:
     )
 
 
+def read_comparisons_table(path: str) -> ComparisonTable:
+    """Read a Linear comparison manifest with explicit record selectors."""
+
+    table_path, header, rows = _read_tsv_table(
+        path,
+        allowed_columns=_COMPARISON_COLUMNS,
+        table_name="comparisons table",
+    )
+    required = {"blast", "query", "subject"}
+    missing = required - set(header)
+    if missing:
+        raise ValidationError(
+            f"{table_path}: comparisons table is missing required column(s): "
+            f"{', '.join(sorted(missing))}."
+        )
+    if not rows:
+        raise ValidationError(f"{table_path}: comparisons table has no data rows.")
+
+    parsed: list[ComparisonTableRow] = []
+    dependencies: list[TablePathDependency] = []
+    for row in rows:
+        values = row.values
+        blast_raw = values.get("blast", "").strip()
+        query = values.get("query", "").strip()
+        subject = values.get("subject", "").strip()
+        for column, value in (("blast", blast_raw), ("query", query), ("subject", subject)):
+            if not value:
+                raise ValidationError(
+                    _cell_error(table_path, row.row_number, column, "value is required")
+                )
+        blast = _resolve_table_path(table_path, blast_raw)
+        if not Path(blast).is_file():
+            raise ValidationError(
+                _cell_error(table_path, row.row_number, "blast", f"file does not exist: {blast}")
+            )
+        if query == subject:
+            raise ValidationError(
+                _cell_error(
+                    table_path,
+                    row.row_number,
+                    "subject",
+                    "query and subject must identify different records",
+                )
+            )
+        dependencies.append(
+            TablePathDependency(
+                row_index=row.row_index,
+                row_number=row.row_number,
+                column="blast",
+                path=blast,
+            )
+        )
+        parsed.append(
+            ComparisonTableRow(
+                row_index=row.row_index,
+                row_number=row.row_number,
+                blast=blast,
+                query=query,
+                subject=subject,
+            )
+        )
+    return ComparisonTable(
+        table_path=str(table_path),
+        rows=tuple(parsed),
+        path_dependencies=tuple(dependencies),
+    )
+
+
 def _read_tsv_table(
     path: str,
     *,
@@ -755,10 +844,13 @@ __all__ = [
     "CircularTrackTable",
     "ConservationTable",
     "ConservationTableRow",
+    "ComparisonTable",
+    "ComparisonTableRow",
     "RecordsTable",
     "RecordsTableRow",
     "TablePathDependency",
     "read_circular_track_table",
     "read_conservation_table",
+    "read_comparisons_table",
     "read_records_table",
 ]

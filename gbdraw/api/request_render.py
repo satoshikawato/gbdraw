@@ -28,7 +28,7 @@ from .diagram import (
     build_linear_diagram,
 )
 from .io import apply_region_specs, load_gbks, load_gff_fasta
-from .options import CircularMultiRecordOptions, DiagramOptions
+from .options import CircularMultiRecordOptions, DiagramOptions, LinearMultiRecordOptions
 from .render import save_figure_to
 from .requests import (
     CircularDiagramRequest,
@@ -125,6 +125,8 @@ def _load_record_input(
         record.annotations["gbdraw_record_label"] = presentation.label
     if presentation.subtitle:
         record.annotations["gbdraw_record_subtitle"] = presentation.subtitle
+    if record_input.record_key:
+        record.annotations["gbdraw_record_key"] = record_input.record_key
     return record
 
 
@@ -193,6 +195,35 @@ def _layout_with_record_placements(
     return replace(layout, multi_record_positions=positions)
 
 
+def _linear_layout_with_record_placements(
+    request: LinearDiagramRequest,
+) -> LinearMultiRecordOptions | None:
+    layout = request.layout
+    if layout is None or layout.multi_record_positions:
+        return layout
+    positioned = [
+        (index, record_input.presentation)
+        for index, record_input in enumerate(request.records)
+        if record_input.presentation.grid_row is not None
+    ]
+    if not positioned:
+        return layout
+    positioned.sort(
+        key=lambda item: (
+            int(item[1].grid_row or 0),
+            int(item[1].grid_column)
+            if item[1].grid_column is not None
+            else item[0],
+            item[0],
+        )
+    )
+    positions = tuple(
+        f"#{index + 1}@{presentation.grid_row}"
+        for index, presentation in positioned
+    )
+    return replace(layout, multi_record_positions=positions)
+
+
 def build_request_diagram(request: DiagramRequest) -> PreparedDiagramRequest:
     """Normalize inputs and build a drawing through the high-level API owners."""
 
@@ -209,7 +240,15 @@ def build_request_diagram(request: DiagramRequest) -> PreparedDiagramRequest:
             )
         mode: Literal["circular", "linear"] = "circular"
     elif isinstance(request, LinearDiagramRequest):
-        drawing = build_linear_diagram(records, options=request.options)
+        linear_layout = _linear_layout_with_record_placements(request)
+        if linear_layout is None:
+            drawing = build_linear_diagram(records, options=request.options)
+        else:
+            drawing = build_linear_diagram(
+                records,
+                options=request.options,
+                layout=linear_layout,
+            )
         mode = "linear"
     else:  # pragma: no cover - normalize_request_records rejects this first.
         raise ValidationError("Unsupported diagram request type.")

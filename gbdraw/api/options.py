@@ -7,6 +7,7 @@ keyword arguments in assemble_* helpers. They are optional and additive.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Literal, Mapping, Sequence
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -24,6 +25,7 @@ from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ign
 from gbdraw.analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.linear_comparison import LinearComparison
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot  # type: ignore[reportMissingImports]
 from gbdraw.annotations import AnnotationOptions
 
@@ -68,6 +70,30 @@ class CircularMultiRecordOptions:
     multi_record_column_gap_ratio: float = 0.10
     multi_record_row_gap_ratio: float = 0.05
     multi_record_positions: Sequence[str] | None = None
+
+
+@dataclass(frozen=True)
+class LinearMultiRecordOptions:
+    """Layout values used only by Linear multi-record rows."""
+
+    record_gap_px: float = 24.0
+    multi_record_positions: Sequence[str] | None = None
+
+    def __post_init__(self) -> None:
+        try:
+            value = float(self.record_gap_px)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("record_gap_px must be a finite non-negative number.") from exc
+        if not math.isfinite(value) or value < 0:
+            raise ValidationError("record_gap_px must be a finite non-negative number.")
+        object.__setattr__(self, "record_gap_px", value)
+        if self.multi_record_positions is not None:
+            if isinstance(self.multi_record_positions, (str, bytes)):
+                raise ValidationError("multi_record_positions must be a sequence of strings or None.")
+            positions = tuple(self.multi_record_positions)
+            if not all(isinstance(item, str) and item.strip() for item in positions):
+                raise ValidationError("multi_record_positions must contain non-empty strings.")
+            object.__setattr__(self, "multi_record_positions", positions)
 
 
 @dataclass(frozen=True)
@@ -122,9 +148,11 @@ class DiagramOptions:
     species: str | None = None
     strain: str | None = None
     blast_files: Sequence[str] | None = None
+    linear_comparisons: Sequence[LinearComparison] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | None = None
     protein_blastp_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = "none"
+    protein_comparison_pairs: Sequence[tuple[int, int]] | None = None
     pairwise_match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
     collinearity_params: CollinearityParameters | LosslessCollinearityParameters | None = None
@@ -163,9 +191,11 @@ _CIRCULAR_ONLY_DIAGRAM_OPTION_NAMES = (
 _LINEAR_ONLY_DIAGRAM_OPTION_NAMES = (
     "depth_track_heights",
     "blast_files",
+    "linear_comparisons",
     "protein_comparisons",
     "orthogroups",
     "protein_blastp_mode",
+    "protein_comparison_pairs",
     "pairwise_match_style",
     "collinearity_blocks",
     "collinearity_params",
@@ -209,6 +239,7 @@ def _validate_diagram_options_mode(
 
 __all__ = [
     "CircularMultiRecordOptions",
+    "LinearMultiRecordOptions",
     "AnnotationOptions",
     "ColorOptions",
     "DiagramOptions",

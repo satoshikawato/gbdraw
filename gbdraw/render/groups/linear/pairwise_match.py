@@ -16,6 +16,7 @@ from ....core.color import (
     interpolate_color,
 )
 from ....features.ids import make_linear_rendered_feature_id
+from ....layout.linear_multi_record import LinearRecordPlacement
 
 
 def _row_value(row: object, name: str, default: object = "") -> object:
@@ -116,6 +117,12 @@ class PairWiseMatchGroup:
         blast_config,
         records,
         record_offsets_x: dict[int, float] | None = None,
+        query_record_index: int | None = None,
+        subject_record_index: int | None = None,
+        query_placement: LinearRecordPlacement | None = None,
+        subject_placement: LinearRecordPlacement | None = None,
+        query_y: float | None = None,
+        subject_y: float | None = None,
     ) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
@@ -151,11 +158,31 @@ class PairWiseMatchGroup:
         self.curve_tension: float = float(getattr(blast_config, "curve_tension", 0.5))
         self.comparison_count: int = comparison_count
         self.records = records
+        self.query_record_index = (
+            int(query_record_index)
+            if query_record_index is not None
+            else self.comparison_count - 1
+        )
+        self.subject_record_index = (
+            int(subject_record_index)
+            if subject_record_index is not None
+            else self.comparison_count
+        )
+        self.query_placement = query_placement
+        self.subject_placement = subject_placement
+        self.query_y = 0 if query_y is None else float(query_y)
+        self.subject_y = self.comparison_height if subject_y is None else float(subject_y)
         self.record_offsets_x = record_offsets_x or {}
         self.track_id: str = "comparison" + str(self.comparison_count)
         self._pairwise_match_counter = 0
         self.calculate_query_subject_offsets()
-        self.match_group = Group(id=self.track_id)
+        self.match_group = Group(id=self.track_id, debug=False)
+        if self.query_placement is not None:
+            self.match_group.attribs["data-query-record-index"] = self.query_record_index
+            self.match_group.attribs["data-subject-record-index"] = self.subject_record_index
+            self.match_group.attribs["data-query-row"] = self.query_placement.row
+        if self.subject_placement is not None:
+            self.match_group.attribs["data-subject-row"] = self.subject_placement.row
         self.add_elements_to_group()
 
     def calculate_query_subject_offsets(self) -> Tuple[float, float]:
@@ -172,19 +199,22 @@ class PairWiseMatchGroup:
         Returns:
             Tuple[float, float]: The x-coordinate offsets for the query and subject sequences.
         """
-        if self.canvas_config.normalize_length:
+        if self.query_placement is not None and self.subject_placement is not None:
+            self.query_offset_x = 0.0
+            self.subject_offset_x = 0.0
+        elif self.canvas_config.normalize_length:
             self.query_offset_x = 0
             self.subject_offset_x = 0
         else:
             if self.canvas_config.align_center:
-                qlen = len(self.records[self.comparison_count - 1].seq)
-                slen = len(self.records[self.comparison_count].seq)
+                qlen = len(self.records[self.query_record_index].seq)
+                slen = len(self.records[self.subject_record_index].seq)
                 self.query_offset_x = (self.canvas_config.longest_genome - qlen) / 2
                 self.subject_offset_x = (self.canvas_config.longest_genome - slen) / 2
             else:
                 self.query_offset_x = self.subject_offset_x = 0
-        self.query_alignment_offset_x = float(self.record_offsets_x.get(self.comparison_count - 1, 0.0))
-        self.subject_alignment_offset_x = float(self.record_offsets_x.get(self.comparison_count, 0.0))
+        self.query_alignment_offset_x = float(self.record_offsets_x.get(self.query_record_index, 0.0))
+        self.subject_alignment_offset_x = float(self.record_offsets_x.get(self.subject_record_index, 0.0))
 
     def _record_id_for_index(self, index: int) -> str:
         try:
@@ -249,10 +279,13 @@ class PairWiseMatchGroup:
         dynamic_fill_color = self.resolve_match_fill_color(row, factor, default_gradient_color)
         query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
-            query_start, query_end, 0, is_query=True
+            query_start, query_end, getattr(self, "query_y", 0), is_query=True
         )
         subject_start_x, subject_start_y, subject_end_x, subject_end_y = self.normalize_positions(
-            subject_start, subject_end, self.comparison_height, is_query=False
+            subject_start,
+            subject_end,
+            getattr(self, "subject_y", self.comparison_height),
+            is_query=False,
         )
 
         match_style = str(getattr(self, "match_style", "ribbon")).lower()
@@ -299,8 +332,12 @@ class PairWiseMatchGroup:
         row: DataFrame,
         match_index: int | None = None,
     ) -> None:
-        query_record_index = int(getattr(self, "comparison_count", 1)) - 1
-        subject_record_index = int(getattr(self, "comparison_count", 1))
+        query_record_index = int(
+            getattr(self, "query_record_index", self.comparison_count - 1)
+        )
+        subject_record_index = int(
+            getattr(self, "subject_record_index", self.comparison_count)
+        )
         query_record_id = (
             _attribute_text(_row_value(row, "query", ""))
             or _attribute_text(_row_value(row, "qseqid", ""))
@@ -415,8 +452,12 @@ class PairWiseMatchGroup:
             "query_display_name": "data-query-display-name",
             "subject_display_name": "data-subject-display-name",
         }
-        query_record_index = int(getattr(self, "comparison_count", 1)) - 1
-        subject_record_index = int(getattr(self, "comparison_count", 1))
+        query_record_index = int(
+            getattr(self, "query_record_index", self.comparison_count - 1)
+        )
+        subject_record_index = int(
+            getattr(self, "subject_record_index", self.comparison_count)
+        )
         for column, attribute in metadata_columns.items():
             text = _attribute_text(_row_value(row, column, ""))
             if text:
@@ -457,12 +498,26 @@ class PairWiseMatchGroup:
         """
         Normalizes the start and end positions for display on the linear canvas.
         """
-        if self.canvas_config.normalize_length:
+        placement = (
+            getattr(self, "query_placement", None)
+            if is_query
+            else getattr(self, "subject_placement", None)
+        )
+        if placement is not None:
+            start_x = placement.x_for_position(start)
+            end_x = placement.x_for_position(end)
+        elif self.canvas_config.normalize_length:
             # Normalize based on the length of each record itself
             if is_query:
-                genome_length = len(self.records[self.comparison_count - 1].seq)
+                query_record_index = int(
+                    getattr(self, "query_record_index", self.comparison_count - 1)
+                )
+                genome_length = len(self.records[query_record_index].seq)
             else:
-                genome_length = len(self.records[self.comparison_count].seq)
+                subject_record_index = int(
+                    getattr(self, "subject_record_index", self.comparison_count)
+                )
+                genome_length = len(self.records[subject_record_index].seq)
 
             start_x = self.canvas_config.alignment_width * (start / genome_length)
             end_x = self.canvas_config.alignment_width * (end / genome_length)
@@ -471,9 +526,10 @@ class PairWiseMatchGroup:
             start_x = normalize_position_linear(start, self.canvas_config.longest_genome, self.canvas_config.alignment_width)
             end_x = normalize_position_linear(end, self.canvas_config.longest_genome, self.canvas_config.alignment_width)
 
-        alignment_offset = self.query_alignment_offset_x if is_query else self.subject_alignment_offset_x
-        start_x += alignment_offset
-        end_x += alignment_offset
+        if placement is None:
+            alignment_offset = self.query_alignment_offset_x if is_query else self.subject_alignment_offset_x
+            start_x += alignment_offset
+            end_x += alignment_offset
         return start_x, y_position, end_x, y_position
 
     def construct_path_description(

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from Bio.SeqRecord import SeqRecord
@@ -58,6 +59,7 @@ class DefinitionGroup:
         text_anchor: str | None = None,
         text_x: float = 0.0,
         group_id: str | None = None,
+        line_kinds: Collection[str] | None = None,
     ) -> None:
         self.record: SeqRecord = record
         self.title_start_x: float = title_start_x
@@ -70,6 +72,11 @@ class DefinitionGroup:
         self.length_param = self.canvas_config.length_param
         self.text_x = float(text_x)
         self._explicit_group_id = str(group_id) if group_id else None
+        self._line_kinds = (
+            frozenset(str(kind).strip().lower() for kind in line_kinds)
+            if line_kinds is not None
+            else None
+        )
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         def_cfg = cfg.objects.definition.linear
@@ -88,6 +95,10 @@ class DefinitionGroup:
         self.linear_dominant_baseline: str = def_cfg.dominant_baseline
         self.get_definition_details()
         self.definition_lines = self._build_definition_lines()
+        if self._line_kinds is not None:
+            self.definition_lines = [
+                line for line in self.definition_lines if line.kind in self._line_kinds
+            ]
         self.calculate_start_coordinates()
         self.definition_group = Group(id=self.definition_group_id)
         self.add_elements_to_group()

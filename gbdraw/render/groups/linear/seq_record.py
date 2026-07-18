@@ -50,6 +50,8 @@ class SeqRecordGroup:
         record_index: int = 0,
         record_count: int = 1,
         group_id: str | None = None,
+        sequence_width: float | None = None,
+        record_local_ruler: bool = False,
     ) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
@@ -64,6 +66,8 @@ class SeqRecordGroup:
         self.record_index = int(record_index)
         self.record_count = int(record_count)
         self.record_group_id = str(group_id) if group_id else str(gb_record.id)
+        self.sequence_width = float(sequence_width) if sequence_width is not None else None
+        self.record_local_ruler = bool(record_local_ruler)
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -131,6 +135,8 @@ class SeqRecordGroup:
         return axis_path
 
     def _resolve_record_coordinate_span(self, record_length: int) -> tuple[int, int]:
+        if self.record_local_ruler:
+            return 0, record_length
         annotations = getattr(self.gb_record, "annotations", None) or {}
         try:
             start_coord = int(annotations.get("gbdraw_coord_base", 1))
@@ -308,7 +314,11 @@ class SeqRecordGroup:
         Returns:
             Group: The SVG group prepared for SeqRecord visualization.
         """
-        alignment_width: float = self.canvas_config.alignment_width
+        alignment_width: float = (
+            self.sequence_width
+            if self.sequence_width is not None
+            else self.canvas_config.alignment_width
+        )
         cds_height: float = self.canvas_config.cds_height
         longest_genome: int = self.canvas_config.longest_genome
         arrow_length: float = self.canvas_config.arrow_length
@@ -317,11 +327,13 @@ class SeqRecordGroup:
         separate_strands = self.canvas_config.strandedness
         resolve_overlaps = self.canvas_config.resolve_overlaps
         label_filtering = self.label_filtering  # type: ignore
-        record_group: Group = Group(id=self.record_group_id)
+        record_group: Group = Group(id=self.record_group_id, debug=False)
 
         record_length: int = len(self.gb_record.seq)
 
-        if self.normalize_length:
+        if self.sequence_width is not None:
+            genome_size_normalization_factor = 1.0
+        elif self.normalize_length:
             genome_size_normalization_factor = 1.0
         else:
             genome_size_normalization_factor: float = record_length / longest_genome

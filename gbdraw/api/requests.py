@@ -20,6 +20,7 @@ from gbdraw.render.formats import ACCEPTED_FORMATS, normalize_format_token
 from .options import (
     CircularMultiRecordOptions,
     DiagramOptions,
+    LinearMultiRecordOptions,
     _validate_diagram_options_mode,
 )
 
@@ -123,6 +124,7 @@ class RecordInput:
     selector: RecordSelector | None = None
     region: RegionSpec | None = None
     presentation: RecordPresentation = field(default_factory=RecordPresentation)
+    record_key: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(
@@ -134,6 +136,10 @@ class RecordInput:
             )
         if not isinstance(self.presentation, RecordPresentation):
             raise ValidationError("Record presentation has an unsupported type.")
+        if self.record_key is not None:
+            if not isinstance(self.record_key, str) or not self.record_key.strip():
+                raise ValidationError("record_key must be a non-empty string or None.")
+            object.__setattr__(self, "record_key", self.record_key.strip())
         if self.selector is not None:
             if not isinstance(self.selector, RecordSelector):
                 raise ValidationError("Record selector has an unsupported type.")
@@ -236,6 +242,9 @@ def _request_records(records: Sequence[RecordInput]) -> tuple[RecordInput, ...]:
         raise ValidationError("A diagram request requires at least one record input.")
     if not all(isinstance(record, RecordInput) for record in normalized):
         raise ValidationError("Diagram request records must be RecordInput values.")
+    keys = [record.record_key for record in normalized if record.record_key is not None]
+    if len(set(keys)) != len(keys):
+        raise ValidationError("Diagram request record keys must be unique.")
     return normalized
 
 
@@ -265,6 +274,35 @@ def _validate_circular_placements(
     if layout.multi_record_positions:
         raise ValidationError(
             "Specify circular placement in RecordPresentation or layout, not both."
+        )
+
+
+def _validate_linear_placements(
+    records: Sequence[RecordInput],
+    *,
+    layout: LinearMultiRecordOptions | None,
+) -> None:
+    placements = [record.presentation for record in records]
+    has_row = any(item.grid_row is not None for item in placements)
+    has_column = any(item.grid_column is not None for item in placements)
+    if not has_row:
+        return
+    if layout is None:
+        raise ValidationError("Grid placement requires a Linear layout.")
+    if any(item.grid_row is None for item in placements):
+        raise ValidationError("If one Linear record has grid_row, every record must have it.")
+    if has_column and any(item.grid_column is None for item in placements):
+        raise ValidationError("If one Linear record has grid_column, every record must have it.")
+    occupied = [
+        (item.grid_row, item.grid_column)
+        for item in placements
+        if item.grid_column is not None
+    ]
+    if len(set(occupied)) != len(occupied):
+        raise ValidationError("Linear record grid placements must be unique.")
+    if layout.multi_record_positions:
+        raise ValidationError(
+            "Specify Linear placement in RecordPresentation or layout, not both."
         )
 
 
@@ -303,6 +341,7 @@ class LinearDiagramRequest:
 
     records: Sequence[RecordInput]
     options: DiagramOptions = field(default_factory=DiagramOptions)
+    layout: LinearMultiRecordOptions | None = None
     output: RenderOutputRequest = field(default_factory=RenderOutputRequest)
 
     def __post_init__(self) -> None:
@@ -310,10 +349,16 @@ class LinearDiagramRequest:
         object.__setattr__(self, "records", records)
         if not isinstance(self.options, DiagramOptions):
             raise ValidationError("Linear request options must be DiagramOptions.")
+        if self.layout is not None and not isinstance(self.layout, LinearMultiRecordOptions):
+            raise ValidationError("Linear request layout has an unsupported type.")
         if not isinstance(self.output, RenderOutputRequest):
             raise ValidationError("Linear request output has an unsupported type.")
-        if any(record.presentation.grid_row is not None for record in records):
-            raise ValidationError("Grid placement is supported only by circular multi-record requests.")
+        if any(record.presentation.grid_row is not None for record in records) and self.layout is None:
+            raise ValidationError(
+                "Grid placement requires LinearMultiRecordOptions; without it, grid "
+                "placement is supported only by circular multi-record requests."
+            )
+        _validate_linear_placements(records, layout=self.layout)
         _validate_diagram_options_mode(self.options, mode="linear")
 
 

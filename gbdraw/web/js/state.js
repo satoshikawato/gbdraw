@@ -344,6 +344,10 @@ export const collapseEmptyLinearSeqList = (items) => {
 };
 
 const linearSeqs = reactive(normalizeLinearSeqList([]));
+const linearRecordLayoutEnabled = ref(false);
+const linearRecordGap = ref(24);
+const linearRecordRows = reactive([]);
+const linearComparisons = reactive([]);
 const annotationSets = reactive([]);
 const selectedAnnotation = ref(null);
 
@@ -1112,6 +1116,10 @@ export const state = {
   annotationSets,
   selectedAnnotation,
   linearSeqs,
+  linearRecordLayoutEnabled,
+  linearRecordGap,
+  linearRecordRows,
+  linearComparisons,
   form,
   adv,
   losat,

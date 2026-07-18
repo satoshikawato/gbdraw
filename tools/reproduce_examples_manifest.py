@@ -166,6 +166,24 @@ SUPPORT_ASSETS: dict[str, SupportAsset] = {
             "{PROJECT_ROOT}/examples/PemoMJNVA.gb\tPenaeus monodon majanivirus A\tMikawa2016\tLC738870.1\t1-160000\t1\t3\n"
         ),
     ),
+    "linear_multi_records.tsv": SupportAsset(
+        filename="linear_multi_records.tsv",
+        content=(
+            "gbk\trecord_label\trecord_id\torder\trow\tcolumn\n"
+            "{PROJECT_ROOT}/examples/MjeNMV.gb\tMjeNMV\tLC738868.1\t1\t1\t1\n"
+            "{PROJECT_ROOT}/examples/PemoMJNVA.gb\tPemoMJNVA\tLC738870.1\t2\t1\t2\n"
+            "{PROJECT_ROOT}/examples/MelaMJNV.gb\tMelaMJNV\tLC738874.1\t3\t2\t1\n"
+            "{PROJECT_ROOT}/examples/PeseMJNV.gb\tPeseMJNV\tLC738873.1\t4\t2\t2\n"
+        ),
+    ),
+    "linear_multi_comparisons.tsv": SupportAsset(
+        filename="linear_multi_comparisons.tsv",
+        content=(
+            "blast\tquery\tsubject\n"
+            "{PROJECT_ROOT}/examples/MjeNMV.MelaMJNV.tblastx.out\t#1\t#3\n"
+            "{PROJECT_ROOT}/examples/PemoMJNVA.PeseMJNV.tblastx.out\t#2\t#4\n"
+        ),
+    ),
     "circular_records.tsv": SupportAsset(
         filename="circular_records.tsv",
         content=(
@@ -1416,6 +1434,71 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             extra_args=("--separate_strands", "--align_center"),
         ),
         required_inputs=("AP027078.gb", "AP027131.gb", "AP027078_AP027131.tblastx.out"),
+    )
+    add(
+        "linear_multi_record",
+        "examples/linear_multi_record.svg",
+        CliRecipe(
+            subcommand="linear",
+            file_args=(
+                _file_arg("--records_table", "linear_multi_records.tsv"),
+                _file_arg("--comparisons_table", "linear_multi_comparisons.tsv"),
+            ),
+            extra_args=(
+                "--linear_record_gap", "28",
+                "--track_layout", "below",
+                "--scale_style", "ruler",
+                "--ruler_on_axis",
+                "--pairwise_match_style", "curve",
+                "--identity", "97",
+                "--alignment_length", "500",
+                "--show_labels", "none",
+            ),
+        ),
+        required_inputs=(
+            "MjeNMV.gb", "PemoMJNVA.gb", "MelaMJNV.gb", "PeseMJNV.gb",
+            "MjeNMV.MelaMJNV.tblastx.out", "PemoMJNVA.PeseMJNV.tblastx.out",
+        ),
+        support_assets=("linear_multi_records.tsv", "linear_multi_comparisons.tsv"),
+    )
+    add(
+        "vibrio_nigripulchritudo_multi_record",
+        "examples/vibrio-nigripulchritudo-multi-record.svg",
+        CliRecipe(
+            subcommand="linear",
+            file_args=(
+                _file_arg("--records_table", "vibrio-nigripulchritudo-linear-records.tsv"),
+            ),
+            extra_args=(
+                "--linear_record_gap", "48",
+                "--track_layout", "above",
+                "--scale_style", "ruler",
+                "--ruler_on_axis",
+                "--scale_interval", "750000",
+                "--separate_strands",
+                "--show_gc",
+                "--hide_accession",
+                "--hide_length",
+                "--definition_font_size", "8",
+                "--keep_definition_left_aligned",
+                "--protein_blastp_mode", "collinear",
+                "--collinear_search_scope", "all",
+                "--protein_blastp_candidate_limit", "5",
+                "--collinear_min_anchors", "3",
+                "--collinear_max_unit_gap", "2",
+                "--collinear_max_diagonal_drift", "2",
+                "--collinear_color_mode", "orientation_identity",
+                "--pairwise_match_style", "curve",
+                "--losatp_bin", "gbdraw/bin/linux-x86_64/losat",
+                "--losatp_threads", "8",
+                "--plot_title", "Vibrio nigripulchritudo replicons: LOSATP collinear blocks",
+                "--plot_title_position", "top",
+            ),
+        ),
+        required_inputs=(
+            "GCF_015097735.1_ASM1509773v1_genomic.gbff",
+            "GCF_000801275.2_ASM80127v1_genomic.gbff",
+        ),
     )
     add(
         "tutorial_3_label_override",

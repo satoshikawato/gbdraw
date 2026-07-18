@@ -39,6 +39,7 @@ class GcContentGroup:
         cfg: GbdrawConfig | None = None,
         gc_df: DataFrame | None = None,
         group_id: str = "gc_content",
+        sequence_width: float | None = None,
     ) -> None:
         """
         Initializes the GcContentGroup with the given parameters and configurations.
@@ -64,7 +65,10 @@ class GcContentGroup:
         self.step: int = self.gc_config.step
         self.dinucleotide: str = self.gc_config.dinucleotide
         self.track_height: float = track_height
-        self.alignment_width: float = alignment_width
+        self.alignment_width: float = (
+            float(sequence_width) if sequence_width is not None else alignment_width
+        )
+        self.sequence_width = sequence_width
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         self.bool_normalize_length = cfg.canvas.linear.normalize_length
@@ -81,7 +85,9 @@ class GcContentGroup:
         to scale the visualization appropriately.
         """
         self.record_len: int = len(self.gb_record.seq)
-        if self.bool_normalize_length:
+        if self.sequence_width is not None:
+            self.genome_size_normalization_factor = 1.0
+        elif self.bool_normalize_length:
             self.genome_size_normalization_factor: float = 1.0
         else:
             self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len

@@ -228,6 +228,23 @@ gbdraw linear \
   -f svg
 ```
 
+### Selected comparisons across multi-record rows
+
+```bash
+gbdraw linear \
+  --records_table examples/linear_multi_records.tsv \
+  --comparisons_table examples/linear_multi_comparisons.tsv \
+  --linear_record_gap 28 \
+  --identity 97 \
+  --alignment_length 500 \
+  --scale_style ruler \
+  --ruler_on_axis \
+  -o linear_multi_record \
+  -f svg
+```
+
+The records table assigns `row` and `column`; the comparisons table declares `blast`, `query`, and `subject`. Use this form whenever a row contains more than one record. `-b/--blast` remains the shorter adjacency-based form for one-record-per-row layouts.
+
 ### Run a protein comparison from CDS annotations
 
 ```bash

@@ -44,6 +44,8 @@ import {
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
+import { linearRecordPositionTokens, reconcileLinearRecordLayout } from './linear-record-layout.js';
+import { validateLinearComparisons } from './linear-comparisons.js';
 import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
@@ -708,6 +710,10 @@ export const createRunAnalysis = ({
     circularRecordList,
     files,
     linearSeqs,
+    linearRecordLayoutEnabled,
+    linearRecordGap,
+    linearRecordRows,
+    linearComparisons,
     generatedLegendPosition,
     generatedMode,
     generatedMultiRecordCanvas,
@@ -3008,9 +3014,19 @@ json.dumps({
         }
         if (form.normalize_length) args.push('--normalize_length');
         if (form.legend !== 'right') args.push('-l', form.legend);
-        const useLosat = blastSource.value === 'losat';
+        const explicitLosatPairs = linearRecordLayoutEnabled.value
+          ? linearComparisons.filter((comparison) => comparison.source === 'losat')
+          : [];
+        const useLosat = linearRecordLayoutEnabled.value
+          ? explicitLosatPairs.length > 0
+          : blastSource.value === 'losat';
         const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
-        const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
+        if (explicitLosatPairs.length > 0 && !useProteinBlastp) {
+          throw new Error('Comparison-list LOSAT sources require the blastp program.');
+        }
+        const blastpMode = explicitLosatPairs.length > 0
+          ? 'pairwise'
+          : normalizeBlastpMode(losat.blastp?.mode);
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         const selectedOrthogroupTarget = String(selectedOrthogroupAlignmentFeature.value || '').trim();
@@ -3721,8 +3737,22 @@ json.dumps({
               }
             }
           } else {
-            for (let i = 0; i < linearSeqs.length - 1; i++) {
-              jobSpecs.push({ queryIndex: i, subjectIndex: i + 1, pairIndex: i });
+            if (linearRecordLayoutEnabled.value) {
+              const indexByUid = new Map(
+                linearSeqs.map((sequence, index) => [sequence.uid, index])
+              );
+              linearComparisons.forEach((comparison, comparisonIndex) => {
+                if (comparison.source !== 'losat') return;
+                jobSpecs.push({
+                  queryIndex: indexByUid.get(comparison.queryUid),
+                  subjectIndex: indexByUid.get(comparison.subjectUid),
+                  pairIndex: comparisonIndex
+                });
+              });
+            } else {
+              for (let i = 0; i < linearSeqs.length - 1; i++) {
+                jobSpecs.push({ queryIndex: i, subjectIndex: i + 1, pairIndex: i });
+              }
             }
           }
 
@@ -3751,7 +3781,9 @@ json.dumps({
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
-            const isAdjacentForwardDisplayPair = spec.subjectIndex === spec.queryIndex + 1;
+            const isAdjacentForwardDisplayPair = linearRecordLayoutEnabled.value
+              ? true
+              : spec.subjectIndex === spec.queryIndex + 1;
             const pair = {
               pairIndex: spec.pairIndex,
               queryIndex: spec.queryIndex,
@@ -4036,7 +4068,7 @@ json.dumps({
               `FASTA chars=${losatTiming.totalFastaChars.toLocaleString()}`
             ].join(', ')
           );
-        } else {
+        } else if (!linearRecordLayoutEnabled.value) {
           for (let i = 0; i < linearSeqs.length - 1; i++) {
             const seq = linearSeqs[i];
             if (seq.blast) {
@@ -4046,6 +4078,37 @@ json.dumps({
               blastArgs.push(`/blast_${i}.txt`);
             }
           }
+        }
+        let explicitComparisonsTablePath = '';
+        if (linearRecordLayoutEnabled.value && linearComparisons.length > 0) {
+          const layoutRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
+          const comparisonError = validateLinearComparisons(
+            linearSeqs,
+            layoutRows,
+            linearComparisons
+          );
+          if (comparisonError) throw new Error(comparisonError);
+          const indexByUid = new Map(linearSeqs.map((sequence, index) => [sequence.uid, index]));
+          const tableLines = ['blast\tquery\tsubject'];
+          for (let index = 0; index < linearComparisons.length; index += 1) {
+            const comparison = linearComparisons[index];
+            const blastPath = comparison.source === 'losat'
+              ? `/blast_${index}.txt`
+              : `/explicit_blast_${index + 1}.txt`;
+            if (comparison.source === 'upload') {
+              await stageUploadedFile(comparison.file, blastPath, {
+                slot: `files.linearComparisons[${index}].blast`
+              });
+            }
+            tableLines.push(
+              `${blastPath}\t#${indexByUid.get(comparison.queryUid) + 1}\t#${indexByUid.get(comparison.subjectUid) + 1}`
+            );
+          }
+          explicitComparisonsTablePath = '/comparisons.tsv';
+          stageTextFile(explicitComparisonsTablePath, `${tableLines.join('\n')}\n`, {
+            name: 'comparisons.tsv',
+            slot: 'generatedFiles.comparisons_table'
+          });
         }
         if (extractFirstFasta) {
           extractFirstFasta.destroy();
@@ -4127,7 +4190,14 @@ json.dumps({
           }
           args.push('--gff', ...gffs, '--fasta', ...fastas);
         }
-        if (blastArgs.length) args.push('-b', ...blastArgs);
+        if (linearRecordLayoutEnabled.value) {
+          linearRecordPositionTokens(linearSeqs, linearRecordRows).forEach((token) => {
+            args.push('--multi_record_position', token);
+          });
+          args.push('--linear_record_gap', String(Math.max(0, Number(linearRecordGap.value) || 0)));
+        }
+        if (explicitComparisonsTablePath) args.push('--comparisons_table', explicitComparisonsTablePath);
+        else if (blastArgs.length) args.push('-b', ...blastArgs);
       }
 
       console.log('CMD:', args.join(' '));

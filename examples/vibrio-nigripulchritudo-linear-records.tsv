@@ -1,0 +1,9 @@
+gbk	record_label	record_subtitle	record_id	order	row	column
+../tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff	TUMSAT-TG-2018	chromosome 1	NZ_AP024087.1	1	1	1
+../tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff	chromosome 2		NZ_AP024088.1	2	1	2
+../tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff	pVNTG1		NZ_AP024089.1	3	1	3
+../tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff	pVNTG2		NZ_AP024090.1	4	1	4
+../tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff	pVNTG3		NZ_AP024091.1	5	1	5
+../tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff	pVNTG4		NZ_AP024092.1	6	1	6
+../tests/test_inputs/GCF_000801275.2_ASM80127v1_genomic.gbff	SFn1	chromosome 1	NC_022528.1	7	2	1
+../tests/test_inputs/GCF_000801275.2_ASM80127v1_genomic.gbff	chromosome 2		NC_022543.1	8	2	2

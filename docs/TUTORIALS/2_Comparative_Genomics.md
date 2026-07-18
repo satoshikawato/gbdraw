@@ -83,7 +83,43 @@ Use `--bitscore`, `--evalue`, `--identity`, and `--alignment_length` to filter r
 
 Record selection and layout are independent from the meaning of BLAST HSPs. See [Arrange linear tracks, record labels, and rulers](./7_Linear_Layout.md#7-select-records-regions-and-orientation) for `--record_id`, `--region`, and `--reverse_complement`. For more than a few records, store those values in [`--records_table`](./5_Table_Driven_Inputs.md#2-linear---records_table-for-genbank-rows).
 
-## 6. Circular BLAST/LOSAT comparison rings
+## 6. Compare selected pairs across multi-record rows
+
+When a row contains several records, adjacency no longer identifies the intended endpoints. Put the layout in a records table and the edges in a comparison table:
+
+```tsv
+# linear_multi_records.tsv
+gbk	record_label	record_id	order	row	column
+MjeNMV.gb	MjeNMV	LC738868.1	1	1	1
+PemoMJNVA.gb	PemoMJNVA	LC738870.1	2	1	2
+MelaMJNV.gb	MelaMJNV	LC738874.1	3	2	1
+PeseMJNV.gb	PeseMJNV	LC738873.1	4	2	2
+```
+
+```tsv
+# linear_multi_comparisons.tsv
+blast	query	subject
+MjeNMV.MelaMJNV.tblastx.out	#1	#3
+PemoMJNVA.PeseMJNV.tblastx.out	#2	#4
+```
+
+```bash
+gbdraw linear \
+  --records_table linear_multi_records.tsv \
+  --comparisons_table linear_multi_comparisons.tsv \
+  --linear_record_gap 28 \
+  --identity 97 \
+  --alignment_length 500 \
+  --pairwise_match_style curve \
+  -o linear_multi_record \
+  -f svg
+```
+
+![Four majanivirus records arranged two per row with two explicitly selected cross-row comparisons](../../examples/linear_multi_record.svg)
+
+The four records use one shared bp/px scale. Each comparison retains its declared query and subject even if the endpoints are listed in the opposite vertical order. Endpoints must lie in adjacent rows; same-row and row-skipping edges are errors.
+
+## 7. Circular BLAST/LOSAT comparison rings
 
 Circular mode can place one outfmt 6/7 result per query around an annotated reference. Use `--conservation_blast` for existing tables or `--conservation_table` for a reproducible manifest. Despite the compatibility option name, describe these as BLAST/LOSAT comparison rings unless a separate analysis supports a conservation claim.
 

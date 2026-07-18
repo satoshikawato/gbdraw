@@ -61,6 +61,10 @@ const state = {
   losatProgram: ref('blastn'),
   losat: { blastp: {} },
   selectedOrthogroupAlignmentFeature: ref(''),
+  linearRecordLayoutEnabled: ref(false),
+  linearRecordGap: ref(24),
+  linearRecordRows: [],
+  linearComparisons: [],
   annotationSets: []
 };
 const genbankText = `LOCUS       WEBTEST                    4 bp    DNA     linear   UNK 01-JAN-1980
@@ -86,7 +90,7 @@ const genbank = {
 const filesData = { c_gb: genbank, linearSeqs: [] };
 
 const canonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(canonical.renderRequest.schema, 1);
+assert.equal(canonical.renderRequest.schema, 2);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
 assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
@@ -195,10 +199,11 @@ state.mode.value = 'linear';
 state.lInputType.value = 'gb';
 const linearFilesData = {
   linearSeqs: [
-    { gb: genbank, region_record_id: '', region_start: null, region_end: null, region_reverse: false },
-    { gb: genbank, region_record_id: 'RecA', region_start: null, region_end: null, region_reverse: false },
-    { gb: genbank, region_record_id: '#2', region_start: 10, region_end: 20, region_reverse: true }
-  ]
+    { uid: 'first', gb: genbank, region_record_id: '', region_start: null, region_end: null, region_reverse: false },
+    { uid: 'second', gb: genbank, region_record_id: 'RecA', region_start: null, region_end: null, region_reverse: false },
+    { uid: 'third', gb: genbank, region_record_id: '#2', region_start: 10, region_end: 20, region_reverse: true }
+  ],
+  linearComparisons: []
 };
 const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
 assert.equal(linearCanonical.renderRequest.records[0].selector, null);
@@ -210,6 +215,34 @@ assert.deepEqual(linearCanonical.renderRequest.records[2].region, {
   end: 20,
   reverseComplement: true
 });
+assert.deepEqual(
+  linearCanonical.renderRequest.records.map((record) => record.recordKey),
+  ['first', 'second', 'third']
+);
+
+state.linearRecordLayoutEnabled.value = true;
+state.linearRecordGap.value = 30;
+state.linearRecordRows.splice(0, state.linearRecordRows.length,
+  { uid: 'first', row: 1 }, { uid: 'second', row: 1 }, { uid: 'third', row: 2 });
+const arrangedCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.deepEqual(arrangedCanonical.renderRequest.layout, {
+  recordGapPx: 30,
+  multiRecordPositions: ['#1@1', '#2@1', '#3@2']
+});
+
+state.losatProgram.value = 'blastp';
+linearFilesData.linearComparisons = [{
+  id: 'selected-losat-pair', queryUid: 'first', subjectUid: 'third', source: 'losat', file: null
+}];
+const losatPairCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+const generatedProtein = losatPairCanonical.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+);
+assert.deepEqual(generatedProtein.pairs, [{ queryRecordIndex: 0, subjectRecordIndex: 2 }]);
+assert.equal(
+  projectCanonicalSessionRequest(losatPairCanonical).files.linearComparisons[0].source,
+  'losat'
+);
 
 const linearProjection = projectCanonicalSessionRequest(linearCanonical);
 assert.deepEqual(

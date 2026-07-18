@@ -55,6 +55,17 @@ import { createAnnotationEditor } from './annotations.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
+import {
+  linearRecordPositionTokens,
+  moveLinearRecordInRow,
+  reconcileLinearRecordLayout,
+  setLinearRecordRow as updateLinearRecordRow
+} from './linear-record-layout.js';
+import {
+  addLinearComparison as appendLinearComparison,
+  adjacentRowPairs,
+  reconcileLinearComparisons
+} from './linear-comparisons.js';
 import { discoverSequenceRecords } from './record-discovery.js';
 import {
   conservationSourceDescriptors,
@@ -120,6 +131,10 @@ export const createAppSetup = () => {
     annotationSets,
     selectedAnnotation,
     linearSeqs,
+    linearRecordLayoutEnabled,
+    linearRecordGap,
+    linearRecordRows,
+    linearComparisons,
     form,
     adv,
     losat,
@@ -275,6 +290,47 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+
+  const syncLinearRecordLayout = () => {
+    const next = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
+    linearRecordRows.splice(0, linearRecordRows.length, ...next);
+    const nextComparisons = reconcileLinearComparisons(linearSeqs, linearComparisons);
+    linearComparisons.splice(0, linearComparisons.length, ...nextComparisons);
+  };
+  const setLinearRecordRow = (uid, row) => {
+    syncLinearRecordLayout();
+    updateLinearRecordRow(linearRecordRows, uid, row);
+  };
+  const moveLinearRecordWithinRow = (uid, direction) => {
+    const next = moveLinearRecordInRow(linearSeqs, linearRecordRows, uid, direction);
+    linearRecordRows.splice(0, linearRecordRows.length, ...next);
+  };
+  const addLinearComparison = () => {
+    if (linearSeqs.length < 2) return;
+    syncLinearRecordLayout();
+    appendLinearComparison(linearComparisons, linearSeqs[0].uid, linearSeqs[1].uid);
+  };
+  const removeLinearComparison = (index) => {
+    if (Number.isInteger(index) && index >= 0) linearComparisons.splice(index, 1);
+  };
+  const setLinearComparisonFile = (index, file) => {
+    if (linearComparisons[index]) linearComparisons[index].file = file || null;
+  };
+  const addLinearComparisonBatch = (allPairs = false) => {
+    syncLinearRecordLayout();
+    adjacentRowPairs(linearSeqs, linearRecordRows, allPairs).forEach(([queryUid, subjectUid]) => {
+      appendLinearComparison(linearComparisons, queryUid, subjectUid);
+    });
+  };
+  const linearRecordRowFor = (uid, fallback) => {
+    syncLinearRecordLayout();
+    return linearRecordRows.find((entry) => entry.uid === uid)?.row || fallback;
+  };
+  const linearLayoutTokens = computed(() => (
+    linearRecordLayoutEnabled.value
+      ? linearRecordPositionTokens(linearSeqs, linearRecordRows)
+      : []
+  ));
 
   const pyodideManager = createPyodideManager({ state });
   const getPyodide = pyodideManager.getPyodide;
@@ -2234,6 +2290,19 @@ export const createAppSetup = () => {
     getLinearDepthFile,
     setLinearDepthFile,
     linearSeqs,
+    linearRecordLayoutEnabled,
+    linearRecordGap,
+    linearRecordRows,
+    linearComparisons,
+    linearLayoutTokens,
+    syncLinearRecordLayout,
+    setLinearRecordRow,
+    moveLinearRecordWithinRow,
+    addLinearComparison,
+    removeLinearComparison,
+    setLinearComparisonFile,
+    addLinearComparisonBatch,
+    linearRecordRowFor,
     linearReorderNotice,
     addLinearSeq,
     removeLastLinearSeq,

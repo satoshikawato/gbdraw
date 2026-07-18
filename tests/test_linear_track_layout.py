@@ -14,7 +14,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.api import LinearMultiRecordOptions, assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
@@ -1001,6 +1001,42 @@ def test_linear_bottom_ruler_legend_title_spacing_is_even() -> None:
     legend_title_gap = title_top - (_extract_legend_translate_y(svg_content) + legend_height)
 
     assert ruler_legend_gap == pytest.approx(cfg.canvas.linear.vertical_padding)
+    assert legend_title_gap == pytest.approx(cfg.canvas.linear.vertical_padding)
+
+
+@pytest.mark.linear
+def test_linear_multi_record_bottom_legend_title_spacing_is_even() -> None:
+    records = [
+        SeqRecord(Seq("A" * 60_000), id=f"rec{index}", description=f"rec{index}")
+        for index in (1, 2)
+    ]
+    for record in records:
+        record.features = [SeqFeature(FeatureLocation(100, 900, strand=1), type="CDS")]
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    svg_content = assemble_linear_diagram_from_records(
+        records,
+        layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
+        config_dict=config_dict,
+        selected_features_set=["CDS"],
+        legend="bottom",
+        plot_title="Synthetic title",
+    ).tostring()
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=len(records),
+        longest_genome=len(records[0].seq),
+        config_dict=config_dict,
+        legend="bottom",
+        cfg=cfg,
+    )
+    legend_height = (24 / 14) * cfg.objects.legends.color_rect_size.for_length_param(
+        canvas_config.length_param
+    )
+    title_y = _extract_group_translate_y(svg_content, "plot_title")
+    title_bottom = _extract_viewbox_bottom(svg_content) - 24.0
+    title_top = (2 * title_y) - title_bottom
+    legend_title_gap = title_top - (_extract_legend_translate_y(svg_content) + legend_height)
+
     assert legend_title_gap == pytest.approx(cfg.canvas.linear.vertical_padding)
 
 

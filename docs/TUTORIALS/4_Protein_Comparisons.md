@@ -115,6 +115,8 @@ This writes `majani_collinear.svg`.
 
 `--collinear_min_anchors 2` removes singleton blocks. `--collinear_color_mode orientation_identity` separates forward and inverted blocks while still encoding identity.
 
+For a multi-record layout, add `--collinear_search_scope all` to search every record pair. gbdraw renders the accepted blocks only between adjacent layout rows and omits same-row ribbons. This supports all-vs-all comparisons between two groups of replicons, including chromosome-to-noncorresponding-chromosome blocks. See the [two-strain *Vibrio* example](./7_Linear_Layout.md#two-strains-with-multiple-replicons).
+
 ![Collinear protein blocks across three majanivirus records](../../examples/majani_collinear.svg)
 
 ## 6. When to prefer precomputed `-b/--blast`
@@ -122,6 +124,8 @@ This writes `majani_collinear.svg`.
 Use precomputed BLAST tables when you need to preserve an existing result, use custom database settings, compare nucleotide or translated nucleotide sequences, or draw hits that were filtered by an upstream workflow.
 
 Do not combine `-b/--blast` with `--protein_blastp_mode`. The CLI rejects that combination because the two options define different comparison sources.
+
+For a typed Python request with multi-record rows, use `DiagramOptions(protein_blastp_mode="pairwise", protein_comparison_pairs=((0, 2), (1, 3)))` to run only the declared record pairs. Pair indices are zero-based and must connect adjacent layout rows. Supplying no `protein_comparison_pairs` preserves the legacy adjacent-record behavior. See the [Python API multi-record example](../PYTHON_API.md#linear-multi-record-layout-and-selected-comparisons).
 
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Set feature colors and labels](./3_Advanced_Customization.md) | [Next: Use TSV manifests >](./5_Table_Driven_Inputs.md)

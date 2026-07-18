@@ -32,6 +32,7 @@ GALLERY_SESSION_FILES = (
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json",
+    "vibrio-harveyi-group-collinear.gbdraw-session.json",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
     "lambda_basic_linear.gbdraw-session.json",
