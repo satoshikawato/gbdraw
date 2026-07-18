@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Human mitochondrial genome with an AT skew track",
   "summary": "Add GC content, GC skew, and AT skew tracks to a circular human mitochondrial genome diagram, then configure its ticks, feature labels, and legend.",
-  "estimatedTime": "5-10 min after the input is available",
-  "difficulty": "Intermediate",
   "appMode": "Circular",
   "primaryWorkflow": "Circular custom track slots with AT skew",
   "downloads": [

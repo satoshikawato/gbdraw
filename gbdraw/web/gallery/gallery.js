@@ -3,6 +3,9 @@ const COMMON_COLOR_RULE_GUIDE_PATH = './tutorials/_common-color-rule-guide.json'
 
 const sampleList = document.querySelector('#sample-list');
 const sampleCount = document.querySelector('#sample-count');
+const tagFilterList = document.querySelector('#tag-filter-list');
+const clearTagFiltersButton = document.querySelector('#clear-tag-filters');
+const noTagMatches = document.querySelector('#no-tag-matches');
 const selectedTitle = document.querySelector('#selected-title');
 const selectedDescription = document.querySelector('#selected-description');
 const selectedMeta = document.querySelector('#selected-meta');
@@ -38,6 +41,17 @@ const TAB_HASHES = {
   files: 'Files'
 };
 
+const TAG_ORDER = [
+  'Circular',
+  'Linear',
+  'Multi-record',
+  'Collinear groups',
+  'Similarity groups',
+  'LOSAT',
+  'Interactive SVG',
+  'Static SVG'
+];
+
 const normalizeHash = () => decodeURIComponent(window.location.hash.replace(/^#/, '')).trim();
 
 const getTabFromHash = () => {
@@ -67,6 +81,7 @@ let tutorialRequestToken = 0;
 let mediaLightbox = null;
 let commonColorRuleGuide = null;
 let commonColorRuleGuidePromise = null;
+const activeTagFilters = new Set();
 const tutorialCache = new Map();
 
 const getAbsoluteSampleUrl = (sample) => new URL(sample.svg, window.location.href).href;
@@ -715,9 +730,41 @@ const plainTitle = (sample) => {
   return template.content.textContent || sample.title || sample.id;
 };
 
-const renderTags = (parent, tags) => {
+const renderTags = (parent, tags, { filterable = false } = {}) => {
   clearChildren(parent);
-  tags.forEach((tag) => appendText(parent, 'span', 'tag', tag));
+  tags.forEach((tag) => {
+    if (!filterable) {
+      appendText(parent, 'span', 'tag', tag);
+      return;
+    }
+    const button = appendText(parent, 'button', 'tag', tag);
+    button.type = 'button';
+    button.setAttribute('aria-pressed', activeTagFilters.has(tag) ? 'true' : 'false');
+    button.title = `Filter examples by ${tag}`;
+    button.addEventListener('click', () => toggleTagFilter(tag));
+  });
+};
+
+const availableTags = () =>
+  TAG_ORDER.filter((tag) => examples.some((sample) => asArray(sample.tags).includes(tag)));
+
+const filteredExamples = () => {
+  if (!activeTagFilters.size) return examples;
+  return examples.filter((sample) => {
+    const sampleTags = asArray(sample.tags);
+    return Array.from(activeTagFilters).every((tag) => sampleTags.includes(tag));
+  });
+};
+
+const renderTagFilters = () => {
+  clearChildren(tagFilterList);
+  availableTags().forEach((tag) => {
+    const button = appendText(tagFilterList, 'button', 'tag tag--filter', tag);
+    button.type = 'button';
+    button.setAttribute('aria-pressed', activeTagFilters.has(tag) ? 'true' : 'false');
+    button.addEventListener('click', () => toggleTagFilter(tag));
+  });
+  clearTagFiltersButton.hidden = activeTagFilters.size === 0;
 };
 
 const setLoading = (sample) => {
@@ -769,9 +816,13 @@ const copyText = async (text) => {
 
 const renderSampleList = () => {
   clearChildren(sampleList);
-  sampleCount.textContent = `${examples.length} examples`;
+  const visibleExamples = filteredExamples();
+  sampleCount.textContent = activeTagFilters.size
+    ? `${visibleExamples.length} of ${examples.length} examples`
+    : `${examples.length} examples`;
+  noTagMatches.hidden = visibleExamples.length !== 0;
 
-  examples.forEach((sample, index) => {
+  visibleExamples.forEach((sample, index) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'sample-card';
@@ -796,13 +847,13 @@ const renderSampleList = () => {
       body,
       'span',
       'sample-card__meta',
-      [sample.difficulty, sample.workflow].filter(Boolean).join(' · ')
+      sample.workflow || ''
     );
     appendText(
       body,
       'span',
       'sample-card__meta sample-card__meta--secondary',
-      [sample.inputSummary, sample.estimatedTime].filter(Boolean).join(' · ')
+      sample.inputSummary || ''
     );
     const tagRow = document.createElement('span');
     tagRow.className = 'tag-row';
@@ -822,6 +873,27 @@ const renderSampleList = () => {
     button.addEventListener('click', () => selectSample(sample.id));
     sampleList.appendChild(button);
   });
+};
+
+const updateTagFilterResults = () => {
+  renderTagFilters();
+  renderSampleList();
+  const visibleExamples = filteredExamples();
+  if (visibleExamples.length && !visibleExamples.some((sample) => sample.id === selectedId)) {
+    selectSample(visibleExamples[0].id);
+    return;
+  }
+  const sample = selectedSample();
+  if (sample) renderTags(selectedTags, sample.tags, { filterable: true });
+};
+
+const toggleTagFilter = (tag) => {
+  if (activeTagFilters.has(tag)) {
+    activeTagFilters.delete(tag);
+  } else {
+    activeTagFilters.add(tag);
+  }
+  updateTagFilterResults();
 };
 
 const updatePressedState = () => {
@@ -881,11 +953,11 @@ const selectSample = (id, { updateUrl = true } = {}) => {
   selectedTitle.innerHTML = sample.title;
   selectedDescription.textContent = sample.description || '';
   selectedDescription.hidden = !sample.description;
-  selectedMeta.textContent = [sample.difficulty, sample.workflow, sample.inputSummary, sample.estimatedTime]
+  selectedMeta.textContent = [sample.workflow, sample.inputSummary]
     .filter(Boolean)
     .join(' · ');
   selectedMeta.hidden = !selectedMeta.textContent;
-  renderTags(selectedTags, sample.tags);
+  renderTags(selectedTags, sample.tags, { filterable: true });
   fileSize.textContent = sample.fileSizeLabel;
   commandBlock.textContent = sample.command;
   const isRunnable = sample.commandKind === 'runnable';
@@ -959,6 +1031,11 @@ copyCommandButton.addEventListener('click', async () => {
   }
 });
 
+clearTagFiltersButton.addEventListener('click', () => {
+  activeTagFilters.clear();
+  updateTagFilterResults();
+});
+
 tabButtons.forEach((button, index) => {
   button.addEventListener('click', () => {
     setActiveTab(button.dataset.galleryTab);
@@ -1009,6 +1086,7 @@ fetch('./examples.json', { cache: 'no-cache' })
     const legacySampleId = getLegacySampleIdFromHash();
     const initialId = pathSampleId || legacySampleId || examples[0]?.id || DEFAULT_SAMPLE_ID;
     selectedId = initialId;
+    renderTagFilters();
     renderSampleList();
     selectSample(initialId, { updateUrl: !legacySampleId });
   })

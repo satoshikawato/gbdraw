@@ -38,10 +38,8 @@ class GallerySessionExample:
     title: str
     tags: tuple[str, ...]
     description: str
-    difficulty: str
     workflow: str
     input_summary: str
-    estimated_time: str
     display_order: int
     command_kind: str
     command_note: str
@@ -203,12 +201,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="HmmtDNA_basic_circular",
         title="Human mitochondrial genome: first circular figure",
-        tags=("Circular", "GenBank", "Beginner"),
+        tags=("Circular", "Interactive SVG"),
         description="Create a first circular genome figure from one small GenBank record without running a sequence search.",
-        difficulty="Beginner",
         workflow="Circular basics",
         input_summary="1 GenBank file",
-        estimated_time="Under 5 min",
         display_order=10,
         command_kind="runnable",
         command_note="Download HmmtDNA.gbk from the Files tab, then run this command in the same directory.",
@@ -217,12 +213,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="lambda_basic_linear",
         title="Lambda phage: first linear figure",
-        tags=("Linear", "GenBank", "Beginner"),
+        tags=("Linear", "Interactive SVG"),
         description="Create a labeled linear genome figure and learn strand separation, the ruler, and SVG export.",
-        difficulty="Beginner",
         workflow="Linear basics",
         input_summary="1 GenBank file",
-        estimated_time="Under 5 min",
         display_order=20,
         command_kind="runnable",
         command_note="Download NC_001416.gb from the Files tab, then run this command in the same directory.",
@@ -231,12 +225,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="HmmtDNA_ATskew",
         title="Human mitochondrial genome (AT skew)",
-        tags=("Circular", "GenBank", "Intermediate"),
+        tags=("Circular", "Interactive SVG"),
         description="Add an AT skew ring and qualifier-based labels to a compact circular mitochondrial diagram.",
-        difficulty="Intermediate",
         workflow="Circular quantitative tracks",
         input_summary="1 GenBank + 1 qualifier TSV",
-        estimated_time="5-10 min",
         display_order=30,
         command_kind="runnable",
         command_note="Download both HmmtDNA.gbk and HmmtDNA_qualifier_priority.tsv from Files before running the command.",
@@ -245,12 +237,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="tobacco-chloroplast",
         title="<i>Nicotiana tabacum</i> chloroplast genome regions",
-        tags=("Circular", "Organellar", "Intermediate"),
+        tags=("Circular", "Interactive SVG"),
         description="Mark LSC, SSC, IRa, and IRb as bracket annotations inside a color-coded chloroplast gene map.",
-        difficulty="Intermediate",
         workflow="Circular region annotations",
         input_summary="1 GenBank + 3 TSV files",
-        estimated_time="5-10 min",
         display_order=40,
         command_kind="runnable",
         command_note="Download NC_001879.gbk and the three Gallery TSV files, then run the command in the same directory.",
@@ -259,12 +249,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="Vnig_TUMSAT-TG-2018",
         title="<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
-        tags=("Circular", "Multi-record", "Intermediate"),
+        tags=("Circular", "Multi-record", "Interactive SVG"),
         description="Arrange two chromosomes and four plasmids from one multi-record GenBank file on a shared circular canvas.",
-        difficulty="Intermediate",
         workflow="Circular multi-record canvas",
         input_summary="1 multi-record GenBank file",
-        estimated_time="5-15 min",
         display_order=50,
         command_kind="runnable",
         command_note="Download the pinned RefSeq assembly named in Files; no sequence search is required.",
@@ -272,12 +260,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="hepatoplasmataceae_collinear",
         title="Hepatoplasmataceae collinear protein-match blocks",
-        tags=("Linear", "Collinear", "Advanced"),
+        tags=("Linear", "Collinear groups", "LOSAT", "Interactive SVG"),
         description="Combine compatible protein-match anchors into collinear blocks across five related genomes.",
-        difficulty="Advanced",
         workflow="LOSATP collinear blocks",
         input_summary="5 GenBank files",
-        estimated_time="10-20 min plus search",
         display_order=60,
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
@@ -285,12 +271,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
         title="<i>Vibrio</i> Harveyi group multi-record collinearity",
-        tags=("Linear", "Multi-record", "Collinear", "Advanced"),
+        tags=("Linear", "Multi-record", "Collinear groups", "LOSAT", "Static SVG"),
         description="Compare all 11 replicons from five Harveyi-group Vibrio assemblies as five multi-record rows.",
-        difficulty="Advanced",
         workflow="Multi-record LOSATP collinear blocks",
         input_summary="5 multi-record GenBank files; 11 replicons",
-        estimated_time="Session: under 5 min; full search: 20-40 min",
         display_order=65,
         command_kind="runnable",
         command_note="Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
@@ -310,12 +294,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="hepatoplasmataceae_orthogroup",
         title="Hepatoplasmataceae CDS protein-similarity links",
-        tags=("Linear", "Similarity groups", "Advanced"),
+        tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
         description="Compare the same five genomes with similarity-group links instead of collinear blocks.",
-        difficulty="Advanced",
         workflow="LOSATP similarity groups",
         input_summary="5 GenBank files",
-        estimated_time="10-20 min plus search",
         display_order=70,
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The CLI value remains orthogroup for compatibility.",
@@ -323,12 +305,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="BGC0000708-BGC0000713",
         title="Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
-        tags=("Linear", "Similarity groups", "Advanced"),
+        tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
         description="Compare five biosynthetic gene clusters while preserving antiSMASH categories and concise gene labels.",
-        difficulty="Advanced",
         workflow="LOSATP similarity groups and color rules",
         input_summary="5 GenBank + 3 color/label TSV files",
-        estimated_time="10-20 min plus search",
         display_order=80,
         command_kind="runnable",
         command_note="Files provides the five MIBiG records and all three repository-managed TSV files used by the command.",
@@ -337,12 +317,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="majanivirus_orthogroup",
         title="Majanivirus CDS protein-similarity links",
-        tags=("Linear", "Similarity groups", "Advanced"),
+        tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
         description="Inspect dense protein-similarity links and product-based feature colors across nine viral genomes.",
-        difficulty="Advanced",
         workflow="LOSATP similarity groups",
         input_summary="9 GenBank + 2 color TSV files",
-        estimated_time="15-40 min plus search",
         display_order=90,
         command_kind="runnable",
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
@@ -350,12 +328,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="WSSV_genome_comparison",
         title="White spot syndrome virus nucleotide-similarity rings",
-        tags=("Circular", "LOSAT", "Advanced"),
+        tags=("Circular", "LOSAT", "Interactive SVG"),
         description="Inspect one viral reference against 20 prepared assemblies as concentric BLAST/LOSAT comparison rings.",
-        difficulty="Advanced",
         workflow="Session-based circular comparison case study",
         input_summary="Bundled session; prepared 20-assembly input set not fully public",
-        estimated_time="Session: under 5 min; preparation/search: hours",
         display_order=100,
         command_kind="provenance",
         command_note="This records the original prepared-input workflow and is not directly runnable from public downloads. Load the bundled session first; Shantou2019 has no recorded public accession.",
@@ -745,10 +721,8 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
             "commandKind": example.command_kind,
             "commandNote": example.command_note,
             "description": example.description,
-            "difficulty": example.difficulty,
             "workflow": example.workflow,
             "inputSummary": example.input_summary,
-            "estimatedTime": example.estimated_time,
             "displayOrder": example.display_order,
         }
         tutorial_path = GALLERY_ROOT / "tutorials" / f"{example.id}.json"

@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Vibrio nigripulchritudo chromosomes and plasmids on one canvas",
   "summary": "Arrange two chromosomes and four plasmids from one RefSeq GBFF file on a shared circular canvas. The example uses automatic record sizing, two rows, GC content, GC skew, and a left legend.",
-  "estimatedTime": "5-15 min after the input is available",
-  "difficulty": "Intermediate",
   "appMode": "Circular",
   "primaryWorkflow": "Circular multi-record canvas",
   "downloads": [

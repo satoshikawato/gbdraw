@@ -141,6 +141,56 @@ h1 {
     white-space: nowrap;
 }
 
+.tag-filter {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+}
+
+.tag-filter__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.tag-filter__label {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 720;
+}
+
+.tag-filter__clear {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-strong);
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 720;
+    cursor: pointer;
+}
+
+.tag-filter__clear:hover,
+.tag-filter__clear:focus-visible {
+    text-decoration: underline;
+    outline: none;
+}
+
+.tag-filter__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.no-tag-matches {
+    padding: 14px 8px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-align: center;
+}
+
 .sample-list {
     display: grid;
     gap: 8px;
@@ -264,6 +314,29 @@ h1 {
     color: #42515d;
     font-size: 0.66rem;
     font-weight: 720;
+}
+
+button.tag {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.tag--filter {
+    min-height: 24px;
+    padding: 2px 8px;
+}
+
+button.tag:hover,
+button.tag:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent-strong);
+    outline: none;
+}
+
+button.tag[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #ffffff;
 }
 
 .sample-card__size {

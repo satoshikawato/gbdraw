@@ -3,8 +3,6 @@
   "version": 1,
   "title": "Plot CDS protein-similarity links across five Hepatoplasmataceae genomes",
   "summary": "Run LOSATP in the browser, assign CDS-derived proteins to gbdraw similarity groups, and draw links between group members in five Hepatoplasmataceae genomes.",
-  "estimatedTime": "10-20 min after inputs are available",
-  "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "LOSATP similarity groups (Orthogroups mode)",
   "downloads": [
