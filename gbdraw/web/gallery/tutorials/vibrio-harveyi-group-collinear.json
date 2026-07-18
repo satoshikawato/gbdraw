@@ -2,12 +2,36 @@
   "id": "vibrio-harveyi-group-collinear",
   "version": 1,
   "title": "Compare every replicon across five Vibrio Harveyi-group assemblies",
-  "summary": "Arrange 11 chromosomes and plasmids from five RefSeq assemblies as five Linear rows, run LOSATP collinear analysis across all records, and color the resulting blocks by orientation and identity.",
+  "summary": "Arrange 11 chromosomes and plasmids from five RefSeq assemblies as five Linear rows, run LOSATP collinear analysis between adjacent rows, and color the resulting blocks by orientation and identity.",
   "estimatedTime": "Session: under 5 min; full browser search: 20-40 min",
   "difficulty": "Advanced",
   "appMode": "Linear",
   "primaryWorkflow": "Multi-record LOSATP collinear blocks",
   "downloads": [
+    {
+      "label": "Vibrio harveyi SB1",
+      "source": "NCBI Assembly",
+      "accession": "GCF_030060435.1",
+      "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_030060435.1",
+      "targetName": "GCF_030060435.1_ASM3006043v1_genomic.gbff",
+      "note": "Download the RefSeq genomic GBFF; the tutorial uses both chromosomes and plasmid p1."
+    },
+    {
+      "label": "Vibrio owensii XSBZ03",
+      "source": "NCBI Assembly",
+      "accession": "GCF_002021755.1",
+      "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_002021755.1",
+      "targetName": "GCF_002021755.1_ASM202175v1_genomic.gbff",
+      "note": "Download the RefSeq genomic GBFF; the tutorial uses both chromosomes."
+    },
+    {
+      "label": "Vibrio campbellii BoB-53",
+      "source": "NCBI Assembly",
+      "accession": "GCF_002906475.1",
+      "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_002906475.1",
+      "targetName": "GCF_002906475.1_ASM290647v1_genomic.gbff",
+      "note": "Download the RefSeq genomic GBFF; the tutorial uses both chromosomes."
+    },
     {
       "label": "Vibrio parahaemolyticus RIMD 2210633",
       "source": "NCBI Assembly",
@@ -23,30 +47,6 @@
       "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_000354175.2",
       "targetName": "GCF_000354175.2_ASM35417v2_genomic.gbff",
       "note": "Download the RefSeq genomic GBFF; the tutorial uses both chromosomes."
-    },
-    {
-      "label": "Vibrio campbellii BoB-53",
-      "source": "NCBI Assembly",
-      "accession": "GCF_002906475.1",
-      "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_002906475.1",
-      "targetName": "GCF_002906475.1_ASM290647v1_genomic.gbff",
-      "note": "Download the RefSeq genomic GBFF; the tutorial uses both chromosomes."
-    },
-    {
-      "label": "Vibrio owensii XSBZ03",
-      "source": "NCBI Assembly",
-      "accession": "GCF_002021755.1",
-      "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_002021755.1",
-      "targetName": "GCF_002021755.1_ASM202175v1_genomic.gbff",
-      "note": "Download the RefSeq genomic GBFF; the tutorial uses both chromosomes."
-    },
-    {
-      "label": "Vibrio harveyi SB1",
-      "source": "NCBI Assembly",
-      "accession": "GCF_030060435.1",
-      "href": "https://www.ncbi.nlm.nih.gov/assembly/GCF_030060435.1",
-      "targetName": "GCF_030060435.1_ASM3006043v1_genomic.gbff",
-      "note": "Download the RefSeq genomic GBFF; the tutorial uses both chromosomes and plasmid p1."
     }
   ],
   "manualSteps": [
@@ -69,36 +69,36 @@
       "table": {
         "columns": ["Order", "Species definition", "Strain subtitle", "Record", "Layout row", "Column"],
         "rows": [
-          ["1", "<i>Vibrio parahaemolyticus</i>", "RIMD 2210633", "NC_004603.1", "1", "1"],
-          ["2", "", "", "NC_004605.1", "1", "2"],
-          ["3", "<i>Vibrio alginolyticus</i>", "NBRC 15630", "NC_022349.1", "2", "1"],
-          ["4", "", "", "NC_022359.1", "2", "2"],
-          ["5", "<i>Vibrio campbellii</i>", "BoB-53", "NZ_CP026321.1", "3", "1"],
-          ["6", "", "", "NZ_CP026322.1", "3", "2"],
-          ["7", "<i>Vibrio owensii</i>", "XSBZ03", "NZ_CP019959.1", "4", "1"],
-          ["8", "", "", "NZ_CP019960.1", "4", "2"],
-          ["9", "<i>Vibrio harveyi</i>", "SB1", "NZ_CP125875.1", "5", "1"],
-          ["10", "", "", "NZ_CP125876.1", "5", "2"],
-          ["11", "", "", "NZ_CP125877.1", "5", "3"]
+          ["1", "<i>Vibrio harveyi</i>", "SB1", "NZ_CP125875.1", "1", "1"],
+          ["2", "", "", "NZ_CP125876.1", "1", "2"],
+          ["3", "", "", "NZ_CP125877.1", "1", "3"],
+          ["4", "<i>Vibrio owensii</i>", "XSBZ03", "NZ_CP019959.1", "2", "1"],
+          ["5", "", "", "NZ_CP019960.1", "2", "2"],
+          ["6", "<i>Vibrio campbellii</i>", "BoB-53", "NZ_CP026321.1", "3", "1"],
+          ["7", "", "", "NZ_CP026322.1", "3", "2"],
+          ["8", "<i>Vibrio parahaemolyticus</i>", "RIMD 2210633", "NC_004603.1", "4", "1"],
+          ["9", "", "", "NC_004605.1", "4", "2"],
+          ["10", "<i>Vibrio alginolyticus</i>", "NBRC 15630", "NC_022349.1", "5", "1"],
+          ["11", "", "", "NC_022359.1", "5", "2"]
         ]
       },
-      "note": "The first four assemblies contain two chromosomes each. The SB1 assembly contains two chromosomes plus plasmid p1, so no replicon is omitted.",
+      "note": "The SB1 assembly contains two chromosomes plus plasmid p1. The other four assemblies contain two chromosomes each, so no replicon is omitted.",
       "operations": [
         {
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-02-01-record-row.webp",
-            "alt": "First Linear input row with the RIMD 2210633 GBFF, NC_004603.1 record selector, species definition, and strain subtitle visible.",
-            "caption": "The first row selects NC_004603.1 and assigns the species definition and RIMD 2210633 subtitle."
+            "alt": "First Linear input row with the SB1 GBFF, NZ_CP125875.1 record selector, species definition, and strain subtitle visible.",
+            "caption": "The first row selects NZ_CP125875.1 and assigns the species definition and SB1 subtitle."
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1280, "height": 1000},
             "openDetails": ["Input Genomes"],
             "actions": [
               {
                 "type": "evaluate",
-                                "script": "const app = window.__GBDRAW_APP__; if (!app || app.linearSeqs?.length !== 11) throw new Error('Expected 11 restored Linear records.'); const seq = app.linearSeqs[0]; if (!seq?.gb?.name?.endsWith('__GCF_000196095.1_ASM19609v1_genomic.gbff') || seq?.region_record_id !== 'NC_004603.1' || seq?.definition !== '<i>Vibrio parahaemolyticus</i>' || seq?.record_subtitle !== 'RIMD 2210633') throw new Error('First restored record row does not match the tutorial.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = [...(card?.querySelectorAll('div') || [])].find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('First Linear input row is unavailable.'); row.querySelectorAll('details').forEach((node) => node.style.display = 'none'); [...row.children].forEach((node) => { if (node.textContent?.includes('LOSAT (pair #1')) node.style.display = 'none'; }); row.setAttribute('data-capture-tutorial-record-row', 'true'); row.scrollIntoView({ block: 'center' });"
+                                "script": "const app = window.__GBDRAW_APP__; if (!app || app.linearSeqs?.length !== 11) throw new Error('Expected 11 restored Linear records.'); const seq = app.linearSeqs[0]; if (!seq?.gb?.name?.endsWith('__GCF_030060435.1_ASM3006043v1_genomic.gbff') || seq?.region_record_id !== 'NZ_CP125875.1' || seq?.definition !== '<i>Vibrio harveyi</i>' || seq?.record_subtitle !== 'SB1') throw new Error('First restored record row does not match the tutorial.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = [...(card?.querySelectorAll('div') || [])].find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('First Linear input row is unavailable.'); row.querySelectorAll('details').forEach((node) => node.style.display = 'none'); [...row.children].forEach((node) => { if (node.textContent?.includes('LOSAT (pair #1')) node.style.display = 'none'; }); row.setAttribute('data-capture-tutorial-record-row', 'true'); row.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture-tutorial-record-row='true']",
@@ -114,17 +114,17 @@
         {
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-03-01-record-layout.webp",
-            "alt": "Linear Record Layout panel with Arrange in rows enabled and the first four replicons assigned to rows 1, 1, 2, and 2.",
-            "caption": "Assign each pair of chromosomes to its species row; SB1 uses three entries on row 5."
+            "alt": "Linear Record Layout panel with Arrange in rows enabled and the first four replicons assigned to rows 1, 1, 1, and 2.",
+            "caption": "Assign the three SB1 replicons to row 1 and each remaining chromosome pair to one species row."
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1280, "height": 1000},
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const inputs = [...document.querySelectorAll('input[aria-label=\"Linear record row\"]')]; const expected = '1,1,2,2,3,3,4,4,5,5,5'; if (inputs.map((node) => node.value).join(',') !== expected) throw new Error('Restored row assignments do not match the tutorial.'); const heading = [...document.querySelectorAll('div')].find((node) => node.textContent?.trim() === 'Record Layout'); const panel = heading?.parentElement?.parentElement; const rows = inputs.slice(0, 4).map((node) => node.parentElement); if (!heading || !panel || rows.some((row) => !row)) throw new Error('Record Layout controls are unavailable.'); heading.parentElement.setAttribute('data-capture-record-layout-heading', 'true'); rows.forEach((row, index) => row.setAttribute('data-capture-record-layout-row', String(index + 1))); const gap = [...panel.querySelectorAll('label')].find((node) => node.textContent?.includes('Record gap')); gap?.setAttribute('data-capture-record-layout-gap', 'true'); heading.scrollIntoView({ block: 'center' });"
+                "script": "const inputs = [...document.querySelectorAll('input[aria-label=\"Linear record row\"]')]; const expected = '1,1,1,2,2,3,3,4,4,5,5'; if (inputs.map((node) => node.value).join(',') !== expected) throw new Error('Restored row assignments do not match the tutorial.'); const heading = [...document.querySelectorAll('div')].find((node) => node.textContent?.trim() === 'Record Layout'); const panel = heading?.parentElement?.parentElement; const rows = inputs.slice(0, 4).map((node) => node.parentElement); if (!heading || !panel || rows.some((row) => !row)) throw new Error('Record Layout controls are unavailable.'); heading.parentElement.setAttribute('data-capture-record-layout-heading', 'true'); rows.forEach((row, index) => row.setAttribute('data-capture-record-layout-row', String(index + 1))); const gap = [...panel.querySelectorAll('label')].find((node) => node.textContent?.includes('Record gap')); gap?.setAttribute('data-capture-record-layout-gap', 'true'); heading.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": ["[data-capture-record-layout-heading='true']", "[data-capture-record-layout-row]", "[data-capture-record-layout-gap='true']"],
@@ -135,23 +135,22 @@
     },
     {
       "title": "Run LOSATP in Collinear blocks mode",
-      "body": "In Pairwise Comparisons, select Run LOSAT and LOSATP. In LOSAT Settings, choose Collinear blocks and use all records as evidence.",
+      "body": "In Pairwise Comparisons, select Run LOSAT and LOSATP. In LOSAT Settings, choose Collinear blocks and use adjacent pairs as evidence.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
           ["blastp mode", "Collinear blocks"],
           ["Max unit gap", "2"],
           ["Min block genes", "3"],
-          ["Evidence scope", "All records"],
+          ["Evidence scope", "Adjacent pairs"],
           ["Diagonal drift", "2"],
           ["Bitscore", "50"],
           ["E-value", "1e-2"],
           ["Minimum Identity", "0"],
-          ["Minimum Length", "0"],
-          ["Candidate limit per query", "5"]
+          ["Minimum Length", "0"]
         ]
       },
-      "note": "All records supplies evidence from every replicon pair. In a multi-record layout, gbdraw draws accepted blocks only between adjacent species rows and omits same-row ribbons.",
+      "note": "With multi-record rows, Adjacent pairs searches every cross-record combination between neighboring rows. This layout evaluates 18 record pairs across four species boundaries; same-row and non-neighboring-row pairs are omitted.",
       "operations": [
         {
           "media": {
@@ -165,6 +164,31 @@
             "src": "./media/hepatoplasmataceae_collinear/manual-04-02-orientation-identity.webp",
             "alt": "LOSAT Settings panel with the Color mode menu open and Orientation plus identity highlighted.",
             "caption": "Choose Orientation + identity for Color mode."
+          }
+        },
+        {
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-04-03-adjacent-pairs.webp",
+            "alt": "LOSAT Settings panel with the Evidence scope menu open and Adjacent pairs highlighted.",
+            "caption": "Choose Adjacent pairs for Evidence scope."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "crop": "openSelect",
+            "cropPadding": {"top": 54, "right": 80, "bottom": 24, "left": 80},
+            "openSelect": {
+              "selectedLabel": "Adjacent pairs",
+              "options": ["Adjacent pairs", "All records"],
+              "label": "Evidence scope"
+            },
+            "openDetails": ["LOSAT Settings"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const blastp = window.__GBDRAW_APP__?.losat?.blastp; if (Number(blastp?.collinearMinAnchors) !== 3 || Number(blastp?.collinearMaxGeneGap) !== 2 || Number(blastp?.collinearMaxDiagonalDrift) !== 2 || blastp?.collinearColorMode !== 'orientation_identity' || blastp?.collinearSearchScope !== 'adjacent') throw new Error(`Restored collinear settings do not match the tutorial: ${JSON.stringify(blastp)}`);"
+              }
+            ]
           }
         }
       ]
@@ -193,7 +217,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1280, "height": 900},
             "openDetails": ["Features"],
             "actions": [
@@ -235,7 +259,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1280, "height": 900},
             "openDetails": ["Layout"],
             "actions": [
@@ -251,38 +275,16 @@
       ]
     },
     {
-      "title": "Place the title and legend at the bottom",
-      "body": "Enter the plot title exactly as shown, including the italic markup around Vibrio. Set both Plot Title Position and Legend Position to Bottom.",
+      "title": "Place the legend at the bottom and leave the title blank",
+      "body": "Leave Plot Title empty and set Legend Position to Bottom.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Plot Title", "<i>Vibrio</i> Harveyi group"],
-          ["Plot Title Position", "Bottom"],
+          ["Plot Title", "Blank"],
           ["Legend Position", "Bottom"]
         ]
       },
       "operations": [
-        {
-          "media": {
-            "src": "./media/vibrio-harveyi-group-collinear/manual-07-01-bottom-title.webp",
-            "alt": "Title and Legend card with the Vibrio Harveyi group title and Bottom title position.",
-            "caption": "Enter <i>Vibrio</i> Harveyi group and set Plot Title Position to Bottom."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
-            "viewport": {"width": 1280, "height": 900},
-            "openDetails": ["Title & Legend"],
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.form?.plot_title !== '<i>Vibrio</i> Harveyi group' || app?.adv?.plot_title_position !== 'bottom' || app?.form?.legend !== 'bottom') throw new Error('Restored title or legend position does not match the tutorial.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Title & Legend')); const labels = [...(card?.querySelectorAll('label') || [])]; const title = labels.find((node) => node.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Plot Title'))?.parentElement; const position = labels.find((node) => node.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Plot Title Position'))?.parentElement; const summary = card?.querySelector('summary'); if (!summary || !title || !position) throw new Error('Title controls are unavailable.'); summary.setAttribute('data-capture-title-summary', 'true'); title.setAttribute('data-capture-title-input', 'true'); position.setAttribute('data-capture-title-position', 'true'); title.scrollIntoView({ block: 'center' });"
-              }
-            ],
-            "clipSelectors": ["[data-capture-title-summary='true']", "[data-capture-title-input='true']", "[data-capture-title-position='true']"],
-            "cropPadding": 12
-          }
-        },
         {
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-07-02-bottom-legend.webp",
@@ -291,7 +293,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "crop": "openSelect",
             "cropPadding": {"top": 54, "right": 80, "bottom": 24, "left": 80},
             "openSelect": {
@@ -306,28 +308,28 @@
     },
     {
       "title": "Generate and inspect the multi-record diagram",
-      "body": "Click Generate Diagram. The first all-record LOSATP search is the expensive step; the bundled Gallery session already contains the completed result for immediate inspection. The preview should show five species rows, 11 record-local rulers, rectangular features, and orientation-and-identity collinear blocks between adjacent species rows. Each two-line definition remains centered on the feature record rather than the ruler. A narrow white gap separates each record from the adjacent blocks, including when feature labels are hidden.",
+      "body": "Click Generate Diagram. The first LOSATP search is the expensive step; the bundled Gallery session already contains the completed result for immediate inspection. The preview should show five species rows, 11 record-local rulers, rectangular features, and orientation-and-identity collinear blocks at the four adjacent species boundaries. Each left-aligned two-line definition remains centered on the feature record rather than the ruler. A narrow white gap separates each record from the adjacent blocks, including when feature labels are hidden.",
       "operations": [
         {
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp",
             "alt": "Generated five-row Vibrio Harveyi-group diagram with bold species names, 11 replicons, and orientation-and-identity collinear blocks.",
-            "caption": "The completed diagram centers each 18 px bold species name and 16 px strain name on the feature record, retains all 11 replicons, preserves the Axis-sized gap around each collinear block band, and places the legend and italicized title directly below the final row."
+            "caption": "The completed title-free diagram retains all 11 replicons, centers each 18 px bold species name and 16 px strain name on its feature row, preserves the Axis-sized gap around each collinear block band, and places the legend below the final row."
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1800, "height": 1100},
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Vibrio parahaemolyticus') || !content.includes('Vibrio harveyi') || !content.includes('Collinear') || !content.includes('Inverted')) throw new Error('Restored Vibrio collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 0.55; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } svg.setAttribute('data-capture-vibrio-overview', 'true');"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Vibrio harveyi') || !content.includes('Vibrio owensii') || !content.includes('Vibrio campbellii') || !content.includes('Vibrio parahaemolyticus') || !content.includes('Vibrio alginolyticus') || !content.includes('Collinear') || !content.includes('Inverted') || svg.getElementById('plot_title')) throw new Error('Restored title-free Vibrio collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 0.55; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } svg.setAttribute('data-capture-vibrio-overview', 'true');"
               },
               {"type": "wait", "ms": 100},
               {
                 "type": "waitForFunction",
                 "timeout": 5000,
-                "script": "() => { const svg = window.__GBDRAW_APP__?.svgContainer?.querySelector('svg'); const legend = svg?.getElementById('legend'); const featureLegend = svg?.getElementById('feature_legend_h'); const pairwiseLegend = svg?.getElementById('legend_horizontal')?.querySelector('#pairwise_legend'); const title = svg?.getElementById('plot_title'); if (!legend || !featureLegend || !pairwiseLegend || !title) return false; const matrix = (node) => node.transform?.baseVal?.consolidate()?.matrix || { e: 0, f: 0 }; const legendMatrix = matrix(legend); const featureMatrix = matrix(featureLegend); const pairwiseMatrix = matrix(pairwiseLegend); const titleMatrix = matrix(title); const legendBox = legend.getBBox(); const featureBox = featureLegend.getBBox(); const pairwiseBox = pairwiseLegend.getBBox(); const titleBox = title.getBBox(); const horizontalGap = pairwiseMatrix.e + pairwiseBox.x - (featureMatrix.e + featureBox.x + featureBox.width); const verticalGap = titleMatrix.f + titleBox.y - (legendMatrix.f + legendBox.y + legendBox.height); return horizontalGap >= 20 && verticalGap >= 10; }"
+                "script": "() => { const svg = window.__GBDRAW_APP__?.svgContainer?.querySelector('svg'); const featureLegend = svg?.getElementById('feature_legend_h'); const pairwiseLegend = svg?.getElementById('legend_horizontal')?.querySelector('#pairwise_legend'); if (!featureLegend || !pairwiseLegend || svg.getElementById('plot_title')) return false; const matrix = (node) => node.transform?.baseVal?.consolidate()?.matrix || { e: 0, f: 0 }; const featureMatrix = matrix(featureLegend); const pairwiseMatrix = matrix(pairwiseLegend); const featureBox = featureLegend.getBBox(); const pairwiseBox = pairwiseLegend.getBBox(); const horizontalGap = pairwiseMatrix.e + pairwiseBox.x - (featureMatrix.e + featureBox.x + featureBox.width); return horizontalGap >= 20; }"
               }
             ],
             "selector": "svg[data-capture-vibrio-overview='true']",
@@ -352,7 +354,7 @@
     },
     {
       "title": "Expect an expensive first run",
-      "body": "All records evaluates many protein-search pairs across 11 replicons. Styling-only changes are much faster after the cache has been created."
+      "body": "Adjacent pairs evaluates 18 cross-record combinations across the four neighboring species-row boundaries. Styling-only changes are much faster after the cache has been created."
     }
   ],
   "troubleshooting": [
@@ -370,7 +372,7 @@
     },
     {
       "title": "The block colors do not match the Gallery",
-      "body": "Set Color mode to Orientation + identity and retain Collinear blocks as the blastp mode."
+      "body": "Set Color mode to Orientation + identity, Evidence scope to Adjacent pairs, and retain Collinear blocks as the blastp mode."
     },
     {
       "title": "The browser becomes unresponsive",

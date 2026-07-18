@@ -416,7 +416,7 @@ def wait_for_web_app_ready(page) -> None:
 
 
 def load_web_app_session(page, session_path: Path) -> None:
-    page.locator('input[accept=".json"]').set_input_files(str(session_path))
+    page.locator('input[accept^=".json,"]').set_input_files(str(session_path))
     page.wait_for_function(
         """
         () => {

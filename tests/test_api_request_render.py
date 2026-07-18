@@ -244,6 +244,7 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
 
     assert result.mode == "linear"
     assert result.output_paths == tuple(expected_paths)
+    assert result.interactive_context is context
     assert captured == {
         "canvas": drawing,
         "formats": ("svg", "interactive_svg"),

@@ -8,6 +8,7 @@
       "Beginner"
     ],
     "svg": "./examples/HmmtDNA_basic_circular.svg",
+    "svgType": "interactive",
     "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
     "thumbnail": "./thumbnails/HmmtDNA_basic_circular.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
@@ -39,6 +40,7 @@
       "Beginner"
     ],
     "svg": "./examples/lambda_basic_linear.svg",
+    "svgType": "interactive",
     "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
     "thumbnail": "./thumbnails/lambda_basic_linear.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json",
@@ -70,6 +72,7 @@
       "Intermediate"
     ],
     "svg": "./examples/HmmtDNA_ATskew.svg",
+    "svgType": "interactive",
     "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
     "thumbnail": "./thumbnails/HmmtDNA_ATskew.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json",
@@ -101,6 +104,7 @@
       "Intermediate"
     ],
     "svg": "./examples/tobacco-chloroplast.svg",
+    "svgType": "interactive",
     "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
     "thumbnail": "./thumbnails/tobacco-chloroplast.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json",
@@ -132,6 +136,7 @@
       "Intermediate"
     ],
     "svg": "./examples/Vnig_TUMSAT-TG-2018.svg",
+    "svgType": "interactive",
     "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "thumbnail": "./thumbnails/Vnig_TUMSAT-TG-2018.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
@@ -163,6 +168,7 @@
       "Advanced"
     ],
     "svg": "./examples/hepatoplasmataceae_collinear.svg",
+    "svgType": "interactive",
     "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
     "thumbnail": "./thumbnails/hepatoplasmataceae_collinear.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
@@ -199,21 +205,22 @@
       "Advanced"
     ],
     "svg": "./examples/vibrio-harveyi-group-collinear.svg",
-    "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
+    "svgType": "static",
+    "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
     "thumbnail": "./thumbnails/vibrio-harveyi-group-collinear.webp",
-    "sourceSession": "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json",
+    "sourceSession": "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
     "sourceOutput": "gbdraw/web/gallery/examples/vibrio-harveyi-group-collinear.svg",
     "sourceFigure": "gbdraw/web/gallery/sources/vibrio-harveyi-group-collinear.svg",
-    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
+    "sourceNote": "The complete gzip-compressed Session JSON and generated SVG output are stored with the gallery assets.",
     "featureSources": [
-      "GCF_000196095.1_ASM19609v1_genomic.gbff",
-      "GCF_000354175.2_ASM35417v2_genomic.gbff",
-      "GCF_002906475.1_ASM290647v1_genomic.gbff",
+      "GCF_030060435.1_ASM3006043v1_genomic.gbff",
       "GCF_002021755.1_ASM202175v1_genomic.gbff",
-      "GCF_030060435.1_ASM3006043v1_genomic.gbff"
+      "GCF_002906475.1_ASM290647v1_genomic.gbff",
+      "GCF_000196095.1_ASM19609v1_genomic.gbff",
+      "GCF_000354175.2_ASM35417v2_genomic.gbff"
     ],
-    "fileSizeLabel": "78.9 MB",
-    "command": "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv --linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis --scale_interval 750000 --separate_strands --hide_accession --hide_length --definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' --definition_line_style 'subtitle:size=16' --keep_definition_left_aligned --protein_blastp_mode collinear --collinear_search_scope all --protein_blastp_candidate_limit 5 --collinear_min_anchors 3 --collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 --collinear_color_mode orientation_identity --pairwise_match_style curve --losatp_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle --feature_shape tRNA=rectangle --feature_shape tmRNA=rectangle --feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle --feature_shape repeat_region=rectangle --block_stroke_width 0 --axis_stroke_width 2 --line_stroke_width 1 --legend bottom --plot_title '<i>Vibrio</i> Harveyi group' --plot_title_position bottom -o vibrio-harveyi-group-collinear -f interactive_svg",
+    "fileSizeLabel": "14.2 MB",
+    "command": "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv --linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis --scale_interval 750000 --separate_strands --hide_accession --hide_length --definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' --definition_line_style 'subtitle:size=16' --keep_definition_left_aligned --protein_blastp_mode collinear --collinear_search_scope adjacent --protein_blastp_candidate_limit 5 --collinear_min_anchors 3 --collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 --collinear_color_mode orientation_identity --pairwise_match_style curve --losatp_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle --feature_shape tRNA=rectangle --feature_shape tmRNA=rectangle --feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle --feature_shape repeat_region=rectangle --block_stroke_width 0 --axis_stroke_width 2 --line_stroke_width 1 --legend bottom -o vibrio-harveyi-group-collinear -f svg",
     "commandKind": "runnable",
     "commandNote": "Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
     "description": "Compare all 11 replicons from five Harveyi-group Vibrio assemblies as five multi-record rows.",
@@ -234,6 +241,7 @@
       "Advanced"
     ],
     "svg": "./examples/hepatoplasmataceae_orthogroup.svg",
+    "svgType": "interactive",
     "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "thumbnail": "./thumbnails/hepatoplasmataceae_orthogroup.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
@@ -269,6 +277,7 @@
       "Advanced"
     ],
     "svg": "./examples/BGC0000708-BGC0000713.svg",
+    "svgType": "interactive",
     "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
     "thumbnail": "./thumbnails/BGC0000708-BGC0000713.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
@@ -304,6 +313,7 @@
       "Advanced"
     ],
     "svg": "./examples/majanivirus_orthogroup.svg",
+    "svgType": "interactive",
     "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
     "thumbnail": "./thumbnails/majanivirus_orthogroup.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json",
@@ -343,6 +353,7 @@
       "Advanced"
     ],
     "svg": "./examples/WSSV_genome_comparison.svg",
+    "svgType": "interactive",
     "session": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
     "thumbnail": "./thumbnails/WSSV_genome_comparison.webp",
     "sourceSession": "gbdraw/web/gallery/sessions/WSSV_genome_comparison.gbdraw-session.json",

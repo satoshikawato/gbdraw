@@ -741,8 +741,10 @@ def _get_args(args) -> argparse.Namespace:
         hidden_aliases=('--collinear-search-scope',),
         dest='collinear_search_scope',
         help=(
-            'Collinear protein blastp scope: adjacent input pairs or all record pairs. '
-            'With multi-record rows, all renders only pairs across adjacent rows '
+            'Collinear protein blastp scope: adjacent displayed records/rows or all record pairs. '
+            'With multi-record rows, adjacent searches every cross-record pair between '
+            'neighboring rows; all uses every pair as grouping evidence but renders only '
+            'pairs across adjacent rows '
             '(default: adjacent).'
         ),
         type=_parse_collinear_search_scope,
@@ -1842,13 +1844,9 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     collinearity_comparisons: list[DataFrame] | None = None
     collinearity_linear_comparisons: list[LinearComparison] | None = None
     collinearity_orthogroups = None
-    collinearity_comparison_pairs = (
-        record_pairs_between_adjacent_rows(rows_by_record)
-        if protein_blastp_mode == "collinear"
-        and collinear_search_scope == "all"
-        and multi_record_rows
-        else None
-    )
+    collinearity_comparison_pairs = None
+    if protein_blastp_mode == "collinear" and multi_record_rows:
+        collinearity_comparison_pairs = record_pairs_between_adjacent_rows(rows_by_record)
     if protein_blastp_mode == "pairwise" and losatp_cache is not None:
         protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,

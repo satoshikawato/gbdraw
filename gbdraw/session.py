@@ -25,6 +25,7 @@ from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
     SESSION_FORMAT,
+    _read_session_text,
     _reject_duplicate_json_keys,
     materialize_embedded_file,
     safe_embedded_filename,
@@ -244,7 +245,7 @@ def load_session_document(
     path = Path(source)
     try:
         payload = json.loads(
-            path.read_text(encoding="utf-8"),
+            _read_session_text(path),
             object_pairs_hook=_reject_duplicate_json_keys,
         )
     except json.JSONDecodeError as exc:

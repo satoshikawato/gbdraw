@@ -60,6 +60,7 @@ class RequestRenderResult:
     records: tuple[SeqRecord, ...]
     drawing: Drawing
     output_paths: tuple[Path, ...]
+    interactive_context: InteractiveSvgContext | None = None
     warnings: tuple[str, ...] = ()
 
 
@@ -319,6 +320,7 @@ def render_request(request: DiagramRequest) -> RequestRenderResult:
 
     prepared = build_request_diagram(request)
     output = request.output
+    interactive_context = _interactive_context(prepared)
     paths = save_figure_to(
         prepared.drawing,
         output.formats,
@@ -329,7 +331,7 @@ def render_request(request: DiagramRequest) -> RequestRenderResult:
         ),
         output_prefix=output.output_prefix,
         overwrite=output.overwrite,
-        interactive_context=_interactive_context(prepared),
+        interactive_context=interactive_context,
     )
     return RequestRenderResult(
         mode=prepared.mode,
@@ -337,6 +339,7 @@ def render_request(request: DiagramRequest) -> RequestRenderResult:
         records=prepared.records,
         drawing=prepared.drawing,
         output_paths=tuple(Path(path) for path in paths),
+        interactive_context=interactive_context,
     )
 
 

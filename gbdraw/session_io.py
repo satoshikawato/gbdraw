@@ -9,6 +9,8 @@ import base64
 import binascii
 import copy
 import csv
+import gzip
+import io
 import json
 import math
 import os
@@ -68,12 +70,12 @@ class SessionBuildContext:
 
 
 def load_session(path: str | Path) -> dict[str, Any]:
-    """Load and validate a gbdraw GUI session JSON file."""
+    """Load and validate a plain or gzip-compressed gbdraw GUI session JSON file."""
 
     session_path = Path(path)
     try:
         payload = json.loads(
-            session_path.read_text(encoding="utf-8"),
+            _read_session_text(session_path),
             object_pairs_hook=_reject_duplicate_json_keys,
         )
     except json.JSONDecodeError as exc:
@@ -84,6 +86,18 @@ def load_session(path: str | Path) -> dict[str, Any]:
         raise ValidationError("Session JSON must be an object.")
     validate_session(payload)
     return payload
+
+
+def _read_session_text(path: str | Path) -> str:
+    """Read UTF-8 session JSON, detecting gzip by its file signature."""
+
+    session_path = Path(path)
+    with session_path.open("rb") as session_file:
+        is_gzip = session_file.read(2) == b"\x1f\x8b"
+    if is_gzip:
+        with gzip.open(session_path, mode="rt", encoding="utf-8") as session_file:
+            return session_file.read()
+    return session_path.read_text(encoding="utf-8")
 
 
 def validate_session(session: Mapping[str, Any]) -> None:
@@ -463,16 +477,33 @@ def build_session_json(
 
 
 def write_session_json(path: str | Path, payload: Mapping[str, Any]) -> None:
-    """Write a session JSON file with a same-directory temporary replacement."""
+    """Write plain or ``.gz`` session JSON with an atomic replacement."""
 
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
     try:
-        temp_path.write_text(
-            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
+        if output_path.suffix.lower() == ".gz":
+            with temp_path.open("wb") as raw_file:
+                with gzip.GzipFile(
+                    filename="",
+                    mode="wb",
+                    fileobj=raw_file,
+                    compresslevel=6,
+                    mtime=0,
+                ) as compressed_file:
+                    with io.TextIOWrapper(compressed_file, encoding="utf-8") as text_file:
+                        json.dump(
+                            payload,
+                            text_file,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+        else:
+            temp_path.write_text(
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
         temp_path.replace(output_path)
     except OSError as exc:
         raise ValidationError(f"Could not write session sidecar: {output_path}") from exc

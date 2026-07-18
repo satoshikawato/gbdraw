@@ -32,7 +32,7 @@ GALLERY_SESSION_FILES = (
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
     "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json",
-    "vibrio-harveyi-group-collinear.gbdraw-session.json",
+    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
     "lambda_basic_linear.gbdraw-session.json",
@@ -40,9 +40,12 @@ GALLERY_SESSION_FILES = (
 
 def _session_path(name_or_id: str) -> Path:
     name = name_or_id
-    if not name.endswith(".gbdraw-session.json"):
-        name = f"{name}.gbdraw-session.json"
-    return SESSION_ROOT / name
+    if name.endswith((".gbdraw-session.json", ".gbdraw-session.json.gz")):
+        return SESSION_ROOT / name
+    compressed_path = SESSION_ROOT / f"{name}.gbdraw-session.json.gz"
+    if compressed_path.exists():
+        return compressed_path
+    return SESSION_ROOT / f"{name}.gbdraw-session.json"
 
 
 def _session_cli_invocation(session: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -171,7 +174,7 @@ def prepare_gallery_assets() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Regenerate web gallery .gbdraw-session.json files with the current CLI/session schema. "
+            "Regenerate web gallery session JSON files with the current CLI/session schema. "
             "By default, gallery SVG sources, thumbnails, and examples.json are refreshed afterwards."
         )
     )

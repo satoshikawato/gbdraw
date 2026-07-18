@@ -1885,19 +1885,13 @@ def assemble_linear_diagram_from_records(
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
     collinearity_comparison_pairs: tuple[tuple[int, int], ...] | None = None
-    if (
-        normalized_protein_blastp_mode == "collinear"
-        and normalized_collinearity_search_scope == "all"
-        and layout is not None
-    ):
+    if normalized_protein_blastp_mode == "collinear" and layout is not None:
         _ordered_indices, collinearity_rows = resolve_record_row_positions(
             records,
             layout.multi_record_positions,
         )
         if len(set(collinearity_rows)) < len(records):
-            collinearity_comparison_pairs = record_pairs_between_adjacent_rows(
-                collinearity_rows
-            )
+            collinearity_comparison_pairs = record_pairs_between_adjacent_rows(collinearity_rows)
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
     if int(orthogroup_member_max_hits) <= 0:

@@ -5,6 +5,7 @@ import io
 import json
 import re
 import shlex
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
-from gbdraw.session_io import write_session_json
+from gbdraw.session_io import load_session, write_session_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -46,17 +47,20 @@ class GallerySessionExample:
     command_note: str
     feature_sources: tuple[str, ...] = ()
     sync_result_svg: bool = True
+    interactive_svg: bool = True
+    compressed_session: bool = False
     interactive_step: str = ""
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
     command: str = ""
 
     @property
     def session_path(self) -> Path:
-        return SESSION_ROOT / f"{self.id}.gbdraw-session.json"
+        suffix = ".gbdraw-session.json.gz" if self.compressed_session else ".gbdraw-session.json"
+        return SESSION_ROOT / f"{self.id}{suffix}"
 
     @property
     def session_ref(self) -> str:
-        return f"./sessions/{self.id}.gbdraw-session.json"
+        return f"./sessions/{self.session_path.name}"
 
     @property
     def source_svg_path(self) -> Path:
@@ -153,7 +157,7 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
     "--scale_interval 750000 --separate_strands --hide_accession --hide_length "
     "--definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' "
     "--definition_line_style 'subtitle:size=16' --keep_definition_left_aligned "
-    "--protein_blastp_mode collinear --collinear_search_scope all "
+    "--protein_blastp_mode collinear --collinear_search_scope adjacent "
     "--protein_blastp_candidate_limit 5 --collinear_min_anchors 3 "
     "--collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 "
     "--collinear_color_mode orientation_identity --pairwise_match_style curve "
@@ -162,8 +166,7 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
     "--feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle "
     "--feature_shape repeat_region=rectangle --block_stroke_width 0 "
     "--axis_stroke_width 2 --line_stroke_width 1 --legend bottom "
-    "--plot_title '<i>Vibrio</i> Harveyi group' --plot_title_position bottom "
-    "-o vibrio-harveyi-group-collinear -f interactive_svg"
+    "-o vibrio-harveyi-group-collinear -f svg"
 )
 
 WSSV_CONSERVATION_LABELS = (
@@ -293,13 +296,16 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_note="Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         feature_sources=(
+            "GCF_030060435.1_ASM3006043v1_genomic.gbff",
+            "GCF_002021755.1_ASM202175v1_genomic.gbff",
+            "GCF_002906475.1_ASM290647v1_genomic.gbff",
             "GCF_000196095.1_ASM19609v1_genomic.gbff",
             "GCF_000354175.2_ASM35417v2_genomic.gbff",
-            "GCF_002906475.1_ASM290647v1_genomic.gbff",
-            "GCF_002021755.1_ASM202175v1_genomic.gbff",
-            "GCF_030060435.1_ASM3006043v1_genomic.gbff",
         ),
         sync_result_svg=False,
+        interactive_svg=False,
+        compressed_session=True,
+        source_note="The complete gzip-compressed Session JSON and generated SVG output are stored with the gallery assets.",
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_orthogroup",
@@ -365,8 +371,7 @@ def _format_size(num_bytes: int) -> str:
 
 
 def _load_session(example: GallerySessionExample) -> dict[str, Any]:
-    with example.session_path.open(encoding="utf-8") as handle:
-        session = json.load(handle)
+    session = load_session(example.session_path)
     if not isinstance(session, dict):
         raise ValueError(f"{example.session_path} did not contain a JSON object.")
     return session
@@ -574,6 +579,33 @@ def _validate_source_feature_ids(
             f"without session metadata: {preview}"
         )
 
+    incomplete_ids: list[str] = []
+    for feature in (features if isinstance(features, list) else ()):
+        if not isinstance(feature, dict):
+            continue
+        feature_id = str(feature.get("svg_id") or "").strip()
+        if not feature_id:
+            continue
+        complete = (
+            bool(str(feature.get("record_id") or "").strip())
+            and bool(str(feature.get("type") or "").strip())
+            and isinstance(feature.get("start"), int)
+            and isinstance(feature.get("end"), int)
+            and isinstance(feature.get("location_parts"), list)
+            and bool(feature["location_parts"])
+            and isinstance(feature.get("qualifiers"), dict)
+            and "nucleotide_sequence" in feature
+            and "amino_acid_sequence" in feature
+        )
+        if not complete:
+            incomplete_ids.append(feature_id)
+    if incomplete_ids:
+        preview = ", ".join(incomplete_ids[:5])
+        raise ValueError(
+            f"{example.id} session contains {len(incomplete_ids)} feature metadata "
+            f"record(s) without popup details: {preview}"
+        )
+
 
 def _read_or_create_source_svg(example: GallerySessionExample, session: dict[str, Any]) -> str:
     if example.source_svg_path.exists():
@@ -581,7 +613,10 @@ def _read_or_create_source_svg(example: GallerySessionExample, session: dict[str
     else:
         source = _session_result_svg(session, example)
     migrated = _migrate_legacy_multipart_feature_ids(source, session)
-    _validate_source_feature_ids(example, session, migrated)
+    if example.interactive_svg:
+        _validate_source_feature_ids(example, session, migrated)
+    else:
+        ET.fromstring(migrated)
     if migrated != source or not example.source_svg_path.exists():
         example.source_svg_path.write_text(migrated, encoding="utf-8")
     return migrated
@@ -592,8 +627,12 @@ def _write_gallery_svg(
     session: dict[str, Any],
     source: str,
 ) -> None:
-    enriched = enrich_svg(source, context=_session_interactive_context(session))
-    example.gallery_svg_path.write_text(enriched, encoding="utf-8")
+    output = (
+        enrich_svg(source, context=_session_interactive_context(session))
+        if example.interactive_svg
+        else source
+    )
+    example.gallery_svg_path.write_text(output, encoding="utf-8")
 
 
 def _sync_session_result_svg(
@@ -693,6 +732,7 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
             "title": example.title,
             "tags": list(example.tags),
             "svg": example.gallery_svg_ref,
+            "svgType": "interactive" if example.interactive_svg else "static",
             "session": example.session_ref,
             "thumbnail": example.thumbnail_ref,
             "sourceSession": str(example.session_path.relative_to(REPO_ROOT)),

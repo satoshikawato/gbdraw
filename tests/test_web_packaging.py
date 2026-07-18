@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import gzip
 import html
 import importlib.util
 import json
@@ -19,7 +20,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +54,7 @@ GALLERY_SESSION_FILES = [
     "HmmtDNA_ATskew.gbdraw-session.json",
     "tobacco-chloroplast.gbdraw-session.json",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
+    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
     "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
@@ -64,6 +66,7 @@ GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
     "hepatoplasmataceae_collinear.gbdraw-session.json",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
+    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
 GALLERY_EDITOR_STATE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
@@ -76,9 +79,13 @@ GALLERY_LOSAT_CACHE_SESSION_FILES = {
     "hepatoplasmataceae_collinear.gbdraw-session.json",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json",
     "majanivirus_orthogroup.gbdraw-session.json",
+    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
 GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
+}
+GALLERY_STATIC_SESSION_FILES = {
+    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
 
 
@@ -90,6 +97,16 @@ def _load_verify_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _read_session_prefix(path: Path, length: int = 256) -> str:
+    with path.open("rb") as session_file:
+        is_gzip = session_file.read(2) == b"\x1f\x8b"
+    if is_gzip:
+        with gzip.open(path, mode="rt", encoding="utf-8") as session_handle:
+            return session_handle.read(length)
+    with path.open(encoding="utf-8") as session_handle:
+        return session_handle.read(length)
 
 
 def _load_prepare_browser_wheel_module():
@@ -852,6 +869,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "tobacco-chloroplast",
         "Vnig_TUMSAT-TG-2018",
         "hepatoplasmataceae_collinear",
+        "vibrio-harveyi-group-collinear",
         "hepatoplasmataceae_orthogroup",
         "BGC0000708-BGC0000713",
         "majanivirus_orthogroup",
@@ -870,6 +888,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "<i>Nicotiana tabacum</i> chloroplast genome regions",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         "Hepatoplasmataceae collinear protein-match blocks",
+        "<i>Vibrio</i> Harveyi group multi-record collinearity",
         "Hepatoplasmataceae CDS protein-similarity links",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "Majanivirus CDS protein-similarity links",
@@ -911,8 +930,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert thumbnail_path.exists()
 
         svg_source = svg_path.read_text(encoding="utf-8")
-        with session_path.open(encoding="utf-8") as session_handle:
-            session_prefix = session_handle.read(256)
+        session_prefix = _read_session_prefix(session_path)
         thumbnail_header = thumbnail_path.read_bytes()[:16]
 
         assert svg_path.stat().st_size > 1024
@@ -924,11 +942,6 @@ def test_interactive_gallery_examples_are_wired() -> None:
         version_match = re.search(r'"version":(\d+)', session_prefix)
         assert version_match is not None
         assert int(version_match.group(1)) == CURRENT_SESSION_VERSION
-        assert 'data-gbdraw-interactive-svg="true"' in svg_source
-        assert "gbdraw-interactive-feature-metadata" in svg_source
-        assert "gbdraw-interactive-feature-script" in svg_source
-        assert 'data-popup-mode="rich"' in svg_source
-        assert "data-gbdraw-original-viewbox" in svg_source
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
         assert "window.parent" not in svg_source
@@ -936,14 +949,23 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert "window.top" not in svg_source
         assert "window.opener" not in svg_source
 
-        payload = _gallery_svg_metadata(svg_source)
-        assert payload["schema"] == "gbdraw-interactive-feature-popup-v1"
-        assert payload["popup_mode"] == "rich"
-        features = payload["features"]
-        assert features
-        assert any(feature.get("qualifiers") for feature in features)
-        assert any(feature.get("location_parts") for feature in features)
-        assert all(feature.get("nucleotide_sequence") for feature in features)
+        if entry.get("svgType") == "static":
+            assert 'data-gbdraw-interactive-svg="true"' not in svg_source
+            assert "gbdraw-interactive-feature-script" not in svg_source
+        else:
+            assert 'data-gbdraw-interactive-svg="true"' in svg_source
+            assert "gbdraw-interactive-feature-metadata" in svg_source
+            assert "gbdraw-interactive-feature-script" in svg_source
+            assert 'data-popup-mode="rich"' in svg_source
+            assert "data-gbdraw-original-viewbox" in svg_source
+            payload = _gallery_svg_metadata(svg_source)
+            assert payload["schema"] == "gbdraw-interactive-feature-popup-v1"
+            assert payload["popup_mode"] == "rich"
+            features = payload["features"]
+            assert features
+            assert any(feature.get("qualifiers") for feature in features)
+            assert any(feature.get("location_parts") for feature in features)
+            assert all(feature.get("nucleotide_sequence") for feature in features)
 
         assert thumbnail_header.startswith(b"RIFF")
         assert b"WEBP" in thumbnail_header
@@ -1133,7 +1155,7 @@ def test_web_session_feature_metadata_recovery_source_contract() -> None:
 def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None:
     for session_name in GALLERY_SESSION_FILES:
         session_path = GALLERY_ROOT / "sessions" / session_name
-        session = json.loads(session_path.read_text(encoding="utf-8"))
+        session = load_session(session_path)
         features = session.get("features", {}).get("extractedFeatures", [])
         svg_text = "\n".join(result.get("content", "") for result in session.get("results", []))
         rendered_feature_ids = {
@@ -2067,6 +2089,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     assert "! Content-Security-Policy" in headers
     assert "frame-ancestors 'self'" in headers
     assert "gallery/media/**/*" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
+    assert "gallery/sessions/*.gbdraw-session.json.gz" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     remote_assets = json.loads((bundle_path / "gallery" / "remote-assets.json").read_text(encoding="utf-8"))
     assert (
         remote_assets["gallery/examples/Vnig_TUMSAT-TG-2018.svg"]
@@ -2076,9 +2099,21 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
         remote_assets["gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json"]
         == f"{remote_base}gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json"
     )
+    assert (
+        remote_assets[
+            "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        ]
+        == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+    )
     assert not (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
     assert not (
         bundle_path / "gallery" / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json"
+    ).exists()
+    assert not (
+        bundle_path
+        / "gallery"
+        / "sessions"
+        / "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
     ).exists()
     assert (bundle_path / "gallery" / "examples" / "majanivirus_orthogroup.svg").exists()
 
@@ -3996,9 +4031,11 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
         with page.expect_download() as download_info:
             page.get_by_role("button", name="Save Session", exact=True).click()
         download_info.value.save_as(session_path)
+        assert download_info.value.suggested_filename.endswith(".gbdraw-session.json.gz")
+        assert session_path.read_bytes().startswith(b"\x1f\x8b")
 
         page.locator('input[type="file"][accept^=".gb,"]').first.set_input_files(str(unique_gbk))
-        page.locator('input[type="file"][accept=".json"]').set_input_files(str(session_path))
+        page.locator('input[type="file"][accept^=".json,"]').set_input_files(str(session_path))
         page.wait_for_function(
             """() => {
                 const app = window.__GBDRAW_APP__;
@@ -4174,7 +4211,7 @@ def test_gallery_session_restore_smoke() -> None:
                     };
                 }"""
             )
-            page.locator('input[accept=".json"]').first.set_input_files(
+            page.locator('input[accept^=".json,"]').first.set_input_files(
                 str(GALLERY_ROOT / "sessions" / session_name)
             )
             page.wait_for_function(
@@ -4230,7 +4267,10 @@ def test_gallery_session_restore_smoke() -> None:
                     "#6@2",
                 ]
 
-            if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
+            if (
+                session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES
+                and session_name not in GALLERY_STATIC_SESSION_FILES
+            ):
                 target = page.evaluate(
                     """async () => {
                         const app = window.__GBDRAW_APP__;

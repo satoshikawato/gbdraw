@@ -1031,7 +1031,7 @@
                     <button @click="$refs.sessionInput.click()" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray"></i> Load Session
                     </button>
-                    <input type="file" ref="sessionInput" accept=".json" class="hidden" @change="importSession">
+                    <input type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
                 </div>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
                     <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
@@ -1308,7 +1308,7 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Evidence scope <help-tip text="Adjacent pairs uses only neighboring records as Collinear evidence. All records uses every record pair as evidence for grouping and block support, but ribbons are still emitted for adjacent display pairs."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Evidence scope <help-tip text="Adjacent pairs uses neighboring records, or every cross-record pair between neighboring rows in a multi-record layout. All records uses every record pair as evidence for grouping and block support, but ribbons are still emitted only between adjacent display rows."></help-tip></label>
                                                 <select v-model="losat.blastp.collinearSearchScope" class="form-input px-1 py-0.5 text-xs">
                                                     <option value="adjacent">Adjacent pairs</option>
                                                     <option value="all">All records</option>

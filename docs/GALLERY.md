@@ -54,7 +54,7 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td colspan="2" valign="top">
       <a href="https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear"><img src="../gbdraw/web/gallery/examples/vibrio-harveyi-group-collinear.svg" alt="Five-row linear comparison of all 11 replicons from five Vibrio Harveyi-group assemblies with orientation-and-identity collinear blocks" width="100%"></a><br>
       <strong><em>Vibrio</em> Harveyi group multi-record collinearity</strong><br>
-      Five RefSeq assemblies are arranged as one species per row while retaining all 11 chromosomes and plasmids. LOSATP collinear blocks use orientation-and-identity colors, every selected feature is rectangular, species and strain form a two-line left definition, and the legend and title sit below the diagram. Follow the <a href="https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear">interactive tutorial</a> to reproduce the complete workflow.
+      Five RefSeq assemblies are arranged as one species per row while retaining all 11 chromosomes and plasmids. LOSATP searches all 18 cross-record combinations between adjacent species rows, collinear blocks use orientation-and-identity colors, every selected feature is rectangular, species and strain form a two-line left definition, and the bottom legend appears without a plot title. The Gallery serves this example as a standard SVG and provides the complete gzip-compressed Session JSON separately. Follow the <a href="https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear">Gallery tutorial</a> to reproduce the workflow.
     </td>
   </tr>
   <tr>

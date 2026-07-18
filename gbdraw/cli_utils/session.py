@@ -65,7 +65,10 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "--session",
-        help="Regenerate a diagram from a gbdraw GUI session JSON file.",
+        help=(
+            "Regenerate a diagram from a plain or gzip-compressed gbdraw GUI "
+            "session JSON file."
+        ),
         type=str,
     )
     parser.add_argument(
@@ -82,7 +85,10 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--session_output",
         metavar="PATH",
-        help="Write the session sidecar to PATH; implies --save_session.",
+        help=(
+            "Write the session sidecar to PATH; use a .gz suffix for gzip "
+            "compression; implies --save_session."
+        ),
         type=str,
     )
     parser.add_argument(
@@ -361,6 +367,14 @@ def render_canonical_session_if_present(
                 )
             if svg_results:
                 adjunct["results"] = svg_results
+            interactive_context = rendered.interactive_context
+            if interactive_context is not None and interactive_context.features:
+                features = adjunct.get("features")
+                features = dict(features) if isinstance(features, Mapping) else {}
+                features["extractedFeatures"] = [
+                    dict(feature) for feature in interactive_context.features
+                ]
+                adjunct["features"] = features
             save_session_document(
                 sidecar_path,
                 request,

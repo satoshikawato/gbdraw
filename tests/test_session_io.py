@@ -40,6 +40,7 @@ from gbdraw.session_io import (
     materialize_embedded_file,
     session_to_cli_args,
     validate_session,
+    write_session_json,
 )
 
 
@@ -93,6 +94,16 @@ def test_session_version_27_remains_supported() -> None:
 
     validate_session(session)
     assert 27 in SUPPORTED_SESSION_VERSIONS
+
+
+def test_session_json_gzip_round_trip(tmp_path: Path) -> None:
+    session = _minimal_session({})
+    session_path = tmp_path / "session.gbdraw-session.json.gz"
+
+    write_session_json(session_path, session)
+
+    assert session_path.read_bytes().startswith(b"\x1f\x8b")
+    assert load_session(session_path) == session
 
 
 def test_embedded_file_materialization_sanitizes_name(tmp_path: Path) -> None:
@@ -719,6 +730,8 @@ def test_session_cli_help_uses_underscore_options(capsys: pytest.CaptureFixture[
     help_text = capsys.readouterr().out
     assert "--save_session" in help_text
     assert "--session_output" in help_text
+    assert ".gz suffix" in help_text
+    assert "gzip compression" in help_text
     assert "--save-session" not in help_text
     assert "--session-output" not in help_text
 

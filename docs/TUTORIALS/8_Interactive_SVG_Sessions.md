@@ -96,9 +96,11 @@ gbdraw circular \
   -f svg
 ```
 
+Add a `.gz` suffix, such as `roundtrip.gbdraw-session.json.gz`, to write the same Session JSON with lossless gzip compression. `--save_session` keeps the uncompressed `.gbdraw-session.json` default for compatibility.
+
 ## 5. Regenerate from a session
 
-Use `--session` with the same diagram subcommand that created the session. Alongside `--session`, the CLI accepts output and format overrides plus optional `--save_session` or `--session_output`; other diagram options are rejected.
+Use `--session` with the same diagram subcommand that created the session. It accepts both `.gbdraw-session.json` and `.gbdraw-session.json.gz`. Alongside `--session`, the CLI accepts output and format overrides plus optional `--save_session` or `--session_output`; other diagram options are rejected.
 
 ```bash
 gbdraw circular \
@@ -118,6 +120,8 @@ gbdraw gui
 ```
 
 Click **Load Session**, then choose the `.gbdraw-session.json` file to restore its embedded inputs, settings, and saved result. Load the JSON sidecar, not the `.interactive.svg` file.
+
+The web app's **Save Session** action downloads a lossless gzip-compressed `.gbdraw-session.json.gz` file. **Load Session** accepts both this compressed form and the uncompressed `.gbdraw-session.json` files written by the CLI.
 
 ![Local gbdraw web app after loading a session, with the embedded GenBank input, circular settings, and saved result restored](./images/tutorial-8-loaded-session.png)
 
