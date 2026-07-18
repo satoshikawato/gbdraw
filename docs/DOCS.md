@@ -38,6 +38,10 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 - Hosted interactive SVG gallery and web tutorials: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
 - Local GUI: `gbdraw gui`
 - CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
-- Protein-search modes: `--protein_blastp_mode pairwise` draws adjacent CDS protein matches, `orthogroup` assigns CDS-derived proteins to gbdraw similarity groups, and `collinear` combines compatible runs of protein-match anchors into collinear blocks. gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`. The similarity groups are not phylogeny-based orthogroups; see [the protein-comparison guide](./TUTORIALS/4_Protein_Comparisons.md#4-gbdraw-similarity-group-ribbons-orthogroup-mode).
+- Protein-search modes:
+  - `--protein_blastp_mode pairwise` draws adjacent CDS protein matches.
+  - `--protein_blastp_mode orthogroup` assigns CDS-derived proteins to gbdraw similarity groups. It does not infer phylogeny-based orthogroups.
+  - `--protein_blastp_mode collinear` combines compatible runs of protein-match anchors into collinear blocks.
+  - gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`. See [the protein-comparison guide](./TUTORIALS/4_Protein_Comparisons.md#4-gbdraw-similarity-group-ribbons-orthogroup-mode).
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

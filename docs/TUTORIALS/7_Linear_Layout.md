@@ -228,9 +228,13 @@ gbdraw linear \
 
 ![LOSATP collinear blocks between two Vibrio nigripulchritudo strains arranged by replicon](../../examples/vibrio-nigripulchritudo-multi-record.svg)
 
-The first row contains two chromosomes and four plasmids; the second contains two chromosomes. Every record uses the same bp/px scale, so the short plasmids remain visibly smaller than the chromosomes. The `above` track layout keeps the feature tracks above their axis rulers. With `--keep_definition_left_aligned`, each row's leading `record_label` and `record_subtitle` are placed together in the left definition column; labels for later chromosomes and plasmids remain above their records. Record-local labels are drawn in front of comparison ribbons, so they do not create an empty band between the ribbons and feature tracks.
+The first row contains two chromosomes and four plasmids; the second contains two chromosomes. Every record uses the same bp/px scale, so the short plasmids remain visibly smaller than the chromosomes.
 
-`--collinear_search_scope all` makes LOSATP search every record pair. In a multi-record layout, gbdraw omits same-row ribbons and renders accepted blocks only between adjacent rows. This example therefore searches all 6 × 2 cross-strain replicon pairs. With the documented three-anchor threshold, the checked-in SVG contains 100 blocks across five endpoint pairs, including TUMSAT-TG-2018 chromosome 2 to SFn1 chromosome 1. The bundled LOSATP runtime is selected automatically; `--losatp_threads` controls its worker count.
+The `above` track layout keeps the feature tracks above their axis rulers. With `--keep_definition_left_aligned`, each row's leading `record_label` and `record_subtitle` are placed together in the left definition column; labels for later chromosomes and plasmids remain above their records. Record-local labels are drawn in front of comparison ribbons, so they do not create an empty band between the ribbons and feature tracks.
+
+`--collinear_search_scope all` makes LOSATP search every record pair. In a multi-record layout, gbdraw omits same-row ribbons and renders accepted blocks only between adjacent rows. This example therefore searches all 6 × 2 cross-strain replicon pairs.
+
+With the documented three-anchor threshold, the checked-in SVG contains 100 blocks across five endpoint pairs, including TUMSAT-TG-2018 chromosome 2 to SFn1 chromosome 1. The bundled LOSATP runtime is selected automatically; `--losatp_threads` controls its worker count.
 
 For a larger five-species workflow, open the [<i>Vibrio</i> Harveyi group Gallery tutorial](https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear). It keeps all 11 replicons from five RefSeq assemblies, uses one species per row, and documents every web setting used for the collinear figure.
 
