@@ -537,7 +537,7 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "Top1" not in index_html
     assert "All hits" not in index_html
     assert "Evidence scope" in index_html
-    assert "ribbons are still emitted for adjacent display pairs" in index_html
+    assert "ribbons are still emitted only between adjacent display rows" in index_html
     assert "Merge conflicts" in index_html
     assert "export const normalizeCollinearAnchorMode = (_value) => 'rbh';" in normalizer_js
     assert "delete cloned.blastp.collinearAnchorMode;" in config_js
@@ -3799,7 +3799,7 @@ def test_web_session_uses_structured_depth_file_codec(tmp_path: Path) -> None:
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     assert "depth: await serializeDepthFile(seq.depth)" in config_source
     assert "c_depth: await serializeDepthFile(state.files.c_depth)" in config_source
-    assert "downloadJson(sessionData, sessionFilename, { pretty: false });" in config_source
+    assert "await downloadCompressedSession(sessionData, sessionFilename);" in config_source
 
 
 def test_web_config_persists_manual_qualifier_priority_rules() -> None:

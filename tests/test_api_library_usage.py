@@ -9,6 +9,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw import CircularOptions
 import gbdraw.api.diagram as api_diagram_module
 from gbdraw.api import (
     CircularMultiRecordOptions,
@@ -64,8 +65,8 @@ def test_documented_python_api_example_runs(
     documented_record = namespace["record"]
     documented_options = namespace["options"]
     assert isinstance(documented_record, SeqRecord)
-    assert isinstance(documented_options, DiagramOptions)
-    assert set(documented_options.selected_features_set) <= {
+    assert isinstance(documented_options, CircularOptions)
+    assert set(documented_options.features.types) <= {
         feature.type for feature in documented_record.features
     }
     assert (temp_output_dir / "api_circular.svg").exists()

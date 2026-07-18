@@ -40,7 +40,7 @@ Use [precomputed BLAST comparisons](./TUTORIALS/2_Comparative_Genomics.md) when 
 | Hosted web app | Interactive exploration with no installation; genomic data stays in the browser. |
 | Local `gbdraw gui` | The same browser workflow offline or with local assets. |
 | CLI | Reproducible commands, batch work, and all static export formats. |
-| `gbdraw.api` | Python pipelines that need records and output in memory. See [Python API](./PYTHON_API.md). |
+| `gbdraw` Python API | Python pipelines that need records and output in memory. See [Python API](./PYTHON_API.md). |
 
 ## Output and reproducibility
 

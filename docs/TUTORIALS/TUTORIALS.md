@@ -41,7 +41,7 @@ Start with the question you need to answer. The filenames retain their numbers s
 
 ## Automation with Python
 
-- [Python API guide](../PYTHON_API.md): load records through `gbdraw.api`, build a figure, and write output.
+- [Python API guide](../PYTHON_API.md): read records, draw a figure, and save or serialize the result.
 - [GFF3 + FASTA guide](../GFF3_FASTA.md): validate record IDs, phase, strand, translations, and multiple contigs.
 
 [Home](../DOCS.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Workflow guide](../WORKFLOW_GUIDE.md) | [Python API](../PYTHON_API.md) | [Export](../EXPORT.md)
