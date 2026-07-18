@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
-from types import SimpleNamespace
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
@@ -110,6 +112,51 @@ def test_selected_generated_protein_pairs_keep_explicit_endpoints(monkeypatch) -
     svg = canvas.tostring()
     assert 'data-query-record-index="0"' in svg
     assert 'data-subject-record-index="2"' in svg
+
+
+def test_collinear_all_scope_renders_every_cross_row_pair(monkeypatch) -> None:
+    captured_pairs: tuple[tuple[int, int], ...] | None = None
+
+    def fake_collinear(_records, **kwargs):
+        nonlocal captured_pairs
+        captured_pairs = kwargs["comparison_pairs"]
+        return SimpleNamespace(orthogroups=None)
+
+    def fake_convert(_result, **_kwargs):
+        assert captured_pairs is not None
+        return {
+            pair: _comparison(*pair).matches
+            for pair in captured_pairs
+        }
+
+    monkeypatch.setattr(
+        "gbdraw.api.diagram.build_orthogroup_collinearity_blocks",
+        fake_collinear,
+    )
+    monkeypatch.setattr(
+        "gbdraw.api.diagram.convert_collinearity_blocks_to_pair_comparisons",
+        fake_convert,
+    )
+    canvas = assemble_linear_diagram_from_records(
+        _records(),
+        protein_blastp_mode="collinear",
+        collinearity_search_scope="all",
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
+        ),
+        legend="none",
+        config_overrides={"show_labels": False, "show_gc": False, "show_skew": False},
+    )
+    assert captured_pairs == ((0, 2), (0, 3), (1, 2), (1, 3))
+    svg = canvas.tostring()
+    rendered_pairs = {
+        (int(query), int(subject))
+        for query, subject in re.findall(
+            r'data-query-record-index="(\d+)"[^>]+data-subject-record-index="(\d+)"',
+            svg,
+        )
+    }
+    assert rendered_pairs == set(captured_pairs)
 
 
 def test_comparisons_table_resolves_relative_blast_path(tmp_path) -> None:

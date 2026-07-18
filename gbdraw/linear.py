@@ -35,7 +35,11 @@ from .api.options import (
     TrackOptions,
 )
 from .linear_comparison import LinearComparison
-from .layout.linear_multi_record import parse_record_row_position, resolve_record_row_positions
+from .layout.linear_multi_record import (
+    parse_record_row_position,
+    record_pairs_between_adjacent_rows,
+    resolve_record_row_positions,
+)
 from .annotations import read_annotation_table
 from .api.requests import (
     InMemoryRecordSource,
@@ -51,6 +55,7 @@ from .analysis.collinearity import (
     LosslessCollinearityParameters,
     build_orthogroup_collinearity_blocks,
     convert_collinearity_blocks_to_comparisons,
+    convert_collinearity_blocks_to_pair_comparisons,
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
@@ -735,7 +740,11 @@ def _get_args(args) -> argparse.Namespace:
         '--collinear_search_scope',
         hidden_aliases=('--collinear-search-scope',),
         dest='collinear_search_scope',
-        help='Collinear protein blastp evidence search scope: adjacent record pairs or all record pairs (default: adjacent).',
+        help=(
+            'Collinear protein blastp scope: adjacent input pairs or all record pairs. '
+            'With multi-record rows, all renders only pairs across adjacent rows '
+            '(default: adjacent).'
+        ),
         type=_parse_collinear_search_scope,
         choices=["adjacent", "all"],
         default='adjacent')
@@ -872,7 +881,11 @@ def _get_args(args) -> argparse.Namespace:
         '--keep_definition_left_aligned',
         hidden_aliases=('--keep-definition-left-aligned',),
         dest='keep_definition_left_aligned',
-        help='Keep the linear record-label block in the left column when records are center-aligned or aligned by a gbdraw similarity group (default: False).',
+        help=(
+            'Keep linear record definitions in the left column. With multi-record rows, '
+            'the leading record label becomes the row definition while remaining record '
+            'text stays above its record (default: False).'
+        ),
         action='store_true')
     parser.add_argument(
         '--evalue',
@@ -1827,7 +1840,15 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
         losat_cache_filenames = _linear_losat_cache_filenames(records)
     collinearity_comparisons: list[DataFrame] | None = None
+    collinearity_linear_comparisons: list[LinearComparison] | None = None
     collinearity_orthogroups = None
+    collinearity_comparison_pairs = (
+        record_pairs_between_adjacent_rows(rows_by_record)
+        if protein_blastp_mode == "collinear"
+        and collinear_search_scope == "all"
+        and multi_record_rows
+        else None
+    )
     if protein_blastp_mode == "pairwise" and losatp_cache is not None:
         protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
@@ -1886,17 +1907,34 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             unit_mode=collinear_unit_mode,
             edge_mode=collinear_anchor_mode,
             search_scope=collinear_search_scope,
+            comparison_pairs=collinearity_comparison_pairs,
             losatp_cache=losatp_cache,
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=losat_cache_filenames,
         )
         collinearity_orthogroups = collinearity_result.orthogroups
-        collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
-            collinearity_result,
-            records=records,
-            color_mode=collinear_color_mode,
-        )
+        if collinearity_comparison_pairs is not None:
+            pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
+                collinearity_result,
+                records=records,
+                color_mode=collinear_color_mode,
+            )
+            collinearity_linear_comparisons = [
+                LinearComparison(query_index, subject_index, matches)
+                for (query_index, subject_index), matches in pair_comparisons.items()
+            ]
+        else:
+            collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
+                collinearity_result,
+                records=records,
+                color_mode=collinear_color_mode,
+            )
+    active_linear_comparisons = (
+        [*(explicit_linear_comparisons or []), *collinearity_linear_comparisons]
+        if collinearity_linear_comparisons is not None
+        else explicit_linear_comparisons
+    )
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)
     cfg = GbdrawConfig.from_dict(config_dict)
@@ -1905,7 +1943,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     canvas = assemble_linear_diagram_from_records(
         records=records,
         blast_files=blast_files,
-        linear_comparisons=explicit_linear_comparisons,
+        linear_comparisons=active_linear_comparisons,
         layout=linear_layout,
         config_dict=config_dict,
         color_table=color_table,
@@ -1936,7 +1974,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         plot_title_font_size=plot_title_font_size,
         protein_comparisons=collinearity_comparisons,
         orthogroups=collinearity_orthogroups,
-        protein_blastp_mode="none" if collinearity_comparisons is not None else protein_blastp_mode,
+        protein_blastp_mode=(
+            "none"
+            if collinearity_comparisons is not None
+            or collinearity_linear_comparisons is not None
+            else protein_blastp_mode
+        ),
         losatp_bin=losatp_bin,
         ncbi_blastp_bin=ncbi_blastp_bin,
         losatp_threads=losatp_threads,
@@ -2036,8 +2079,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             plot_title_font_size=plot_title_font_size,
             blast_files=tuple(blast_files) if blast_files else None,
             linear_comparisons=(
-                tuple(explicit_linear_comparisons)
-                if explicit_linear_comparisons is not None
+                tuple(active_linear_comparisons)
+                if active_linear_comparisons is not None
                 else None
             ),
             protein_comparisons=(
@@ -2047,7 +2090,10 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             ),
             orthogroups=collinearity_orthogroups,
             protein_blastp_mode=(
-                "none" if collinearity_comparisons is not None else protein_blastp_mode
+                "none"
+                if collinearity_comparisons is not None
+                or collinearity_linear_comparisons is not None
+                else protein_blastp_mode
             ),
             pairwise_match_style=pairwise_match_style,
             collinearity_params=collinearity_params,

@@ -59,6 +59,13 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
   </tr>
   <tr>
     <td colspan="2" valign="top">
+      <a href="../examples/vibrio-nigripulchritudo-multi-record.svg"><img src="../examples/vibrio-nigripulchritudo-multi-record.svg" alt="LOSATP collinear blocks between two Vibrio nigripulchritudo strains arranged by replicon" width="100%"></a><br>
+      <strong>All-vs-all <em>Vibrio nigripulchritudo</em> replicon comparison</strong><br>
+      LOSATP searches every TUMSAT-TG-2018 replicon against both SFn1 chromosomes. Collinear ribbons are drawn only across the two strain rows, revealing blocks such as TUMSAT-TG-2018 chromosome 2 versus SFn1 chromosome 1 without adding same-row links. See the <a href="./TUTORIALS/7_Linear_Layout.md#two-strains-with-multiple-replicons">linear-layout tutorial</a>.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
       <a href="../examples/majani.svg"><img src="../examples/majani.svg" alt="Ten-record linear comparison of majanivirus genomes with translated nucleotide match ribbons" width="100%"></a><br>
       <strong>Majanivirus comparison</strong><br>
       Ten viral records connected by translated-nucleotide matches, with product-based feature colors. For a protein-search version, open the <a href="https://gbdraw.app/gallery/#majanivirus_orthogroup">interactive case study</a>.

@@ -9,6 +9,7 @@ final canvas sizing.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 import math
 from typing import Sequence
 
@@ -56,6 +57,7 @@ def _precalculate_definition_metrics(
     config_dict: dict,
     canvas_config,
     cfg: GbdrawConfig | None = None,
+    line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """
     Pre-calculate definition widths and heights for all records.
@@ -67,8 +69,21 @@ def _precalculate_definition_metrics(
         return 0.0, definition_heights, definition_half_heights
 
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    for record in records:
-        def_group = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
+    if line_kinds_by_record is not None and len(line_kinds_by_record) != len(records):
+        raise ValueError("line_kinds_by_record must match the number of records")
+    for index, record in enumerate(records):
+        line_kinds = (
+            line_kinds_by_record[index]
+            if line_kinds_by_record is not None
+            else None
+        )
+        def_group = DefinitionGroup(
+            record,
+            config_dict,
+            canvas_config,
+            cfg=cfg,
+            line_kinds=line_kinds,
+        )
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width
         definition_height = float(def_group.definition_bounding_box_height)

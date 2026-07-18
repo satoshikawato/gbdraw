@@ -25,6 +25,8 @@ class LinearRecordMeasurement:
     right_inset: float = 0.0
     top_extent: float = 0.0
     bottom_extent: float = 0.0
+    comparison_top_extent: float | None = None
+    comparison_bottom_extent: float | None = None
 
     def __post_init__(self) -> None:
         if self.record_index < 0:
@@ -37,6 +39,18 @@ class LinearRecordMeasurement:
             value = float(getattr(self, name))
             if not math.isfinite(value) or value < 0:
                 raise ValidationError(f"{name} must be a finite non-negative number.")
+        for name, layout_extent_name in (
+            ("comparison_top_extent", "top_extent"),
+            ("comparison_bottom_extent", "bottom_extent"),
+        ):
+            raw_value = getattr(self, name)
+            if raw_value is None:
+                continue
+            value = float(raw_value)
+            if not math.isfinite(value) or value < 0:
+                raise ValidationError(f"{name} must be a finite non-negative number.")
+            if value > float(getattr(self, layout_extent_name)):
+                raise ValidationError(f"{name} cannot exceed {layout_extent_name}.")
 
 
 @dataclass(frozen=True)
@@ -202,6 +216,21 @@ def resolve_record_row_positions(
     return tuple(item[2] for item in ordered), tuple(rows_by_index)
 
 
+def record_pairs_between_adjacent_rows(
+    rows_by_record: Sequence[int],
+) -> tuple[tuple[int, int], ...]:
+    """Return every cross-row pair whose normalized rows are adjacent."""
+
+    if any(not isinstance(row, int) or isinstance(row, bool) or row < 0 for row in rows_by_record):
+        raise ValidationError("Linear rows must be non-negative integers.")
+    return tuple(
+        (query_index, subject_index)
+        for query_index in range(len(rows_by_record))
+        for subject_index in range(query_index + 1, len(rows_by_record))
+        if abs(rows_by_record[query_index] - rows_by_record[subject_index]) == 1
+    )
+
+
 def solve_linear_layout(
     measurements: Sequence[LinearRecordMeasurement],
     rows_by_record: Sequence[int],
@@ -287,6 +316,16 @@ def solve_linear_layout(
         content_left = min(content_left, cursor - row_items[0].left_inset)
         column = 0
         for item, sequence_width_value in zip(row_items, sequence_widths):
+            comparison_top_extent = (
+                item.top_extent
+                if item.comparison_top_extent is None
+                else item.comparison_top_extent
+            )
+            comparison_bottom_extent = (
+                item.bottom_extent
+                if item.comparison_bottom_extent is None
+                else item.comparison_bottom_extent
+            )
             placement = LinearRecordPlacement(
                 record_index=item.record_index,
                 record_key=item.record_key,
@@ -299,8 +338,8 @@ def solve_linear_layout(
                 right_inset=item.right_inset,
                 top_extent=item.top_extent,
                 bottom_extent=item.bottom_extent,
-                comparison_top_y=row_axis_y[row_index] - item.top_extent,
-                comparison_bottom_y=row_axis_y[row_index] + item.bottom_extent,
+                comparison_top_y=row_axis_y[row_index] - comparison_top_extent,
+                comparison_bottom_y=row_axis_y[row_index] + comparison_bottom_extent,
                 px_per_bp=px_per_bp,
             )
             placements.append(placement)
@@ -313,8 +352,8 @@ def solve_linear_layout(
             column += 1
 
     placements.sort(key=lambda item: item.record_index)
-    content_top = min(item.comparison_top_y for item in placements)
-    content_bottom = max(item.comparison_bottom_y for item in placements)
+    content_top = min(item.axis_y - item.top_extent for item in placements)
+    content_bottom = max(item.axis_y + item.bottom_extent for item in placements)
     return LinearLayoutPlan(
         placements=tuple(placements),
         px_per_bp=px_per_bp,

@@ -27,6 +27,7 @@ from gbdraw.analysis.collinearity import (
     call_collinearity_blocks,
     cluster_lossless_collinearity_anchors,
     convert_collinearity_blocks_to_comparisons,
+    convert_collinearity_blocks_to_pair_comparisons,
     deduplicate_unit_pair_anchors,
     iter_collinearity_search_pairs,
     normalize_collinearity_anchor_mode,
@@ -1460,6 +1461,38 @@ def test_build_blocks_from_hits_all_scope_uses_non_adjacent_connectivity_only_as
     )
     assert comparisons[0].shape[0] == 1
     assert comparisons[1].shape[0] == 0
+
+
+@pytest.mark.linear
+def test_build_blocks_from_hits_can_render_selected_non_adjacent_pairs() -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]})]),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["c0"], "protein_id": ["c0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 2): pd.DataFrame.from_records([_hit_row("a0", "c0")], columns=COMPARISON_COLUMNS),
+        (2, 0): pd.DataFrame.from_records([_hit_row("c0", "a0")], columns=COMPARISON_COLUMNS),
+    }
+
+    result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        directional_hits,
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(),
+        edge_mode="one_to_one",
+        search_scope="all",
+        comparison_pairs=((0, 2),),
+    )
+    comparisons = convert_collinearity_blocks_to_pair_comparisons(
+        result,
+        records=records,
+        color_mode="orientation",
+    )
+
+    assert {(block.query_record_index, block.subject_record_index) for block in result.blocks} == {(0, 2)}
+    assert comparisons[(0, 2)].shape[0] == 1
 
 
 @pytest.mark.linear

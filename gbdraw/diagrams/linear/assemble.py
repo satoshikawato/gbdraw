@@ -825,6 +825,17 @@ def assemble_linear_diagram(
     for row in rows_by_record:
         row_counts[row] = row_counts.get(row, 0) + 1
     multi_record_enabled = any(count > 1 for count in row_counts.values())
+    row_leading_indices: set[int] = set()
+    seen_rows: set[int] = set()
+    for record_index in ordered_record_indices:
+        row = rows_by_record[record_index]
+        if row in seen_rows:
+            continue
+        seen_rows.add(row)
+        row_leading_indices.add(record_index)
+    split_row_definitions = (
+        multi_record_enabled and bool(canvas_config.keep_definition_left_aligned)
+    )
     if multi_record_enabled and bool(cfg.canvas.linear.normalize_length):
         raise ValidationError(
             "normalize_length=True cannot be combined with multiple records in one Linear row."
@@ -953,12 +964,39 @@ def assemble_linear_diagram(
         orthogroup_label_eligibility=orthogroup_label_eligibility,
     )
     record_label_heights_below = _precalculate_label_heights_below(all_labels)
+    local_definition_line_kinds = (
+        [
+            (
+                frozenset({"subtitle", "replicon", "accession", "length"})
+                if index in row_leading_indices
+                else None
+            )
+            for index in range(len(records))
+        ]
+        if split_row_definitions
+        else None
+    )
     max_def_width, _definition_heights, definition_half_heights = _precalculate_definition_metrics(
         records,
         config_dict,
         canvas_config,
         cfg=cfg,
+        line_kinds_by_record=local_definition_line_kinds,
     )
+    row_definition_width = 0.0
+    if split_row_definitions:
+        row_definition_width, _row_definition_heights, _row_definition_half_heights = (
+            _precalculate_definition_metrics(
+                records,
+                config_dict,
+                canvas_config,
+                cfg=cfg,
+                line_kinds_by_record=[
+                    frozenset({"name"}) if index in row_leading_indices else frozenset()
+                    for index in range(len(records))
+                ],
+            )
+        )
 
     # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
     (
@@ -1115,14 +1153,25 @@ def assemble_linear_diagram(
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
         required_legend_height = float(legend_group.legend_height)
+        definition_reserve_width = (
+            row_definition_width
+            if split_row_definitions
+            else (0.0 if multi_record_enabled else max_def_width)
+        )
         canvas_config.recalculate_canvas_dimensions(
-            legend_group, 0.0 if multi_record_enabled else max_def_width
+            legend_group,
+            definition_reserve_width,
         )
     else:
+        definition_reserve_width = (
+            row_definition_width
+            if split_row_definitions
+            else (0.0 if multi_record_enabled else max_def_width)
+        )
         canvas_config.alignment_width = canvas_config.fig_width
         canvas_config.horizontal_offset = (
             2 * canvas_config.canvas_padding
-            + (0.0 if multi_record_enabled else max_def_width)
+            + definition_reserve_width
             + canvas_config.definition_gap
         )
         canvas_config.total_width = (
@@ -1182,11 +1231,15 @@ def assemble_linear_diagram(
                     + record_label_heights_below[i]
                     + canvas_config.plot_tracks_height
                 )
-            # Multi-record definitions are record-local headers above the sequence.
-            top_extent = max(
-                top_extent,
-                float(_definition_heights[i]) + float(canvas_config.vertical_padding),
-            )
+            comparison_top_extent = top_extent
+            # Multi-record definitions are record-local headers stacked above
+            # every other record-local element. They reserve layout height but
+            # may overlay comparison ribbons to avoid an empty header band.
+            if float(_definition_heights[i]) > 0.0:
+                top_extent += (
+                    float(_definition_heights[i])
+                    + float(canvas_config.vertical_padding)
+                )
             measurements.append(
                 LinearRecordMeasurement(
                     record_index=i,
@@ -1196,6 +1249,7 @@ def assemble_linear_diagram(
                     right_inset=0.0,
                     top_extent=top_extent,
                     bottom_extent=bottom_extent,
+                    comparison_top_extent=comparison_top_extent,
                 )
             )
         multi_record_plan = solve_linear_layout(
@@ -1875,6 +1929,7 @@ def assemble_linear_diagram(
                 cfg=record_cfg,
                 group_id=definition_group_id,
                 placement=record_placement,
+                row_definition_width=row_definition_width,
             )
             continue
 
@@ -1908,6 +1963,7 @@ def assemble_linear_diagram(
             cfg=record_cfg,
             group_id=definition_group_id,
             placement=record_placement,
+            row_definition_width=row_definition_width,
         )
         gc_offset_y = offset_y
         if non_middle_layout:

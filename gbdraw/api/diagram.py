@@ -61,6 +61,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     LosslessCollinearityParameters,
     build_orthogroup_collinearity_blocks,
     convert_collinearity_blocks_to_comparisons,
+    convert_collinearity_blocks_to_pair_comparisons,
     normalize_collinearity_anchor_mode,
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
@@ -76,7 +77,10 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     _validate_diagram_options_mode,
 )
 from gbdraw.linear_comparison import LinearComparison
-from gbdraw.layout.linear_multi_record import resolve_record_row_positions
+from gbdraw.layout.linear_multi_record import (
+    record_pairs_between_adjacent_rows,
+    resolve_record_row_positions,
+)
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.canvas.circular import resolve_circular_side_legend_geometry  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -1880,6 +1884,20 @@ def assemble_linear_diagram_from_records(
     normalized_collinearity_search_scope = normalize_collinearity_search_scope(str(collinearity_search_scope))
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
+    collinearity_comparison_pairs: tuple[tuple[int, int], ...] | None = None
+    if (
+        normalized_protein_blastp_mode == "collinear"
+        and normalized_collinearity_search_scope == "all"
+        and layout is not None
+    ):
+        _ordered_indices, collinearity_rows = resolve_record_row_positions(
+            records,
+            layout.multi_record_positions,
+        )
+        if len(set(collinearity_rows)) < len(records):
+            collinearity_comparison_pairs = record_pairs_between_adjacent_rows(
+                collinearity_rows
+            )
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
     if int(orthogroup_member_max_hits) <= 0:
@@ -2120,14 +2138,26 @@ def assemble_linear_diagram_from_records(
             unit_mode=collinearity_unit_mode,
             edge_mode=normalized_collinearity_anchor_mode,
             search_scope=normalized_collinearity_search_scope,
+            comparison_pairs=collinearity_comparison_pairs,
             feature_visibility_rules=feature_visibility_rules,
         )
         resolved_orthogroups = collinearity_result.orthogroups
-        resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
-            collinearity_result,
-            records=records,
-            color_mode=normalized_collinearity_color_mode,
-        )
+        if collinearity_comparison_pairs is not None:
+            pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
+                collinearity_result,
+                records=records,
+                color_mode=normalized_collinearity_color_mode,
+            )
+            resolved_linear_comparisons.extend(
+                LinearComparison(query_index, subject_index, matches)
+                for (query_index, subject_index), matches in pair_comparisons.items()
+            )
+        else:
+            resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
+                collinearity_result,
+                records=records,
+                color_mode=normalized_collinearity_color_mode,
+            )
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(
         str(plot_title_position)

@@ -676,7 +676,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--show_gc_content_axis] [--hide_gc_content_axis]
               [--show_gc_content_ticks] [--hide_gc_content_ticks]
               [--show_skew]
-              [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
+              [--align_center] [--keep_definition_left_aligned]
+              [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
               [--pairwise_match_style {ribbon,curve}]
               [-k FEATURES] [--feature_shape TYPE=SHAPE]
@@ -758,6 +759,11 @@ options:
                         Protein blastp comparison mode: none, pairwise
                         adjacent ribbons, all-record similarity groups
                         (orthogroup), or collinear blocks (default: none).
+  --collinear_search_scope {adjacent,all}
+                        Collinear protein blastp scope: adjacent input pairs
+                        or all record pairs. With multi-record rows, all
+                        renders only pairs across adjacent rows (default:
+                        adjacent).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block. The default 1 includes singleton
@@ -807,6 +813,11 @@ options:
                         Show or hide GC content percent-mode ticks and labels.
   --show_skew           plot GC skew below genome (default: False).
   --align_center        Align genomes to the center (default: False).
+  --keep_definition_left_aligned
+                        Keep linear record definitions in the left column. With
+                        multi-record rows, the leading record label becomes the
+                        row definition while remaining record text stays above
+                        its record (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)
   --bitscore BITSCORE   bitscore threshold (default=50)
   --identity IDENTITY   identity threshold (default=0)

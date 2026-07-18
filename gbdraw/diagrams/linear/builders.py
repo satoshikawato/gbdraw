@@ -219,6 +219,7 @@ def add_record_definition_group(
     cfg: GbdrawConfig | None = None,
     group_id: str | None = None,
     placement: LinearRecordPlacement | None = None,
+    row_definition_width: float | None = None,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
@@ -228,6 +229,14 @@ def add_record_definition_group(
         definition_gap = 20.0
 
     if placement is not None:
+        split_row_definition = (
+            keep_definition_left_aligned and placement.column == 0
+        )
+        local_line_kinds = (
+            {"subtitle", "replicon", "accession", "length"}
+            if split_row_definition
+            else None
+        )
         definition_group_obj = DefinitionGroup(
             record,
             config_dict,
@@ -236,6 +245,7 @@ def add_record_definition_group(
             text_anchor="middle",
             text_x=0.0,
             group_id=group_id,
+            line_kinds=local_line_kinds,
         )
         record_definition_group = definition_group_obj.get_group()
         header_y = (
@@ -250,6 +260,28 @@ def add_record_definition_group(
             header_y,
         )
         canvas.add(record_definition_group)
+        if split_row_definition:
+            row_group_obj = DefinitionGroup(
+                record,
+                config_dict,
+                canvas_config,
+                cfg=cfg,
+                text_anchor="start",
+                text_x=0.0,
+                group_id=f"{group_id or str(record.id)}_row",
+                line_kinds={"name"},
+            )
+            reserved_width = (
+                max(0.0, float(row_definition_width))
+                if row_definition_width is not None
+                else row_group_obj.definition_bounding_box_width
+            )
+            row_group = row_group_obj.get_group()
+            row_group.translate(
+                canvas_config.horizontal_offset - definition_gap - reserved_width,
+                placement.axis_y,
+            )
+            canvas.add(row_group)
         return canvas
 
     if keep_definition_left_aligned:

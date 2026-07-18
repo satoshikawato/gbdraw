@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import re
+import xml.etree.ElementTree as ET
+
 import pytest
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
@@ -13,10 +17,12 @@ from gbdraw.api import (
     assemble_linear_diagram_from_records,
     build_request_diagram,
 )
+from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear_multi_record import (
     LinearRecordMeasurement,
     RecordKey,
+    record_pairs_between_adjacent_rows,
     resolve_record_row_positions,
     solve_linear_layout,
 )
@@ -58,6 +64,15 @@ def test_non_contiguous_rows_and_token_column_order_are_normalized() -> None:
     assert rows == (0, 0, 1)
 
 
+def test_adjacent_row_pairs_exclude_same_row_records() -> None:
+    assert record_pairs_between_adjacent_rows((0, 0, 1, 1)) == (
+        (0, 2),
+        (0, 3),
+        (1, 2),
+        (1, 3),
+    )
+
+
 def test_layout_rejects_gap_that_consumes_available_width() -> None:
     measurements = (
         LinearRecordMeasurement(0, RecordKey("a"), 10),
@@ -69,6 +84,48 @@ def test_layout_rejects_gap_that_consumes_available_width() -> None:
             (0, 0),
             available_width=24,
             record_gap_px=24,
+        )
+
+
+def test_comparison_anchor_can_overlay_reserved_record_header() -> None:
+    measurements = (
+        LinearRecordMeasurement(
+            0,
+            RecordKey("top"),
+            100,
+            bottom_extent=12,
+        ),
+        LinearRecordMeasurement(
+            1,
+            RecordKey("bottom"),
+            100,
+            top_extent=40,
+            comparison_top_extent=18,
+        ),
+    )
+    plan = solve_linear_layout(
+        measurements,
+        (0, 1),
+        available_width=100,
+        first_axis_y=50,
+        comparison_height=20,
+    )
+
+    bottom = plan.placement_for_index(1)
+    assert bottom.axis_y == pytest.approx(122)
+    assert bottom.comparison_top_y == pytest.approx(104)
+    assert plan.content_top == pytest.approx(50)
+    assert plan.content_bottom == pytest.approx(122)
+
+
+def test_comparison_extent_cannot_escape_reserved_record_extent() -> None:
+    with pytest.raises(ValidationError, match="cannot exceed top_extent"):
+        LinearRecordMeasurement(
+            0,
+            RecordKey("record"),
+            100,
+            top_extent=20,
+            comparison_top_extent=21,
         )
 
 
@@ -87,6 +144,91 @@ def test_api_renders_record_local_widths_and_grid_metadata() -> None:
     assert svg.count("data-record-row=") == 4
     assert 'data-record-row="0"' in svg
     assert 'data-record-column="1"' in svg
+
+
+def test_multi_record_above_layout_separates_row_definitions_and_record_labels() -> None:
+    records = _records(1000, 800)
+    records[0].annotations["gbdraw_record_label"] = "TUMSAT-TG-2018"
+    records[0].annotations["gbdraw_record_subtitle"] = "chromosome 1"
+    records[1].annotations["gbdraw_record_label"] = "chromosome 2"
+    for record in records:
+        record.features.append(
+            SeqFeature(
+                FeatureLocation(100, min(700, len(record.seq)), strand=1),
+                type="CDS",
+            )
+        )
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict["canvas"]["show_gc"] = False
+    config_dict["canvas"]["show_skew"] = False
+    config_dict["canvas"]["show_labels"] = False
+    config_dict["canvas"]["linear"]["track_layout"] = "above"
+    config_dict["canvas"]["linear"]["keep_definition_left_aligned"] = True
+    definition_cfg = config_dict["objects"]["definition"]["linear"]
+    definition_cfg["show_replicon"] = False
+    definition_cfg["show_accession"] = False
+    definition_cfg["show_length"] = False
+
+    svg = assemble_linear_diagram_from_records(
+        records,
+        layout=LinearMultiRecordOptions(
+            record_gap_px=24,
+            multi_record_positions=("#1@1", "#2@1"),
+        ),
+        legend="none",
+        config_dict=config_dict,
+    ).tostring()
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    groups = {
+        group.attrib["id"]: group
+        for group in root.findall(".//svg:g", namespace)
+        if "id" in group.attrib
+    }
+
+    first_record = groups["record_1_record_1"]
+    first_local_definition = groups["record_1_definition_record_1"]
+    first_row_definition = groups["record_1_definition_record_1_row"]
+    second_local_definition = groups["record_2_definition_record_2"]
+
+    def text_values(group: ET.Element) -> list[str]:
+        return [
+            "".join(text.itertext())
+            for text in group.findall(".//svg:text", namespace)
+        ]
+
+    def translate(group: ET.Element) -> tuple[float, float]:
+        match = re.fullmatch(
+            r"translate\(([-+0-9.eE]+),([-+0-9.eE]+)\)",
+            group.attrib["transform"],
+        )
+        assert match is not None
+        return float(match.group(1)), float(match.group(2))
+
+    assert text_values(first_row_definition) == ["TUMSAT-TG-2018"]
+    assert text_values(first_local_definition) == ["chromosome 1"]
+    assert text_values(second_local_definition) == ["chromosome 2"]
+    assert translate(first_row_definition)[0] < translate(first_record)[0]
+
+    feature_y_values = [
+        float(y_value)
+        for path in first_record.findall(".//svg:path", namespace)
+        for _x_value, y_value in re.findall(
+            r"[ML]\s*([-+0-9.eE]+)\s*,?\s*([-+0-9.eE]+)",
+            path.attrib.get("d", ""),
+        )
+    ]
+    assert feature_y_values
+    feature_top = translate(first_record)[1] + min(feature_y_values)
+    local_text = first_local_definition.find(".//svg:text", namespace)
+    assert local_text is not None
+    local_font_size = float(local_text.attrib["font-size"])
+    local_bottom = translate(first_local_definition)[1] + (0.5 * local_font_size)
+    assert local_bottom <= feature_top
+    assert feature_top - local_bottom >= (
+        float(config_dict["canvas"]["linear"]["vertical_padding"]) - 0.5
+    )
 
 
 def test_multi_record_layout_rejects_normalize_length() -> None:
