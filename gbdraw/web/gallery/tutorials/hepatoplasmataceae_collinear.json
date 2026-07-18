@@ -265,7 +265,7 @@
       ]
     },
     {
-      "title": "Check collinear blocks",
+      "title": "Inspect collinear blocks",
       "body": "Click a curved block ribbon between adjacent genomes to inspect its two records, intervals, orientation, and gbdraw group count. Orientation + identity colors separate forward and reverse blocks while retaining identity information.",
       "operations": [
         {
