@@ -56,7 +56,10 @@ from ...legend.table import (  # type: ignore[reportMissingImports]
     prepare_legend_table,
 )
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
-from ...layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
+from ...layout.linear import (  # type: ignore[reportMissingImports]
+    calculate_feature_position_factors_linear,
+    resolve_feature_axis_gap_linear,
+)
 from ...layout.linear_multi_record import (
     LinearRecordMeasurement,
     LinearRecordPlacement,
@@ -586,7 +589,7 @@ def _precalculate_feature_track_heights(
     canvas_config: LinearCanvasConfigurator,
     cfg: GbdrawConfig,
     precomputed_feature_dicts: list[FeatureDict] | None = None,
-) -> tuple[list[float], list[float], list[float], list[float], list[float]]:
+) -> tuple[list[float], list[float], list[float], list[float], list[float], list[float]]:
     """
     Pre-calculates the height required for feature tracks for each record.
     This is needed when resolve_overlaps is enabled as features may span multiple tracks.
@@ -597,12 +600,14 @@ def _precalculate_feature_track_heights(
         - list mapping record index -> minimum above-axis extent required to keep top visible
         - list mapping record index -> above-axis extent with non-displaced track positioning
         - list mapping record index -> middle-layout above-axis extent with non-displaced tracks
+        - list mapping record index -> feature-only visual center relative to the axis
     """
     record_heights_below: list[float] = []
     record_heights_above: list[float] = []
     record_top_guard_above: list[float] = []
     record_top_guard_undisplaced: list[float] = []
     record_top_guard_middle_undisplaced: list[float] = []
+    record_feature_center_offsets: list[float] = []
     track_layout = str(canvas_config.track_layout).strip().lower()
     axis_gap_factor = (
         (float(canvas_config.track_axis_gap) / float(canvas_config.cds_height))
@@ -634,6 +639,8 @@ def _precalculate_feature_track_heights(
             )
         min_top_y = 0.0
         max_bottom_y = 0.0
+        feature_top_y: float | None = None
+        feature_bottom_y: float | None = None
         min_top_y_undisplaced = 0.0
         min_top_y_middle_undisplaced = 0.0
         for feature_obj in feature_dict.values():
@@ -648,6 +655,10 @@ def _precalculate_feature_track_heights(
             )
             top_y = canvas_config.cds_height * float(factors[0])
             bottom_y = canvas_config.cds_height * float(factors[2])
+            feature_top_y = top_y if feature_top_y is None else min(feature_top_y, top_y)
+            feature_bottom_y = (
+                bottom_y if feature_bottom_y is None else max(feature_bottom_y, bottom_y)
+            )
             if top_y < min_top_y:
                 min_top_y = top_y
             if bottom_y > max_bottom_y:
@@ -724,6 +735,11 @@ def _precalculate_feature_track_heights(
         record_top_guard_above.append(precise_height_above)
         record_top_guard_undisplaced.append(undisplaced_height_above)
         record_top_guard_middle_undisplaced.append(middle_undisplaced_height_above)
+        record_feature_center_offsets.append(
+            0.0
+            if feature_top_y is None or feature_bottom_y is None
+            else 0.5 * (feature_top_y + feature_bottom_y)
+        )
 
     return (
         record_heights_below,
@@ -731,6 +747,7 @@ def _precalculate_feature_track_heights(
         record_top_guard_above,
         record_top_guard_undisplaced,
         record_top_guard_middle_undisplaced,
+        record_feature_center_offsets,
     )
 
 
@@ -967,7 +984,7 @@ def assemble_linear_diagram(
     local_definition_line_kinds = (
         [
             (
-                frozenset({"subtitle", "replicon", "accession", "length"})
+                frozenset({"replicon", "accession", "length"})
                 if index in row_leading_indices
                 else None
             )
@@ -992,7 +1009,9 @@ def assemble_linear_diagram(
                 canvas_config,
                 cfg=cfg,
                 line_kinds_by_record=[
-                    frozenset({"name"}) if index in row_leading_indices else frozenset()
+                    frozenset({"name", "subtitle"})
+                    if index in row_leading_indices
+                    else frozenset()
                     for index in range(len(records))
                 ],
             )
@@ -1005,6 +1024,7 @@ def assemble_linear_diagram(
         record_top_guard_above,
         record_top_guard_undisplaced,
         record_top_guard_middle_undisplaced,
+        record_feature_center_offsets,
     ) = _precalculate_feature_track_heights(
         records,
         feature_config,
@@ -1231,7 +1251,19 @@ def assemble_linear_diagram(
                     + record_label_heights_below[i]
                     + canvas_config.plot_tracks_height
                 )
-            comparison_top_extent = top_extent
+            comparison_endpoint_gap = 0.0
+            if has_blast:
+                comparison_endpoint_gap = float(canvas_config.vertical_padding)
+                if non_middle_layout:
+                    comparison_endpoint_gap = resolve_feature_axis_gap_linear(
+                        cds_height=float(canvas_config.cds_height),
+                        separate_strands=bool(canvas_config.strandedness),
+                        axis_gap=canvas_config.track_axis_gap,
+                    )
+            comparison_top_extent = top_extent + comparison_endpoint_gap
+            comparison_bottom_extent = bottom_extent + comparison_endpoint_gap
+            top_extent = comparison_top_extent
+            bottom_extent = comparison_bottom_extent
             # Multi-record definitions are record-local headers stacked above
             # every other record-local element. They reserve layout height but
             # may overlay comparison ribbons to avoid an empty header band.
@@ -1250,6 +1282,7 @@ def assemble_linear_diagram(
                     top_extent=top_extent,
                     bottom_extent=bottom_extent,
                     comparison_top_extent=comparison_top_extent,
+                    comparison_bottom_extent=comparison_bottom_extent,
                 )
             )
         multi_record_plan = solve_linear_layout(
@@ -1456,7 +1489,6 @@ def assemble_linear_diagram(
         and normalized_plot_title_position == "bottom"
         and canvas_config.legend_position == "bottom"
         and legend_group is not None
-        and length_bar_group is not None
     )
     bottom_stack_gap = float(canvas_config.vertical_padding)
     if bottom_title_stack:
@@ -1478,11 +1510,18 @@ def assemble_linear_diagram(
         )
         if canvas_config.legend_position in ["top", "bottom"]:
             final_height += int(required_legend_height)
-    canvas_config.total_height = max(final_height, canvas_config.total_height)
+    if multi_record_plan is not None:
+        # The configurator's initial height assumes one record per row. Once a
+        # multi-record plan exists, retaining that estimate leaves an empty
+        # band for every record that shares a row. Size the canvas from the
+        # resolved rows while still allowing a side legend to set the minimum.
+        canvas_config.total_height = max(final_height, required_legend_height)
+    else:
+        canvas_config.total_height = max(final_height, canvas_config.total_height)
 
     if legend_group is not None:
         canvas_config.recalculate_canvas_dimensions(
-            legend_group, 0.0 if multi_record_enabled else max_def_width
+            legend_group, definition_reserve_width
         )
 
     alignment_shift_x = alignment_extents.horizontal_shift
@@ -1544,9 +1583,11 @@ def assemble_linear_diagram(
         canvas_config.legend_offset_y += plot_title_top_reserve
     if bottom_title_stack:
         canvas_config.legend_offset_y = (
-            canvas_config.height_below_final_record
-            + length_bar_height
-            + bottom_stack_gap
+            float(canvas_config.total_height)
+            - plot_title_edge_margin
+            - float(plot_title_obj.text_bbox_height)
+            - bottom_stack_gap
+            - required_legend_height
         )
 
     if canvas_config.legend_position != "none":
@@ -1930,6 +1971,9 @@ def assemble_linear_diagram(
                 group_id=definition_group_id,
                 placement=record_placement,
                 row_definition_width=row_definition_width,
+                definition_center_y=(
+                    offset_y + record_feature_center_offsets[record_index]
+                ),
             )
             continue
 
@@ -1964,6 +2008,9 @@ def assemble_linear_diagram(
             group_id=definition_group_id,
             placement=record_placement,
             row_definition_width=row_definition_width,
+            definition_center_y=(
+                offset_y + record_feature_center_offsets[record_index]
+            ),
         )
         gc_offset_y = offset_y
         if non_middle_layout:

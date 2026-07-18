@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
@@ -71,6 +73,73 @@ def test_explicit_comparison_metadata_uses_selected_endpoints() -> None:
     assert 'data-subject-record-index="2"' in svg
     assert 'data-query-row="0"' in svg
     assert 'data-subject-row="1"' in svg
+
+
+def test_comparison_ribbons_keep_endpoint_padding_without_labels() -> None:
+    records = _records()[:3]
+    for record in records:
+        record.features.extend(
+            (
+                SeqFeature(FeatureLocation(10, 110, strand=1), type="CDS"),
+                SeqFeature(FeatureLocation(120, 220, strand=-1), type="CDS"),
+            )
+        )
+    svg = assemble_linear_diagram_from_records(
+        records,
+        linear_comparisons=[_comparison(0, 2)],
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=("#1@1", "#2@1", "#3@2"),
+        ),
+        legend="none",
+        config_overrides={
+            "show_labels": False,
+            "show_gc": False,
+            "show_skew": False,
+            "strandedness": True,
+            "linear_track_layout": "above",
+            "linear_ruler_on_axis": False,
+        },
+    ).tostring()
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    groups = {
+        group.attrib["id"]: group
+        for group in root.findall(".//svg:g", namespace)
+        if "id" in group.attrib
+    }
+
+    def translate_y(group: ET.Element) -> float:
+        match = re.fullmatch(
+            r"translate\(([-+0-9.eE]+),([-+0-9.eE]+)\)",
+            group.attrib["transform"],
+        )
+        assert match is not None
+        return float(match.group(2))
+
+    def path_y_values(group: ET.Element) -> list[float]:
+        return [
+            float(y_value)
+            for path in group.findall(".//svg:path", namespace)
+            for _x_value, y_value in re.findall(
+                r"[ML]\s*([-+0-9.eE]+),?\s*([-+0-9.eE]+)",
+                path.attrib.get("d", ""),
+            )
+        ]
+
+    top_record = groups["r1_record_1"]
+    bottom_record = groups["r3_record_3"]
+    comparison = groups["comparison1"]
+    top_record_axis = translate_y(top_record)
+    top_record_bottom = top_record_axis + max(path_y_values(top_record))
+    bottom_record_top = translate_y(bottom_record) + min(path_y_values(bottom_record))
+    comparison_y_values = path_y_values(comparison)
+    comparison_top = translate_y(comparison) + min(comparison_y_values)
+    comparison_bottom = translate_y(comparison) + max(comparison_y_values)
+
+    feature_to_axis_gap = top_record_axis - top_record_bottom
+    assert feature_to_axis_gap > 0
+    assert comparison_top - top_record_axis == pytest.approx(feature_to_axis_gap)
+    assert bottom_record_top - comparison_bottom == pytest.approx(feature_to_axis_gap)
 
 
 def test_reversed_explicit_endpoints_work_with_legacy_one_record_rows() -> None:

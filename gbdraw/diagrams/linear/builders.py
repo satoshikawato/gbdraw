@@ -220,6 +220,7 @@ def add_record_definition_group(
     group_id: str | None = None,
     placement: LinearRecordPlacement | None = None,
     row_definition_width: float | None = None,
+    definition_center_y: float | None = None,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
@@ -233,7 +234,7 @@ def add_record_definition_group(
             keep_definition_left_aligned and placement.column == 0
         )
         local_line_kinds = (
-            {"subtitle", "replicon", "accession", "length"}
+            {"replicon", "accession", "length"}
             if split_row_definition
             else None
         )
@@ -269,7 +270,7 @@ def add_record_definition_group(
                 text_anchor="start",
                 text_x=0.0,
                 group_id=f"{group_id or str(record.id)}_row",
-                line_kinds={"name"},
+                line_kinds={"name", "subtitle"},
             )
             reserved_width = (
                 max(0.0, float(row_definition_width))
@@ -279,7 +280,11 @@ def add_record_definition_group(
             row_group = row_group_obj.get_group()
             row_group.translate(
                 canvas_config.horizontal_offset - definition_gap - reserved_width,
-                placement.axis_y,
+                (
+                    placement.axis_y
+                    if definition_center_y is None
+                    else float(definition_center_y)
+                ),
             )
             canvas.add(row_group)
         return canvas
@@ -325,7 +330,11 @@ def add_record_definition_group(
 
     position_record_definition_group(
         record_definition_group,
-        record_offset_y,
+        (
+            record_offset_y
+            if definition_center_y is None
+            else float(definition_center_y)
+        ),
         positioned_definition_offset_x,
         canvas_config,
     )

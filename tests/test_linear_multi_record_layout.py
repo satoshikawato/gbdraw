@@ -146,7 +146,50 @@ def test_api_renders_record_local_widths_and_grid_metadata() -> None:
     assert 'data-record-column="1"' in svg
 
 
-def test_multi_record_above_layout_separates_row_definitions_and_record_labels() -> None:
+def test_bottom_legend_follows_last_resolved_row() -> None:
+    records = _records(*(1000 for _index in range(10)))
+    svg = assemble_linear_diagram_from_records(
+        records,
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=tuple(
+                f"#{index + 1}@{1 if index < 5 else 2}"
+                for index in range(10)
+            ),
+        ),
+        legend="bottom",
+        plot_title="Resolved rows",
+        plot_title_position="bottom",
+        config_overrides={
+            "show_labels": False,
+            "show_gc": False,
+            "show_skew": False,
+        },
+    ).tostring()
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    groups = {
+        group.attrib["id"]: group
+        for group in root.findall(".//svg:g", namespace)
+        if "id" in group.attrib
+    }
+
+    def translate_y(group: ET.Element) -> float:
+        match = re.fullmatch(
+            r"translate\(([-+0-9.eE]+),([-+0-9.eE]+)\)",
+            group.attrib["transform"],
+        )
+        assert match is not None
+        return float(match.group(2))
+
+    last_row_axis = translate_y(groups["record_10_record_10"])
+    legend_top = translate_y(groups["legend"])
+    assert 0 < legend_top - last_row_axis < 120
+
+
+@pytest.mark.parametrize("ruler_on_axis", [False, True])
+def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
+    ruler_on_axis: bool,
+) -> None:
     records = _records(1000, 800)
     records[0].annotations["gbdraw_record_label"] = "TUMSAT-TG-2018"
     records[0].annotations["gbdraw_record_subtitle"] = "chromosome 1"
@@ -165,6 +208,7 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels()
     config_dict["canvas"]["show_labels"] = False
     config_dict["canvas"]["linear"]["track_layout"] = "above"
     config_dict["canvas"]["linear"]["keep_definition_left_aligned"] = True
+    config_dict["canvas"]["linear"]["ruler_on_axis"] = ruler_on_axis
     definition_cfg = config_dict["objects"]["definition"]["linear"]
     definition_cfg["show_replicon"] = False
     definition_cfg["show_accession"] = False
@@ -176,7 +220,7 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels()
             record_gap_px=24,
             multi_record_positions=("#1@1", "#2@1"),
         ),
-        legend="none",
+        legend="bottom",
         config_dict=config_dict,
     ).tostring()
     root = ET.fromstring(svg)
@@ -188,6 +232,7 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels()
     }
 
     first_record = groups["record_1_record_1"]
+    second_record = groups["record_2_record_2"]
     first_local_definition = groups["record_1_definition_record_1"]
     first_row_definition = groups["record_1_definition_record_1_row"]
     second_local_definition = groups["record_2_definition_record_2"]
@@ -206,12 +251,12 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels()
         assert match is not None
         return float(match.group(1)), float(match.group(2))
 
-    assert text_values(first_row_definition) == ["TUMSAT-TG-2018"]
-    assert text_values(first_local_definition) == ["chromosome 1"]
+    assert text_values(first_row_definition) == ["TUMSAT-TG-2018", "chromosome 1"]
+    assert text_values(first_local_definition) == []
     assert text_values(second_local_definition) == ["chromosome 2"]
-    assert translate(first_row_definition)[0] < translate(first_record)[0]
+    assert 0 <= translate(first_row_definition)[0] < translate(first_record)[0]
 
-    feature_y_values = [
+    first_feature_y_values = [
         float(y_value)
         for path in first_record.findall(".//svg:path", namespace)
         for _x_value, y_value in re.findall(
@@ -219,12 +264,28 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels()
             path.attrib.get("d", ""),
         )
     ]
+    assert first_feature_y_values
+    expected_definition_center_y = translate(first_record)[1] + 0.5 * (
+        min(first_feature_y_values) + max(first_feature_y_values)
+    )
+    assert translate(first_row_definition)[1] == pytest.approx(
+        expected_definition_center_y
+    )
+
+    feature_y_values = [
+        float(y_value)
+        for path in second_record.findall(".//svg:path", namespace)
+        for _x_value, y_value in re.findall(
+            r"[ML]\s*([-+0-9.eE]+)\s*,?\s*([-+0-9.eE]+)",
+            path.attrib.get("d", ""),
+        )
+    ]
     assert feature_y_values
-    feature_top = translate(first_record)[1] + min(feature_y_values)
-    local_text = first_local_definition.find(".//svg:text", namespace)
+    feature_top = translate(second_record)[1] + min(feature_y_values)
+    local_text = second_local_definition.find(".//svg:text", namespace)
     assert local_text is not None
     local_font_size = float(local_text.attrib["font-size"])
-    local_bottom = translate(first_local_definition)[1] + (0.5 * local_font_size)
+    local_bottom = translate(second_local_definition)[1] + (0.5 * local_font_size)
     assert local_bottom <= feature_top
     assert feature_top - local_bottom >= (
         float(config_dict["canvas"]["linear"]["vertical_padding"]) - 0.5

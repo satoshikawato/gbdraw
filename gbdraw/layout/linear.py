@@ -55,6 +55,21 @@ def _resolve_axis_gap_factor(
     return 0.30
 
 
+def resolve_feature_axis_gap_linear(
+    *,
+    cds_height: float,
+    separate_strands: bool,
+    axis_gap: float | None,
+) -> float:
+    """Return the resolved feature-edge to axis gap in pixels."""
+    if axis_gap is not None:
+        return max(0.0, float(axis_gap))
+    return max(0.0, float(cds_height)) * _resolve_axis_gap_factor(
+        separate_strands=separate_strands,
+        axis_gap_factor=None,
+    )
+
+
 def calculate_feature_position_factors_linear(
     strand: str,
     track_id: int,
@@ -127,6 +142,9 @@ def calculate_feature_position_factors_linear(
     return [middle - half_height, middle, middle + half_height]
 
 
-__all__ = ["calculate_feature_position_factors_linear"]
+__all__ = [
+    "calculate_feature_position_factors_linear",
+    "resolve_feature_axis_gap_linear",
+]
 
 

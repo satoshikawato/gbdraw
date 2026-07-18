@@ -216,6 +216,52 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   expect(pageErrors).toEqual([]);
 });
 
+test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto(`${baseUrl}/gallery/#vibrio-harveyi-group-collinear`, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#selected-title')).toHaveText('Vibrio Harveyi group multi-record collinearity');
+
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(
+    tutorialPanel.getByRole('heading', { name: 'Compare every replicon across five Vibrio Harveyi-group assemblies' })
+  ).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: /11.*NZ_CP125877\.1.*5.*3/ })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'CDS Rectangle' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Plot Title <i>Vibrio</i> Harveyi group' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
+  await expect(tutorialPanel.getByText('The SB1 assembly contains two chromosomes plus plasmid p1')).toBeVisible();
+  await expect(
+    tutorialPanel.getByText('A narrow white gap separates each record from the adjacent blocks')
+  ).toBeVisible();
+
+  const mediaImages = tutorialPanel.getByRole('img');
+  await expect(mediaImages).toHaveCount(10);
+  await expect(tutorialPanel.locator('img[src$="manual-02-01-record-row.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-03-01-record-layout.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-05-01-rectangle-features.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-08-01-collinear-overview.webp"]')).toHaveCount(1);
+  for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
+    const image = mediaImages.nth(idx);
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+  }
+
+  await page.getByRole('tab', { name: 'Files' }).click();
+  const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
+  await expect(filesPanel.getByText('GCF_000196095.1_ASM19609v1_genomic.gbff')).toBeVisible();
+  await expect(filesPanel.getByText('GCF_030060435.1_ASM3006043v1_genomic.gbff')).toBeVisible();
+  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
+  expect(
+    statSync(join(webRoot, 'gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json')).size
+  ).toBeLessThan(100 * 1024 * 1024);
+
+  expect(pageErrors).toEqual([]);
+});
+
 test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));

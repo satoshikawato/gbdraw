@@ -234,9 +234,24 @@ export const createLegendLayoutActions = ({ state }) => {
       const availableHorizontalWidth = vbW - padding * 2;
       const wideHorizontalLegend =
         availableHorizontalWidth > 0 && activeBounds.width > availableHorizontalWidth * 0.9;
+      let top = position === 'top' ? vbY + padding : vbY + vbH - activeBounds.height - padding;
+
+      if (position === 'bottom') {
+        const plotTitle = svg.getElementById('plot_title');
+        if (plotTitle && plotTitle.getAttribute('display') !== 'none') {
+          const titleOffset = parseTransform(plotTitle.getAttribute('transform'));
+          const titleBox = plotTitle.getBBox();
+          const titleTop = titleOffset.y + titleBox.y;
+          const legendBottom = top + activeBounds.height;
+          if (Number.isFinite(titleTop) && legendBottom + padding > titleTop) {
+            top = Math.max(vbY + padding, titleTop - activeBounds.height - padding);
+          }
+        }
+      }
+
       return {
         left: wideHorizontalLegend ? vbX + padding : vbX + (vbW - activeBounds.width) / 2,
-        top: position === 'top' ? vbY + padding : vbY + vbH - activeBounds.height - padding
+        top
       };
     }
 
@@ -605,7 +620,7 @@ export const createLegendLayoutActions = ({ state }) => {
           if (featureYOffset > 0) {
             featureGroup.setAttribute('transform', `translate(0, ${featureYOffset})`);
           }
-          const pairwiseX = featureWidth + textXOffset;
+          const pairwiseX = featureBBox.x + featureWidth + textXOffset;
           pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseYOffset})`);
         } else {
           const featureXOffset =
