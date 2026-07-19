@@ -176,6 +176,23 @@ def _merge_gff3_qualifiers(features: list[SeqFeature]) -> dict:
     return merged
 
 
+def _order_gff3_feature_group(features: list[SeqFeature]) -> list[SeqFeature]:
+    """Return multipart rows in biological order when their strand is consistent."""
+    strands = {
+        part.strand
+        for feature in features
+        for part in feature.location.parts
+    }
+    if strands not in ({1}, {-1}):
+        return features
+
+    def location_key(feature: SeqFeature) -> tuple[int, int]:
+        parts = feature.location.parts
+        return min(int(part.start) for part in parts), max(int(part.end) for part in parts)
+
+    return sorted(features, key=location_key, reverse=strands == {-1})
+
+
 def _normalize_gff3_feature_list(features: list[SeqFeature]) -> tuple[list[SeqFeature], int]:
     """Collapse same-ID GFF3 rows into multipart Biopython features."""
     grouped_features: list[list[SeqFeature]] = []
@@ -199,6 +216,7 @@ def _normalize_gff3_feature_list(features: list[SeqFeature]) -> tuple[list[SeqFe
     normalized: list[SeqFeature] = []
     merged_count = 0
     for feature_group in grouped_features:
+        feature_group = _order_gff3_feature_group(feature_group)
         feature = feature_group[0]
         if len(feature_group) > 1:
             parts = [
