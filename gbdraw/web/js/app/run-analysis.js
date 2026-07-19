@@ -71,7 +71,7 @@ import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
 } from './plot-title-position.js';
-import { discoverSequenceRecords } from './record-discovery.js';
+import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 
 const hashText = async (text) => {
   if (globalThis.crypto?.subtle) {
@@ -646,7 +646,8 @@ export const createRunAnalysis = ({
   getPyodide,
   writeFileToFs,
   refreshFeatureOverrides,
-  resetPreviewViewport
+  resetPreviewViewport,
+  validateAnnotationTargets = null
 }) => {
   const {
     pyodideReady,
@@ -709,6 +710,7 @@ export const createRunAnalysis = ({
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
     circularRecordList,
+    circularRecordDiscovery,
     files,
     linearSeqs,
     linearRecordLayoutEnabled,
@@ -1562,34 +1564,53 @@ json.dumps({
       adv.multi_record_positions = [];
     }
     const pyodide = getPyodide();
-    const sourceFile = files.c_gb;
+    const inputType = cInputType.value;
+    const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
+    const pairedFile = inputType === 'gff' ? files.c_fasta : null;
+    const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
+    Object.assign(circularRecordDiscovery, {
+      status: hasCompleteInput ? 'loading' : 'idle',
+      error: '',
+      inputType,
+      primaryFile: primaryFile || null,
+      pairedFile: pairedFile || null
+    });
     if (
       mode.value !== 'circular' ||
-      cInputType.value !== 'gb' ||
-      !sourceFile ||
+      !hasCompleteInput ||
       !pyodideReady.value ||
       !pyodide
     ) {
       circularRecordList.value = [];
-      if (!files.c_gb || cInputType.value !== 'gb') {
+      if (!hasCompleteInput) {
         adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       }
       return;
     }
 
     try {
-      const records = await discoverSequenceRecords({
-        file: sourceFile,
-        format: 'genbank',
-        pyodide,
-        writeFileToFs,
-        temporaryPath: `/record-discovery-circular-${refreshGeneration}.gb`
-      });
+      const records = inputType === 'gff'
+        ? await discoverGffFastaRecords({
+            gffFile: primaryFile,
+            fastaFile: pairedFile,
+            pyodide,
+            writeFileToFs,
+            gffTemporaryPath: `/record-discovery-circular-${refreshGeneration}.gff`,
+            fastaTemporaryPath: `/record-discovery-circular-${refreshGeneration}.fasta`
+          })
+        : await discoverSequenceRecords({
+            file: primaryFile,
+            format: 'genbank',
+            pyodide,
+            writeFileToFs,
+            temporaryPath: `/record-discovery-circular-${refreshGeneration}.gb`
+          });
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         mode.value !== 'circular' ||
-        cInputType.value !== 'gb' ||
-        files.c_gb !== sourceFile
+        cInputType.value !== inputType ||
+        (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
+        (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
       const nextRecords = records.map((entry) => ({
         selector: entry.selector,
@@ -1597,17 +1618,21 @@ json.dumps({
         record_length: entry.recordLength
       }));
       circularRecordList.value = nextRecords;
+      circularRecordDiscovery.status = 'ready';
       const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...nextPositions);
     } catch (error) {
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         mode.value !== 'circular' ||
-        cInputType.value !== 'gb' ||
-        files.c_gb !== sourceFile
+        cInputType.value !== inputType ||
+        (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
+        (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
       console.warn('Failed to refresh circular record order:', error);
       circularRecordList.value = [];
+      circularRecordDiscovery.status = 'error';
+      circularRecordDiscovery.error = 'Could not read records from the circular input file(s).';
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
     }
   };
@@ -1780,6 +1805,7 @@ json.dumps({
 
     try {
       let args = [];
+      let annotationLoadComparison = false;
       const pendingMatchSequenceSources = [];
       const queueMatchSequenceSource = (source) => {
         if (!source?.key || !source?.sequence) return;
@@ -4274,6 +4300,18 @@ json.dumps({
         }
         if (explicitComparisonsTablePath) args.push('--comparisons_table', explicitComparisonsTablePath);
         else if (blastArgs.length) args.push('-b', ...blastArgs);
+        annotationLoadComparison = Boolean(explicitComparisonsTablePath || blastArgs.length);
+      }
+
+      if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
+        const annotationError = validateAnnotationTargets({
+          loadComparison: mode.value === 'linear' ? annotationLoadComparison : false
+        });
+        if (annotationError) throw new Error(annotationError);
+        stageTextFile('/web_annotations.tsv', encodeAnnotationTable(annotationSets), {
+          name: 'annotations.tsv',
+          slot: 'generatedFiles.web_annotations'
+        });
       }
 
       console.log('CMD:', args.join(' '));

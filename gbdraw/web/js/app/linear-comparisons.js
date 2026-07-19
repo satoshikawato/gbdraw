@@ -2,6 +2,18 @@ let comparisonCounter = 0;
 
 const keyFor = (queryUid, subjectUid) => `${queryUid}->${subjectUid}`;
 
+export const hasLinearComparisonIntent = ({
+  layoutEnabled = false,
+  comparisons = [],
+  sequences = [],
+  blastSource = 'upload'
+} = {}) => {
+  const records = Array.isArray(sequences) ? sequences : [];
+  if (layoutEnabled) return Array.isArray(comparisons) && comparisons.length > 0;
+  if (String(blastSource || '') === 'losat') return records.length > 1;
+  return records.slice(0, -1).some((sequence) => Boolean(sequence?.blast));
+};
+
 export const reconcileLinearComparisons = (sequences, comparisons = []) => {
   const valid = new Set((Array.isArray(sequences) ? sequences : []).map((sequence) => String(sequence?.uid || '')));
   const seen = new Set();

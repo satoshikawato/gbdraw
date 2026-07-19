@@ -311,6 +311,8 @@ def test_linear_record_selector_source_contract() -> None:
     assert "linearRecordOptions(seq)" in index_html
     assert "linearRecordSelectorDisabled(seq)" in index_html
     assert "def list_sequence_records(path, format):" in helper_js
+    assert "def list_gff_fasta_records(gff_path, fasta_path):" in helper_js
+    assert "load_gff_fasta(" in helper_js
     assert 'format_map = {"genbank": "genbank", "fasta": "fasta"}' in helper_js
     assert "def list_genbank_records(" not in helper_js
     assert (WEB_ROOT / "js" / "app" / "record-discovery.js").is_file()
@@ -3989,7 +3991,11 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "js" / "workers" / "losat-threaded-worker.js",
         build_root / "gbdraw" / "web" / "js" / "workers" / "losat-wasi-thread-worker.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "record-discovery.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "record-options.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "linear-record-selector.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "annotations" / "record-catalog.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "annotations" / "record-selector.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "annotations" / "validation.js",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat.wasm",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat-threaded.wasm",
         *(build_root / "gbdraw" / "web" / path for path in verify_module.REQUIRED_UI_FONT_FILES),
@@ -4038,7 +4044,11 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         assert browser_wheels == [browser_wheel_member]
         assert gallery_members == []
         assert "gbdraw/web/js/app/record-discovery.js" in outer_names
+        assert "gbdraw/web/js/app/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
+        assert "gbdraw/web/js/app/annotations/record-catalog.js" in outer_names
+        assert "gbdraw/web/js/app/annotations/record-selector.js" in outer_names
+        assert "gbdraw/web/js/app/annotations/validation.js" in outer_names
 
 
 @pytest.mark.slow

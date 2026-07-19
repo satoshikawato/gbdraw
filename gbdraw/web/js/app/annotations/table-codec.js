@@ -1,5 +1,10 @@
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from './state.js';
-import { coordinateTarget, featureTarget } from './target-actions.js';
+import {
+  annotationRecordSelectorValue,
+  coordinateTarget,
+  featureTarget,
+  parseAnnotationRecordSelectorValue
+} from './target-actions.js';
 
 const REQUIRED = ['set_id', 'id', 'mark'];
 const COLUMNS = [
@@ -16,7 +21,6 @@ const boolValue = (value, fallback = false) => {
   if (['false', '0', 'no', 'off'].includes(text)) return false;
   throw new Error(`Invalid boolean value: ${value}`);
 };
-const recordText = (record) => record?.kind === 'recordId' ? record.value : (record?.kind === 'recordIndex' ? `#${record.index + 1}` : '');
 const styleFromRow = (row) => {
   const hasStyle = COLUMNS.slice(15).some((name) => row[name] !== '');
   if (!hasStyle) return null;
@@ -52,9 +56,14 @@ export const parseAnnotationTable = (text) => {
     const row = Object.fromEntries(header.map((name, column) => [name, values[column] ?? '']));
     const rowNumber = index + 2;
     if (!row.set_id || !row.id) throw new Error(`Annotation table row ${rowNumber}: set_id and id are required.`);
-    const record = row.record?.startsWith('#')
-      ? { recordId: null, recordIndex: Math.max(0, Number(row.record.slice(1)) - 1) }
-      : { recordId: row.record || null, recordIndex: null };
+    const parsedRecord = parseAnnotationRecordSelectorValue(row.record);
+    if (parsedRecord.error) {
+      throw new Error(`Annotation table row ${rowNumber}, column 'record': ${parsedRecord.error}`);
+    }
+    const recordSelector = parsedRecord.selector;
+    const record = recordSelector?.kind === 'recordIndex'
+      ? { recordId: null, recordIndex: recordSelector.index }
+      : { recordId: recordSelector?.value || null, recordIndex: null };
     const hasCoordinates = Boolean(row.start || row.end);
     const hasFeature = Boolean(row.feature_selector);
     if (hasCoordinates === hasFeature) throw new Error(`Annotation table row ${rowNumber}: provide exactly one coordinate or feature target.`);
@@ -84,7 +93,7 @@ export const encodeAnnotationTable = (sets) => {
     const style = annotation.style || set.defaultStyle || {};
     const hatch = style.hatch || {};
     const row = {
-      set_id: set.id, id: annotation.id, mark: annotation.mark, record: recordText(target.record),
+      set_id: set.id, id: annotation.id, mark: annotation.mark, record: annotationRecordSelectorValue(target.record),
       start: coordinate ? target.start : '', end: coordinate ? target.end : '', coordinate_space: coordinate ? target.coordinateSpace : '',
       wraps_origin: coordinate && (target.wrapsOrigin || Number(target.start) > Number(target.end)) ? 'true' : '', out_of_bounds: coordinate ? target.outOfBounds : '',
       feature_selector: coordinate ? '' : selectors, envelope: coordinate ? '' : target.envelope, circular_path: coordinate ? '' : target.circularPath,

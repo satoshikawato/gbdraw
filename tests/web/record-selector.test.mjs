@@ -10,6 +10,7 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-record-selector-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 await cp(join(sourceRoot, 'linear-record-selector.js'), join(tempRoot, 'linear-record-selector.js'));
 await cp(join(sourceRoot, 'record-discovery.js'), join(tempRoot, 'record-discovery.js'));
+await cp(join(sourceRoot, 'record-options.js'), join(tempRoot, 'record-options.js'));
 
 const {
   AUTOMATIC_RECORD_OPTION_LABEL,
@@ -18,6 +19,7 @@ const {
   formatRecordLength
 } = await import(pathToFileURL(join(tempRoot, 'linear-record-selector.js')));
 const {
+  discoverGffFastaRecords,
   discoverSequenceRecords,
   normalizeSequenceRecords
 } = await import(pathToFileURL(join(tempRoot, 'record-discovery.js')));
@@ -48,6 +50,13 @@ assert.deepEqual(duplicateOptions.slice(1), [
   { value: '#1', label: 'RecA (1,234 bp) [#1]', synthetic: false },
   { value: '#2', label: 'RecA (1,100 bp) [#2]', synthetic: false }
 ]);
+assert.deepEqual(
+  buildRecordOptions([
+    { selector: '#1', recordId: 'null', recordLength: 10 },
+    { selector: '#2', recordId: '#named', recordLength: 20 }
+  ]).slice(1).map((option) => option.value),
+  ['#1', '#2']
+);
 
 const unmatchedOptions = buildRecordOptions(records, 'LegacyRec');
 assert.deepEqual(unmatchedOptions[1], {
@@ -101,6 +110,31 @@ assert.deepEqual(unlinkedPaths, ['/records.fa']);
 assert.equal(destroyed, true);
 assert.equal(stagedPaths.size, 0);
 
+const pairedPaths = new Set();
+const paired = await discoverGffFastaRecords({
+  gffFile: { name: 'records.gff' },
+  fastaFile: { name: 'records.fa' },
+  pyodide: {
+    globals: {
+      get: (name) => {
+        assert.equal(name, 'list_gff_fasta_records');
+        return () => JSON.stringify({
+          records: [{ selector: '#1', record_id: 'GffOwned', record_length: 25 }]
+        });
+      }
+    },
+    FS: { unlink: (path) => pairedPaths.delete(path) }
+  },
+  writeFileToFs: async (_file, path) => {
+    pairedPaths.add(path);
+    return true;
+  },
+  gffTemporaryPath: '/records.gff',
+  fastaTemporaryPath: '/records.fasta'
+});
+assert.equal(paired[0].recordId, 'GffOwned');
+assert.equal(pairedPaths.size, 0);
+
 const failedPaths = new Set();
 await assert.rejects(
   discoverSequenceRecords({
@@ -130,7 +164,7 @@ const state = {
   linearSeqs: [{ uid: 'row-a', gb: fileA, fasta: null, region_record_id: '' }]
 };
 const pending = new Map();
-const recordReader = ({ file }) => new Promise((resolve) => pending.set(file, resolve));
+const recordReader = ({ primaryFile }) => new Promise((resolve) => pending.set(primaryFile, resolve));
 const controller = createLinearRecordSelector({
   state,
   reactive: (value) => value,

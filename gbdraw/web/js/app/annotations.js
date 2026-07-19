@@ -1,9 +1,21 @@
 import { createAnnotationSet, normalizeAnnotationSets, uniqueAnnotationSetId } from './annotations/state.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
 import { parseAnnotationTable } from './annotations/table-codec.js';
+import {
+  createAnnotationRecordSelector,
+  reconcileAnnotationRecordBindings
+} from './annotations/record-selector.js';
 
-export const createAnnotationEditor = ({ state }) => {
-  const replaceSets = (sets) => state.annotationSets.splice(0, state.annotationSets.length, ...normalizeAnnotationSets(sets));
+export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
+  const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
+  const reconcileRecords = (sets = state.annotationSets) => {
+    reconcileAnnotationRecordBindings(sets, getRecordCatalog?.());
+    return sets;
+  };
+  const replaceSets = (sets) => {
+    state.annotationSets.splice(0, state.annotationSets.length, ...normalizeAnnotationSets(sets));
+    reconcileRecords();
+  };
   const addAnnotationSet = (base = 'annotations') => {
     const set = createAnnotationSet({ id: uniqueAnnotationSetId(state.annotationSets, base) });
     state.annotationSets.push(set);
@@ -42,6 +54,7 @@ export const createAnnotationEditor = ({ state }) => {
     const targets = featureTargetsFromSelection(state.selectedFeatures?.value ?? state.selectedFeatures ?? []);
     const items = targets.map((target, index) => ({ id: `feature_${set.annotations.length + index + 1}`, target, label: '', mark: 'bracket', lane: null, style: null, legendLabel: null, metadata: {} }));
     set.annotations.push(...items);
+    reconcileRecords(items.length ? [{ annotations: items }] : []);
     return items;
   };
   const removeAnnotation = (set, item) => {
@@ -50,9 +63,11 @@ export const createAnnotationEditor = ({ state }) => {
   };
   const setAnnotationTargetKind = (item, kind) => {
     if (!item) return;
+    const record = item.target?.record ?? null;
     item.target = kind === 'featureSpan'
       ? featureTarget({ selector: 'locus_tag=' })
       : coordinateTarget({ start: 1, end: 1 });
+    item.target.record = record;
   };
   const importAnnotationTable = (text) => replaceSets(parseAnnotationTable(text));
   const importAnnotationTableFile = async (event) => {
@@ -64,6 +79,14 @@ export const createAnnotationEditor = ({ state }) => {
   return {
     addAnnotationSet, renameAnnotationSet, duplicateAnnotationSet, removeAnnotationSet,
     addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, setAnnotationTargetKind,
-    importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets
+    importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
+    recordOptionsFor: recordSelector.optionsFor,
+    recordValueFor: recordSelector.valueFor,
+    setRecordValue: recordSelector.setValue,
+    recordIsRequired: recordSelector.isRequired,
+    recordIsMissing: recordSelector.isMissing,
+    recordIsDisabled: recordSelector.isDisabled,
+    recordMissingMessage: recordSelector.missingMessage,
+    reconcileRecordBindings: reconcileRecords
   };
 };

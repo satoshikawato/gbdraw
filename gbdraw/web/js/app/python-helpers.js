@@ -1350,6 +1350,32 @@ def list_sequence_records(path, format):
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
+def list_gff_fasta_records(gff_path, fasta_path):
+    """List records in the same FASTA order used by diagram generation."""
+    try:
+        from gbdraw.io.genome import load_gff_fasta
+        records = load_gff_fasta(
+            [gff_path],
+            [fasta_path],
+            "linear",
+            selected_features_set=(),
+            keep_all_features=False,
+            load_comparison=False,
+            record_selectors=[""],
+            reverse_flags=[False],
+        )
+        payload = [
+            {
+                "selector": f"#{idx + 1}",
+                "record_id": str(record.id or f"Record_{idx + 1}"),
+                "record_length": len(record.seq),
+            }
+            for idx, record in enumerate(records)
+        ]
+        return json.dumps({"records": payload})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
 def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
     """Generate SVG elements for a single legend entry"""
     from xml.sax.saxutils import escape as xml_escape
