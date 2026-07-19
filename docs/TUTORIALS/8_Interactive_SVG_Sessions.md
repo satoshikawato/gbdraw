@@ -43,6 +43,8 @@ Hover over a feature for a compact summary, or click it to open the **Details**,
 
 Interactive SVG embeds feature metadata for rendered features. Linear comparison plots can also include pairwise match metadata. Reuse the precomputed BLAST outfmt 7 table maintained in `examples/`:
 
+New exports use compact metadata schema v2. The browser reconstructs FASTA text and match-popup rows when needed, so qualifier display, sequence copy/download, search, and match popups remain available without storing duplicate pre-rendered values. Existing files that use schema v1 remain compatible with the embedded runtime and do not need conversion.
+
 ```bash
 cp examples/MjeNMV.MelaMJNV.tblastx.out .
 ```

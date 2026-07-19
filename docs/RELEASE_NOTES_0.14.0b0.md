@@ -38,6 +38,12 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 
 ## Behavior corrections
 
+### Interactive SVG search remains responsive on large diagrams
+
+Interactive SVG search now prepares reusable field indexes and updates only changed match elements. Applying or clearing a result set uses an SVG-root search state, suppresses bulk feature transitions for two animation frames, and no longer adds a dimmed class to every unmatched feature. Previous and next navigation updates only the old and new active feature parts. The web app preview uses the same difference-based rendering behavior.
+
+New interactive SVG exports use compact metadata schema v2. They omit precomputed FASTA text, deduplicate CDS amino-acid sequence when `qualifiers.translation` already contains it, and store raw match fields instead of expanded popup rows. The embedded runtime derives those views on demand and continues to read schema v1 payloads. Existing standalone v1 files remain unchanged and self-contained.
+
 ### Collinearity anchor mode is now honored
 
 Previously, `DiagramOptions.collinearity_anchor_mode` accepted `all`,

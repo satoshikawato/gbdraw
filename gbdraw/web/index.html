@@ -647,6 +647,18 @@
         .preview-feature-search.is-invalid .gfs-button--search {
             box-shadow: none;
         }
+        .gbdraw-preview-feature-search-results-active [data-gbdraw-feature-id]:not(.gbdraw-preview-feature-search-match),
+        .gbdraw-preview-feature-search-results-active path[id^="f"]:not(.gbdraw-preview-feature-search-match),
+        .gbdraw-preview-feature-search-results-active polygon[id^="f"]:not(.gbdraw-preview-feature-search-match),
+        .gbdraw-preview-feature-search-results-active rect[id^="f"]:not(.gbdraw-preview-feature-search-match) {
+            opacity: 0.18;
+        }
+        .gbdraw-preview-feature-search-updating [data-gbdraw-feature-id],
+        .gbdraw-preview-feature-search-updating path[id^="f"],
+        .gbdraw-preview-feature-search-updating polygon[id^="f"],
+        .gbdraw-preview-feature-search-updating rect[id^="f"] {
+            transition: none !important;
+        }
         .gbdraw-preview-feature-search-dimmed {
             opacity: 0.18;
             transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease;

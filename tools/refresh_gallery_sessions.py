@@ -29,12 +29,12 @@ GALLERY_SESSION_FILES = (
     "HmmtDNA_basic_circular.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
     "tobacco-chloroplast.gbdraw-session.json",
-    "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
+    "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
     "WSSV_genome_comparison.gbdraw-session.json",
-    "hepatoplasmataceae_collinear.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json",
-    "majanivirus_orthogroup.gbdraw-session.json",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+    "majanivirus_orthogroup.gbdraw-session.json.gz",
     "lambda_basic_linear.gbdraw-session.json",
 )
 

@@ -289,7 +289,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
             "viewport": {
               "width": 1280,
               "height": 900

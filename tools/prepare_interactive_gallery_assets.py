@@ -25,6 +25,10 @@ EXAMPLE_ROOT = GALLERY_ROOT / "examples"
 SESSION_ROOT = GALLERY_ROOT / "sessions"
 SOURCE_ROOT = GALLERY_ROOT / "sources"
 THUMBNAIL_ROOT = GALLERY_ROOT / "thumbnails"
+GZIP_SESSION_SOURCE_NOTE = (
+    "The complete gzip-compressed Session JSON and generated SVG output are stored "
+    "with the gallery assets."
+)
 
 GENOME_SUFFIXES = (".gb", ".gbk", ".gbff")
 _RENDERED_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
@@ -256,6 +260,8 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=50,
         command_kind="runnable",
         command_note="Download the pinned RefSeq assembly named in Files; no sequence search is required.",
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_collinear",
@@ -267,6 +273,8 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=60,
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
@@ -289,7 +297,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         sync_result_svg=False,
         interactive_svg=False,
         compressed_session=True,
-        source_note="The complete gzip-compressed Session JSON and generated SVG output are stored with the gallery assets.",
+        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_orthogroup",
@@ -301,6 +309,8 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=70,
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The CLI value remains orthogroup for compatibility.",
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="BGC0000708-BGC0000713",
@@ -324,6 +334,8 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=90,
         command_kind="runnable",
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="WSSV_genome_comparison",

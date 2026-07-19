@@ -3,6 +3,7 @@ import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js');
@@ -257,7 +258,11 @@ const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];
   assert.ok(sessionPath, '--project-session requires a path');
-  const session = JSON.parse(await readFile(sessionPath, 'utf8'));
+  const sessionBytes = await readFile(sessionPath);
+  const sessionText = sessionBytes[0] === 0x1f && sessionBytes[1] === 0x8b
+    ? gunzipSync(sessionBytes).toString('utf8')
+    : sessionBytes.toString('utf8');
+  const session = JSON.parse(sessionText);
   const projectedSession = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources

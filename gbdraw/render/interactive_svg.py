@@ -21,6 +21,7 @@ INTERACTIVE_STYLE_ID = "gbdraw-interactive-feature-style"
 INTERACTIVE_SCRIPT_ID = "gbdraw-interactive-feature-script"
 INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
+INTERACTIVE_SCHEMA = "gbdraw-interactive-feature-popup-v2"
 
 _FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
 _FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
@@ -73,7 +74,31 @@ def _add_class_token(element: ET.Element, token: str) -> None:
     tokens = [item for item in str(element.get("class") or "").split() if item]
     if token not in tokens:
         tokens.append(token)
-    element.set("class", " ".join(tokens))
+        element.set("class", " ".join(tokens))
+
+
+def _remove_class_token(element: ET.Element, token: str) -> None:
+    tokens = [item for item in str(element.get("class") or "").split() if item != token]
+    if tokens:
+        element.set("class", " ".join(tokens))
+    else:
+        element.attrib.pop("class", None)
+
+
+def _compact_wire_value(value: object) -> object | None:
+    if isinstance(value, Mapping):
+        compact = {
+            str(key): normalized
+            for key, entry in value.items()
+            if (normalized := _compact_wire_value(entry)) is not None
+        }
+        return compact or None
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        items = [normalized for entry in value if (normalized := _compact_wire_value(entry)) is not None]
+        return items or None
+    if value is None or value == "" or value is False:
+        return None
+    return value
 
 
 def _normalize_feature_id(value: object | None) -> str:
@@ -481,22 +506,22 @@ def _normalize_orthogroup_member(member: object | None) -> dict[str, object] | N
     start = _number_or_none(member.get("start"))
     end = _number_or_none(member.get("end"))
     return {
-        "orthogroupId": _first_text(member.get("orthogroupId"), member.get("orthogroup_id")),
-        "proteinId": _first_text(member.get("proteinId"), member.get("protein_id")),
-        "sourceProteinId": _first_text(member.get("sourceProteinId"), member.get("source_protein_id")),
-        "recordIndex": record_index,
-        "recordId": _first_text(member.get("recordId"), member.get("record_id")),
-        "featureIndex": feature_index,
+        "orthogroup_id": _first_text(member.get("orthogroupId"), member.get("orthogroup_id")),
+        "protein_id": _first_text(member.get("proteinId"), member.get("protein_id")),
+        "source_protein_id": _first_text(member.get("sourceProteinId"), member.get("source_protein_id")),
+        "record_index": record_index,
+        "record_id": _first_text(member.get("recordId"), member.get("record_id")),
+        "feature_index": feature_index,
         "label": _first_text(member.get("label")),
-        "featureSvgId": _first_text(member.get("featureSvgId"), member.get("feature_svg_id")),
+        "feature_svg_id": _first_text(member.get("featureSvgId"), member.get("feature_svg_id")),
         "start": start,
         "end": end,
         "strand": _strand_symbol(member.get("strand")),
         "representative": bool(member.get("representative")),
         "gene": _first_text(member.get("gene")),
-        "locusTag": _first_text(member.get("locusTag"), member.get("locus_tag")),
-        "geneId": _first_text(member.get("geneId"), member.get("gene_id")),
-        "oldLocusTag": _first_text(member.get("oldLocusTag"), member.get("old_locus_tag")),
+        "locus_tag": _first_text(member.get("locusTag"), member.get("locus_tag")),
+        "gene_id": _first_text(member.get("geneId"), member.get("gene_id")),
+        "old_locus_tag": _first_text(member.get("oldLocusTag"), member.get("old_locus_tag")),
         "product": _first_text(member.get("product")),
         "note": _first_text(member.get("note")),
     }
@@ -508,9 +533,18 @@ def _normalize_orthogroup_candidate(candidate: object | None) -> dict[str, objec
     return {
         "text": _first_text(candidate.get("text")),
         "source": _first_text(candidate.get("source")),
-        "memberCount": _int_or_none(candidate.get("memberCount")) or 0,
-        "recordCoverageCount": _int_or_none(candidate.get("recordCoverageCount")) or 0,
-        "representativeCount": _int_or_none(candidate.get("representativeCount")) or 0,
+        "member_count": _int_or_none(
+            _first_text(candidate.get("memberCount"), candidate.get("member_count"))
+        )
+        or 0,
+        "record_coverage_count": _int_or_none(
+            _first_text(candidate.get("recordCoverageCount"), candidate.get("record_coverage_count"))
+        )
+        or 0,
+        "representative_count": _int_or_none(
+            _first_text(candidate.get("representativeCount"), candidate.get("representative_count"))
+        )
+        or 0,
         "score": _number_or_none(candidate.get("score")) or 0,
     }
 
@@ -550,9 +584,9 @@ def _orthogroup_payloads(
         member_count = _int_or_none(_first_text(group.get("member_count"), group.get("memberCount"))) or len(members)
         record_coverage_fallback = len(
             {
-                member.get("recordIndex")
+                member.get("record_index")
                 for member in members
-                if isinstance(member.get("recordIndex"), int)
+                if isinstance(member.get("record_index"), int)
             }
         )
         record_coverage_count = (
@@ -562,7 +596,7 @@ def _orthogroup_payloads(
             or record_coverage_fallback
             or 0
         )
-        raw_candidates = group.get("nameCandidates")
+        raw_candidates = group.get("nameCandidates") or group.get("name_candidates")
         raw_candidate_list = (
             raw_candidates
             if isinstance(raw_candidates, Sequence) and not isinstance(raw_candidates, (str, bytes))
@@ -588,8 +622,10 @@ def _orthogroup_payloads(
                 "name": _first_text(group.get("name")),
                 "display_name": display_name,
                 "description": _first_text(group.get("description")),
-                "nameConfidence": _first_text(group.get("nameConfidence")),
-                "nameCandidates": candidates,
+                "name_confidence": _first_text(
+                    group.get("nameConfidence"), group.get("name_confidence")
+                ),
+                "name_candidates": candidates,
                 "member_count": member_count,
                 "record_coverage_count": record_coverage_count,
                 "members": members,
@@ -609,7 +645,6 @@ def _fallback_feature_payload(svg_id: str, entry: _RenderedFeatureEntry) -> dict
     return {
         "svg_id": svg_id,
         "stable_svg_id": stable_svg_id,
-        "stable_feature_id": stable_svg_id,
         "label": label,
         "display_label": label,
         "search_labels": search_labels,
@@ -674,7 +709,15 @@ def _feature_payloads(
             if isinstance(orthogroup_entry, Mapping)
             else None
         )
-        sequence_fastas = _build_feature_sequence_fastas(feature)
+        qualifiers = _normalize_qualifier_map(feature.get("qualifiers"))
+        amino_acid_sequence = _first_text(
+            feature.get("amino_acid_sequence"),
+            feature.get("aminoAcidSequence"),
+        )
+        translation = next(
+            (value for value in _normalize_string_array(qualifiers.get("translation")) if value.strip()),
+            "",
+        )
         payload = {
             "svg_id": svg_id,
             "stable_svg_id": _first_text(
@@ -738,29 +781,26 @@ def _feature_payloads(
         if popup_mode == "rich":
             payload.update(
                 {
-                    "qualifiers": _normalize_qualifier_map(feature.get("qualifiers")),
+                    "qualifiers": qualifiers,
                     "location_parts": _normalize_location_parts(feature.get("location_parts")),
                     "nucleotide_sequence": _first_text(
                         feature.get("nucleotide_sequence"),
                         feature.get("nucleotideSequence"),
                     ),
-                    "amino_acid_sequence": _first_text(
-                        feature.get("amino_acid_sequence"),
-                        feature.get("aminoAcidSequence"),
+                    "amino_acid_sequence": (
+                        amino_acid_sequence if amino_acid_sequence != translation else ""
                     ),
                     "sequence_warnings": _normalize_string_array(feature.get("sequence_warnings")),
-                    "nucleotide_fasta": sequence_fastas["nucleotideFasta"],
-                    "amino_acid_fasta": sequence_fastas["aminoAcidFasta"],
                     "orthogroup_member": orthogroup_member,
                 }
             )
-        payloads.append(payload)
+        payloads.append(dict(_compact_wire_value(payload) or {}))
 
     for svg_id, entry in rendered.items():
         if svg_id in seen:
             continue
         seen.add(svg_id)
-        payloads.append(_fallback_feature_payload(svg_id, entry))
+        payloads.append(dict(_compact_wire_value(_fallback_feature_payload(svg_id, entry)) or {}))
 
     feature_ids = {str(feature.get("svg_id") or "").strip() for feature in payloads}
     for element in root.iter():
@@ -1537,7 +1577,7 @@ def _match_section(title: str, rows: Sequence[Sequence[str]], **extras: object) 
     return section
 
 
-def _match_payload(
+def _match_payload_v1(
     element: ET.Element,
     index: int,
     *,
@@ -1810,26 +1850,67 @@ def _match_payload(
     }
 
 
+def _match_payload_v2(element: ET.Element, index: int) -> dict[str, object]:
+    match_id = _first_text(element.get("data-gbdraw-pairwise-match-id"))
+    if not match_id:
+        match_id = f"pairwise_match_{index + 1}"
+        element.set("data-gbdraw-pairwise-match-id", match_id)
+    payload = {
+        "id": match_id,
+        "match_kind": _match_kind(element),
+        "orthogroup_ids": _unique_metadata_values(element.get("data-orthogroup-id")),
+        "collinearity_block_id": _first_text(element.get("data-collinearity-block-id")),
+        "fill": _first_text(element.get("fill"), "#94a3b8"),
+        "query_record_id": _first_text(
+            element.get("data-query-record-id"), element.get("data-query")
+        ),
+        "subject_record_id": _first_text(
+            element.get("data-subject-record-id"), element.get("data-subject")
+        ),
+        "qstart": _first_text(element.get("data-qstart")),
+        "qend": _first_text(element.get("data-qend")),
+        "sstart": _first_text(element.get("data-sstart")),
+        "send": _first_text(element.get("data-send")),
+        "orientation": _first_text(
+            element.get("data-collinearity-orientation"), element.get("data-orientation")
+        ),
+        "identity": _first_text(element.get("data-identity")),
+        "alignment_length": _first_text(element.get("data-alignment-length")),
+        "evalue": _first_text(element.get("data-evalue")),
+        "bitscore": _first_text(element.get("data-bitscore")),
+        "mismatches": _first_text(element.get("data-mismatches")),
+        "gap_opens": _first_text(element.get("data-gap-opens")),
+        "block_kind": _first_text(element.get("data-collinearity-block-kind")),
+        "collinear_group_scope": _first_text(element.get("data-collinear-group-scope")),
+        "group_kind": _first_text(element.get("data-group-kind")),
+        "block_color_mode": _first_text(element.get("data-collinearity-color-mode")),
+        "block_score": _first_text(element.get("data-collinearity-block-score")),
+        "block_evalue": _first_text(element.get("data-collinearity-block-evalue")),
+        "anchor_index": _first_text(element.get("data-collinearity-anchor-index")),
+        "anchor_count": _first_text(element.get("data-collinearity-anchor-count")),
+        "query_feature_svg_id": _first_text(element.get("data-query-feature-svg-id")),
+        "subject_feature_svg_id": _first_text(element.get("data-subject-feature-svg-id")),
+        "query_protein_id": _first_text(element.get("data-query-protein-id")),
+        "subject_protein_id": _first_text(element.get("data-subject-protein-id")),
+        "query_locus_id": _first_text(element.get("data-query-locus-id")),
+        "subject_locus_id": _first_text(element.get("data-subject-locus-id")),
+        "query_display_name": _first_text(element.get("data-query-display-name")),
+        "subject_display_name": _first_text(element.get("data-subject-display-name")),
+    }
+    return dict(_compact_wire_value(payload) or {})
+
+
 def _match_payloads(
     root: ET.Element,
     features: Sequence[Mapping[str, object]],
     orthogroups: Sequence[Mapping[str, object]],
 ) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
-    features_by_id = _feature_lookup(features)
-    orthogroups_by_id = _orthogroup_lookup(orthogroups)
     for element in root.iter():
         if not _is_match_candidate(element):
             continue
         payloads.append(
-            _match_payload(
-                element,
-                len(payloads),
-                features=features,
-                features_by_id=features_by_id,
-                orthogroups=orthogroups,
-                orthogroups_by_id=orthogroups_by_id,
-            )
+            _match_payload_v2(element, len(payloads))
         )
         element.set("data-gbdraw-interactive-match", "true")
         _add_class_token(element, "gbdraw-interactive-pairwise-match")
@@ -2080,6 +2161,12 @@ def enrich_svg(
 
     style_source, script_source = _load_standalone_assets()
     _remove_existing_assets(root)
+    _remove_class_token(root, "gbdraw-feature-search-active")
+    _remove_class_token(root, "gbdraw-feature-search-updating")
+    for element in root.iter():
+        _remove_class_token(element, "gbdraw-interactive-feature--dimmed")
+        _remove_class_token(element, "gbdraw-interactive-feature--match")
+        _remove_class_token(element, "gbdraw-interactive-feature--active-match")
     features = _feature_payloads(root, context)
     orthogroups = _orthogroup_payloads(features, context)
     matches = _match_payloads(root, features, orthogroups)
@@ -2120,14 +2207,16 @@ def enrich_svg(
 
     try:
         metadata_payload = json.dumps(
-            {
-                "schema": "gbdraw-interactive-feature-popup-v1",
-                "popup_mode": popup_mode,
-                "features": features,
-                "orthogroups": orthogroups,
-                "matches": matches,
-                "annotations": annotations,
-            },
+            _compact_wire_value(
+                {
+                    "schema": INTERACTIVE_SCHEMA,
+                    "popup_mode": popup_mode,
+                    "features": features,
+                    "orthogroups": orthogroups,
+                    "matches": matches,
+                    "annotations": annotations,
+                }
+            ),
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -2138,7 +2227,7 @@ def enrich_svg(
 
     metadata = ET.SubElement(root, _svg_tag("metadata"))
     metadata.set("id", INTERACTIVE_METADATA_ID)
-    metadata.set("data-schema", "gbdraw-interactive-feature-popup-v1")
+    metadata.set("data-schema", INTERACTIVE_SCHEMA)
     metadata.set("data-popup-mode", popup_mode)
     metadata.text = metadata_payload
 

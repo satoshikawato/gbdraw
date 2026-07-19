@@ -1,4 +1,3 @@
-import { buildFeatureSequenceFastas } from '../app/feature-sequence-fasta.js';
 import { normalizeStringArray } from '../app/feature-utils.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
@@ -24,6 +23,24 @@ const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
 const INTERACTIVE_GLOW_FILTER_ID = 'gbdraw-interactive-feature-glow';
 const INTERACTIVE_MATCH_GLOW_FILTER_ID = 'gbdraw-interactive-feature-match-glow';
 const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
+const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
+
+const compactWireValue = (value) => {
+  if (Array.isArray(value)) {
+    const items = value.map(compactWireValue).filter((item) => item !== undefined);
+    return items.length ? items : undefined;
+  }
+  if (value && typeof value === 'object') {
+    const compact = {};
+    Object.entries(value).forEach(([key, entry]) => {
+      const normalized = compactWireValue(entry);
+      if (normalized !== undefined) compact[key] = normalized;
+    });
+    return Object.keys(compact).length ? compact : undefined;
+  }
+  if (value === null || value === undefined || value === '' || value === false) return undefined;
+  return value;
+};
 
 const normalizeFeatureElementId = (value) =>
   String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
@@ -265,24 +282,24 @@ const normalizeStandaloneOrthogroupMember = (member) => {
   const end = Number(member.end);
   const recordIndex = Number(member.recordIndex ?? member.record_index);
   return {
-    orthogroupId: String(member.orthogroupId || member.orthogroup_id || ''),
-    proteinId: String(member.proteinId || member.protein_id || ''),
-    sourceProteinId: String(member.sourceProteinId || member.source_protein_id || ''),
-    recordIndex: Number.isInteger(recordIndex) ? recordIndex : null,
-    recordId: String(member.recordId || member.record_id || ''),
-    featureIndex: Number.isFinite(Number(member.featureIndex ?? member.feature_index))
+    orthogroup_id: String(member.orthogroupId || member.orthogroup_id || ''),
+    protein_id: String(member.proteinId || member.protein_id || ''),
+    source_protein_id: String(member.sourceProteinId || member.source_protein_id || ''),
+    record_index: Number.isInteger(recordIndex) ? recordIndex : null,
+    record_id: String(member.recordId || member.record_id || ''),
+    feature_index: Number.isFinite(Number(member.featureIndex ?? member.feature_index))
       ? Number(member.featureIndex ?? member.feature_index)
       : null,
     label: String(member.label || ''),
-    featureSvgId: String(member.featureSvgId || member.feature_svg_id || ''),
+    feature_svg_id: String(member.featureSvgId || member.feature_svg_id || ''),
     start: Number.isFinite(start) ? start : null,
     end: Number.isFinite(end) ? end : null,
     strand: String(member.strand || ''),
     representative: Boolean(member.representative),
     gene: String(member.gene || ''),
-    locusTag: String(member.locusTag || member.locus_tag || ''),
-    geneId: String(member.geneId || member.gene_id || ''),
-    oldLocusTag: String(member.oldLocusTag || member.old_locus_tag || ''),
+    locus_tag: String(member.locusTag || member.locus_tag || ''),
+    gene_id: String(member.geneId || member.gene_id || ''),
+    old_locus_tag: String(member.oldLocusTag || member.old_locus_tag || ''),
     product: String(member.product || ''),
     note: String(member.note || '')
   };
@@ -293,9 +310,9 @@ const normalizeStandaloneOrthogroupCandidate = (candidate) => {
   return {
     text: String(candidate.text || ''),
     source: String(candidate.source || ''),
-    memberCount: Number.isFinite(Number(candidate.memberCount)) ? Number(candidate.memberCount) : 0,
-    recordCoverageCount: Number.isFinite(Number(candidate.recordCoverageCount)) ? Number(candidate.recordCoverageCount) : 0,
-    representativeCount: Number.isFinite(Number(candidate.representativeCount)) ? Number(candidate.representativeCount) : 0,
+    member_count: Number.isFinite(Number(candidate.memberCount ?? candidate.member_count)) ? Number(candidate.memberCount ?? candidate.member_count) : 0,
+    record_coverage_count: Number.isFinite(Number(candidate.recordCoverageCount ?? candidate.record_coverage_count)) ? Number(candidate.recordCoverageCount ?? candidate.record_coverage_count) : 0,
+    representative_count: Number.isFinite(Number(candidate.representativeCount ?? candidate.representative_count)) ? Number(candidate.representativeCount ?? candidate.representative_count) : 0,
     score: Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : 0
   };
 };
@@ -330,7 +347,7 @@ const buildStandaloneOrthogroupPayloads = (features, context) => {
       const memberCount = Number(group?.member_count || group?.memberCount || members.length || 0);
       const recordCoverageFallback = new Set(
         members
-          .map((member) => Number(member.recordIndex))
+          .map((member) => Number(member.record_index))
           .filter((recordIndex) => Number.isInteger(recordIndex))
       ).size;
       const recordCoverageCount = Number(group?.record_coverage_count || group?.recordCoverageCount || recordCoverageFallback || 0);
@@ -339,9 +356,9 @@ const buildStandaloneOrthogroupPayloads = (features, context) => {
         name: String(group?.name || ''),
         display_name: getStandaloneOrthogroupDisplayName(group, context),
         description: getStandaloneOrthogroupDescription(group, context),
-        nameConfidence: String(group?.nameConfidence || ''),
-        nameCandidates: Array.isArray(group?.nameCandidates)
-          ? group.nameCandidates.map(normalizeStandaloneOrthogroupCandidate).filter(Boolean)
+        name_confidence: String(group?.nameConfidence || group?.name_confidence || ''),
+        name_candidates: Array.isArray(group?.nameCandidates || group?.name_candidates)
+          ? (group.nameCandidates || group.name_candidates).map(normalizeStandaloneOrthogroupCandidate).filter(Boolean)
           : [],
         member_count: Number.isFinite(memberCount) ? memberCount : members.length,
         record_coverage_count: Number.isFinite(recordCoverageCount) ? recordCoverageCount : 0,
@@ -486,7 +503,9 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
     const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel, context);
     const orthogroupEntry = getStandaloneFeatureOrthogroupEntry(feature, context);
     const orthogroupMember = normalizeStandaloneOrthogroupMember(orthogroupEntry?.orthogroupMember);
-    const sequenceFastas = buildFeatureSequenceFastas(feature);
+    const qualifiers = normalizeQualifierMap(feature?.qualifiers);
+    const aminoAcidSequence = String(feature?.amino_acid_sequence || '');
+    const translation = normalizeStringArray(qualifiers.translation).find((value) => value.trim()) || '';
     const payload = {
       svg_id: svgId,
       label: fallbackLabel,
@@ -521,24 +540,24 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
     };
     if (normalizedPopupMode === 'rich') {
       Object.assign(payload, {
-        qualifiers: normalizeQualifierMap(feature?.qualifiers),
+        qualifiers,
         location_parts: normalizeLocationParts(feature?.location_parts),
         nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
-        amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
+        amino_acid_sequence: aminoAcidSequence && aminoAcidSequence !== translation
+          ? aminoAcidSequence
+          : '',
         sequence_warnings: normalizeStringArray(feature?.sequence_warnings),
-        nucleotide_fasta: sequenceFastas.nucleotideFasta,
-        amino_acid_fasta: sequenceFastas.aminoAcidFasta,
         orthogroup_member: orthogroupMember
       });
     }
-    payloads.push(payload);
+    payloads.push(compactWireValue(payload));
   });
   if (payloads.length < renderedIds.size) {
     const captionsByColor = collectLegendCaptionsByColor(svg, context);
     renderedEntries.forEach((entry, svgId) => {
       if (seenIds.has(svgId)) return;
       seenIds.add(svgId);
-      payloads.push(buildFallbackStandaloneFeaturePayload(svgId, entry, captionsByColor));
+      payloads.push(compactWireValue(buildFallbackStandaloneFeaturePayload(svgId, entry, captionsByColor)));
     });
   }
   return payloads;
@@ -1077,7 +1096,7 @@ const buildStandaloneMatchFeatureSection = ({
   };
 };
 
-const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } = {}) => {
+const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] } = {}) => {
   if (!svg) return [];
   const featuresById = new Map();
   (Array.isArray(features) ? features : []).forEach((feature) => {
@@ -1274,6 +1293,62 @@ const buildStandaloneMatchPayloads = (svg, { features = [], orthogroups = [] } =
   });
 };
 
+const buildStandaloneMatchPayloads = (svg) => {
+  if (!svg) return [];
+  return Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR)).map((element, index) => {
+    let id = standaloneAttr(element, 'data-gbdraw-pairwise-match-id');
+    if (!id) {
+      id = `pairwise_match_${index + 1}`;
+      element.setAttribute('data-gbdraw-pairwise-match-id', id);
+    }
+    return compactWireValue({
+      id,
+      match_kind: standaloneMatchKind(element),
+      orthogroup_ids: uniqueStandaloneMetadataValues(standaloneAttr(element, 'data-orthogroup-id')),
+      collinearity_block_id: standaloneAttr(element, 'data-collinearity-block-id'),
+      fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
+      query_record_id: firstStandaloneText(
+        standaloneAttr(element, 'data-query-record-id'),
+        standaloneAttr(element, 'data-query')
+      ),
+      subject_record_id: firstStandaloneText(
+        standaloneAttr(element, 'data-subject-record-id'),
+        standaloneAttr(element, 'data-subject')
+      ),
+      qstart: standaloneAttr(element, 'data-qstart'),
+      qend: standaloneAttr(element, 'data-qend'),
+      sstart: standaloneAttr(element, 'data-sstart'),
+      send: standaloneAttr(element, 'data-send'),
+      orientation: firstStandaloneText(
+        standaloneAttr(element, 'data-collinearity-orientation'),
+        standaloneAttr(element, 'data-orientation')
+      ),
+      identity: standaloneAttr(element, 'data-identity'),
+      alignment_length: standaloneAttr(element, 'data-alignment-length'),
+      evalue: standaloneAttr(element, 'data-evalue'),
+      bitscore: standaloneAttr(element, 'data-bitscore'),
+      mismatches: standaloneAttr(element, 'data-mismatches'),
+      gap_opens: standaloneAttr(element, 'data-gap-opens'),
+      block_kind: standaloneAttr(element, 'data-collinearity-block-kind'),
+      collinear_group_scope: standaloneAttr(element, 'data-collinear-group-scope'),
+      group_kind: standaloneAttr(element, 'data-group-kind'),
+      block_color_mode: standaloneAttr(element, 'data-collinearity-color-mode'),
+      block_score: standaloneAttr(element, 'data-collinearity-block-score'),
+      block_evalue: standaloneAttr(element, 'data-collinearity-block-evalue'),
+      anchor_index: standaloneAttr(element, 'data-collinearity-anchor-index'),
+      anchor_count: standaloneAttr(element, 'data-collinearity-anchor-count'),
+      query_feature_svg_id: standaloneAttr(element, 'data-query-feature-svg-id'),
+      subject_feature_svg_id: standaloneAttr(element, 'data-subject-feature-svg-id'),
+      query_protein_id: standaloneAttr(element, 'data-query-protein-id'),
+      subject_protein_id: standaloneAttr(element, 'data-subject-protein-id'),
+      query_locus_id: standaloneAttr(element, 'data-query-locus-id'),
+      subject_locus_id: standaloneAttr(element, 'data-subject-locus-id'),
+      query_display_name: standaloneAttr(element, 'data-query-display-name'),
+      subject_display_name: standaloneAttr(element, 'data-subject-display-name')
+    });
+  });
+};
+
 const appendStandaloneFeatureGlowFilter = (
   defs,
   {
@@ -1385,6 +1460,13 @@ const addClassToken = (element, token) => {
   element.setAttribute('class', Array.from(tokens).join(' '));
 };
 
+const removeClassToken = (element, token) => {
+  const existing = String(element.getAttribute('class') || '').trim();
+  const tokens = existing ? existing.split(/\s+/).filter((entry) => entry !== token) : [];
+  if (tokens.length) element.setAttribute('class', tokens.join(' '));
+  else element.removeAttribute('class');
+};
+
 const parseSvgViewBox = (value) => {
   const parts = String(value || '')
     .trim()
@@ -1443,6 +1525,14 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   const originalGeometry = resolveStandaloneOriginalGeometry(svg);
   const normalizedPopupMode = normalizeStandalonePopupMode(context.popupMode);
   removeExistingStandaloneInteractivityAssets(svg);
+  removeClassToken(svg, 'gbdraw-feature-search-active');
+  removeClassToken(svg, 'gbdraw-feature-search-updating');
+  svg.querySelectorAll('.gbdraw-interactive-feature--dimmed, .gbdraw-interactive-feature--match, .gbdraw-interactive-feature--active-match')
+    .forEach((element) => {
+      removeClassToken(element, 'gbdraw-interactive-feature--dimmed');
+      removeClassToken(element, 'gbdraw-interactive-feature--match');
+      removeClassToken(element, 'gbdraw-interactive-feature--active-match');
+    });
   const features = buildStandaloneFeaturePayloads(svg, {
     ...context,
     popupMode: normalizedPopupMode
@@ -1467,15 +1557,15 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
 
   const metadata = document.createElementNS(SVG_NS, 'metadata');
   metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
-  metadata.setAttribute('data-schema', 'gbdraw-interactive-feature-popup-v1');
+  metadata.setAttribute('data-schema', INTERACTIVE_SCHEMA);
   metadata.setAttribute('data-popup-mode', normalizedPopupMode);
-  metadata.textContent = JSON.stringify({
-    schema: 'gbdraw-interactive-feature-popup-v1',
+  metadata.textContent = JSON.stringify(compactWireValue({
+    schema: INTERACTIVE_SCHEMA,
     popup_mode: normalizedPopupMode,
     features,
     orthogroups,
     matches
-  });
+  }));
 
   const style = document.createElementNS(SVG_NS, 'style');
   style.setAttribute('id', INTERACTIVE_STYLE_ID);
