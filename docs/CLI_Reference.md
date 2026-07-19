@@ -1019,6 +1019,25 @@ options:
                         true/false, yes/no.
 ```
 
+When a logical depth track has no file for one displayed record, keep that
+record's position with `''`, `-`, `none`, or `null`. The group must still
+contain at least one file. For example, these two logical tracks cover one
+record each:
+
+```bash
+gbdraw linear \
+  --gbk tests/test_inputs/AP027131.gb tests/test_inputs/AP027132.gb \
+  --depth_track tests/test_inputs/AP027131.DRR394921.depth.tsv '' \
+  --depth_track '' tests/test_inputs/AP027132.DRR394921.depth.tsv \
+  -o sparse-depth \
+  -f svg
+```
+
+The placeholder is a missing value, not a zero-coverage table. gbdraw omits
+the Depth group and quantitative axis for that record while preserving the
+logical track index used by labels, colors, shared axes, and custom track
+slots.
+
 For `--protein_blastp_mode`, gbdraw first uses a bundled native LOSAT binary
 when one is available. The current package bundles LOSAT for Linux x86_64.
 macOS and Windows packages do not currently include bundled LOSAT binaries; if

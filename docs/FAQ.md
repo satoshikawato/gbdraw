@@ -51,6 +51,20 @@ The most common causes are:
 
 See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
+## What if one record has no Depth TSV for a sample?
+
+Keep the record's position in the repeated `--depth_track` group with a quoted empty argument:
+
+```bash
+gbdraw linear \
+  --gbk record-a.gb record-b.gb \
+  --depth_track record-a.depth.tsv '' \
+  -o depth-partial \
+  -f svg
+```
+
+Use `--depth_track '' record-b.depth.tsv` when only the second record has data. The empty argument means that the logical series is missing for that record. gbdraw does not substitute another file or draw zero coverage, and each group must contain at least one real file. See [Plot read depth and other numeric tracks](./TUTORIALS/6_Depth_Quantitative_Tracks.md#3-compare-depth-across-records) for a runnable example.
+
 ## Why is my circular BLAST similarity ring empty?
 
 Check that the BLAST file is outfmt 6 or 7, the displayed circular record ID appears on the side selected by `--conservation_reference`, and the thresholds are not too strict. When BLAST was generated as `blastn -query comparison.fasta -subject reference.fasta`, use `--conservation_reference subject`.

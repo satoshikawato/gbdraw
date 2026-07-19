@@ -22,7 +22,7 @@ import {
   applyLinearTrackOrderPlacements,
   buildLinearTrackSlotSpec,
   clampLinearTrackAxisIndex,
-  linearDepthTrackCountForState,
+  linearTrackAxisIndexForEnabledSlots,
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
 } from './linear-track-slots.js';
@@ -33,6 +33,8 @@ import {
 import {
   depthFileSlotsFromValue,
   depthSlotTrackIndex,
+  depthTrackCoverageCount,
+  depthTrackMatrixWidth,
   syncDepthSlotLabels
 } from './depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
@@ -1505,7 +1507,20 @@ json.dumps({
   };
 
   const validateDepthInputPresence = () => {
-    if (!form.show_depth) return '';
+    const customDepthRequested = mode.value === 'linear'
+      ? (
+          adv.linear_track_slots_enabled === true &&
+          (Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : []).some((slot) => (
+            slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
+          ))
+        )
+      : (
+          adv.circular_track_slots_enabled === true &&
+          (Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : []).some((slot) => (
+            slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
+          ))
+        );
+    if (!form.show_depth && !customDepthRequested) return '';
     const depthFileSlots = (value) => (Array.isArray(value) ? value.slice() : (value ? [value] : []));
     const depthFiles = (value) => depthFileSlots(value).filter(Boolean);
     if (mode.value === 'circular') {
@@ -1513,12 +1528,14 @@ json.dumps({
     }
 
     const perRecordDepthFiles = linearSeqs.map((seq) => depthFileSlots(seq.depth));
-    const depthCount = perRecordDepthFiles.reduce(
-      (sum, items) => sum + items.filter(Boolean).length,
-      0
-    );
+    const depthCount = perRecordDepthFiles.reduce((sum, items) => sum + items.filter(Boolean).length, 0);
     if (depthCount === 0) {
       return 'Please upload at least one Depth TSV file or disable Show depth track.';
+    }
+    const logicalWidth = depthTrackMatrixWidth(perRecordDepthFiles);
+    for (let trackIndex = 0; trackIndex < logicalWidth; trackIndex += 1) {
+      if (depthTrackCoverageCount(perRecordDepthFiles, trackIndex) > 0) continue;
+      return `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no TSV source in any record. Add a TSV or remove the series.`;
     }
     return '';
   };
@@ -2120,14 +2137,14 @@ json.dumps({
         .filter(Boolean);
       const appendDepthTrackMetadataArgs = (trackEntries) => {
         if (!Array.isArray(trackEntries) || trackEntries.length === 0) return;
-        const labels = trackEntries.map((entry, outputIndex) => (
-          String(entry.config.label || getDepthTrackFallbackLabel(outputIndex))
+        const labels = trackEntries.map((entry) => (
+          String(entry.config.label || getDepthTrackFallbackLabel(entry.index))
         ));
         if (labels.some((label) => label.trim())) {
           args.push('--depth_track_label', ...labels);
         }
-        const colors = trackEntries.map((entry, outputIndex) => (
-          String(entry.config.color || (outputIndex === 0 ? adv.depth_color : '') || '#4A90E2')
+        const colors = trackEntries.map((entry) => (
+          String(entry.config.color || (entry.index === 0 ? adv.depth_color : '') || '#4A90E2')
         ));
         if (colors.some((color) => color.trim())) {
           args.push('--depth_track_color', ...colors);
@@ -2209,7 +2226,7 @@ json.dumps({
       };
       const linearDepthRepresentativeFiles = () => {
         const rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
-        const maxDepthTracks = Math.max(...rows.map((row) => row.length), 0);
+        const maxDepthTracks = depthTrackMatrixWidth(rows);
         return Array.from({ length: maxDepthTracks }, (_, trackIndex) => (
           rows.map((row) => row[trackIndex]).find(Boolean) || null
         ));
@@ -3052,11 +3069,17 @@ json.dumps({
           linearSlotNeedsDepth = linearTrackSlots.some(
             (slot) => slot.enabled !== false && slot.renderer === 'depth'
           );
-          const depthTrackCount = linearDepthTrackCountForState(state);
+          const depthTrackCount = depthTrackMatrixWidth(
+            linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth))
+          );
           let nextDepthIndex = 0;
           linearTrackSlots.forEach((slot) => {
             if (slot.renderer !== 'depth') return;
             slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+            if (slot.enabled === false && slot.depth_binding_error) {
+              delete slot.params.track_index;
+              return;
+            }
             const rawTrackIndex = Number(slot.params.track_index);
             if (!Number.isInteger(rawTrackIndex) || rawTrackIndex < 0) {
               slot.params.track_index = nextDepthIndex;
@@ -4234,16 +4257,20 @@ json.dumps({
           if (totalDepthFiles === 0) {
             throw new Error('Please upload at least one Depth TSV file or disable the depth track.');
           }
-          const maxDepthTracks = Math.max(...depthRows.map((row) => row.length), 0);
+          const maxDepthTracks = depthTrackMatrixWidth(depthRows);
           const depthTrackEntries = [];
           for (let depthTrackIndex = 0; depthTrackIndex < maxDepthTracks; depthTrackIndex += 1) {
             const entries = depthRows.map((row, idx) => ({ file: row[depthTrackIndex] || null, idx }));
             const presentEntries = entries.filter((entry) => Boolean(entry.file));
-            if (presentEntries.length === 0) continue;
+            if (presentEntries.length === 0) {
+              throw new Error(
+                `Depth series #${depthTrackIndex + 1} (logical track index ${depthTrackIndex}) has no TSV source in any record. Add a TSV or remove the series.`
+              );
+            }
             const depthPaths = [];
             for (const entry of entries) {
               if (entry.file) {
-                const depthPath = `/seq_${entry.idx}.depth_${depthTrackEntries.length + 1}.tsv`;
+                const depthPath = `/seq_${entry.idx}.depth_${depthTrackIndex + 1}.tsv`;
                 const rawDepthValue = linearSeqs[entry.idx]?.depth;
                 await stageUploadedFile(entry.file, depthPath, {
                   slot: Array.isArray(rawDepthValue)
@@ -4274,7 +4301,11 @@ json.dumps({
           }
         }
         if (useLinearTrackSlots) {
-          args.push('--linear_track_axis_index', String(linearTrackSlotAxisIndex));
+          const emittedAxisIndex = linearTrackAxisIndexForEnabledSlots(
+            linearTrackSlots,
+            linearTrackSlotAxisIndex
+          );
+          args.push('--linear_track_axis_index', String(emittedAxisIndex));
           linearTrackSlots
             .filter((slot) => slot.enabled !== false)
             .forEach((slot) => {

@@ -133,6 +133,8 @@ gbdraw linear \
 
 The axis index is the boundary in the slot list. Here the feature slot overlays boundary `0`, and the two later slots are placed below it.
 
+For a Depth slot, `track_index=0` selects the first repeated `--depth_track` group, `track_index=1` selects the second, and so on. Moving the slot above or below the axis changes its vertical position without changing the selected depth series. If that series has no file for one record, gbdraw omits the depth area, axis, and ticks for that record while retaining the slot band. See [Plot read depth and other numeric tracks](./6_Depth_Quantitative_Tracks.md#3-compare-depth-across-records) for an empty-placeholder example.
+
 ![Linear MjeNMV diagram with an overlay feature slot followed by custom-height GC content and GC skew slots](../../examples/tutorial-7-linear-track-slots.svg)
 
 Add a reusable annotation row with the same table used in Circular mode:

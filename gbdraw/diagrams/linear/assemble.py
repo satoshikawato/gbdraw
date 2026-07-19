@@ -27,7 +27,9 @@ from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     build_depth_track_dataframes,
     depth_track_count,
     depth_track_heights,
+    index_depth_track_row,
     normalize_depth_tracks,
+    representative_depth_tracks,
     sync_depth_track_legend_entries,
 )
 from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
@@ -148,7 +150,7 @@ def _prepare_linear_annotation_tracks(
         slots = default_linear_track_slots(
             show_features=True,
             show_depth=bool(record_depth_tracks),
-            depth_track_count=max((len(items) for items in (record_depth_tracks or ())), default=1),
+            depth_track_count=max(1, depth_track_count(record_depth_tracks)),
             show_gc=bool(canvas_config.show_gc),
             show_skew=bool(canvas_config.show_skew),
             track_layout=str(canvas_config.track_layout),
@@ -1117,6 +1119,10 @@ def assemble_linear_diagram(
         base_config=depth_config,
         depth_df_builder=build_depth_df,
     ) if depth_enabled else [[] for _ in records]
+    record_depth_by_index = [
+        index_depth_track_row(row, record_index=record_index)
+        for record_index, row in enumerate(record_depth_data)
+    ]
     if not depth_enabled:
         canvas_config.show_depth = False
         if linear_track_layout is None:
@@ -1158,8 +1164,10 @@ def assemble_linear_diagram(
             depth_config=depth_config if depth_enabled and depth_track_count(record_depth_tracks) == 1 else None,
         )
         if depth_enabled:
-            first_depth_row = next((row for row in record_depth_data if row), [])
-            legend_table = sync_depth_track_legend_entries(legend_table, first_depth_row)
+            legend_table = sync_depth_track_legend_entries(
+                legend_table,
+                representative_depth_tracks(record_depth_data),
+            )
         legend_table = _sync_legend_table_for_linear_slots(
             legend_table,
             linear_track_slots=normalized_linear_track_slots,
@@ -1739,6 +1747,11 @@ def assemble_linear_diagram(
     total_records = len(records)
     for count, record in enumerate(records, start=1):
         record_index = count - 1
+        depth_by_index = (
+            record_depth_by_index[record_index]
+            if record_index < len(record_depth_by_index)
+            else {}
+        )
         offset_y = record_offsets[record_index]
         record_placement = (
             multi_record_plan.placement_for_index(record_index)
@@ -1777,7 +1790,6 @@ def assemble_linear_diagram(
         )
 
         if linear_track_layout is not None:
-            shared_depth_tracks = record_depth_data[record_index] if record_index < len(record_depth_data) else []
             feature_rendered = False
 
             for slot in sorted(linear_track_layout.slots, key=lambda item: (item.z, item.slot_index)):
@@ -1854,11 +1866,9 @@ def assemble_linear_diagram(
                     continue
                 if slot.renderer == "depth":
                     track_index = int(slot.params.get("track_index", 0))
-                    if track_index < 0 or track_index >= len(shared_depth_tracks):
-                        raise ValueError(
-                            f"Depth slot '{slot.id}' track_index={track_index} is outside the available depth tracks."
-                        )
-                    depth_track = shared_depth_tracks[track_index]
+                    depth_track = depth_by_index.get(track_index)
+                    if depth_track is None:
+                        continue
                     group_id = _linear_depth_group_id(
                         slot.id or depth_track.id,
                         record_index=record_index,
@@ -2018,10 +2028,10 @@ def assemble_linear_diagram(
             gc_offset_y = offset_y + (current_feature_height_below - canvas_config.cds_padding)
         gc_offset_y += record_label_heights_below[record_index]
         shared_gc_df = record_gc_dfs[record_index] if record_index < len(record_gc_dfs) else None
-        shared_depth_tracks = record_depth_data[record_index] if record_index < len(record_depth_data) else []
 
         if depth_enabled:
-            for depth_track_index, depth_track in enumerate(shared_depth_tracks):
+            for depth_track_index in sorted(depth_by_index):
+                depth_track = depth_by_index[depth_track_index]
                 group_id = _linear_depth_group_id(
                     depth_track.id,
                     record_index=record_index,

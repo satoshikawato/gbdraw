@@ -249,11 +249,11 @@ def resolve_linear_track_layout(
         max(depth_heights_by_index.keys(), default=-1),
     ) + 1
     depth_track_offsets = tuple(
-        depth_offsets_by_index[index]
+        depth_offsets_by_index.get(index, 0.0)
         for index in range(depth_track_count)
     )
     depth_track_heights = tuple(
-        depth_heights_by_index[index]
+        depth_heights_by_index.get(index, 0.0)
         for index in range(depth_track_count)
     )
 

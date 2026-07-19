@@ -2552,8 +2552,11 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "updateDepthTrackLabelFromFile(idx, file, previousFile);" in app_setup_source
     assert "Depth TSV tracks" in index_html
     assert 'v-if="!hasCircularDepthFiles"' in index_html
-    assert 'v-if="!hasLinearDepthFiles(seq)"' in index_html
-    assert "Add TSV" in index_html
+    assert "linearDepthTrackCoverageLabel" in index_html
+    assert "Add series for all records" in index_html
+    assert "clearDepthTrackSourceAt" in app_setup_source
+    assert "removeDepthTrackColumnAt" in app_setup_source
+    assert "delete slot.depth_binding_error" in app_setup_source
     assert "Per-track settings" in index_html
     assert ':value="getDepthTrackLabel(track.index)"' in index_html
     assert '@input="setDepthTrackLabel(track.index, $event.target.value)"' in index_html

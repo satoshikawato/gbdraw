@@ -1,6 +1,6 @@
 import {
-  dropInvalidManagedDepthSlots,
-  uploadedDepthFileCount
+  depthTrackMatrixWidth,
+  dropInvalidManagedDepthSlots
 } from './depth-track-state.js';
 import { resolveColorToHex } from './color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
@@ -144,8 +144,7 @@ const defaultSlot = (renderer, overrides = {}) => {
 export const linearDepthTrackCountForState = (state) => {
   if (!Boolean(state?.form?.show_depth)) return 0;
   const seqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
-  const counts = seqs.map((seq) => uploadedDepthFileCount(seq?.depth));
-  return Math.max(0, ...counts);
+  return depthTrackMatrixWidth(seqs.map((seq) => seq?.depth));
 };
 
 export const createDefaultLinearTrackSlots = ({
@@ -248,6 +247,9 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
         id,
         renderer,
         enabled: slot.enabled !== false,
+        ...(slot.depth_binding_error
+          ? { depth_binding_error: String(slot.depth_binding_error) }
+          : {}),
         side: renderer !== 'features' && renderer !== 'annotations' && side === 'overlay' ? 'below' : side,
         height: normalizePxText(slot.height),
         spacing: normalizePxText(slot.spacing),
@@ -289,6 +291,15 @@ export const resolveLinearTrackAxisIndex = (slots, axisIndex = null) => {
   const normalizedSlots = Array.isArray(slots) ? slots : [];
   const clamped = clampLinearTrackAxisIndex(axisIndex, normalizedSlots.length);
   return clamped === null ? inferLinearTrackAxisIndexFromSlots(normalizedSlots) : clamped;
+};
+
+export const linearTrackAxisIndexForEnabledSlots = (slots, axisIndex = null) => {
+  const normalizedSlots = Array.isArray(slots) ? slots : [];
+  const resolvedAxis = resolveLinearTrackAxisIndex(normalizedSlots, axisIndex);
+  return normalizedSlots
+    .slice(0, resolvedAxis)
+    .filter((slot) => slot?.enabled !== false)
+    .length;
 };
 
 export const syncLinearSlotPlacementFromSide = (slot, placement) => {
@@ -803,7 +814,16 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     const managedDepthEntries = slots
       .map((slot, index) => ({ slot, index }))
       .filter((entry) => isDefaultManagedLinearSlot(entry.slot, 'depth'));
-    const claimed = new Set();
+    const claimed = new Set(
+      slots
+        .filter((slot) => (
+          normalizeRenderer(slot?.renderer) === 'depth' &&
+          slot?.enabled !== false &&
+          !isDefaultManagedLinearSlot(slot, 'depth')
+        ))
+        .map((slot) => normalizeTrackIndex(slot?.params?.track_index))
+        .filter((trackIndex) => trackIndex !== null && trackIndex < desiredCount)
+    );
     const removeIndexes = [];
     managedDepthEntries.forEach((entry) => {
       const trackIndex = normalizeTrackIndex(entry.slot?.params?.track_index);
@@ -815,6 +835,14 @@ export const createLinearTrackSlotEditor = ({ state }) => {
         removeIndexes.push(entry.index);
       }
     });
+    const previousAxisIndex = clampLinearTrackAxisIndex(
+      adv.linear_track_slots_axis_index,
+      slots.length
+    );
+    if (previousAxisIndex !== null) {
+      const removedBeforeAxis = removeIndexes.filter((index) => index < previousAxisIndex).length;
+      adv.linear_track_slots_axis_index = Math.max(0, previousAxisIndex - removedBeforeAxis);
+    }
     removeIndexes.sort((a, b) => b - a).forEach((index) => {
       slots.splice(index, 1);
     });

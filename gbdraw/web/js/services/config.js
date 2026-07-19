@@ -17,7 +17,10 @@ import {
 } from '../app/linear-track-slots.js';
 import {
   depthFileSlotsFromValue,
+  depthTrackMatrixWidth,
+  depthTrackSessionWidth,
   dropInvalidManagedDepthSlots,
+  padDepthFileSlots,
   reconcileDepthTracksToFiles,
   syncDepthSlotLabels,
   uploadedDepthFileCount
@@ -1897,36 +1900,43 @@ const applyFiles = (filesData) => {
   return { collapsedLinearSeqs: false };
 };
 
-const representativeLinearDepthFiles = () => {
-  const rows = state.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
-  const maxDepthTracks = Math.max(...rows.map((row) => row.length), 0);
-  return Array.from({ length: maxDepthTracks }, (_, trackIndex) => (
-    rows.map((row) => row[trackIndex]).find(Boolean) || null
-  ));
-};
-
 const reconcileDepthTrackStateAfterSessionFiles = () => {
   const circularDepthCount = uploadedDepthFileCount(state.files.c_depth);
-  const linearDepthCount = state.linearSeqs.reduce(
-    (maxCount, seq) => Math.max(maxCount, uploadedDepthFileCount(seq.depth)),
-    0
-  );
-  const targetDepthTrackCount = Math.max(1, circularDepthCount, linearDepthCount);
-  const depthFilesForTracks = circularDepthCount > 0
-    ? depthFileSlotsFromValue(state.files.c_depth).filter(Boolean)
-    : representativeLinearDepthFiles();
-  const normalizedTracks = reconcileDepthTracksToFiles({
-    files: depthFilesForTracks,
-    depthTracks: state.adv.depth_tracks,
-    targetCount: targetDepthTrackCount,
-    defaults: {
-      depthColor: state.adv.depth_color,
-      depthHeight: state.adv.depth_height,
-      largeTickInterval: state.adv.depth_tick_interval,
-      smallTickInterval: state.adv.depth_small_tick_interval,
-      tickFontSize: state.adv.depth_tick_font_size
+  const linearRows = state.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+  const linearDepthCount = state.mode.value === 'linear'
+    ? depthTrackSessionWidth({
+        rows: linearRows,
+        depthTracks: state.adv.depth_tracks,
+        slots: state.adv.linear_track_slots
+      })
+    : depthTrackMatrixWidth(linearRows);
+  if (state.mode.value === 'linear' && linearDepthCount > 0) {
+    state.linearSeqs.forEach((seq) => {
+      seq.depth = padDepthFileSlots(seq.depth, linearDepthCount);
+    });
+  }
+
+  const defaults = {
+    depthColor: state.adv.depth_color,
+    depthHeight: state.adv.depth_height,
+    largeTickInterval: state.adv.depth_tick_interval,
+    smallTickInterval: state.adv.depth_small_tick_interval,
+    tickFontSize: state.adv.depth_tick_font_size
+  };
+  let normalizedTracks;
+  if (state.mode.value === 'linear') {
+    normalizedTracks = normalizeDepthTracks(state.adv.depth_tracks, state.adv);
+    while (normalizedTracks.length < Math.max(1, linearDepthCount)) {
+      normalizedTracks.push(normalizeDepthTrackConfig(null, normalizedTracks.length, state.adv));
     }
-  });
+  } else {
+    normalizedTracks = reconcileDepthTracksToFiles({
+      files: depthFileSlotsFromValue(state.files.c_depth).filter(Boolean),
+      depthTracks: state.adv.depth_tracks,
+      targetCount: Math.max(1, circularDepthCount),
+      defaults
+    });
+  }
   state.adv.depth_tracks.splice(0, state.adv.depth_tracks.length, ...normalizedTracks);
 
   state.adv.circular_track_slots.splice(

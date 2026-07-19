@@ -5,7 +5,8 @@ from __future__ import annotations
 import copy
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
-from typing import Callable, Sequence
+from numbers import Integral
+from typing import Callable, Sequence, TypeVar
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -22,6 +23,7 @@ class DepthTrackSpec:
     id: str
     label: str
     table: DataFrame
+    track_index: int = 0
     fill_color: str | None = None
     height: float | None = None
     large_tick_interval: float | None = None
@@ -37,10 +39,12 @@ class DepthTrackData:
     label: str
     df: DataFrame
     config: DepthConfigurator
+    track_index: int = 0
     height: float | None = None
 
 
 DepthDfBuilder = Callable[..., DataFrame]
+DepthTrack = TypeVar("DepthTrack", DepthTrackSpec, DepthTrackData)
 
 
 def _has_any(values: Sequence[object | None]) -> bool:
@@ -233,6 +237,7 @@ def _tracks_from_record_major_values(
                     id=track_ids[track_index],
                     label=str(track_labels[track_index] or _default_depth_track_labels(track_count)[track_index]),
                     table=table,
+                    track_index=track_index,
                     fill_color=track_colors[track_index],
                     height=track_heights[track_index],
                     large_tick_interval=track_large_tick_intervals[track_index],
@@ -367,19 +372,64 @@ def normalize_depth_tracks(
     )
 
 
+def index_depth_track_row(
+    row: Sequence[DepthTrack],
+    *,
+    record_index: int | None = None,
+) -> dict[int, DepthTrack]:
+    """Index one sparse record row by logical depth track index."""
+
+    indexed: dict[int, DepthTrack] = {}
+    record_context = "" if record_index is None else f" for record {record_index}"
+    for track in row:
+        raw_index = track.track_index
+        if isinstance(raw_index, bool) or not isinstance(raw_index, Integral):
+            raise ValidationError(
+                f"Depth track{record_context} has non-integer track_index={raw_index!r}."
+            )
+        track_index = int(raw_index)
+        if track_index < 0:
+            raise ValidationError(
+                f"Depth track{record_context} has negative track_index={track_index}."
+            )
+        if track_index in indexed:
+            raise ValidationError(
+                f"Depth track row{record_context} contains duplicate track_index={track_index}."
+            )
+        indexed[track_index] = track
+    return indexed
+
+
+def _logical_depth_track_count(
+    record_depth_tracks: Sequence[Sequence[DepthTrack]] | None,
+) -> int:
+    indices = depth_track_indices(record_depth_tracks)
+    return (indices[-1] + 1) if indices else 0
+
+
+def depth_track_indices(
+    record_depth_tracks: Sequence[Sequence[DepthTrack]] | None,
+) -> tuple[int, ...]:
+    """Return all present logical depth track indices in ascending order."""
+
+    indices: set[int] = set()
+    for record_index, row in enumerate(record_depth_tracks or ()):
+        indexed = index_depth_track_row(row, record_index=record_index)
+        indices.update(indexed)
+    return tuple(sorted(indices))
+
+
 def depth_track_count(record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None) -> int:
-    if not record_depth_tracks:
-        return 0
-    return max((len(row) for row in record_depth_tracks), default=0)
+    return _logical_depth_track_count(record_depth_tracks)
 
 
 def depth_track_heights(
     record_depth_tracks: Sequence[Sequence[DepthTrackSpec]] | None,
 ) -> list[float | None]:
     heights: list[float | None] = [None for _ in range(depth_track_count(record_depth_tracks))]
-    for row in record_depth_tracks or ():
-        for track_index, spec in enumerate(row):
-            if track_index >= len(heights) or heights[track_index] is not None:
+    for record_index, row in enumerate(record_depth_tracks or ()):
+        for track_index, spec in index_depth_track_row(row, record_index=record_index).items():
+            if heights[track_index] is not None:
                 continue
             if spec.height is not None:
                 heights[track_index] = float(spec.height)
@@ -387,9 +437,19 @@ def depth_track_heights(
 
 
 def depth_track_data_count(record_depth_tracks: Sequence[Sequence[DepthTrackData]] | None) -> int:
-    if not record_depth_tracks:
-        return 0
-    return max((len(row) for row in record_depth_tracks), default=0)
+    return _logical_depth_track_count(record_depth_tracks)
+
+
+def representative_depth_tracks(
+    record_depth_tracks: Sequence[Sequence[DepthTrackData]] | None,
+) -> list[DepthTrackData]:
+    """Return the first present data item for every logical depth track."""
+
+    representatives: dict[int, DepthTrackData] = {}
+    for record_index, row in enumerate(record_depth_tracks or ()):
+        for track_index, track in index_depth_track_row(row, record_index=record_index).items():
+            representatives.setdefault(track_index, track)
+    return [representatives[index] for index in sorted(representatives)]
 
 
 def clone_depth_config(
@@ -438,6 +498,7 @@ def build_depth_track_dataframes(
 
     output: list[list[DepthTrackData]] = []
     for record_index, (record, track_specs) in enumerate(zip(records, record_depth_tracks)):
+        index_depth_track_row(track_specs, record_index=record_index)
         if window_steps is not None and record_index < len(window_steps):
             window, step = window_steps[record_index]
         else:
@@ -467,27 +528,33 @@ def build_depth_track_dataframes(
                         max_depth=config.max_depth,
                     ),
                     config=config,
+                    track_index=spec.track_index,
                     height=spec.height,
                 )
             )
         output.append(row)
 
     if bool(getattr(base_config, "share_axis", False)) and base_config.max_depth is None:
-        track_count = max((len(row) for row in output), default=0)
+        indexed_rows = [
+            index_depth_track_row(row, record_index=record_index)
+            for record_index, row in enumerate(output)
+        ]
+        track_count = depth_track_data_count(output)
         for track_index in range(track_count):
             max_values = [
-                float(row[track_index].df["depth"].max())
-                for row in output
-                if track_index < len(row)
-                and not row[track_index].df.empty
-                and "depth" in row[track_index].df.columns
+                float(track.df["depth"].max())
+                for row in indexed_rows
+                if (track := row.get(track_index)) is not None
+                and not track.df.empty
+                and "depth" in track.df.columns
             ]
             if not max_values:
                 continue
             shared_max = max(max_values)
-            for row in output:
-                if track_index < len(row):
-                    row[track_index].config.max_depth = shared_max
+            for row in indexed_rows:
+                track = row.get(track_index)
+                if track is not None:
+                    track.config.max_depth = shared_max
 
     return output
 
@@ -502,8 +569,12 @@ def sync_depth_track_legend_entries(
         return legend_table
     out = dict(legend_table)
     out.pop("Depth", None)
-    for index, track in enumerate(depth_tracks):
-        label = str(track.label or ("Depth" if len(depth_tracks) == 1 else f"Depth {index + 1}"))
+    track_count = depth_track_data_count([depth_tracks])
+    for track in depth_tracks:
+        label = str(
+            track.label
+            or ("Depth" if track_count == 1 else f"Depth {int(track.track_index) + 1}")
+        )
         unique_label = label
         suffix = 2
         while unique_label in out:
@@ -525,6 +596,10 @@ __all__ = [
     "clone_depth_config",
     "depth_track_count",
     "depth_track_data_count",
+    "depth_track_heights",
+    "depth_track_indices",
+    "index_depth_track_row",
     "normalize_depth_tracks",
+    "representative_depth_tracks",
     "sync_depth_track_legend_entries",
 ]

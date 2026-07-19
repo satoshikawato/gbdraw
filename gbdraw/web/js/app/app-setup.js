@@ -91,13 +91,20 @@ import {
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import {
+  activeDepthTrackIndices,
+  clearDepthTrackSourceAt,
   compactDepthFileSlots,
   depthFileSlotsFromValue,
+  depthSlotTrackIndex,
+  depthTrackCoverageCount,
+  depthTrackMatrixWidth,
   ensureDepthTrackConfigCount as ensureDepthTrackConfigCountEntries,
   ensureDepthTrackConfigShape,
   isDefaultManagedDepthSlot,
   normalizeDepthTrackConfig as normalizeDepthTrackConfigEntry,
+  padDepthFileSlots,
   reindexDepthSlots,
+  removeDepthTrackColumnAt,
   removeDepthTrackAt,
   syncDepthSlotLabels,
   uploadedDepthFileCount
@@ -629,8 +636,7 @@ export const createAppSetup = () => {
   ));
   const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
   const depthTrackUiCounts = reactive({
-    circular: 1,
-    linearByUid: {}
+    circular: 1
   });
   const sourceDepthTrackCount = (slots, uiCount = 1) => Math.max(
     1,
@@ -646,18 +652,14 @@ export const createAppSetup = () => {
       config: adv.depth_tracks[index] || normalizeDepthTrackConfig(null, index)
     }));
   };
-  const linearDepthTrackUiCount = (seq) => {
-    const uid = String(seq?.uid || '').trim();
-    if (!uid) return 1;
-    if (!Number.isFinite(Number(depthTrackUiCounts.linearByUid[uid]))) {
-      depthTrackUiCounts.linearByUid[uid] = 1;
-    }
-    return Math.max(1, Number(depthTrackUiCounts.linearByUid[uid]) || 1);
-  };
-  const setLinearDepthTrackUiCount = (seq, count) => {
-    const uid = String(seq?.uid || '').trim();
-    if (!uid) return;
-    depthTrackUiCounts.linearByUid[uid] = Math.max(1, Number(count) || 1);
+  const linearDepthRows = () => linearSeqs.map((seq) => depthFileSlotsFromValue(seq?.depth));
+  const linearDepthLogicalWidth = () => depthTrackMatrixWidth(linearDepthRows());
+  const linearDepthTrackUiCount = () => Math.max(1, linearDepthLogicalWidth());
+  const padLinearDepthRows = (width) => {
+    const targetWidth = Math.max(0, Number(width) || 0);
+    linearSeqs.forEach((seq) => {
+      seq.depth = padDepthFileSlots(seq.depth, targetWidth);
+    });
   };
   const depthTrackFallbackColor = (index) => depthTrackDefaultColors[index % depthTrackDefaultColors.length];
   const depthTrackConfigDefaults = () => ({
@@ -680,13 +682,7 @@ export const createAppSetup = () => {
   };
   const activeDepthTrackCount = () => {
     if (mode.value === 'linear') {
-      return linearSeqs.reduce(
-        (maxCount, seq) => Math.max(
-          maxCount,
-          sourceDepthTrackCount(seq.depth, linearDepthTrackUiCount(seq))
-        ),
-        1
-      );
+      return linearDepthTrackUiCount();
     }
     return sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
   };
@@ -707,10 +703,23 @@ export const createAppSetup = () => {
   const circularDepthTrackRows = computed(() => rowsForDepthTrackCount(
     sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular)
   ));
-  const linearDepthTrackRows = (seq) => rowsForDepthTrackCount(
-    sourceDepthTrackCount(seq?.depth, linearDepthTrackUiCount(seq))
-  );
+  const linearDepthTrackRows = () => rowsForDepthTrackCount(linearDepthTrackUiCount());
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
+  const linearDepthTrackCoverageLabel = (trackIndex) => {
+    const covered = depthTrackCoverageCount(linearDepthRows(), trackIndex);
+    const total = linearSeqs.length;
+    return `${covered}/${total} record${total === 1 ? '' : 's'}`;
+  };
+  const linearDepthTrackIndexOptions = () => {
+    const rows = linearDepthRows();
+    const active = new Set(activeDepthTrackIndices(rows));
+    return Array.from({ length: linearDepthLogicalWidth() }, (_, trackIndex) => ({
+      trackIndex,
+      label: getDepthTrackLabel(trackIndex),
+      coverage: linearDepthTrackCoverageLabel(trackIndex),
+      disabled: !active.has(trackIndex)
+    }));
+  };
   const definitionLineStyleRows = Object.freeze([
     { key: 'name', label: 'Name / Species' },
     { key: 'subtitle', label: 'Subtitle' },
@@ -822,7 +831,12 @@ export const createAppSetup = () => {
   };
   const syncDepthTrackSlotLabel = (slot) => {
     if (!slot || slot.renderer !== 'depth') return;
-    syncDepthTrackSlotLabelsForTrack(normalizeDepthSlotTrackIndex(slot));
+    const trackIndex = normalizeDepthSlotTrackIndex(slot);
+    const hasSource = mode.value === 'linear'
+      ? activeDepthTrackIndices(linearDepthRows()).includes(trackIndex)
+      : Boolean(depthFileSlotsFromValue(files.c_depth)[trackIndex]);
+    if (hasSource) delete slot.depth_binding_error;
+    syncDepthTrackSlotLabelsForTrack(trackIndex);
   };
   const depthTrackAutoLabels = [];
   const refreshDepthTrackLabelsAfterRemoval = (previousFiles, nextFiles, removedIndex) => {
@@ -877,12 +891,17 @@ export const createAppSetup = () => {
   const setLinearDepthFile = (seq, index, file) => {
     if (!seq) return;
     const idx = Math.max(0, Number(index) || 0);
-    ensureDepthTrackConfigCount(idx + 1);
-    setLinearDepthTrackUiCount(seq, Math.max(linearDepthTrackUiCount(seq), idx + 1));
+    const logicalWidth = Math.max(linearDepthLogicalWidth(), idx + 1);
+    padLinearDepthRows(logicalWidth);
+    ensureDepthTrackConfigCount(logicalWidth);
     const slots = depthFileSlotsFromValue(seq.depth);
     const previousFile = slots[idx] || null;
-    slots[idx] = file || null;
-    seq.depth = compactDepthFileSlots(slots);
+    if (file) {
+      slots[idx] = file;
+      seq.depth = slots;
+    } else {
+      seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
+    }
     if (file) {
       updateDepthTrackLabelFromFile(idx, file, previousFile);
       form.show_depth = true;
@@ -893,12 +912,14 @@ export const createAppSetup = () => {
     ensureDepthTrackConfigCount(depthTrackUiCounts.circular);
     if (canShowDepthTrack.value) form.show_depth = true;
   };
-  const addLinearDepthTrack = (seq) => {
-    if (!seq) return;
-    const nextCount = sourceDepthTrackCount(seq.depth, linearDepthTrackUiCount(seq)) + 1;
-    setLinearDepthTrackUiCount(seq, nextCount);
+  const addLinearDepthTrack = () => {
+    const nextCount = linearDepthTrackUiCount() + 1;
+    padLinearDepthRows(nextCount);
     ensureDepthTrackConfigCount(nextCount);
     if (canShowDepthTrack.value) form.show_depth = true;
+    if (adv.linear_track_slots_enabled && form.show_depth) {
+      linearTrackSlotEditor.ensureLinearTrackDepthSlots();
+    }
   };
   const removeCircularDepthTrack = (index) => {
     const idx = Number(index);
@@ -933,38 +954,43 @@ export const createAppSetup = () => {
       circularTrackSlotEditor.ensureCircularTrackDepthSlot();
     }
   };
-  const removeLinearDepthTrack = (seq, index) => {
-    if (!seq) return;
+  const removeLinearDepthTrack = (_seq, index) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
-    const count = sourceDepthTrackCount(seq.depth, linearDepthTrackUiCount(seq));
-    const removal = removeDepthTrackAt({
-      files: seq.depth,
-      depthTracks: adv.depth_tracks,
-      index: idx,
-      minCount: 1,
-      defaults: depthTrackConfigDefaults()
+    const logicalWidth = linearDepthLogicalWidth();
+    if (idx >= logicalWidth) return;
+    const nextRows = removeDepthTrackColumnAt(linearDepthRows(), idx);
+    linearSeqs.forEach((seq, recordIndex) => {
+      seq.depth = nextRows[recordIndex] || [];
     });
-    seq.depth = removal.files;
-    adv.depth_tracks.splice(0, adv.depth_tracks.length, ...removal.depthTracks);
-    setLinearDepthTrackUiCount(seq, count <= 1 ? 1 : count - 1);
-    refreshDepthTrackLabelsAfterRemoval(removal.previousFiles, seq.depth, idx);
+    if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
+    depthTrackAutoLabels.splice(idx, 1);
     ensureDepthTrackConfigCount(activeDepthTrackCount());
-    const activeFileCount = linearSeqs.reduce(
-      (maxCount, item) => Math.max(maxCount, uploadedDepthFileCount(item.depth)),
-      0
-    );
+    const activeFileCount = activeDepthTrackIndices(linearDepthRows()).length;
+    const previousAxisIndex = Number(adv.linear_track_slots_axis_index);
+    const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
+      ? adv.linear_track_slots.reduce((count, slot, slotIndex) => {
+          if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
+          return depthSlotTrackIndex(slot, slotIndex) === idx ? count + 1 : count;
+        }, 0)
+      : 0;
     adv.linear_track_slots.splice(
       0,
       adv.linear_track_slots.length,
       ...reindexDepthSlots({
         slots: adv.linear_track_slots,
         removedIndex: idx,
-        activeCount: activeFileCount,
+        activeCount: Math.max(0, logicalWidth - 1),
         managedPredicate: isDefaultManagedDepthSlot
       })
     );
-    syncDepthTrackSlotLabelsForTrack(idx);
+    if (Number.isInteger(previousAxisIndex)) {
+      adv.linear_track_slots_axis_index = Math.max(
+        0,
+        previousAxisIndex - removedManagedSlotCountBeforeAxis
+      );
+    }
+    syncDepthTrackSlotLabelsForTrack(0);
     linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
     linearTrackSlotEditor.normalizeLinearTrackSlots();
     if (adv.linear_track_slots_enabled && form.show_depth && activeFileCount > 0) {
@@ -976,24 +1002,13 @@ export const createAppSetup = () => {
       files.c_depth,
       linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth).length).join(','),
       linearSeqs.map((seq) => seq.uid).join(','),
-      depthTrackUiCounts.circular,
-      Object.entries(depthTrackUiCounts.linearByUid).map(([uid, count]) => `${uid}:${count}`).join(',')
+      depthTrackUiCounts.circular
     ],
     () => {
-      const activeUids = new Set(linearSeqs.map((seq) => String(seq.uid || '').trim()).filter(Boolean));
-      Object.keys(depthTrackUiCounts.linearByUid).forEach((uid) => {
-        if (!activeUids.has(uid)) delete depthTrackUiCounts.linearByUid[uid];
-      });
       depthTrackUiCounts.circular = Math.max(
         depthTrackUiCounts.circular,
         sourceDepthTrackCount(files.c_depth, 1)
       );
-      linearSeqs.forEach((seq) => {
-        setLinearDepthTrackUiCount(seq, Math.max(
-          linearDepthTrackUiCount(seq),
-          sourceDepthTrackCount(seq.depth, 1)
-        ));
-      });
       ensureDepthTrackConfigCount(activeDepthTrackCount());
     },
     { deep: true, immediate: true }
@@ -1706,9 +1721,6 @@ export const createAppSetup = () => {
     circularTrackNewRenderer.value = 'dinucleotide_skew';
     linearTrackNewRenderer.value = 'dinucleotide_skew';
     depthTrackUiCounts.circular = 1;
-    Object.keys(depthTrackUiCounts.linearByUid).forEach((uid) => {
-      delete depthTrackUiCounts.linearByUid[uid];
-    });
     ensureDepthTrackConfigCount(activeDepthTrackCount());
   };
 
@@ -2287,7 +2299,13 @@ export const createAppSetup = () => {
   };
 
   const applyLinearSeqMutation = (items, { actionLabel = 'Updating sequences' } = {}) => {
+    const depthWidth = linearDepthLogicalWidth();
     const { linearSeqs: next, clearedBlastSlots, clearedLosatNames } = reconcileLinearSeqPairData(Array.from(linearSeqs), items);
+    if (depthWidth > 0) {
+      next.forEach((seq) => {
+        seq.depth = padDepthFileSlots(seq.depth, depthWidth);
+      });
+    }
     linearSeqs.splice(0, linearSeqs.length, ...next);
     losatCacheInfo.value = [];
     linearReorderNotice.value = buildLinearReorderNotice({ clearedBlastSlots, clearedLosatNames, actionLabel });
@@ -2442,6 +2460,8 @@ export const createAppSetup = () => {
     depthTrackRows,
     circularDepthTrackRows,
     linearDepthTrackRows,
+    linearDepthTrackCoverageLabel,
+    linearDepthTrackIndexOptions,
     hasCircularDepthFiles,
     hasLinearDepthFiles,
     canShowDepthTrack,

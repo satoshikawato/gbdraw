@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -13,11 +14,22 @@ from svgwrite import Drawing
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.depth import clear_depth_tsv_cache, depth_df, read_depth_tsv
+from gbdraw.analysis.depth_tracks import (
+    DepthTrackSpec,
+    build_depth_track_dataframes,
+    depth_track_count,
+    depth_track_heights,
+    index_depth_track_row,
+    normalize_depth_tracks,
+    representative_depth_tracks,
+)
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_records,
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
 )
+from gbdraw.config.toml import load_config_toml
+from gbdraw.configurators import DepthConfigurator
 from gbdraw.exceptions import ValidationError
 
 
@@ -52,6 +64,100 @@ def _constant_depth_table(reference: str, depth: float, length: int = 40) -> pd.
             "depth": [depth] * length,
         }
     )
+
+
+def test_sparse_depth_normalization_preserves_logical_indices_count_and_heights() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+
+    normalized = normalize_depth_tracks(
+        records,
+        depth_track_tables=[
+            [_constant_depth_table("rec1", 10), None],
+            [None, _constant_depth_table("rec2", 50)],
+        ],
+        depth_track_labels=["Sample A", "Sample B"],
+        depth_track_heights=[12, 28],
+    )
+
+    assert normalized is not None
+    assert [[track.track_index for track in row] for row in normalized] == [[0], [1]]
+    assert [[track.id for track in row] for row in normalized] == [["depth_1"], ["depth_2"]]
+    assert depth_track_count(normalized) == 2
+    assert depth_track_heights(normalized) == [12, 28]
+
+
+@pytest.mark.parametrize(
+    ("track_indices", "message"),
+    [
+        ([-1], "negative track_index=-1"),
+        ([0, 0], "duplicate track_index=0"),
+    ],
+)
+def test_depth_track_row_rejects_invalid_logical_indices(
+    track_indices: list[int],
+    message: str,
+) -> None:
+    row = [
+        DepthTrackSpec(
+            id=f"depth_{index}",
+            label=f"Depth {index}",
+            table=_depth_table(),
+            track_index=track_index,
+        )
+        for index, track_index in enumerate(track_indices)
+    ]
+
+    with pytest.raises(ValidationError, match=message):
+        index_depth_track_row(row, record_index=0)
+
+
+def test_sparse_depth_shared_axis_and_representatives_are_per_logical_track() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    normalized = normalize_depth_tracks(
+        records,
+        depth_track_tables=[
+            [_constant_depth_table("rec1", 10), None],
+            [None, _constant_depth_table("rec2", 50)],
+        ],
+        depth_track_labels=["Sample A", "Sample B"],
+        depth_track_colors=["#112233", "#445566"],
+    )
+    assert normalized is not None
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    depth_config = DepthConfigurator(
+        10,
+        10,
+        config_dict,
+        normalize=False,
+        share_axis=True,
+    )
+
+    depth_data = build_depth_track_dataframes(
+        records,
+        normalized,
+        base_config=depth_config,
+        depth_df_builder=lambda _record, table, _window, _step, **_kwargs: table,
+    )
+    representatives = representative_depth_tracks(depth_data)
+
+    assert [track.track_index for track in representatives] == [0, 1]
+    assert [track.label for track in representatives] == ["Sample A", "Sample B"]
+    assert [track.config.fill_color for track in representatives] == ["#112233", "#445566"]
+    assert depth_data[0][0].config.max_depth == pytest.approx(10)
+    assert depth_data[1][0].config.max_depth == pytest.approx(50)
+
+
+def test_depth_normalization_rejects_globally_empty_logical_column() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+
+    with pytest.raises(ValidationError, match="Depth track 2 is empty"):
+        normalize_depth_tracks(
+            records,
+            depth_track_tables=[
+                [_constant_depth_table("rec1", 10), None],
+                [_constant_depth_table("rec2", 20), None],
+            ],
+        )
 
 
 def _write_depth_file(path: Path, text: str) -> Path:
@@ -900,6 +1006,220 @@ def test_linear_depth_track_partial_record_rows_are_not_shared() -> None:
     assert svg.count('id="depth_record_2_axis"') == 1
 
 
+@pytest.mark.parametrize(
+    ("present_record_index", "depth_side", "feature_side"),
+    [
+        (0, "above", "below"),
+        (1, "below", "above"),
+    ],
+)
+@pytest.mark.linear
+def test_linear_custom_depth_slot_skips_leading_or_trailing_missing_record(
+    present_record_index: int,
+    depth_side: str,
+    feature_side: str,
+) -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    depth_rows: list[list[pd.DataFrame | None]] = [[None], [None]]
+    present_record_id = records[present_record_index].id
+    depth_rows[present_record_index][0] = _constant_depth_table(present_record_id, 25, length=40)
+
+    svg = assemble_linear_diagram_from_records(
+        records,
+        legend="none",
+        depth_track_tables=depth_rows,
+        linear_track_slots=[
+            f"depth:depth@track_index=0,side={depth_side}",
+            f"features:features@side={feature_side}",
+        ],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    present_number = present_record_index + 1
+    missing_number = 2 if present_number == 1 else 1
+    assert svg.count(f'id="depth_record_{present_number}"') == 1
+    assert svg.count(f'id="depth_record_{present_number}_axis"') == 1
+    assert f'id="depth_record_{missing_number}"' not in svg
+    assert f'id="depth_record_{missing_number}_axis"' not in svg
+
+
+@pytest.mark.linear
+def test_linear_diagonal_sparse_depth_binding_survives_slot_order_reversal() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    depth_rows = [
+        [_constant_depth_table("rec1", 10, length=40), None],
+        [None, _constant_depth_table("rec2", 50, length=40)],
+    ]
+
+    def render(depth_slot_ids: list[str]) -> str:
+        slots = {
+            "depth_a": "depth_a:depth@track_index=0,side=below",
+            "depth_b": "depth_b:depth@track_index=1,side=below",
+        }
+        return assemble_linear_diagram_from_records(
+            records,
+            legend="none",
+            depth_track_tables=depth_rows,
+            depth_track_labels=["Sample A", "Sample B"],
+            depth_track_colors=["#112233", "#445566"],
+            linear_track_slots=[
+                *(slots[slot_id] for slot_id in depth_slot_ids),
+                "features:features@side=overlay",
+            ],
+            config_overrides={"show_gc": False, "show_skew": False},
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
+        ).tostring()
+
+    original = render(["depth_a", "depth_b"])
+    reversed_order = render(["depth_b", "depth_a"])
+
+    for svg in (original, reversed_order):
+        assert 'fill="#112233"' in _svg_group(svg, "depth_a_record_1")
+        assert 'fill="#445566"' in _svg_group(svg, "depth_b_record_2")
+        assert 'id="depth_a_record_2"' not in svg
+        assert 'id="depth_b_record_1"' not in svg
+    assert _svg_group_translate_y(original, "depth_a_record_1") != pytest.approx(
+        _svg_group_translate_y(reversed_order, "depth_a_record_1")
+    )
+    assert _svg_group_translate_y(original, "depth_b_record_2") != pytest.approx(
+        _svg_group_translate_y(reversed_order, "depth_b_record_2")
+    )
+
+
+@pytest.mark.linear
+def test_linear_custom_slot_can_select_only_second_logical_depth_track() -> None:
+    record = _make_record("rec1", length=40)
+
+    svg = assemble_linear_diagram_from_records(
+        [record],
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 50, length=40),
+            ]
+        ],
+        depth_track_colors=["#112233", "#445566"],
+        linear_track_slots=[
+            "selected_depth:depth@track_index=1,side=below",
+            "features:features@side=overlay",
+        ],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    assert 'fill="#445566"' in _svg_group(svg, "selected_depth")
+    assert 'id="selected_depth_axis"' in svg
+
+
+@pytest.mark.linear
+def test_linear_depth_slot_rejects_globally_out_of_range_logical_index() -> None:
+    record = _make_record("rec1", length=40)
+
+    with pytest.raises(
+        ValidationError,
+        match="Depth slot 'missing_depth' track_index=2.*range 0\\.\\.1",
+    ):
+        assemble_linear_diagram_from_records(
+            [record],
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 50, length=40),
+                ]
+            ],
+            linear_track_slots=[
+                "missing_depth:depth@track_index=2",
+                "features:features@side=overlay",
+            ],
+            config_overrides={"show_gc": False, "show_skew": False},
+        )
+
+
+@pytest.mark.parametrize("present_record_index", [0, 1])
+@pytest.mark.circular
+def test_circular_multi_record_partial_depth_skips_paint_but_reserves_slot(
+    present_record_index: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    depth_rows: list[list[pd.DataFrame | None]] = [[None], [None]]
+    present_record_id = records[present_record_index].id
+    depth_rows[present_record_index][0] = _constant_depth_table(present_record_id, 25, length=40)
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        legend="none",
+        depth_track_tables=depth_rows,
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    )
+    svg = canvas.tostring()
+    geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
+
+    assert svg.count('id="depth"') == 1
+    present_number = present_record_index + 1
+    missing_number = 2 if present_number == 1 else 1
+    assert svg.count(f'id="depth_record_{present_number}_axis"') == 1
+    assert f'id="depth_record_{missing_number}_axis"' not in svg
+    assert len(geometry["records"]) == 2
+    assert all(
+        any(slot["slotId"] == "depth" for slot in record_geometry["slots"])
+        for record_geometry in geometry["records"]
+    )
+    assert "depth data are unavailable" not in caplog.text
+
+
+@pytest.mark.circular
+def test_circular_multi_record_diagonal_sparse_depth_uses_logical_binding() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        legend="none",
+        depth_track_tables=[
+            [_constant_depth_table("rec1", 10, length=40), None],
+            [None, _constant_depth_table("rec2", 50, length=40)],
+        ],
+        depth_track_labels=["Sample A", "Sample B"],
+        depth_track_colors=["#112233", "#445566"],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    )
+    svg = canvas.tostring()
+    geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
+
+    assert svg.count('id="depth_1_record_1"') == 1
+    assert svg.count('id="depth_1_record_1_axis"') == 1
+    assert svg.count('id="depth_2_record_2"') == 1
+    assert svg.count('id="depth_2_record_2_axis"') == 1
+    assert 'id="depth_1_record_2"' not in svg
+    assert 'id="depth_2_record_1"' not in svg
+    assert 'fill="#112233"' in _svg_group(svg, "depth_1_record_1")
+    assert 'fill="#445566"' in _svg_group(svg, "depth_2_record_2")
+    assert all(
+        {slot["slotId"] for slot in record_geometry["slots"]} >= {"depth_1", "depth_2"}
+        for record_geometry in geometry["records"]
+    )
+
+
 @pytest.mark.linear
 def test_linear_depth_origin_label_requires_explicit_min() -> None:
     record = _make_record()
@@ -1362,6 +1682,61 @@ def test_linear_cli_depth_track_placeholders_keep_record_slots(
     ]
 
 
+@pytest.mark.linear
+def test_linear_cli_sparse_depth_tracks_render_end_to_end(tmp_path: Path) -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    record_paths = [tmp_path / "rec1.gb", tmp_path / "rec2.gb"]
+    for record, path in zip(records, record_paths):
+        SeqIO.write(record, path, "genbank")
+
+    depth_paths = [tmp_path / "rec1.tsv", tmp_path / "rec2.tsv"]
+    for record, path, depth in zip(records, depth_paths, (10, 50)):
+        _write_depth_file(
+            path,
+            "".join(f"{record.id}\t{position}\t{depth}\n" for position in range(1, 41)),
+        )
+
+    output_prefix = tmp_path / "sparse-depth"
+    linear_cli_module.linear_main(
+        [
+            "--gbk",
+            *(str(path) for path in record_paths),
+            "--depth_track",
+            str(depth_paths[0]),
+            "",
+            "--depth_track",
+            "",
+            str(depth_paths[1]),
+            "--depth_track_label",
+            "Sample A",
+            "Sample B",
+            "--depth_track_color",
+            "#112233",
+            "#445566",
+            "--linear_track_slot",
+            "depth_a:depth@track_index=0,side=above",
+            "--linear_track_slot",
+            "depth_b:depth@track_index=1,side=above",
+            "--linear_track_slot",
+            "features:features@side=below",
+            "--linear_track_axis_index",
+            "2",
+            "--format",
+            "svg",
+            "--legend",
+            "none",
+            "-o",
+            str(output_prefix),
+        ]
+    )
+
+    svg = output_prefix.with_suffix(".svg").read_text(encoding="utf-8")
+    assert 'fill="#112233"' in _svg_group(svg, "depth_a_record_1")
+    assert 'fill="#445566"' in _svg_group(svg, "depth_b_record_2")
+    assert 'id="depth_a_record_2"' not in svg
+    assert 'id="depth_b_record_1"' not in svg
+
+
 def test_circular_cli_repeated_depth_track_forwards_record_major_files(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1417,6 +1792,51 @@ def test_circular_cli_repeated_depth_track_forwards_record_major_files(
     assert captured["depth_track_large_tick_intervals"] == ["10", "20"]
     assert captured["depth_track_small_tick_intervals"] == ["auto", "5"]
     assert captured["depth_track_tick_font_sizes"] == ["8", "12"]
+
+
+@pytest.mark.circular
+def test_circular_cli_sparse_depth_tracks_render_separate_outputs(tmp_path: Path) -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    record_paths = [tmp_path / "rec1.gb", tmp_path / "rec2.gb"]
+    for record, path in zip(records, record_paths):
+        SeqIO.write(record, path, "genbank")
+
+    depth_paths = [tmp_path / "rec1.tsv", tmp_path / "rec2.tsv"]
+    for record, path, depth in zip(records, depth_paths, (10, 50)):
+        _write_depth_file(
+            path,
+            "".join(f"{record.id}\t{position}\t{depth}\n" for position in range(1, 41)),
+        )
+
+    output_prefix = tmp_path / "sparse-circular"
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            *(str(path) for path in record_paths),
+            "--depth_track",
+            str(depth_paths[0]),
+            "",
+            "--depth_track",
+            "",
+            str(depth_paths[1]),
+            "--depth_track_color",
+            "#112233",
+            "#445566",
+            "--format",
+            "svg",
+            "--legend",
+            "none",
+            "-o",
+            str(output_prefix),
+        ]
+    )
+
+    first_svg = Path(f"{output_prefix}_1.svg").read_text(encoding="utf-8")
+    second_svg = Path(f"{output_prefix}_2.svg").read_text(encoding="utf-8")
+    assert 'fill="#112233"' in _svg_group(first_svg, "depth_1")
+    assert 'id="depth_2"' not in first_svg
+    assert 'fill="#445566"' in _svg_group(second_svg, "depth_2")
+    assert 'id="depth_1"' not in second_svg
 
 
 @pytest.mark.linear

@@ -92,9 +92,24 @@ This writes `tutorial-6-depth-tracks.svg`. The common 0× to 1,000× scale makes
 
 ![AP027131.1 and AP027132.1 linear diagrams with DRR394921 depth tracks on shared axes ranging from 0× to 1,000×](../../examples/tutorial-6-depth-tracks.svg)
 
-Repeat `--depth_track` only when another matching dataset is available. A second depth track is omitted here because the example data do not include a second matching depth file for both records.
+Each repeated `--depth_track` group is one logical depth series. The series does not need a file for every displayed record. Use a quoted empty argument in the missing record's position:
 
-For multiple samples, repeat `--depth_track`, and give each group a matching `--depth_track_label` and `--depth_track_color`. Within every group, list files in displayed-record order. If a sample has no measurement for a record, do not substitute an unrelated file: prepare a correctly named zero-coverage table or omit that comparison.
+```bash
+gbdraw linear \
+  --gbk tests/test_inputs/AP027131.gb tests/test_inputs/AP027132.gb \
+  --depth_track tests/test_inputs/AP027131.DRR394921.depth.tsv '' \
+  --depth_track '' tests/test_inputs/AP027132.DRR394921.depth.tsv \
+  --depth_track_label "AP027131 depth" "AP027132 depth" \
+  --depth_track_color "#4E79A7" "#E15759" \
+  --show_depth_axis \
+  --share_depth_axis \
+  -o tutorial-6-sparse-depth-tracks \
+  -f svg
+```
+
+This writes `tutorial-6-sparse-depth-tracks.svg`. The first repeated group is logical track 0 and has data only for AP027131.1; the second is logical track 1 and has data only for AP027132.1. A missing cell draws no depth area, axis, or ticks for that record. It is not converted to zero coverage, and the track band remains reserved so record stacks stay aligned. Every `--depth_track` group must contain at least one file.
+
+For multiple samples, repeat `--depth_track`, and give each group a matching `--depth_track_label` and `--depth_track_color`. Within every group, list files or empty placeholders in displayed-record order. Do not substitute an unrelated file for a missing measurement.
 
 Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same y-axis range across records for each depth track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
 

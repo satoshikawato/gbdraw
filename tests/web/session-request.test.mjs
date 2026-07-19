@@ -14,6 +14,15 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const { buildCanonicalSessionRequest, projectCanonicalSessionRequest } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
+const { linearTrackAxisIndexForEnabledSlots } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-track-slots.js'))
+);
+
+assert.equal(linearTrackAxisIndexForEnabledSlots([
+  { id: 'above', renderer: 'depth', enabled: true, params: { track_index: 0 } },
+  { id: 'removed', renderer: 'depth', enabled: false, params: {} },
+  { id: 'features', renderer: 'features', enabled: true, params: {} }
+], 2), 1);
 
 const ref = (value) => ({ value });
 const state = {
@@ -278,6 +287,74 @@ assert.deepEqual(
 assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
 assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
 assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
+
+const depthA = {
+  ...genbank,
+  name: 'sample-a.depth.tsv',
+  type: 'text/tab-separated-values',
+  data: btoa('position\tdepth\n1\t10\n')
+};
+const depthB = {
+  ...genbank,
+  name: 'sample-b.depth.tsv',
+  type: 'text/tab-separated-values',
+  data: btoa('position\tdepth\n1\t20\n')
+};
+state.form.show_depth = true;
+state.adv.depth_tracks = [
+  { label: 'Sample A', color: '#112233', height: 12 },
+  { label: 'Sample B', color: '#445566', height: 18 }
+];
+state.adv.linear_track_slots_enabled = true;
+state.adv.linear_track_slots_axis_index = 1;
+state.adv.linear_track_slots = [
+  { id: 'depth_b', renderer: 'depth', enabled: true, side: 'above', params: { track_index: 1 } },
+  { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: {} },
+  { id: 'depth_a', renderer: 'depth', enabled: true, side: 'below', params: { track_index: 0 } }
+];
+const sparseDepthFilesData = {
+  ...linearFilesData,
+  linearSeqs: linearFilesData.linearSeqs.slice(0, 2).map((seq, index) => ({
+    ...seq,
+    depth: index === 0 ? [depthA, null] : [null, depthB]
+  }))
+};
+const sparseDepthCanonical = buildCanonicalSessionRequest({ state, filesData: sparseDepthFilesData });
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles.length, 2);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[0].length, 2);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[0][1], null);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[1][0], null);
+assert.deepEqual(
+  sparseDepthCanonical.renderRequest.diagramOptions.depthTrackLabels,
+  ['Sample A', 'Sample B']
+);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 1);
+assert.deepEqual(
+  sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.split(':')[0]),
+  ['depth_b', 'features', 'depth_a']
+);
+const sparseDepthProjection = projectCanonicalSessionRequest(sparseDepthCanonical);
+assert.equal(sparseDepthProjection.files.linearSeqs[0].depth.length, 2);
+assert.equal(sparseDepthProjection.files.linearSeqs[0].depth[0].data, depthA.data);
+assert.equal(sparseDepthProjection.files.linearSeqs[0].depth[1], null);
+assert.equal(sparseDepthProjection.files.linearSeqs[1].depth[0], null);
+assert.equal(sparseDepthProjection.files.linearSeqs[1].depth[1].data, depthB.data);
+
+state.adv.linear_track_slots_axis_index = 1;
+state.adv.linear_track_slots = [
+  {
+    id: 'custom_removed', renderer: 'depth', enabled: false, side: 'above',
+    depth_binding_error: 'Depth logical track index 0 is no longer available.', params: {}
+  },
+  { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: {} },
+  { id: 'depth_b', renderer: 'depth', enabled: true, side: 'below', params: { track_index: 1 } }
+];
+const filteredAxisCanonical = buildCanonicalSessionRequest({ state, filesData: sparseDepthFilesData });
+assert.equal(filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 0);
+assert.deepEqual(
+  filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.split(':')[0]),
+  ['features', 'depth_b']
+);
 
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {

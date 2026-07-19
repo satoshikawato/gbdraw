@@ -1425,16 +1425,7 @@
                                     Depth TSV tracks
                                     <span v-if="hasLinearDepthFiles(seq)" class="ml-auto text-[10px] font-semibold text-slate-400">{{ depthTrackCountLabel(seq.depth) }}</span>
                                 </summary>
-                                <div v-if="!hasLinearDepthFiles(seq)" class="pt-1">
-                                    <file-uploader
-                                        label="Depth TSV"
-                                        small
-                                        accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
-                                        :model-value="getLinearDepthFile(seq, 0)"
-                                        @update:model-value="setLinearDepthFile(seq, 0, $event)"
-                                    ></file-uploader>
-                                </div>
-                                <div v-else class="space-y-1.5 pt-1">
+                                <div class="space-y-1.5 pt-1">
                                     <div class="rounded border border-slate-200 bg-white/80 p-2 space-y-2">
                                         <div class="grid grid-cols-2 gap-y-1 gap-x-1">
                                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -1492,9 +1483,12 @@
                                     <div class="space-y-1.5">
                                         <div v-for="track in linearDepthTrackRows(seq)" :key="`${seq.uid}-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
                                             <div class="flex items-center justify-between gap-2">
-                                                <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || 'Depth' }}</div>
+                                                <div class="min-w-0">
+                                                    <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || 'Depth' }}</div>
+                                                    <div class="text-[9px] text-slate-400">{{ linearDepthTrackCoverageLabel(track.index) }}</div>
+                                                </div>
                                                 <button type="button" @click="removeLinearDepthTrack(seq, track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1">
-                                                    <i class="ph ph-trash"></i> Remove
+                                                    <i class="ph ph-trash"></i> Remove series
                                                 </button>
                                             </div>
                                             <div class="grid grid-cols-[1fr_64px_44px] gap-1.5 items-end">
@@ -1562,8 +1556,8 @@
                                             ></file-uploader>
                                         </div>
                                     </div>
-                                    <button type="button" @click="addLinearDepthTrack(seq)" class="btn btn-secondary text-xs w-full">
-                                        <i class="ph ph-plus"></i> Add TSV
+                                    <button type="button" @click="addLinearDepthTrack()" class="btn btn-secondary text-xs w-full">
+                                        <i class="ph ph-plus"></i> Add series for all records
                                     </button>
                                 </div>
                             </details>
@@ -2034,7 +2028,7 @@
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
                                                     <i class="ph ph-stack"></i>
                                                     <span class="truncate">Linear track stack</span>
-                                                    <help-tip text="Rows before Axis render above it; rows after Axis render below it. Depth track selects the uploaded depth series and does not control vertical order."></help-tip>
+                                                    <help-tip text="Rows before Axis render above it; rows after Axis render below it. A Depth slot selects one global series and does not control vertical order. Records with a blank TSV cell do not paint that series, while its stack space remains reserved."></help-tip>
                                                 </div>
                                                 <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ linearTrackSlots().length }}</span>
                                             </div>
@@ -2133,16 +2127,19 @@
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
                                                             <label class="track-slot-field-label">track index <help-tip text="Zero-based depth TSV track number used by this slot."></help-tip></label>
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                step="1"
+                                                            <select
                                                                 v-model.number="entry.slot.params.track_index"
                                                                 @change="syncDepthTrackSlotLabel(entry.slot); syncLinearDepthSlotHeightsFromDepthTracks()"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
-                                                                placeholder="0"
                                                                 title="Depth track index"
                                                             >
+                                                                <option
+                                                                    v-for="option in linearDepthTrackIndexOptions()"
+                                                                    :key="`linear-depth-option-${option.trackIndex}`"
+                                                                    :value="option.trackIndex"
+                                                                    :disabled="option.disabled"
+                                                                >{{ option.trackIndex }} · {{ option.label || 'Depth' }} · {{ option.coverage }}</option>
+                                                            </select>
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <label class="track-slot-field-label">legend label <help-tip text="Text shown for this track in the diagram legend. Leave blank to use the depth track title."></help-tip></label>
@@ -2153,6 +2150,9 @@
                                                                 placeholder="Legend label"
                                                             >
                                                         </div>
+                                                    </div>
+                                                    <div v-if="entry.slot.depth_binding_error" class="rounded border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] text-amber-700">
+                                                        {{ entry.slot.depth_binding_error }} Select an available series or delete this slot.
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">

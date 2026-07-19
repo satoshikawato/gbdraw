@@ -38,6 +38,14 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 
 ## Behavior corrections
 
+### Sparse depth tracks keep their logical series
+
+Repeated `--depth_track` groups and the corresponding Python depth-track matrices can now omit a file for an individual record without changing the series identity. Use `''`, `-`, `none`, or `null` as a CLI placeholder when supplying one value per record. A group that is empty for every record remains invalid.
+
+For a missing record/series cell, gbdraw draws no depth area, quantitative axis, or ticks. It does not substitute another record's file or treat the missing cell as zero coverage. Labels, colors, heights, shared-axis ranges, legends, and custom-slot `track_index` values remain attached to the original logical series. Linear default and custom slots and Circular multi-record diagrams use the same sparse binding behavior, while the logical slot band remains reserved to keep records aligned.
+
+The existing CLI, Python API, settings, and canonical session shapes are unchanged, and dense depth inputs retain their previous SVG geometry. This correction does not introduce the separate Linear occupancy-planner redesign or otherwise change general Linear track-packing geometry.
+
 ### Interactive SVG search remains responsive on large diagrams
 
 Interactive SVG search now prepares reusable field indexes and updates only changed match elements. Applying or clearing a result set uses an SVG-root search state, suppresses bulk feature transitions for two animation frames, and no longer adds a dimmed class to every unmatched feature. Previous and next navigation updates only the old and new active feature parts. The web app preview uses the same difference-based rendering behavior.

@@ -6,7 +6,10 @@ import {
   buildCircularTrackSlotSpec,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
-import { buildLinearTrackSlotSpec } from '../app/linear-track-slots.js';
+import {
+  buildLinearTrackSlotSpec,
+  linearTrackAxisIndexForEnabledSlots
+} from '../app/linear-track-slots.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 2;
@@ -348,6 +351,17 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions }) =>
 
 const buildTracks = (state) => {
   const circular = state.mode.value === 'circular';
+  const storedLinearAxisIndex = optionalNumber(state.adv.linear_track_slots_axis_index);
+  const emittedLinearAxisIndex = (
+    !circular &&
+    state.adv.linear_track_slots_enabled &&
+    storedLinearAxisIndex !== null
+  )
+    ? linearTrackAxisIndexForEnabledSlots(
+        state.adv.linear_track_slots,
+        storedLinearAxisIndex
+      )
+    : storedLinearAxisIndex;
   return {
     circularTrackSlots: circular && state.adv.circular_track_slots_enabled
       ? state.adv.circular_track_slots
@@ -360,7 +374,7 @@ const buildTracks = (state) => {
           .filter((slot) => slot?.enabled !== false)
           .map((slot) => buildLinearTrackSlotSpec(slot))
       : null,
-    linearTrackAxisIndex: circular ? null : optionalNumber(state.adv.linear_track_slots_axis_index),
+    linearTrackAxisIndex: circular ? null : emittedLinearAxisIndex,
     centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null
   };
 };
@@ -690,16 +704,14 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources, webFi
   const depthRows = Array.isArray(options.depthTrackFiles) ? options.depthTrackFiles : [];
   if (renderRequest.mode === 'circular' && Array.isArray(depthRows[0])) {
     const depth = depthRows[0]
-      .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
-      .filter(Boolean);
+      .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null);
     files.c_depth = depth.length > 1 ? depth : (depth[0] || null);
   }
   if (renderRequest.mode === 'linear') {
     depthRows.forEach((row, index) => {
       if (!files.linearSeqs[index] || !Array.isArray(row)) return;
       const depth = row
-        .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
-        .filter(Boolean);
+        .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null);
       files.linearSeqs[index].depth = depth.length > 1 ? depth : (depth[0] || null);
     });
   }

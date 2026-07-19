@@ -13,9 +13,18 @@ await writeFile(tempModulePath, await readFile(sourceUrl, 'utf8'));
 await writeFile(join(tempDir, 'track-slot-display.js'), await readFile(displaySourceUrl, 'utf8'));
 
 const {
+  activeDepthTrackIndices,
+  clearDepthTrackSourceAt,
+  depthTrackCoverageCount,
   depthFileSlotsFromValue,
+  depthSlotTrackIndex,
+  depthTrackMatrixWidth,
+  depthTrackSessionWidth,
+  padDepthFileSlots,
+  referencedDepthTrackWidth,
   reindexDepthSlots,
   reconcileDepthTracksToFiles,
+  removeDepthTrackColumnAt,
   removeDepthTrackAt,
   syncDepthSlotLabels
 } = await import(pathToFileURL(tempModulePath));
@@ -36,6 +45,46 @@ const depthSlots = (count) => Array.from({ length: count }, (_, index) => ({
     legend_label: ['24 hpi', '12 hpi', '6 hpi'][index]
   }
 }));
+
+{
+  const first = file('record-1-track-1.tsv');
+  const second = file('record-2-track-2.tsv');
+  const rows = [
+    [first, null],
+    [null, second]
+  ];
+
+  assert.equal(depthTrackMatrixWidth(rows), 2);
+  assert.deepEqual(activeDepthTrackIndices(rows), [0, 1]);
+  assert.equal(depthTrackCoverageCount(rows, 0), 1);
+  assert.equal(depthTrackCoverageCount(rows, 1), 1);
+
+  const cleared = clearDepthTrackSourceAt(rows[0], 0, 2);
+  assert.deepEqual(cleared, [null, null]);
+  assert.equal(cleared.length, 2, 'clearing one record must preserve logical row width');
+  assert.equal(rows[1][1], second, 'clearing one record must not move another record source');
+
+  const addedWidth = depthTrackMatrixWidth(rows) + 1;
+  const addedRows = rows.map((row) => padDepthFileSlots(row, addedWidth));
+  assert.deepEqual(addedRows.map((row) => row.length), [3, 3]);
+  assert.deepEqual(addedRows.map((row) => row[2]), [null, null]);
+
+  const removedRows = removeDepthTrackColumnAt(rows, 0);
+  assert.deepEqual(removedRows, [[null], [second]]);
+  assert.equal(removedRows[1][0], second, 'series removal must reindex the same column in every record');
+}
+
+{
+  assert.equal(referencedDepthTrackWidth([
+    { id: 'features', renderer: 'features', params: {} },
+    { id: 'custom-depth', renderer: 'depth', params: { track_index: 3 } }
+  ]), 4);
+  assert.equal(depthTrackSessionWidth({
+    rows: [[file('only-source.tsv')], []],
+    depthTracks: [{ label: 'A' }, { label: 'B' }],
+    slots: [{ id: 'custom-depth', renderer: 'depth', params: { track_index: 3 } }]
+  }), 4);
+}
 
 {
   const removal = removeDepthTrackAt({
@@ -124,7 +173,11 @@ const depthSlots = (count) => Array.from({ length: count }, (_, index) => ({
   const custom = slots.find((slot) => slot.id === 'custom_removed');
   assert.equal(custom.enabled, false);
   assert.equal(Object.hasOwn(custom.params, 'track_index'), false);
+  assert.match(custom.depth_binding_error, /logical track index 1/);
+  assert.equal(depthSlotTrackIndex(custom, 0), null, 'invalid manual slots must not regain an ordinal fallback');
   assert.deepEqual(depthIndexes(slots), [0, 1]);
+  custom.params.track_index = 0;
+  assert.equal(depthSlotTrackIndex(custom, 1), 0, 'an explicit replacement selection must take precedence');
 }
 
 {

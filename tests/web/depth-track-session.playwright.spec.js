@@ -1,15 +1,18 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync } = require('node:fs');
+const { createReadStream, existsSync, readFileSync } = require('node:fs');
 const { createServer } = require('node:http');
 const { extname, join, normalize, resolve, sep } = require('node:path');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionPath = join(repoRoot, 'tests/test_inputs/2026-06-16_wssv.gbdraw-session.json');
 const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
+const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000711.gbk');
+const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000713.gbk');
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
@@ -56,6 +59,53 @@ test.afterAll(async () => {
   await new Promise((resolveClose) => server.close(resolveClose));
 });
 
+const inspectSparseDepthResult = async (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const content = app.results?.[0]?.content || '';
+  const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+  const hasGroup = (id) => Boolean(svg.querySelector(`[id="${id}"]`));
+  const groupFills = (id) => {
+    const group = svg.querySelector(`[id="${id}"]`);
+    if (!group) return [];
+    return [group, ...group.querySelectorAll('[fill]')]
+      .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
+      .filter(Boolean);
+  };
+  const args = Array.isArray(app.lastRunInfo?.invocation?.args)
+    ? app.lastRunInfo.invocation.args
+    : [];
+  const depthArgs = [];
+  args.forEach((arg, index) => {
+    if (arg === '--depth_track') depthArgs.push(args.slice(index + 1, index + 3));
+  });
+  return {
+    resultCount: app.results?.length || 0,
+    groups: {
+      depthARecord1: hasGroup('depth_a_record_1'),
+      depthARecord1Axis: hasGroup('depth_a_record_1_axis'),
+      depthARecord2: hasGroup('depth_a_record_2'),
+      depthBRecord1: hasGroup('depth_b_record_1'),
+      depthBRecord2: hasGroup('depth_b_record_2'),
+      depthBRecord2Axis: hasGroup('depth_b_record_2_axis')
+    },
+    depthAFills: groupFills('depth_a_record_1'),
+    depthBFills: groupFills('depth_b_record_2'),
+    depthArgs
+  };
+});
+
+const runDiagramWithDiagnostics = async (page) => page.evaluate(async () => {
+  const app = window.__GBDRAW_APP__;
+  const result = await app.runAnalysis();
+  return {
+    result,
+    errorSummary: String(app.errorLog?.summary || ''),
+    errorDetails: Array.isArray(app.errorLog?.details)
+      ? app.errorLog.details.map((detail) => String(detail))
+      : []
+  };
+});
+
 test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page }) => {
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
@@ -84,6 +134,304 @@ test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page })
   });
   await expect(showDepthCheckbox).toBeDisabled();
   await expect(showDepthCheckbox).not.toBeChecked();
+});
+
+test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const result = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.addLinearSeq();
+    const first = new File(['position\tdepth\n1\t10\n'], 'sample-a.tsv', {
+      type: 'text/tab-separated-values'
+    });
+    const second = new File(['position\tdepth\n1\t20\n'], 'sample-b.tsv', {
+      type: 'text/tab-separated-values'
+    });
+    app.setLinearDepthFile(app.linearSeqs[0], 0, first);
+    app.setLinearTrackSlotsEnabled(true);
+    const clonePlain = (value) => JSON.parse(JSON.stringify(value));
+    const originalSlots = clonePlain(app.adv.linear_track_slots);
+    const originalAxisIndex = app.adv.linear_track_slots_axis_index;
+    const originalFeatureSlot = clonePlain(
+      app.adv.linear_track_slots.find((slot) => slot.renderer === 'features')
+    );
+    const duplicateManagedSlot = clonePlain(
+      app.adv.linear_track_slots.find((slot) => (
+        slot.renderer === 'depth' && slot.params.track_index === 0
+      ))
+    );
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'manual_depth', renderer: 'depth', enabled: true, side: 'above',
+        params: { track_index: 0, custom: 'manual' }
+      },
+      duplicateManagedSlot,
+      originalFeatureSlot
+    );
+    app.adv.linear_track_slots_axis_index = 2;
+    app.ensureLinearTrackDepthSlots();
+    const deduplicatedSlots = {
+      ids: app.adv.linear_track_slots.map((slot) => slot.id),
+      axisIndex: app.adv.linear_track_slots_axis_index
+    };
+    app.adv.linear_track_slots.splice(0, app.adv.linear_track_slots.length, ...originalSlots);
+    app.adv.linear_track_slots_axis_index = originalAxisIndex;
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[1], 1, second);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const beforeClear = {
+      rows: app.linearSeqs.map((seq) => seq.depth.map((file) => file?.name || null)),
+      labels: app.adv.depth_tracks.map((track) => track.label),
+      slotIndexes: app.adv.linear_track_slots
+        .filter((slot) => slot.renderer === 'depth' && slot.enabled !== false)
+        .map((slot) => slot.params.track_index)
+    };
+    app.setLinearDepthFile(app.linearSeqs[0], 0, null);
+    const afterClear = {
+      rows: app.linearSeqs.map((seq) => seq.depth.map((file) => file?.name || null)),
+      labels: app.adv.depth_tracks.map((track) => track.label),
+      slotIndexes: app.adv.linear_track_slots
+        .filter((slot) => slot.renderer === 'depth' && slot.enabled !== false)
+        .map((slot) => slot.params.track_index)
+    };
+    const featureSlot = app.adv.linear_track_slots.find((slot) => slot.renderer === 'features');
+    const trackZeroSlot = app.adv.linear_track_slots.find((slot) => (
+      slot.renderer === 'depth' && slot.params.track_index === 0
+    ));
+    const trackOneSlot = app.adv.linear_track_slots.find((slot) => (
+      slot.renderer === 'depth' && slot.params.track_index === 1
+    ));
+    const manualSlotSource = {
+      id: 'custom_depth',
+      renderer: 'depth',
+      enabled: true,
+      side: 'above',
+      params: { track_index: 0, custom: 'keep-manual' }
+    };
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      manualSlotSource,
+      trackZeroSlot,
+      featureSlot,
+      trackOneSlot
+    );
+    app.adv.linear_track_slots_axis_index = 2;
+    app.removeLinearDepthTrack(app.linearSeqs[0], 0);
+    const manualSlot = app.adv.linear_track_slots.find((slot) => slot.id === 'custom_depth');
+    const { linearTrackAxisIndexForEnabledSlots } = await import(
+      new URL('./js/app/linear-track-slots.js', window.location.href).href
+    );
+    const afterRemove = {
+      rows: app.linearSeqs.map((seq) => seq.depth.map((file) => file?.name || null)),
+      labels: app.adv.depth_tracks.map((track) => track.label),
+      slotIndexes: app.adv.linear_track_slots
+        .filter((slot) => slot.renderer === 'depth' && slot.enabled !== false)
+        .map((slot) => slot.params.track_index),
+      manualSlot: {
+        enabled: manualSlot.enabled,
+        trackIndex: manualSlot.params.track_index ?? null,
+        error: manualSlot.depth_binding_error
+      },
+      fullAxisIndex: app.adv.linear_track_slots_axis_index,
+      emittedAxisIndex: linearTrackAxisIndexForEnabledSlots(
+        app.adv.linear_track_slots,
+        app.adv.linear_track_slots_axis_index
+      ),
+      emittedSlotIds: app.adv.linear_track_slots
+        .filter((slot) => slot.enabled !== false)
+        .map((slot) => slot.id)
+    };
+    manualSlot.params.track_index = 0;
+    app.syncDepthTrackSlotLabel(manualSlot);
+    const afterRepair = {
+      enabled: manualSlot.enabled,
+      trackIndex: manualSlot.params.track_index,
+      error: manualSlot.depth_binding_error ?? null
+    };
+    return { deduplicatedSlots, beforeClear, afterClear, afterRemove, afterRepair };
+  });
+
+  expect(result.deduplicatedSlots).toEqual({ ids: ['manual_depth', 'features'], axisIndex: 1 });
+  expect(result.beforeClear.rows).toEqual([
+    ['sample-a.tsv', null],
+    [null, 'sample-b.tsv']
+  ]);
+  expect(result.beforeClear.slotIndexes).toEqual([0, 1]);
+  expect(result.afterClear.rows).toEqual([
+    [null, null],
+    [null, 'sample-b.tsv']
+  ]);
+  expect(result.afterClear.labels).toEqual(result.beforeClear.labels);
+  expect(result.afterClear.slotIndexes).toEqual(result.beforeClear.slotIndexes);
+  expect(result.afterRemove.rows).toEqual([
+    [null],
+    ['sample-b.tsv']
+  ]);
+  expect(result.afterRemove.labels).toHaveLength(1);
+  expect(result.afterRemove.slotIndexes).toEqual([0]);
+  expect(result.afterRemove.manualSlot.enabled).toBe(false);
+  expect(result.afterRemove.manualSlot.trackIndex).toBeNull();
+  expect(result.afterRemove.manualSlot.error).toContain('logical track index 0');
+  expect(result.afterRemove.fullAxisIndex).toBe(1);
+  expect(result.afterRemove.emittedAxisIndex).toBe(0);
+  expect(result.afterRemove.emittedSlotIds).toEqual(['features', 'depth_2']);
+  expect(result.afterRepair).toEqual({ enabled: false, trackIndex: 0, error: null });
+});
+
+test('Linear sparse diagonal depth generates and survives a session round trip', async ({ page }) => {
+  test.setTimeout(240000);
+  const genbankA = readFileSync(sparseGenbankAPath, 'utf8');
+  const genbankB = readFileSync(sparseGenbankBPath, 'utf8');
+  const makeDepthTsv = (recordId, length, depth) => [
+    'reference_name\tposition\tdepth',
+    ...Array.from(
+      { length: Math.ceil(length / 1000) },
+      (_, index) => `${recordId}\t${Math.min(length, index * 1000 + 1)}\t${depth + (index % 3)}`
+    ),
+    `${recordId}\t${length}\t${depth}`
+  ].join('\n');
+  const depthA = makeDepthTsv('BGC0000711', 30837, 10);
+  const depthB = makeDepthTsv('BGC0000713', 31892, 50);
+
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.addLinearSeq();
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankAText], 'BGC0000711.gbk', {
+      type: 'text/plain', lastModified: 1
+    }));
+    app.setLinearSeqPrimaryFile(1, 'gb', new File([genbankBText], 'BGC0000713.gbk', {
+      type: 'text/plain', lastModified: 2
+    }));
+    app.setLinearDepthFile(app.linearSeqs[0], 0, new File([depthAText], 'sample-a.tsv', {
+      type: 'text/tab-separated-values', lastModified: 3
+    }));
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[1], 1, new File([depthBText], 'sample-b.tsv', {
+      type: 'text/tab-separated-values', lastModified: 4
+    }));
+    Object.assign(app.adv.depth_tracks[0], {
+      label: 'Sample A', color: '#112233', height: 12
+    });
+    Object.assign(app.adv.depth_tracks[1], {
+      label: 'Sample B', color: '#445566', height: 18
+    });
+    app.form.show_gc = false;
+    app.form.show_skew = false;
+    app.form.legend = 'none';
+    app.setLinearTrackSlotsEnabled(true);
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'depth_a', renderer: 'depth', enabled: true, side: 'above', height: '12px',
+        params: { track_index: 0, legend_label: 'Sample A' }
+      },
+      {
+        id: 'depth_b', renderer: 'depth', enabled: true, side: 'above', height: '18px',
+        params: { track_index: 1, legend_label: 'Sample B' }
+      },
+      { id: 'features', renderer: 'features', enabled: true, side: 'below', params: {} }
+    );
+    app.adv.linear_track_slots_axis_index = 2;
+    app.sessionTitle = 'sparse-depth-e2e';
+  }, {
+    genbankAText: genbankA,
+    genbankBText: genbankB,
+    depthAText: depthA,
+    depthBText: depthB
+  });
+
+  const firstRun = await runDiagramWithDiagnostics(page);
+  expect(firstRun).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  const firstResult = await inspectSparseDepthResult(page);
+  expect(firstResult.resultCount).toBe(1);
+  expect(firstResult.groups).toEqual({
+    depthARecord1: true,
+    depthARecord1Axis: true,
+    depthARecord2: false,
+    depthBRecord1: false,
+    depthBRecord2: true,
+    depthBRecord2Axis: true
+  });
+  expect(firstResult.depthAFills).toContain('#112233');
+  expect(firstResult.depthBFills).toContain('#445566');
+  expect(firstResult.depthArgs).toEqual([
+    ['sample-a.tsv', ''],
+    ['', 'sample-b.tsv']
+  ]);
+
+  const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const download = await downloadPromise;
+  const savedSessionPath = await download.path();
+  expect(savedSessionPath).toBeTruthy();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await page.waitForFunction(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.mode === 'linear' &&
+      app.linearSeqs?.length === 2 &&
+      app.adv?.linear_track_slots_axis_index === 2;
+  }, null, { timeout: 120000 });
+
+  const restoredState = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      sparseRows: app.linearSeqs.map((seq) => seq.depth.map(Boolean)),
+      labels: app.adv.depth_tracks.map((track) => track.label),
+      colors: app.adv.depth_tracks.map((track) => track.color.toLowerCase()),
+      slotIds: app.adv.linear_track_slots.map((slot) => slot.id),
+      slotIndexes: app.adv.linear_track_slots
+        .filter((slot) => slot.renderer === 'depth')
+        .map((slot) => slot.params.track_index),
+      axisIndex: app.adv.linear_track_slots_axis_index
+    };
+  });
+  expect(restoredState).toEqual({
+    sparseRows: [[true, false], [false, true]],
+    labels: ['Sample A', 'Sample B'],
+    colors: ['#112233', '#445566'],
+    slotIds: ['depth_a', 'depth_b', 'features'],
+    slotIndexes: [0, 1],
+    axisIndex: 2
+  });
+
+  const secondRun = await runDiagramWithDiagnostics(page);
+  expect(secondRun).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  const secondResult = await inspectSparseDepthResult(page);
+  expect(secondResult.groups).toEqual(firstResult.groups);
+  expect(secondResult.depthAFills).toContain('#112233');
+  expect(secondResult.depthBFills).toContain('#445566');
+  expect(secondResult.depthArgs).toEqual([
+    ['depth-track-files-1-1-sample-a.tsv', ''],
+    ['', 'depth-track-files-2-2-sample-b.tsv']
+  ]);
 });
 
 test('WSSV depth session removes stale circular depth metadata and slots', async ({ page }) => {
