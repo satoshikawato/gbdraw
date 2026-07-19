@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { createReadStream, existsSync, readFileSync, statSync } = require('node:fs');
 const { createServer } = require('node:http');
 const { extname, join, normalize, resolve, sep } = require('node:path');
+const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const webRoot = join(repoRoot, 'gbdraw/web');
@@ -258,19 +259,33 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('GCF_000196095.1_ASM19609v1_genomic.gbff')).toBeVisible();
   await expect(filesPanel.getByText('GCF_030060435.1_ASM3006043v1_genomic.gbff')).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'SVG', exact: true })).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Interactive SVG' })).toHaveCount(0);
+  const svgLink = filesPanel.getByRole('link', { name: 'Interactive SVG', exact: true });
+  await expect(svgLink).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON (gzip)' })).toBeVisible();
   const sample = readGalleryExamples().find((entry) => entry.id === 'vibrio-harveyi-group-collinear');
-  expect(sample?.svgType).toBe('static');
+  expect(sample?.svgType).toBe('interactive');
+  expect(sample?.svg).toBe('./examples/vibrio-harveyi-group-collinear.svg');
   const svgPath = join(webRoot, 'gallery/examples/vibrio-harveyi-group-collinear.svg');
   const svgSource = readFileSync(svgPath, 'utf8');
-  expect(svgSource).not.toContain('<script');
-  expect(svgSource).not.toContain('data-gbdraw-interactive-svg');
-  expect(statSync(svgPath).size).toBeLessThan(100 * 1024 * 1024);
+  expect(svgSource).toContain('gbdraw-interactive-feature-script');
+  expect(svgSource).toContain('data-gbdraw-interactive-svg="true"');
+  expect(svgSource).toContain('data-encoding="gzip-base64"');
+  expect(statSync(svgPath).size).toBeLessThan(40 * 1024 * 1024);
+  const encodedMetadata = svgSource.match(
+    /<metadata[^>]*id="gbdraw-interactive-feature-metadata"[^>]*>([^<]+)<\/metadata>/
+  )?.[1];
+  expect(encodedMetadata).toBeTruthy();
+  const metadata = JSON.parse(gunzipSync(Buffer.from(encodedMetadata, 'base64')).toString('utf8'));
+  expect(metadata.features).toHaveLength(24_945);
+  expect(metadata.matches).toHaveLength(633);
   await page.getByRole('tab', { name: 'Preview' }).click();
-  await expect(page.locator('#preview-note')).toContainText('static SVG');
-  await expect(page.locator('#demo-frame')).toHaveAttribute('title', /Static gbdraw SVG/);
+  await expect(page.locator('#preview-note')).toContainText('JavaScript-enabled');
+  await expect(page.locator('#demo-frame')).toHaveAttribute('title', /Interactive gbdraw SVG/);
+  const previewFrame = page.frameLocator('#demo-frame');
+  await expect(previewFrame.locator('svg[data-gbdraw-interactive-svg="true"]')).toBeVisible({
+    timeout: 30_000
+  });
+  await expect(previewFrame.locator('#gbdraw-viewport-controls')).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -862,18 +877,18 @@ test('Gallery uses workflow tags and distinguishes runnable commands', async ({ 
   await expect(cards).toHaveCount(11);
   await expect(page.locator('#sample-count')).toHaveText('11 examples');
 
-  const staticCard = page.locator('[data-sample-id="vibrio-harveyi-group-collinear"]');
-  await expect(staticCard.locator('.tag')).toHaveText([
+  const harveyiCard = page.locator('[data-sample-id="vibrio-harveyi-group-collinear"]');
+  await expect(harveyiCard.locator('.tag')).toHaveText([
     'Linear',
     'Multi-record',
     'Collinear groups',
     'LOSAT',
-    'Static SVG'
+    'Interactive SVG'
   ]);
-  await staticCard.click();
-  await page.locator('#selected-tags').getByRole('button', { name: 'Static SVG' }).click();
-  await expect(cards).toHaveCount(1);
-  await expect(tagFilters.getByRole('button', { name: 'Static SVG' })).toHaveAttribute(
+  await harveyiCard.click();
+  await page.locator('#selected-tags').getByRole('button', { name: 'Multi-record' }).click();
+  await expect(cards).toHaveCount(2);
+  await expect(tagFilters.getByRole('button', { name: 'Multi-record' })).toHaveAttribute(
     'aria-pressed',
     'true'
   );

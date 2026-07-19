@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
+import gzip
 import io
 import json
 import re
@@ -50,6 +52,7 @@ class GallerySessionExample:
     feature_sources: tuple[str, ...] = ()
     sync_result_svg: bool = True
     interactive_svg: bool = True
+    compressed_metadata: bool = False
     compressed_session: bool = False
     interactive_step: str = ""
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
@@ -168,7 +171,7 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
     "--feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle "
     "--feature_shape repeat_region=rectangle --block_stroke_width 0 "
     "--axis_stroke_width 2 --line_stroke_width 1 --legend bottom "
-    "-o vibrio-harveyi-group-collinear -f svg"
+    "-o vibrio-harveyi-group-collinear -f interactive_svg"
 )
 
 WSSV_CONSERVATION_LABELS = (
@@ -279,7 +282,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
         title="<i>Vibrio</i> Harveyi group multi-record collinearity",
-        tags=("Linear", "Multi-record", "Collinear groups", "LOSAT", "Static SVG"),
+        tags=("Linear", "Multi-record", "Collinear groups", "LOSAT", "Interactive SVG"),
         description="Compare all 11 replicons from five Harveyi-group Vibrio assemblies as five multi-record rows.",
         workflow="Multi-record LOSATP collinear blocks",
         input_summary="5 multi-record GenBank files; 11 replicons",
@@ -295,9 +298,12 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
             "GCF_000354175.2_ASM35417v2_genomic.gbff",
         ),
         sync_result_svg=False,
-        interactive_svg=False,
+        compressed_metadata=True,
         compressed_session=True,
-        source_note=GZIP_SESSION_SOURCE_NOTE,
+        source_note=(
+            "The interactive SVG with gzip-compressed metadata, complete gzip-compressed "
+            "Session JSON, and uncompressed source figure are stored with the gallery assets."
+        ),
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_orthogroup",
@@ -620,6 +626,26 @@ def _write_gallery_svg(
         if example.interactive_svg
         else source
     )
+    if example.compressed_metadata:
+        root = ET.fromstring(output)
+        metadata = next(
+            (
+                element
+                for element in root.iter()
+                if element.get("id") == "gbdraw-interactive-feature-metadata"
+            ),
+            None,
+        )
+        if metadata is None:
+            raise ValueError(f"Interactive metadata is missing from {example.id}")
+        compressed = gzip.compress(
+            (metadata.text or "{}").encode("utf-8"),
+            compresslevel=9,
+            mtime=0,
+        )
+        metadata.set("data-encoding", "gzip-base64")
+        metadata.text = base64.b64encode(compressed).decode("ascii")
+        output = ET.tostring(root, encoding="unicode")
     example.gallery_svg_path.write_text(output, encoding="utf-8")
 
 

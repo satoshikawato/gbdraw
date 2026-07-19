@@ -306,7 +306,7 @@
     },
     {
       "title": "Generate and inspect the multi-record diagram",
-      "body": "Click Generate Diagram. The first LOSATP search is the expensive step; the bundled Gallery session already contains the completed result for immediate inspection. The preview should show five species rows, 11 record-local rulers, rectangular features, and orientation-and-identity collinear blocks at the four adjacent species boundaries. Each left-aligned two-line definition remains centered on the feature record rather than the ruler. A narrow white gap separates each record from the adjacent blocks, including when feature labels are hidden.",
+      "body": "Click Generate Diagram. The first LOSATP search is the expensive step; the bundled Gallery session already contains the completed result for immediate inspection. The preview should show five species rows, 11 record-local rulers, rectangular features, and orientation-and-identity collinear blocks at the four adjacent species boundaries. Each left-aligned two-line definition remains centered on the feature record rather than the ruler. A narrow white gap separates each record from the adjacent blocks, including when feature labels are hidden. The Gallery preview uses an interactive SVG with internally compressed metadata, so you can click a feature or collinear block to inspect its embedded metadata.",
       "operations": [
         {
           "media": {

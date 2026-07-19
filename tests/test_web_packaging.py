@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import contextlib
 import functools
 import gzip
@@ -84,11 +85,6 @@ GALLERY_LOSAT_CACHE_SESSION_FILES = {
 GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
 }
-GALLERY_STATIC_SESSION_FILES = {
-    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-}
-
-
 def _load_verify_module():
     module_path = REPO_ROOT / "tools" / "verify_gui_offline.py"
     spec = importlib.util.spec_from_file_location("verify_gui_offline", module_path)
@@ -214,12 +210,16 @@ def _standalone_interactivity_source() -> str:
 
 def _gallery_svg_metadata(svg_source: str) -> dict[str, object]:
     metadata_match = re.search(
-        r'<metadata[^>]*id="gbdraw-interactive-feature-metadata"[^>]*>(.*?)</metadata>',
+        r'<metadata(?P<attributes>[^>]*id="gbdraw-interactive-feature-metadata"[^>]*)>'
+        r'(?P<payload>.*?)</metadata>',
         svg_source,
         re.S,
     )
     assert metadata_match, "missing interactive feature metadata"
-    return json.loads(html.unescape(metadata_match.group(1)))
+    payload = html.unescape(metadata_match.group("payload"))
+    if 'data-encoding="gzip-base64"' in metadata_match.group("attributes"):
+        payload = gzip.decompress(base64.b64decode(payload)).decode("utf-8")
+    return json.loads(payload)
 
 
 def _assert_white_gallery_thumbnail(path: Path) -> None:
@@ -897,7 +897,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
             "Multi-record",
             "Collinear groups",
             "LOSAT",
-            "Static SVG",
+            "Interactive SVG",
         ],
         "hepatoplasmataceae_orthogroup": [
             "Linear",
@@ -2165,7 +2165,17 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
         ]
         == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
     )
+    assert (
+        remote_assets["gallery/examples/vibrio-harveyi-group-collinear.svg"]
+        == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
+    )
     assert (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
+    assert not (
+        bundle_path
+        / "gallery"
+        / "examples"
+        / "vibrio-harveyi-group-collinear.svg"
+    ).exists()
     assert (
         bundle_path
         / "gallery"
@@ -4330,10 +4340,7 @@ def test_gallery_session_restore_smoke() -> None:
                     "#6@2",
                 ]
 
-            if (
-                session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES
-                and session_name not in GALLERY_STATIC_SESSION_FILES
-            ):
+            if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
                 target = page.evaluate(
                     """async () => {
                         const app = window.__GBDRAW_APP__;

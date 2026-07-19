@@ -705,7 +705,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
 `;
 
 export const STANDALONE_INTERACTIVE_SCRIPT = `
-(function () {
+(async function () {
   'use strict';
 
   var FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
@@ -796,7 +796,23 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   try {
-    payload = JSON.parse(metadata ? metadata.textContent || '{}' : '{}');
+    var metadataText = metadata ? metadata.textContent || '{}' : '{}';
+    if (metadata && metadata.getAttribute('data-encoding') === 'gzip-base64') {
+      if (typeof DecompressionStream !== 'function') {
+        throw new Error('This browser cannot decompress the interactive SVG metadata.');
+      }
+      var encoded = metadataText.replace(/\\s+/g, '');
+      var binary = atob(encoded);
+      var compressed = new Uint8Array(binary.length);
+      for (var byteIndex = 0; byteIndex < binary.length; byteIndex += 1) {
+        compressed[byteIndex] = binary.charCodeAt(byteIndex);
+      }
+      var decompressed = new Blob([compressed])
+        .stream()
+        .pipeThrough(new DecompressionStream('gzip'));
+      metadataText = await new Response(decompressed).text();
+    }
+    payload = JSON.parse(metadataText);
   } catch (error) {
     payload = {};
   }

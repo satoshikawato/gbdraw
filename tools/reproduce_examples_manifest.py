@@ -31,7 +31,7 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
         "Brand asset derived from the adjacent SVG; update and verify both logo files together."
     ),
     "gbdraw/web/gallery/examples/vibrio-harveyi-group-collinear.svg": (
-        "Static Web Gallery output; refresh it together with its source figure and compressed session."
+        "Interactive Web Gallery output with compressed metadata; refresh it together with its source figure and compressed session."
     ),
 }
 
