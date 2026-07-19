@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -15,7 +16,6 @@ DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID = "G-GG6JMKM02Y"
 GOOGLE_ANALYTICS_MEASUREMENT_ID_ENV = "GBDRAW_GOOGLE_ANALYTICS_MEASUREMENT_ID"
 GALLERY_REMOTE_REF_ENV = "GBDRAW_GALLERY_REMOTE_REF"
 GALLERY_REMOTE_BASE_ENV = "GBDRAW_GALLERY_REMOTE_BASE"
-DEFAULT_GALLERY_REMOTE_REF = "main"
 DEFAULT_GALLERY_REMOTE_REPOSITORY = "satoshikawato/gbdraw"
 GALLERY_REMOTE_MANIFEST = "gallery/remote-assets.json"
 GALLERY_REMOTE_ASSET_LIMIT_BYTES = 25 * 1024 * 1024
@@ -28,6 +28,7 @@ GALLERY_REMOTE_ASSET_PATTERNS = (
 )
 SCRIPT_MARKER = "<!-- GOOGLE_ANALYTICS_SCRIPT -->"
 NOTICE_MARKER = "<!-- GOOGLE_ANALYTICS_NOTICE -->"
+FULL_COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 ISOLATION_HEADERS = """/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
@@ -89,17 +90,25 @@ def _render_google_analytics_notice() -> str:
                             </div>"""
 
 
-def _default_gallery_remote_base() -> str:
+def _default_gallery_remote_base(*, commit_sha: str | None = None) -> str:
     explicit_base = os.environ.get(GALLERY_REMOTE_BASE_ENV)
     if explicit_base:
         return explicit_base.rstrip("/") + "/"
+
     ref = (
-        os.environ.get(GALLERY_REMOTE_REF_ENV)
-        or os.environ.get("CF_PAGES_COMMIT_SHA")
-        or os.environ.get("GITHUB_SHA")
-        or DEFAULT_GALLERY_REMOTE_REF
+        os.environ.get(GALLERY_REMOTE_REF_ENV, "").strip()
+        or str(commit_sha or "").strip()
+        or _load_stamp_web_build_module().resolve_commit_sha().strip()
     )
-    return f"https://raw.githubusercontent.com/{DEFAULT_GALLERY_REMOTE_REPOSITORY}/{ref}/gbdraw/web/"
+    if not FULL_COMMIT_SHA_RE.fullmatch(ref):
+        raise RuntimeError(
+            "Cloudflare Gallery remote assets require a full 40-character commit SHA. "
+            f"Set {GALLERY_REMOTE_REF_ENV} to an immutable commit SHA."
+        )
+    return (
+        f"https://raw.githubusercontent.com/{DEFAULT_GALLERY_REMOTE_REPOSITORY}/"
+        f"{ref}/gbdraw/web/"
+    )
 
 
 def _write_remote_gallery_manifest(output_root: Path, remote_base: str) -> dict[str, str]:
@@ -156,11 +165,17 @@ def build_cloudflare_pages_bundle(
         "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com;",
     )
     index_path.write_text(index_html, encoding="utf-8")
-    _load_stamp_web_build_module().stamp_web_build(output_root, commit_sha=commit_sha)
+    stamp_web_build_module = _load_stamp_web_build_module()
+    resolved_commit_sha = str(commit_sha or stamp_web_build_module.resolve_commit_sha()).strip()
+    stamp_web_build_module.stamp_web_build(
+        output_root,
+        commit_sha=resolved_commit_sha,
+    )
     (output_root / "_headers").write_text(ISOLATION_HEADERS, encoding="utf-8")
     _write_remote_gallery_manifest(
         output_root=output_root,
-        remote_base=gallery_remote_base or _default_gallery_remote_base(),
+        remote_base=gallery_remote_base
+        or _default_gallery_remote_base(commit_sha=resolved_commit_sha),
     )
     return output_root
 
