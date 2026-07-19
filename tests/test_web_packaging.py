@@ -2133,11 +2133,14 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     ensure_prepared_browser_wheel()
     cloudflare_module = _load_prepare_cloudflare_pages_module()
     output_root = tmp_path / "cloudflare-pages"
-    remote_base = "https://example.com/gbdraw/web/"
+    commit_sha = "abcdef1234567890abcdef1234567890abcdef12"
+    remote_base = (
+        "https://raw.githubusercontent.com/satoshikawato/gbdraw/"
+        f"{commit_sha}/gbdraw/web/"
+    )
     bundle_path = cloudflare_module.build_cloudflare_pages_bundle(
         output_root=output_root,
-        gallery_remote_base=remote_base,
-        commit_sha="abcdef1234567890",
+        commit_sha=commit_sha,
     )
 
     index_html = (bundle_path / "index.html").read_text(encoding="utf-8")
@@ -2161,7 +2164,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     assert "GOOGLE_ANALYTICS_NOTICE" not in index_html
     assert "GBDRAW_HOSTED_BUILD_LABEL" not in index_html
     assert f"Version: v{read_project_version()}+abcdef1" in index_html
-    assert 'title="Commit abcdef1234567890"' in index_html
+    assert f'title="Commit {commit_sha}"' in index_html
     headers = (bundle_path / "_headers").read_text(encoding="utf-8")
     assert "Cross-Origin-Opener-Policy: same-origin" in headers
     assert "Cross-Origin-Embedder-Policy: require-corp" in headers
@@ -2185,6 +2188,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
         remote_assets["gallery/examples/vibrio-harveyi-group-collinear.svg"]
         == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
     )
+    assert all("/main/" not in url for url in remote_assets.values())
     assert (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
     assert not (
         bundle_path
@@ -2205,6 +2209,36 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
         / "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
     ).exists()
     assert (bundle_path / "gallery" / "examples" / "majanivirus_orthogroup.svg").exists()
+
+
+def test_cloudflare_gallery_remote_base_rejects_mutable_refs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    monkeypatch.delenv(cloudflare_module.GALLERY_REMOTE_BASE_ENV, raising=False)
+    monkeypatch.setenv(cloudflare_module.GALLERY_REMOTE_REF_ENV, "main")
+
+    with pytest.raises(RuntimeError, match="full 40-character commit SHA"):
+        cloudflare_module._default_gallery_remote_base()
+
+
+def test_cloudflare_gallery_remote_base_uses_resolved_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    commit_sha = "1234567890abcdef1234567890abcdef12345678"
+    monkeypatch.delenv(cloudflare_module.GALLERY_REMOTE_BASE_ENV, raising=False)
+    monkeypatch.delenv(cloudflare_module.GALLERY_REMOTE_REF_ENV, raising=False)
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_load_stamp_web_build_module",
+        lambda: SimpleNamespace(resolve_commit_sha=lambda: commit_sha),
+    )
+
+    assert cloudflare_module._default_gallery_remote_base() == (
+        "https://raw.githubusercontent.com/satoshikawato/gbdraw/"
+        f"{commit_sha}/gbdraw/web/"
+    )
 
 
 def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
