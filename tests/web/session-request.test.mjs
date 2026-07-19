@@ -123,7 +123,8 @@ state.annotationSets = [{
   annotations: [{
     id: 'window',
     target: { kind: 'coordinateSpan', record: null, start: 1, end: 4, coordinateSpace: 'source', wrapsOrigin: false, outOfBounds: 'clip' },
-    label: 'Window', mark: 'band', lane: null, style: null, legendLabel: null, metadata: {}
+    label: 'Window', mark: 'band', lane: null, style: null, legendLabel: null,
+    metadata: { _gbdraw_web_target_record_key: 'linear-source::#2' }
   }],
   defaultStyle: {
     stroke: '#404040', strokeWidth: 1.5, strokeDasharray: [], lineCap: 'tick', fill: null,
@@ -135,6 +136,11 @@ state.annotationSets = [{
 const annotationCanonical = buildCanonicalSessionRequest({ state, filesData });
 assert.equal(annotationCanonical.renderRequest.diagramOptions.annotations.sets[0].id, 'review');
 assert.equal(projectCanonicalSessionRequest(annotationCanonical).config.annotationSets[0].annotations[0].id, 'window');
+assert.equal(
+  projectCanonicalSessionRequest(annotationCanonical).config.annotationSets[0].annotations[0]
+    .metadata._gbdraw_web_target_record_key,
+  'linear-source::#2'
+);
 state.annotationSets = [];
 
 state.adv.circular_label_placement = 'radial';

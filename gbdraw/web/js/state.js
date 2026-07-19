@@ -600,6 +600,13 @@ const showRightDrawer = ref(false);
 const rightDrawerTab = ref('features'); // 'legend' | 'features' | 'orthogroups'
 const linearReorderNotice = ref('');
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
+const circularRecordDiscovery = reactive({
+  status: 'idle',
+  error: '',
+  inputType: '',
+  primaryFile: null,
+  pairedFile: null
+});
 
 // Color & Filter State
 const paletteDefinitions = ref({});
@@ -1146,6 +1153,7 @@ export const state = {
   rightDrawerTab,
   linearReorderNotice,
   circularRecordList,
+  circularRecordDiscovery,
   paletteDefinitions,
   paletteNames,
   selectedPalette,

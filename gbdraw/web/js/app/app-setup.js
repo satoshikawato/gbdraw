@@ -53,6 +53,14 @@ import {
 } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createAnnotationEditor } from './annotations.js';
+import {
+  annotationSourceKey,
+  buildAnnotationRecordCatalog
+} from './annotations/record-catalog.js';
+import {
+  reconcileAnnotationRecordBindings
+} from './annotations/record-selector.js';
+import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
@@ -65,9 +73,10 @@ import {
 import {
   addLinearComparison as appendLinearComparison,
   adjacentRowPairs,
+  hasLinearComparisonIntent,
   reconcileLinearComparisons
 } from './linear-comparisons.js';
-import { discoverSequenceRecords } from './record-discovery.js';
+import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import {
   conservationSourceDescriptors,
   defaultConservationSeriesLabel,
@@ -154,6 +163,7 @@ export const createAppSetup = () => {
     rightDrawerTab,
     linearReorderNotice,
     circularRecordList,
+    circularRecordDiscovery,
     paletteDefinitions,
     paletteNames,
     selectedPalette,
@@ -339,12 +349,83 @@ export const createAppSetup = () => {
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
-    recordReader: (options) => discoverSequenceRecords({
-      ...options,
-      pyodide: getPyodide(),
-      writeFileToFs: pyodideManager.writeFileToFs
-    })
+    recordReader: ({ inputType, primaryFile, pairedFile, temporaryPathPrefix }) => (
+      inputType === 'gff'
+        ? discoverGffFastaRecords({
+            gffFile: primaryFile,
+            fastaFile: pairedFile,
+            pyodide: getPyodide(),
+            writeFileToFs: pyodideManager.writeFileToFs,
+            gffTemporaryPath: `${temporaryPathPrefix}.gff`,
+            fastaTemporaryPath: `${temporaryPathPrefix}.fasta`
+          })
+        : discoverSequenceRecords({
+            file: primaryFile,
+            format: 'genbank',
+            pyodide: getPyodide(),
+            writeFileToFs: pyodideManager.writeFileToFs,
+            temporaryPath: `${temporaryPathPrefix}.gb`
+          })
+    )
   });
+  const getAnnotationRecordCatalog = (loadComparisonOverride = null) => {
+    const inputType = mode.value === 'linear' ? lInputType.value : cInputType.value;
+    const circularPrimaryFile = cInputType.value === 'gff' ? files.c_gff : files.c_gb;
+    const circularPairedFile = cInputType.value === 'gff' ? files.c_fasta : null;
+    const circularHasInput = Boolean(
+      circularPrimaryFile && (cInputType.value !== 'gff' || circularPairedFile)
+    );
+    const circularIsCurrent =
+      circularRecordDiscovery.inputType === cInputType.value &&
+      circularRecordDiscovery.primaryFile === circularPrimaryFile &&
+      circularRecordDiscovery.pairedFile === circularPairedFile;
+    const loadComparison = loadComparisonOverride == null
+      ? hasLinearComparisonIntent({
+          layoutEnabled: linearRecordLayoutEnabled.value,
+          comparisons: linearComparisons,
+          sequences: linearSeqs,
+          blastSource: blastSource.value
+        })
+      : Boolean(loadComparisonOverride);
+    return buildAnnotationRecordCatalog({
+      mode: mode.value,
+      inputType,
+      loadComparison,
+      multiRecordCanvas: form.multi_record_canvas,
+      circularSource: {
+        sourceKey: annotationSourceKey({
+          scope: 'circular',
+          inputType: cInputType.value,
+          primaryFile: circularPrimaryFile,
+          pairedFile: circularPairedFile
+        }),
+        hasInput: circularHasInput,
+        status: circularIsCurrent
+          ? circularRecordDiscovery.status
+          : (circularHasInput ? 'loading' : 'idle'),
+        error: circularIsCurrent ? circularRecordDiscovery.error : '',
+        records: circularIsCurrent ? circularRecordList.value : []
+      },
+      linearSources: linearSeqs.map((seq) => {
+        const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
+        const pairedFile = lInputType.value === 'gff' ? seq.fasta : null;
+        return {
+          sourceKey: annotationSourceKey({
+            scope: 'linear',
+            uid: seq.uid,
+            inputType: lInputType.value,
+            primaryFile,
+            pairedFile
+          }),
+          selector: seq.region_record_id,
+          hasInput: Boolean(primaryFile && (lInputType.value !== 'gff' || pairedFile)),
+          status: linearRecordSelector.statusFor(seq),
+          error: linearRecordSelector.errorFor(seq),
+          records: linearRecordSelector.recordsFor(seq)
+        };
+      })
+    });
+  };
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   setPreviewRuntime(previewRuntime);
 
@@ -488,7 +569,20 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
-  const annotationEditor = createAnnotationEditor({ state });
+  const annotationEditor = createAnnotationEditor({ state, getRecordCatalog: getAnnotationRecordCatalog });
+  watch(
+    () => {
+      const catalog = getAnnotationRecordCatalog();
+      return `${catalog.status}:${catalog.signature}`;
+    },
+    () => {
+      const catalog = getAnnotationRecordCatalog();
+      if (catalog.status === 'ready') {
+        reconcileAnnotationRecordBindings(annotationSets, catalog);
+      }
+    },
+    { immediate: true }
+  );
   const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(state));
   const losatSettings = createLosatSettings({ state });
   const autoValueDisplay = createAutoValueDisplay(state);
@@ -1124,7 +1218,12 @@ export const createAppSetup = () => {
     getPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
     refreshFeatureOverrides: featureActions.refreshFeatureOverrides,
-    resetPreviewViewport
+    resetPreviewViewport,
+    validateAnnotationTargets: ({ loadComparison }) => {
+      const catalog = getAnnotationRecordCatalog(loadComparison);
+      reconcileAnnotationRecordBindings(annotationSets, catalog);
+      return validateAnnotationRecordTargets(annotationSets, catalog);
+    }
   });
   const resultsManager = createResultsManager({
     state,
@@ -1468,6 +1567,26 @@ export const createAppSetup = () => {
         processingStatus.value = '';
         generationCancelRequested.value = false;
         return { status: wasCanceled ? 'canceled' : 'error' };
+      }
+    }
+
+    const hasRegionAnnotations = annotationSets.some((set) => (
+      Array.isArray(set?.annotations) && set.annotations.length > 0
+    ));
+    if (hasRegionAnnotations) {
+      let catalog = getAnnotationRecordCatalog();
+      if (catalog.status !== 'ready') {
+        if (mode.value === 'linear') await linearRecordSelector.refresh();
+        else await refreshCircularRecordOrder();
+        catalog = getAnnotationRecordCatalog();
+      }
+      reconcileAnnotationRecordBindings(annotationSets, catalog);
+      const annotationTargetError = validateAnnotationRecordTargets(annotationSets, catalog);
+      if (annotationTargetError) {
+        errorLog.value = { summary: annotationTargetError, details: [] };
+        processing.value = false;
+        processingStatus.value = '';
+        return { status: 'error' };
       }
     }
 
@@ -2302,6 +2421,13 @@ export const createAppSetup = () => {
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
     importAnnotationTableFile: annotationEditor.importAnnotationTableFile,
+    annotationRecordOptions: annotationEditor.recordOptionsFor,
+    annotationRecordValue: annotationEditor.recordValueFor,
+    setAnnotationRecord: annotationEditor.setRecordValue,
+    annotationRecordRequired: annotationEditor.recordIsRequired,
+    annotationRecordMissing: annotationEditor.recordIsMissing,
+    annotationRecordDisabled: annotationEditor.recordIsDisabled,
+    annotationRecordMissingMessage: annotationEditor.recordMissingMessage,
     circularConservationLayoutWarning,
     circularConservationFastaInput,
     circularConservationSeriesRows,

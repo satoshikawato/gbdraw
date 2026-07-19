@@ -24,6 +24,25 @@ export const normalizeSequenceRecords = (payload) => {
   return records;
 };
 
+const readRecordPayload = (pyodide, helperName, args) => {
+  const helper = pyodide.globals.get(helperName);
+  try {
+    if (typeof helper !== 'function') throw new Error('Record discovery helper is unavailable.');
+    const rawPayload = helper(...args);
+    return normalizeSequenceRecords(JSON.parse(String(rawPayload || '{}')));
+  } finally {
+    helper?.destroy?.();
+  }
+};
+
+const unlinkIfPresent = (pyodide, path) => {
+  try {
+    pyodide.FS.unlink(path);
+  } catch (_error) {
+    // The file may not have been staged when discovery fails early.
+  }
+};
+
 export const discoverSequenceRecords = async ({
   file,
   format,
@@ -36,21 +55,40 @@ export const discoverSequenceRecords = async ({
   if (typeof writeFileToFs !== 'function') throw new Error('File staging is unavailable.');
   if (!temporaryPath) throw new Error('A temporary path is required.');
 
-  let listRecords = null;
   try {
     const staged = await writeFileToFs(file, temporaryPath);
     if (!staged) throw new Error('Could not stage the sequence file.');
-    listRecords = pyodide.globals.get('list_sequence_records');
-    if (typeof listRecords !== 'function') throw new Error('Record discovery helper is unavailable.');
-    const rawPayload = listRecords(temporaryPath, format);
-    const payload = JSON.parse(String(rawPayload || '{}'));
-    return normalizeSequenceRecords(payload);
+    return readRecordPayload(pyodide, 'list_sequence_records', [temporaryPath, format]);
   } finally {
-    listRecords?.destroy?.();
-    try {
-      pyodide.FS.unlink(temporaryPath);
-    } catch (_error) {
-      // The file may not have been staged when discovery fails early.
-    }
+    unlinkIfPresent(pyodide, temporaryPath);
+  }
+};
+
+export const discoverGffFastaRecords = async ({
+  gffFile,
+  fastaFile,
+  pyodide,
+  writeFileToFs,
+  gffTemporaryPath,
+  fastaTemporaryPath
+}) => {
+  if (!gffFile || !fastaFile) throw new Error('GFF3 and FASTA files are required.');
+  if (!pyodide) throw new Error('Python environment is not ready.');
+  if (typeof writeFileToFs !== 'function') throw new Error('File staging is unavailable.');
+  if (!gffTemporaryPath || !fastaTemporaryPath) throw new Error('Temporary paths are required.');
+
+  try {
+    const gffStaged = await writeFileToFs(gffFile, gffTemporaryPath);
+    if (!gffStaged) throw new Error('Could not stage the GFF3 file.');
+    const fastaStaged = await writeFileToFs(fastaFile, fastaTemporaryPath);
+    if (!fastaStaged) throw new Error('Could not stage the FASTA file.');
+    return readRecordPayload(
+      pyodide,
+      'list_gff_fasta_records',
+      [gffTemporaryPath, fastaTemporaryPath]
+    );
+  } finally {
+    unlinkIfPresent(pyodide, gffTemporaryPath);
+    unlinkIfPresent(pyodide, fastaTemporaryPath);
   }
 };

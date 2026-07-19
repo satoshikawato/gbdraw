@@ -129,6 +129,9 @@ def merge_gff_fasta_records(
 ) -> List[SeqRecord]:
     merged_records: List[SeqRecord] = []
     fasta_dict: Dict[str, SeqRecord] = {record.id: record for record in fasta_records}
+    fasta_order: Dict[str, int] = {
+        record.id: index for index, record in enumerate(fasta_records)
+    }
     for gff_record in gff_records:
         if gff_record.id in fasta_dict:
             try:
@@ -151,7 +154,7 @@ def merge_gff_fasta_records(
             raise ValidationError(
                 f"No matching FASTA record found for GFF record {gff_record.id}. Please ensure that all GFF records have corresponding FASTA entries."
             )
-    return merged_records
+    return sorted(merged_records, key=lambda record: fasta_order[record.id])
 
 
 def _gff3_feature_id(feature: SeqFeature) -> str | None:

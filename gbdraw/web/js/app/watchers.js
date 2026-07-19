@@ -763,7 +763,7 @@ export const setupWatchers = ({
   watch(() => state.adv.plot_title_font_size, scheduleCircularDefinitionUpdate);
   watch(() => state.adv.keep_full_definition_with_plot_title, scheduleCircularDefinitionUpdate);
   watch(
-    () => [mode.value, cInputType.value, files.c_gb, pyodideReady.value],
+    () => [mode.value, cInputType.value, files.c_gb, files.c_gff, files.c_fasta, pyodideReady.value],
     async () => {
       if (typeof refreshCircularRecordOrder !== 'function') return;
       await refreshCircularRecordOrder();
@@ -776,7 +776,8 @@ export const setupWatchers = ({
       pyodideReady.value,
       ...linearSeqs.flatMap((seq) => [
         seq.uid,
-        lInputType.value === 'gff' ? seq.fasta : seq.gb
+        lInputType.value === 'gff' ? seq.gff : seq.gb,
+        lInputType.value === 'gff' ? seq.fasta : null
       ])
     ],
     async () => {

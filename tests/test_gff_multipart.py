@@ -7,6 +7,39 @@ from gbdraw.features.coordinates import get_exon_and_intron_coordinates
 from gbdraw.io.genome import load_gff_fasta
 
 
+def test_load_gff_fasta_preserves_fasta_record_order(tmp_path: Path) -> None:
+    gff_path = tmp_path / "records.gff3"
+    fasta_path = tmp_path / "records.fasta"
+    gff_path.write_text(
+        "\n".join(
+            [
+                "##gff-version 3",
+                "##sequence-region record_a 1 4",
+                "record_a\ttest\tgene\t1\t4\t.\t+\t.\tID=gene_a",
+                "##sequence-region record_b 1 4",
+                "record_b\ttest\tgene\t1\t4\t.\t+\t.\tID=gene_b",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fasta_path.write_text(">record_b\nCCCC\n>record_a\nAAAA\n", encoding="utf-8")
+
+    records = load_gff_fasta(
+        [str(gff_path)],
+        [str(fasta_path)],
+        mode="linear",
+        selected_features_set={"gene"},
+    )
+
+    assert [record.id for record in records] == ["record_b", "record_a"]
+    assert [str(record.seq) for record in records] == ["CCCC", "AAAA"]
+    assert [record.features[0].qualifiers["ID"] for record in records] == [
+        ["gene_b"],
+        ["gene_a"],
+    ]
+
+
 def test_load_gff_fasta_collapses_same_id_rows_into_compound_location(
     tmp_path: Path,
 ) -> None:

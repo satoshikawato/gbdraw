@@ -1,3 +1,5 @@
+import { buildDisambiguatedRecordEntries, formatRecordLength } from './record-options.js';
+
 export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';
 export const RECORDS_LOADING_LABEL = 'Loading records...';
 export const RECORD_FILE_REQUIRED_LABEL = 'Upload a sequence file first';
@@ -5,27 +7,15 @@ export const RECORD_READ_ERROR_LABEL = 'Records could not be loaded';
 
 const currentSelectorValue = (seq) => String(seq?.region_record_id ?? '').trim();
 
-export const formatRecordLength = (value) => {
-  const numeric = Number(value);
-  if (!Number.isInteger(numeric) || numeric <= 0) return 'length unavailable';
-  return `${numeric.toLocaleString('en-US')} bp`;
-};
+export { formatRecordLength };
 
 export const buildRecordOptions = (records, currentValue = '') => {
   const normalizedRecords = Array.isArray(records) ? records : [];
-  const idCounts = new Map();
-  normalizedRecords.forEach((record) => {
-    const recordId = String(record?.recordId ?? '').trim();
-    idCounts.set(recordId, (idCounts.get(recordId) || 0) + 1);
-  });
-
-  const options = normalizedRecords.map((record, index) => {
-    const selector = String(record?.selector ?? `#${index + 1}`).trim() || `#${index + 1}`;
-    const recordId = String(record?.recordId ?? '').trim() || `Record_${index + 1}`;
-    const duplicate = (idCounts.get(recordId) || 0) > 1;
+  const options = buildDisambiguatedRecordEntries(normalizedRecords).map((record) => {
+    const { selector, recordId, usesIndex, value } = record;
     return {
-      value: duplicate ? selector : recordId,
-      label: `${recordId} (${formatRecordLength(record?.recordLength)})${duplicate ? ` [${selector}]` : ''}`,
+      value,
+      label: `${recordId} (${formatRecordLength(record?.recordLength)})${usesIndex ? ` [${selector}]` : ''}`,
       synthetic: false
     };
   });
@@ -48,7 +38,10 @@ export const buildRecordOptions = (records, currentValue = '') => {
 const emptySelectorState = () => ({
   status: 'idle',
   records: [],
-  error: ''
+  error: '',
+  inputType: '',
+  primaryFile: null,
+  pairedFile: null
 });
 
 const sanitizePathSegment = (value) =>
@@ -64,19 +57,41 @@ export const createLinearRecordSelector = ({
   let refreshGeneration = 0;
 
   const uidFor = (seq) => String(seq?.uid ?? '').trim();
-  const sourceFileFor = (seq, inputType = state.lInputType.value) =>
-    inputType === 'gff' ? seq?.fasta : seq?.gb;
+  const sourceFilesFor = (seq, inputType = state.lInputType.value) => (
+    inputType === 'gff'
+      ? { primaryFile: seq?.gff || null, pairedFile: seq?.fasta || null }
+      : { primaryFile: seq?.gb || null, pairedFile: null }
+  );
 
   const stateFor = (seq) => {
     const uid = uidFor(seq);
-    return (uid && selectorStateByUid[uid]) || emptySelectorState();
+    const stored = (uid && selectorStateByUid[uid]) || emptySelectorState();
+    const inputType = state.lInputType.value;
+    const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
+    if (
+      stored.inputType !== inputType ||
+      stored.primaryFile !== primaryFile ||
+      stored.pairedFile !== pairedFile
+    ) {
+      return {
+        ...emptySelectorState(),
+        status: primaryFile && (inputType !== 'gff' || pairedFile) ? 'loading' : 'idle',
+        inputType,
+        primaryFile,
+        pairedFile
+      };
+    }
+    return stored;
   };
 
   const replaceState = (uid, nextState) => {
     selectorStateByUid[uid] = {
       status: nextState.status,
       records: Array.isArray(nextState.records) ? nextState.records : [],
-      error: String(nextState.error || '')
+      error: String(nextState.error || ''),
+      inputType: String(nextState.inputType || ''),
+      primaryFile: nextState.primaryFile || null,
+      pairedFile: nextState.pairedFile || null
     };
   };
 
@@ -87,11 +102,13 @@ export const createLinearRecordSelector = ({
     });
   };
 
-  const isCurrentRequest = ({ generation, uid, file, inputType }) => {
+  const isCurrentRequest = ({ generation, uid, primaryFile, pairedFile, inputType }) => {
     if (generation !== refreshGeneration) return false;
     if (state.mode.value !== 'linear' || state.lInputType.value !== inputType) return false;
     const currentSeq = state.linearSeqs.find((seq) => uidFor(seq) === uid);
-    return Boolean(currentSeq) && sourceFileFor(currentSeq, inputType) === file;
+    if (!currentSeq) return false;
+    const currentFiles = sourceFilesFor(currentSeq, inputType);
+    return currentFiles.primaryFile === primaryFile && currentFiles.pairedFile === pairedFile;
   };
 
   const refresh = async () => {
@@ -104,37 +121,44 @@ export const createLinearRecordSelector = ({
     }
 
     const inputType = state.lInputType.value;
-    const format = inputType === 'gff' ? 'fasta' : 'genbank';
     const targets = [];
     for (const seq of state.linearSeqs) {
       const uid = uidFor(seq);
       if (!uid) continue;
-      const file = sourceFileFor(seq, inputType);
-      if (!file) {
-        replaceState(uid, emptySelectorState());
+      const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
+      if (!primaryFile || (inputType === 'gff' && !pairedFile)) {
+        replaceState(uid, { ...emptySelectorState(), inputType, primaryFile, pairedFile });
         continue;
       }
-      replaceState(uid, { status: 'loading', records: [], error: '' });
-      targets.push({ uid, file });
+      replaceState(uid, {
+        status: 'loading', records: [], error: '', inputType, primaryFile, pairedFile
+      });
+      targets.push({ uid, primaryFile, pairedFile });
     }
     if (!state.pyodideReady.value) return;
 
-    for (const { uid, file } of targets) {
+    for (const { uid, primaryFile, pairedFile } of targets) {
       try {
         const records = await recordReader({
-          file,
-          format,
-          temporaryPath: `/record-selector-${sanitizePathSegment(uid)}-${generation}.${format === 'fasta' ? 'fasta' : 'gb'}`
+          inputType,
+          primaryFile,
+          pairedFile,
+          temporaryPathPrefix: `/record-selector-${sanitizePathSegment(uid)}-${generation}`
         });
-        if (!isCurrentRequest({ generation, uid, file, inputType })) return;
-        replaceState(uid, { status: 'ready', records, error: '' });
+        if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
+        replaceState(uid, {
+          status: 'ready', records, error: '', inputType, primaryFile, pairedFile
+        });
       } catch (error) {
-        if (!isCurrentRequest({ generation, uid, file, inputType })) return;
+        if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
         logger.warn?.(`Failed to read records for ${uid}:`, error);
         replaceState(uid, {
           status: 'error',
           records: [],
-          error: 'Could not read records from this file.'
+          error: 'Could not read records from this file.',
+          inputType,
+          primaryFile,
+          pairedFile
         });
       }
     }
@@ -160,6 +184,8 @@ export const createLinearRecordSelector = ({
   };
 
   const isDisabled = (seq) => stateFor(seq).status !== 'ready';
+  const statusFor = (seq) => stateFor(seq).status;
+  const recordsFor = (seq) => stateFor(seq).records.slice();
   const errorFor = (seq) => stateFor(seq).error;
   const warningFor = (seq) => {
     const selectorState = stateFor(seq);
@@ -174,6 +200,8 @@ export const createLinearRecordSelector = ({
     refresh,
     purgeInactiveState,
     optionsFor,
+    statusFor,
+    recordsFor,
     isDisabled,
     errorFor,
     warningFor

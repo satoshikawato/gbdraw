@@ -1717,6 +1717,27 @@
                                         </select>
                                         <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation"><i class="ph ph-trash"></i></button>
                                     </div>
+                                    <div>
+                                        <label class="mb-0.5 flex items-center gap-1 text-[9px] text-slate-500">
+                                            Target record
+                                            <span v-if="annotationRecordRequired()" class="font-semibold text-red-600">Required</span>
+                                        </label>
+                                        <select
+                                            :value="annotationRecordValue(item)"
+                                            @change="setAnnotationRecord(item, $event.target.value)"
+                                            :disabled="annotationRecordDisabled(item)"
+                                            :class="annotationRecordMissing(item) ? 'border-red-400 bg-red-50' : ''"
+                                            class="form-input px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-500"
+                                            aria-label="Annotation target record"
+                                        >
+                                            <option
+                                                v-for="option in annotationRecordOptions(item)"
+                                                :key="`${option.value}:${option.synthetic ? 'synthetic' : 'record'}`"
+                                                :value="option.value"
+                                            >{{ option.label }}</option>
+                                        </select>
+                                        <p v-if="annotationRecordMissing(item)" class="mt-0.5 text-[9px] text-red-600">{{ annotationRecordMissingMessage(item) }}</p>
+                                    </div>
                                     <div v-if="item.target.kind === 'coordinateSpan'" class="grid grid-cols-2 gap-1">
                                         <input type="number" min="1" v-model.number="item.target.start" class="form-input px-1 py-0.5 text-[10px]" placeholder="Start (1-based)">
                                         <input type="number" min="1" v-model.number="item.target.end" class="form-input px-1 py-0.5 text-[10px]" placeholder="End (inclusive)">
@@ -2549,16 +2570,13 @@
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-1 px-2"
                                                 @click="refreshCircularRecordOrder"
-                                                :disabled="cInputType !== 'gb'"
+                                                :disabled="cInputType === 'gb' ? !files.c_gb : (!files.c_gff || !files.c_fasta)"
                                             >
                                                 Reload Records
                                             </button>
                                         </div>
-                                        <div v-if="cInputType !== 'gb'" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
-                                            Record Order is available for GenBank input.
-                                        </div>
-                                        <div v-else-if="adv.multi_record_positions.length === 0" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
-                                            Upload a GenBank file to load records.
+                                        <div v-if="adv.multi_record_positions.length === 0" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
+                                            Upload a sequence file to load records.
                                         </div>
                                         <div v-else class="space-y-1 bg-slate-50 border border-slate-200 rounded p-1.5">
                                             <div
