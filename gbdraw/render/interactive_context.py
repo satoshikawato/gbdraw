@@ -32,6 +32,7 @@ def build_interactive_svg_context(
     linear_rendered_feature_ids: bool = False,
     annotations: AnnotationOptions | None = None,
     mode: str | None = None,
+    comparison_sequence_records: Sequence[Sequence[SeqRecord]] | None = None,
 ) -> InteractiveSvgContext:
     """Build rich popup metadata from rendered records.
 
@@ -110,10 +111,46 @@ def build_interactive_svg_context(
             for item in resolved.annotations
         ]
 
+    resolved_mode = mode or ("linear" if linear_rendered_feature_ids else "circular")
+    sequence_sources: list[dict[str, object]] = []
+    for record_index, record in enumerate(record_list):
+        aliases = {
+            str(record.id or "").strip(),
+            str(record.name or "").strip(),
+        }
+        accessions = (getattr(record, "annotations", {}) or {}).get("accessions", [])
+        if isinstance(accessions, str):
+            aliases.add(accessions.strip())
+        else:
+            aliases.update(str(value or "").strip() for value in accessions)
+        sequence_sources.append(
+            {
+                "key": f"linear:record:{record_index}" if resolved_mode == "linear" else f"circular:record:{record_index}",
+                "recordId": str(record.id),
+                "aliases": sorted(value for value in aliases if value),
+                "sequence": str(record.seq).upper(),
+                "origin": "linear-record" if resolved_mode == "linear" else "circular-reference",
+                "recordIndex": record_index,
+            }
+        )
+    for source_index, source_records in enumerate(comparison_sequence_records or ()):
+        for record in source_records:
+            sequence_sources.append(
+                {
+                    "key": f"homology:comparison:{source_index}:{record.id}",
+                    "recordId": str(record.id),
+                    "aliases": [str(record.id), str(record.name)],
+                    "sequence": str(record.seq).upper(),
+                    "origin": "homology-comparison",
+                    "sourceIndex": source_index,
+                }
+            )
+
     return InteractiveSvgContext(
         features=features,
         orthogroups=orthogroup_payload,
         annotations=annotation_payload,
+        sequence_sources=sequence_sources,
     )
 
 

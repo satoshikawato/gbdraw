@@ -85,6 +85,7 @@ export const createFeatureSvgActions = ({
     clickedFeaturePos,
     clickedPairwiseMatch,
     clickedPairwiseMatchPos,
+    matchSequenceRegistry,
     selectedAnnotation,
     featurePopupSize,
     featureSelectionDrag,
@@ -657,7 +658,8 @@ export const createFeatureSvgActions = ({
     featureLookup,
     orthogroups: orthogroups?.value,
     orthogroupNameOverrides,
-    orthogroupDescriptionOverrides
+    orthogroupDescriptionOverrides,
+    resolveSequenceSource: matchSequenceRegistry?.resolve
   });
 
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {

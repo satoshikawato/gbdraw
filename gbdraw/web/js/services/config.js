@@ -1776,6 +1776,10 @@ export const serializeFiles = async () => {
     c_depth: await serializeDepthFile(state.files.c_depth),
     c_conservation_blasts: await serializeFileArray(state.files.c_conservation_blasts),
     c_conservation_fastas: await serializeFileArray(state.files.c_conservation_fastas),
+    c_conservation_sequence_sources: await Promise.all(
+      (Array.isArray(state.files.c_conservation_sequence_sources) ? state.files.c_conservation_sequence_sources : [])
+        .map((file) => serializeFile(file))
+    ),
     d_color: await serializeFile(state.files.d_color),
     t_color: await serializeFile(state.files.t_color),
     blacklist: await serializeFile(state.files.blacklist),
@@ -1787,12 +1791,14 @@ export const serializeFiles = async () => {
 };
 
 const applyFiles = (filesData) => {
+  state.matchSequenceRegistry?.reset?.();
   state.files.c_gb = null;
   state.files.c_gff = null;
   state.files.c_fasta = null;
   state.files.c_depth = null;
   state.files.c_conservation_blasts = [];
   state.files.c_conservation_fastas = [];
+  state.files.c_conservation_sequence_sources = [];
   state.files.d_color = null;
   state.files.t_color = null;
   state.files.blacklist = null;
@@ -1816,6 +1822,9 @@ const applyFiles = (filesData) => {
     : [];
   state.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
     ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry)).filter(Boolean)
+    : [];
+  state.files.c_conservation_sequence_sources = Array.isArray(filesData.c_conservation_sequence_sources)
+    ? filesData.c_conservation_sequence_sources.map((entry) => deserializeFile(entry))
     : [];
   state.files.d_color = deserializeFile(filesData.d_color);
   state.files.t_color = deserializeFile(filesData.t_color);
@@ -2467,6 +2476,9 @@ export const exportSession = async (titleOverride = null) => {
     (Array.isArray(state.files.c_conservation_fastas)
       ? state.files.c_conservation_fastas.reduce((sum, file) => sum + (file?.size || 0), 0)
       : 0) +
+    (Array.isArray(state.files.c_conservation_sequence_sources)
+      ? state.files.c_conservation_sequence_sources.reduce((sum, file) => sum + (file?.size || 0), 0)
+      : 0) +
     (state.files.d_color?.size || 0) +
     (state.files.t_color?.size || 0) +
     (state.files.blacklist?.size || 0) +
@@ -2538,6 +2550,7 @@ export const exportSession = async (titleOverride = null) => {
     },
     renderRequest: canonical.renderRequest,
     resources: canonical.resources,
+    webFiles: canonical.webFiles,
     results: serializeResults(),
     features: {
       extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
@@ -2603,7 +2616,8 @@ export const importSession = async (e, options = {}) => {
     const canonicalProjection = data.version === SESSION_VERSION
       ? projectCanonicalSessionRequest({
           renderRequest: data.renderRequest,
-          resources: data.resources
+          resources: data.resources,
+          webFiles: data.webFiles
         })
       : null;
     const ui = {

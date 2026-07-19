@@ -5,6 +5,7 @@ const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'gbdraw-feature-selected',
   'gbdraw-feature-selection-anchor',
   'gbdraw-feature-selection-candidate',
+  'gbdraw-match-selected',
   'feature-selection-marquee',
   'feature-selection-status'
 ]);

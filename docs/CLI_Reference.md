@@ -41,6 +41,7 @@ Options (examples):
   --comparisons_table  Linear BLAST manifest with explicit query/subject endpoints
   --conservation_blast BLAST result file(s) for circular similarity rings (-outfmt 6 or 7)
   --conservation_table TSV manifest for circular BLAST similarity rings
+  --conservation_fasta Optional comparison FASTA source(s) for interactive matched-span export
   --circular_track_table TSV manifest for circular track slots
   --annotation_table    TSV table for coordinate- or feature-targeted region annotations
 
@@ -75,6 +76,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--suppress_skew]
               [--conservation_blast BLAST [BLAST ...]]
               [--conservation_table TSV]
+              [--conservation_fasta FASTA [FASTA ...]]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
@@ -200,6 +202,9 @@ options:
   --conservation_table TSV
                         TSV manifest with BLAST files for similarity rings,
                         labels, and colors.
+  --conservation_fasta FASTA [FASTA ...]
+                        Optional comparison FASTA source(s), aligned with
+                        --conservation_blast for interactive span export.
   --conservation_reference {query,subject,auto}
                         BLAST side containing displayed circular reference
                         coordinates. Use "subject" for BLAST generated as
@@ -397,6 +402,8 @@ options:
 
 Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for these rings, so provide precomputed BLAST output.
 
+For `interactive_svg`, add one `--conservation_fasta` value per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
+
 ## TSV manifest inputs
 
 ### Region annotations
@@ -524,17 +531,20 @@ PemoMJNVA.PeseMJNV.tblastx.out	#2	#4
 
 ### `--conservation_table`
 
-Use `--conservation_table` in circular mode to keep BLAST paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
+Use `--conservation_table` in circular mode to keep BLAST paths, optional comparison FASTA paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_fasta`, `--conservation_labels`, or `--conservation_colors`.
 
 Allowed columns:
 
 | Column | Required | Meaning |
 | --- | --- | --- |
 | `blast` | yes | Path to a precomputed BLAST outfmt 6 or 7 file. |
+| `comparison_fasta` | optional | Comparison FASTA used only for interactive comparison-span export. |
 | `label` | optional | Similarity ring label. If the column is present, row order supplies the label list. |
 | `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list. |
 
 The row order defines the ring order. Thresholds and geometry still stay on the CLI, for example `--conservation_reference`, `--bitscore`, `--evalue`, `--identity`, `--alignment_length`, `--conservation_ring_width`, and `--conservation_ring_gap`.
+
+`comparison_fasta` does not change static ring geometry or filtering. Omit it when only the reference span should be available in an interactive SVG.
 
 ```tsv
 blast	label	color

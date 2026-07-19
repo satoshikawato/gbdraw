@@ -115,6 +115,8 @@ This writes `majani_collinear.svg`.
 
 `--collinear_min_anchors 2` removes singleton blocks. `--collinear_color_mode orientation_identity` separates forward and inverted blocks while still encoding identity.
 
+In the web preview or standalone interactive SVG, click a collinear block to export its complete query and subject block envelopes as nucleotide FASTA. The envelopes may include intergenic sequence and genes that are not anchors. This remains distinct from the orthogroup-member nucleotide and amino-acid actions in the same popup.
+
 For a multi-record layout, add `--collinear_search_scope all` to search every record pair. gbdraw renders the accepted blocks only between adjacent layout rows and omits same-row ribbons. This supports all-vs-all comparisons between two groups of replicons, including chromosome-to-noncorresponding-chromosome blocks. See the [two-strain *Vibrio* example](./7_Linear_Layout.md#two-strains-with-multiple-replicons).
 
 ![Collinear protein blocks across three majanivirus records](../../examples/majani_collinear.svg)

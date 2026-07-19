@@ -14,6 +14,7 @@ Usage:
 """
 
 import hashlib
+import re
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,11 @@ from tests.utils.svg_compare import compare_svgs
 TESTS_DIR = Path(__file__).parent
 REFERENCE_DIR = TESTS_DIR / "reference_outputs"
 EXAMPLES_DIR = TESTS_DIR.parent / "examples"
+
+
+def _strip_additive_match_ids(svg_text: str) -> str:
+    """Ignore non-visual generic match IDs in geometry reference comparisons."""
+    return re.sub(r'\sdata-gbdraw-match-id="[^"]*"', "", svg_text)
 
 
 def get_file_hash(path: Path) -> str:
@@ -265,7 +271,10 @@ class TestOutputComparison:
             output_svg = run_gbdraw_linear(gbk_files, tmp_path, name, config["args"], blast_files)
 
         # Compare with reference
-        result = compare_svgs(ref_path, output_svg)
+        result = compare_svgs(
+            _strip_additive_match_ids(ref_path.read_text(encoding="utf-8")),
+            _strip_additive_match_ids(output_svg.read_text(encoding="utf-8")),
+        )
 
         if not result.equal:
             # Keep diagnostics outside the tracked reference directory.

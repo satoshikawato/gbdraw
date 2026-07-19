@@ -32,6 +32,7 @@ import {
 } from '../services/diagram-generation.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
+import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles } from './svg-styles.js';
@@ -112,6 +113,7 @@ export const createAppSetup = () => {
     resultPanelTab,
     lastRunInfo,
     pairwiseMatchFactors,
+    matchSequenceRegistry,
     svgContent,
     zoom,
     layoutRepositionMode,
@@ -918,6 +920,11 @@ export const createAppSetup = () => {
     },
     { immediate: true }
   );
+  watch(mode, (nextMode, previousMode) => {
+    if (nextMode === previousMode) return;
+    matchSequenceRegistry?.reset?.();
+    clickedPairwiseMatch.value = null;
+  });
   const isCircularConservationUploadSource = () => (
     String(circularConservation.source || '').trim().toLowerCase() === 'upload'
   );
@@ -936,6 +943,12 @@ export const createAppSetup = () => {
     } else {
       files.c_conservation_fastas = normalized;
     }
+    losatCacheInfo.value = [];
+    syncCircularConservationSeries();
+  };
+  const setCircularConservationUploadFiles = (nextFiles) => {
+    files.c_conservation_blasts = normalizeFileList(nextFiles);
+    files.c_conservation_sequence_sources = [];
     losatCacheInfo.value = [];
     syncCircularConservationSeries();
   };
@@ -958,6 +971,12 @@ export const createAppSetup = () => {
       index,
       filename: String(entry?.fileName || `source_${Number(index) + 1}`).trim(),
       sourceLabel: `${isCircularConservationUploadSource() ? 'BLAST' : 'Comparison'} ${Number(index) + 1}`,
+      sourceIndex: Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index,
+      comparisonSequenceFilename: String(
+        files.c_conservation_sequence_sources?.[
+          Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
+        ]?.name || ''
+      ),
       defaultLabel: defaultConservationSeriesLabel(
         { name: entry?.fileName },
         Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
@@ -995,6 +1014,18 @@ export const createAppSetup = () => {
     syncCircularConservationSeries();
     if (target) target.value = '';
   };
+  const setCircularConservationCompanionFile = (sourceIndex, event) => {
+    const index = Number(sourceIndex);
+    if (!Number.isInteger(index) || index < 0) return;
+    const selectedFile = Array.from(event?.target?.files || []).filter(Boolean)[0] || null;
+    const next = Array.isArray(files.c_conservation_sequence_sources)
+      ? [...files.c_conservation_sequence_sources]
+      : [];
+    while (next.length <= index) next.push(null);
+    next[index] = selectedFile;
+    files.c_conservation_sequence_sources = next;
+    if (event?.target) event.target.value = '';
+  };
   const removeCircularConservationSource = (index) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= circularConservation.series.length) return;
@@ -1008,6 +1039,12 @@ export const createAppSetup = () => {
     }
     if (sourceIndex < 0 && idx < sourceFiles.length) sourceIndex = idx;
     if (sourceIndex < 0 || sourceIndex >= sourceFiles.length) return;
+    if (isCircularConservationUploadSource()) {
+      files.c_conservation_sequence_sources = (Array.isArray(files.c_conservation_sequence_sources)
+        ? files.c_conservation_sequence_sources
+        : [])
+        .filter((_, fileIndex) => fileIndex !== sourceIndex);
+    }
     setCircularConservationSourceFiles(sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
   };
   watch(
@@ -1546,6 +1583,7 @@ export const createAppSetup = () => {
 
     cancelDefinitionUpdate();
     resetSettingsState(state);
+    matchSequenceRegistry?.reset?.();
     circularTrackNewRenderer.value = 'dinucleotide_skew';
     linearTrackNewRenderer.value = 'dinucleotide_skew';
     depthTrackUiCounts.circular = 1;
@@ -1684,8 +1722,19 @@ export const createAppSetup = () => {
     openFeatureEditorForFeature(row.feature, event);
   };
 
-  watch(clickedPairwiseMatch, () => {
+  watch(clickedPairwiseMatch, (match) => {
     selectedPairwiseBlockOrthogroupId.value = '';
+    const svg = svgContainer.value?.querySelector?.('svg');
+    if (!svg) return;
+    const matchId = String(match?.matchId || '').trim();
+    svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
+      const elementMatchId = String(
+        element.getAttribute('data-gbdraw-match-id') ||
+        element.getAttribute('data-gbdraw-pairwise-match-id') ||
+        ''
+      ).trim();
+      element.classList.toggle('gbdraw-match-selected', Boolean(matchId) && elementMatchId === matchId);
+    });
   });
 
   const onPairwiseMatchPopupDrag = (event) => {
@@ -2256,6 +2305,8 @@ export const createAppSetup = () => {
     circularConservationLayoutWarning,
     circularConservationFastaInput,
     circularConservationSeriesRows,
+    setCircularConservationUploadFiles,
+    setCircularConservationCompanionFile,
     canMoveCircularConservationSeries,
     moveCircularConservationSeries,
     openCircularConservationComparisonFilePicker,

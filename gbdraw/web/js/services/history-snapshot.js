@@ -296,6 +296,7 @@ const buildFilesData = (state, fileStore) => ({
   c_depth: fileStore.describeValue(state.files?.c_depth),
   c_conservation_blasts: fileStore.describeValue(state.files?.c_conservation_blasts || []),
   c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
+  c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
   d_color: fileStore.describeValue(state.files?.d_color),
   t_color: fileStore.describeValue(state.files?.t_color),
   blacklist: fileStore.describeValue(state.files?.blacklist),
@@ -325,6 +326,7 @@ const buildFilesData = (state, fileStore) => ({
 
 const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = null) => {
   if (!state.files) return;
+  state.matchSequenceRegistry?.reset?.();
   const restore = (value) => fileStore.restoreValue(value);
   state.files.c_gb = restore(filesData?.c_gb);
   state.files.c_gff = restore(filesData?.c_gff);
@@ -335,6 +337,9 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
     : [];
   state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
     ? restore(filesData.c_conservation_fastas).filter(Boolean)
+    : [];
+  state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
+    ? restore(filesData.c_conservation_sequence_sources)
     : [];
   state.files.d_color = restore(filesData?.d_color);
   state.files.t_color = restore(filesData?.t_color);

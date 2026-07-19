@@ -123,6 +123,8 @@ The four records use one shared bp/px scale. Each comparison retains its declare
 
 Circular mode can place one outfmt 6/7 result per query around an annotated reference. Use `--conservation_blast` for existing tables or `--conservation_table` for a reproducible manifest. Despite the compatibility option name, describe these as BLAST/LOSAT comparison rings unless a separate analysis supports a conservation claim.
 
+In the web app, click an HSP arc to inspect both BLAST coordinate pairs and export matched nucleotide spans. Run LOSAT already supplies both sequences. For uploaded BLAST, choose an optional **Comparison FASTA** on the corresponding ring row; otherwise only the displayed reference span is available. These are coordinate spans, not gapped alignments.
+
 - [Table-driven circular comparison rings](./5_Table_Driven_Inputs.md#5-circular-blast-similarity-rings-with---conservation_table)
 - [WSSV advanced session-based case study](https://gbdraw.app/gallery/#WSSV_genome_comparison)
 

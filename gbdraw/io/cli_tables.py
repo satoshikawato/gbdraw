@@ -37,6 +37,7 @@ class ConservationTableRow:
     blast: str
     label: str
     color: str
+    comparison_fasta: str = ""
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class ConservationTable:
     has_label_column: bool
     has_color_column: bool
     path_dependencies: tuple[TablePathDependency, ...]
+    has_comparison_fasta_column: bool = False
 
     @property
     def conservation_blast_files(self) -> list[str]:
@@ -62,6 +64,12 @@ class ConservationTable:
         if not self.has_color_column:
             return None
         return [row.color for row in self.rows]
+
+    @property
+    def comparison_fasta_files(self) -> list[str | None] | None:
+        if not self.has_comparison_fasta_column:
+            return None
+        return [row.comparison_fasta or None for row in self.rows]
 
     @property
     def dependency_paths(self) -> tuple[str, ...]:
@@ -199,7 +207,7 @@ class _TrackRow:
     values: dict[str, str]
 
 
-_CONSERVATION_COLUMNS = frozenset({"blast", "label", "color"})
+_CONSERVATION_COLUMNS = frozenset({"blast", "label", "color", "comparison_fasta"})
 _COMPARISON_COLUMNS = frozenset({"blast", "query", "subject"})
 _CIRCULAR_TRACK_COLUMNS = frozenset(
     {
@@ -279,6 +287,12 @@ def read_conservation_table(path: str) -> ConservationTable:
                 _cell_error(table_path, row.row_number, "blast", "value is required")
             )
         blast_path = _resolve_table_path(table_path, blast_raw)
+        comparison_fasta_raw = row.values.get("comparison_fasta", "").strip()
+        comparison_fasta_path = (
+            _resolve_table_path(table_path, comparison_fasta_raw)
+            if comparison_fasta_raw
+            else ""
+        )
         parsed_rows.append(
             ConservationTableRow(
                 row_index=row.row_index,
@@ -286,6 +300,7 @@ def read_conservation_table(path: str) -> ConservationTable:
                 blast=blast_path,
                 label=row.values.get("label", "").strip(),
                 color=row.values.get("color", "").strip(),
+                comparison_fasta=comparison_fasta_path,
             )
         )
         dependencies.append(
@@ -296,12 +311,22 @@ def read_conservation_table(path: str) -> ConservationTable:
                 path=blast_path,
             )
         )
+        if comparison_fasta_path:
+            dependencies.append(
+                TablePathDependency(
+                    row_index=row.row_index,
+                    row_number=row.row_number,
+                    column="comparison_fasta",
+                    path=comparison_fasta_path,
+                )
+            )
 
     return ConservationTable(
         table_path=str(table_path),
         rows=tuple(parsed_rows),
         has_label_column="label" in header,
         has_color_column="color" in header,
+        has_comparison_fasta_column="comparison_fasta" in header,
         path_dependencies=tuple(dependencies),
     )
 

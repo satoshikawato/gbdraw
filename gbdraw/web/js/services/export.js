@@ -50,7 +50,8 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
       orthogroupNameOverrides: state.orthogroupNameOverrides,
       orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides,
       legendEntries: state.legendEntries.value,
-      currentColors: state.currentColors.value
+      currentColors: state.currentColors.value,
+      sequenceSources: state.matchSequenceRegistry?.values?.() || []
     });
   } else {
     stripEditorOnlyCursorStyles(clone);

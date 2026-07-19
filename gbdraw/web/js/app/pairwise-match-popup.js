@@ -1,11 +1,13 @@
 import { resolveDisplayProteinId } from './feature-utils.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import { buildMatchSequenceBundle } from './match-sequences.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
 
 export const PAIRWISE_MATCH_SELECTOR = [
+  'path[data-gbdraw-match-id]',
   'path[data-gbdraw-pairwise-match-id]',
   'path[data-match-kind]',
   'path[data-pairwise-match-style]'
@@ -14,14 +16,21 @@ export const PAIRWISE_MATCH_SELECTOR = [
 const MATCH_KIND_TITLES = {
   pairwise: 'Pairwise match',
   orthogroup: 'Orthogroup match',
-  collinear: 'Collinearity block'
+  collinear: 'Collinearity block',
+  homology: 'Homology ring match'
 };
 
-const MATCH_KIND_ALIASES = new Set(['pairwise', 'orthogroup', 'collinear']);
+const MATCH_KIND_ALIASES = new Set(['pairwise', 'orthogroup', 'collinear', 'homology']);
 const normalizeText = (value) => String(value === null || value === undefined ? '' : value).trim();
 const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
 
 const attr = (element, name) => normalizeText(element?.getAttribute?.(name));
+const integerAttr = (element, name) => {
+  const value = attr(element, name);
+  if (!value) return null;
+  const numeric = Number(value);
+  return Number.isInteger(numeric) ? numeric : null;
+};
 
 const firstText = (...values) => {
   for (const value of values) {
@@ -757,13 +766,77 @@ const buildFeatureRows = ({
   return section(title, rows, { featureRows });
 };
 
-export const buildPairwiseMatchPayload = (
+const buildMatchSpans = (element, matchKind) => {
+  if (matchKind === 'orthogroup') return [];
+  const queryRecordIndex = integerAttr(element, 'data-query-record-index');
+  const subjectRecordIndex = integerAttr(element, 'data-subject-record-index');
+  const sourceIndex = integerAttr(element, 'data-source-index');
+  const referenceSide = attr(element, 'data-reference-side').toLowerCase();
+  const homologyDisplayRole = (role) => role === referenceSide ? 'Reference' : 'Comparison';
+  return [
+    {
+      role: 'query',
+      sourceKey: matchKind === 'homology' ? '' : (queryRecordIndex !== null ? `linear:record:${queryRecordIndex}` : ''),
+      recordId: firstText(attr(element, 'data-query-record-id'), attr(element, 'data-query')),
+      start: attr(element, 'data-qstart'),
+      end: attr(element, 'data-qend'),
+      displayRole: matchKind === 'homology' ? homologyDisplayRole('query') : 'Query',
+      sourceIndex,
+      recordIndex: queryRecordIndex,
+      referenceSide
+    },
+    {
+      role: 'subject',
+      sourceKey: matchKind === 'homology' ? '' : (subjectRecordIndex !== null ? `linear:record:${subjectRecordIndex}` : ''),
+      recordId: firstText(attr(element, 'data-subject-record-id'), attr(element, 'data-subject')),
+      start: attr(element, 'data-sstart'),
+      end: attr(element, 'data-send'),
+      displayRole: matchKind === 'homology' ? homologyDisplayRole('subject') : 'Subject',
+      sourceIndex,
+      recordIndex: subjectRecordIndex,
+      referenceSide
+    }
+  ];
+};
+
+const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenceSource) => {
+  const spans = buildMatchSpans(element, matchKind);
+  if (!spans.length) return null;
+  return buildMatchSequenceBundle(spans, {
+    matchId,
+    resolveSequenceSource: (sourceKey, recordId, context) => {
+      const resolved = typeof resolveSequenceSource === 'function'
+        ? resolveSequenceSource(sourceKey, recordId, context)
+        : null;
+      const resolvedSource = resolved?.source !== undefined ? resolved.source : resolved;
+      if (matchKind === 'homology' && context?.origin === 'homology-comparison' && !resolvedSource) {
+        return {
+          source: null,
+          reason: 'Comparison sequence was not supplied for this BLAST source.'
+        };
+      }
+      return resolved;
+    },
+    contextForSpan: (span) => {
+      if (matchKind !== 'homology') {
+        return { origin: 'linear-record', recordIndex: span.recordIndex };
+      }
+      const isReference = span.role === span.referenceSide;
+      return isReference
+        ? { origin: 'circular-reference' }
+        : { origin: 'homology-comparison', sourceIndex: span.sourceIndex };
+    }
+  });
+};
+
+export const buildMatchPopupPayload = (
   element,
   {
     featureLookup = new Map(),
     orthogroups = [],
     orthogroupNameOverrides = null,
-    orthogroupDescriptionOverrides = null
+    orthogroupDescriptionOverrides = null,
+    resolveSequenceSource = null
   } = {}
 ) => {
   if (!element) return null;
@@ -816,7 +889,13 @@ export const buildPairwiseMatchPayload = (
   const qInterval = intervalText(attr(element, 'data-qstart'), attr(element, 'data-qend'));
   const sInterval = intervalText(attr(element, 'data-sstart'), attr(element, 'data-send'));
   const title = MATCH_KIND_TITLES[matchKind] || MATCH_KIND_TITLES.pairwise;
-  const subtitle = firstText(collinearityBlockId, orthogroupId, attr(element, 'data-gbdraw-pairwise-match-id'));
+  const matchId = firstText(
+    attr(element, 'data-gbdraw-match-id'),
+    attr(element, 'data-gbdraw-pairwise-match-id'),
+    collinearityBlockId,
+    orthogroupId
+  );
+  const subtitle = firstText(collinearityBlockId, orthogroupId, matchId);
 
   const summaryRows = [];
   addRow(summaryRows, 'Query record', attr(element, 'data-query-record-id'));
@@ -827,6 +906,13 @@ export const buildPairwiseMatchPayload = (
     attr(element, 'data-collinearity-orientation'),
     attr(element, 'data-orientation')
   ));
+  if (matchKind === 'homology') {
+    addRow(summaryRows, 'Ring label', attr(element, 'data-track-label'));
+    const rawSourceIndex = integerAttr(element, 'data-source-index');
+    addRow(summaryRows, 'Source index', rawSourceIndex !== null ? String(rawSourceIndex + 1) : '');
+    addRow(summaryRows, 'Reference side', attr(element, 'data-reference-side'));
+    addRow(summaryRows, 'Reference record', attr(element, 'data-reference-record-id'));
+  }
 
   const alignmentRows = [];
   addRow(alignmentRows, 'Identity', attr(element, 'data-identity'));
@@ -884,7 +970,7 @@ export const buildPairwiseMatchPayload = (
       orthogroupMemberSectionExtras(orthogroupMemberRows, orthogroupId, displayName)
     );
     return {
-      id: firstText(attr(element, 'data-gbdraw-pairwise-match-id'), orthogroupId),
+      id: firstText(matchId, orthogroupId),
       title: orthogroupTitle(orthogroupId, displayName),
       subtitle: '',
       matchKind,
@@ -923,7 +1009,7 @@ export const buildPairwiseMatchPayload = (
   if (matchKind === 'collinear' || blockRows.length > 0) {
     sections.push(section('Collinearity', blockRows));
   }
-  sections.push(buildFeatureRows({
+  if (matchKind !== 'homology') sections.push(buildFeatureRows({
     title: 'Query',
     feature: queryFeature,
     recordId: attr(element, 'data-query-record-id'),
@@ -935,7 +1021,7 @@ export const buildPairwiseMatchPayload = (
     featureLookup,
     group
   }));
-  sections.push(buildFeatureRows({
+  if (matchKind !== 'homology') sections.push(buildFeatureRows({
     title: 'Subject',
     feature: subjectFeature,
     recordId: attr(element, 'data-subject-record-id'),
@@ -948,8 +1034,15 @@ export const buildPairwiseMatchPayload = (
     group
   }));
 
+  const sequenceBundle = buildSequenceBundleForMatch(
+    element,
+    matchKind,
+    matchId || 'match',
+    resolveSequenceSource
+  );
+
   return {
-    id: firstText(attr(element, 'data-gbdraw-pairwise-match-id'), collinearityBlockId, orthogroupId),
+    id: matchId,
     title,
     subtitle,
     matchKind,
@@ -961,12 +1054,21 @@ export const buildPairwiseMatchPayload = (
     blockOrthogroupCount: blockOrthogroups.length || (matchKind === 'collinear' ? orthogroupIds.length : 0),
     blockOrthogroups,
     fill: firstText(element.getAttribute('fill'), element.style?.fill, '#94a3b8'),
+    sequenceTitle: matchKind === 'collinear' ? 'Collinear block spans' : 'Matched sequences',
+    sequenceNote: matchKind === 'collinear'
+      ? 'Block envelopes may include intergenic sequence and genes that are not anchors.'
+      : '',
+    sequenceBundle,
     sections: sections.filter((entry) => (
       entry.rows.length > 0 ||
       (Array.isArray(entry.featureRows) && entry.featureRows.length > 0)
     ))
   };
 };
+
+// Compatibility export retained for callers and older tests.
+export const buildPairwiseMatchPayload = (element, options = {}) =>
+  buildMatchPopupPayload(element, options);
 
 export const buildPairwiseMatchHoverRows = (payload) => {
   const rows = [];

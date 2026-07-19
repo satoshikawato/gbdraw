@@ -11,6 +11,7 @@ from dataclasses import replace
 from tempfile import TemporaryDirectory
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio import SeqIO  # type: ignore[reportMissingImports]
 from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
 from .io.cli_tables import (
     read_circular_track_table,
@@ -115,8 +116,22 @@ def _build_interactive_svg_context(
     color_table=None,
     default_colors=None,
     annotations=None,
+    conservation_sequence_sources=None,
 ) -> InteractiveSvgContext:
     try:
+        comparison_sequence_records = []
+        for path in conservation_sequence_sources or []:
+            if not path:
+                comparison_sequence_records.append([])
+                continue
+            try:
+                comparison_sequence_records.append(list(SeqIO.parse(str(path), "fasta")))
+            except Exception as source_exc:
+                logger.warning(
+                    "WARNING: Comparison FASTA could not be embedded in interactive SVG: %s",
+                    source_exc,
+                )
+                comparison_sequence_records.append([])
         return build_interactive_svg_context(
             records,
             selected_features_set=selected_features,
@@ -125,6 +140,7 @@ def _build_interactive_svg_context(
             default_colors=default_colors,
             annotations=annotations,
             mode="circular",
+            comparison_sequence_records=comparison_sequence_records,
         )
     except Exception as exc:
         logger.warning(
@@ -292,6 +308,12 @@ def _get_args(args) -> argparse.Namespace:
         metavar='TSV',
         help='TSV manifest with BLAST files for similarity rings, labels, and colors.',
         type=str)
+    parser.add_argument(
+        '--conservation_fasta',
+        metavar='FASTA',
+        help='Optional comparison FASTA source(s), aligned with --conservation_blast for interactive span export.',
+        type=str,
+        nargs='+')
     parser.add_argument(
         '--conservation_reference',
         help='BLAST side containing displayed circular reference coordinates.',
@@ -487,6 +509,8 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
     if args.conservation_table and args.conservation_blast:
         parser.error("--conservation_table cannot be combined with --conservation_blast")
+    if args.conservation_table and args.conservation_fasta:
+        parser.error("--conservation_table cannot be combined with --conservation_fasta")
     if args.conservation_table and args.conservation_labels:
         parser.error("--conservation_table cannot be combined with --conservation_labels")
     if args.conservation_table and args.conservation_colors:
@@ -555,6 +579,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--conservation_labels requires --conservation_blast")
     if args.conservation_colors and not args.conservation_blast:
         parser.error("--conservation_colors requires --conservation_blast")
+    if args.conservation_fasta and not args.conservation_blast:
+        parser.error("--conservation_fasta requires --conservation_blast")
+    if args.conservation_fasta and len(args.conservation_fasta) != len(args.conservation_blast):
+        parser.error("--conservation_fasta must provide one source per --conservation_blast")
     if args.depth_min is not None and args.depth_min < 0:
         parser.error("--depth_min must be >= 0")
     if args.depth_max is not None and args.depth_max < 0:
@@ -746,6 +774,11 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         conservation_table.conservation_blast_files
         if conservation_table
         else list(args.conservation_blast or []) or None
+    )
+    conservation_sequence_sources: list[str | None] | None = (
+        conservation_table.comparison_fasta_files
+        if conservation_table
+        else list(args.conservation_fasta or []) or None
     )
     conservation_reference: str = args.conservation_reference
     conservation_labels: list[str] | None = (
@@ -1113,6 +1146,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 color_table=color_table,
                 default_colors=default_colors,
                 annotations=annotation_options,
+                conservation_sequence_sources=conservation_sequence_sources,
             )
             save_figure(
                 canvas,
@@ -1196,6 +1230,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                     color_table=color_table,
                     default_colors=default_colors,
                     annotations=annotation_options,
+                    conservation_sequence_sources=conservation_sequence_sources,
                 )
                 save_figure(
                     canvas,

@@ -27,6 +27,7 @@ ConservationReferenceMode = Literal["query", "subject", "auto"]
 
 NORMALIZED_CONSERVATION_COLUMNS = (
     "source_index",
+    "source_hit_index",
     "track_index",
     "track_label",
     "reference_side",
@@ -35,12 +36,18 @@ NORMALIZED_CONSERVATION_COLUMNS = (
     "track_color",
     "query",
     "subject",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
     "start",
     "end",
     "draw_start",
     "draw_end",
     "identity",
     "alignment_length",
+    "mismatches",
+    "gap_opens",
     "evalue",
     "bitscore",
     "orientation",
@@ -155,8 +162,10 @@ def _coerce_comparison_dataframe(dataframe: DataFrame) -> DataFrame:
 
 def _filter_valid_dataframe(dataframe: DataFrame, blast_config: object) -> DataFrame:
     df = _coerce_comparison_dataframe(dataframe)
+    # Keep the original source-row identity through filtering and paint-order sorting.
+    df["source_hit_index"] = range(len(df))
     filtered = filter_comparison_dataframe(df, blast_config)  # type: ignore[arg-type]
-    return filtered.loc[:, list(COMPARISON_COLUMNS)].reset_index(drop=True)
+    return filtered.loc[:, [*COMPARISON_COLUMNS, "source_hit_index"]].reset_index(drop=True)
 
 
 def _load_conservation_file(path: str, blast_config: object) -> tuple[DataFrame | None, str | None]:
@@ -240,6 +249,9 @@ def load_conservation_sources(
                 if len(valid_frames) > 1
                 else valid_frames[0].copy()
             )
+            # DataFrame and file inputs can be merged for one logical source. A
+            # single monotonically increasing index keeps IDs unique in that case.
+            merged["source_hit_index"] = range(len(merged))
             sources.append(
                 ConservationSource(
                     source_index=source_index,
@@ -395,6 +407,7 @@ def _normalize_source_hits_for_record(
             rows.append(
                 {
                     "source_index": int(source.source_index),
+                    "source_hit_index": int(getattr(row, "source_hit_index")),
                     "track_index": int(track_index),
                     "track_label": source.label,
                     "reference_side": reference_side,
@@ -403,12 +416,18 @@ def _normalize_source_hits_for_record(
                     "track_color": source.color or "",
                     "query": _row_text(row, "query"),
                     "subject": _row_text(row, "subject"),
+                    "qstart": int(_row_float(row, "qstart")),
+                    "qend": int(_row_float(row, "qend")),
+                    "sstart": int(_row_float(row, "sstart")),
+                    "send": int(_row_float(row, "send")),
                     "start": int(start) if float(start).is_integer() else float(start),
                     "end": int(end) if float(end).is_integer() else float(end),
                     "draw_start": float(draw_start),
                     "draw_end": float(draw_end),
                     "identity": _row_float(row, "identity"),
                     "alignment_length": _row_float(row, "alignment_length"),
+                    "mismatches": _row_float(row, "mismatches"),
+                    "gap_opens": _row_float(row, "gap_opens"),
                     "evalue": _row_float(row, "evalue"),
                     "bitscore": _row_float(row, "bitscore"),
                     "orientation": orientation,

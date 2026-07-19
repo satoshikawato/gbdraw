@@ -52,6 +52,14 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-width: 1.5;
   paint-order: stroke fill markers;
 }
+.gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--selected {
+  opacity: 1;
+  filter: url(#gbdraw-interactive-feature-glow);
+  stroke: #f59e0b;
+  stroke-opacity: 1;
+  stroke-width: 2.5;
+  paint-order: stroke fill markers;
+}
 .gbdraw-feature-popup {
   overflow: visible;
   pointer-events: auto;
@@ -713,7 +721,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     'path[' + FEATURE_ID_ATTRIBUTE + '], polygon[' + FEATURE_ID_ATTRIBUTE + '], rect[' + FEATURE_ID_ATTRIBUTE + '], ' +
     'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
   var MATCH_SELECTOR =
-    'path[data-gbdraw-pairwise-match-id], path[data-match-kind], path[data-pairwise-match-style]';
+    'path[data-gbdraw-match-id], path[data-gbdraw-pairwise-match-id], path[data-match-kind], path[data-pairwise-match-style]';
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
   var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
@@ -820,6 +828,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var features = Array.isArray(payload.features) ? payload.features : [];
   var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
   var matches = Array.isArray(payload.matches) ? payload.matches : [];
+  var sequenceSources = Array.isArray(payload.sequence_sources) ? payload.sequence_sources : [];
   var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';
   var searchFieldIds = {
     all: true,
@@ -930,9 +939,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   });
 
   var matchElementsById = new Map();
+  var selectedMatchId = '';
   var comparisonElementsByCollinearityBlockId = new Map();
   Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
-    var matchId = String(element.getAttribute('data-gbdraw-pairwise-match-id') || '').trim();
+    var matchId = String(element.getAttribute('data-gbdraw-match-id') || element.getAttribute('data-gbdraw-pairwise-match-id') || '').trim();
     if (matchId) {
       if (!matchElementsById.has(matchId)) {
         matchElementsById.set(matchId, []);
@@ -1021,7 +1031,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function getElementMatchId(element) {
-    return matchAttr(element, 'data-gbdraw-pairwise-match-id');
+    return matchAttr(element, 'data-gbdraw-match-id') || matchAttr(element, 'data-gbdraw-pairwise-match-id');
   }
 
   function getMatchHoverKey(element) {
@@ -1043,6 +1053,21 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var orthogroupId = matchAttr(element, 'data-orthogroup-id');
     if (orthogroupId) {
       setOrthogroupHover(orthogroupId, highlight);
+    }
+  }
+
+  function setSelectedMatch(matchId) {
+    var nextId = String(matchId || '').trim();
+    if (selectedMatchId) {
+      (matchElementsById.get(selectedMatchId) || []).forEach(function (element) {
+        setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', false);
+      });
+    }
+    selectedMatchId = nextId;
+    if (selectedMatchId) {
+      (matchElementsById.get(selectedMatchId) || []).forEach(function (element) {
+        setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', true);
+      });
     }
   }
 
@@ -3479,6 +3504,116 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }).filter(function (value) { return value; }).join('; ');
   }
 
+  function reverseComplementMatchSequence(sequence) {
+    var complements = { A:'T', C:'G', G:'C', T:'A', U:'A', R:'Y', Y:'R', S:'S', W:'W', K:'M', M:'K', B:'V', D:'H', H:'D', V:'B', N:'N', '-':'-' };
+    var input = String(sequence || '').replace(/\\s+/g, '').toUpperCase();
+    var output = '';
+    for (var index = input.length - 1; index >= 0; index -= 1) output += complements[input[index]] || 'N';
+    return output;
+  }
+
+  function safeMatchFilenamePart(value, fallback) {
+    var cleaned = String(value || '').trim().replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
+    return cleaned || fallback || 'sequence';
+  }
+
+  function matchSourceAliases(source) {
+    return [source && source.recordId].concat(Array.isArray(source && source.aliases) ? source.aliases : []).map(function (value) {
+      return String(value || '').trim();
+    }).filter(Boolean);
+  }
+
+  function resolveEmbeddedMatchSource(match, role) {
+    var kind = String(match && match.match_kind || 'pairwise');
+    var recordId = String(match && match[role + '_record_id'] || '').trim();
+    var recordIndexText = String(match && match[role + '_record_index'] == null ? '' : match[role + '_record_index']).trim();
+    var recordIndex = recordIndexText ? Number(recordIndexText) : NaN;
+    var referenceSide = String(match && match.reference_side || '').trim();
+    var sourceIndexText = String(match && match.source_index == null ? '' : match.source_index).trim();
+    var sourceIndex = sourceIndexText ? Number(sourceIndexText) : NaN;
+    var expectedOrigin = kind === 'homology'
+      ? (role === referenceSide ? 'circular-reference' : 'homology-comparison')
+      : 'linear-record';
+    var candidates = sequenceSources.filter(function (source) {
+      if (String(source && source.origin || '') !== expectedOrigin) return false;
+      if (expectedOrigin === 'linear-record' && Number.isInteger(recordIndex) && Number(source.recordIndex) !== recordIndex) return false;
+      if (expectedOrigin === 'homology-comparison' && Number.isInteger(sourceIndex) && Number(source.sourceIndex) !== sourceIndex) return false;
+      return true;
+    });
+    if (candidates.length === 1 && (expectedOrigin === 'linear-record' || !recordId)) return { source: candidates[0], reason: '' };
+    var exact = candidates.filter(function (source) { return String(source.recordId || '') === recordId; });
+    if (exact.length === 1) return { source: exact[0], reason: '' };
+    if (exact.length > 1) return { source: null, reason: 'Record ID is ambiguous in the embedded sequence sources.' };
+    var aliases = candidates.filter(function (source) { return matchSourceAliases(source).indexOf(recordId) >= 0; });
+    if (aliases.length === 1) return { source: aliases[0], reason: '' };
+    if (aliases.length > 1) return { source: null, reason: 'Record alias is ambiguous in the embedded sequence sources.' };
+    if (kind === 'homology' && expectedOrigin === 'homology-comparison') {
+      return { source: null, reason: 'Comparison sequence was not supplied for this BLAST source.' };
+    }
+    return { source: null, reason: 'Sequence was not embedded by the interactive export policy.' };
+  }
+
+  function wrapMatchFasta(sequence) {
+    var value = String(sequence || '');
+    var lines = [];
+    for (var index = 0; index < value.length; index += 60) lines.push(value.slice(index, index + 60));
+    return lines.join('\\n');
+  }
+
+  function buildEmbeddedMatchEntry(match, role) {
+    var prefix = role === 'query' ? 'q' : 's';
+    var start = Number(match && match[prefix + 'start']);
+    var end = Number(match && match[prefix + 'end']);
+    var kind = String(match && match.match_kind || 'pairwise');
+    var referenceSide = String(match && match.reference_side || '').trim();
+    var displayRole = kind === 'homology'
+      ? (role === referenceSide ? 'Reference' : 'Comparison')
+      : (role === 'query' ? 'Query' : 'Subject');
+    var recordId = String(match && match[role + '_record_id'] || '').trim();
+    var orientation = start <= end ? '+' : '-';
+    var unavailable = function (reason) {
+      return { role: role, displayRole: displayRole, recordId: recordId, start: start, end: end, orientation: orientation, available: false, reason: reason, fasta: '', filename: '' };
+    };
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) return unavailable('Coordinates must be whole 1-based values.');
+    var resolved = resolveEmbeddedMatchSource(match, role);
+    if (!resolved.source) return unavailable(resolved.reason);
+    var sourceSequence = String(resolved.source.sequence || '').replace(/\\s+/g, '').toUpperCase();
+    if (start > sourceSequence.length || end > sourceSequence.length) return unavailable('Coordinates exceed the embedded sequence length.');
+    var low = Math.min(start, end);
+    var high = Math.max(start, end);
+    var sequence = sourceSequence.slice(low - 1, high);
+    if (orientation === '-') sequence = reverseComplementMatchSequence(sequence);
+    var matchId = safeMatchFilenamePart(match && match.id, 'match');
+    var header = matchId + '_' + role + '|record=' + recordId + '|coords=' + start + '..' + end + '|strand=' + orientation;
+    var fasta = '>' + header + '\\n' + wrapMatchFasta(sequence) + '\\n';
+    return {
+      role: role,
+      displayRole: displayRole,
+      recordId: recordId,
+      start: start,
+      end: end,
+      orientation: orientation,
+      length: high - low + 1,
+      available: true,
+      reason: '',
+      fasta: fasta,
+      filename: matchId + '_' + role + '_' + safeMatchFilenamePart(recordId, 'record') + '_' + start + '-' + end + '.fna'
+    };
+  }
+
+  function buildEmbeddedMatchBundle(match) {
+    if (!match || match.match_kind === 'orthogroup') return null;
+    var entries = [buildEmbeddedMatchEntry(match, 'query'), buildEmbeddedMatchEntry(match, 'subject')];
+    var allAvailable = entries.every(function (entry) { return entry.available; });
+    return {
+      title: match.match_kind === 'collinear' ? 'Collinear block spans' : 'Matched sequences',
+      note: match.match_kind === 'collinear' ? 'Block envelopes may include intergenic sequence and genes that are not anchors.' : '',
+      entries: entries,
+      combinedFasta: allAvailable ? entries.map(function (entry) { return entry.fasta; }).join('') : '',
+      combinedFilename: safeMatchFilenamePart(match.id, 'match') + '_both.fna'
+    };
+  }
+
   function materializeCompactMatch(match) {
     if (!match || Array.isArray(match.sections)) return match || {};
     if (match._gbdrawMaterialized) return match._gbdrawMaterialized;
@@ -3499,6 +3634,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     addMaterializedMatchRow(summaryRows, 'Query interval', qInterval);
     addMaterializedMatchRow(summaryRows, 'Subject interval', sInterval);
     addMaterializedMatchRow(summaryRows, 'Orientation', match.orientation);
+    if (kind === 'homology') {
+      addMaterializedMatchRow(summaryRows, 'Ring label', match.track_label);
+      addMaterializedMatchRow(summaryRows, 'Source index', Number.isFinite(Number(match.source_index)) ? String(Number(match.source_index) + 1) : '');
+      addMaterializedMatchRow(summaryRows, 'Reference side', match.reference_side);
+      addMaterializedMatchRow(summaryRows, 'Reference record', match.reference_record_id);
+    }
     var alignmentRows = [];
     addMaterializedMatchRow(alignmentRows, 'Identity', match.identity);
     addMaterializedMatchRow(alignmentRows, 'Alignment length', match.alignment_length);
@@ -3564,28 +3705,30 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       addMaterializedMatchRow(blockRows, 'Block e-value', match.block_evalue);
       addMaterializedMatchRow(blockRows, 'Anchor', [match.anchor_index, match.anchor_count].filter(Boolean).join(' / '));
       if (blockRows.length) sections.push({ title: 'Collinearity', rows: blockRows });
-      sections.push({
-        title: 'Query',
-        rows: [],
-        feature_rows: materializedMatchFeatureRows(match.query_feature_svg_id, {
-          recordId: match.query_record_id,
-          interval: qInterval,
-          proteinId: match.query_protein_id,
-          locusId: match.query_locus_id,
-          displayName: match.query_display_name
-        })
-      });
-      sections.push({
-        title: 'Subject',
-        rows: [],
-        feature_rows: materializedMatchFeatureRows(match.subject_feature_svg_id, {
-          recordId: match.subject_record_id,
-          interval: sInterval,
-          proteinId: match.subject_protein_id,
-          locusId: match.subject_locus_id,
-          displayName: match.subject_display_name
-        })
-      });
+      if (kind !== 'homology') {
+        sections.push({
+          title: 'Query',
+          rows: [],
+          feature_rows: materializedMatchFeatureRows(match.query_feature_svg_id, {
+            recordId: match.query_record_id,
+            interval: qInterval,
+            proteinId: match.query_protein_id,
+            locusId: match.query_locus_id,
+            displayName: match.query_display_name
+          })
+        });
+        sections.push({
+          title: 'Subject',
+          rows: [],
+          feature_rows: materializedMatchFeatureRows(match.subject_feature_svg_id, {
+            recordId: match.subject_record_id,
+            interval: sInterval,
+            proteinId: match.subject_protein_id,
+            locusId: match.subject_locus_id,
+            displayName: match.subject_display_name
+          })
+        });
+      }
     }
     var hoverRows = [];
     addMaterializedMatchRow(hoverRows, 'Kind', kind);
@@ -3600,7 +3743,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     addMaterializedMatchRow(hoverRows, 'Block', match.collinearity_block_id);
     var title = kind === 'orthogroup'
       ? (displayName && displayName !== orthogroupId ? orthogroupId + ':' + displayName : orthogroupId || 'Orthogroup match')
-      : (kind === 'collinear' ? 'Collinearity block' : 'Pairwise match');
+      : (kind === 'collinear' ? 'Collinearity block' : (kind === 'homology' ? 'Homology ring match' : 'Pairwise match'));
     match._gbdrawMaterialized = {
       id: match.id,
       title: title,
@@ -3610,7 +3753,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       collinearity_block_id: match.collinearity_block_id,
       fill: match.fill || '#94a3b8',
       sections: sections,
-      hover_rows: hoverRows
+      hover_rows: hoverRows,
+      sequence_bundle: buildEmbeddedMatchBundle(match)
     };
     return match._gbdrawMaterialized;
   }
@@ -3758,6 +3902,26 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       '<div class="gfi-block-actions">' + copyButton(copyText) + sequenceActions + '</div>';
   }
 
+  function renderMatchSequenceBundle(match) {
+    var bundle = match && (match.sequence_bundle || match.sequenceBundle);
+    if (!bundle || !Array.isArray(bundle.entries)) return '';
+    var entries = bundle.entries.map(function (entry) {
+      var coordinates = String(entry.recordId || '') + ' · ' + entry.start + '..' + entry.end + ' · ' + entry.orientation +
+        (entry.available ? ' · ' + Number(entry.length || 0).toLocaleString() + ' bp' : '');
+      var actions = entry.available
+        ? copyButton(entry.fasta, 'Copy') + downloadButton(entry.filename, entry.fasta, 'FASTA')
+        : '';
+      var reason = entry.available ? '' : '<div class="gfi-warning">' + escapeHtml(entry.reason || 'Sequence is unavailable.') + '</div>';
+      return '<div class="gfi-block"><div class="gfi-block-title"><span>' + escapeHtml(entry.displayRole + ' span') + '</span>' + actions + '</div>' +
+        '<div class="gfi-mono">' + escapeHtml(coordinates) + '</div>' + reason + '</div>';
+    }).join('');
+    var combined = bundle.combinedFasta
+      ? '<div class="gfi-block-actions"><span>Both spans</span>' + copyButton(bundle.combinedFasta, 'Copy') + downloadButton(bundle.combinedFilename, bundle.combinedFasta, 'FASTA') + '</div>'
+      : '';
+    return '<div class="gfi-block"><div class="gfi-block-title">' + escapeHtml(bundle.title || 'Matched sequences') + '</div>' +
+      (bundle.note ? '<div class="gfi-warning">' + escapeHtml(bundle.note) + '</div>' : '') + entries + combined + '</div>';
+  }
+
   function renderMatchSections(match) {
     match = materializeCompactMatch(match);
     var sections = Array.isArray(match && match.sections) ? match.sections : [];
@@ -3802,7 +3966,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       '<div class="gfi-subtitle">' + escapeHtml(match && (match.subtitle || match.id) || '') + '</div></div>' +
       '<button type="button" class="gfi-close" data-close="true">x</button>' +
       '</div>' +
-      '<div class="gfi-content">' + renderMatchSections(match) + '</div>' +
+      '<div class="gfi-content">' + renderMatchSequenceBundle(match) + renderMatchSections(match) + '</div>' +
       '<button type="button" class="gfi-resize-handle" data-resize="true" title="Drag to resize" aria-label="Resize popup"></button>' +
       '</div>';
   }
@@ -3833,6 +3997,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       popup.parentNode.removeChild(popup);
     }
     popup = null;
+    setSelectedMatch('');
   }
 
   function closeHoverPopup() {
@@ -4720,6 +4885,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       event.stopPropagation();
       closeHoverPopup();
       openPopup(match, event, 'match');
+      setSelectedMatch(matchId);
       return;
     }
     var svgId = getElementFeatureId(featureElement);
