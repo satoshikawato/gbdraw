@@ -13,6 +13,7 @@ const FEATURE_SELECTOR = [
   'rect[id^="f"]'
 ].join(', ');
 const STANDALONE_MATCH_SELECTOR = [
+  'path[data-gbdraw-match-id]',
   'path[data-gbdraw-pairwise-match-id]',
   'path[data-match-kind]',
   'path[data-pairwise-match-style]'
@@ -165,7 +166,8 @@ const normalizeStandaloneContext = (options = {}) => ({
   currentColors:
     options.currentColors && typeof options.currentColors === 'object'
       ? options.currentColors
-      : {}
+      : {},
+  sequenceSources: Array.isArray(options.sequenceSources) ? options.sequenceSources : []
 });
 
 const getEditableLabelEntryForStandaloneFeature = (feature, context) => {
@@ -705,13 +707,14 @@ const standaloneMemberCopyText = (memberRows) => {
 
 const standaloneMatchKind = (element) => {
   const explicit = standaloneAttr(element, 'data-match-kind').toLowerCase();
-  if (explicit === 'pairwise' || explicit === 'orthogroup' || explicit === 'collinear') return explicit;
+  if (['homology', 'pairwise', 'orthogroup', 'collinear'].includes(explicit)) return explicit;
   if (standaloneAttr(element, 'data-collinearity-block-id')) return 'collinear';
   if (standaloneAttr(element, 'data-orthogroup-id')) return 'orthogroup';
   return 'pairwise';
 };
 
 const STANDALONE_MATCH_TITLES = {
+  homology: 'Homology ring match',
   pairwise: 'Pairwise match',
   orthogroup: 'Orthogroup match',
   collinear: 'Collinearity block'
@@ -1296,9 +1299,13 @@ const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] }
 const buildStandaloneMatchPayloads = (svg) => {
   if (!svg) return [];
   return Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR)).map((element, index) => {
-    let id = standaloneAttr(element, 'data-gbdraw-pairwise-match-id');
+    let id = firstStandaloneText(
+      standaloneAttr(element, 'data-gbdraw-match-id'),
+      standaloneAttr(element, 'data-gbdraw-pairwise-match-id')
+    );
     if (!id) {
       id = `pairwise_match_${index + 1}`;
+      element.setAttribute('data-gbdraw-match-id', id);
       element.setAttribute('data-gbdraw-pairwise-match-id', id);
     }
     return compactWireValue({
@@ -1315,6 +1322,13 @@ const buildStandaloneMatchPayloads = (svg) => {
         standaloneAttr(element, 'data-subject-record-id'),
         standaloneAttr(element, 'data-subject')
       ),
+      query_record_index: standaloneAttr(element, 'data-query-record-index'),
+      subject_record_index: standaloneAttr(element, 'data-subject-record-index'),
+      source_index: standaloneAttr(element, 'data-source-index'),
+      track_index: standaloneAttr(element, 'data-track-index'),
+      track_label: standaloneAttr(element, 'data-track-label'),
+      reference_side: standaloneAttr(element, 'data-reference-side'),
+      reference_record_id: standaloneAttr(element, 'data-reference-record-id'),
       qstart: standaloneAttr(element, 'data-qstart'),
       qend: standaloneAttr(element, 'data-qend'),
       sstart: standaloneAttr(element, 'data-sstart'),
@@ -1346,6 +1360,40 @@ const buildStandaloneMatchPayloads = (svg) => {
       query_display_name: standaloneAttr(element, 'data-query-display-name'),
       subject_display_name: standaloneAttr(element, 'data-subject-display-name')
     });
+  });
+};
+
+const selectStandaloneSequenceSources = (matches, sources) => {
+  if (!Array.isArray(matches) || matches.length === 0) return [];
+  const linearIndexes = new Set();
+  const circularRecordIds = new Set();
+  const comparisonSourceIndexes = new Set();
+  matches.forEach((match) => {
+    if (match?.match_kind === 'homology') {
+      const referenceSide = String(match.reference_side || '').trim();
+      const recordId = String(match[`${referenceSide}_record_id`] || '').trim();
+      if (recordId) circularRecordIds.add(recordId);
+      const sourceIndex = Number(match.source_index);
+      if (Number.isInteger(sourceIndex)) comparisonSourceIndexes.add(sourceIndex);
+      return;
+    }
+    ['query', 'subject'].forEach((role) => {
+      const recordIndex = Number(match?.[`${role}_record_index`]);
+      if (Number.isInteger(recordIndex)) linearIndexes.add(recordIndex);
+    });
+  });
+  return (Array.isArray(sources) ? sources : []).filter((source) => {
+    const origin = String(source?.origin || '').trim();
+    if (origin === 'linear-record') return linearIndexes.has(Number(source.recordIndex));
+    if (origin === 'homology-comparison') {
+      return comparisonSourceIndexes.has(Number(source.sourceIndex));
+    }
+    if (origin === 'circular-reference') {
+      const aliases = [source.recordId, ...(Array.isArray(source.aliases) ? source.aliases : [])]
+        .map((value) => String(value || '').trim());
+      return aliases.some((value) => circularRecordIds.has(value));
+    }
+    return false;
   });
 };
 
@@ -1539,6 +1587,7 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   });
   const orthogroups = buildStandaloneOrthogroupPayloads(features, context);
   const matches = buildStandaloneMatchPayloads(svg, { features, orthogroups });
+  const sequenceSources = selectStandaloneSequenceSources(matches, context.sequenceSources);
 
   const featureIds = new Set(features.map((feature) => feature.svg_id));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
@@ -1549,7 +1598,10 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   });
   const matchIds = new Set(matches.map((match) => match.id));
   svg.querySelectorAll(STANDALONE_MATCH_SELECTOR).forEach((element) => {
-    const id = standaloneAttr(element, 'data-gbdraw-pairwise-match-id');
+    const id = firstStandaloneText(
+      standaloneAttr(element, 'data-gbdraw-match-id'),
+      standaloneAttr(element, 'data-gbdraw-pairwise-match-id')
+    );
     if (!matchIds.has(id)) return;
     element.setAttribute('data-gbdraw-interactive-match', 'true');
     addClassToken(element, 'gbdraw-interactive-pairwise-match');
@@ -1564,7 +1616,8 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     popup_mode: normalizedPopupMode,
     features,
     orthogroups,
-    matches
+    matches,
+    sequence_sources: sequenceSources
   }));
 
   const style = document.createElementNS(SVG_NS, 'style');

@@ -184,7 +184,14 @@ This writes `MjeNMV_conservation_table.svg`.
 
 The ring shows retained HSP spans from the BLAST table. It does not infer evolutionary conservation.
 
-`--conservation_table` cannot be combined with `--conservation_blast`, `--conservation_labels`, or `--conservation_colors`.
+To enable comparison-span FASTA actions in `interactive_svg` output, add an optional `comparison_fasta` column. Its path must identify the BLAST comparison records for that row:
+
+```tsv
+blast	comparison_fasta	label	color
+comparison_vs_reference.tsv	comparison.fna	Comparison	#4E79A7
+```
+
+The displayed reference span remains available when this column is omitted. `--conservation_table` cannot be combined with `--conservation_blast`, `--conservation_fasta`, `--conservation_labels`, or `--conservation_colors`.
 
 ## 6. Circular track slots with `--circular_track_table`
 

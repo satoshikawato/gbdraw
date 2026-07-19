@@ -478,6 +478,7 @@ const buildLayout = (state, filesData) => {
 
 export const buildCanonicalSessionRequest = ({ state, filesData }) => {
   const resources = createResourceBuilder();
+  const webFiles = {};
   const records = buildRecords({ state, filesData, resources });
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
 
@@ -517,6 +518,20 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
       diagramOptions.conservationBlastFiles = conservation.map((entry, index) => fileRef(
         resources.addFile(`conservation-blast-files-${index + 1}`, 'conservation-blast-file', entry)
       ));
+      const comparisonSources = Array.isArray(filesData.c_conservation_sequence_sources)
+        ? filesData.c_conservation_sequence_sources
+        : [];
+      if (comparisonSources.some(Boolean)) {
+        webFiles.conservationSequenceSources = comparisonSources.map((entry, index) => (
+          entry
+            ? resources.addFile(
+                `conservation-sequence-sources-${index + 1}`,
+                'conservation-sequence-source',
+                entry
+              )
+            : null
+        ));
+      }
       diagramOptions.conservationReference = String(state.circularConservation.reference || 'auto');
       diagramOptions.conservationLabels = String(state.circularConservation.labels || '')
         .split(',').map((value) => value.trim()).filter(Boolean);
@@ -547,7 +562,8 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
         interactiveMetadataPolicy: 'auto'
       }
     },
-    resources: resources.resources
+    resources: resources.resources,
+    webFiles
   };
 };
 
@@ -591,7 +607,7 @@ const combineCircularGenbankResources = (resources, records) => {
   };
 };
 
-export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => {
+export const projectCanonicalSessionRequest = ({ renderRequest, resources, webFiles = {} }) => {
   if (!renderRequest || ![1, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
   }
@@ -706,6 +722,11 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources }) => 
     files.c_conservation_blasts = options.conservationBlastFiles
       .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
       .filter(Boolean);
+  }
+  if (renderRequest.mode === 'circular' && Array.isArray(webFiles.conservationSequenceSources)) {
+    files.c_conservation_sequence_sources = webFiles.conservationSequenceSources.map((resourceId) => (
+      resourceId ? resourceAsLegacyFile(resources, resourceId) : null
+    ));
   }
   const overrides = options.configOverrides || {};
   const tracks = options.tracks || {};

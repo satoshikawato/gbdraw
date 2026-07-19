@@ -72,18 +72,26 @@ def test_public_label_table_readers(tmp_path: Path) -> None:
 def test_conservation_table_resolves_relative_paths(tmp_path: Path) -> None:
     blast = tmp_path / "blast.tsv"
     blast.write_text("", encoding="utf-8")
+    comparison_fasta = tmp_path / "comparison.fna"
+    comparison_fasta.write_text(">comparison\nACGT\n", encoding="utf-8")
     table_dir = tmp_path / "tables"
     table_dir.mkdir()
     table = table_dir / "conservation.tsv"
-    table.write_text("blast\tlabel\tcolor\n../blast.tsv\tReference A\t#E15759\n", encoding="utf-8")
+    table.write_text(
+        "blast\tlabel\tcolor\tcomparison_fasta\n"
+        "../blast.tsv\tReference A\t#E15759\t../comparison.fna\n",
+        encoding="utf-8",
+    )
 
     parsed = read_conservation_table(str(table))
 
     assert parsed.conservation_blast_files == [str(blast.resolve())]
     assert parsed.labels == ["Reference A"]
     assert parsed.colors == ["#E15759"]
+    assert parsed.comparison_fasta_files == [str(comparison_fasta.resolve())]
     assert parsed.path_dependencies[0].column == "blast"
     assert parsed.path_dependencies[0].row_index == 0
+    assert parsed.path_dependencies[1].column == "comparison_fasta"
 
 
 def test_conservation_table_rejects_unknown_columns(tmp_path: Path) -> None:

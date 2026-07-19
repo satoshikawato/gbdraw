@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal, Mapping, Sequence, TypeAlias
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio import SeqIO  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
@@ -166,6 +167,7 @@ class ConservationTrackOptions:
     source: TableSource
     label: str | None = None
     color: str | None = None
+    comparison_sequence_source: RecordCollection | str | PathLike[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -577,6 +579,18 @@ def _interactive_context(
     )
     if default_colors is None:
         default_colors = load_default_colors(default_file or "", options.features.palette)
+    comparison_sequence_records: list[list[SeqRecord]] = []
+    if isinstance(options, CircularOptions):
+        for track in options.conservation.tracks:
+            source = track.comparison_sequence_source
+            if source is None:
+                comparison_sequence_records.append([])
+            elif isinstance(source, SeqRecord):
+                comparison_sequence_records.append([source])
+            elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, PathLike)):
+                comparison_sequence_records.append(list(source))
+            else:
+                comparison_sequence_records.append(list(SeqIO.parse(str(source), "fasta")))
     return build_interactive_svg_context(
         records,
         selected_features_set=options.features.types,
@@ -587,6 +601,7 @@ def _interactive_context(
         linear_rendered_feature_ids=mode == "linear",
         annotations=options.annotations,
         mode=mode,
+        comparison_sequence_records=comparison_sequence_records,
     )
 
 

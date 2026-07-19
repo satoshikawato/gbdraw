@@ -665,6 +665,7 @@ export const createRunAnalysis = ({
     skipCaptureBaseConfig,
     skipPositionReapply,
     pairwiseMatchFactors,
+    matchSequenceRegistry,
     addedLegendCaptions,
     fileLegendCaptions,
     featureColorOverrides,
@@ -1654,6 +1655,7 @@ json.dumps({
           selectedResultIndex: selectedResultIndex.value,
           zoom: zoom.value,
           pairwiseMatchFactors: { ...(pairwiseMatchFactors.value || {}) },
+          matchSequenceSources: matchSequenceRegistry?.values?.() || [],
           addedLegendCaptions: new Set(addedLegendCaptions.value || []),
           fileLegendCaptions: new Set(fileLegendCaptions.value || []),
           featureColorOverrides: cloneJsonValue(featureColorOverrides, {}),
@@ -1683,6 +1685,7 @@ json.dumps({
       );
       zoom.value = manualCancelSnapshot.zoom;
       pairwiseMatchFactors.value = { ...manualCancelSnapshot.pairwiseMatchFactors };
+      matchSequenceRegistry?.reset?.(manualCancelSnapshot.matchSequenceSources);
       addedLegendCaptions.value = new Set(manualCancelSnapshot.addedLegendCaptions);
       fileLegendCaptions.value = new Set(manualCancelSnapshot.fileLegendCaptions);
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
@@ -1758,6 +1761,7 @@ json.dumps({
       skipCaptureBaseConfig.value = false;
       skipPositionReapply.value = false;
       pairwiseMatchFactors.value = {};
+      matchSequenceRegistry?.reset?.();
       clickedLabel.value = null;
       resetLabelScopeDialogState();
       addedLegendCaptions.value = new Set();
@@ -1776,6 +1780,11 @@ json.dumps({
 
     try {
       let args = [];
+      const pendingMatchSequenceSources = [];
+      const queueMatchSequenceSource = (source) => {
+        if (!source?.key || !source?.sequence) return;
+        pendingMatchSequenceSources.push(source);
+      };
       let regionSpecs = [];
       let recordSelectors = [];
       let reverseFlags = [];
@@ -2623,6 +2632,22 @@ json.dumps({
           args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
         }
 
+        if (!isReflow) {
+          const circularSequenceFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
+          const circularSequenceText = await circularSequenceFile.text();
+          const circularRecords = cInputType.value === 'gb'
+            ? parseGenbankRecordsFast(circularSequenceText)
+            : parseFastaRecordsFast(circularSequenceText);
+          circularRecords.forEach((record, recordIndex) => queueMatchSequenceSource({
+            key: `circular:record:${recordIndex}`,
+            recordId: record.id,
+            aliases: [record.id],
+            sequence: record.sequence,
+            origin: 'circular-reference',
+            recordIndex
+          }));
+        }
+
         const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
           : 'losat';
@@ -2777,6 +2802,16 @@ json.dumps({
               const queryHash = await hashText(queryFasta);
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
+              if (!isReflow) {
+                parseFastaRecordsFast(queryFasta).forEach((record) => queueMatchSequenceSource({
+                  key: `homology:comparison:${index}:${record.id}`,
+                  recordId: record.id,
+                  aliases: [record.id],
+                  sequence: record.sequence,
+                  origin: 'homology-comparison',
+                  sourceIndex: index
+                }));
+              }
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
               const cacheMetadata = {
                 flow: 'circular-conservation',
@@ -2895,6 +2930,22 @@ json.dumps({
                 slot: `files.c_conservation_blasts[${conservationEntries[index].sourceIndex}]`
               });
               conservationBlastPaths.push(blastPath);
+              if (!isReflow) {
+                const comparisonFile = files.c_conservation_sequence_sources?.[
+                  conservationEntries[index].sourceIndex
+                ] || null;
+                if (comparisonFile) {
+                  const comparisonText = await comparisonFile.text();
+                  parseFastaRecordsFast(comparisonText).forEach((record) => queueMatchSequenceSource({
+                    key: `homology:comparison:${index}:${record.id}`,
+                    recordId: record.id,
+                    aliases: [record.id],
+                    sequence: record.sequence,
+                    origin: 'homology-comparison',
+                    sourceIndex: index
+                  }));
+                }
+              }
             }
             const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
             conservationReference = ['query', 'subject'].includes(rawReference) ? rawReference : 'auto';
@@ -3697,6 +3748,31 @@ json.dumps({
         }
 
         regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
+        if (!isReflow) {
+          for (let index = 0; index < linearSeqs.length; index += 1) {
+            const sourceFile = lInputType.value === 'gb' ? linearSeqs[index].gb : linearSeqs[index].fasta;
+            const entry = await extractLosatFastaFast({
+              file: sourceFile,
+              fmt: lInputType.value === 'gb' ? 'genbank' : 'fasta',
+              regionSpec: regionSpecs[index]?.file || null,
+              recordSelector: recordSelectors[index] || '',
+              reverseFlag: '0'
+            });
+            const materialized = parseFastaRecordsFast(entry.fasta)[0];
+            if (!materialized) continue;
+            const sequence = viewTransformSpecs[index]?.reverse
+              ? reverseComplementSequence(materialized.sequence)
+              : materialized.sequence;
+            queueMatchSequenceSource({
+              key: `linear:record:${index}`,
+              recordId: entry.recordId || materialized.id,
+              aliases: [entry.recordId, materialized.id],
+              sequence,
+              origin: 'linear-record',
+              recordIndex: index
+            });
+          }
+        }
         if (useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
         }
@@ -4253,6 +4329,7 @@ json.dumps({
         if (!isReflow && resultGenerationKey) {
           resultGenerationKey.value += 1;
         }
+        if (!isReflow) matchSequenceRegistry?.reset?.(pendingMatchSequenceSources);
       });
       if (!isReflow && manualRunStartedAt !== null) {
         const runInfo = buildRunInfo({

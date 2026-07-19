@@ -106,15 +106,31 @@ class ConservationDrawer:
                 stroke_width=self.stroke_width,
                 debug=False,
             )
+            source_index = int(_row_float(row, "source_index"))
+            source_hit_index = int(_row_float(row, "source_hit_index"))
+            match_id = f"homology_ring{source_index + 1}_hit{source_hit_index + 1}"
             metadata: dict[str, Any] = {
+                "data-gbdraw-match-id": match_id,
+                "data-match-kind": "homology",
                 "data-source-index": getattr(row, "source_index", ""),
+                "data-track-index": getattr(row, "track_index", ""),
                 "data-track-label": getattr(row, "track_label", ""),
                 "data-track-color": getattr(row, "track_color", ""),
+                "data-reference-side": _row_text(row, "reference_side"),
                 "data-identity": identity,
                 "data-query": _row_text(row, "query"),
                 "data-subject": _row_text(row, "subject"),
+                "data-query-record-id": _row_text(row, "query"),
+                "data-subject-record-id": _row_text(row, "subject"),
+                "data-qstart": getattr(row, "qstart", ""),
+                "data-qend": getattr(row, "qend", ""),
+                "data-sstart": getattr(row, "sstart", ""),
+                "data-send": getattr(row, "send", ""),
+                "data-alignment-length": getattr(row, "alignment_length", ""),
                 "data-evalue": getattr(row, "evalue", ""),
                 "data-bitscore": getattr(row, "bitscore", ""),
+                "data-mismatches": getattr(row, "mismatches", ""),
+                "data-gap-opens": getattr(row, "gap_opens", ""),
                 "data-orientation": _row_text(row, "orientation"),
                 "data-reference-record-id": _row_text(row, "reference_record_id"),
             }

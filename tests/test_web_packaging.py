@@ -1777,13 +1777,21 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
     )
     normalization_path = tmp_path / "losat-normalization.mjs"
     normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
+    match_sequences_path = tmp_path / "match-sequences.mjs"
+    match_sequences_path.write_text(
+        (WEB_ROOT / "js" / "app" / "match-sequences.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
+        encoding="utf-8",
+    )
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_path.write_text(
         source_path.read_text(encoding="utf-8")
         .replace("./feature-utils.js", "./feature-utils.mjs")
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./losat-normalization.js", "./losat-normalization.mjs"),
+        .replace("./losat-normalization.js", "./losat-normalization.mjs")
+        .replace("./match-sequences.js", "./match-sequences.mjs"),
         encoding="utf-8",
     )
     check_path = tmp_path / "check-pairwise-popup.mjs"
@@ -1922,13 +1930,21 @@ def test_collinear_adjacent_popup_labels_local_collinear_groups(tmp_path: Path) 
     )
     normalization_path = tmp_path / "losat-normalization.mjs"
     normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
+    match_sequences_path = tmp_path / "match-sequences.mjs"
+    match_sequences_path.write_text(
+        (WEB_ROOT / "js" / "app" / "match-sequences.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
+        encoding="utf-8",
+    )
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_path.write_text(
         source_path.read_text(encoding="utf-8")
         .replace("./feature-utils.js", "./feature-utils.mjs")
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./losat-normalization.js", "./losat-normalization.mjs"),
+        .replace("./losat-normalization.js", "./losat-normalization.mjs")
+        .replace("./match-sequences.js", "./match-sequences.mjs"),
         encoding="utf-8",
     )
     check_path = tmp_path / "check-collinear-popup.mjs"

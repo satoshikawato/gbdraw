@@ -348,8 +348,10 @@ class PairWiseMatchGroup:
             or _attribute_text(_row_value(row, "sseqid", ""))
             or self._record_id_for_index(subject_record_index)
         )
+        match_id = self._next_pairwise_match_id(match_index)
         required_attributes = {
-            "data-gbdraw-pairwise-match-id": self._next_pairwise_match_id(match_index),
+            "data-gbdraw-match-id": match_id,
+            "data-gbdraw-pairwise-match-id": match_id,
             "data-match-kind": _match_kind(row),
             "data-query-record-index": query_record_index,
             "data-subject-record-index": subject_record_index,

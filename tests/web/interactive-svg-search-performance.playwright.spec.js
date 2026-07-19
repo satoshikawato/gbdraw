@@ -195,17 +195,111 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   execFileSync('python', ['-c', generator, svgPath], { cwd: process.cwd(), stdio: 'inherit' });
   await page.goto(pathToFileURL(svgPath).href);
   await page.locator('[data-gbdraw-pairwise-match-id="m1"]').click();
+  await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
+    .toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
   await expect(page.locator('.gfi-title')).toHaveText('Pairwise match');
   const sectionTitles = await page.locator('.gfi-block-title').allTextContents();
-  expect(sectionTitles).toEqual(['Summary', 'Alignment', 'Orthogroup', 'Query', 'Subject']);
+  expect(sectionTitles).toEqual([
+    'Matched sequences',
+    'Query span',
+    'Subject span',
+    'Summary',
+    'Alignment',
+    'Orthogroup',
+    'Query',
+    'Subject',
+  ]);
   await expect(page.locator('.gfi-content')).toContainText('99.1');
   await expect(page.locator('.gfi-content')).toContainText('Protein A');
   await expect(page.locator('.gfi-content')).toContainText('Protein B');
   await page.locator('[data-close]').click();
+  await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
+    .not.toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
   await page.locator('[data-gbdraw-pairwise-match-id="m2"]').click();
   const collinearTitles = await page.locator('.gfi-block-title').allTextContents();
-  expect(collinearTitles).toEqual(['Summary', 'Local collinear groups', 'Collinearity', 'Query', 'Subject']);
+  expect(collinearTitles).toEqual([
+    'Collinear block spans',
+    'Query span',
+    'Subject span',
+    'Summary',
+    'Local collinear groups',
+    'Collinearity',
+    'Query',
+    'Subject',
+  ]);
   await expect(page.locator('.gfi-content')).toContainText('Number of local collinear groups');
+});
+
+test('standalone homology popup exports exact spans and keeps missing comparison optional', async ({ page }, testInfo) => {
+  const svgPath = testInfo.outputPath('interactive-homology-match.svg');
+  const generator = String.raw`
+import sys
+from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+
+source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
+<path data-ring-background="true" fill="#eeeeee" d="M 5 5 L 115 5 L 115 15 L 5 15 Z" />
+<path data-gbdraw-match-id="homology_ring2_hit17" data-match-kind="homology"
+ data-source-index="0" data-track-index="2" data-track-label="Comparison A"
+ data-reference-side="query" data-reference-record-id="ref"
+ data-query-record-id="ref" data-subject-record-id="cmp"
+ data-qstart="2" data-qend="5" data-sstart="6" data-send="3"
+ data-identity="98.5" data-alignment-length="4" data-evalue="1e-20"
+ fill="#ef4444" d="M 10 25 L 110 25 L 110 35 L 10 35 Z" />
+<path data-gbdraw-match-id="homology_ring3_hit1" data-match-kind="homology"
+ data-source-index="1" data-track-index="3" data-track-label="BLAST only"
+ data-reference-side="query" data-reference-record-id="ref"
+ data-query-record-id="ref" data-subject-record-id="missing"
+ data-qstart="1" data-qend="4" data-sstart="1" data-send="4"
+ fill="#3b82f6" d="M 10 45 L 110 45 L 110 55 L 10 55 Z" />
+</svg>'''
+sources = [
+ {"key": "circular:record:0", "recordId": "ref", "aliases": ["REF"],
+  "sequence": "AACCGGTT", "origin": "circular-reference", "recordIndex": 0},
+ {"key": "homology:comparison:0:cmp", "recordId": "cmp", "aliases": ["CMP"],
+  "sequence": "TTGCAACC", "origin": "homology-comparison", "sourceIndex": 0},
+]
+with open(sys.argv[1], 'w', encoding='utf-8') as handle:
+    handle.write(enrich_svg(source, InteractiveSvgContext(sequence_sources=sources)))
+`;
+  execFileSync('python', ['-c', generator, svgPath], { cwd: process.cwd(), stdio: 'inherit' });
+  await page.addInitScript(() => {
+    window.__copiedText = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (value) => { window.__copiedText = String(value); } },
+    });
+  });
+  await page.goto(pathToFileURL(svgPath).href);
+
+  await page.locator('[data-ring-background="true"]').click();
+  await expect(page.locator('.gfi-title')).toHaveCount(0);
+  await page.locator('[data-gbdraw-match-id="homology_ring2_hit17"]').click();
+  await expect(page.locator('.gfi-title')).toHaveText('Homology ring match');
+  await expect(page.locator('.gfi-content')).toContainText('Comparison A');
+  await expect(page.locator('.gfi-content')).toContainText('Reference span');
+  await expect(page.locator('.gfi-content')).toContainText('Comparison span');
+
+  const referenceBlock = page.locator('.gfi-block').filter({ hasText: 'Reference span' }).last();
+  await referenceBlock.getByRole('button', { name: 'Copy' }).click();
+  await expect.poll(() => page.evaluate(() => window.__copiedText)).toBe(
+    '>homology_ring2_hit17_query|record=ref|coords=2..5|strand=+\nACCG\n'
+  );
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('.gfi-block-actions').getByRole('button', { name: 'FASTA' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('homology_ring2_hit17_both.fna');
+  expect(await fs.promises.readFile(await download.path(), 'utf8')).toBe(
+    '>homology_ring2_hit17_query|record=ref|coords=2..5|strand=+\nACCG\n' +
+    '>homology_ring2_hit17_subject|record=cmp|coords=6..3|strand=-\nTTGC\n'
+  );
+
+  await page.locator('[data-close]').click();
+  await page.locator('[data-gbdraw-match-id="homology_ring3_hit1"]').click();
+  await expect(page.locator('.gfi-content')).toContainText(
+    'Comparison sequence was not supplied for this BLAST source.'
+  );
+  await expect(page.locator('.gfi-block-actions')).toHaveCount(0);
 });
 
 test('web exporter writes the same compact v2 feature and raw match contract', async ({ page }) => {
@@ -219,11 +313,18 @@ test('web exporter writes the same compact v2 feature and raw match contract', a
     svg.innerHTML = `
       <rect id="fq" data-gbdraw-feature-id="fq" x="1" y="1" width="10" height="5" fill="#54bcf8" />
       <rect id="fs" data-gbdraw-feature-id="fs" x="1" y="20" width="10" height="5" fill="#54bcf8" />
-      <path data-gbdraw-pairwise-match-id="m1" data-match-kind="pairwise"
+      <path data-gbdraw-match-id="m1" data-gbdraw-pairwise-match-id="m1" data-match-kind="pairwise"
         data-orthogroup-id="og1" data-query-record-id="rec1" data-subject-record-id="rec2"
+        data-query-record-index="0" data-subject-record-index="1"
         data-qstart="1" data-qend="9" data-sstart="10" data-send="18"
         data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
-        data-identity="99.1" data-alignment-length="9" d="M 1 2 L 2 3" />`;
+        data-identity="99.1" data-alignment-length="9" d="M 1 2 L 2 3" />
+      <path data-gbdraw-match-id="homology_ring1_hit1" data-match-kind="homology"
+        data-source-index="0" data-track-index="1" data-track-label="Homology A"
+        data-reference-side="query" data-reference-record-id="ref"
+        data-query-record-id="ref" data-subject-record-id="cmp"
+        data-qstart="1" data-qend="4" data-sstart="4" data-send="1"
+        data-identity="97.0" d="M 5 30 L 25 30" />`;
     enrichSvgWithStandaloneInteractivity(svg, {
       popupMode: 'rich',
       features: [
@@ -233,6 +334,13 @@ test('web exporter writes the same compact v2 feature and raw match contract', a
           nucleotide_sequence: 'ATGAAATAA', amino_acid_sequence: 'MPEPTIDE'
         },
         { svg_id: 'fs', record_id: 'rec2', type: 'CDS', start: 9, end: 18 }
+      ],
+      sequenceSources: [
+        { key: 'linear:record:0', recordId: 'rec1', sequence: 'ATGAAATAA', origin: 'linear-record', recordIndex: 0 },
+        { key: 'linear:record:1', recordId: 'rec2', sequence: 'CCCCCCCCCAAAAAAAAA', origin: 'linear-record', recordIndex: 1 },
+        { key: 'linear:record:2', recordId: 'unused', sequence: 'NNNN', origin: 'linear-record', recordIndex: 2 },
+        { key: 'circular:record:0', recordId: 'ref', sequence: 'AACCGG', origin: 'circular-reference', recordIndex: 0 },
+        { key: 'homology:comparison:0:cmp', recordId: 'cmp', sequence: 'TTGGCC', origin: 'homology-comparison', sourceIndex: 0 },
       ]
     });
     return JSON.parse(svg.querySelector('#gbdraw-interactive-feature-metadata').textContent);
@@ -249,11 +357,26 @@ test('web exporter writes the same compact v2 feature and raw match contract', a
     orthogroup_ids: ['og1'],
     query_record_id: 'rec1',
     subject_record_id: 'rec2',
+    query_record_index: '0',
+    subject_record_index: '1',
     identity: '99.1',
     alignment_length: '9'
   });
   expect(payload.matches[0].sections).toBeUndefined();
   expect(payload.matches[0].hover_rows).toBeUndefined();
+  expect(payload.matches[1]).toMatchObject({
+    id: 'homology_ring1_hit1',
+    match_kind: 'homology',
+    source_index: '0',
+    track_label: 'Homology A',
+    reference_side: 'query',
+  });
+  expect(payload.sequence_sources.map((source) => source.key)).toEqual([
+    'linear:record:0',
+    'linear:record:1',
+    'circular:record:0',
+    'homology:comparison:0:cmp',
+  ]);
 });
 
 test('preview search renderer applies result and active differences only', async ({ page }) => {

@@ -45,6 +45,10 @@ Interactive SVG embeds feature metadata for rendered features. Linear comparison
 
 New exports use compact metadata schema v2. The browser reconstructs FASTA text and match-popup rows when needed, so qualifier display, sequence copy/download, search, and match popups remain available without storing duplicate pre-rendered values. Existing files that use schema v1 remain compatible with the embedded runtime and do not need conversion.
 
+Click a Linear pairwise ribbon or collinear block, or a Circular Homology-ring HSP, to open the shared match popup. The sequence section can copy or download the query/reference span, the subject/comparison span, or both spans as nucleotide FASTA. Collinear export uses the complete block envelopes, which may include intergenic bases and genes that are not anchors. Feature and orthogroup-member actions remain separate.
+
+These exports are ungapped genomic spans, not reconstructed alignments. Coordinates stay 1-based and inclusive in the FASTA header. A reversed coordinate pair is sliced and reverse-complemented. Circular comparison spans require a companion FASTA supplied through `--conservation_fasta`, the `comparison_fasta` table column, or the web app's **Comparison FASTA (optional)** control. Web sessions retain each optional companion file with its Homology source.
+
 ```bash
 cp examples/MjeNMV.MelaMJNV.tblastx.out .
 ```

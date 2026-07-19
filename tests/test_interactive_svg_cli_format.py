@@ -159,6 +159,35 @@ def test_enrich_svg_embeds_valid_regexp_escape_runtime() -> None:
     assert "replace(/[.*+?^${}()|[\\]\\]/g, '\\\\$&');" not in script
 
 
+def test_enrich_svg_embeds_match_sequence_sources_once() -> None:
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
+      <path data-gbdraw-match-id="comparison1_match1"
+        data-gbdraw-pairwise-match-id="comparison1_match1" data-match-kind="pairwise"
+        data-query-record-index="0" data-subject-record-index="1"
+        data-query-record-id="query" data-subject-record-id="subject"
+        data-qstart="2" data-qend="4" data-sstart="5" data-send="3"
+        fill="#ff7272" d="M 1 1 L 2 2" />
+    </svg>"""
+    sources = [
+        {"key": "linear:record:0", "recordId": "query", "sequence": "AACCGG", "origin": "linear-record", "recordIndex": 0},
+        {"key": "linear:record:1", "recordId": "subject", "sequence": "TTGGCC", "origin": "linear-record", "recordIndex": 1},
+        {"key": "linear:record:2", "recordId": "unused", "sequence": "NNNN", "origin": "linear-record", "recordIndex": 2},
+    ]
+
+    enriched = enrich_svg(svg, InteractiveSvgContext(sequence_sources=sources))
+    payload = _metadata_payload(enriched)
+
+    assert payload["matches"][0]["id"] == "comparison1_match1"
+    assert [source["key"] for source in payload["sequence_sources"]] == [
+        "linear:record:0",
+        "linear:record:1",
+    ]
+    assert enriched.count('"sequence":"AACCGG"') == 1
+    script = _script_payload(enriched)
+    assert "buildEmbeddedMatchBundle" in script
+    assert "coords=" in script
+
+
 def test_enrich_svg_generates_fallback_feature_payload() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
       <path id="fabc12345__line1" data-gbdraw-feature-id="fabc12345"

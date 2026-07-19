@@ -22,12 +22,12 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "ce0d7ea71ab77544448691bcfc69dd0f132d9e4bf6550d189364a7acb0138744"
+    "contract_sha256": "d6632a221a429157e5ac65c02f46b46b857237c4383ef734a9c95f784901d0c6"
   },
   "circular_cli": {
-    "actions_sha256": "5091c59a9aa6f40e1db3922c3d2eb44d4814937b3c9bb074c25a691703b45f31",
-    "defaults_sha256": "d1bc6be48776afb90736220f386804bc06bb84d4ae0a4820c0dc710119f7446b",
-    "representative_sha256": "fbb101f0f442762f75a970b77abc40e8438b34a0fe355f5ff655ab7822655a26"
+    "actions_sha256": "dd613bc94de976c916518236a82f0396fc85ebf89fe6ffc6a04bd24484c31692",
+    "defaults_sha256": "c14f96d346099b2b8f28554932afff7bd95d0ec9989d684d695d1e2fa73fb322",
+    "representative_sha256": "118847070a0dca5bce92fa6b10cb146d0788750840527d06b2496fa539904453"
   },
   "linear_cli": {
     "actions_sha256": "bc4a31c4f9cb696c96bd4f0a916b117dd73ce36f53b98884031c9961f2a887b8",

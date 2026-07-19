@@ -59,3 +59,7 @@ python -m build
 - Treat `tests/reference_outputs/` as read-only during normal tests. If diagram output changes intentionally, regenerate it with `--update-reference-outputs`, review the SVG diff, and rerun `TestOutputComparison`.
 - Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`.
 - Treat `gbdraw/web/gbdraw-<version>-py3-none-any.whl` as a generated, gitignored asset. Prepare it when tests or packaging need it, but do not commit it.
+
+## Completion Handoff
+
+- After completing an implementation, treat the session as one commit and provide a proposed commit title and summary in English.

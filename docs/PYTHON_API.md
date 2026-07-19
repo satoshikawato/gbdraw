@@ -157,7 +157,10 @@ because circular track width is controlled by the circular track layout.
 ## Conservation rings
 
 `ConservationTrackOptions` binds each BLAST file or DataFrame to its label and color.
-All tracks in one diagram must use the same source kind.
+All tracks in one diagram must use the same source kind. For interactive SVG output,
+set `comparison_sequence_source` to a FASTA path, one `SeqRecord`, or a sequence of
+records to enable the comparison-span FASTA actions for that track. Static geometry
+does not depend on this optional source.
 
 ```python
 from gbdraw import ConservationOptions, ConservationTrackOptions

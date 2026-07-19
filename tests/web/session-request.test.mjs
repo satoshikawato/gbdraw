@@ -99,6 +99,25 @@ assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
 assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
 
+const blastTable = { ...genbank, name: 'hits.tsv', data: btoa('ref\tcmp\t99\t4\t0\t0\t1\t4\t4\t1\t1e-20\t50\n') };
+const comparisonFasta = { ...genbank, name: 'comparison.fna', data: btoa('>cmp\nAACCGG\n') };
+state.circularConservation.series = [{ label: 'Comparison', color: '#E15759' }];
+const conservationCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable],
+    c_conservation_sequence_sources: [comparisonFasta],
+  },
+});
+assert.equal(conservationCanonical.renderRequest.diagramOptions.conservationSequenceSources, undefined);
+assert.deepEqual(conservationCanonical.webFiles.conservationSequenceSources, ['conservation-sequence-sources-1']);
+assert.equal(
+  projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0].data,
+  comparisonFasta.data
+);
+state.circularConservation.series = [];
+
 state.annotationSets = [{
   id: 'review',
   annotations: [{

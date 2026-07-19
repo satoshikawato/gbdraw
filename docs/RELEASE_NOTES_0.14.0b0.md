@@ -44,6 +44,12 @@ Interactive SVG search now prepares reusable field indexes and updates only chan
 
 New interactive SVG exports use compact metadata schema v2. They omit precomputed FASTA text, deduplicate CDS amino-acid sequence when `qualifiers.translation` already contains it, and store raw match fields instead of expanded popup rows. The embedded runtime derives those views on demand and continues to read schema v1 payloads. Existing standalone v1 files remain unchanged and self-contained.
 
+### Interactive match popups export genomic spans
+
+Circular Homology-ring HSPs, Linear pairwise ribbons, and Linear collinear blocks now open one shared match popup in the web preview and standalone interactive SVG. The popup copies or downloads either genomic span, or both spans as multi-FASTA. Reverse coordinate pairs are reverse-complemented; collinear actions export the complete block envelope, which may include intergenic sequence and non-anchor genes.
+
+Uploaded BLAST rings can supply an optional companion FASTA in the web app, with `--conservation_fasta`, or through the `comparison_fasta` conservation-table column. Without it, the displayed reference span remains available and the popup explains why the comparison span is unavailable. These are ungapped coordinate spans, not reconstructed alignments.
+
 ### Collinearity anchor mode is now honored
 
 Previously, `DiagramOptions.collinearity_anchor_mode` accepted `all`,

@@ -312,6 +312,13 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
     assert 'id="conservation_Reference_A"' in svg
     assert 'data-track-label="Reference A"' in svg
     assert 'data-reference-record-id="rec1"' in svg
+    assert 'data-gbdraw-match-id="homology_ring1_hit1"' in svg
+    assert 'data-match-kind="homology"' in svg
+    assert 'data-reference-side="subject"' in svg
+    assert 'data-query-record-id="query1"' in svg
+    assert 'data-subject-record-id="rec1"' in svg
+    assert 'data-qstart="1"' in svg
+    assert 'data-send="120"' in svg
     assert 'data-legend-key="Conservation identity"' in svg
 
 

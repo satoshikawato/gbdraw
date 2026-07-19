@@ -28,6 +28,13 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./feature-utils.js", "./feature-utils.mjs"),
         encoding="utf-8",
     )
+    match_sequences_path = tmp_path / "match-sequences.mjs"
+    match_sequences_path.write_text(
+        (WEB_ROOT / "js" / "app" / "match-sequences.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
+        encoding="utf-8",
+    )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"
     losat_normalization_path.write_text(
         (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"),
@@ -39,6 +46,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         source_path.read_text(encoding="utf-8")
         .replace("./feature-utils.js", "./feature-utils.mjs")
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./match-sequences.js", "./match-sequences.mjs")
         .replace("./losat-normalization.js", "./losat-normalization.mjs"),
         encoding="utf-8",
     )

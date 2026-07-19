@@ -680,6 +680,14 @@
             stroke-opacity: 1 !important;
             stroke-width: 3px !important;
         }
+        .gbdraw-match-selected {
+            opacity: 1 !important;
+            filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.82));
+            stroke: #f59e0b !important;
+            stroke-opacity: 1 !important;
+            stroke-width: 2.5px !important;
+            paint-order: stroke fill markers;
+        }
         .gbdraw-feature-selected {
             opacity: 1 !important;
             stroke: #2563eb !important;
@@ -1748,7 +1756,8 @@
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
                                 <file-uploader
                                     label="BLAST outfmt 6/7 files"
-                                    v-model="files.c_conservation_blasts"
+                                    :model-value="files.c_conservation_blasts"
+                                    @update:model-value="setCircularConservationUploadFiles"
                                     :multiple="true"
                                     accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
                                 ></file-uploader>
@@ -1851,6 +1860,15 @@
                                     <div class="min-w-0 space-y-0.5">
                                         <input type="text" v-model="circularConservation.series[row.index].label" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs">
                                         <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
+                                        <label v-if="circularConservation.source === 'upload'"
+                                               class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">
+                                            <span class="shrink-0">Comparison FASTA (optional)</span>
+                                            <span class="truncate text-slate-600">{{ row.comparisonSequenceFilename || 'Choose file…' }}</span>
+                                            <input type="file"
+                                                   class="hidden"
+                                                   accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*"
+                                                   @change="setCircularConservationCompanionFile(row.sourceIndex, $event)">
+                                        </label>
                                         <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
                                             <label class="text-[9px] text-slate-500 truncate">Subject gencode</label>
                                             <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6">
@@ -4543,6 +4561,60 @@
                             </button>
                         </div>
                         <div class="pairwise-match-popup-body custom-scrollbar" data-nodrag="true">
+                            <div v-if="clickedPairwiseMatch.sequenceBundle"
+                                 class="pairwise-match-popup-section">
+                                <div class="pairwise-match-popup-section-title">{{ clickedPairwiseMatch.sequenceTitle }}</div>
+                                <div v-if="clickedPairwiseMatch.sequenceNote"
+                                     class="mb-2 text-[11px] text-slate-500">
+                                    {{ clickedPairwiseMatch.sequenceNote }}
+                                </div>
+                                <div v-for="entry in clickedPairwiseMatch.sequenceBundle.entries"
+                                     :key="`match-sequence-${entry.span.role}`"
+                                     class="rounded-lg border border-slate-100 px-3 py-2 mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <div class="min-w-0 flex-1">
+                                            <div class="text-xs font-semibold text-slate-700">{{ entry.span.displayRole }} span</div>
+                                            <div class="text-[10px] font-mono text-slate-500 break-all">
+                                                {{ entry.span.recordId }} · {{ entry.span.start }}..{{ entry.span.end }} · {{ entry.orientation }}
+                                                <span v-if="entry.available"> · {{ entry.sequenceLength.toLocaleString() }} bp</span>
+                                            </div>
+                                        </div>
+                                        <button type="button"
+                                                @click="copyText(entry.fasta)"
+                                                :disabled="!entry.available"
+                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
+                                                :title="entry.available ? `Copy ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason">
+                                            <i class="ph ph-copy"></i><span>Copy</span>
+                                        </button>
+                                        <button type="button"
+                                                @click="downloadText(entry.filename, entry.fasta, 'text/plain;charset=utf-8')"
+                                                :disabled="!entry.available"
+                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
+                                                :title="entry.available ? `Download ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason">
+                                            <i class="ph ph-download-simple"></i><span>FASTA</span>
+                                        </button>
+                                    </div>
+                                    <div v-if="!entry.available" class="mt-1 text-[10px] text-amber-700">
+                                        {{ entry.unavailableReason }}
+                                    </div>
+                                </div>
+                                <div v-if="clickedPairwiseMatch.sequenceBundle.entries.length > 1"
+                                     class="flex items-center justify-end gap-1 pt-1">
+                                    <span class="mr-auto text-[10px] font-semibold uppercase text-slate-500">Both spans</span>
+                                    <button type="button"
+                                            @click="copyText(clickedPairwiseMatch.sequenceBundle.combinedFasta)"
+                                            :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
+                                            :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
+                                        <i class="ph ph-copy"></i><span>Copy</span>
+                                    </button>
+                                    <button type="button"
+                                            @click="downloadText(clickedPairwiseMatch.sequenceBundle.combinedFilename, clickedPairwiseMatch.sequenceBundle.combinedFasta, 'text/plain;charset=utf-8')"
+                                            :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
+                                            :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
+                                        <i class="ph ph-download-simple"></i><span>FASTA</span>
+                                    </button>
+                                </div>
+                            </div>
                             <div v-for="section in renderedPairwiseMatchSections"
                                  :key="`match-section-${section.title}`"
                                  class="pairwise-match-popup-section">

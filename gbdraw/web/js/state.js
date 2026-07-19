@@ -9,6 +9,7 @@ import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
 import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
 import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
+import { createSequenceSourceRegistry } from './app/match-sequences.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -33,6 +34,8 @@ const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
+// Analysis-scoped materialized nucleotide sources used by match span popups.
+const matchSequenceRegistry = createSequenceSourceRegistry();
 const svgContent = computed(() => {
   if (results.value.length > 0) {
     const rawSvg = results.value[selectedResultIndex.value].content;
@@ -86,6 +89,7 @@ const svgContent = computed(() => {
         'data-subject-feature-svg-id',
         'data-query-unit-id',
         'data-subject-unit-id',
+        'data-gbdraw-match-id',
         'data-gbdraw-pairwise-match-id',
         'data-match-kind',
         'data-query-record-index',
@@ -112,6 +116,7 @@ const svgContent = computed(() => {
         'data-track-index',
         'data-track-label',
         'data-track-color',
+        'data-reference-side',
         'data-identity',
         'data-query',
         'data-subject',
@@ -220,6 +225,7 @@ const files = reactive({
   c_depth: null,
   c_conservation_blasts: [],
   c_conservation_fastas: [],
+  c_conservation_sequence_sources: [],
   d_color: null,
   t_color: null,
   blacklist: null,
@@ -1090,6 +1096,7 @@ export const state = {
   lastRunInfo,
   trackSlotResolvedGeometry,
   pairwiseMatchFactors,
+  matchSequenceRegistry,
   svgContent,
   zoom,
   layoutRepositionMode,

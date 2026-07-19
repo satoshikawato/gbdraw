@@ -53,6 +53,7 @@ class InteractiveSvgContext:
     legend_entries: Sequence[Mapping[str, object]] = ()
     current_colors: Mapping[str, str] = field(default_factory=dict)
     annotations: Sequence[Mapping[str, object]] = ()
+    sequence_sources: Sequence[Mapping[str, object]] = ()
 
 
 @dataclass
@@ -154,6 +155,7 @@ def _is_match_candidate(element: ET.Element) -> bool:
     return any(
         element.get(attr)
         for attr in (
+            "data-gbdraw-match-id",
             "data-gbdraw-pairwise-match-id",
             "data-match-kind",
             "data-pairwise-match-style",
@@ -815,7 +817,7 @@ def _feature_payloads(
 
 def _match_kind(element: ET.Element) -> str:
     value = _first_text(element.get("data-match-kind")).lower()
-    if value in {"pairwise", "orthogroup", "collinear"}:
+    if value in {"pairwise", "orthogroup", "collinear", "homology"}:
         return value
     if element.get("data-collinearity-block-id"):
         return "collinear"
@@ -828,6 +830,7 @@ _MATCH_TITLES = {
     "pairwise": "Pairwise match",
     "orthogroup": "Orthogroup match",
     "collinear": "Collinearity block",
+    "homology": "Homology ring match",
 }
 
 
@@ -1851,10 +1854,13 @@ def _match_payload_v1(
 
 
 def _match_payload_v2(element: ET.Element, index: int) -> dict[str, object]:
-    match_id = _first_text(element.get("data-gbdraw-pairwise-match-id"))
+    match_id = _first_text(
+        element.get("data-gbdraw-match-id"),
+        element.get("data-gbdraw-pairwise-match-id"),
+    )
     if not match_id:
-        match_id = f"pairwise_match_{index + 1}"
-        element.set("data-gbdraw-pairwise-match-id", match_id)
+        match_id = f"match_{index + 1}"
+    element.set("data-gbdraw-match-id", match_id)
     payload = {
         "id": match_id,
         "match_kind": _match_kind(element),
@@ -1864,9 +1870,11 @@ def _match_payload_v2(element: ET.Element, index: int) -> dict[str, object]:
         "query_record_id": _first_text(
             element.get("data-query-record-id"), element.get("data-query")
         ),
+        "query_record_index": _first_text(element.get("data-query-record-index")),
         "subject_record_id": _first_text(
             element.get("data-subject-record-id"), element.get("data-subject")
         ),
+        "subject_record_index": _first_text(element.get("data-subject-record-index")),
         "qstart": _first_text(element.get("data-qstart")),
         "qend": _first_text(element.get("data-qend")),
         "sstart": _first_text(element.get("data-sstart")),
@@ -1880,6 +1888,11 @@ def _match_payload_v2(element: ET.Element, index: int) -> dict[str, object]:
         "bitscore": _first_text(element.get("data-bitscore")),
         "mismatches": _first_text(element.get("data-mismatches")),
         "gap_opens": _first_text(element.get("data-gap-opens")),
+        "source_index": _first_text(element.get("data-source-index")),
+        "track_index": _first_text(element.get("data-track-index")),
+        "track_label": _first_text(element.get("data-track-label")),
+        "reference_side": _first_text(element.get("data-reference-side")),
+        "reference_record_id": _first_text(element.get("data-reference-record-id")),
         "block_kind": _first_text(element.get("data-collinearity-block-kind")),
         "collinear_group_scope": _first_text(element.get("data-collinear-group-scope")),
         "group_kind": _first_text(element.get("data-group-kind")),
@@ -1915,6 +1928,58 @@ def _match_payloads(
         element.set("data-gbdraw-interactive-match", "true")
         _add_class_token(element, "gbdraw-interactive-pairwise-match")
     return payloads
+
+
+def _sequence_sources_for_matches(
+    matches: Sequence[Mapping[str, object]],
+    sources: Sequence[Mapping[str, object]],
+) -> list[Mapping[str, object]]:
+    if not matches:
+        return []
+    linear_indexes: set[int] = set()
+    circular_record_ids: set[str] = set()
+    comparison_source_indexes: set[int] = set()
+    for match in matches:
+        kind = _first_text(match.get("match_kind"))
+        if kind == "homology":
+            reference_side = _first_text(match.get("reference_side"))
+            circular_record_ids.add(
+                _first_text(match.get(f"{reference_side}_record_id"))
+            )
+            try:
+                comparison_source_indexes.add(int(str(match.get("source_index"))))
+            except (TypeError, ValueError):
+                pass
+            continue
+        for role in ("query", "subject"):
+            try:
+                linear_indexes.add(int(str(match.get(f"{role}_record_index"))))
+            except (TypeError, ValueError):
+                pass
+
+    selected: list[Mapping[str, object]] = []
+    for source in sources:
+        origin = _first_text(source.get("origin"))
+        if origin == "linear-record":
+            try:
+                if int(str(source.get("recordIndex"))) in linear_indexes:
+                    selected.append(source)
+            except (TypeError, ValueError):
+                continue
+        elif origin == "circular-reference":
+            aliases = {
+                _first_text(source.get("recordId")),
+                *(_normalize_string_array(source.get("aliases"))),
+            }
+            if aliases & circular_record_ids:
+                selected.append(source)
+        elif origin == "homology-comparison":
+            try:
+                if int(str(source.get("sourceIndex"))) in comparison_source_indexes:
+                    selected.append(source)
+            except (TypeError, ValueError):
+                continue
+    return selected
 
 
 def _extract_template_literal(source: str, name: str) -> str:
@@ -2170,6 +2235,7 @@ def enrich_svg(
     features = _feature_payloads(root, context)
     orthogroups = _orthogroup_payloads(features, context)
     matches = _match_payloads(root, features, orthogroups)
+    sequence_sources = _sequence_sources_for_matches(matches, context.sequence_sources)
     annotation_context = {
         (
             str(item.get("record_index", "")),
@@ -2215,6 +2281,7 @@ def enrich_svg(
                     "orthogroups": orthogroups,
                     "matches": matches,
                     "annotations": annotations,
+                    "sequence_sources": sequence_sources,
                 }
             ),
             ensure_ascii=False,

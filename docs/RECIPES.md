@@ -291,6 +291,18 @@ gbdraw circular \
 
 Pass more `--conservation_blast` files to add rings. Each ring shows raw BLAST HSP spans, not an inferred measure of evolutionary conservation. Reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
 
+For a standalone interactive SVG with both matched spans available, add one comparison FASTA per BLAST source:
+
+```bash
+gbdraw circular \
+  --gbk reference.gbk \
+  --conservation_blast comparison_vs_reference.blast.out \
+  --conservation_fasta comparison.fna \
+  --conservation_reference subject \
+  -f interactive_svg \
+  -o circular_comparison
+```
+
 ## Color and label tables
 
 ### Override default feature colors

@@ -127,6 +127,40 @@ def test_grouped_options_compile_to_the_existing_render_engine(
     assert options.depth_track_labels == ["Coverage"]
 
 
+def test_circular_companion_sequence_reaches_interactive_context() -> None:
+    reference = _record("reference")
+    comparison = _record("comparison")
+    blast = pd.DataFrame(
+        [["reference", "comparison", 99.0, 20, 0, 0, 1, 20, 20, 1, 1e-20, 50]],
+        columns=[
+            "query", "subject", "identity", "alignment_length", "mismatches",
+            "gap_opens", "qstart", "qend", "sstart", "send", "evalue", "bitscore",
+        ],
+    )
+    options = interface.CircularOptions(
+        conservation=interface.ConservationOptions(
+            tracks=(
+                interface.ConservationTrackOptions(
+                    source=blast,
+                    comparison_sequence_source=(comparison,),
+                ),
+            )
+        )
+    )
+
+    context = interface._interactive_context(
+        [reference],
+        options=options,
+        legacy=interface._circular_options(options, record_count=1),
+        mode="circular",
+    )
+
+    assert [(source["origin"], source["recordId"]) for source in context.sequence_sources] == [
+        ("circular-reference", "reference"),
+        ("homology-comparison", "comparison"),
+    ]
+
+
 def test_draw_functions_require_mode_specific_options() -> None:
     with pytest.raises(ValidationError, match="CircularOptions"):
         interface.draw_circular(_record(), options=interface.LinearOptions())  # type: ignore[arg-type]
