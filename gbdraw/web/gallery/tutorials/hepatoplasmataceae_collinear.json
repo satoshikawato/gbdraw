@@ -222,7 +222,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1280, "height": 1000},
             "openDetails": ["Layout"],
             "actions": [
@@ -249,7 +249,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1600, "height": 1000},
             "actions": [
               {
@@ -276,7 +276,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -336,7 +336,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
             "viewport": {
               "width": 1280,
               "height": 900

@@ -201,7 +201,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1280,
               "height": 1000
@@ -244,7 +244,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -305,7 +305,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1280,
               "height": 900

@@ -1,4 +1,5 @@
 import {
+  buildFeatureSearchIndex,
   formatSearchMatchDetail,
   getFeatureSearchFieldOptions,
   isRichFeatureSearchField,
@@ -6,12 +7,14 @@ import {
   runFeatureSearch
 } from './search-core.js';
 import {
-  applyPreviewFeatureSearchClasses,
+  applyPreviewActiveSearchMatch,
   centerPreviewFeature,
+  createPreviewFeatureSearchDomState,
+  disposePreviewFeatureSearchDomState,
   getFeatureScreenCenter,
   getPreviewFeatureElementIndex,
   resolvePreviewSvg,
-  stripPreviewFeatureSearchClasses
+  schedulePreviewFeatureSearchClasses
 } from './preview-svg.js';
 
 export const createPreviewFeatureSearch = ({
@@ -52,6 +55,12 @@ export const createPreviewFeatureSearch = ({
   let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
   let appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
   let appliedUseRegex = Boolean(previewFeatureSearchUseRegex.value);
+  let searchIndex = buildFeatureSearchIndex({
+    features: extractedFeatures.value,
+    popupMode: getPopupMode(),
+    orthogroups: orthogroups.value
+  });
+  const appliedSearchDomState = createPreviewFeatureSearchDomState();
   const dragOffset = reactive({ x: 0, y: 0 });
   let activeDrag = null;
   const getSvg = () => resolvePreviewSvg(svgContainer.value);
@@ -97,31 +106,8 @@ export const createPreviewFeatureSearch = ({
     return detailText ? `Matched ${detailText}` : '';
   });
 
-  const syncPreviewClasses = ({ center = false } = {}) => {
-    const svg = getSvg();
-    if (!svg) return;
-    const activeId = getActiveMatchId();
-    const featureIndex = getPreviewFeatureElementIndex(svg);
-    applyPreviewFeatureSearchClasses({
-      svg,
-      matches: previewFeatureSearchMatches.value,
-      activeId,
-      queryActive: queryIsActive(),
-      featureIndex
-    });
-    if (center && activeId) {
-      centerPreviewFeature({
-        svg,
-        featureId: activeId,
-        featureIndex,
-        canvasContainer: canvasContainerRef.value,
-        canvasPan
-      });
-    }
-  };
-
   const clearPreviewClasses = () => {
-    stripPreviewFeatureSearchClasses(getSvg());
+    disposePreviewFeatureSearchDomState(appliedSearchDomState);
   };
 
   const refreshSearchNow = ({ preserveActive = true, center = false } = {}) => {
@@ -142,6 +128,7 @@ export const createPreviewFeatureSearch = ({
       useRegex: appliedUseRegex,
       popupMode,
       orthogroups: orthogroups.value,
+      searchIndex,
       previousActiveId
     });
 
@@ -150,12 +137,13 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchMatches.value = searchResult.matches;
     previewFeatureSearchMatchDetails.value = searchResult.matchDetails;
     previewFeatureSearchActiveIndex.value = searchResult.activeIndex;
-    applyPreviewFeatureSearchClasses({
+    schedulePreviewFeatureSearchClasses({
       svg,
       matches: searchResult.matches,
       activeId: getActiveMatchId(),
       queryActive: queryIsActive(),
-      featureIndex
+      featureIndex,
+      appliedState: appliedSearchDomState
     });
     if (center && getActiveMatchId()) {
       centerPreviewFeature({
@@ -261,7 +249,11 @@ export const createPreviewFeatureSearch = ({
         canvasPan
       });
     }
-    syncPreviewClasses();
+    applyPreviewActiveSearchMatch({
+      featureIndex,
+      appliedState: appliedSearchDomState,
+      activeId
+    });
     nextTick(() => {
       const centerPoint = getFeatureScreenCenter(getSvg(), activeId, featureIndex);
       openFeatureEditorForFeature(feature, centerPoint);
@@ -271,12 +263,39 @@ export const createPreviewFeatureSearch = ({
   const goToMatch = (index, { center = true } = {}) => {
     const count = previewFeatureSearchMatches.value.length;
     if (!count) {
+      const svg = getSvg();
+      const featureIndex = getPreviewFeatureElementIndex(svg);
       previewFeatureSearchActiveIndex.value = -1;
-      syncPreviewClasses();
+      applyPreviewActiveSearchMatch({ featureIndex, appliedState: appliedSearchDomState, activeId: '' });
       return;
     }
+    const previousActiveId = getActiveMatchId();
     previewFeatureSearchActiveIndex.value = ((Number(index) || 0) % count + count) % count;
-    syncPreviewClasses({ center });
+    const activeId = getActiveMatchId();
+    const svg = getSvg();
+    const featureIndex = getPreviewFeatureElementIndex(svg);
+    if (!appliedSearchDomState.queryActive || !appliedSearchDomState.matchedIds.has(activeId)) {
+      schedulePreviewFeatureSearchClasses({
+        svg,
+        matches: previewFeatureSearchMatches.value,
+        activeId,
+        queryActive: queryIsActive(),
+        featureIndex,
+        appliedState: appliedSearchDomState
+      });
+    } else {
+      appliedSearchDomState.activeId = previousActiveId;
+      applyPreviewActiveSearchMatch({ featureIndex, appliedState: appliedSearchDomState, activeId });
+    }
+    if (center && activeId) {
+      centerPreviewFeature({
+        svg,
+        featureId: activeId,
+        featureIndex,
+        canvasContainer: canvasContainerRef.value,
+        canvasPan
+      });
+    }
     if (clickedFeature?.value) {
       openActiveMatch({ center: false });
     }
@@ -311,24 +330,30 @@ export const createPreviewFeatureSearch = ({
       if (getPopupMode() === 'simple' && isRichFeatureSearchField(appliedSearchField)) {
         appliedSearchField = 'all';
       }
+      searchIndex = buildFeatureSearchIndex({
+        features: extractedFeatures.value,
+        popupMode: getPopupMode(),
+        orthogroups: orthogroups.value
+      });
       scheduleRefreshSearch();
     }
   );
-  watch(
-    [
-      selectedResultIndex,
-      extractedFeatures,
-      orthogroups,
-      svgContent
-    ],
-    () => scheduleRefreshSearch()
-  );
+  watch([extractedFeatures, orthogroups], () => {
+    searchIndex = buildFeatureSearchIndex({
+      features: extractedFeatures.value,
+      popupMode: getPopupMode(),
+      orthogroups: orthogroups.value
+    });
+    scheduleRefreshSearch();
+  });
+  watch([selectedResultIndex, svgContent], () => scheduleRefreshSearch());
 
   scheduleRefreshSearch({ preserveActive: false });
 
   const dispose = () => {
     refreshRequestId += 1;
     stopDrag();
+    disposePreviewFeatureSearchDomState(appliedSearchDomState);
   };
 
   return {

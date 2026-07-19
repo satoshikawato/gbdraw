@@ -51,6 +51,17 @@ def _metadata_payload(svg_source: str) -> dict[str, object]:
     return json.loads(metadata.text or "{}")
 
 
+def _metadata_text(svg_source: str) -> str:
+    root = ET.fromstring(svg_source)
+    metadata = next(
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "metadata"
+        and element.get("id") == "gbdraw-interactive-feature-metadata"
+    )
+    return metadata.text or "{}"
+
+
 def _script_payload(svg_source: str) -> str:
     root = ET.fromstring(svg_source)
     script = next(
@@ -161,7 +172,7 @@ def test_enrich_svg_generates_fallback_feature_payload() -> None:
     assert payload["features"][0]["fill_color"] == "#54bcf8"
 
 
-def test_enrich_svg_embeds_feature_sequences_and_fastas() -> None:
+def test_enrich_svg_v2_embeds_sequences_without_precomputed_fastas() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
       <path id="fseq" data-gbdraw-feature-id="fseq" fill="#54bcf8" d="M 1 1 L 2 2" />
     </svg>"""
@@ -186,12 +197,59 @@ def test_enrich_svg_embeds_feature_sequences_and_fastas() -> None:
         ),
     )
 
-    feature = _metadata_payload(enriched)["features"][0]
+    payload = _metadata_payload(enriched)
+    feature = payload["features"][0]
 
+    assert payload["schema"] == "gbdraw-interactive-feature-popup-v2"
     assert feature["nucleotide_sequence"] == "ATGAAATAA"
     assert feature["amino_acid_sequence"] == "MK"
-    assert feature["nucleotide_fasta"] == ">rec1:1-9 protein A\nATGAAATAA"
-    assert feature["amino_acid_fasta"] == ">WP_000001.1 protein A\nMK"
+    assert "nucleotide_fasta" not in feature
+    assert "amino_acid_fasta" not in feature
+
+
+def test_enrich_svg_v2_deduplicates_translation_sequence() -> None:
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
+      <path id="fseq" data-gbdraw-feature-id="fseq" fill="#54bcf8" d="M 1 1 L 2 2" />
+    </svg>"""
+    payload = _metadata_payload(
+        enrich_svg(
+            svg,
+            InteractiveSvgContext(
+                features=[
+                    {
+                        "svg_id": "fseq",
+                        "type": "CDS",
+                        "qualifiers": {"translation": ["MPEPTIDE"]},
+                        "amino_acid_sequence": "MPEPTIDE",
+                    }
+                ]
+            ),
+        )
+    )
+
+    feature = payload["features"][0]
+    assert feature["qualifiers"]["translation"] == ["MPEPTIDE"]
+    assert "amino_acid_sequence" not in feature
+
+
+def test_enrich_svg_v2_metadata_is_at_least_35_percent_smaller_than_v1_fixture() -> None:
+    source = (Path(__file__).parent / "test_inputs" / "AP027280_comparison.interactive.svg").read_text(
+        encoding="utf-8"
+    )
+    v1_text = _metadata_text(source)
+    v1_payload = json.loads(v1_text)
+    enriched = enrich_svg(
+        source,
+        InteractiveSvgContext(
+            features=v1_payload.get("features", []),
+            orthogroups=v1_payload.get("orthogroups", []),
+            popup_mode="rich",
+        ),
+    )
+    v2_text = _metadata_text(enriched)
+
+    assert _metadata_payload(enriched)["schema"] == "gbdraw-interactive-feature-popup-v2"
+    assert len(v2_text.encode("utf-8")) <= len(v1_text.encode("utf-8")) * 0.65
 
 
 def test_enrich_svg_matches_record_suffixed_session_feature_ids() -> None:
@@ -418,9 +476,10 @@ def test_enrich_svg_uses_orthogroup_payload_for_feature_and_match_metadata() -> 
     assert payload["features"][0]["orthogroup_id"] == "og_1"
     assert payload["orthogroups"][0]["id"] == "og_1"
     match = payload["matches"][0]
-    assert match["title"] == "og_1:geneA"
-    assert match["sections"][0]["rows"][0] == ["Orthogroup ID", "og_1"]
-    assert match["sections"][0]["member_rows"][0]["proteinId"] == "WP_000001.1"
+    assert match["match_kind"] == "orthogroup"
+    assert match["orthogroup_ids"] == ["og_1"]
+    assert "sections" not in match
+    assert "hover_rows" not in match
 
 
 def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> None:
@@ -520,20 +579,14 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
 
     match = _metadata_payload(enriched)["matches"][0]
 
-    assert match["title"] == "Pairwise match"
-    assert [section["title"] for section in match["sections"]] == [
-        "Summary",
-        "Alignment",
-        "Orthogroup",
-        "Query",
-        "Subject",
-    ]
-    orthogroup_section = match["sections"][2]
-    assert ["Orthogroup ID", "og_1"] in orthogroup_section["rows"]
-    assert orthogroup_section["member_rows"][1]["proteinId"] == "WP_000002.1"
-    query_section = match["sections"][3]
-    assert query_section["feature_rows"][0]["proteinId"] == "WP_000001.1"
-    assert query_section["featureRows"] == query_section["feature_rows"]
+    assert match["match_kind"] == "pairwise"
+    assert match["orthogroup_ids"] == ["og_1"]
+    assert match["query_record_id"] == "rec1"
+    assert match["subject_record_id"] == "rec2"
+    assert match["query_feature_svg_id"] == "fquery"
+    assert match["subject_feature_svg_id"] == "fsubject"
+    assert match["identity"] == "99.1"
+    assert "sections" not in match
 
 
 def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> None:
@@ -603,19 +656,14 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
 
     match = _metadata_payload(enrich_svg(svg, context))["matches"][0]
 
-    assert match["title"] == "Collinearity block"
-    assert [section["title"] for section in match["sections"]] == [
-        "Summary",
-        "Orthogroups covered",
-        "Collinearity",
-        "Query",
-        "Subject",
-    ]
-    assert match["block_orthogroup_count"] == 1
-    assert match["block_orthogroups"][0]["query_member"] == "WP_000001.1"
-    collinearity_rows = match["sections"][2]["rows"]
-    assert ["Block ID", "block_1"] in collinearity_rows
-    assert ["Average identity", "95.5"] in collinearity_rows
+    assert match["match_kind"] == "collinear"
+    assert match["orthogroup_ids"] == ["og_1"]
+    assert match["collinearity_block_id"] == "block_1"
+    assert match["block_kind"] == "syntenic"
+    assert match["identity"] == "95.5"
+    assert match["alignment_length"] == "9"
+    assert "block_orthogroups" not in match
+    assert "sections" not in match
 
 
 def test_save_figure_interactive_writes_static_and_interactive_without_cairosvg(

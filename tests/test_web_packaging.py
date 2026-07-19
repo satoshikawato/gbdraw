@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import contextlib
 import functools
 import gzip
@@ -53,19 +54,19 @@ GALLERY_SESSION_FILES = [
     "HmmtDNA_basic_circular.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
     "tobacco-chloroplast.gbdraw-session.json",
-    "Vnig_TUMSAT-TG-2018.gbdraw-session.json",
+    "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
     "WSSV_genome_comparison.gbdraw-session.json",
-    "hepatoplasmataceae_collinear.gbdraw-session.json",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json",
-    "majanivirus_orthogroup.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+    "majanivirus_orthogroup.gbdraw-session.json.gz",
     "lambda_basic_linear.gbdraw-session.json",
 ]
 GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
-    "hepatoplasmataceae_collinear.gbdraw-session.json",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json",
-    "majanivirus_orthogroup.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+    "majanivirus_orthogroup.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
 GALLERY_EDITOR_STATE_SESSION_FILES = {
@@ -76,19 +77,14 @@ GALLERY_EDITOR_STATE_SESSION_FILES = {
 GALLERY_LOSAT_CACHE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
     "WSSV_genome_comparison.gbdraw-session.json",
-    "hepatoplasmataceae_collinear.gbdraw-session.json",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json",
-    "majanivirus_orthogroup.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+    "majanivirus_orthogroup.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
 GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
 }
-GALLERY_STATIC_SESSION_FILES = {
-    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-}
-
-
 def _load_verify_module():
     module_path = REPO_ROOT / "tools" / "verify_gui_offline.py"
     spec = importlib.util.spec_from_file_location("verify_gui_offline", module_path)
@@ -214,12 +210,16 @@ def _standalone_interactivity_source() -> str:
 
 def _gallery_svg_metadata(svg_source: str) -> dict[str, object]:
     metadata_match = re.search(
-        r'<metadata[^>]*id="gbdraw-interactive-feature-metadata"[^>]*>(.*?)</metadata>',
+        r'<metadata(?P<attributes>[^>]*id="gbdraw-interactive-feature-metadata"[^>]*)>'
+        r'(?P<payload>.*?)</metadata>',
         svg_source,
         re.S,
     )
     assert metadata_match, "missing interactive feature metadata"
-    return json.loads(html.unescape(metadata_match.group(1)))
+    payload = html.unescape(metadata_match.group("payload"))
+    if 'data-encoding="gzip-base64"' in metadata_match.group("attributes"):
+        payload = gzip.decompress(base64.b64decode(payload)).decode("utf-8")
+    return json.loads(payload)
 
 
 def _assert_white_gallery_thumbnail(path: Path) -> None:
@@ -369,7 +369,7 @@ def test_web_canonical_session_request_codec() -> None:
             str(
                 GALLERY_ROOT
                 / "sessions"
-                / "hepatoplasmataceae_orthogroup.gbdraw-session.json"
+                / "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
             ),
         ],
         check=True,
@@ -897,7 +897,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
             "Multi-record",
             "Collinear groups",
             "LOSAT",
-            "Static SVG",
+            "Interactive SVG",
         ],
         "hepatoplasmataceae_orthogroup": [
             "Linear",
@@ -1002,7 +1002,10 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert 'data-popup-mode="rich"' in svg_source
             assert "data-gbdraw-original-viewbox" in svg_source
             payload = _gallery_svg_metadata(svg_source)
-            assert payload["schema"] == "gbdraw-interactive-feature-popup-v1"
+            assert payload["schema"] in {
+                "gbdraw-interactive-feature-popup-v1",
+                "gbdraw-interactive-feature-popup-v2",
+            }
             assert payload["popup_mode"] == "rich"
             features = payload["features"]
             assert features
@@ -1262,10 +1265,10 @@ def test_tobacco_gallery_session_keeps_chloroplast_region_annotations() -> None:
 
 
 def test_vnig_gallery_session_multirecord_positions_are_restoreable() -> None:
-    session = json.loads(
-        (GALLERY_ROOT / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json").read_text(
-            encoding="utf-8"
-        )
+    session = load_session(
+        GALLERY_ROOT
+        / "sessions"
+        / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
     )
     expected_positions = ["#1@1", "#2@1", "#3@2", "#4@2", "#5@2", "#6@2"]
     config_positions = session.get("config", {}).get("adv", {}).get("multi_record_positions")
@@ -1373,7 +1376,7 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
     assert "enrichSvgWithStandaloneFeaturePopup" not in export_source
 
     standalone_needles = [
-        "gbdraw-interactive-feature-popup-v1",
+        "gbdraw-interactive-feature-popup-v2",
         "gbdraw-interactive-feature-metadata",
         "gbdraw-interactive-feature-script",
         "gbdraw-feature-search-controls",
@@ -1385,10 +1388,9 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "stroke-opacity: 0.6;",
         "stroke-opacity: 1;",
         "function normalizeSearchText(value)",
-        "function featureSearchValues(feature, field, qualifierKey)",
-        "function featureSearchMatches(feature, matcher, field, qualifierKey)",
         "function compileSearchMatcher(query, useRegex)",
-        "function featureMatchesSearch(feature, matcher, field, qualifierKey)",
+        "function buildPreparedSearchIndex()",
+        "function preparedFeatureSearchMatches(document, matcher, field, qualifierKey)",
         "matchDetails: {}",
         "data-search-match-detail",
         "gfs-button--clear",
@@ -1463,11 +1465,11 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "var richSearchFields = {",
         "if (popupMode === 'simple') {\n      searchFieldOptions = searchFieldOptions.filter",
         "function renderSimplePopup(feature)",
-        "if (normalizedPopupMode === 'rich') {\n      Object.assign(payload, {\n        qualifiers: normalizeQualifierMap(feature?.qualifiers),",
+        "if (normalizedPopupMode === 'rich') {\n      Object.assign(payload, {\n        qualifiers,",
         "nucleotide_sequence",
         "amino_acid_sequence",
-        "nucleotide_fasta",
-        "amino_acid_fasta",
+        "function featureFasta(feature, sequenceKind)",
+        "function featureAminoAcidSequence(feature)",
         "getVisibleViewRect()",
         "var visibleView = getVisibleViewRect();",
         "window.addEventListener('scroll', updateViewportControlsPosition, { passive: true });",
@@ -1658,6 +1660,7 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
     check_path.write_text(
         f"""
         import {{
+          buildFeatureSearchIndex,
           featureSearchItems,
           runFeatureSearch
         }} from {module_path.as_uri()!r};
@@ -1687,13 +1690,20 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
           aminoAcidSequence: 'MXX'
         }};
         const renderedFeatureIds = new Set(['fabc12345']);
+        const searchIndex = buildFeatureSearchIndex({{
+          features: [feature],
+          popupMode: 'rich'
+        }});
+        assert(searchIndex.featureOrder.join(',') === 'fabc12345', 'Prepared feature order missing');
+        assert(searchIndex.byId.has('fabc12345'), 'Prepared document missing');
 
         const productSearch = runFeatureSearch({{
           features: [feature],
           renderedFeatureIds,
           query: 'polymerase',
           field: 'all',
-          popupMode: 'rich'
+          popupMode: 'rich',
+          searchIndex
         }});
         assert(productSearch.matches.join(',') === 'fabc12345', `Product search failed: ${{JSON.stringify(productSearch)}}`);
         assert(
@@ -1724,6 +1734,20 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
           popupMode: 'simple'
         }});
         assert(simpleSearch.matches.length === 0, `Simple popup mode should not search rich qualifier payloads: ${{JSON.stringify(simpleSearch)}}`);
+
+        const translationOnly = {{
+          svg_id: 'ftranslation',
+          type: 'CDS',
+          qualifiers: {{ translation: ['MPEPTIDE'] }}
+        }};
+        const translationSearch = runFeatureSearch({{
+          features: [translationOnly],
+          renderedFeatureIds: new Set(['ftranslation']),
+          query: 'MPEPTIDE',
+          field: 'amino-acid',
+          popupMode: 'rich'
+        }});
+        assert(translationSearch.matches.join(',') === 'ftranslation', `Translation fallback failed: ${{JSON.stringify(translationSearch)}}`);
         """,
         encoding="utf-8",
     )
@@ -2133,23 +2157,30 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     assert "gallery/media/**/*" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     assert "gallery/sessions/*.gbdraw-session.json.gz" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     remote_assets = json.loads((bundle_path / "gallery" / "remote-assets.json").read_text(encoding="utf-8"))
-    assert (
-        remote_assets["gallery/examples/Vnig_TUMSAT-TG-2018.svg"]
-        == f"{remote_base}gallery/examples/Vnig_TUMSAT-TG-2018.svg"
-    )
-    assert (
-        remote_assets["gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json"]
-        == f"{remote_base}gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json"
-    )
+    assert "gallery/examples/Vnig_TUMSAT-TG-2018.svg" not in remote_assets
+    assert "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz" not in remote_assets
     assert (
         remote_assets[
             "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
         ]
         == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
     )
-    assert not (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
+    assert (
+        remote_assets["gallery/examples/vibrio-harveyi-group-collinear.svg"]
+        == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
+    )
+    assert (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
     assert not (
-        bundle_path / "gallery" / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json"
+        bundle_path
+        / "gallery"
+        / "examples"
+        / "vibrio-harveyi-group-collinear.svg"
+    ).exists()
+    assert (
+        bundle_path
+        / "gallery"
+        / "sessions"
+        / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
     ).exists()
     assert not (
         bundle_path
@@ -4292,7 +4323,7 @@ def test_gallery_session_restore_smoke() -> None:
             assert summary["featureExtractionError"] in (None, ""), session_name
             assert summary["extractedCount"] > 0, session_name
 
-            if session_name == "Vnig_TUMSAT-TG-2018.gbdraw-session.json":
+            if session_name == "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz":
                 multi_record_positions = page.evaluate(
                     """() => {
                         const app = window.__GBDRAW_APP__;
@@ -4309,10 +4340,7 @@ def test_gallery_session_restore_smoke() -> None:
                     "#6@2",
                 ]
 
-            if (
-                session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES
-                and session_name not in GALLERY_STATIC_SESSION_FILES
-            ):
+            if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
                 target = page.evaluate(
                     """async () => {
                         const app = window.__GBDRAW_APP__;

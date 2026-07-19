@@ -48,6 +48,13 @@ export const getFeatureSearchFieldOptions = ({ popupMode = 'rich' } = {}) => {
 
 const normalizeSearchText = (value) => String(value == null ? '' : value).toLowerCase();
 
+const prepareSearchItem = (item) => ({
+  label: String(item?.label || ''),
+  value: String(item?.value || ''),
+  normalizedValue: item?.alphabet ? '' : normalizeSearchText(item?.value),
+  alphabet: String(item?.alphabet || '')
+});
+
 export const NUCLEOTIDE_IUPAC = Object.freeze({
   A: 'A',
   C: 'C',
@@ -176,6 +183,15 @@ export const getFeatureQualifiers = (feature) => (
     ? feature.qualifiers
     : {}
 );
+
+export const resolveFeatureAminoAcidSequence = (feature) => {
+  const direct = String(feature?.amino_acid_sequence || feature?.aminoAcidSequence || '').trim();
+  if (direct) return direct;
+  const qualifiers = getFeatureQualifiers(feature);
+  const values = [];
+  appendSearchValues(values, qualifiers.translation);
+  return values.find((value) => value.trim()) || '';
+};
 
 const getQualifierSearchItems = (feature, qualifierKey) => {
   const target = normalizeSearchText(qualifierKey).trim();
@@ -342,7 +358,7 @@ export const featureSearchItems = (
     return items;
   }
   if (selectedField === 'amino-acid') {
-    appendSearchItems(items, 'Amino acid sequence', feature?.amino_acid_sequence || feature?.aminoAcidSequence, { alphabet: 'amino-acid' });
+    appendSearchItems(items, 'Amino acid sequence', resolveFeatureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
     return items;
   }
 
@@ -360,7 +376,7 @@ export const featureSearchItems = (
       appendSearchItems(items, `Qualifier ${key}`, qualifiers[key]);
     });
     appendSearchItems(items, 'Nucleotide sequence', feature?.nucleotide_sequence || feature?.nucleotideSequence, { alphabet: 'nucleotide' });
-    appendSearchItems(items, 'Amino acid sequence', feature?.amino_acid_sequence || feature?.aminoAcidSequence, { alphabet: 'amino-acid' });
+    appendSearchItems(items, 'Amino acid sequence', resolveFeatureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
   }
   return items;
 };
@@ -379,6 +395,11 @@ export const compileFeatureSearchMatcher = (query, useRegex) => {
         match: (value) => {
           regex.lastIndex = 0;
           const match = String(value == null ? '' : value).match(regex);
+          return match ? String(match[0] || '') : '';
+        },
+        matchPrepared: (item) => {
+          regex.lastIndex = 0;
+          const match = String(item?.value || '').match(regex);
           return match ? String(match[0] || '') : '';
         },
         test: (values) => values.some((value) => {
@@ -415,6 +436,17 @@ export const compileFeatureSearchMatcher = (query, useRegex) => {
       const index = normalizeSearchText(text).indexOf(needle);
       return index === -1 ? '' : text.slice(index, index + trimmedQuery.length);
     },
+    matchPrepared: (item) => {
+      const text = String(item?.value || '');
+      const sequenceRegex = getSequenceRegex(item?.alphabet);
+      if (sequenceRegex) {
+        sequenceRegex.lastIndex = 0;
+        const sequenceMatch = text.match(sequenceRegex);
+        return sequenceMatch ? String(sequenceMatch[0] || '') : '';
+      }
+      const index = String(item?.normalizedValue || '').indexOf(needle);
+      return index === -1 ? '' : text.slice(index, index + trimmedQuery.length);
+    },
     test: (values) => values.some((value) => normalizeSearchText(value).includes(needle))
   };
 };
@@ -434,6 +466,79 @@ export const featureSearchMatches = (feature, matcher, field, qualifierKey, opti
     .filter(Boolean);
 };
 
+const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
+  featureSearchItems(feature, field, '', { popupMode, orthogroupsById }).map(prepareSearchItem)
+);
+
+export const buildFeatureSearchIndex = ({
+  features = [],
+  popupMode = 'rich',
+  orthogroups = []
+} = {}) => {
+  const normalizedPopupMode = normalizeFeatureSearchPopupMode(popupMode);
+  const orthogroupsById = buildOrthogroupMap(orthogroups);
+  const featureOrder = [];
+  const byId = new Map();
+  const qualifierFeatureIdsByKey = new Map();
+
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const svgId = String(feature?.svg_id || '').trim();
+    if (!svgId || byId.has(svgId)) return;
+    const qualifiers = getFeatureQualifiers(feature);
+    const qualifierValuesByKey = new Map();
+    const qualifierKeys = [];
+    Object.keys(qualifiers).sort().forEach((key) => {
+      const normalizedKey = normalizeSearchText(key).trim();
+      if (!normalizedKey) return;
+      qualifierKeys.push(prepareSearchItem({ label: 'Qualifier key', value: key }));
+      const values = [];
+      appendSearchItems(values, `Qualifier ${key}`, qualifiers[key]);
+      const preparedValues = values.map(prepareSearchItem);
+      qualifierValuesByKey.set(normalizedKey, preparedValues);
+      if (!qualifierFeatureIdsByKey.has(normalizedKey)) qualifierFeatureIdsByKey.set(normalizedKey, []);
+      qualifierFeatureIdsByKey.get(normalizedKey).push(svgId);
+    });
+
+    const itemsByField = new Map();
+    ['label', 'type', 'record-id', 'location', 'strand', 'orthogroup', 'nucleotide', 'amino-acid']
+      .forEach((field) => {
+        if (normalizedPopupMode === 'simple' && isRichFeatureSearchField(field)) return;
+        itemsByField.set(field, preparedItemsForField(feature, field, normalizedPopupMode, orthogroupsById));
+      });
+    itemsByField.set('qualifier-key', qualifierKeys);
+    itemsByField.set('qualifier-value', Array.from(qualifierValuesByKey.values()).flat());
+    itemsByField.set('all', preparedItemsForField(feature, 'all', normalizedPopupMode, orthogroupsById));
+
+    featureOrder.push(svgId);
+    byId.set(svgId, { feature, itemsByField, qualifierValuesByKey });
+  });
+
+  return {
+    popupMode: normalizedPopupMode,
+    featureOrder,
+    byId,
+    qualifierFeatureIdsByKey,
+    orthogroupsById
+  };
+};
+
+const preparedFeatureSearchMatches = (document, matcher, field, qualifierKey) => {
+  if (!document || !matcher?.active || matcher.error) return [];
+  const normalizedQualifierKey = normalizeSearchText(qualifierKey).trim();
+  const items = field === 'qualifier-value' && normalizedQualifierKey
+    ? document.qualifierValuesByKey.get(normalizedQualifierKey) || []
+    : document.itemsByField.get(field) || [];
+  const details = [];
+  items.forEach((item) => {
+    const matchedText = matcher.matchPrepared
+      ? matcher.matchPrepared(item)
+      : matcher.match(item.value, item.alphabet);
+    if (!matchedText) return;
+    details.push({ label: item.label, value: item.value, match: matchedText });
+  });
+  return details;
+};
+
 export const runFeatureSearch = ({
   features,
   renderedFeatureIds,
@@ -443,6 +548,7 @@ export const runFeatureSearch = ({
   useRegex,
   popupMode = 'rich',
   orthogroups = [],
+  searchIndex = null,
   previousActiveId = ''
 } = {}) => {
   const normalizedPopupMode = normalizeFeatureSearchPopupMode(popupMode);
@@ -464,16 +570,21 @@ export const runFeatureSearch = ({
     };
   }
 
-  const orthogroupsById = buildOrthogroupMap(orthogroups);
+  const preparedIndex = searchIndex?.byId instanceof Map
+    ? searchIndex
+    : buildFeatureSearchIndex({ features, popupMode: normalizedPopupMode, orthogroups });
   const matches = [];
   const matchDetails = {};
-  (Array.isArray(features) ? features : []).forEach((feature) => {
-    const svgId = String(feature?.svg_id || '').trim();
+  let candidateIds = preparedIndex.featureOrder;
+  const normalizedQualifierKey = normalizeSearchText(qualifierKey).trim();
+  if (normalizedField === 'qualifier-value' && normalizedQualifierKey) {
+    candidateIds = preparedIndex.qualifierFeatureIdsByKey.get(normalizedQualifierKey) || [];
+  }
+  candidateIds.forEach((svgId) => {
     if (!svgId || !renderedIds.has(svgId)) return;
-    const details = featureSearchMatches(feature, matcher, normalizedField, qualifierKey, {
-      popupMode: normalizedPopupMode,
-      orthogroupsById
-    });
+    const details = preparedFeatureSearchMatches(
+      preparedIndex.byId.get(svgId), matcher, normalizedField, qualifierKey
+    );
     if (!details.length) return;
     matches.push(svgId);
     matchDetails[svgId] = details;

@@ -153,7 +153,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -240,7 +240,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -275,7 +275,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -321,7 +321,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -372,7 +372,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1600,
               "height": 1000
@@ -406,7 +406,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1280,
               "height": 900

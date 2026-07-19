@@ -10,8 +10,12 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   opacity: 0.82;
   filter: url(#gbdraw-interactive-feature-glow);
 }
+.gbdraw-feature-search-active .gbdraw-interactive-feature:not(.gbdraw-interactive-feature--match),
 .gbdraw-interactive-feature.gbdraw-interactive-feature--dimmed {
   opacity: 0.18;
+}
+.gbdraw-feature-search-updating .gbdraw-interactive-feature {
+  transition: none;
 }
 .gbdraw-interactive-feature.gbdraw-interactive-feature--match {
   opacity: 1;
@@ -701,7 +705,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
 `;
 
 export const STANDALONE_INTERACTIVE_SCRIPT = `
-(function () {
+(async function () {
   'use strict';
 
   var FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
@@ -765,6 +769,15 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     qualifierKey: '',
     useRegex: false
   };
+  var appliedSearchDomState = {
+    queryActive: false,
+    matchedIds: new Set(),
+    activeId: '',
+    updateGeneration: 0,
+    firstFrame: null,
+    secondFrame: null
+  };
+  var preparedSearchIndex = null;
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
   var FEATURE_PART_SUFFIX_RE = /__part\\d+$/;
 
@@ -783,7 +796,23 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   try {
-    payload = JSON.parse(metadata ? metadata.textContent || '{}' : '{}');
+    var metadataText = metadata ? metadata.textContent || '{}' : '{}';
+    if (metadata && metadata.getAttribute('data-encoding') === 'gzip-base64') {
+      if (typeof DecompressionStream !== 'function') {
+        throw new Error('This browser cannot decompress the interactive SVG metadata.');
+      }
+      var encoded = metadataText.replace(/\\s+/g, '');
+      var binary = atob(encoded);
+      var compressed = new Uint8Array(binary.length);
+      for (var byteIndex = 0; byteIndex < binary.length; byteIndex += 1) {
+        compressed[byteIndex] = binary.charCodeAt(byteIndex);
+      }
+      var decompressed = new Blob([compressed])
+        .stream()
+        .pipeThrough(new DecompressionStream('gzip'));
+      metadataText = await new Response(decompressed).text();
+    }
+    payload = JSON.parse(metadataText);
   } catch (error) {
     payload = {};
   }
@@ -938,6 +967,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   featureElementsById.forEach(function (elements) {
     elements.forEach(function (element) {
       setClassToken(element, 'gbdraw-interactive-feature', true);
+      setClassToken(element, 'gbdraw-interactive-feature--dimmed', false);
     });
   });
 
@@ -1176,11 +1206,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (value === null || value === undefined) return;
     var text = String(value).trim();
     if (text) {
-      items.push({
-        label: label,
-        value: text,
-        alphabet: options && options.alphabet ? String(options.alphabet) : ''
-      });
+    items.push({
+      label: label,
+      value: text,
+      normalizedValue: options && options.alphabet ? '' : normalizeSearchText(text),
+      alphabet: options && options.alphabet ? String(options.alphabet) : ''
+    });
     }
   }
 
@@ -1188,6 +1219,15 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return feature && feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
       ? feature.qualifiers
       : {};
+  }
+
+  function featureAminoAcidSequence(feature) {
+    var direct = String(feature && (feature.amino_acid_sequence || feature.aminoAcidSequence) || '').trim();
+    if (direct) return direct;
+    var qualifiers = getFeatureQualifiers(feature);
+    var values = [];
+    appendSearchValues(values, qualifiers.translation);
+    return values.filter(function (value) { return String(value || '').trim(); })[0] || '';
   }
 
   function getQualifierSearchItems(feature, qualifierKey) {
@@ -1409,7 +1449,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       return items;
     }
     if (selectedField === 'amino-acid') {
-      appendSearchItems(items, 'Amino acid sequence', feature && (feature.amino_acid_sequence || feature.aminoAcidSequence), { alphabet: 'amino-acid' });
+      appendSearchItems(items, 'Amino acid sequence', featureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
       return items;
     }
 
@@ -1427,15 +1467,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
       });
       appendSearchItems(items, 'Nucleotide sequence', feature && (feature.nucleotide_sequence || feature.nucleotideSequence), { alphabet: 'nucleotide' });
-      appendSearchItems(items, 'Amino acid sequence', feature && (feature.amino_acid_sequence || feature.aminoAcidSequence), { alphabet: 'amino-acid' });
+      appendSearchItems(items, 'Amino acid sequence', featureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
     }
     return items;
-  }
-
-  function featureSearchValues(feature, field, qualifierKey) {
-    return featureSearchItems(feature, field, qualifierKey).map(function (item) {
-      return item.value;
-    });
   }
 
   function compileSearchMatcher(query, useRegex) {
@@ -1452,6 +1486,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
           match: function (value) {
             regex.lastIndex = 0;
             var match = String(value == null ? '' : value).match(regex);
+            return match ? String(match[0] || '') : '';
+          },
+          matchPrepared: function (item) {
+            regex.lastIndex = 0;
+            var match = String(item && item.value || '').match(regex);
             return match ? String(match[0] || '') : '';
           },
           test: function (values) {
@@ -1489,6 +1528,17 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         var index = normalizeSearchText(text).indexOf(needle);
         return index === -1 ? '' : text.slice(index, index + trimmedQuery.length);
       },
+      matchPrepared: function (item) {
+        var text = String(item && item.value || '');
+        var sequenceRegex = getSequenceRegex(item && item.alphabet);
+        if (sequenceRegex) {
+          sequenceRegex.lastIndex = 0;
+          var sequenceMatch = text.match(sequenceRegex);
+          return sequenceMatch ? String(sequenceMatch[0] || '') : '';
+        }
+        var index = String(item && item.normalizedValue || '').indexOf(needle);
+        return index === -1 ? '' : text.slice(index, index + trimmedQuery.length);
+      },
       test: function (values) {
         return values.some(function (value) {
           return normalizeSearchText(value).indexOf(needle) !== -1;
@@ -1497,23 +1547,60 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     };
   }
 
-  function featureMatchesSearch(feature, matcher, field, qualifierKey) {
-    if (!matcher || !matcher.active || matcher.error) return false;
-    return featureSearchMatches(feature, matcher, field, qualifierKey).length > 0;
+  function buildPreparedSearchIndex() {
+    var index = {
+      featureOrder: [],
+      byId: new Map(),
+      qualifierFeatureIdsByKey: new Map()
+    };
+    features.forEach(function (feature) {
+      var svgId = String(feature && feature.svg_id || '').trim();
+      if (!svgId || index.byId.has(svgId)) return;
+      var qualifiers = getFeatureQualifiers(feature);
+      var qualifierValuesByKey = new Map();
+      Object.keys(qualifiers).sort().forEach(function (key) {
+        var normalizedKey = normalizeSearchText(key).trim();
+        if (!normalizedKey) return;
+        var items = [];
+        appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
+        qualifierValuesByKey.set(normalizedKey, items);
+        if (!index.qualifierFeatureIdsByKey.has(normalizedKey)) {
+          index.qualifierFeatureIdsByKey.set(normalizedKey, []);
+        }
+        index.qualifierFeatureIdsByKey.get(normalizedKey).push(svgId);
+      });
+      var itemsByField = new Map();
+      ['all', 'label', 'type', 'record-id', 'location', 'strand', 'orthogroup', 'qualifier-key', 'qualifier-value', 'nucleotide', 'amino-acid']
+        .forEach(function (field) {
+          itemsByField.set(field, featureSearchItems(feature, field, ''));
+        });
+      index.featureOrder.push(svgId);
+      index.byId.set(svgId, {
+        itemsByField: itemsByField,
+        qualifierValuesByKey: qualifierValuesByKey
+      });
+    });
+    return index;
   }
 
-  function featureSearchMatches(feature, matcher, field, qualifierKey) {
-    if (!matcher || !matcher.active || matcher.error) return [];
-    return featureSearchItems(feature, field, qualifierKey).map(function (item) {
-      var matchedText = matcher.match ? matcher.match(item.value, item.alphabet) : '';
-      if (!matchedText) return null;
-      return {
-        label: item.label,
-        value: String(item.value),
-        match: matchedText
-      };
-    }).filter(Boolean);
+  function preparedFeatureSearchMatches(document, matcher, field, qualifierKey) {
+    if (!document || !matcher || !matcher.active || matcher.error) return [];
+    var normalizedQualifierKey = normalizeSearchText(qualifierKey).trim();
+    var items = field === 'qualifier-value' && normalizedQualifierKey
+      ? document.qualifierValuesByKey.get(normalizedQualifierKey) || []
+      : document.itemsByField.get(field) || [];
+    var details = [];
+    items.forEach(function (item) {
+      var matchedText = matcher.matchPrepared
+        ? matcher.matchPrepared(item)
+        : matcher.match(item.value, item.alphabet);
+      if (!matchedText) return;
+      details.push({ label: item.label, value: String(item.value), match: matchedText });
+    });
+    return details;
   }
+
+  preparedSearchIndex = buildPreparedSearchIndex();
 
   function collapseWhitespace(value) {
     return String(value == null ? '' : value).replace(/\\s+/g, ' ').trim();
@@ -1598,20 +1685,71 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }
   }
 
+  function setSearchFeatureClass(svgId, token, enabled) {
+    var elements = featureElementsById.get(String(svgId || '')) || [];
+    elements.forEach(function (element) {
+      setClassToken(element, token, enabled);
+    });
+  }
+
+  function applyActiveSearchMatch(previousActiveId, nextActiveId) {
+    var previousId = String(previousActiveId || '').trim();
+    var nextId = String(nextActiveId || '').trim();
+    if (previousId === nextId) return;
+    if (previousId) {
+      setSearchFeatureClass(previousId, 'gbdraw-interactive-feature--active-match', false);
+    }
+    if (nextId && appliedSearchDomState.matchedIds.has(nextId)) {
+      setSearchFeatureClass(nextId, 'gbdraw-interactive-feature--active-match', true);
+      appliedSearchDomState.activeId = nextId;
+    } else {
+      appliedSearchDomState.activeId = '';
+    }
+  }
+
+  function cancelSearchResultFrames() {
+    if (appliedSearchDomState.firstFrame != null) cancelAnimationFrame(appliedSearchDomState.firstFrame);
+    if (appliedSearchDomState.secondFrame != null) cancelAnimationFrame(appliedSearchDomState.secondFrame);
+    appliedSearchDomState.firstFrame = null;
+    appliedSearchDomState.secondFrame = null;
+  }
+
+  function applySearchResultSet(nextMatches, nextActiveId, queryActive) {
+    var nextMatchedIds = new Set(queryActive ? nextMatches : []);
+    appliedSearchDomState.matchedIds.forEach(function (svgId) {
+      if (!nextMatchedIds.has(svgId)) {
+        setSearchFeatureClass(svgId, 'gbdraw-interactive-feature--match', false);
+      }
+    });
+    nextMatchedIds.forEach(function (svgId) {
+      if (!appliedSearchDomState.matchedIds.has(svgId)) {
+        setSearchFeatureClass(svgId, 'gbdraw-interactive-feature--match', true);
+      }
+    });
+    var previousActiveId = appliedSearchDomState.activeId;
+    appliedSearchDomState.matchedIds = nextMatchedIds;
+    appliedSearchDomState.queryActive = Boolean(queryActive);
+    setClassToken(svg, 'gbdraw-feature-search-active', Boolean(queryActive));
+    applyActiveSearchMatch(previousActiveId, nextActiveId);
+  }
+
   function applySearchResults() {
     var queryActive = Boolean(String(searchState.query || '').trim()) && !searchState.error;
-    var matchedIds = new Set(searchState.matches);
-    var activeId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
-    featureElementsById.forEach(function (elements, svgId) {
-      var isMatch = queryActive && matchedIds.has(svgId);
-      var isActive = isMatch && svgId === activeId;
-      elements.forEach(function (element) {
-        setClassToken(element, 'gbdraw-interactive-feature--match', isMatch);
-        setClassToken(element, 'gbdraw-interactive-feature--active-match', isActive);
-        setClassToken(element, 'gbdraw-interactive-feature--dimmed', queryActive && !isMatch);
+    cancelSearchResultFrames();
+    var generation = ++appliedSearchDomState.updateGeneration;
+    setClassToken(svg, 'gbdraw-feature-search-updating', true);
+    syncSearchControls();
+    appliedSearchDomState.firstFrame = requestAnimationFrame(function () {
+      if (generation !== appliedSearchDomState.updateGeneration) return;
+      appliedSearchDomState.firstFrame = null;
+      var currentActiveId = searchState.activeIndex >= 0 ? searchState.matches[searchState.activeIndex] : '';
+      applySearchResultSet(searchState.matches, currentActiveId, queryActive);
+      appliedSearchDomState.secondFrame = requestAnimationFrame(function () {
+        if (generation !== appliedSearchDomState.updateGeneration) return;
+        appliedSearchDomState.secondFrame = null;
+        setClassToken(svg, 'gbdraw-feature-search-updating', false);
       });
     });
-    syncSearchControls();
   }
 
   function setSearchState(nextState) {
@@ -1638,16 +1776,21 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       return;
     }
 
+    if (!preparedSearchIndex) preparedSearchIndex = buildPreparedSearchIndex();
     var nextMatchDetails = {};
-    searchState.matches = features.filter(function (feature) {
-      var svgId = String(feature && feature.svg_id || '').trim();
+    var candidateIds = preparedSearchIndex.featureOrder;
+    var normalizedQualifierKey = normalizeSearchText(searchState.qualifierKey).trim();
+    if (searchState.field === 'qualifier-value' && normalizedQualifierKey) {
+      candidateIds = preparedSearchIndex.qualifierFeatureIdsByKey.get(normalizedQualifierKey) || [];
+    }
+    searchState.matches = candidateIds.filter(function (svgId) {
       if (!svgId || !featureElementsById.has(svgId)) return false;
-      var details = featureSearchMatches(feature, matcher, searchState.field, searchState.qualifierKey);
+      var details = preparedFeatureSearchMatches(
+        preparedSearchIndex.byId.get(svgId), matcher, searchState.field, searchState.qualifierKey
+      );
       if (!details.length) return false;
       nextMatchDetails[svgId] = details;
       return true;
-    }).map(function (feature) {
-      return String(feature.svg_id);
     });
     searchState.matchDetails = nextMatchDetails;
 
@@ -1767,14 +1910,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function setActiveMatch(index, options) {
     if (!searchState.matches.length) {
+      var previousActiveId = appliedSearchDomState.activeId;
       searchState.activeIndex = -1;
-      applySearchResults();
+      applyActiveSearchMatch(previousActiveId, '');
+      syncSearchControls();
       return;
     }
     var count = searchState.matches.length;
     var nextIndex = ((Number(index) || 0) % count + count) % count;
+    var previousActiveId = appliedSearchDomState.activeId;
     searchState.activeIndex = nextIndex;
-    applySearchResults();
+    applyActiveSearchMatch(previousActiveId, searchState.matches[nextIndex]);
+    syncSearchControls();
     if (options && options.center) {
       centerFeatureInView(searchState.matches[nextIndex]);
     }
@@ -2931,7 +3078,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       : firstDisplayText(feature.nucleotide_fasta, feature.nucleotideFasta);
     if (existing) return existing;
     var sequence = label === 'aa'
-      ? firstDisplayText(feature.amino_acid_sequence, feature.aminoAcidSequence)
+      ? featureAminoAcidSequence(feature)
       : firstDisplayText(feature.nucleotide_sequence, feature.nucleotideSequence);
     if (!normalizeSequence(sequence)) return '';
     var id = label === 'aa'
@@ -3239,7 +3386,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
     return warningHtml +
       renderSequenceBlock('Nucleotide', feature.nucleotide_sequence, feature.nucleotide_fasta || feature.nucleotideFasta, 'nt', feature) +
-      renderSequenceBlock('Amino acid', feature.amino_acid_sequence, feature.amino_acid_fasta || feature.aminoAcidFasta, 'aa', feature);
+      renderSequenceBlock('Amino acid', featureAminoAcidSequence(feature), feature.amino_acid_fasta || feature.aminoAcidFasta, 'aa', feature);
   }
 
   function renderSimplePopup(feature) {
@@ -3285,6 +3432,187 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       '<div class="gfi-content">' + panel + '</div>' +
       '<button type="button" class="gfi-resize-handle" data-resize="true" title="Drag to resize" aria-label="Resize popup"></button>' +
       '</div>';
+  }
+
+  function addMaterializedMatchRow(rows, label, value) {
+    var text = String(value == null ? '' : value).trim();
+    if (text) rows.push([label, text]);
+  }
+
+  function materializedMatchFeatureRow(svgId, fallback) {
+    var id = String(svgId || '').trim();
+    var feature = featuresById.get(id) || {};
+    return {
+      key: id || String(fallback && fallback.locusId || ''),
+      svgId: id,
+      canOpen: Boolean(id && featuresById.has(id)),
+      label: firstDisplayText(feature.display_label, feature.label, fallback && fallback.displayName, fallback && fallback.proteinId, id),
+      record: firstDisplayText(feature.record_id, fallback && fallback.recordId),
+      location: firstDisplayText(feature.location, feature && locationText(feature), fallback && fallback.interval),
+      proteinId: firstDisplayText(displayProteinId(feature, null, ''), fallback && fallback.proteinId),
+      locusId: firstDisplayText(feature.locus_tag, fallback && fallback.locusId),
+      displayName: firstDisplayText(featureDescription(feature), fallback && fallback.displayName),
+      product: featureDescription(feature)
+    };
+  }
+
+  function materializedMatchFeatureRows(svgIds, fallback) {
+    var ids = getOrthogroupIds(svgIds);
+    if (!ids.length) return [materializedMatchFeatureRow('', fallback)];
+    return ids.map(function (svgId) {
+      return materializedMatchFeatureRow(svgId, fallback);
+    });
+  }
+
+  function materializedBlockMemberLabels(group, featureSvgIds) {
+    if (!group) return '';
+    var members = Array.isArray(group.members) ? group.members : [];
+    return getOrthogroupIds(featureSvgIds).map(function (svgId) {
+      var member = members.find(function (candidate) {
+        return memberFeatureSvgId(candidate) === svgId;
+      }) || null;
+      return firstDisplayText(
+        displayProteinId(featuresById.get(svgId) || null, member, ''),
+        member && member.label,
+        svgId
+      );
+    }).filter(function (value) { return value; }).join('; ');
+  }
+
+  function materializeCompactMatch(match) {
+    if (!match || Array.isArray(match.sections)) return match || {};
+    if (match._gbdrawMaterialized) return match._gbdrawMaterialized;
+    var kind = String(match.match_kind || 'pairwise');
+    var localCollinearGroups = match.collinear_group_scope === 'adjacent_local' ||
+      match.group_kind === 'collinear_gene_group';
+    var orthogroupIds = Array.isArray(match.orthogroup_ids)
+      ? match.orthogroup_ids.map(String)
+      : getOrthogroupIds(match.orthogroup_id);
+    var orthogroupId = orthogroupIds[0] || '';
+    var group = orthogroupsById.get(orthogroupId) || null;
+    var displayName = firstDisplayText(group && (group.display_name || group.displayName || group.name), orthogroupId);
+    var qInterval = [match.qstart, match.qend].filter(function (value) { return String(value || '').trim(); }).join('..');
+    var sInterval = [match.sstart, match.send].filter(function (value) { return String(value || '').trim(); }).join('..');
+    var summaryRows = [];
+    addMaterializedMatchRow(summaryRows, 'Query record', match.query_record_id);
+    addMaterializedMatchRow(summaryRows, 'Subject record', match.subject_record_id);
+    addMaterializedMatchRow(summaryRows, 'Query interval', qInterval);
+    addMaterializedMatchRow(summaryRows, 'Subject interval', sInterval);
+    addMaterializedMatchRow(summaryRows, 'Orientation', match.orientation);
+    var alignmentRows = [];
+    addMaterializedMatchRow(alignmentRows, 'Identity', match.identity);
+    addMaterializedMatchRow(alignmentRows, 'Alignment length', match.alignment_length);
+    addMaterializedMatchRow(alignmentRows, 'E-value', match.evalue);
+    addMaterializedMatchRow(alignmentRows, 'Bit score', match.bitscore);
+    addMaterializedMatchRow(alignmentRows, 'Mismatches', match.mismatches);
+    addMaterializedMatchRow(alignmentRows, 'Gap opens', match.gap_opens);
+    var memberRows = group ? orthogroupMemberTableRows(Array.isArray(group.members) ? group.members : [], group) : [];
+    var orthogroupRows = [];
+    addMaterializedMatchRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
+    addMaterializedMatchRow(orthogroupRows, 'Display name', displayName);
+    addMaterializedMatchRow(orthogroupRows, 'Description', group && group.description);
+    addMaterializedMatchRow(orthogroupRows, 'Members', group && (group.member_count || group.memberCount));
+    addMaterializedMatchRow(orthogroupRows, 'Record coverage', group && (group.record_coverage_count || group.recordCoverage));
+    var sections = [];
+    if (kind === 'orthogroup') {
+      sections.push({ title: 'Summary', rows: orthogroupRows, member_rows: memberRows });
+    } else {
+      sections.push({ title: 'Summary', rows: summaryRows });
+      if (kind !== 'collinear') sections.push({ title: 'Alignment', rows: alignmentRows });
+      if (kind !== 'collinear' && orthogroupRows.length) {
+        sections.push({ title: 'Orthogroup', rows: orthogroupRows, member_rows: memberRows });
+      }
+      if (kind === 'collinear') {
+        sections.push({
+          title: localCollinearGroups ? 'Local collinear groups' : 'Orthogroups covered',
+          rows: [[
+            localCollinearGroups ? 'Number of local collinear groups' : 'Number of orthogroups covered',
+            String(orthogroupIds.length)
+          ]],
+          block_orthogroups: orthogroupIds.map(function (id) {
+            var blockGroup = orthogroupsById.get(id) || {};
+            var blockDisplayName = firstDisplayText(blockGroup.display_name, blockGroup.displayName, blockGroup.name, id);
+            return {
+              id: id,
+              displayName: blockDisplayName,
+              memberCount: firstDisplayText(blockGroup.member_count, blockGroup.memberCount),
+              recordCoverage: firstDisplayText(blockGroup.record_coverage_count, blockGroup.recordCoverage),
+              queryMember: materializedBlockMemberLabels(blockGroup, match.query_feature_svg_id),
+              subjectMember: materializedBlockMemberLabels(blockGroup, match.subject_feature_svg_id),
+              detailRows: [
+                [localCollinearGroups ? 'Collinear group ID' : 'Orthogroup ID', id],
+                ['Display name', blockDisplayName],
+                ['Description', firstDisplayText(blockGroup.description)],
+                ['Members', firstDisplayText(blockGroup.member_count, blockGroup.memberCount)],
+                ['Record coverage', firstDisplayText(blockGroup.record_coverage_count, blockGroup.recordCoverage)]
+              ].filter(function (row) { return row[1]; }),
+              memberRows: orthogroupMemberTableRows(Array.isArray(blockGroup.members) ? blockGroup.members : [], blockGroup)
+            };
+          })
+        });
+      }
+      var blockRows = [];
+      addMaterializedMatchRow(blockRows, 'Block ID', match.collinearity_block_id);
+      addMaterializedMatchRow(blockRows, 'Kind', match.block_kind);
+      addMaterializedMatchRow(blockRows, 'Orientation', match.orientation);
+      addMaterializedMatchRow(blockRows, 'Color mode', match.block_color_mode);
+      if (kind === 'collinear') {
+        addMaterializedMatchRow(blockRows, 'Average identity', match.identity);
+        addMaterializedMatchRow(blockRows, 'Aligned length', match.alignment_length);
+      }
+      addMaterializedMatchRow(blockRows, 'Block score', match.block_score);
+      addMaterializedMatchRow(blockRows, 'Block e-value', match.block_evalue);
+      addMaterializedMatchRow(blockRows, 'Anchor', [match.anchor_index, match.anchor_count].filter(Boolean).join(' / '));
+      if (blockRows.length) sections.push({ title: 'Collinearity', rows: blockRows });
+      sections.push({
+        title: 'Query',
+        rows: [],
+        feature_rows: materializedMatchFeatureRows(match.query_feature_svg_id, {
+          recordId: match.query_record_id,
+          interval: qInterval,
+          proteinId: match.query_protein_id,
+          locusId: match.query_locus_id,
+          displayName: match.query_display_name
+        })
+      });
+      sections.push({
+        title: 'Subject',
+        rows: [],
+        feature_rows: materializedMatchFeatureRows(match.subject_feature_svg_id, {
+          recordId: match.subject_record_id,
+          interval: sInterval,
+          proteinId: match.subject_protein_id,
+          locusId: match.subject_locus_id,
+          displayName: match.subject_display_name
+        })
+      });
+    }
+    var hoverRows = [];
+    addMaterializedMatchRow(hoverRows, 'Kind', kind);
+    addMaterializedMatchRow(hoverRows, 'Identity', match.identity);
+    addMaterializedMatchRow(hoverRows, 'Query', qInterval);
+    addMaterializedMatchRow(hoverRows, 'Subject', sInterval);
+    addMaterializedMatchRow(
+      hoverRows,
+      kind === 'collinear' ? (localCollinearGroups ? 'Collinear groups' : 'Orthogroups') : 'Orthogroup',
+      kind === 'collinear' ? orthogroupIds.length : orthogroupId
+    );
+    addMaterializedMatchRow(hoverRows, 'Block', match.collinearity_block_id);
+    var title = kind === 'orthogroup'
+      ? (displayName && displayName !== orthogroupId ? orthogroupId + ':' + displayName : orthogroupId || 'Orthogroup match')
+      : (kind === 'collinear' ? 'Collinearity block' : 'Pairwise match');
+    match._gbdrawMaterialized = {
+      id: match.id,
+      title: title,
+      subtitle: firstDisplayText(match.collinearity_block_id, orthogroupId, match.id),
+      match_kind: kind,
+      orthogroup_id: orthogroupId,
+      collinearity_block_id: match.collinearity_block_id,
+      fill: match.fill || '#94a3b8',
+      sections: sections,
+      hover_rows: hoverRows
+    };
+    return match._gbdrawMaterialized;
   }
 
   function normalizeMatchRows(rows) {
@@ -3431,6 +3759,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function renderMatchSections(match) {
+    match = materializeCompactMatch(match);
     var sections = Array.isArray(match && match.sections) ? match.sections : [];
     if (!sections.length) {
       return '<div class="gfi-empty">No match details available.</div>';
@@ -3464,6 +3793,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function renderMatchPopup(match) {
+    match = materializeCompactMatch(match);
     copyValues = [];
     downloadValues = [];
     return '<div class="gfi gfi--simple">' +
@@ -3616,6 +3946,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function renderMatchHoverPopupHtml(match) {
+    match = materializeCompactMatch(match);
     var rows = normalizeMatchRows(match && match.hover_rows).slice(0, 6);
     var rowHtml = rows.map(function (row) {
       return '<div class="gfhs-row">' +
