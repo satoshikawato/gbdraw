@@ -77,6 +77,7 @@ def test_current_session_version_matches_web_config() -> None:
     source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
     match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
     assert match is not None
+    assert CURRENT_SESSION_VERSION == 33
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
 
 
@@ -94,6 +95,18 @@ def test_session_version_27_remains_supported() -> None:
 
     validate_session(session)
     assert 27 in SUPPORTED_SESSION_VERSIONS
+
+
+def test_canonical_session_version_32_remains_supported() -> None:
+    session = {
+        "format": SESSION_FORMAT,
+        "version": 32,
+        "renderRequest": {},
+        "resources": {},
+    }
+
+    validate_session(session)
+    assert 32 in SUPPORTED_SESSION_VERSIONS
 
 
 def test_session_json_gzip_round_trip(tmp_path: Path) -> None:

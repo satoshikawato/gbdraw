@@ -212,7 +212,7 @@ def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() ->
 
     assert skew_top == pytest.approx(gc_bottom)
 
-    svg = assemble_linear_diagram_from_records(
+    canvas = assemble_linear_diagram_from_records(
         [_make_record()],
         legend="none",
         config_overrides={
@@ -222,11 +222,19 @@ def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() ->
         },
         window=20,
         step=20,
-    ).tostring()
+    )
+    svg = canvas.tostring()
     gc_y = _svg_group_translate_y(svg, "gc_content")
     skew_y = _svg_group_translate_y(svg, "gc_skew")
+    slots = {
+        slot["slotId"]: slot
+        for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
 
-    assert skew_y - (0.5 * canvas_config.skew_height) == pytest.approx(gc_y + canvas_config.gc_height)
+    assert slots["gc_skew"]["reserveBand"]["topPx"] == pytest.approx(
+        slots["gc_content"]["reserveBand"]["bottomPx"]
+    )
+    assert skew_y > gc_y + canvas_config.gc_height
 
 
 def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:

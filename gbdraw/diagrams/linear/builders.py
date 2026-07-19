@@ -15,6 +15,7 @@ from svgwrite.container import Group  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...layout.linear_multi_record import LinearRecordPlacement
+from ...layout.linear import LinearFeatureLaneGeometry
 from ...linear_comparison import LinearComparison
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
@@ -31,9 +32,6 @@ from ...render.groups.linear import (  # type: ignore[reportMissingImports]
     SeqRecordGroup,
 )
 from .positioning import (
-    position_depth_group,
-    position_gc_content_group,
-    position_gc_skew_group,
     position_linear_track_group,
     position_record_definition_group,
     position_record_group,
@@ -63,11 +61,13 @@ def add_record_group(
     sequence_width: float | None = None,
     record_local_ruler: bool = False,
     placement: LinearRecordPlacement | None = None,
+    multi_record_layout: bool = False,
+    feature_offset_y: float = 0.0,
+    feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
     if placement is not None:
         sequence_width = placement.sequence_width
-        record_local_ruler = True
     record_group: Group = SeqRecordGroup(
         gb_record=record,
         canvas_config=canvas_config,
@@ -86,8 +86,12 @@ def add_record_group(
         group_id=group_id,
         sequence_width=sequence_width,
         record_local_ruler=record_local_ruler,
+        feature_offset_y=feature_offset_y,
+        feature_lane_geometry=feature_lane_geometry,
     ).get_group()
-    if placement is not None:
+    if multi_record_layout:
+        if placement is None:
+            raise ValueError("multi_record_layout requires a resolved record placement")
         record_group.attribs["data-record-index"] = placement.record_index
         record_group.attribs["data-record-row"] = placement.row
         record_group.attribs["data-record-column"] = placement.column
@@ -105,10 +109,10 @@ def add_gc_content_group(
     canvas_config: LinearCanvasConfigurator,
     gc_config: GcContentConfigurator,
     config_dict: dict,
+    track_offset_y: float,
     cfg: GbdrawConfig | None = None,
     gc_df: DataFrame | None = None,
     track_height: float | None = None,
-    track_offset_y: float | None = None,
     group_id: str = "gc_content",
     sequence_width: float | None = None,
 ) -> Drawing:
@@ -125,10 +129,7 @@ def add_gc_content_group(
         group_id=group_id,
         sequence_width=sequence_width,
     ).get_group()
-    if track_offset_y is None:
-        position_gc_content_group(gc_content_group, offset_y, offset_x, canvas_config)
-    else:
-        position_linear_track_group(gc_content_group, offset_y, offset_x, canvas_config, track_offset_y)
+    position_linear_track_group(gc_content_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_content_group)
     return canvas
 
@@ -141,13 +142,12 @@ def add_depth_group(
     canvas_config: LinearCanvasConfigurator,
     depth_config: DepthConfigurator,
     config_dict: dict,
+    track_offset_y: float,
     cfg: GbdrawConfig | None = None,
     depth_df: DataFrame | None = None,
-    depth_track_index: int = 0,
     group_id: str = "depth",
     axis_group_id: str = "depth_axis",
     track_height: float | None = None,
-    track_offset_y: float | None = None,
     sequence_width: float | None = None,
 ) -> Drawing:
     """Adds a depth coverage group to the linear canvas."""
@@ -164,10 +164,7 @@ def add_depth_group(
         axis_group_id=axis_group_id,
         sequence_width=sequence_width,
     ).get_group()
-    if track_offset_y is None:
-        position_depth_group(depth_group, offset_y, offset_x, canvas_config, depth_track_index)
-    else:
-        position_linear_track_group(depth_group, offset_y, offset_x, canvas_config, track_offset_y)
+    position_linear_track_group(depth_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(depth_group)
     return canvas
 
@@ -180,10 +177,10 @@ def add_gc_skew_group(
     canvas_config: LinearCanvasConfigurator,
     skew_config: GcSkewConfigurator,
     config_dict: dict,
+    track_offset_y: float,
     cfg: GbdrawConfig | None = None,
     gc_df: DataFrame | None = None,
     track_height: float | None = None,
-    track_offset_y: float | None = None,
     group_id: str = "gc_skew",
     sequence_width: float | None = None,
 ) -> Drawing:
@@ -200,10 +197,7 @@ def add_gc_skew_group(
         group_id=group_id,
         sequence_width=sequence_width,
     ).get_group()
-    if track_offset_y is None:
-        position_gc_skew_group(gc_skew_group, offset, offset_x, canvas_config)
-    else:
-        position_linear_track_group(gc_skew_group, offset, offset_x, canvas_config, track_offset_y)
+    position_linear_track_group(gc_skew_group, offset, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_skew_group)
     return canvas
 
@@ -221,6 +215,8 @@ def add_record_definition_group(
     placement: LinearRecordPlacement | None = None,
     row_definition_width: float | None = None,
     definition_center_y: float | None = None,
+    definition_header_center_y: float | None = None,
+    multi_record_layout: bool = False,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
@@ -229,7 +225,9 @@ def add_record_definition_group(
     except (TypeError, ValueError):
         definition_gap = 20.0
 
-    if placement is not None:
+    if multi_record_layout:
+        if placement is None:
+            raise ValueError("multi_record_layout requires a resolved record placement")
         split_row_definition = (
             keep_definition_left_aligned and placement.column == 0
         )
@@ -250,9 +248,13 @@ def add_record_definition_group(
         )
         record_definition_group = definition_group_obj.get_group()
         header_y = (
-            placement.axis_y
-            - placement.top_extent
-            + 0.5 * definition_group_obj.definition_bounding_box_height
+            float(definition_header_center_y)
+            if definition_header_center_y is not None
+            else (
+                placement.axis_y
+                - placement.top_extent
+                + 0.5 * definition_group_obj.definition_bounding_box_height
+            )
         )
         record_definition_group.translate(
             canvas_config.horizontal_offset

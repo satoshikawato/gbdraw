@@ -900,6 +900,10 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_track_groups,
         record_count=len(gb_records),
     )
+    logical_depth_track_count = max(
+        (len(row) for row in (depth_track_files or [])),
+        default=0,
+    )
 
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
@@ -1052,7 +1056,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         circular_track_slots_or_none = circular_track_slots_from_order(
             circular_track_order,
             show_depth=show_depth,
-            depth_track_count=max(1, len(depth_track_files[0]) if depth_track_files else 1),
+            depth_track_count=max(1, logical_depth_track_count),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
@@ -1061,7 +1065,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         circular_track_slots_or_none = circular_track_slots_from_order(
             "features,ticks,depth,gc_content,gc_skew",
             show_depth=show_depth,
-            depth_track_count=max(1, len(depth_track_files[0]) if depth_track_files else 1),
+            depth_track_count=max(1, logical_depth_track_count),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,

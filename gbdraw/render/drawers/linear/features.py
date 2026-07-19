@@ -8,6 +8,7 @@ from svgwrite.path import Path
 
 from ....configurators import FeatureDrawingConfigurator
 from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
+from ....layout.linear import LinearFeatureLaneGeometry
 from ....svg.linear_features import (
     create_arrowhead_path_linear,
     create_intron_path_linear,
@@ -86,6 +87,7 @@ class FeatureDrawer:
         arrow_length: float,
         track_layout: str = "middle",
         track_axis_gap: float | None = None,
+        feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
         record_index: int = 0,
         record_count: int = 1,
     ) -> Group:
@@ -99,6 +101,7 @@ class FeatureDrawer:
             arrow_length=arrow_length,
             track_layout=track_layout,
             track_axis_gap=track_axis_gap,
+            feature_lane_geometry=feature_lane_geometry,
         )
 
         gene_paths = path_generator.generate_linear_gene_path(feature_object)
@@ -171,6 +174,7 @@ class FeaturePathGenerator:
         arrow_length: float,
         track_layout: str = "middle",
         track_axis_gap: float | None = None,
+        feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
     ) -> None:
         self.genome_length = genome_length
         self.alignment_width = alignment_width
@@ -181,11 +185,19 @@ class FeaturePathGenerator:
         self.arrow_length = arrow_length
         self.track_layout = track_layout
         self.track_axis_gap = track_axis_gap
+        self.feature_lane_geometry = feature_lane_geometry
 
     def generate_linear_gene_path(self, gene_object):
         feature_track_id = gene_object.feature_track_id
         coords = gene_object.location
         coordinates_paths = []
+        feature_y_positions = None
+        if self.feature_lane_geometry is not None:
+            feature_y_positions = self.feature_lane_geometry.lane_for(
+                strand=self.feature_strand,
+                track_id=feature_track_id,
+                separate_strands=self.separate_strands,
+            ).positions
 
         for coord in coords:
             coord_dict = {
@@ -208,6 +220,7 @@ class FeaturePathGenerator:
                     feature_track_id=feature_track_id,
                     track_layout=self.track_layout,
                     track_axis_gap=self.track_axis_gap,
+                    feature_y_positions=feature_y_positions,
                 )
             elif feat_type == "block":
                 if coord.is_last and gene_object.is_directional:
@@ -223,6 +236,7 @@ class FeaturePathGenerator:
                         feature_track_id=feature_track_id,
                         track_layout=self.track_layout,
                         track_axis_gap=self.track_axis_gap,
+                        feature_y_positions=feature_y_positions,
                     )
                 else:
                     coord_path = create_rectangle_path_linear(
@@ -236,6 +250,7 @@ class FeaturePathGenerator:
                         feature_track_id=feature_track_id,
                         track_layout=self.track_layout,
                         track_axis_gap=self.track_axis_gap,
+                        feature_y_positions=feature_y_positions,
                     )
             else:
                 continue

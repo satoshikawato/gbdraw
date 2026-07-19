@@ -440,7 +440,7 @@ export const createDefaultAdv = () => ({
   depth_small_tick_interval: null,
   depth_tick_font_size: null,
   linear_track_slots_enabled: false,
-  linear_track_slots_schema_version: 1,
+  linear_track_slots_schema_version: 2,
   linear_track_slots_axis_index: null,
   linear_track_slots: createDefaultLinearTrackSlots(),
   gc_content_mode: 'deviation',

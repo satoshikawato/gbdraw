@@ -1,5 +1,6 @@
 """Circular track-slot input helpers."""
 
+from .parsing import parse_nonnegative_integer  # type: ignore[reportMissingImports]
 from .scalars import ScalarSpec, ScalarUnit  # type: ignore[reportMissingImports]
 from .circular import (  # type: ignore[reportMissingImports]
     CircularTrackRendererName,
@@ -63,4 +64,5 @@ __all__ = [
     "parse_circular_track_slots",
     "parse_linear_track_slot",
     "parse_linear_track_slots",
+    "parse_nonnegative_integer",
 ]

@@ -6,6 +6,7 @@ const { extname, join, normalize, resolve, sep } = require('node:path');
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionPath = join(repoRoot, 'tests/test_inputs/2026-06-16_wssv.gbdraw-session.json');
 const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
+const hmmtDnaPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000711.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000713.gbk');
 
@@ -94,6 +95,40 @@ const inspectSparseDepthResult = async (page) => page.evaluate(() => {
   };
 });
 
+const inspectCircularSparseDepthResult = async (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const content = app.results?.[0]?.content || '';
+  const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+  const hasGroup = (id) => Boolean(svg.querySelector(`[id="${id}"]`));
+  const groupFills = (id) => {
+    const group = svg.querySelector(`[id="${id}"]`);
+    if (!group) return [];
+    return [group, ...group.querySelectorAll('[fill]')]
+      .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
+      .filter(Boolean);
+  };
+  const args = Array.isArray(app.lastRunInfo?.invocation?.args)
+    ? app.lastRunInfo.invocation.args
+    : [];
+  const depthArgs = [];
+  args.forEach((arg, index) => {
+    if (arg === '--depth_track') depthArgs.push(args.slice(index + 1, index + 3));
+  });
+  return {
+    groups: {
+      depthARecord1: hasGroup('depth_1_record_1'),
+      depthARecord1Axis: hasGroup('depth_1_record_1_axis'),
+      depthARecord2: hasGroup('depth_1_record_2'),
+      depthBRecord1: hasGroup('depth_2_record_1'),
+      depthBRecord2: hasGroup('depth_2_record_2'),
+      depthBRecord2Axis: hasGroup('depth_2_record_2_axis')
+    },
+    depthAFills: groupFills('depth_1_record_1'),
+    depthBFills: groupFills('depth_2_record_2'),
+    depthArgs
+  };
+});
+
 const runDiagramWithDiagnostics = async (page) => page.evaluate(async () => {
   const app = window.__GBDRAW_APP__;
   const result = await app.runAnalysis();
@@ -151,6 +186,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
       type: 'text/tab-separated-values'
     });
     app.setLinearDepthFile(app.linearSeqs[0], 0, first);
+    app.resetLinearTrackSlotsFromSimpleControls();
     app.setLinearTrackSlotsEnabled(true);
     const clonePlain = (value) => JSON.parse(JSON.stringify(value));
     const originalSlots = clonePlain(app.adv.linear_track_slots);
@@ -283,6 +319,362 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
   expect(result.afterRemove.emittedAxisIndex).toBe(0);
   expect(result.afterRemove.emittedSlotIds).toEqual(['features', 'depth_2']);
   expect(result.afterRepair).toEqual({ enabled: false, trackIndex: 0, error: null });
+});
+
+test('Linear custom slot panel and enable state preserve the explicit stack', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const result = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'custom_gc', renderer: 'dinucleotide_content', enabled: true,
+        side: 'above', height: '23px', spacing: '4px', params: { nt: 'AT' }
+      },
+      {
+        id: 'features', renderer: 'features', enabled: true,
+        side: 'overlay', height: '41px', spacing: '6px', params: {}
+      }
+    );
+    app.adv.linear_track_slots_axis_index = 1;
+    app.setLinearTrackSlotsEnabled(true);
+    const snapshot = () => JSON.stringify({
+      slots: app.adv.linear_track_slots,
+      axis: app.adv.linear_track_slots_axis_index,
+      specs: app.adv.linear_track_slots.map((slot) => app.linearTrackSlotCliSpec(slot))
+    });
+    const initial = snapshot();
+
+    app.toggleLinearTrackSlotsPanel();
+    const panelOpened = app.linearTrackSlotsPanelOpen;
+    const afterOpen = snapshot();
+    app.toggleLinearTrackSlotsPanel();
+    const panelClosed = app.linearTrackSlotsPanelOpen;
+    const afterClose = snapshot();
+
+    app.setLinearTrackSlotsEnabled(false);
+    const afterDisable = snapshot();
+    app.form.show_gc = false;
+    app.form.show_skew = true;
+    app.form.show_depth = false;
+    app.form.linear_track_layout = 'below';
+    const afterSimpleChanges = snapshot();
+    app.setLinearTrackSlotsEnabled(true);
+    const afterReenable = snapshot();
+    app.resetLinearTrackSlotsFromSimpleControls();
+    const afterReset = snapshot();
+
+    return {
+      initial,
+      panelOpened,
+      panelClosed,
+      afterOpen,
+      afterClose,
+      afterDisable,
+      afterSimpleChanges,
+      afterReenable,
+      afterReset
+    };
+  });
+
+  expect(result.panelOpened).toBe(true);
+  expect(result.panelClosed).toBe(false);
+  expect(result.afterOpen).toBe(result.initial);
+  expect(result.afterClose).toBe(result.initial);
+  expect(result.afterDisable).toBe(result.initial);
+  expect(result.afterSimpleChanges).toBe(result.initial);
+  expect(result.afterReenable).toBe(result.initial);
+  expect(result.afterReset).not.toBe(result.initial);
+});
+
+test('Session preflight rejects invalid canonical data without resetting live state', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    app.mode = 'linear';
+    await window.Vue.nextTick();
+    app.sessionTitle = 'keep-live-state';
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'keep_gc', renderer: 'dinucleotide_content', enabled: true,
+        side: 'above', height: '23px', spacing: '4px', params: { nt: 'AT' }
+      },
+      {
+        id: 'keep_features', renderer: 'features', enabled: true,
+        side: 'overlay', height: '41px', spacing: '6px', params: {}
+      }
+    );
+    app.adv.linear_track_slots_axis_index = 1;
+    app.setLinearTrackSlotsEnabled(true);
+    state.suppressCircularMultiRecordDefaults.value = true;
+  });
+
+  const snapshot = () => page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    return {
+      mode: app.mode,
+      title: app.sessionTitle,
+      enabled: app.adv.linear_track_slots_enabled,
+      axisIndex: app.adv.linear_track_slots_axis_index,
+      slots: JSON.parse(JSON.stringify(app.adv.linear_track_slots)),
+      suppressDefaults: state.suppressCircularMultiRecordDefaults.value
+    };
+  });
+  const before = await snapshot();
+  const dialogs = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  const input = page.locator('input[accept^=".json,"]').first();
+
+  const invalidCanonicalSession = {
+    format: 'gbdraw-session',
+    version: 32,
+    renderRequest: {
+      schema: 2,
+      mode: 'linear',
+      records: [],
+      diagramOptions: {},
+      output: { prefix: 'invalid' }
+    },
+    resources: {}
+  };
+  await input.setInputFiles({
+    name: 'invalid-canonical.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(invalidCanonicalSession))
+  });
+  await expect.poll(() => dialogs.length).toBe(1);
+  expect(dialogs[0]).toContain('Canonical renderRequest records are required.');
+  expect(await snapshot()).toEqual(before);
+
+  const invalidSlotSchemaSession = {
+    ...invalidCanonicalSession,
+    version: 33,
+    config: {
+      adv: {
+        linear_track_slots_schema_version: '1',
+        linear_track_slots: [{ id: 'features', renderer: 'features', params: {} }]
+      }
+    }
+  };
+  await input.setInputFiles({
+    name: 'invalid-slot-schema.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(invalidSlotSchemaSession))
+  });
+  await expect.poll(() => dialogs.length).toBe(2);
+  expect(dialogs[1]).toContain('Custom Track Slots use an obsolete schema.');
+  expect(await snapshot()).toEqual(before);
+
+  const recordText = `LOCUS       PREFLIGHT                   4 bp    DNA     linear   UNK 01-JAN-1980
+DEFINITION  Session preflight fixture.
+ACCESSION   PREFLIGHT
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+`;
+  const invalidStoredSlotSession = {
+    format: 'gbdraw-session',
+    version: 33,
+    renderRequest: {
+      schema: 2,
+      mode: 'linear',
+      records: [{
+        recordKey: 'record-1',
+        source: { kind: 'genbank', resourceId: 'record-1-genbank' },
+        selector: null,
+        region: null,
+        presentation: {
+          label: null, subtitle: null, reverseComplement: false,
+          gridRow: null, gridColumn: null
+        }
+      }],
+      diagramOptions: {
+        configOverrides: {},
+        tracks: {
+          linearTrackSlots: ['features:features@side=overlay'],
+          linearTrackAxisIndex: 0
+        }
+      },
+      layout: {},
+      comparisons: [],
+      output: {
+        prefix: 'preflight', formats: ['interactive_svg'], overwrite: true,
+        interactiveMetadataPolicy: 'auto'
+      }
+    },
+    resources: {
+      'record-1-genbank': {
+        kind: 'genbank', name: 'record.gb', type: 'text/plain',
+        size: Buffer.byteLength(recordText), lastModified: 0,
+        encoding: 'base64', data: Buffer.from(recordText).toString('base64')
+      }
+    },
+    config: {
+      adv: {
+        linear_track_slots_enabled: true,
+        linear_track_slots_schema_version: 2,
+        linear_track_slots_axis_index: 1,
+        linear_track_slots: [
+          {
+            id: 'invalid_depth', renderer: 'depth', enabled: true,
+            side: 'above', z: 0, params: { track_index: 0.5 }
+          },
+          {
+            id: 'features', renderer: 'features', enabled: true,
+            side: 'overlay', z: 0, params: {}
+          }
+        ]
+      }
+    }
+  };
+  await input.setInputFiles({
+    name: 'invalid-stored-slot.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(invalidStoredSlotSession))
+  });
+  await expect.poll(() => dialogs.length).toBe(3);
+  expect(dialogs[2]).toContain('non-negative integer');
+  expect(await snapshot()).toEqual(before);
+
+  const invalidLegacyConfig = {
+    form: { multi_record_canvas: true },
+    adv: {
+      circular_track_slots: [{ id: 'features', renderer: 'features', params: {} }]
+    }
+  };
+  await input.setInputFiles({
+    name: 'invalid-legacy-config.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(invalidLegacyConfig))
+  });
+  await expect.poll(() => dialogs.length).toBe(4);
+  expect(dialogs[3]).toContain('Custom Track Slots use an obsolete schema.');
+  expect(await snapshot()).toEqual(before);
+});
+
+test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint', async ({ page }) => {
+  test.setTimeout(240000);
+  const genbank = readFileSync(hmmtDnaPath, 'utf8');
+
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate((genbankText) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
+      type: 'text/plain', lastModified: 1
+    }));
+    Object.assign(app.form, {
+      linear_track_layout: 'middle',
+      separate_strands: true,
+      show_gc: true,
+      show_skew: true,
+      show_depth: false,
+      show_labels_linear: 'none',
+      legend: 'none'
+    });
+    app.adv.resolve_overlaps = true;
+    app.setLinearTrackSlotsEnabled(false);
+  }, genbank);
+
+  const generated = await runDiagramWithDiagnostics(page);
+  expect(generated).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  await page.waitForFunction(() => {
+    const feature = document.querySelector(
+      '[data-gbdraw-feature-id][data-gbdraw-record-id="NC_012920.1"]'
+    );
+    const svg = feature?.ownerSVGElement;
+    return Boolean(svg?.getElementById('gc_content') && svg?.getElementById('gc_skew'));
+  });
+
+  const geometry = await page.evaluate(() => {
+    const featureSelector = '[data-gbdraw-feature-id][data-gbdraw-record-id="NC_012920.1"]';
+    const feature = document.querySelector(featureSelector);
+    const svg = feature?.ownerSVGElement;
+    if (!svg) throw new Error('Live HmmtDNA SVG was not found.');
+    const features = Array.from(svg.querySelectorAll(featureSelector));
+    const gc = svg.getElementById('gc_content');
+    const skew = svg.getElementById('gc_skew');
+    if (features.length === 0 || !gc || !skew) {
+      throw new Error('Expected live feature, GC content, and GC skew geometry.');
+    }
+
+    const clientBand = (elements) => {
+      const rects = elements.map((element) => element.getBoundingClientRect());
+      return {
+        top: Math.min(...rects.map((rect) => rect.top)),
+        bottom: Math.max(...rects.map((rect) => rect.bottom))
+      };
+    };
+    const bboxBand = (elements) => {
+      let top = Number.POSITIVE_INFINITY;
+      let bottom = Number.NEGATIVE_INFINITY;
+      elements.forEach((element) => {
+        const box = element.getBBox();
+        const matrix = element.getCTM();
+        if (!matrix) throw new Error(`Missing SVG transform for ${element.id || element.tagName}.`);
+        [
+          [box.x, box.y],
+          [box.x + box.width, box.y],
+          [box.x, box.y + box.height],
+          [box.x + box.width, box.y + box.height]
+        ].forEach(([x, y]) => {
+          const point = new DOMPoint(x, y).matrixTransform(matrix);
+          top = Math.min(top, point.y);
+          bottom = Math.max(bottom, point.y);
+        });
+      });
+      return { top, bottom };
+    };
+    const args = Array.isArray(window.__GBDRAW_APP__.lastRunInfo?.invocation?.args)
+      ? window.__GBDRAW_APP__.lastRunInfo.invocation.args
+      : [];
+    return {
+      client: {
+        features: clientBand(features),
+        gc: clientBand([gc]),
+        skew: clientBand([skew])
+      },
+      bbox: {
+        features: bboxBand(features),
+        gc: bboxBand([gc]),
+        skew: bboxBand([skew])
+      },
+      args
+    };
+  });
+
+  ['--separate_strands', '--resolve_overlaps', '--show_gc', '--show_skew'].forEach((arg) => {
+    expect(geometry.args).toContain(arg);
+  });
+  for (const bands of [geometry.client, geometry.bbox]) {
+    for (const band of Object.values(bands)) {
+      expect(Number.isFinite(band.top)).toBe(true);
+      expect(Number.isFinite(band.bottom)).toBe(true);
+      expect(band.bottom).toBeGreaterThan(band.top);
+    }
+    expect(bands.features.bottom).toBeLessThanOrEqual(bands.gc.top + 0.5);
+    expect(bands.gc.bottom).toBeLessThanOrEqual(bands.skew.top + 0.5);
+  }
 });
 
 test('Linear sparse diagonal depth generates and survives a session round trip', async ({ page }) => {
@@ -434,6 +826,137 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   ]);
 });
 
+test('Circular sparse diagonal depth generates and survives a session round trip', async ({ page }) => {
+  test.setTimeout(240000);
+  const genbankA = readFileSync(sparseGenbankAPath, 'utf8');
+  const genbankB = readFileSync(sparseGenbankBPath, 'utf8');
+  const makeDepthTsv = (recordId, length, depth) => [
+    'reference_name\tposition\tdepth',
+    ...Array.from(
+      { length: Math.ceil(length / 1000) },
+      (_, index) => `${recordId}\t${Math.min(length, index * 1000 + 1)}\t${depth + (index % 3)}`
+    ),
+    `${recordId}\t${length}\t${depth}`
+  ].join('\n');
+  const depthA = makeDepthTsv('BGC0000711', 30837, 10);
+  const depthB = makeDepthTsv('BGC0000713', 31892, 50);
+
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'circular';
+    app.cInputType = 'gb';
+    app.files.c_gb = new File([`${genbankAText}\n${genbankBText}`], 'combined.gbk', {
+      type: 'text/plain', lastModified: 1
+    });
+    app.files.c_depth = [
+      [new File([depthAText], 'sample-a.tsv', {
+        type: 'text/tab-separated-values', lastModified: 2
+      }), null],
+      [null, new File([depthBText], 'sample-b.tsv', {
+        type: 'text/tab-separated-values', lastModified: 3
+      })]
+    ];
+    Object.assign(app.form, {
+      multi_record_canvas: true,
+      show_depth: true,
+      suppress_gc: true,
+      suppress_skew: true,
+      labels_mode: 'none',
+      legend: 'none'
+    });
+    app.adv.depth_tracks.splice(
+      0,
+      app.adv.depth_tracks.length,
+      { label: 'Sample A', color: '#112233', large_tick_interval: null, small_tick_interval: null, tick_font_size: null },
+      { label: 'Sample B', color: '#445566', large_tick_interval: null, small_tick_interval: null, tick_font_size: null }
+    );
+    app.setCircularTrackSlotsEnabled(false);
+    app.sessionTitle = 'circular-sparse-depth-e2e';
+  }, {
+    genbankAText: genbankA,
+    genbankBText: genbankB,
+    depthAText: depthA,
+    depthBText: depthB
+  });
+
+  const firstRun = await runDiagramWithDiagnostics(page);
+  expect(firstRun).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.circularRecordList?.length === 2, null, {
+    timeout: 120000
+  });
+  const firstResult = await inspectCircularSparseDepthResult(page);
+  expect(firstResult.groups).toEqual({
+    depthARecord1: true,
+    depthARecord1Axis: true,
+    depthARecord2: false,
+    depthBRecord1: false,
+    depthBRecord2: true,
+    depthBRecord2Axis: true
+  });
+  expect(firstResult.depthAFills).toContain('#112233');
+  expect(firstResult.depthBFills).toContain('#445566');
+  expect(firstResult.depthArgs).toEqual([
+    ['sample-a.tsv', ''],
+    ['', 'sample-b.tsv']
+  ]);
+
+  const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const download = await downloadPromise;
+  const savedSessionPath = await download.path();
+  expect(savedSessionPath).toBeTruthy();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await page.waitForFunction(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.mode === 'circular' &&
+      app.circularRecordList?.length === 2 &&
+      Array.isArray(app.files?.c_depth) &&
+      app.files.c_depth.length === 2;
+  }, null, { timeout: 120000 });
+
+  const restoredState = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      sparseRows: app.files.c_depth.map((row) => row.map(Boolean)),
+      labels: app.adv.depth_tracks.map((track) => track.label),
+      colors: app.adv.depth_tracks.map((track) => track.color.toLowerCase())
+    };
+  });
+  expect(restoredState).toEqual({
+    sparseRows: [[true, false], [false, true]],
+    labels: ['Sample A', 'Sample B'],
+    colors: ['#112233', '#445566']
+  });
+
+  const secondRun = await runDiagramWithDiagnostics(page);
+  expect(secondRun).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  const secondResult = await inspectCircularSparseDepthResult(page);
+  expect(secondResult.groups).toEqual(firstResult.groups);
+  expect(secondResult.depthAFills).toContain('#112233');
+  expect(secondResult.depthBFills).toContain('#445566');
+  expect(secondResult.depthArgs).toEqual([
+    ['depth-track-files-1-1-sample-a.tsv', ''],
+    ['', 'depth-track-files-2-2-sample-b.tsv']
+  ]);
+});
+
 test('WSSV depth session removes stale circular depth metadata and slots', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
@@ -442,13 +965,16 @@ test('WSSV depth session removes stale circular depth metadata and slots', async
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
-    return Array.isArray(app?.files?.c_depth) && app.files.c_depth.length === 2;
+    if (!Array.isArray(app?.files?.c_depth)) return false;
+    const files = Array.isArray(app.files.c_depth[0]) ? app.files.c_depth[0] : app.files.c_depth;
+    return files.length === 2;
   });
 
   const loaded = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
+    const files = Array.isArray(app.files.c_depth[0]) ? app.files.c_depth[0] : app.files.c_depth;
     return {
-      names: app.files.c_depth.map((file) => file?.name || ''),
+      names: files.map((file) => file?.name || ''),
       labels: app.adv.depth_tracks.map((track) => track?.label || ''),
       slots: app.adv.circular_track_slots
         .filter((slot) => slot?.renderer === 'depth')
@@ -470,8 +996,9 @@ test('WSSV depth session removes stale circular depth metadata and slots', async
   await page.evaluate(() => window.__GBDRAW_APP__.removeCircularDepthTrack(1));
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
-    return Array.isArray(app.files.c_depth) &&
-      app.files.c_depth.length === 1 &&
+    const files = Array.isArray(app.files.c_depth?.[0]) ? app.files.c_depth[0] : app.files.c_depth;
+    return Array.isArray(files) &&
+      files.length === 1 &&
       app.adv.circular_track_slots
         .filter((slot) => slot?.renderer === 'depth' && slot.enabled !== false)
         .every((slot) => Number(slot.params?.track_index) < 1);
@@ -479,8 +1006,9 @@ test('WSSV depth session removes stale circular depth metadata and slots', async
 
   const afterRemoval = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
+    const files = Array.isArray(app.files.c_depth?.[0]) ? app.files.c_depth[0] : app.files.c_depth;
     return {
-      names: app.files.c_depth.map((file) => file?.name || ''),
+      names: files.map((file) => file?.name || ''),
       labels: app.adv.depth_tracks.map((track) => track?.label || ''),
       slots: app.adv.circular_track_slots
         .filter((slot) => slot?.renderer === 'depth')

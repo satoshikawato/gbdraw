@@ -128,6 +128,7 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     normalize_linear_track_slots_with_axis,
     parse_circular_track_slots,
     parse_linear_track_slots,
+    parse_nonnegative_integer,
 )
 
 DEFAULT_SELECTED_FEATURES = (
@@ -790,7 +791,10 @@ def _validate_depth_track_indices(
             continue
         raw_index = (slot.params or {}).get("track_index", 0)
         try:
-            track_index = int(raw_index or 0)
+            track_index = parse_nonnegative_integer(
+                raw_index,
+                field_name=f"Depth slot '{slot.id}' track_index",
+            )
         except (TypeError, ValueError) as exc:
             raise ValidationError(
                 f"Depth slot '{slot.id}' has invalid track_index={raw_index!r}."
@@ -2655,14 +2659,12 @@ def assemble_circular_diagram_from_record(
     if cfg.canvas.show_depth and depth_config is not None:
         if precomputed_depth_track_list:
             resolved_depth_tracks = precomputed_depth_track_list
-            resolved_depth_df = resolved_depth_tracks[0].df if resolved_depth_tracks else None
         elif _precomputed_depth_df is not None:
-            resolved_depth_df = _precomputed_depth_df
             resolved_depth_tracks = [
                 DepthTrackData(
                     id="depth",
                     label="Depth",
-                    df=resolved_depth_df,
+                    df=_precomputed_depth_df,
                     config=depth_config,
                 )
             ]
@@ -2674,20 +2676,13 @@ def assemble_circular_diagram_from_record(
                 depth_df_builder=build_depth_df,
                 window_steps=[(resolved_depth_window, resolved_depth_step)],
             )[0]
-            resolved_depth_df = resolved_depth_tracks[0].df if resolved_depth_tracks else None
         else:
-            resolved_depth_df = None
             resolved_depth_tracks = []
     else:
-        resolved_depth_df = None
         resolved_depth_tracks = []
     resolved_depth_by_index = index_depth_track_row(resolved_depth_tracks)
     resolved_depth_track_zero = resolved_depth_by_index.get(0)
-    resolved_depth_df = (
-        resolved_depth_track_zero.df
-        if resolved_depth_track_zero is not None
-        else resolved_depth_df if not resolved_depth_tracks else None
-    )
+    resolved_depth_df = resolved_depth_track_zero.df if resolved_depth_track_zero is not None else None
     _validate_depth_track_indices(
         parsed_circular_track_slots,
         depth_track_count_value=max(1, available_depth_track_count),

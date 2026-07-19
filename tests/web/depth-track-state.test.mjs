@@ -20,7 +20,10 @@ const {
   depthSlotTrackIndex,
   depthTrackMatrixWidth,
   depthTrackSessionWidth,
+  isRecordMajorDepthFileMatrix,
+  normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
+  representativeDepthFiles,
   referencedDepthTrackWidth,
   reindexDepthSlots,
   reconcileDepthTracksToFiles,
@@ -45,6 +48,24 @@ const depthSlots = (count) => Array.from({ length: count }, (_, index) => ({
     legend_label: ['24 hpi', '12 hpi', '6 hpi'][index]
   }
 }));
+
+{
+  const shared = file('shared.tsv');
+  const replicated = normalizeRecordMajorDepthFileRows([shared, null], 2);
+  assert.equal(isRecordMajorDepthFileMatrix([shared, null]), false);
+  assert.deepEqual(replicated, [[shared, null], [shared, null]]);
+  assert.notEqual(replicated[0], replicated[1], 'record rows must not share array identity');
+
+  const first = file('record-1-track-1.tsv');
+  const second = file('record-2-track-2.tsv');
+  const diagonal = normalizeRecordMajorDepthFileRows([
+    [first],
+    [null, second]
+  ], 2);
+  assert.equal(isRecordMajorDepthFileMatrix(diagonal), true);
+  assert.deepEqual(diagonal, [[first, null], [null, second]]);
+  assert.deepEqual(representativeDepthFiles(diagonal), [first, second]);
+}
 
 {
   const first = file('record-1-track-1.tsv');

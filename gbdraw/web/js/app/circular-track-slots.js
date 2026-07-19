@@ -8,7 +8,8 @@ import {
 import {
   dropInvalidManagedDepthSlots,
   isDefaultManagedDepthSlot,
-  uploadedDepthFileCount
+  parseDepthTrackIndexIdentity,
+  representativeDepthFiles
 } from './depth-track-state.js';
 import { resolveColorToHex } from './color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
@@ -337,7 +338,8 @@ const cloneParams = (params = {}) => {
 
 const circularDepthTrackCountForState = (state) => {
   if (!Boolean(state?.form?.show_depth)) return 0;
-  return uploadedDepthFileCount(state?.files?.c_depth);
+  const files = representativeDepthFiles(state?.files?.c_depth);
+  return files.some(Boolean) ? files.length : 0;
 };
 
 const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);
@@ -814,6 +816,17 @@ export const parseCircularTrackSlotSpec = (spec, index = 0, defaultNt = 'GC', pr
       else if (key === 'z') source.z = Number(rawValue);
       else source.params[key] = value;
     });
+  }
+
+  if (
+    source.enabled !== false &&
+    source.renderer === 'depth' &&
+    Object.prototype.hasOwnProperty.call(source.params, 'track_index')
+  ) {
+    source.params.track_index = parseDepthTrackIndexIdentity(
+      source.params.track_index,
+      `Circular Depth slot '${source.id || `#${index + 1}`}' track_index`
+    );
   }
 
   return normalizeCircularTrackSlot(source, index, defaultNt, preset);
@@ -1975,3 +1988,5 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackSlotUsesPresetGeometry
   };
 };
+
+export { SUPPORTED_RENDERERS as CIRCULAR_TRACK_RENDERERS };

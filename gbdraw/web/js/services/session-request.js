@@ -4,12 +4,23 @@ import { buildLabelOverrideTsv } from '../app/feature-editor/label-override-tabl
 import { serializeFeatureVisibilityRules } from '../app/feature-visibility.js';
 import {
   buildCircularTrackSlotSpec,
+  CIRCULAR_TRACK_RENDERERS,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
 import {
   buildLinearTrackSlotSpec,
-  linearTrackAxisIndexForEnabledSlots
+  LINEAR_TRACK_RENDERERS,
+  LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+  linearTrackAxisIndexForEnabledSlots,
+  migrateLinearTrackSlotsToCurrentSchema,
+  parseLinearTrackSlotSpecs
 } from '../app/linear-track-slots.js';
+import {
+  isRecordMajorDepthFileMatrix,
+  normalizeRecordMajorDepthFileRows,
+  parseDepthTrackIndexIdentity
+} from '../app/depth-track-state.js';
+import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 2;
@@ -28,6 +39,19 @@ const optionalNumber = (value) => {
 const optionalPositiveInteger = (value) => {
   const numeric = optionalNumber(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+};
+
+const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
+  for (let trackIndex = 0; trackIndex < logicalTrackCount; trackIndex += 1) {
+    const hasSource = depthRows.some((row) => (
+      Array.isArray(row) && Boolean(row[trackIndex]?.resourceId)
+    ));
+    if (!hasSource) {
+      throw new Error(
+        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
+      );
+    }
+  }
 };
 
 const textToBase64 = (text) => {
@@ -328,11 +352,20 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
   }
 };
 
-const buildDepthResources = ({ state, filesData, resources, diagramOptions }) => {
+const buildDepthResources = ({ state, filesData, resources, diagramOptions, recordCount }) => {
   const rows = state.mode.value === 'linear'
     ? (filesData.linearSeqs || []).map((seq) => Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : []))
-    : [Array.isArray(filesData.c_depth) ? filesData.c_depth : (filesData.c_depth ? [filesData.c_depth] : [])];
+    : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount);
   if (rows.every((row) => row.length === 0)) return;
+  if (
+    state.mode.value === 'circular' &&
+    isRecordMajorDepthFileMatrix(filesData.c_depth) &&
+    filesData.c_depth.length !== recordCount
+  ) {
+    throw new Error(
+      `Circular Depth matrix has ${filesData.c_depth.length} record rows; expected ${recordCount}.`
+    );
+  }
   diagramOptions.depthTrackFiles = rows.map((row, rowIndex) => row.map((entry, columnIndex) => {
     if (!entry) return null;
     const id = `depth-track-files-${rowIndex + 1}-${columnIndex + 1}`;
@@ -559,7 +592,7 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
   }
 
   addGeneratedTableResources(state, resources, diagramOptions);
-  buildDepthResources({ state, filesData, resources, diagramOptions });
+  buildDepthResources({ state, filesData, resources, diagramOptions, recordCount: records.length });
 
   return {
     renderRequest: {
@@ -621,7 +654,12 @@ const combineCircularGenbankResources = (resources, records) => {
   };
 };
 
-export const projectCanonicalSessionRequest = ({ renderRequest, resources, webFiles = {} }) => {
+export const projectCanonicalSessionRequest = ({
+  renderRequest,
+  resources,
+  webFiles = {},
+  linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION
+}) => {
   if (!renderRequest || ![1, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
   }
@@ -702,10 +740,20 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources, webFi
 
   const options = renderRequest.diagramOptions || {};
   const depthRows = Array.isArray(options.depthTrackFiles) ? options.depthTrackFiles : [];
-  if (renderRequest.mode === 'circular' && Array.isArray(depthRows[0])) {
-    const depth = depthRows[0]
-      .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null);
-    files.c_depth = depth.length > 1 ? depth : (depth[0] || null);
+  if (depthRows.length > 0) {
+    if (depthRows.length !== records.length || depthRows.some((row) => !Array.isArray(row))) {
+      throw new Error(
+        `Canonical ${renderRequest.mode === 'circular' ? 'Circular' : 'Linear'} Depth matrix must contain one row per record (${records.length}).`
+      );
+    }
+  }
+  if (renderRequest.mode === 'circular' && depthRows.length > 0) {
+    files.c_depth = normalizeRecordMajorDepthFileRows(
+      depthRows.map((row) => row.map((ref) => (
+        ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null
+      ))),
+      records.length
+    );
   }
   if (renderRequest.mode === 'linear') {
     depthRows.forEach((row, index) => {
@@ -742,6 +790,69 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources, webFi
   }
   const overrides = options.configOverrides || {};
   const tracks = options.tracks || {};
+  const projectedCircularTrackSlots = renderRequest.mode === 'circular'
+    ? parseCircularTrackSlotSpecs(
+        tracks.circularTrackSlots,
+        options.dinucleotide || 'GC',
+        overrides.track_type || 'tuckin'
+      )
+    : [];
+  const projectedLinearTrackSlots = renderRequest.mode === 'linear'
+    ? migrateLinearTrackSlotsToCurrentSchema(
+        parseLinearTrackSlotSpecs(tracks.linearTrackSlots),
+        linearTrackSlotSchemaVersion
+      )
+    : [];
+  const depthMetadataFields = [
+    options.depthTrackLabels,
+    options.depthTrackColors,
+    options.depthTrackHeights,
+    options.depthTrackLargeTickIntervals,
+    options.depthTrackSmallTickIntervals,
+    options.depthTrackTickFontSizes
+  ];
+  const referencedDepthTrackWidth = [
+    ...projectedCircularTrackSlots,
+    ...projectedLinearTrackSlots
+  ].reduce((width, slot) => {
+    if (slot?.renderer !== 'depth') return width;
+    const trackIndex = parseDepthTrackIndexIdentity(
+      slot?.params?.track_index ?? 0,
+      `Depth slot '${slot?.id || ''}' track_index`
+    );
+    return Math.max(width, trackIndex + 1);
+  }, 0);
+  const projectedDepthTrackCount = Math.max(
+    0,
+    ...depthRows.map((row) => Array.isArray(row) ? row.length : 0),
+    ...depthMetadataFields.map((values) => Array.isArray(values) ? values.length : 0),
+    referencedDepthTrackWidth
+  );
+  validateTrackSlotBindingInvariants(projectedCircularTrackSlots, {
+    modeLabel: 'Circular',
+    layoutKind: 'circular',
+    supportedRenderers: CIRCULAR_TRACK_RENDERERS,
+    supportedSides: ['inside', 'outside', 'overlay'],
+    anchorlessRenderers: ['ticks', 'spacer'],
+    depthTrackCount: projectedDepthTrackCount
+  });
+  validateTrackSlotBindingInvariants(projectedLinearTrackSlots, {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: LINEAR_TRACK_RENDERERS,
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer'],
+    depthTrackCount: projectedDepthTrackCount
+  });
+  validateProjectedDepthSources(depthRows, projectedDepthTrackCount);
+  const projectedDepthTracks = Array.from({ length: projectedDepthTrackCount }, (_, index) => ({
+    label: String(options.depthTrackLabels?.[index] ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
+    color: String(options.depthTrackColors?.[index] || (index === 0 ? overrides.depth_color : '') || '#4A90E2'),
+    height: optionalNumber(options.depthTrackHeights?.[index]),
+    large_tick_interval: optionalNumber(options.depthTrackLargeTickIntervals?.[index]),
+    small_tick_interval: optionalNumber(options.depthTrackSmallTickIntervals?.[index]),
+    tick_font_size: optionalNumber(options.depthTrackTickFontSizes?.[index])
+  }));
   const form = {
     prefix: renderRequest.output?.prefix || 'out',
     plot_title: options.plotTitle || '',
@@ -783,12 +894,32 @@ export const projectCanonicalSessionRequest = ({ renderRequest, resources, webFi
     multi_record_column_gap_ratio: renderRequest.layout?.multiRecordColumnGapRatio ?? 0.10,
     multi_record_row_gap_ratio: renderRequest.layout?.multiRecordRowGapRatio ?? 0.05,
     center_reserved_radius: tracks.centerReservedRadius ?? null,
+    resolve_overlaps: Boolean(overrides.resolve_overlaps),
+    feature_height: overrides.default_cds_height ?? null,
+    depth_color: overrides.depth_color || '#4A90E2',
+    depth_height: overrides.depth_height ?? null,
+    depth_min: overrides.depth_min ?? null,
+    depth_max: overrides.depth_max ?? null,
+    depth_normalize: Boolean(overrides.depth_normalize),
+    depth_show_axis: overrides.depth_show_axis !== false,
+    depth_show_ticks: overrides.depth_show_ticks !== false,
+    depth_tick_interval: overrides.depth_large_tick_interval ?? null,
+    depth_small_tick_interval: overrides.depth_small_tick_interval ?? null,
+    depth_tick_font_size: overrides.depth_tick_font_size ?? null,
+    depth_share_axis: Boolean(overrides.depth_share_axis),
+    depth_window_size: options.depthWindow ?? null,
+    depth_step_size: options.depthStep ?? null,
+    depth_tracks: projectedDepthTracks,
     circular_track_slots_enabled: renderRequest.mode === 'circular' && Array.isArray(tracks.circularTrackSlots),
     circular_track_slots_schema_version: 4,
     circular_track_slots_axis_index: tracks.circularTrackAxisIndex ?? null,
-    circular_track_slots: renderRequest.mode === 'circular'
-      ? parseCircularTrackSlotSpecs(tracks.circularTrackSlots, options.dinucleotide || 'GC', overrides.track_type || 'tuckin')
-      : [],
+    circular_track_slots: projectedCircularTrackSlots,
+    linear_track_slots_enabled: renderRequest.mode === 'linear' && Array.isArray(tracks.linearTrackSlots),
+    linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+    linear_track_slots_axis_index: renderRequest.mode === 'linear'
+      ? (tracks.linearTrackAxisIndex ?? null)
+      : null,
+    linear_track_slots: projectedLinearTrackSlots,
     multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((token) => {
       const split = String(token).lastIndexOf('@');
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };

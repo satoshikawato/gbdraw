@@ -14,6 +14,7 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from gbdraw.analysis.depth import depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
 from gbdraw.configurators import DepthConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.tracks.parsing import parse_nonnegative_integer
 
 
 @dataclass(frozen=True)
@@ -562,19 +563,49 @@ def build_depth_track_dataframes(
 def sync_depth_track_legend_entries(
     legend_table: dict,
     depth_tracks: Sequence[DepthTrackData] | None,
+    *,
+    slots: Sequence[object] | None = None,
 ) -> dict:
-    """Replace the singleton depth legend entry with depth-track-aware entries."""
+    """Replace the singleton Depth legend with logical-track-aware entries.
+
+    When ``slots`` is supplied, it is authoritative: only enabled Depth slots are
+    represented, in slot order, and their legend label overrides are honored.
+    """
 
     if not depth_tracks:
         return legend_table
     out = dict(legend_table)
     out.pop("Depth", None)
     track_count = depth_track_data_count([depth_tracks])
-    for track in depth_tracks:
-        label = str(
+    selected: list[tuple[DepthTrackData, object | None]]
+    if slots is None:
+        selected = [(track, None) for track in depth_tracks]
+    else:
+        tracks_by_index = index_depth_track_row(depth_tracks)
+        selected = []
+        for slot in slots:
+            if not getattr(slot, "enabled", True):
+                continue
+            if str(getattr(slot, "renderer", "")) != "depth":
+                continue
+            params = getattr(slot, "params", {}) or {}
+            track_index = parse_nonnegative_integer(
+                params.get("track_index", 0),
+                field_name=f"depth slot '{getattr(slot, 'id', '')}' track_index",
+            )
+            track = tracks_by_index.get(track_index)
+            if track is not None:
+                selected.append((track, slot))
+
+    for track, slot in selected:
+        fallback = str(
             track.label
             or ("Depth" if track_count == 1 else f"Depth {int(track.track_index) + 1}")
         )
+        params = getattr(slot, "params", {}) or {}
+        raw_label = params.get("legend_label", params.get("label"))
+        override = str(raw_label).strip() if raw_label is not None else ""
+        label = override or fallback
         unique_label = label
         suffix = 2
         while unique_label in out:

@@ -23,7 +23,21 @@ and rendering components remain available from `gbdraw.api` for integrations.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
 
-## Python/Web session version 32
+## Python/Web session version 33
+
+- Session version 33 updates Linear custom track geometry to schema v2. Feature
+  slot `height` now sets a minimum reservation and `spacing` sets clearance to
+  the adjacent outer track. New Python and Web sessions preserve these values in
+  canonical Linear slot lists and restore the slot order and axis position.
+- Version 32 sessions remain readable. Because feature-slot `height` and
+  `spacing` were no-ops in schema v1, migration removes only those two feature
+  values to preserve the old effective rendering. Numeric-track geometry,
+  renderer parameters, enabled state, side, order, and axis position are kept.
+  The Python typed session bridge applies the same compatibility rule before
+  decoding canonical requests.
+- The Web app now validates and migrates the complete session before replacing
+  live state. Invalid canonical data, slot geometry, or references reject the
+  import without clearing the current work.
 
 - Session version 32 stores materialized annotation sets, targets, styles, and annotation track bindings in the canonical request. Version 31 canonical sessions remain readable.
 
@@ -42,9 +56,40 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 
 Repeated `--depth_track` groups and the corresponding Python depth-track matrices can now omit a file for an individual record without changing the series identity. Use `''`, `-`, `none`, or `null` as a CLI placeholder when supplying one value per record. A group that is empty for every record remains invalid.
 
-For a missing record/series cell, gbdraw draws no depth area, quantitative axis, or ticks. It does not substitute another record's file or treat the missing cell as zero coverage. Labels, colors, heights, shared-axis ranges, legends, and custom-slot `track_index` values remain attached to the original logical series. Linear default and custom slots and Circular multi-record diagrams use the same sparse binding behavior, while the logical slot band remains reserved to keep records aligned.
+For a missing record/series cell, gbdraw draws no depth area, quantitative axis, or ticks. It does not substitute another record's file or treat the missing cell as zero coverage. Labels, colors, heights, shared-axis ranges, legends, and custom-slot `track_index` values remain attached to the original logical series. Linear default and custom slots and Circular multi-record diagrams use the same sparse binding behavior. In Linear mode, the per-record planner keeps the logical slot's reserve band even when there is no painted Depth geometry, so that cell does not compact or renumber its record's stack.
 
-The existing CLI, Python API, settings, and canonical session shapes are unchanged, and dense depth inputs retain their previous SVG geometry. This correction does not introduce the separate Linear occupancy-planner redesign or otherwise change general Linear track-packing geometry.
+Web canonical requests and sessions keep Depth files as a record-major matrix in
+both Linear and Circular mode: one row per displayed record and one column per
+logical series. `null` cells and column order survive save/load. In a Linear
+custom stack, enabled Depth slots are authoritative for the legend; entries
+follow slot order, honor `legend_label`, and omit unselected logical series.
+
+The Depth CLI, Python API matrix, settings, and canonical resource shapes are unchanged. Dense depth inputs retain their logical binding and data semantics.
+
+### Linear tracks use record-specific measured occupancy
+
+Linear feature lanes, labels, axes, numeric tracks, Depth tracks, annotations,
+and spacers now contribute measured paint and reserve bands to one per-record
+vertical plan. `--resolve_overlaps` can add feature lanes without colliding with
+GC, skew, or Depth tracks; only the records that need more room are expanded.
+Default tracks and custom slots use the same packer.
+
+Feature-slot `height` is now a minimum reservation: the effective band is
+`max(measured, configured)`. It does not change glyph thickness, which remains
+controlled by `--feature_height`. Feature-slot `spacing` is clearance to the
+adjacent outer track. Missing Depth data reserves its logical band but produces
+no paint, axis, or ticks.
+
+Comparison links now begin and end at the outer edges of the records' measured
+exclusion bands. `--comparison_height` remains a minimum corridor; record
+spacing expands around taller occupancy while keeping links outside the track
+stacks. Geometry metadata schema v2 reports record-specific paint, reserve,
+comparison-exclusion, and canvas bands.
+
+In the web app, the Custom Track Slots caret controls only whether the editor is
+open. **Use custom stack** controls rendering, disabling and re-enabling it
+preserves the stack, and **Reset** is the only action that rebuilds the stack
+from the simple controls.
 
 ### Interactive SVG search remains responsive on large diagrams
 
@@ -154,7 +199,7 @@ New drawing code should prefer the top-level interface described above.
 
 ## Session API boundary
 
-The public session bridge accepts version 31 and 32 canonical documents.
+The public session bridge accepts version 31, 32, and 33 canonical documents.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.

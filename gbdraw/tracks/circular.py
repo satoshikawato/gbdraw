@@ -8,8 +8,10 @@ from .parsing import (
     CircularTrackSlotParseError,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
+    parse_nonnegative_integer,
     split_kv_list,
     strip_inline_comment as _strip_inline_comment,
+    validate_overlay_annotation_anchors,
 )
 from .scalars import ScalarSpec
 from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
@@ -343,7 +345,7 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
         outer_gap_px=outer_gap_px,
     )
     try:
-        normalize_circular_track_slots([slot])
+        _normalize_circular_track_slots([slot], validate_anchor_references=False)
     except Exception as exc:
         raise CircularTrackSlotParseError(str(exc), original) from exc
     return slot
@@ -362,7 +364,7 @@ def parse_circular_track_slots(specs: Sequence[str | CircularTrackSlot]) -> list
                 params = _normalize_dinucleotide_skew_color_params(params)
             slot = replace(item, renderer=renderer, params=params)
             try:
-                normalize_circular_track_slots([slot])
+                _normalize_circular_track_slots([slot], validate_anchor_references=False)
             except Exception as exc:
                 raise CircularTrackSlotParseError(str(exc), str(slot.id)) from exc
         else:
@@ -495,8 +497,12 @@ def _normalized_tick_params(params: dict[str, Any], side: str) -> dict[str, Any]
     return params
 
 
-def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[NormalizedCircularTrackSlot]:
-    """Validate and normalize slots for the circular radial resolver."""
+def _normalize_circular_track_slots(
+    slots: Sequence[CircularTrackSlot],
+    *,
+    validate_anchor_references: bool,
+) -> list[NormalizedCircularTrackSlot]:
+    """Normalize slots, optionally deferring aggregate anchor validation."""
 
     normalized: list[NormalizedCircularTrackSlot] = []
     seen: set[str] = set()
@@ -545,6 +551,17 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
+            elif renderer == "depth" and "track_index" in params:
+                raw_track_index = params["track_index"]
+                try:
+                    params["track_index"] = parse_nonnegative_integer(
+                        raw_track_index,
+                        field_name=f"depth slot '{slot.id}' track_index",
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"depth slot '{slot.id}' has invalid track_index={raw_track_index!r}"
+                    ) from exc
         elif renderer == "spacer":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
         elif renderer == "annotations":
@@ -597,22 +614,20 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
                 annotation=annotation_params,
             )
         )
-    by_id = {slot.id: slot for slot in normalized}
-    for slot in normalized:
-        if slot.renderer != "annotations" or slot.side != "overlay" or slot.annotation is None:
-            continue
-        anchor = by_id.get(str(slot.annotation.anchor_slot))
-        if anchor is None and len(slots) == 1:
-            continue
-        if anchor is None:
-            raise ValueError(f"annotation slot '{slot.id}' references unknown anchor_slot={slot.annotation.anchor_slot!r}")
-        if anchor.renderer in {"ticks", "spacer"}:
-            raise ValueError(f"annotation slot '{slot.id}' anchor '{anchor.id}' has no drawable band")
-        if slot.annotation.layer == "underlay" and slot.z >= anchor.z:
-            raise ValueError(f"annotation underlay slot '{slot.id}' must have z less than anchor '{anchor.id}'")
-        if slot.annotation.layer == "foreground" and slot.z <= anchor.z:
-            raise ValueError(f"annotation foreground slot '{slot.id}' must have z greater than anchor '{anchor.id}'")
+    if validate_anchor_references:
+        validate_overlay_annotation_anchors(
+            normalized,
+            anchorless_renderers={"ticks", "spacer"},
+        )
     return normalized
+
+
+def normalize_circular_track_slots(
+    slots: Sequence[CircularTrackSlot],
+) -> list[NormalizedCircularTrackSlot]:
+    """Validate and normalize a complete circular track-slot list."""
+
+    return _normalize_circular_track_slots(slots, validate_anchor_references=True)
 
 
 def normalize_circular_track_slots_with_axis(

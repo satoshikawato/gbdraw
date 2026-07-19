@@ -24,6 +24,7 @@ from ...features.objects import FeatureObject  # type: ignore[reportMissingImpor
 from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
+from ...layout.linear import LinearFeatureLaneGeometry
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
 
 
@@ -158,6 +159,7 @@ def _precalculate_label_dimensions(
     precomputed_feature_dicts: list[FeatureDict] | None = None,
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
     sequence_widths: Sequence[float] | None = None,
+    feature_lane_geometries: Sequence[LinearFeatureLaneGeometry] | None = None,
 ) -> tuple[float, list[list[dict]], list[float]]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
 
@@ -236,6 +238,11 @@ def _precalculate_label_dimensions(
             label_font_size=label_font_size,
             orthogroup_label_member_ids=member_ids,
             orthogroup_label_top_member_ids=top_member_ids,
+            feature_lane_geometry=(
+                feature_lane_geometries[i]
+                if feature_lane_geometries is not None
+                else None
+            ),
         )
         all_labels_by_record.append(label_list)
 

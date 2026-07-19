@@ -107,7 +107,7 @@ gbdraw linear \
   -f svg
 ```
 
-This writes `tutorial-6-sparse-depth-tracks.svg`. The first repeated group is logical track 0 and has data only for AP027131.1; the second is logical track 1 and has data only for AP027132.1. A missing cell draws no depth area, axis, or ticks for that record. It is not converted to zero coverage, and the track band remains reserved so record stacks stay aligned. Every `--depth_track` group must contain at least one file.
+This writes `tutorial-6-sparse-depth-tracks.svg`. The first repeated group is logical track 0 and has data only for AP027131.1; the second is logical track 1 and has data only for AP027132.1. A missing cell draws no depth area, axis, or ticks for that record. It is not converted to zero coverage. The Linear planner measures each record separately but retains the missing logical slot's reserved band, so that cell does not compact or renumber its record's stack. Every `--depth_track` group must contain at least one file.
 
 For multiple samples, repeat `--depth_track`, and give each group a matching `--depth_track_label` and `--depth_track_color`. Within every group, list files or empty placeholders in displayed-record order. Do not substitute an unrelated file for a missing measurement.
 

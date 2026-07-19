@@ -61,6 +61,7 @@ from ...tracks import (  # type: ignore[reportMissingImports]
     ScalarSpec,
     default_circular_track_slots,
     normalize_circular_track_slots,
+    parse_nonnegative_integer,
 )
 from ...annotations import (
     AnnotationOptions,
@@ -1258,10 +1259,10 @@ def _sync_legend_table_for_circular_slots(
         renderer = str(slot.renderer)
         if renderer == "depth":
             if depth_by_index:
-                try:
-                    track_index = int((slot.params or {}).get("track_index", 0) or 0)
-                except (TypeError, ValueError):
-                    track_index = 0
+                track_index = parse_nonnegative_integer(
+                    (slot.params or {}).get("track_index", 0),
+                    field_name=f"depth slot '{slot.id}' track_index",
+                )
                 track = depth_by_index.get(track_index)
                 if track is None:
                     continue
@@ -1513,10 +1514,10 @@ def _draw_resolved_circular_slot(
         selected_depth_df = depth_df
         selected_depth_config = depth_config
         if depth_tracks_by_index is not None:
-            try:
-                track_index = int(resolved_slot.params.get("track_index", 0) or 0)
-            except (TypeError, ValueError):
-                track_index = 0
+            track_index = parse_nonnegative_integer(
+                resolved_slot.params.get("track_index", 0),
+                field_name=f"depth slot '{resolved_slot.id}' track_index",
+            )
             depth_track = depth_tracks_by_index.get(track_index)
             if depth_track is None:
                 return canvas

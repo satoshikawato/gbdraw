@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+
+from gbdraw.exceptions import ValidationError
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.features.tracks import arrange_feature_tracks, get_feature_ends
 
@@ -144,3 +147,56 @@ def test_arrange_feature_tracks_indexes_origin_spanning_features_conservatively(
     assert arranged["origin"].feature_track_id == 0
     assert arranged["middle"].feature_track_id == 0
     assert arranged["left"].feature_track_id == 1
+
+
+def test_arrange_feature_tracks_treats_touching_intervals_as_non_overlapping() -> None:
+    feature_dict = {
+        "left": _make_feature("left", "positive", [(100, 200)]),
+        "right": _make_feature("right", "positive", [(200, 300)]),
+    }
+
+    arranged = arrange_feature_tracks(
+        feature_dict=feature_dict,
+        separate_strands=False,
+        resolve_overlaps=True,
+        genome_length=1000,
+    )
+
+    assert arranged["left"].feature_track_id == 0
+    assert arranged["right"].feature_track_id == 0
+
+
+def test_arrange_feature_tracks_origin_span_can_touch_neighbor_without_overlap() -> None:
+    feature_dict = {
+        "origin": _make_feature("origin", "positive", [(990, 1000), (1, 20)]),
+        "neighbor": _make_feature("neighbor", "positive", [(20, 30)]),
+    }
+
+    arranged = arrange_feature_tracks(
+        feature_dict=feature_dict,
+        separate_strands=False,
+        resolve_overlaps=True,
+        genome_length=1000,
+    )
+
+    assert arranged["origin"].feature_track_id == 0
+    assert arranged["neighbor"].feature_track_id == 0
+
+
+def test_arrange_feature_tracks_raises_when_all_feature_lanes_are_occupied() -> None:
+    feature_dict = {
+        f"feature_{index:03d}": _make_feature(
+            f"feature_{index:03d}",
+            "positive",
+            [(100, 200)],
+        )
+        for index in range(101)
+    }
+
+    with pytest.raises(ValidationError, match=r"all 100 feature lanes are occupied"):
+        arrange_feature_tracks(
+            feature_dict=feature_dict,
+            separate_strands=False,
+            resolve_overlaps=True,
+            genome_length=1000,
+        )

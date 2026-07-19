@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 from Bio import SeqIO
@@ -339,6 +340,40 @@ def test_parse_circular_track_slot_with_duplicate_renderer_params() -> None:
     assert slot.radius is not None
     assert slot.radius.resolve(390) == pytest.approx(163.8)
     assert slot.z == 7
+
+
+@pytest.mark.parametrize("track_index", [True, 1.9, -0.2, "1.9", "not-an-integer"])
+def test_normalize_circular_depth_track_index_rejects_non_integer_identity(
+    track_index: object,
+) -> None:
+    with pytest.raises(ValueError, match="invalid track_index"):
+        normalize_circular_track_slots(
+            [
+                CircularTrackSlot(
+                    id="depth",
+                    renderer="depth",
+                    params={"track_index": track_index},
+                )
+            ]
+        )
+
+
+@pytest.mark.parametrize("track_index", [2, "2", np.int64(2)])
+def test_normalize_circular_depth_track_index_accepts_integer_identity(
+    track_index: object,
+) -> None:
+    normalized = normalize_circular_track_slots(
+        [
+            CircularTrackSlot(
+                id="depth",
+                renderer="depth",
+                params={"track_index": track_index},
+            )
+        ]
+    )
+
+    assert normalized[0].params["track_index"] == 2
+    assert isinstance(normalized[0].params["track_index"], int)
 
 
 def test_parse_circular_track_slot_canonicalizes_skew_color_aliases() -> None:

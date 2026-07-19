@@ -304,6 +304,43 @@ def test_multi_record_layout_rejects_normalize_length() -> None:
         )
 
 
+@pytest.mark.linear
+def test_final_width_label_band_recomputes_first_row_axis_y() -> None:
+    records = _records(3000, 3000)
+    records[0].features = [
+        SeqFeature(
+            FeatureLocation(start, start + 12, strand=1),
+            type="CDS",
+            qualifiers={"product": [f"Long final-width label number {index:02d}"]},
+        )
+        for index, start in enumerate(range(80, 2640, 80), start=1)
+    ]
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict["canvas"]["show_gc"] = False
+    config_dict["canvas"]["show_skew"] = False
+    config_dict["canvas"]["show_labels"] = "all"
+    config_dict["labels"]["rendering"] = "external_only"
+    definition_cfg = config_dict["objects"]["definition"]["linear"]
+    definition_cfg["show_replicon"] = False
+    definition_cfg["show_accession"] = False
+    definition_cfg["show_length"] = False
+
+    drawing = assemble_linear_diagram_from_records(
+        records,
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=("#1@1", "#2@1"),
+        ),
+        selected_features_set=["CDS"],
+        legend="none",
+        config_dict=config_dict,
+    )
+    first_record = drawing._gbdraw_track_slot_geometry["records"][0]
+    canvas_band = first_record["canvasBand"]
+
+    assert canvas_band["topPx"] < -100.0
+    assert canvas_band["absoluteTopPx"] >= -1e-6
+
+
 def test_typed_request_preserves_stable_record_keys_in_svg_metadata() -> None:
     records = _records(100, 100)
     request = LinearDiagramRequest(

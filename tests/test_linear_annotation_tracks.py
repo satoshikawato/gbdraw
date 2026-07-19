@@ -1,5 +1,6 @@
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+import pytest
 
 from gbdraw.api import (
     AnnotationOptions,
@@ -10,9 +11,16 @@ from gbdraw.api import (
     RegionAnnotation,
     RegionAnnotationStyle,
     TrackOptions,
+    LinearMultiRecordOptions,
+    assemble_linear_diagram_from_records,
     build_linear_diagram,
+    parse_record_selector,
 )
-from gbdraw.tracks import LinearTrackSlot, parse_linear_track_slot
+from gbdraw.tracks import (
+    LinearTrackSlot,
+    normalize_linear_track_slots,
+    parse_linear_track_slot,
+)
 
 
 def test_linear_annotation_renderer_parses_typed_params() -> None:
@@ -48,10 +56,48 @@ def test_linear_annotation_overlay_requires_anchor_and_consistent_z() -> None:
         params={"set_id": "s", "anchor_slot": "features", "layer": "foreground"},
     )
     feature = LinearTrackSlot("features", "features", side="overlay", z=0)
-    from gbdraw.tracks import normalize_linear_track_slots
-
     normalized = normalize_linear_track_slots([feature, annotation])
+
+    assert normalized[0].side == "overlay"
+    assert normalized[0].reserve is True
     assert normalized[1].annotation is not None
+
+
+def test_linear_annotation_overlay_rejects_unknown_anchor_in_complete_list() -> None:
+    annotation = LinearTrackSlot(
+        "a",
+        "annotations",
+        side="overlay",
+        z=1,
+        params={"set_id": "s", "anchor_slot": "missing", "layer": "foreground"},
+    )
+
+    with pytest.raises(ValueError, match="unknown anchor_slot='missing'"):
+        normalize_linear_track_slots([annotation])
+
+
+def test_linear_annotation_overlay_rejects_annotation_anchor() -> None:
+    anchor = LinearTrackSlot(
+        "base_notes",
+        "annotations",
+        side="above",
+        z=0,
+        params={"set_id": "base"},
+    )
+    annotation = LinearTrackSlot(
+        "overlay_notes",
+        "annotations",
+        side="overlay",
+        z=1,
+        params={
+            "set_id": "overlay",
+            "anchor_slot": "base_notes",
+            "layer": "foreground",
+        },
+    )
+
+    with pytest.raises(ValueError, match="cannot use annotation slot 'base_notes' as anchor"):
+        normalize_linear_track_slots([anchor, annotation])
 
 
 def test_linear_annotation_clip_policy_creates_clip_path() -> None:
@@ -99,3 +145,50 @@ def test_annotation_hatch_is_used_in_shared_legend_preview() -> None:
     svg = drawing.tostring()
     assert 'data-legend-key="Reviewed region"' in svg
     assert 'fill="url(#gbdraw-hatch-' in svg
+
+
+@pytest.mark.linear
+def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
+    records = [
+        SeqRecord(Seq("A" * 1000), id="r1", name="r1"),
+        SeqRecord(Seq("A" * 1000), id="r2", name="r2"),
+    ]
+    annotations = AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (
+                    RegionAnnotation(
+                        "left",
+                        CoordinateSpan(parse_record_selector("#1"), 100, 140),
+                        label="Extremely long annotation label at final record width",
+                    ),
+                    RegionAnnotation(
+                        "right",
+                        CoordinateSpan(parse_record_selector("#1"), 300, 340),
+                        label="Extremely long annotation label at final record width",
+                    ),
+                ),
+            ),
+        )
+    )
+
+    drawing = assemble_linear_diagram_from_records(
+        records,
+        annotation_options=annotations,
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=("#1@1", "#2@1"),
+        ),
+        legend="none",
+        config_overrides={
+            "show_labels": False,
+            "show_gc": False,
+            "show_skew": False,
+        },
+    )
+    slots = {
+        slot["slotId"]: slot
+        for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert slots["annotations_1"]["heightPx"] == pytest.approx(35.0)

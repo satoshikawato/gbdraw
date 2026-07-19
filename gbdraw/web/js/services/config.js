@@ -5,6 +5,7 @@ import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import {
   applyCircularTrackOrderPlacements,
+  CIRCULAR_TRACK_RENDERERS,
   clampCircularTrackAxisIndex,
   inferLegacyAxisIndexFromFeature,
   normalizeCircularTrackSlots
@@ -12,6 +13,10 @@ import {
 import {
   applyLinearTrackOrderPlacements,
   clampLinearTrackAxisIndex,
+  LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+  LINEAR_TRACK_RENDERERS,
+  LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+  migrateLinearTrackSlotsToCurrentSchema,
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
 } from '../app/linear-track-slots.js';
@@ -22,9 +27,10 @@ import {
   dropInvalidManagedDepthSlots,
   padDepthFileSlots,
   reconcileDepthTracksToFiles,
-  syncDepthSlotLabels,
-  uploadedDepthFileCount
+  representativeDepthFiles,
+  syncDepthSlotLabels
 } from '../app/depth-track-state.js';
+import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import {
   DEPTH_FILE_ENCODING,
   decodeDepthText,
@@ -62,14 +68,14 @@ import { normalizeAnnotationSets } from '../app/annotations/state.js';
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 32;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, 31, SESSION_VERSION]);
+const SESSION_VERSION = 33;
+const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
+const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, 31, 32, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
 const LOSAT_DERIVED_CACHE_SCHEMA = 1;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
-const LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1;
 const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
   'gapAfter',
   'gap_after',
@@ -380,7 +386,7 @@ const findObsoleteCircularTrackSlotShape = (slots) => {
   return null;
 };
 
-const validateImportedCircularTrackSlots = (configData = {}) => {
+const validateImportedCircularTrackSlots = (configData = {}, { depthTrackCount = null } = {}) => {
   const adv = configData && typeof configData === 'object' ? configData.adv : null;
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
   if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return;
@@ -400,9 +406,17 @@ const validateImportedCircularTrackSlots = (configData = {}) => {
       `Custom Track Slots use obsolete field '${obsoletePath}'. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.`
     );
   }
+  validateTrackSlotBindingInvariants(adv.circular_track_slots, {
+    modeLabel: 'Circular',
+    layoutKind: 'circular',
+    supportedRenderers: CIRCULAR_TRACK_RENDERERS,
+    supportedSides: ['inside', 'outside', 'overlay'],
+    anchorlessRenderers: ['ticks', 'spacer'],
+    depthTrackCount
+  });
 };
 
-const validateImportedLinearTrackSlots = (configData = {}) => {
+const validateImportedLinearTrackSlots = (configData = {}, { depthTrackCount = null } = {}) => {
   const adv = configData && typeof configData === 'object' ? configData.adv : null;
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
   if (!Object.prototype.hasOwnProperty.call(adv, 'linear_track_slots')) return;
@@ -415,6 +429,64 @@ const validateImportedLinearTrackSlots = (configData = {}) => {
   if (!Array.isArray(adv.linear_track_slots)) {
     throw new Error('Custom Track Slots must be an array.');
   }
+  validateTrackSlotBindingInvariants(adv.linear_track_slots, {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: LINEAR_TRACK_RENDERERS,
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer'],
+    depthTrackCount
+  });
+};
+
+const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion = null) => {
+  const adv = configData && typeof configData === 'object' ? configData.adv : null;
+  if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return configData;
+  if (!Object.prototype.hasOwnProperty.call(adv, 'linear_track_slots')) return configData;
+  if (!Array.isArray(adv.linear_track_slots)) {
+    throw new Error('Custom Track Slots must be an array.');
+  }
+
+  const hasStoredSchemaVersion = Object.prototype.hasOwnProperty.call(
+    adv,
+    'linear_track_slots_schema_version'
+  );
+  const storedSchemaVersion = adv.linear_track_slots_schema_version;
+  if (
+    hasStoredSchemaVersion &&
+    (
+      !Number.isInteger(storedSchemaVersion) ||
+      ![LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_SLOT_SCHEMA_VERSION].includes(storedSchemaVersion)
+    )
+  ) {
+    throw new Error(
+      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`
+    );
+  }
+  const sessionUsesLegacySemantics = (
+    Number.isInteger(sourceSessionVersion) &&
+    sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
+  );
+  const sourceSchemaVersion = sessionUsesLegacySemantics
+    ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
+    : storedSchemaVersion;
+  if (![LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_SLOT_SCHEMA_VERSION].includes(sourceSchemaVersion)) {
+    throw new Error(
+      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`
+    );
+  }
+
+  return {
+    ...configData,
+    adv: {
+      ...adv,
+      linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+      linear_track_slots: migrateLinearTrackSlotsToCurrentSchema(
+        adv.linear_track_slots,
+        sourceSchemaVersion
+      )
+    }
+  };
 };
 
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
@@ -792,6 +864,12 @@ const normalizeSessionData = (data) => {
   };
 };
 
+const migrateSessionDataToCurrent = (data, sourceSessionVersion) => ({
+  ...data,
+  version: SESSION_VERSION,
+  config: migrateImportedLinearTrackSlots(data.config, sourceSessionVersion)
+});
+
 const LEGACY_CONFIG_KEYS = new Set([
   'form',
   'adv',
@@ -815,10 +893,11 @@ const isLegacyConfigPayload = (data) =>
   Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
 
 const applyLegacyConfigPayload = (data) => {
-  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.form);
-  validateImportedCircularTrackSlots(data);
-  validateImportedLinearTrackSlots(data);
-  applyConfigData(data);
+  const migrated = migrateImportedLinearTrackSlots(data);
+  validateImportedCircularTrackSlots(migrated);
+  validateImportedLinearTrackSlots(migrated);
+  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(migrated.form);
+  applyConfigData(migrated);
   restorePaletteStateAfterConfigImport();
 };
 
@@ -844,6 +923,48 @@ const mergeStoredConfigWithCanonicalProjection = (projectedConfig, storedConfig)
     },
     annotationSets: projectedConfig.annotationSets
   };
+};
+
+const preflightSessionImport = (rawData) => {
+  const sourceSessionVersion = rawData.version;
+  const data = migrateSessionDataToCurrent(
+    normalizeSessionData(rawData),
+    sourceSessionVersion
+  );
+  const canonicalProjection = sourceSessionVersion >= 31
+    ? projectCanonicalSessionRequest({
+        renderRequest: data.renderRequest,
+        resources: data.resources,
+        webFiles: data.webFiles,
+        linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
+          ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
+          : LINEAR_TRACK_SLOT_SCHEMA_VERSION
+      })
+    : null;
+  const restoredConfig = canonicalProjection
+    ? mergeStoredConfigWithCanonicalProjection(canonicalProjection.config, data.config)
+    : data.config;
+  if (!canonicalProjection && restoredConfig) {
+    hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
+  }
+  if (restoredConfig) {
+    const projectedDepthTrackCount = Array.isArray(canonicalProjection?.config?.adv?.depth_tracks)
+      ? canonicalProjection.config.adv.depth_tracks.length
+      : null;
+    validateImportedCircularTrackSlots(restoredConfig, {
+      depthTrackCount: canonicalProjection?.mode === 'circular' &&
+        restoredConfig.adv?.circular_track_slots_enabled
+        ? projectedDepthTrackCount
+        : null
+    });
+    validateImportedLinearTrackSlots(restoredConfig, {
+      depthTrackCount: canonicalProjection?.mode === 'linear' &&
+        restoredConfig.adv?.linear_track_slots_enabled
+        ? projectedDepthTrackCount
+        : null
+    });
+  }
+  return { data, canonicalProjection, restoredConfig };
 };
 
 const syncActiveCircularLayoutCache = () => {
@@ -1456,7 +1577,7 @@ const serializeDepthFile = async (file) => {
 
 const fileSizeOf = (fileOrFiles) => (
   Array.isArray(fileOrFiles)
-    ? fileOrFiles.reduce((sum, file) => sum + (file?.size || 0), 0)
+    ? fileOrFiles.reduce((sum, file) => sum + fileSizeOf(file), 0)
     : (fileOrFiles?.size || 0)
 );
 
@@ -1901,7 +2022,8 @@ const applyFiles = (filesData) => {
 };
 
 const reconcileDepthTrackStateAfterSessionFiles = () => {
-  const circularDepthCount = uploadedDepthFileCount(state.files.c_depth);
+  const circularDepthFiles = representativeDepthFiles(state.files.c_depth);
+  const circularDepthCount = circularDepthFiles.some(Boolean) ? circularDepthFiles.length : 0;
   const linearRows = state.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
   const linearDepthCount = state.mode.value === 'linear'
     ? depthTrackSessionWidth({
@@ -1931,7 +2053,7 @@ const reconcileDepthTrackStateAfterSessionFiles = () => {
     }
   } else {
     normalizedTracks = reconcileDepthTracksToFiles({
-      files: depthFileSlotsFromValue(state.files.c_depth).filter(Boolean),
+      files: circularDepthFiles,
       depthTracks: state.adv.depth_tracks,
       targetCount: Math.max(1, circularDepthCount),
       defaults
@@ -2620,16 +2742,10 @@ export const importSession = async (e, options = {}) => {
       return { status: 'legacy' };
     }
 
-    data = normalizeSessionData(data);
+    const preflight = preflightSessionImport(data);
+    data = preflight.data;
+    const { canonicalProjection, restoredConfig } = preflight;
     resetSessionBaseline();
-
-    const canonicalProjection = data.version === SESSION_VERSION
-      ? projectCanonicalSessionRequest({
-          renderRequest: data.renderRequest,
-          resources: data.resources,
-          webFiles: data.webFiles
-        })
-      : null;
     const ui = {
       ...(data.ui || {}),
       ...(canonicalProjection ? { mode: canonicalProjection.mode } : {})
@@ -2674,23 +2790,11 @@ export const importSession = async (e, options = {}) => {
       ? normalizeCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition)
       : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
 
-    if (canonicalProjection) {
-      const restoredConfig = mergeStoredConfigWithCanonicalProjection(
-        canonicalProjection.config,
-        data.config
-      );
+    if (restoredConfig) {
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
         restoredConfig.form
       );
-      validateImportedCircularTrackSlots(restoredConfig);
-      validateImportedLinearTrackSlots(restoredConfig);
       applyConfigData(restoredConfig);
-    } else if (data.config) {
-      hydrateMissingMultiRecordPositionsFromCliInvocation(data.config, data.cliInvocation);
-      state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
-      validateImportedCircularTrackSlots(data.config);
-      validateImportedLinearTrackSlots(data.config);
-      applyConfigData(data.config);
     }
     restorePaletteStateFromSession(ui);
     restoreSessionCircularLayoutCaches(ui);
@@ -2782,7 +2886,11 @@ export const importSession = async (e, options = {}) => {
       state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
     }
 
-    await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
+    try {
+      await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
+    } catch (recoveryError) {
+      console.warn('Session loaded, but feature metadata recovery failed.', recoveryError);
+    }
 
     if (typeof options?.afterLoad === 'function') {
       try {
@@ -2796,7 +2904,6 @@ export const importSession = async (e, options = {}) => {
     return { status: 'ok', data };
   } catch (err) {
     console.error(err);
-    state.suppressCircularMultiRecordDefaults.value = false;
     const message = err?.message || 'Invalid JSON structure.';
     alert(`Failed to load session: ${message}`);
     return { status: 'error', error: err };

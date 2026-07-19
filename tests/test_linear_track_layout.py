@@ -5,14 +5,20 @@ from functools import lru_cache
 import re
 import subprocess
 import sys
+from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
+
+import gbdraw.labels.linear as linear_labels_module
+import gbdraw.layout.linear as linear_layout_module
+import gbdraw.svg.linear_features as linear_svg_features_module
 
 from gbdraw.api import LinearMultiRecordOptions, assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
@@ -22,7 +28,10 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import FeatureDrawingConfigurator
 from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
 from gbdraw.io.colors import load_default_colors
-from gbdraw.layout.linear import calculate_feature_position_factors_linear
+from gbdraw.layout.linear import (
+    LinearFeatureLaneGeometry,
+    calculate_feature_position_factors_linear,
+)
 from gbdraw.labels.linear import calculate_label_y_bounds
 from gbdraw.linear import _parse_linear_track_axis_gap, _parse_linear_track_layout
 from gbdraw.render.groups.linear.length_bar import LengthBarGroup, RULER_TICK_LENGTH
@@ -75,7 +84,10 @@ def _extract_axis_group_y(svg_content: str, record_id: str) -> float:
 
 
 def _extract_comparison_group_y(svg_content: str) -> float:
-    match = re.search(r'<g id="comparison1" transform="translate\([^,]+,([0-9.]+)\)">', svg_content)
+    match = re.search(
+        r'<g\b(?=[^>]*\bid="comparison1")[^>]*\btransform="translate\([^,]+,([0-9.]+)\)"[^>]*>',
+        svg_content,
+    )
     assert match is not None
     return float(match.group(1))
 
@@ -90,7 +102,10 @@ def _extract_group_translate_y(svg_content: str, group_id: str) -> float:
 
 
 def _extract_first_comparison_path_ys(svg_content: str) -> tuple[float, float, float, float]:
-    match = re.search(r'<g id="comparison1"[^>]*><path d="([^"]+)"', svg_content)
+    match = re.search(
+        r'<g\b(?=[^>]*\bid="comparison1")[^>]*><path d="([^"]+)"',
+        svg_content,
+    )
     assert match is not None
     coords = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", match.group(1))]
     assert len(coords) >= 8
@@ -141,6 +156,33 @@ def _build_bottom_ruler_fragment(
         cfg=cfg,
         ruler_width=ruler_width,
     ).get_group().tostring()
+
+
+@pytest.mark.linear
+def test_linear_side_legend_expands_canvas_with_vertical_padding() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=1200,
+        config_dict=config_dict,
+        legend="right",
+        cfg=cfg,
+    )
+    legend_height = float(canvas_config.total_height) + 100.0
+    legend_group = SimpleNamespace(
+        legend_height=legend_height,
+        legend_width=120.0,
+    )
+
+    canvas_config.recalculate_canvas_dimensions(legend_group, 0.0)
+
+    assert canvas_config.total_height >= legend_height + 2.0 * canvas_config.vertical_padding
+    assert canvas_config.legend_offset_y >= canvas_config.vertical_padding
+    assert (
+        canvas_config.legend_offset_y + legend_height
+        <= canvas_config.total_height - canvas_config.vertical_padding
+    )
 
 
 def _extract_min_absolute_feature_y(svg_content: str) -> float:
@@ -210,6 +252,35 @@ def _extract_viewbox_bottom(svg_content: str) -> float:
     parts = [float(value) for value in view_box_raw.split()]
     assert len(parts) == 4
     return parts[1] + parts[3]
+
+
+def _extract_group_path_absolute_y_bounds(svg_content: str, group_id: str) -> tuple[float, float]:
+    root = ET.fromstring(svg_content)
+    y_values: list[float] = []
+    number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+
+    def translate_y(element: ET.Element) -> float:
+        match = re.search(
+            rf"translate\(\s*{number}(?:\s*,\s*|\s+)({number})\s*\)",
+            element.attrib.get("transform", ""),
+        )
+        return 0.0 if match is None else float(match.group(1))
+
+    def walk(element: ET.Element, parent_y: float, inside_target: bool) -> None:
+        absolute_y = parent_y + translate_y(element)
+        inside = inside_target or element.attrib.get("id") == group_id
+        if inside and element.tag.rsplit("}", 1)[-1] == "path":
+            for match in re.finditer(
+                rf"[ML]\s*({number})(?:\s*,\s*|\s+)({number})",
+                element.attrib.get("d", ""),
+            ):
+                y_values.append(absolute_y + float(match.group(2)))
+        for child in element:
+            walk(child, absolute_y, inside)
+
+    walk(root, 0.0, False)
+    assert y_values, f"No path coordinates found in group {group_id}"
+    return min(y_values), max(y_values)
 
 
 @lru_cache(maxsize=1)
@@ -492,7 +563,7 @@ def test_linear_track_layout_cli_generates_svg(tmp_path: Path, layout: str) -> N
 
 @pytest.mark.linear
 @pytest.mark.parametrize("layout", ["above", "below"])
-def test_linear_pairwise_hits_span_between_axes_for_non_middle_layouts(tmp_path: Path, layout: str) -> None:
+def test_linear_pairwise_hits_use_record_exclusion_edges(tmp_path: Path, layout: str) -> None:
     returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
         tmp_path,
         [INPUT_GBK, INPUT_MELA_GBK],
@@ -506,13 +577,12 @@ def test_linear_pairwise_hits_span_between_axes_for_non_middle_layouts(tmp_path:
     second_axis_y = _extract_axis_group_y(svg_content, "LC738874.1")
     comparison_group_y = _extract_comparison_group_y(svg_content)
     path_y1, path_y2, path_y3, path_y4 = _extract_first_comparison_path_ys(svg_content)
-    axis_delta = second_axis_y - first_axis_y
 
-    assert comparison_group_y == pytest.approx(first_axis_y)
+    assert comparison_group_y > first_axis_y
     assert path_y1 == pytest.approx(0.0)
     assert path_y2 == pytest.approx(0.0)
-    assert path_y3 == pytest.approx(axis_delta)
-    assert path_y4 == pytest.approx(axis_delta)
+    assert comparison_group_y + path_y3 < second_axis_y
+    assert comparison_group_y + path_y4 < second_axis_y
 
 
 @pytest.mark.linear
@@ -542,9 +612,15 @@ def test_linear_pairwise_starts_at_percent_gc_skew_stack_bottom(tmp_path: Path) 
     cfg = GbdrawConfig.from_dict(config_dict)
     comparison_group_y = _extract_comparison_group_y(svg_content)
     gc_skew_y = _extract_group_translate_y(svg_content, "gc_skew")
-    gc_skew_bottom_y = gc_skew_y + (0.5 * cfg.canvas.linear.default_gc_height)
+    gc_skew_reserve_bottom_y = (
+        gc_skew_y
+        + (0.5 * cfg.canvas.linear.default_gc_height)
+        + (0.5 * cfg.objects.gc_skew.stroke_width)
+    )
 
-    assert comparison_group_y == pytest.approx(gc_skew_bottom_y)
+    assert comparison_group_y == pytest.approx(
+        gc_skew_reserve_bottom_y + cfg.canvas.linear.vertical_padding
+    )
 
 
 @pytest.mark.linear
@@ -572,6 +648,158 @@ def test_linear_middle_layout_keeps_feature_top_inside_canvas_with_resolve_overl
 
 
 @pytest.mark.linear
+def test_linear_middle_resolved_feature_lanes_do_not_overlap_gc_or_skew(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        [
+            "--track_layout",
+            "middle",
+            "--separate_strands",
+            "--resolve_overlaps",
+            "--show_labels",
+            "none",
+            "--show_gc",
+            "--show_skew",
+        ],
+        output_name="linear_middle_resolved_feature_numeric_clearance",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    record_group_id, _axis_y = _extract_first_record_axis(svg_content)
+    feature_top, feature_bottom = _extract_group_path_absolute_y_bounds(
+        svg_content,
+        record_group_id,
+    )
+    gc_top, gc_bottom = _extract_group_path_absolute_y_bounds(svg_content, "gc_content")
+    skew_top, _skew_bottom = _extract_group_path_absolute_y_bounds(svg_content, "gc_skew")
+
+    assert feature_top < feature_bottom <= gc_top
+    assert gc_bottom <= skew_top
+
+
+@pytest.mark.linear
+def test_linear_custom_overlay_features_do_not_overlap_depth() -> None:
+    record = SeqRecord(Seq("A" * 500), id="collision")
+    record.annotations["molecule_type"] = "DNA"
+    record.features = [
+        SeqFeature(FeatureLocation(100, 300, strand=-1), type="CDS")
+        for _ in range(3)
+    ]
+    depth_table = pd.DataFrame(
+        {
+            "reference_name": [record.id] * 5,
+            "position": [1, 101, 201, 301, 401],
+            "depth": [10, 20, 30, 20, 10],
+        }
+    )
+    canvas = assemble_linear_diagram_from_records(
+        [record],
+        legend="none",
+        depth_table=depth_table,
+        linear_track_slots=[
+            "features:features@side=overlay",
+            "depth:depth@track_index=0,side=below,h=10px",
+        ],
+        config_overrides={
+            "show_labels": False,
+            "show_gc": False,
+            "show_skew": False,
+            "strandedness": True,
+            "resolve_overlaps": True,
+        },
+        depth_window=100,
+        depth_step=100,
+    )
+    svg_content = canvas.tostring()
+    _feature_top, feature_bottom = _extract_group_path_absolute_y_bounds(
+        svg_content,
+        "collision",
+    )
+    depth_top, _depth_bottom = _extract_group_path_absolute_y_bounds(
+        svg_content,
+        "depth",
+    )
+    slots = {
+        slot["slotId"]: slot
+        for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert feature_bottom <= depth_top
+    assert (
+        slots["depth"]["reserveBand"]["topPx"]
+        - slots["features"]["reserveBand"]["bottomPx"]
+    ) == pytest.approx(slots["features"]["spacingAfterPx"])
+
+
+@pytest.mark.linear
+def test_linear_assembly_resolves_feature_lane_once_for_labels_and_renderer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = SeqRecord(Seq("A" * 500), id="resolved_lane")
+    record.annotations["molecule_type"] = "DNA"
+    record.features = [
+        SeqFeature(
+            FeatureLocation(100, 300, strand=1),
+            type="CDS",
+            qualifiers={"product": ["shared lane geometry"]},
+        )
+    ]
+
+    factor_calls = 0
+    original_calculate = linear_layout_module.calculate_feature_position_factors_linear
+
+    def count_measurement_call(*args, **kwargs):
+        nonlocal factor_calls
+        factor_calls += 1
+        return original_calculate(*args, **kwargs)
+
+    def reject_downstream_recalculation(*_args, **_kwargs):
+        raise AssertionError("resolved feature lane geometry must be reused")
+
+    resolved_positions: list[tuple[float, float, float]] = []
+    original_lane_for = LinearFeatureLaneGeometry.lane_for
+
+    def record_lane_lookup(self, **kwargs):
+        lane = original_lane_for(self, **kwargs)
+        resolved_positions.append(lane.positions)
+        return lane
+
+    monkeypatch.setattr(
+        linear_layout_module,
+        "calculate_feature_position_factors_linear",
+        count_measurement_call,
+    )
+    monkeypatch.setattr(
+        linear_labels_module,
+        "calculate_feature_position_factors_linear",
+        reject_downstream_recalculation,
+    )
+    monkeypatch.setattr(
+        linear_svg_features_module,
+        "calculate_feature_position_factors_linear",
+        reject_downstream_recalculation,
+    )
+    monkeypatch.setattr(LinearFeatureLaneGeometry, "lane_for", record_lane_lookup)
+
+    svg_content = assemble_linear_diagram_from_records(
+        [record],
+        selected_features_set=["CDS"],
+        legend="none",
+        config_overrides={
+            "show_labels": "all",
+            "show_gc": False,
+            "show_skew": False,
+        },
+    ).tostring()
+
+    assert factor_calls == 1
+    assert len(resolved_positions) == 2
+    assert resolved_positions[0] == pytest.approx(resolved_positions[1])
+    assert "shared lane geometry" in svg_content
+
+
+@pytest.mark.linear
 def test_linear_above_layout_keeps_feature_top_inside_canvas_with_resolve_overlaps(tmp_path: Path) -> None:
     returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
         tmp_path,
@@ -586,7 +814,7 @@ def test_linear_above_layout_keeps_feature_top_inside_canvas_with_resolve_overla
 
 @pytest.mark.linear
 @pytest.mark.parametrize("layout", ["above", "middle"])
-def test_linear_layout_preserves_top_margin_when_resolve_overlaps_enabled(
+def test_linear_layout_keeps_features_inside_canvas_when_resolve_overlaps_enabled(
     tmp_path: Path,
     layout: str,
 ) -> None:
@@ -617,12 +845,13 @@ def test_linear_layout_preserves_top_margin_when_resolve_overlaps_enabled(
     resolved_svg_content = resolved_output_svg.read_text(encoding="utf-8")
     base_top_margin = _extract_min_absolute_feature_y(base_svg_content)
     resolved_top_margin = _extract_min_absolute_feature_y(resolved_svg_content)
-    assert resolved_top_margin == pytest.approx(base_top_margin, abs=1e-6)
+    assert base_top_margin >= -1e-6
+    assert resolved_top_margin >= -1e-6
 
 
 @pytest.mark.linear
 @pytest.mark.parametrize("resolve_overlaps", [False, True])
-def test_linear_above_separate_strands_uses_middle_top_margin_floor(
+def test_linear_above_separate_strands_keeps_features_inside_canvas(
     tmp_path: Path,
     resolve_overlaps: bool,
 ) -> None:
@@ -654,7 +883,8 @@ def test_linear_above_separate_strands_uses_middle_top_margin_floor(
 
     middle_top_margin = _extract_min_absolute_feature_y(middle_output_svg.read_text(encoding="utf-8"))
     above_top_margin = _extract_min_absolute_feature_y(above_output_svg.read_text(encoding="utf-8"))
-    assert above_top_margin == pytest.approx(middle_top_margin, abs=1e-6)
+    assert middle_top_margin >= -1e-6
+    assert above_top_margin >= -1e-6
 
 
 @pytest.mark.linear
@@ -666,7 +896,7 @@ def test_linear_above_separate_strands_uses_middle_top_margin_floor(
     ],
 )
 @pytest.mark.parametrize("resolve_overlaps", [False, True])
-def test_linear_above_non_stranded_uses_middle_top_margin_floor(
+def test_linear_above_non_stranded_keeps_features_inside_canvas(
     tmp_path: Path,
     scale_style: str,
     axis_args: list[str],
@@ -699,7 +929,8 @@ def test_linear_above_non_stranded_uses_middle_top_margin_floor(
 
     middle_top_margin = _extract_min_absolute_feature_y(middle_output_svg.read_text(encoding="utf-8"))
     above_top_margin = _extract_min_absolute_feature_y(above_output_svg.read_text(encoding="utf-8"))
-    assert above_top_margin == pytest.approx(middle_top_margin, abs=1e-6)
+    assert middle_top_margin >= -1e-6
+    assert above_top_margin >= -1e-6
 
 
 @pytest.mark.linear

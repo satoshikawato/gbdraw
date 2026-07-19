@@ -55,6 +55,51 @@ export const depthFileSlotsFromValue = (value) => {
   return value ? [value] : [];
 };
 
+export const isRecordMajorDepthFileMatrix = (value) => (
+  Array.isArray(value) && value.every((row) => Array.isArray(row))
+);
+
+export const parseDepthTrackIndexIdentity = (value, fieldName = 'track_index') => {
+  let numeric = null;
+  if (typeof value === 'number') {
+    numeric = value;
+  } else if (
+    typeof value === 'string' &&
+    /^[+-]?\d+$/.test(value.trim())
+  ) {
+    numeric = Number(value.trim());
+  }
+  if (!Number.isSafeInteger(numeric) || numeric < 0) {
+    throw new Error(`${fieldName} must be a non-negative integer.`);
+  }
+  return numeric;
+};
+
+export const normalizeRecordMajorDepthFileRows = (value, recordCount = 1) => {
+  const requestedCount = Math.max(1, Number(recordCount) || 1);
+  const sourceIsMatrix = isRecordMajorDepthFileMatrix(value);
+  const rows = sourceIsMatrix
+    ? value.map((row) => depthFileSlotsFromValue(row))
+    : Array.from(
+        { length: requestedCount },
+        () => depthFileSlotsFromValue(value)
+      );
+  const targetCount = Math.max(requestedCount, rows.length);
+  while (rows.length < targetCount) rows.push([]);
+  const width = depthTrackMatrixWidth(rows);
+  return rows.map((row) => padDepthFileSlots(row, width));
+};
+
+export const representativeDepthFiles = (value) => {
+  const rows = isRecordMajorDepthFileMatrix(value)
+    ? normalizeRecordMajorDepthFileRows(value, value.length)
+    : [depthFileSlotsFromValue(value)];
+  const width = depthTrackMatrixWidth(rows);
+  return Array.from({ length: width }, (_, trackIndex) => (
+    rows.map((row) => row[trackIndex]).find(Boolean) || null
+  ));
+};
+
 export const compactDepthFileSlots = (slots) => {
   const next = depthFileSlotsFromValue(slots);
   while (next.length > 0 && !next[next.length - 1]) {

@@ -84,7 +84,7 @@ def test_comparison_ribbons_keep_endpoint_padding_without_labels() -> None:
                 SeqFeature(FeatureLocation(120, 220, strand=-1), type="CDS"),
             )
         )
-    svg = assemble_linear_diagram_from_records(
+    canvas = assemble_linear_diagram_from_records(
         records,
         linear_comparisons=[_comparison(0, 2)],
         layout=LinearMultiRecordOptions(
@@ -99,7 +99,8 @@ def test_comparison_ribbons_keep_endpoint_padding_without_labels() -> None:
             "linear_track_layout": "above",
             "linear_ruler_on_axis": False,
         },
-    ).tostring()
+    )
+    svg = canvas.tostring()
     root = ET.fromstring(svg)
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     groups = {
@@ -136,10 +137,15 @@ def test_comparison_ribbons_keep_endpoint_padding_without_labels() -> None:
     comparison_top = translate_y(comparison) + min(comparison_y_values)
     comparison_bottom = translate_y(comparison) + max(comparison_y_values)
 
-    feature_to_axis_gap = top_record_axis - top_record_bottom
-    assert feature_to_axis_gap > 0
-    assert comparison_top - top_record_axis == pytest.approx(feature_to_axis_gap)
-    assert bottom_record_top - comparison_bottom == pytest.approx(feature_to_axis_gap)
+    geometry = canvas._gbdraw_track_slot_geometry["records"]
+    assert top_record_bottom < top_record_axis
+    assert bottom_record_top < translate_y(bottom_record)
+    assert comparison_top == pytest.approx(
+        geometry[0]["comparisonExclusionBand"]["absoluteBottomPx"]
+    )
+    assert comparison_bottom == pytest.approx(
+        geometry[2]["comparisonExclusionBand"]["absoluteTopPx"]
+    )
 
 
 def test_reversed_explicit_endpoints_work_with_legacy_one_record_rows() -> None:

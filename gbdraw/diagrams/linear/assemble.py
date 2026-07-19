@@ -9,7 +9,7 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 from __future__ import annotations
 
 import copy
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import logging
 import math
 from typing import TYPE_CHECKING, Any
@@ -59,8 +59,10 @@ from ...legend.table import (  # type: ignore[reportMissingImports]
 )
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import (  # type: ignore[reportMissingImports]
-    calculate_feature_position_factors_linear,
-    resolve_feature_axis_gap_linear,
+    LinearFeatureLaneGeometry,
+    VerticalBand,
+    measure_linear_feature_lanes,
+    measure_linear_label_band,
 )
 from ...layout.linear_multi_record import (
     LinearRecordMeasurement,
@@ -76,12 +78,12 @@ from ...linear_comparison import (
     validate_linear_comparison_topology,
 )
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px  # type: ignore[reportMissingImports]
-from ...labels.linear import calculate_label_y_bounds  # type: ignore[reportMissingImports]
 from ...tracks import (
     LinearTrackSlot,
     ScalarSpec,
     default_linear_track_slots,
     normalize_linear_track_slots_with_axis,
+    parse_nonnegative_integer,
 )
 from ...annotations import (
     AnnotationOptions,
@@ -95,7 +97,6 @@ from ...annotations import (
 from ...render.drawers.linear.annotations import draw_linear_annotation_track
 
 from .builders import (
-    add_comparison_on_linear_canvas,
     add_explicit_comparisons_on_linear_canvas,
     add_depth_group,
     add_gc_content_group,
@@ -120,8 +121,14 @@ from .precalc import (
 )
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.ids import make_linear_dom_id
-from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
-from .track_slots import LinearResolvedTrack, LinearTrackLayout, resolve_linear_track_layout
+from .track_slots import (
+    LinearRecordVerticalPlan,
+    LinearResolvedTrack,
+    LinearSlotFootprint,
+    LinearTrackLayout,
+    resolve_linear_record_vertical_plan,
+    resolve_linear_track_layout,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -137,14 +144,19 @@ def _prepare_linear_annotation_tracks(
     *,
     canvas_config: LinearCanvasConfigurator,
     record_depth_tracks: list[list[DepthTrackSpec]] | None,
-) -> tuple[list[LinearTrackSlot] | None, ResolvedAnnotationBundle, dict[str, ResolvedAnnotationTrack]]:
+) -> tuple[
+    list[LinearTrackSlot] | None,
+    ResolvedAnnotationBundle,
+    dict[str, ResolvedAnnotationTrack],
+    frozenset[str],
+]:
     bundle = (
         annotations
         if isinstance(annotations, ResolvedAnnotationBundle)
         else resolve_annotations(annotations, records, mode="linear")
     )
     if not bundle.set_ids and not bundle.annotations:
-        return slots, bundle, {}
+        return slots, bundle, {}, frozenset()
     set_ids = bundle.set_ids or tuple(dict.fromkeys(item.set_id for item in bundle.annotations))
     if slots is None:
         slots = default_linear_track_slots(
@@ -177,16 +189,54 @@ def _prepare_linear_annotation_tracks(
         if set_id not in requested_set_ids:
             logger.warning("Annotation set %s is not referenced by a linear track slot.", set_id)
 
+    auto_slot_ids = frozenset(
+        slot.id
+        for slot in slots
+        if str(slot.renderer).strip().lower() == "annotations" and slot.height is None
+    )
+    updated_slots, layouts = _layout_linear_annotation_tracks(
+        records,
+        slots,
+        bundle,
+        canvas_config=canvas_config,
+        auto_slot_ids=auto_slot_ids,
+    )
+    return updated_slots, bundle, layouts, auto_slot_ids
+
+
+def _layout_linear_annotation_tracks(
+    records: list[SeqRecord],
+    slots: list[LinearTrackSlot],
+    bundle: ResolvedAnnotationBundle,
+    *,
+    canvas_config: LinearCanvasConfigurator,
+    auto_slot_ids: frozenset[str],
+    sequence_widths: list[float] | None = None,
+) -> tuple[list[LinearTrackSlot], dict[str, ResolvedAnnotationTrack]]:
+    """Resolve annotation lanes for the axis widths used by final rendering."""
+
+    if sequence_widths is not None and len(sequence_widths) != len(records):
+        raise ValueError("sequence_widths must contain one width for every record")
     record_lengths = {index: len(record.seq) for index, record in enumerate(records)}
-    bp_per_px = {
-        index: len(record.seq)
-        / max(
-            1.0,
-            float(canvas_config.alignment_width)
-            * (1.0 if canvas_config.normalize_length else len(record.seq) / max(1, canvas_config.longest_genome)),
-        )
-        for index, record in enumerate(records)
-    }
+    if sequence_widths is None:
+        bp_per_px = {
+            index: len(record.seq)
+            / max(
+                1.0,
+                float(canvas_config.alignment_width)
+                * (
+                    1.0
+                    if canvas_config.normalize_length
+                    else len(record.seq) / max(1, canvas_config.longest_genome)
+                ),
+            )
+            for index, record in enumerate(records)
+        }
+    else:
+        bp_per_px = {
+            index: len(record.seq) / max(1.0, float(sequence_widths[index]))
+            for index, record in enumerate(records)
+        }
     updated_slots: list[LinearTrackSlot] = []
     layouts: dict[str, ResolvedAnnotationTrack] = {}
     for slot in slots:
@@ -194,7 +244,11 @@ def _prepare_linear_annotation_tracks(
             updated_slots.append(slot)
             continue
         params = annotation_track_params_from_mapping(slot.params)
-        available = slot.height.resolve(1.0) if slot.height is not None else None
+        available = (
+            None
+            if slot.id in auto_slot_ids
+            else (slot.height.resolve(1.0) if slot.height is not None else None)
+        )
         layout = layout_annotation_track(
             slot.id,
             params.set_id,
@@ -206,11 +260,11 @@ def _prepare_linear_annotation_tracks(
         )
         layouts[slot.id] = layout
         updated_slots.append(
-            slot
-            if slot.height is not None
-            else replace(slot, height=ScalarSpec(layout.required_extent_px, "px"))
+            replace(slot, height=ScalarSpec(layout.required_extent_px, "px"))
+            if slot.id in auto_slot_ids
+            else slot
         )
-    return updated_slots, bundle, layouts
+    return updated_slots, layouts
 
 
 def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> bool:
@@ -238,10 +292,6 @@ def _feature_track_layout_for_linear_slots(
     return str(fallback or "middle").strip().lower()
 
 
-def _feature_slot_for_linear_slots(slots: list) -> object | None:
-    return next((slot for slot in slots if slot.renderer == "features"), None)
-
-
 def _apply_depth_track_heights_to_linear_slots(
     slots: list,
     record_depth_tracks: list[list[DepthTrackSpec]] | None,
@@ -254,10 +304,7 @@ def _apply_depth_track_heights_to_linear_slots(
         if slot.renderer != "depth" or slot.height is not None:
             out.append(slot)
             continue
-        try:
-            track_index = int(slot.params.get("track_index", 0))
-        except (AttributeError, TypeError, ValueError):
-            track_index = 0
+        track_index = _depth_slot_track_index(slot)
         if 0 <= track_index < len(depth_heights) and depth_heights[track_index] is not None:
             out.append(replace(slot, height=ScalarSpec(float(depth_heights[track_index]), "px")))
         else:
@@ -268,6 +315,14 @@ def _apply_depth_track_heights_to_linear_slots(
 def _slot_nt(slot: LinearResolvedTrack, default_nt: str) -> str:
     params = slot.params or {}
     return str(params.get("nt", params.get("dinucleotide", default_nt)) or default_nt).upper()
+
+
+def _depth_slot_track_index(slot) -> int:
+    params = getattr(slot, "params", {}) or {}
+    return parse_nonnegative_integer(
+        params.get("track_index", 0),
+        field_name=f"depth slot '{getattr(slot, 'id', '')}' track_index",
+    )
 
 
 def _clone_gc_config_with_dinucleotide(gc_config: GcContentConfigurator, dinucleotide: str) -> GcContentConfigurator:
@@ -296,12 +351,17 @@ def _sync_legend_table_for_linear_slots(
     *,
     linear_track_slots: list | None,
     skew_config: GcSkewConfigurator,
+    depth_tracks: list[DepthTrackData] | None,
 ) -> dict:
-    """Replace singleton skew legend entries with slot-aware entries."""
+    """Replace singleton numeric legends with slot-authoritative entries."""
     if linear_track_slots is None:
         return legend_table
 
-    out = dict(legend_table)
+    out = sync_depth_track_legend_entries(
+        legend_table,
+        depth_tracks,
+        slots=linear_track_slots,
+    )
     default_nt = str(getattr(skew_config, "dinucleotide", "GC")).upper()
     for key in (
         f"{default_nt} skew",
@@ -341,110 +401,31 @@ def _sync_legend_table_for_linear_slots(
     return out
 
 
-def _custom_record_bottom_extent(
-    *,
-    record_index: int,
-    layout: LinearTrackLayout,
-    feature_slot,
-    canvas_config: LinearCanvasConfigurator,
-    record_heights_below: list[float],
-    record_label_heights_below: list[float],
-) -> float:
-    extent = float(layout.bottom_extent)
-    feature_side = getattr(feature_slot, "side", None) if feature_slot is not None else None
-    feature_extent = (
-        record_heights_below[record_index]
-        + record_label_heights_below[record_index]
-    )
-    if feature_side == "below":
-        return extent + feature_extent + canvas_config.vertical_padding
-    if feature_side is None or feature_side == "overlay":
-        return max(extent, feature_extent)
-    return extent
-
-
-def _custom_record_top_extent(
-    *,
-    record_index: int,
-    layout: LinearTrackLayout,
-    feature_slot,
-    canvas_config: LinearCanvasConfigurator,
-    record_heights_above: list[float],
-    record_label_heights_above: list[float],
-) -> float:
-    extent = float(layout.top_extent)
-    feature_side = getattr(feature_slot, "side", None) if feature_slot is not None else None
-    feature_extent = max(
-        record_heights_above[record_index],
-        record_label_heights_above[record_index],
-    )
-    if feature_side == "above":
-        return extent + feature_extent + canvas_config.vertical_padding
-    if feature_side is None or feature_side == "overlay":
-        return max(extent, feature_extent)
-    return extent
-
-
-def _custom_slot_track_offset_y(
-    slot: LinearResolvedTrack,
-    *,
-    feature_slot,
-    record_index: int,
-    canvas_config: LinearCanvasConfigurator,
-    record_heights_below: list[float],
-    record_heights_above: list[float],
-    record_label_heights_below: list[float],
-    record_label_heights_above: list[float],
-) -> float:
-    offset = float(slot.y_offset)
-    if feature_slot is None or slot.renderer in {"features", "spacer"}:
-        return offset
-    feature_side = getattr(feature_slot, "side", None)
-    feature_index = int(getattr(feature_slot, "slot_index", -1))
-    if slot.side == "below" and feature_side == "below" and feature_index < int(slot.slot_index):
-        return (
-            offset
-            + record_heights_below[record_index]
-            + record_label_heights_below[record_index]
-            + canvas_config.vertical_padding
-        )
-    if slot.side == "above" and feature_side == "above" and feature_index > int(slot.slot_index):
-        return (
-            offset
-            - record_heights_above[record_index]
-            - record_label_heights_above[record_index]
-            - canvas_config.vertical_padding
-        )
-    return offset
-
-
 def _serialize_linear_track_slot_geometry(
     *,
     records: list[SeqRecord],
     layout: LinearTrackLayout,
+    record_plans: list[LinearRecordVerticalPlan],
     record_offsets: list[float],
-    feature_slot,
-    canvas_config: LinearCanvasConfigurator,
-    record_heights_below: list[float],
-    record_heights_above: list[float],
-    record_label_heights_below: list[float],
-    record_label_heights_above: list[float],
 ) -> dict[str, Any]:
+    def band_payload(band: VerticalBand | None, *, axis_y: float) -> dict[str, float] | None:
+        if band is None:
+            return None
+        return {
+            "topPx": float(band.top_y),
+            "bottomPx": float(band.bottom_y),
+            "absoluteTopPx": axis_y + float(band.top_y),
+            "absoluteBottomPx": axis_y + float(band.bottom_y),
+        }
+
+    base_by_id = {slot.id: slot for slot in layout.slots}
     records_payload: list[dict[str, Any]] = []
     for record_index, record in enumerate(records):
         axis_y = float(record_offsets[record_index]) if record_index < len(record_offsets) else 0.0
+        plan = record_plans[record_index]
         slots_payload: list[dict[str, Any]] = []
-        for slot in layout.slots:
-            final_offset = _custom_slot_track_offset_y(
-                slot,
-                feature_slot=feature_slot,
-                record_index=record_index,
-                canvas_config=canvas_config,
-                record_heights_below=record_heights_below,
-                record_heights_above=record_heights_above,
-                record_label_heights_below=record_label_heights_below,
-                record_label_heights_above=record_label_heights_above,
-            )
+        for slot in plan.slots:
+            base_slot = base_by_id[slot.id]
             slots_payload.append(
                 {
                     "slotIndex": int(slot.slot_index),
@@ -453,8 +434,12 @@ def _serialize_linear_track_slot_geometry(
                     "side": str(slot.side),
                     "heightPx": float(slot.height),
                     "spacingAfterPx": float(slot.spacing_after_px),
-                    "baseYOffsetPx": float(slot.y_offset),
-                    "finalYOffsetPx": axis_y + float(final_offset),
+                    "baseYOffsetPx": float(base_slot.y_offset),
+                    "resolvedOriginPx": float(slot.origin_y),
+                    "finalYOffsetPx": axis_y + float(slot.origin_y),
+                    "dataAvailable": bool(slot.data_available),
+                    "paintBand": band_payload(slot.paint_band, axis_y=axis_y),
+                    "reserveBand": band_payload(slot.reserve_band, axis_y=axis_y),
                     "source": "resolved",
                 }
             )
@@ -464,11 +449,18 @@ def _serialize_linear_track_slot_geometry(
                 "recordIndex": int(record_index),
                 "recordId": record_id,
                 "recordLabel": record_id,
+                "axisYpx": axis_y,
+                "recordBodyBand": band_payload(plan.record_body_band, axis_y=axis_y),
+                "comparisonExclusionBand": band_payload(
+                    plan.comparison_exclusion_band,
+                    axis_y=axis_y,
+                ),
+                "canvasBand": band_payload(plan.canvas_band, axis_y=axis_y),
                 "slots": slots_payload,
             }
         )
     return {
-        "schema": 1,
+        "schema": 2,
         "mode": "linear",
         "source": "resolved",
         "records": records_payload,
@@ -513,7 +505,7 @@ def _gc_config_matching_linear_depth_axis_font_size(
     *,
     gc_config: GcContentConfigurator,
     depth_config: DepthConfigurator | None,
-    canvas_config: LinearCanvasConfigurator,
+    depth_height: float,
     depth_enabled: bool,
 ) -> GcContentConfigurator:
     if (
@@ -527,7 +519,7 @@ def _gc_config_matching_linear_depth_axis_font_size(
         return gc_config
 
     cloned = copy.copy(gc_config)
-    cloned.tick_font_size = linear_scalar_axis_tick_font_size_px(depth_config, canvas_config.depth_height)
+    cloned.tick_font_size = linear_scalar_axis_tick_font_size_px(depth_config, depth_height)
     return cloned
 
 
@@ -558,199 +550,379 @@ def _axis_ruler_extents(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConf
     return 0.0, 0.0
 
 
-def _record_plot_track_stack_bottom_y(
-    *,
-    axis_y: float,
-    record_index: int,
-    canvas_config: LinearCanvasConfigurator,
-    record_heights_below: list[float],
-    record_label_heights_below: list[float],
-    non_middle_layout: bool,
-) -> float | None:
-    """Return the absolute y-coordinate for the drawn plot-track stack bottom."""
-    visual_bottom = float(getattr(canvas_config, "plot_tracks_visual_bottom", 0.0))
-    if visual_bottom <= 0.0:
-        return None
-
-    plot_offset_y = float(axis_y)
-    if non_middle_layout:
-        current_feature_height_below = record_heights_below[record_index]
-        plot_offset_y += current_feature_height_below - canvas_config.cds_padding
-    plot_offset_y += record_label_heights_below[record_index]
-    return (
-        plot_offset_y
-        + canvas_config.cds_padding
-        + canvas_config.vertical_padding
-        + visual_bottom
-    )
-
-
-def _precalculate_feature_track_heights(
-    records: list[SeqRecord],
-    feature_config: FeatureDrawingConfigurator,
+def _linear_axis_band(
     canvas_config: LinearCanvasConfigurator,
     cfg: GbdrawConfig,
-    precomputed_feature_dicts: list[FeatureDict] | None = None,
-) -> tuple[list[float], list[float], list[float], list[float], list[float], list[float]]:
-    """
-    Pre-calculates the height required for feature tracks for each record.
-    This is needed when resolve_overlaps is enabled as features may span multiple tracks.
-
-    Returns:
-        - list mapping record index -> height below the axis line (for lower tracks)
-        - list mapping record index -> height above the axis line (for upper tracks)
-        - list mapping record index -> minimum above-axis extent required to keep top visible
-        - list mapping record index -> above-axis extent with non-displaced track positioning
-        - list mapping record index -> middle-layout above-axis extent with non-displaced tracks
-        - list mapping record index -> feature-only visual center relative to the axis
-    """
-    record_heights_below: list[float] = []
-    record_heights_above: list[float] = []
-    record_top_guard_above: list[float] = []
-    record_top_guard_undisplaced: list[float] = []
-    record_top_guard_middle_undisplaced: list[float] = []
-    record_feature_center_offsets: list[float] = []
-    track_layout = str(canvas_config.track_layout).strip().lower()
-    axis_gap_factor = (
-        (float(canvas_config.track_axis_gap) / float(canvas_config.cds_height))
-        if (canvas_config.track_axis_gap is not None and float(canvas_config.cds_height) > 0.0)
-        else None
+) -> VerticalBand:
+    axis_stroke_width = cfg.objects.axis.linear.stroke_width.for_length_param(
+        canvas_config.length_param
     )
-    axis_ruler_above, axis_ruler_below = _axis_ruler_extents(canvas_config, cfg)
-
-    if precomputed_feature_dicts is None:
-        color_table, default_colors = preprocess_color_tables(
-            feature_config.color_table, feature_config.default_colors
-        )
-
-    for index, record in enumerate(records):
-        if precomputed_feature_dicts is not None:
-            feature_dict = precomputed_feature_dicts[index]
-        else:
-            feature_dict, _ = create_feature_dict(
-                record,
-                color_table,
-                feature_config.selected_features_set,
-                default_colors,
-                canvas_config.strandedness,
-                canvas_config.resolve_overlaps,
-                {},
-                directional_feature_types=feature_config.directional_feature_types,
-                feature_visibility_rules=feature_config.feature_visibility_rules,
-                compute_label_text=False,
-            )
-        min_top_y = 0.0
-        max_bottom_y = 0.0
-        feature_top_y: float | None = None
-        feature_bottom_y: float | None = None
-        min_top_y_undisplaced = 0.0
-        min_top_y_middle_undisplaced = 0.0
-        for feature_obj in feature_dict.values():
-            track_id = int(getattr(feature_obj, "feature_track_id", 0))
-            strand = str(getattr(feature_obj, "strand", "undefined"))
-            factors = calculate_feature_position_factors_linear(
-                strand=strand,
-                track_id=track_id,
-                separate_strands=canvas_config.strandedness,
-                track_layout=track_layout,
-                axis_gap_factor=axis_gap_factor,
-            )
-            top_y = canvas_config.cds_height * float(factors[0])
-            bottom_y = canvas_config.cds_height * float(factors[2])
-            feature_top_y = top_y if feature_top_y is None else min(feature_top_y, top_y)
-            feature_bottom_y = (
-                bottom_y if feature_bottom_y is None else max(feature_bottom_y, bottom_y)
-            )
-            if top_y < min_top_y:
-                min_top_y = top_y
-            if bottom_y > max_bottom_y:
-                max_bottom_y = bottom_y
-
-            undisplaced_track_id = -1 if (canvas_config.strandedness and strand == "negative") else 0
-            undisplaced_factors = calculate_feature_position_factors_linear(
-                strand=strand,
-                track_id=undisplaced_track_id,
-                separate_strands=canvas_config.strandedness,
-                track_layout=track_layout,
-                axis_gap_factor=axis_gap_factor,
-            )
-            undisplaced_top_y = canvas_config.cds_height * float(undisplaced_factors[0])
-            if undisplaced_top_y < min_top_y_undisplaced:
-                min_top_y_undisplaced = undisplaced_top_y
-            middle_undisplaced_factors = calculate_feature_position_factors_linear(
-                strand=strand,
-                track_id=undisplaced_track_id,
-                separate_strands=canvas_config.strandedness,
-                track_layout="middle",
-                axis_gap_factor=axis_gap_factor,
-            )
-            middle_undisplaced_top_y = canvas_config.cds_height * float(middle_undisplaced_factors[0])
-            if middle_undisplaced_top_y < min_top_y_middle_undisplaced:
-                min_top_y_middle_undisplaced = middle_undisplaced_top_y
-
-        precise_height_above = max(0.0, -min_top_y)
-        precise_height_below = max(0.0, max_bottom_y)
-        undisplaced_height_above = max(0.0, -min_top_y_undisplaced)
-        middle_undisplaced_height_above = max(0.0, -min_top_y_middle_undisplaced)
-
-        if track_layout == "middle":
-            # Keep existing middle-mode sizing behavior for backward compatibility.
-            max_positive_track = 0
-            min_negative_track = 0
-
-            for feature_obj in feature_dict.values():
-                track_id = feature_obj.feature_track_id
-                if track_id > max_positive_track:
-                    max_positive_track = track_id
-                if track_id < min_negative_track:
-                    min_negative_track = track_id
-
-            if canvas_config.strandedness:
-                # Stranded mode: positive tracks above axis, negative tracks below
-                num_tracks_above = max_positive_track + 1
-                num_tracks_below = abs(min_negative_track) + 1 if min_negative_track < 0 else 1
-                height_above = num_tracks_above * canvas_config.cds_height * 1.1
-                height_below = num_tracks_below * canvas_config.cds_height * 1.1
-            else:
-                # Non-stranded mode: track 0 is at axis, higher track IDs go below
-                # Each track needs full cds_height of space plus some padding
-                # Track 0 extends both above and below the axis (0.6 each direction)
-                # Additional tracks (1, 2, ...) add cds_height * 1.1 below for breathing room
-                height_above = canvas_config.cds_height * 0.6
-                height_below = canvas_config.cds_height * (0.6 + max_positive_track * 1.1)
-        else:
-            # For above/below layouts, use actual positioned factors so downstream spacing,
-            # GC/skew placement, and comparison ribbons align with feature extents.
-            height_above = precise_height_above
-            height_below = precise_height_below
-
-        if axis_ruler_above > 0.0:
-            height_above = max(height_above, axis_ruler_above)
-            precise_height_above = max(precise_height_above, axis_ruler_above)
-            undisplaced_height_above = max(undisplaced_height_above, axis_ruler_above)
-            middle_undisplaced_height_above = max(middle_undisplaced_height_above, axis_ruler_above)
-        if axis_ruler_below > 0.0:
-            height_below = max(height_below, axis_ruler_below)
-
-        record_heights_above.append(height_above)
-        record_heights_below.append(height_below)
-        record_top_guard_above.append(precise_height_above)
-        record_top_guard_undisplaced.append(undisplaced_height_above)
-        record_top_guard_middle_undisplaced.append(middle_undisplaced_height_above)
-        record_feature_center_offsets.append(
-            0.0
-            if feature_top_y is None or feature_bottom_y is None
-            else 0.5 * (feature_top_y + feature_bottom_y)
-        )
-
-    return (
-        record_heights_below,
-        record_heights_above,
-        record_top_guard_above,
-        record_top_guard_undisplaced,
-        record_top_guard_middle_undisplaced,
-        record_feature_center_offsets,
+    half_stroke = 0.5 * max(0.0, float(axis_stroke_width))
+    ruler_above, ruler_below = _axis_ruler_extents(canvas_config, cfg)
+    return VerticalBand(
+        -max(half_stroke, float(ruler_above)),
+        max(half_stroke, float(ruler_below)),
     )
+
+
+def _feature_reserve_band(
+    paint_band: VerticalBand,
+    *,
+    side: str,
+    minimum_height: float,
+) -> VerticalBand:
+    minimum = max(0.0, float(minimum_height))
+    if paint_band.height >= minimum:
+        return paint_band
+    if side == "above":
+        return VerticalBand(paint_band.bottom_y - minimum, paint_band.bottom_y)
+    if side == "below":
+        return VerticalBand(paint_band.top_y, paint_band.top_y + minimum)
+    center_y = 0.5 * (paint_band.top_y + paint_band.bottom_y)
+    return VerticalBand(center_y - 0.5 * minimum, center_y + 0.5 * minimum)
+
+
+def _slot_body_band(slot: LinearResolvedTrack) -> VerticalBand:
+    return VerticalBand(-float(slot.top_extent), float(slot.bottom_extent))
+
+
+def _axis_text_overhang(axis_config: object, track_height: float) -> float:
+    if not bool(getattr(axis_config, "show_axis", False)):
+        return 0.0
+    axis_stroke = 0.4
+    if not bool(getattr(axis_config, "show_ticks", False)):
+        return axis_stroke
+    return max(
+        axis_stroke,
+        0.5 * linear_scalar_axis_tick_font_size_px(axis_config, track_height),
+    )
+
+
+def _linear_slot_footprints_for_record(
+    *,
+    record_index: int,
+    layout: LinearTrackLayout,
+    feature_dict: FeatureDict,
+    feature_geometry: LinearFeatureLaneGeometry,
+    labels: list[dict],
+    canvas_config: LinearCanvasConfigurator,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    depth_config_by_index: dict[int, DepthConfigurator],
+    available_depth_indices: set[int],
+    annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
+) -> tuple[dict[str, LinearSlotFootprint], float]:
+    footprints: dict[str, LinearSlotFootprint] = {}
+    label_band = measure_linear_label_band(
+        labels,
+        leader_stroke_width=float(canvas_config._cfg.labels.stroke_width.long),
+    )
+
+    for slot in layout.slots:
+        body_band = _slot_body_band(slot)
+        if slot.renderer == "features":
+            paint_band = feature_geometry.occupied_band
+            if label_band is not None:
+                paint_band = paint_band.union(label_band)
+            reserve_band = _feature_reserve_band(
+                paint_band,
+                side=slot.side,
+                minimum_height=float(slot.height),
+            )
+            footprints[slot.id] = LinearSlotFootprint(
+                paint_band=paint_band if feature_dict or labels else None,
+                reserve_band=reserve_band,
+                data_available=bool(feature_dict or labels),
+            )
+            continue
+
+        if slot.renderer == "spacer":
+            footprints[slot.id] = LinearSlotFootprint(
+                paint_band=None,
+                reserve_band=body_band,
+                data_available=False,
+            )
+            continue
+
+        if slot.renderer == "depth":
+            track_index = _depth_slot_track_index(slot)
+            axis_config = depth_config_by_index.get(track_index)
+            overhang = (
+                _axis_text_overhang(axis_config, float(slot.height))
+                if axis_config is not None
+                else 0.0
+            )
+            stroke_overhang = 0.5 * max(
+                0.0,
+                float(getattr(axis_config, "stroke_width", 0.0)),
+            )
+            expanded = body_band.expand(max(overhang, stroke_overhang))
+            available = track_index in available_depth_indices
+            footprints[slot.id] = LinearSlotFootprint(
+                paint_band=expanded if available else None,
+                reserve_band=expanded,
+                data_available=available,
+            )
+            continue
+
+        if slot.renderer == "dinucleotide_content":
+            overhang = max(
+                0.5 * max(0.0, float(gc_config.stroke_width)),
+                0.5 * max(0.0, float(gc_config.percent_border_width)),
+            )
+            if str(getattr(gc_config, "mode", "deviation")).strip().lower() == "percent":
+                overhang = max(overhang, _axis_text_overhang(gc_config, float(slot.height)))
+            expanded = body_band.expand(overhang)
+            footprints[slot.id] = LinearSlotFootprint(expanded, expanded)
+            continue
+
+        if slot.renderer == "dinucleotide_skew":
+            overhang = 0.5 * max(0.0, float(skew_config.stroke_width))
+            expanded = body_band.expand(overhang)
+            footprints[slot.id] = LinearSlotFootprint(expanded, expanded)
+            continue
+
+        if slot.renderer == "annotations":
+            annotation_layout = annotation_track_layouts.get(slot.id)
+            placements = (
+                [
+                    item
+                    for item in annotation_layout.placements
+                    if item.annotation.record_index == record_index
+                ]
+                if annotation_layout is not None
+                else []
+            )
+            params = annotation_track_params_from_mapping(slot.params)
+            top_overhang = 0.0
+            bottom_overhang = 0.0
+            if params.show_labels:
+                for placement in placements:
+                    style = placement.annotation.style
+                    label_overhang = float(style.label_offset) + 0.5 * float(
+                        style.label_font_size or 10.0
+                    )
+                    if slot.side == "above":
+                        top_overhang = max(top_overhang, label_overhang)
+                    else:
+                        bottom_overhang = max(bottom_overhang, label_overhang)
+            expanded = body_band.expand(top_overhang, bottom_overhang)
+            available = bool(placements)
+            footprints[slot.id] = LinearSlotFootprint(
+                paint_band=expanded if available else None,
+                reserve_band=expanded,
+                data_available=available,
+            )
+            continue
+
+        footprints[slot.id] = LinearSlotFootprint(body_band, body_band)
+    feature_center_y = 0.5 * (
+        feature_geometry.occupied_band.top_y
+        + feature_geometry.occupied_band.bottom_y
+    )
+    return footprints, feature_center_y
+
+
+def _layout_with_preferred_origins(
+    layout: LinearTrackLayout,
+    preferred_origins: dict[str, float],
+) -> LinearTrackLayout:
+    if not preferred_origins:
+        return layout
+    return replace(
+        layout,
+        slots=tuple(
+            replace(slot, y_offset=float(preferred_origins.get(slot.id, slot.y_offset)))
+            for slot in layout.slots
+        ),
+    )
+
+
+def _default_preferred_origins(
+    layout: LinearTrackLayout,
+    canvas_config: LinearCanvasConfigurator,
+) -> dict[str, float]:
+    base = float(canvas_config.cds_padding) + float(canvas_config.vertical_padding)
+    axis_clearance = float(canvas_config.vertical_padding)
+    return {
+        slot.id: base + float(slot.y_offset) - axis_clearance
+        for slot in layout.slots
+        if slot.renderer in {"depth", "dinucleotide_content", "dinucleotide_skew"}
+    }
+
+
+def _resolved_linear_depth_heights(layout: LinearTrackLayout) -> dict[int, float]:
+    heights: dict[int, float] = {}
+    for slot in layout.slots:
+        if slot.renderer != "depth":
+            continue
+        track_index = _depth_slot_track_index(slot)
+        heights.setdefault(track_index, float(slot.height))
+    return heights
+
+
+@dataclass(frozen=True)
+class _LinearRecordDefinitionGeometry:
+    """Record-axis-local bands used by definition measurement and rendering."""
+
+    local_band: VerticalBand | None = None
+    row_band: VerticalBand | None = None
+
+    @property
+    def local_center_y(self) -> float | None:
+        if self.local_band is None:
+            return None
+        return 0.5 * (self.local_band.top_y + self.local_band.bottom_y)
+
+    @property
+    def row_center_y(self) -> float | None:
+        if self.row_band is None:
+            return None
+        return 0.5 * (self.row_band.top_y + self.row_band.bottom_y)
+
+
+def _centered_vertical_band(center_y: float, height: float) -> VerticalBand | None:
+    resolved_height = max(0.0, float(height))
+    if resolved_height <= 0.0:
+        return None
+    half_height = 0.5 * resolved_height
+    return VerticalBand(float(center_y) - half_height, float(center_y) + half_height)
+
+
+def _linear_record_vertical_offset(
+    plans: list[LinearRecordVerticalPlan],
+    rows_by_record: tuple[int, ...],
+    canvas_config: LinearCanvasConfigurator,
+) -> float:
+    """Place the first row below the top edge using final measured canvas bands."""
+
+    first_row_top_extent = max(
+        (
+            plan.canvas_top_extent
+            for index, plan in enumerate(plans)
+            if index < len(rows_by_record) and rows_by_record[index] == 0
+        ),
+        default=0.0,
+    )
+    return max(
+        float(canvas_config.original_vertical_offset) + float(canvas_config.cds_padding),
+        first_row_top_extent + float(canvas_config.vertical_padding),
+    )
+
+
+def _build_linear_record_vertical_plans(
+    *,
+    records: list[SeqRecord],
+    layout: LinearTrackLayout,
+    feature_dicts: list[FeatureDict],
+    feature_geometries: list[LinearFeatureLaneGeometry],
+    labels_by_record: list[list[dict]],
+    canvas_config: LinearCanvasConfigurator,
+    cfg: GbdrawConfig,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    record_depth_by_index: list[dict[int, DepthTrackData]],
+    representative_depth_configs: dict[int, DepthConfigurator],
+    annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
+    definition_heights: list[float],
+    row_definition_heights: list[float],
+    multi_record_enabled: bool,
+    split_row_definitions: bool,
+    has_comparisons: bool,
+) -> tuple[list[LinearRecordVerticalPlan], list[_LinearRecordDefinitionGeometry]]:
+    axis_band = _linear_axis_band(canvas_config, cfg)
+    comparison_gap = float(canvas_config.vertical_padding) if has_comparisons else 0.0
+    plans: list[LinearRecordVerticalPlan] = []
+    definition_geometries: list[_LinearRecordDefinitionGeometry] = []
+    feature_slot_id = next(
+        (slot.id for slot in layout.slots if slot.renderer == "features"),
+        None,
+    )
+    for record_index, _record in enumerate(records):
+        depth_by_index = (
+            record_depth_by_index[record_index]
+            if record_index < len(record_depth_by_index)
+            else {}
+        )
+        depth_configs = dict(representative_depth_configs)
+        depth_configs.update(
+            {index: track.config for index, track in depth_by_index.items()}
+        )
+        footprints, feature_center_y = _linear_slot_footprints_for_record(
+            record_index=record_index,
+            layout=layout,
+            feature_dict=feature_dicts[record_index],
+            feature_geometry=feature_geometries[record_index],
+            labels=labels_by_record[record_index],
+            canvas_config=canvas_config,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            depth_config_by_index=depth_configs,
+            available_depth_indices=set(depth_by_index),
+            annotation_track_layouts=annotation_track_layouts,
+        )
+        plan = resolve_linear_record_vertical_plan(
+            layout,
+            axis_band=axis_band,
+            footprints=footprints,
+            comparison_gap=comparison_gap,
+        )
+        feature_origin_y = (
+            plan.slot_by_id(feature_slot_id).origin_y
+            if feature_slot_id is not None
+            else 0.0
+        )
+        feature_center_y += feature_origin_y
+        canvas_band = (
+            plan.comparison_exclusion_band
+            if has_comparisons
+            else plan.canvas_band
+        )
+        local_definition_height = (
+            float(definition_heights[record_index])
+            if record_index < len(definition_heights)
+            else 0.0
+        )
+        row_definition_height = (
+            float(row_definition_heights[record_index])
+            if record_index < len(row_definition_heights)
+            else 0.0
+        )
+        if multi_record_enabled:
+            row_band = (
+                _centered_vertical_band(feature_center_y, row_definition_height)
+                if split_row_definitions
+                else None
+            )
+            if row_band is not None:
+                canvas_band = canvas_band.union(row_band)
+            local_band = None
+            if local_definition_height > 0.0:
+                header_bottom_y = (
+                    canvas_band.top_y - float(canvas_config.vertical_padding)
+                )
+                local_band = VerticalBand(
+                    header_bottom_y - local_definition_height,
+                    header_bottom_y,
+                )
+        else:
+            local_band = _centered_vertical_band(
+                feature_center_y,
+                local_definition_height,
+            )
+            row_band = None
+
+        for definition_band in (local_band,):
+            if definition_band is not None:
+                canvas_band = canvas_band.union(definition_band)
+        plans.append(replace(plan, canvas_band=canvas_band))
+        definition_geometries.append(
+            _LinearRecordDefinitionGeometry(
+                local_band=local_band,
+                row_band=row_band,
+            )
+        )
+    return plans, definition_geometries
 
 
 def _precalculate_gc_dataframes(
@@ -784,24 +956,6 @@ def _linear_depth_group_id(
         record_index=record_index,
         record_count=record_count,
     )
-
-
-def _precalculate_label_heights_below(all_labels_by_record: list[list[dict]]) -> list[float]:
-    """Return per-record label extents that protrude below the axis."""
-    record_label_heights_below: list[float] = []
-    for labels in all_labels_by_record:
-        max_bottom_y = 0.0
-        for label in labels:
-            _, label_bottom_y = calculate_label_y_bounds(label)
-            if bool(label.get("is_embedded")):
-                feature_bottom_y = float(label.get("feature_bottom_y", 0.0))
-                # Ignore labels that do not protrude outside their feature track.
-                if label_bottom_y <= feature_bottom_y:
-                    continue
-            if label_bottom_y > max_bottom_y:
-                max_bottom_y = label_bottom_y
-        record_label_heights_below.append(max_bottom_y)
-    return record_label_heights_below
 
 
 def assemble_linear_diagram(
@@ -864,33 +1018,41 @@ def assemble_linear_diagram(
             records,
             depth_track_tables=[[table] for table in depth_tables],
         )
-    linear_track_slots, resolved_annotations, annotation_track_layouts = _prepare_linear_annotation_tracks(
+    custom_linear_track_slots_requested = linear_track_slots is not None
+    (
+        linear_track_slots,
+        resolved_annotations,
+        annotation_track_layouts,
+        auto_annotation_slot_ids,
+    ) = _prepare_linear_annotation_tracks(
         records,
         annotations,
         linear_track_slots,
         canvas_config=canvas_config,
         record_depth_tracks=record_depth_tracks,
     )
-    normalized_linear_track_slots = (
-        normalize_linear_track_slots_with_axis(
-            linear_track_slots,
-            linear_track_axis_index,
+    if linear_track_slots is None:
+        linear_track_slots = default_linear_track_slots(
+            show_features=True,
+            show_depth=bool(canvas_config.show_depth and record_depth_tracks),
+            depth_track_count=max(1, depth_track_count(record_depth_tracks)),
+            show_gc=bool(canvas_config.show_gc),
+            show_skew=bool(canvas_config.show_skew),
+            dinucleotide=str(gc_config.dinucleotide),
+            track_layout=str(canvas_config.track_layout),
         )
-        if linear_track_slots is not None
-        else None
+    normalized_linear_track_slots = normalize_linear_track_slots_with_axis(
+        linear_track_slots,
+        linear_track_axis_index,
     )
-    if normalized_linear_track_slots is not None:
-        normalized_linear_track_slots = _apply_depth_track_heights_to_linear_slots(
-            normalized_linear_track_slots,
-            record_depth_tracks,
-        )
-    if normalized_linear_track_slots is not None:
-        canvas_config.track_layout = _feature_track_layout_for_linear_slots(
-            normalized_linear_track_slots,
-            canvas_config.track_layout,
-        )
-    track_layout = str(canvas_config.track_layout).strip().lower()
-    non_middle_layout = track_layout in {"above", "below"}
+    normalized_linear_track_slots = _apply_depth_track_heights_to_linear_slots(
+        normalized_linear_track_slots,
+        record_depth_tracks,
+    )
+    canvas_config.track_layout = _feature_track_layout_for_linear_slots(
+        normalized_linear_track_slots,
+        canvas_config.track_layout,
+    )
     axis_ruler_enabled = _is_axis_ruler_enabled(canvas_config, cfg)
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = str(plot_title_position or "bottom").strip().lower()
@@ -945,6 +1107,7 @@ def assemble_linear_diagram(
     normalized_comparisons = list(merge_linear_comparisons(normalized_comparisons))
     validate_linear_comparison_topology(normalized_comparisons, rows_by_record)
     comparisons = [item.matches for item in normalized_comparisons]
+    has_blast = bool(normalized_comparisons)
 
     raw_show_labels = cfg.canvas.show_labels
     show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
@@ -973,7 +1136,21 @@ def assemble_linear_diagram(
         cfg=cfg,
         orthogroup_label_eligibility=orthogroup_label_eligibility,
     )
-    required_label_height, all_labels, record_label_heights_above = _precalculate_label_dimensions(
+    record_feature_lane_geometries = [
+        measure_linear_feature_lanes(
+            feature_dict,
+            cds_height=float(canvas_config.cds_height),
+            separate_strands=bool(canvas_config.strandedness),
+            track_layout=str(canvas_config.track_layout),
+            axis_gap=canvas_config.track_axis_gap,
+            stroke_width=max(
+                float(feature_config.block_stroke_width),
+                float(feature_config.line_stroke_width),
+            ),
+        )
+        for feature_dict in record_feature_dicts
+    ]
+    _unused_label_height, all_labels, _record_label_heights_above = _precalculate_label_dimensions(
         records,
         feature_config,
         canvas_config,
@@ -981,8 +1158,8 @@ def assemble_linear_diagram(
         cfg=cfg,
         precomputed_feature_dicts=record_feature_dicts,
         orthogroup_label_eligibility=orthogroup_label_eligibility,
+        feature_lane_geometries=record_feature_lane_geometries,
     )
-    record_label_heights_below = _precalculate_label_heights_below(all_labels)
     local_definition_line_kinds = (
         [
             (
@@ -995,7 +1172,7 @@ def assemble_linear_diagram(
         if split_row_definitions
         else None
     )
-    max_def_width, _definition_heights, definition_half_heights = _precalculate_definition_metrics(
+    max_def_width, definition_heights, _definition_half_heights = _precalculate_definition_metrics(
         records,
         config_dict,
         canvas_config,
@@ -1003,8 +1180,9 @@ def assemble_linear_diagram(
         line_kinds_by_record=local_definition_line_kinds,
     )
     row_definition_width = 0.0
+    row_definition_heights = [0.0 for _record in records]
     if split_row_definitions:
-        row_definition_width, _row_definition_heights, _row_definition_half_heights = (
+        row_definition_width, row_definition_heights, _row_definition_half_heights = (
             _precalculate_definition_metrics(
                 records,
                 config_dict,
@@ -1019,123 +1197,90 @@ def assemble_linear_diagram(
             )
         )
 
-    # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
-    (
-        record_heights_below,
-        record_heights_above,
-        record_top_guard_above,
-        record_top_guard_undisplaced,
-        record_top_guard_middle_undisplaced,
-        record_feature_center_offsets,
-    ) = _precalculate_feature_track_heights(
-        records,
-        feature_config,
-        canvas_config,
-        cfg,
-        precomputed_feature_dicts=record_feature_dicts,
+    linear_track_layout = resolve_linear_track_layout(
+        normalized_linear_track_slots,
+        canvas_config=canvas_config,
+        cfg=cfg,
     )
-
-    linear_track_layout: LinearTrackLayout | None = None
-    feature_slot = None
-    if normalized_linear_track_slots is not None:
-        linear_track_layout = resolve_linear_track_layout(
-            normalized_linear_track_slots,
-            canvas_config=canvas_config,
-            cfg=cfg,
+    if not custom_linear_track_slots_requested:
+        linear_track_layout = _layout_with_preferred_origins(
+            linear_track_layout,
+            _default_preferred_origins(linear_track_layout, canvas_config),
         )
-        canvas_config.set_linear_track_layout(linear_track_layout)
-        feature_slot = _feature_slot_for_linear_slots(normalized_linear_track_slots)
-
-    if required_label_height > 0:
-        if canvas_config.vertical_offset < required_label_height:
-            canvas_config.vertical_offset = (
-                required_label_height + canvas_config.original_vertical_offset + canvas_config.cds_padding
-            )
-    else:
-        canvas_config.vertical_offset = canvas_config.original_vertical_offset + canvas_config.cds_padding
-
-    if records:
-        base_axis_y = canvas_config.vertical_offset
-        first_actual_extent = record_top_guard_above[0]
-        first_normal_extent = record_top_guard_undisplaced[0]
-        normal_top_margin = max(canvas_config.vertical_padding, base_axis_y - first_normal_extent)
-        if track_layout == "above":
-            middle_floor_extent = record_top_guard_middle_undisplaced[0]
-            middle_floor_margin = max(canvas_config.vertical_padding, base_axis_y - middle_floor_extent)
-            normal_top_margin = max(normal_top_margin, middle_floor_margin)
-        if track_layout == "above" or (canvas_config.resolve_overlaps and track_layout == "middle"):
-            required_axis_y = first_actual_extent + normal_top_margin
-            # In above layout, keep at least the middle-layout top-margin floor so
-            # non-stranded tracks do not end up visually too close to the top edge.
-            canvas_config.vertical_offset = max(base_axis_y, required_axis_y)
-        else:
-            minimum_axis_y_for_features = first_actual_extent + canvas_config.vertical_padding
-            canvas_config.vertical_offset = max(base_axis_y, minimum_axis_y_for_features)
-        canvas_config.vertical_offset = max(
-            canvas_config.vertical_offset,
-            definition_half_heights[0] + canvas_config.vertical_padding,
-        )
-        if linear_track_layout is not None:
-            custom_top_extent = float(linear_track_layout.top_extent)
-            if feature_slot is not None and getattr(feature_slot, "side", "") == "above":
-                custom_top_extent += record_heights_above[0]
-                custom_top_extent += record_label_heights_above[0]
-            canvas_config.vertical_offset = max(
-                canvas_config.vertical_offset,
-                custom_top_extent + canvas_config.vertical_padding,
-            )
-
-    normalize_length = cfg.canvas.linear.normalize_length
-    if linear_track_layout is not None:
-        needed_nts = {
-            _slot_nt(slot, str(gc_config.dinucleotide))
-            for slot in linear_track_layout.slots
-            if slot.renderer in {"dinucleotide_content", "dinucleotide_skew"}
-        }
-        record_gc_dfs_by_nt = {
-            nt: _precalculate_gc_dataframes(
-                records,
-                window=int(gc_config.window),
-                step=int(gc_config.step),
-                dinucleotide=nt,
-                enabled=True,
-            )
-            for nt in sorted(needed_nts)
-        }
-        record_gc_dfs = record_gc_dfs_by_nt.get(str(gc_config.dinucleotide).upper(), [None for _ in records])
-    else:
-        record_gc_dfs_by_nt = {}
-        record_gc_dfs = _precalculate_gc_dataframes(
-            records,
-            window=int(gc_config.window),
-            step=int(gc_config.step),
-            dinucleotide=str(gc_config.dinucleotide),
-            enabled=bool(canvas_config.show_gc or canvas_config.show_skew),
-        )
+    resolved_depth_heights_by_index = _resolved_linear_depth_heights(
+        linear_track_layout
+    )
+    primary_depth_track_index = min(resolved_depth_heights_by_index, default=0)
     depth_enabled = bool(canvas_config.show_depth and depth_config is not None and record_depth_tracks)
-    record_depth_data: list[list[DepthTrackData]] = build_depth_track_dataframes(
-        records,
-        record_depth_tracks,
-        base_config=depth_config,
-        depth_df_builder=build_depth_df,
-    ) if depth_enabled else [[] for _ in records]
+    record_depth_data: list[list[DepthTrackData]] = (
+        build_depth_track_dataframes(
+            records,
+            record_depth_tracks,
+            base_config=depth_config,
+            depth_df_builder=build_depth_df,
+        )
+        if depth_enabled
+        else [[] for _ in records]
+    )
     record_depth_by_index = [
         index_depth_track_row(row, record_index=record_index)
         for record_index, row in enumerate(record_depth_data)
     ]
+    representative_depth_data = representative_depth_tracks(record_depth_data)
+    representative_depth_configs = {
+        track.track_index: track.config
+        for track in representative_depth_data
+    }
     if not depth_enabled:
         canvas_config.show_depth = False
-        if linear_track_layout is None:
-            canvas_config.set_gc_height_and_gc_padding()
-    gc_axis_config = _gc_config_matching_linear_depth_axis_font_size(
-        gc_config=gc_config,
-        depth_config=depth_config,
+
+    record_vertical_plans, record_definition_geometries = _build_linear_record_vertical_plans(
+        records=records,
+        layout=linear_track_layout,
+        feature_dicts=record_feature_dicts,
+        feature_geometries=record_feature_lane_geometries,
+        labels_by_record=all_labels,
         canvas_config=canvas_config,
-        depth_enabled=depth_enabled,
+        cfg=cfg,
+        gc_config=gc_config,
+        skew_config=skew_config,
+        record_depth_by_index=record_depth_by_index,
+        representative_depth_configs=representative_depth_configs,
+        annotation_track_layouts=annotation_track_layouts,
+        definition_heights=definition_heights,
+        row_definition_heights=row_definition_heights,
+        multi_record_enabled=multi_record_enabled,
+        split_row_definitions=split_row_definitions,
+        has_comparisons=has_blast,
     )
 
+    canvas_config.vertical_offset = _linear_record_vertical_offset(
+        record_vertical_plans,
+        rows_by_record,
+        canvas_config,
+    )
+
+    normalize_length = cfg.canvas.linear.normalize_length
+    needed_nts = {
+        _slot_nt(slot, str(gc_config.dinucleotide))
+        for slot in linear_track_layout.slots
+        if slot.renderer in {"dinucleotide_content", "dinucleotide_skew"}
+    }
+    record_gc_dfs_by_nt = {
+        nt: _precalculate_gc_dataframes(
+            records,
+            window=int(gc_config.window),
+            step=int(gc_config.step),
+            dinucleotide=nt,
+            enabled=True,
+        )
+        for nt in sorted(needed_nts)
+    }
+    record_gc_dfs = record_gc_dfs_by_nt.get(
+        str(gc_config.dinucleotide).upper(),
+        [None for _ in records],
+    )
     # Prepare legend group
-    has_blast = bool(normalized_comparisons)
     configure_pairwise_identity_legend_from_comparisons(blast_config, comparisons)
     legend_table: dict = {}
     legend_group: LegendGroup | None = None
@@ -1163,15 +1308,11 @@ def assemble_linear_diagram(
             default_used_features=default_used_features,
             depth_config=depth_config if depth_enabled and depth_track_count(record_depth_tracks) == 1 else None,
         )
-        if depth_enabled:
-            legend_table = sync_depth_track_legend_entries(
-                legend_table,
-                representative_depth_tracks(record_depth_data),
-            )
         legend_table = _sync_legend_table_for_linear_slots(
             legend_table,
             linear_track_slots=normalized_linear_track_slots,
             skew_config=skew_config,
+            depth_tracks=representative_depth_data if depth_enabled else None,
         )
         legend_table = sync_annotation_legend_entries(
             legend_table,
@@ -1209,112 +1350,117 @@ def assemble_linear_diagram(
         )
         canvas_config.legend_offset_x = 0
         canvas_config.legend_offset_y = 0
-    # Vertical shift: how much the records should be moved downward in order to place the records in the middle of the canvas
-    vertical_shift = 0
-    if canvas_config.legend_position in ["top", "bottom"]:
-        pass  # If the legend is placed at the top or bottom of the canvas, no need to care about this
-    else:
-        # the height of the legend might be larger than that of the canvas if the legend is stacked vertically.
-        if required_legend_height > canvas_config.total_height:
-            height_difference = required_legend_height - canvas_config.total_height
-            canvas_config.total_height = int(required_legend_height)
-            vertical_shift = height_difference / 2
-
     record_offsets: list[float] = []
     multi_record_plan = None
 
-    if canvas_config.legend_position == "top":
-        current_y = canvas_config.original_vertical_offset + required_legend_height + canvas_config.vertical_offset
-    else:
-        if canvas_config.vertical_offset > vertical_shift:
-            current_y = canvas_config.vertical_offset
+    def resolve_first_axis_y() -> float:
+        if canvas_config.legend_position == "top":
+            first_axis_y = (
+                canvas_config.original_vertical_offset
+                + required_legend_height
+                + canvas_config.vertical_offset
+            )
         else:
-            current_y = canvas_config.original_vertical_offset + vertical_shift
-    current_y += plot_title_top_reserve
+            first_axis_y = max(
+                canvas_config.vertical_offset,
+                canvas_config.original_vertical_offset,
+            )
+        return first_axis_y + plot_title_top_reserve
+
+    current_y = resolve_first_axis_y()
 
     if multi_record_enabled:
-        measurements: list[LinearRecordMeasurement] = []
-        for i, record in enumerate(records):
-            if linear_track_layout is not None:
-                bottom_extent = _custom_record_bottom_extent(
-                    record_index=i,
-                    layout=linear_track_layout,
-                    feature_slot=feature_slot,
-                    canvas_config=canvas_config,
-                    record_heights_below=record_heights_below,
-                    record_label_heights_below=record_label_heights_below,
-                )
-                top_extent = _custom_record_top_extent(
-                    record_index=i,
-                    layout=linear_track_layout,
-                    feature_slot=feature_slot,
-                    canvas_config=canvas_config,
-                    record_heights_above=record_heights_above,
-                    record_label_heights_above=record_label_heights_above,
-                )
-            else:
-                top_extent = max(record_label_heights_above[i], record_heights_above[i])
-                bottom_extent = (
-                    record_heights_below[i]
-                    + record_label_heights_below[i]
-                    + canvas_config.plot_tracks_height
-                )
-            comparison_endpoint_gap = 0.0
-            if has_blast:
-                comparison_endpoint_gap = float(canvas_config.vertical_padding)
-                if non_middle_layout:
-                    comparison_endpoint_gap = resolve_feature_axis_gap_linear(
-                        cds_height=float(canvas_config.cds_height),
-                        separate_strands=bool(canvas_config.strandedness),
-                        axis_gap=canvas_config.track_axis_gap,
+        def build_measurements() -> list[LinearRecordMeasurement]:
+            measurements: list[LinearRecordMeasurement] = []
+            for index, record in enumerate(records):
+                record_plan = record_vertical_plans[index]
+                measurements.append(
+                    LinearRecordMeasurement(
+                        record_index=index,
+                        record_key=RecordKey(str(record_keys[index])),
+                        sequence_length=len(record.seq),
+                        left_inset=0.0,
+                        right_inset=0.0,
+                        top_extent=record_plan.canvas_top_extent,
+                        bottom_extent=record_plan.canvas_bottom_extent,
+                        comparison_top_extent=record_plan.comparison_top_extent,
+                        comparison_bottom_extent=record_plan.comparison_bottom_extent,
                     )
-            comparison_top_extent = top_extent + comparison_endpoint_gap
-            comparison_bottom_extent = bottom_extent + comparison_endpoint_gap
-            top_extent = comparison_top_extent
-            bottom_extent = comparison_bottom_extent
-            # Multi-record definitions are record-local headers stacked above
-            # every other record-local element. They reserve layout height but
-            # may overlay comparison ribbons to avoid an empty header band.
-            if float(_definition_heights[i]) > 0.0:
-                top_extent += (
-                    float(_definition_heights[i])
-                    + float(canvas_config.vertical_padding)
                 )
-            measurements.append(
-                LinearRecordMeasurement(
-                    record_index=i,
-                    record_key=RecordKey(str(record_keys[i])),
-                    sequence_length=len(record.seq),
-                    left_inset=0.0,
-                    right_inset=0.0,
-                    top_extent=top_extent,
-                    bottom_extent=bottom_extent,
-                    comparison_top_extent=comparison_top_extent,
-                    comparison_bottom_extent=comparison_bottom_extent,
-                )
+            return measurements
+
+        def solve_measurements(
+            measurements: list[LinearRecordMeasurement],
+            *,
+            first_axis_y: float,
+        ):
+            return solve_linear_layout(
+                measurements,
+                rows_by_record,
+                available_width=float(canvas_config.alignment_width),
+                record_gap_px=(
+                    linear_layout.record_gap_px if linear_layout is not None else 24.0
+                ),
+                align_center=bool(canvas_config.align_center),
+                first_axis_y=first_axis_y,
+                row_gap_px=float(canvas_config.cds_padding) * 1.5,
+                comparison_height=(
+                    float(canvas_config.comparison_height) if has_blast else 0.0
+                ),
+                record_order=ordered_record_indices,
             )
-        multi_record_plan = solve_linear_layout(
-            measurements,
-            rows_by_record,
-            available_width=float(canvas_config.alignment_width),
-            record_gap_px=(
-                linear_layout.record_gap_px if linear_layout is not None else 24.0
-            ),
-            align_center=bool(canvas_config.align_center),
+
+        multi_record_plan = solve_measurements(
+            build_measurements(),
             first_axis_y=current_y,
-            row_gap_px=float(canvas_config.cds_padding) * 1.5,
-            comparison_height=(
-                float(canvas_config.comparison_height) if has_blast else 0.0
-            ),
-            record_order=ordered_record_indices,
         )
-        record_offsets = [
-            multi_record_plan.placement_for_index(index).axis_y
+        # Horizontal widths are independent of vertical extents. Re-resolve all
+        # width-sensitive lanes before the authoritative vertical solve.
+        final_sequence_widths = [
+            multi_record_plan.placement_for_index(index).sequence_width
             for index in range(len(records))
         ]
-        current_y = max(record_offsets)
-        # Re-run label X placement with the final record-local sequence widths.
-        _unused_height, all_labels, _unused_record_heights = _precalculate_label_dimensions(
+        if annotation_track_layouts:
+            linear_track_slots, annotation_track_layouts = (
+                _layout_linear_annotation_tracks(
+                    records,
+                    linear_track_slots,
+                    resolved_annotations,
+                    canvas_config=canvas_config,
+                    auto_slot_ids=auto_annotation_slot_ids,
+                    sequence_widths=final_sequence_widths,
+                )
+            )
+            normalized_linear_track_slots = normalize_linear_track_slots_with_axis(
+                linear_track_slots,
+                linear_track_axis_index,
+            )
+            normalized_linear_track_slots = _apply_depth_track_heights_to_linear_slots(
+                normalized_linear_track_slots,
+                record_depth_tracks,
+            )
+            canvas_config.track_layout = _feature_track_layout_for_linear_slots(
+                normalized_linear_track_slots,
+                canvas_config.track_layout,
+            )
+            linear_track_layout = resolve_linear_track_layout(
+                normalized_linear_track_slots,
+                canvas_config=canvas_config,
+                cfg=cfg,
+            )
+            if not custom_linear_track_slots_requested:
+                linear_track_layout = _layout_with_preferred_origins(
+                    linear_track_layout,
+                    _default_preferred_origins(linear_track_layout, canvas_config),
+                )
+            resolved_depth_heights_by_index = _resolved_linear_depth_heights(
+                linear_track_layout
+            )
+            primary_depth_track_index = min(
+                resolved_depth_heights_by_index,
+                default=0,
+            )
+        _unused_height, all_labels, _record_label_heights_above = _precalculate_label_dimensions(
             records,
             feature_config,
             canvas_config,
@@ -1322,90 +1468,59 @@ def assemble_linear_diagram(
             cfg=cfg,
             precomputed_feature_dicts=record_feature_dicts,
             orthogroup_label_eligibility=orthogroup_label_eligibility,
-            sequence_widths=[
-                multi_record_plan.placement_for_index(index).sequence_width
-                for index in range(len(records))
-            ],
+            feature_lane_geometries=record_feature_lane_geometries,
+            sequence_widths=final_sequence_widths,
         )
+        record_vertical_plans, record_definition_geometries = _build_linear_record_vertical_plans(
+            records=records,
+            layout=linear_track_layout,
+            feature_dicts=record_feature_dicts,
+            feature_geometries=record_feature_lane_geometries,
+            labels_by_record=all_labels,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            record_depth_by_index=record_depth_by_index,
+            representative_depth_configs=representative_depth_configs,
+            annotation_track_layouts=annotation_track_layouts,
+            definition_heights=definition_heights,
+            row_definition_heights=row_definition_heights,
+            multi_record_enabled=multi_record_enabled,
+            split_row_definitions=split_row_definitions,
+            has_comparisons=has_blast,
+        )
+        canvas_config.vertical_offset = _linear_record_vertical_offset(
+            record_vertical_plans,
+            rows_by_record,
+            canvas_config,
+        )
+        current_y = resolve_first_axis_y()
+        multi_record_plan = solve_measurements(
+            build_measurements(),
+            first_axis_y=current_y,
+        )
+        record_offsets = [
+            multi_record_plan.placement_for_index(index).axis_y
+            for index in range(len(records))
+        ]
+        current_y = max(record_offsets)
     else:
         for i, _record in enumerate(records):
             record_offsets.append(current_y)
 
             if i >= len(records) - 1:
                 continue
-            # Get the height below axis for the current record (feature tracks + GC/skew)
-            current_feature_height_below = record_heights_below[i]
-            current_label_height_below = record_label_heights_below[i]
-            if linear_track_layout is not None:
-                height_below_axis = float(linear_track_layout.bottom_extent)
-                if feature_slot is not None and getattr(feature_slot, "side", "") == "below":
-                    height_below_axis += (
-                        current_feature_height_below
-                        + current_label_height_below
-                        + canvas_config.vertical_padding
-                    )
-                elif feature_slot is None or getattr(feature_slot, "side", "") == "overlay":
-                    height_below_axis = max(
-                        height_below_axis,
-                        current_feature_height_below + current_label_height_below,
-                    )
-            else:
-                height_below_axis = (
-                    current_feature_height_below
-                    + current_label_height_below
-                    + canvas_config.plot_tracks_height
-                )
-                current_plot_stack_bottom_y = _record_plot_track_stack_bottom_y(
-                    axis_y=current_y,
-                    record_index=i,
-                    canvas_config=canvas_config,
-                    record_heights_below=record_heights_below,
-                    record_label_heights_below=record_label_heights_below,
-                    non_middle_layout=non_middle_layout,
-                )
-                if current_plot_stack_bottom_y is not None:
-                    height_below_axis = max(
-                        height_below_axis,
-                        current_plot_stack_bottom_y - current_y,
-                    )
-
-            # Get the height above axis for the next record (labels or feature tracks)
-            next_label_height = record_label_heights_above[i + 1]
-            next_feature_height_above = record_heights_above[i + 1]
-            # For above-axis height, we need to consider both labels and the upper part of features
-            height_above_next_axis = max(next_label_height, next_feature_height_above)
-            if linear_track_layout is not None:
-                custom_height_above = float(linear_track_layout.top_extent)
-                if feature_slot is not None and getattr(feature_slot, "side", "") == "above":
-                    custom_height_above += (
-                        next_feature_height_above
-                        + next_label_height
-                        + canvas_config.vertical_padding
-                    )
-                elif feature_slot is None or getattr(feature_slot, "side", "") == "overlay":
-                    custom_height_above = max(custom_height_above, next_label_height, next_feature_height_above)
-                height_above_next_axis = max(height_above_next_axis, custom_height_above)
-            # For BLAST comparisons, use comparison_height as minimum space between records
-            if has_blast:
-                min_gap = canvas_config.comparison_height
-            else:
-                # Use cds_padding * 1.5 as minimum gap to ensure clean separation with some breathing room
-                min_gap = canvas_config.cds_padding * 1.5
-
-            # Total inter-record space: below current + gap + above next
-            inter_record_space = height_below_axis + min_gap + height_above_next_axis
-            inter_record_space = max(
-                inter_record_space,
-                definition_half_heights[i]
-                + definition_half_heights[i + 1],
+            current_plan = record_vertical_plans[i]
+            next_plan = record_vertical_plans[i + 1]
+            height_below_axis = current_plan.canvas_bottom_extent
+            height_above_next_axis = next_plan.canvas_top_extent
+            min_gap = (
+                float(canvas_config.comparison_height)
+                if has_blast
+                else float(canvas_config.cds_padding) * 1.5
             )
-            if definition_half_heights[i] > 0.0 and definition_half_heights[i + 1] > 0.0:
-                inter_record_space = max(
-                    inter_record_space,
-                    definition_half_heights[i]
-                    + definition_half_heights[i + 1]
-                    + max(1.0, 0.5 * float(canvas_config.vertical_padding)),
-                )
+            inter_record_space = height_below_axis + min_gap + height_above_next_axis
             current_y += inter_record_space
 
     if multi_record_enabled:
@@ -1448,43 +1563,17 @@ def assemble_linear_diagram(
     )
 
     final_record_index = len(records) - 1 if records else -1
-    final_feature_height_below = (
-        record_heights_below[final_record_index]
-        if non_middle_layout and final_record_index >= 0
-        else canvas_config.cds_padding
-    )
-    final_label_height_below = (
-        record_label_heights_below[final_record_index] if final_record_index >= 0 else 0.0
-    )
-    final_definition_height_below = (
-        definition_half_heights[final_record_index] if final_record_index >= 0 else 0.0
-    )
     if multi_record_plan is not None:
         final_record_height_below = max(
             placement.bottom_extent
             for placement in multi_record_plan.placements
             if placement.row == multi_record_plan.row_count - 1
         )
-    elif linear_track_layout is not None:
-        custom_final_height_below = float(linear_track_layout.bottom_extent)
-        if feature_slot is not None and getattr(feature_slot, "side", "") == "below":
-            custom_final_height_below += (
-                final_feature_height_below
-                + final_label_height_below
-                + canvas_config.vertical_padding
-            )
-        elif feature_slot is None or getattr(feature_slot, "side", "") == "overlay":
-            custom_final_height_below = max(
-                custom_final_height_below,
-                final_feature_height_below + final_label_height_below,
-            )
-        final_record_height_below = max(custom_final_height_below, final_definition_height_below)
     else:
-        final_record_height_below = max(
-            final_feature_height_below
-            + final_label_height_below
-            + canvas_config.plot_tracks_height,
-            final_definition_height_below,
+        final_record_height_below = (
+            record_vertical_plans[final_record_index].canvas_bottom_extent
+            if final_record_index >= 0
+            else 0.0
         )
 
     canvas_config.height_below_final_record = (
@@ -1518,14 +1607,7 @@ def assemble_linear_diagram(
         )
         if canvas_config.legend_position in ["top", "bottom"]:
             final_height += int(required_legend_height)
-    if multi_record_plan is not None:
-        # The configurator's initial height assumes one record per row. Once a
-        # multi-record plan exists, retaining that estimate leaves an empty
-        # band for every record that shares a row. Size the canvas from the
-        # resolved rows while still allowing a side legend to set the minimum.
-        canvas_config.total_height = max(final_height, required_legend_height)
-    else:
-        canvas_config.total_height = max(final_height, canvas_config.total_height)
+    canvas_config.total_height = max(final_height, required_legend_height)
 
     if legend_group is not None:
         canvas_config.recalculate_canvas_dimensions(
@@ -1564,6 +1646,39 @@ def assemble_linear_diagram(
     definition_column_width = max_def_width
     if canvas_config.keep_definition_left_aligned and record_offsets_x:
         definition_column_width = max(0.0, float(max_def_width) - min(record_offsets_x))
+
+    record_placements: dict[int, LinearRecordPlacement] = {}
+    for record_index, record in enumerate(records):
+        if multi_record_plan is not None:
+            record_placements[record_index] = multi_record_plan.placement_for_index(
+                record_index
+            )
+            continue
+        axis_y = record_offsets[record_index]
+        record_plan = record_vertical_plans[record_index]
+        sequence_width = (
+            float(canvas_config.alignment_width)
+            if canvas_config.normalize_length
+            else float(canvas_config.alignment_width)
+            * len(record.seq)
+            / max(1, canvas_config.longest_genome)
+        )
+        record_placements[record_index] = LinearRecordPlacement(
+            record_index=record_index,
+            record_key=RecordKey(str(record_keys[record_index])),
+            row=rows_by_record[record_index],
+            column=0,
+            x=record_offsets_x[record_index],
+            axis_y=axis_y,
+            sequence_width=sequence_width,
+            left_inset=0.0,
+            right_inset=0.0,
+            top_extent=record_plan.canvas_top_extent,
+            bottom_extent=record_plan.canvas_bottom_extent,
+            comparison_top_y=axis_y - record_plan.comparison_top_extent,
+            comparison_bottom_y=axis_y + record_plan.comparison_bottom_extent,
+            px_per_bp=sequence_width / max(1, len(record.seq)),
+        )
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     # Embed both viewBox configurations as data attributes for JavaScript repositioning
@@ -1610,129 +1725,16 @@ def assemble_linear_diagram(
             offset_x=length_bar_offset_x,
         )
 
-    explicit_placements: dict[int, LinearRecordPlacement] | None = None
-    if has_blast and linear_comparisons and multi_record_plan is None:
-        explicit_placements = {}
-        for record_index, record in enumerate(records):
-            axis_y = record_offsets[record_index]
-            if linear_track_layout is not None:
-                top_y = axis_y - _custom_record_top_extent(
-                    record_index=record_index,
-                    layout=linear_track_layout,
-                    feature_slot=feature_slot,
-                    canvas_config=canvas_config,
-                    record_heights_above=record_heights_above,
-                    record_label_heights_above=record_label_heights_above,
-                )
-                bottom_y = axis_y + _custom_record_bottom_extent(
-                    record_index=record_index,
-                    layout=linear_track_layout,
-                    feature_slot=feature_slot,
-                    canvas_config=canvas_config,
-                    record_heights_below=record_heights_below,
-                    record_label_heights_below=record_label_heights_below,
-                )
-            elif non_middle_layout:
-                top_y = bottom_y = axis_y
-            else:
-                top_y = axis_y - canvas_config.cds_padding
-                bottom_y = _record_plot_track_stack_bottom_y(
-                    axis_y=axis_y,
-                    record_index=record_index,
-                    canvas_config=canvas_config,
-                    record_heights_below=record_heights_below,
-                    record_label_heights_below=record_label_heights_below,
-                    non_middle_layout=non_middle_layout,
-                ) or (axis_y + canvas_config.cds_padding)
-            sequence_width = (
-                float(canvas_config.alignment_width)
-                if canvas_config.normalize_length
-                else float(canvas_config.alignment_width)
-                * len(record.seq)
-                / max(1, canvas_config.longest_genome)
-            )
-            explicit_placements[record_index] = LinearRecordPlacement(
-                record_index=record_index,
-                record_key=RecordKey(str(record_keys[record_index])),
-                row=rows_by_record[record_index],
-                column=0,
-                x=record_offsets_x[record_index],
-                axis_y=axis_y,
-                sequence_width=sequence_width,
-                left_inset=0.0,
-                right_inset=0.0,
-                top_extent=max(0.0, axis_y - top_y),
-                bottom_extent=max(0.0, bottom_y - axis_y),
-                comparison_top_y=top_y,
-                comparison_bottom_y=bottom_y,
-                px_per_bp=sequence_width / len(record.seq),
-            )
+    comparison_placements = record_placements if has_blast else None
 
-    if has_blast and (multi_record_plan is not None or explicit_placements is not None):
+    if has_blast and comparison_placements is not None:
         canvas = add_explicit_comparisons_on_linear_canvas(
             canvas,
             normalized_comparisons,
             canvas_config,
             blast_config,
             records,
-            explicit_placements or {
-                placement.record_index: placement
-                for placement in multi_record_plan.placements
-            },
-        )
-    elif has_blast:
-        comparison_offsets = []
-        actual_comparison_heights = []
-        for i in range(len(records) - 1):
-            if linear_track_layout is not None:
-                ribbon_start_y = record_offsets[i] + _custom_record_bottom_extent(
-                    record_index=i,
-                    layout=linear_track_layout,
-                    feature_slot=feature_slot,
-                    canvas_config=canvas_config,
-                    record_heights_below=record_heights_below,
-                    record_label_heights_below=record_label_heights_below,
-                )
-                ribbon_end_y = record_offsets[i + 1] - _custom_record_top_extent(
-                    record_index=i + 1,
-                    layout=linear_track_layout,
-                    feature_slot=feature_slot,
-                    canvas_config=canvas_config,
-                    record_heights_above=record_heights_above,
-                    record_label_heights_above=record_label_heights_above,
-                )
-            elif non_middle_layout:
-                # In above/below layouts, anchor ribbons to consecutive record axes.
-                ribbon_start_y = record_offsets[i]
-                ribbon_end_y = record_offsets[i + 1]
-            else:
-                plot_stack_bottom_y = _record_plot_track_stack_bottom_y(
-                    axis_y=record_offsets[i],
-                    record_index=i,
-                    canvas_config=canvas_config,
-                    record_heights_below=record_heights_below,
-                    record_label_heights_below=record_label_heights_below,
-                    non_middle_layout=non_middle_layout,
-                )
-                if plot_stack_bottom_y is None:
-                    ribbon_start_y = record_offsets[i] + canvas_config.cds_padding
-                else:
-                    ribbon_start_y = plot_stack_bottom_y
-                ribbon_end_y = record_offsets[i + 1] - canvas_config.cds_padding
-            comparison_offsets.append(ribbon_start_y)
-            height = max(0.0, ribbon_end_y - ribbon_start_y)
-            actual_comparison_heights.append(height)
-
-        canvas = add_comparison_on_linear_canvas(
-            canvas,
-            comparisons,
-            canvas_config,
-            blast_config,
-            config_dict,
-            records,
-            comparison_offsets,
-            actual_comparison_heights,
-            orthogroup_alignment_offsets,
+            comparison_placements,
         )
 
     label_font_size = _resolve_linear_diagram_label_font_size(
@@ -1753,14 +1755,10 @@ def assemble_linear_diagram(
             else {}
         )
         offset_y = record_offsets[record_index]
-        record_placement = (
-            multi_record_plan.placement_for_index(record_index)
-            if multi_record_plan is not None
-            else None
-        )
-        sequence_width = (
-            record_placement.sequence_width if record_placement is not None else None
-        )
+        record_placement = record_placements[record_index]
+        sequence_width = record_placement.sequence_width
+        record_vertical_plan = record_vertical_plans[record_index]
+        record_definition_geometry = record_definition_geometries[record_index]
 
         offset_x = record_offsets_x[record_index] if record_index < len(record_offsets_x) else 0.0
 
@@ -1793,6 +1791,7 @@ def assemble_linear_diagram(
             feature_rendered = False
 
             for slot in sorted(linear_track_layout.slots, key=lambda item: (item.z, item.slot_index)):
+                resolved_slot = record_vertical_plan.slot_by_id(slot.id)
                 if slot.renderer == "spacer":
                     continue
                 if slot.renderer == "features":
@@ -1816,20 +1815,15 @@ def assemble_linear_diagram(
                         record_count=total_records,
                         group_id=record_group_id,
                         placement=record_placement,
+                        multi_record_layout=multi_record_enabled,
+                        record_local_ruler=multi_record_enabled,
+                        feature_offset_y=resolved_slot.origin_y,
+                        feature_lane_geometry=record_feature_lane_geometries[record_index],
                     )
                     feature_rendered = True
                     continue
 
-                track_offset_y = _custom_slot_track_offset_y(
-                    slot,
-                    feature_slot=feature_slot,
-                    record_index=record_index,
-                    canvas_config=canvas_config,
-                    record_heights_below=record_heights_below,
-                    record_heights_above=record_heights_above,
-                    record_label_heights_below=record_label_heights_below,
-                    record_label_heights_above=record_label_heights_above,
-                )
+                track_offset_y = resolved_slot.origin_y
                 if slot.renderer == "annotations":
                     annotation_layout = annotation_track_layouts.get(slot.id)
                     if annotation_layout is None:
@@ -1865,7 +1859,7 @@ def assemble_linear_diagram(
                     canvas.add(annotation_group)
                     continue
                 if slot.renderer == "depth":
-                    track_index = int(slot.params.get("track_index", 0))
+                    track_index = _depth_slot_track_index(slot)
                     depth_track = depth_by_index.get(track_index)
                     if depth_track is None:
                         continue
@@ -1884,7 +1878,6 @@ def assemble_linear_diagram(
                         config_dict,
                         cfg=record_cfg,
                         depth_df=depth_track.df,
-                        depth_track_index=track_index,
                         group_id=group_id,
                         axis_group_id=f"{group_id}_axis",
                         track_height=slot.height,
@@ -1897,10 +1890,21 @@ def assemble_linear_diagram(
                     nt = _slot_nt(slot, str(gc_config.dinucleotide))
                     per_nt_gc_dfs = record_gc_dfs_by_nt.get(nt, record_gc_dfs)
                     shared_gc_df = per_nt_gc_dfs[record_index] if record_index < len(per_nt_gc_dfs) else None
+                    primary_depth_track = depth_by_index.get(primary_depth_track_index)
                     slot_gc_config = _gc_config_matching_linear_depth_axis_font_size(
                         gc_config=_clone_gc_config_with_dinucleotide(gc_config, nt),
-                        depth_config=depth_config,
-                        canvas_config=canvas_config,
+                        depth_config=(
+                            primary_depth_track.config
+                            if primary_depth_track is not None
+                            else representative_depth_configs.get(
+                                primary_depth_track_index,
+                                depth_config,
+                            )
+                        ),
+                        depth_height=resolved_depth_heights_by_index.get(
+                            primary_depth_track_index,
+                            float(canvas_config.default_depth_height),
+                        ),
                         depth_enabled=depth_enabled,
                     )
                     add_gc_content_group(
@@ -1968,6 +1972,9 @@ def assemble_linear_diagram(
                     record_count=total_records,
                     group_id=record_group_id,
                     placement=record_placement,
+                    multi_record_layout=multi_record_enabled,
+                    record_local_ruler=multi_record_enabled,
+                    feature_lane_geometry=record_feature_lane_geometries[record_index],
                 )
             add_record_definition_group(
                 canvas,
@@ -1982,115 +1989,25 @@ def assemble_linear_diagram(
                 placement=record_placement,
                 row_definition_width=row_definition_width,
                 definition_center_y=(
-                    offset_y + record_feature_center_offsets[record_index]
+                    offset_y + record_definition_geometry.row_center_y
+                    if multi_record_enabled
+                    and record_definition_geometry.row_center_y is not None
+                    else (
+                        offset_y + record_definition_geometry.local_center_y
+                        if not multi_record_enabled
+                        and record_definition_geometry.local_center_y is not None
+                        else None
+                    )
                 ),
+                definition_header_center_y=(
+                    offset_y + record_definition_geometry.local_center_y
+                    if multi_record_enabled
+                    and record_definition_geometry.local_center_y is not None
+                    else None
+                ),
+                multi_record_layout=multi_record_enabled,
             )
             continue
-
-        add_record_group(
-            canvas,
-            record,
-            offset_y,
-            offset_x,
-            canvas_config,
-            feature_config,
-            config_dict,
-            precalculated_labels=labels_for_record,
-            cfg=record_cfg,
-            precomputed_feature_dict=record_feature_dicts[record_index],
-            label_font_size=label_font_size,
-            orthogroup_label_member_ids=orthogroup_label_member_ids,
-            orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
-            record_index=record_index,
-            record_count=total_records,
-            group_id=record_group_id,
-            placement=record_placement,
-        )
-        add_record_definition_group(
-            canvas,
-            record,
-            offset_y,
-            offset_x,
-            canvas_config,
-            config_dict,
-            definition_column_width,
-            cfg=record_cfg,
-            group_id=definition_group_id,
-            placement=record_placement,
-            row_definition_width=row_definition_width,
-            definition_center_y=(
-                offset_y + record_feature_center_offsets[record_index]
-            ),
-        )
-        gc_offset_y = offset_y
-        if non_middle_layout:
-            current_feature_height_below = record_heights_below[record_index]
-            gc_offset_y = offset_y + (current_feature_height_below - canvas_config.cds_padding)
-        gc_offset_y += record_label_heights_below[record_index]
-        shared_gc_df = record_gc_dfs[record_index] if record_index < len(record_gc_dfs) else None
-
-        if depth_enabled:
-            for depth_track_index in sorted(depth_by_index):
-                depth_track = depth_by_index[depth_track_index]
-                group_id = _linear_depth_group_id(
-                    depth_track.id,
-                    record_index=record_index,
-                    record_count=total_records,
-                )
-                add_depth_group(
-                    canvas,
-                    record,
-                    gc_offset_y,
-                    offset_x,
-                    canvas_config,
-                    depth_track.config,
-                    config_dict,
-                    cfg=record_cfg,
-                    depth_df=depth_track.df,
-                    depth_track_index=depth_track_index,
-                    group_id=group_id,
-                    axis_group_id=f"{group_id}_axis",
-                    track_height=depth_track.height,
-                    sequence_width=sequence_width,
-                )
-        if canvas_config.show_gc:
-            gc_group_id = make_linear_dom_id(
-                "gc_content",
-                record_index=record_index,
-                record_count=total_records,
-            )
-            add_gc_content_group(
-                canvas,
-                record,
-                gc_offset_y,
-                offset_x,
-                canvas_config,
-                gc_axis_config,
-                config_dict,
-                cfg=record_cfg,
-                gc_df=shared_gc_df,
-                group_id=gc_group_id,
-                sequence_width=sequence_width,
-            )
-        if canvas_config.show_skew:
-            skew_group_id = make_linear_dom_id(
-                "gc_skew",
-                record_index=record_index,
-                record_count=total_records,
-            )
-            add_gc_skew_group(
-                canvas,
-                record,
-                gc_offset_y,
-                offset_x,
-                canvas_config,
-                skew_config,
-                config_dict,
-                cfg=record_cfg,
-                gc_df=shared_gc_df,
-                group_id=skew_group_id,
-                sequence_width=sequence_width,
-            )
 
     if plot_title_obj is not None:
         title_group = plot_title_obj.get_group()
@@ -2118,13 +2035,8 @@ def assemble_linear_diagram(
             _serialize_linear_track_slot_geometry(
                 records=records,
                 layout=linear_track_layout,
+                record_plans=record_vertical_plans,
                 record_offsets=record_offsets,
-                feature_slot=feature_slot,
-                canvas_config=canvas_config,
-                record_heights_below=record_heights_below,
-                record_heights_above=record_heights_above,
-                record_label_heights_below=record_label_heights_below,
-                record_label_heights_above=record_label_heights_above,
             ),
         )
 

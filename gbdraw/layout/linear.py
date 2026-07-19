@@ -3,6 +3,140 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+import math
+from types import MappingProxyType
+from typing import Iterable, Mapping, Sequence
+
+
+@dataclass(frozen=True)
+class VerticalBand:
+    """One closed vertical interval in record-axis-local coordinates."""
+
+    top_y: float
+    bottom_y: float
+
+    def __post_init__(self) -> None:
+        top_y = float(self.top_y)
+        bottom_y = float(self.bottom_y)
+        if not math.isfinite(top_y) or not math.isfinite(bottom_y):
+            raise ValueError("vertical band coordinates must be finite")
+        if top_y > bottom_y:
+            raise ValueError("vertical band top_y must not exceed bottom_y")
+        object.__setattr__(self, "top_y", top_y)
+        object.__setattr__(self, "bottom_y", bottom_y)
+
+    @property
+    def height(self) -> float:
+        return self.bottom_y - self.top_y
+
+    def translate(self, offset_y: float) -> VerticalBand:
+        offset = float(offset_y)
+        if not math.isfinite(offset):
+            raise ValueError("vertical band translation must be finite")
+        return VerticalBand(self.top_y + offset, self.bottom_y + offset)
+
+    def expand(self, top: float = 0.0, bottom: float | None = None) -> VerticalBand:
+        top_value = max(0.0, float(top))
+        bottom_value = top_value if bottom is None else max(0.0, float(bottom))
+        return VerticalBand(self.top_y - top_value, self.bottom_y + bottom_value)
+
+    def union(self, *others: VerticalBand) -> VerticalBand:
+        bands = (self, *others)
+        return VerticalBand(
+            min(band.top_y for band in bands),
+            max(band.bottom_y for band in bands),
+        )
+
+    def intersects(self, other: VerticalBand, *, epsilon: float = 1e-9) -> bool:
+        tolerance = max(0.0, float(epsilon))
+        return (
+            self.top_y < other.bottom_y - tolerance
+            and self.bottom_y > other.top_y + tolerance
+        )
+
+
+def union_vertical_bands(
+    bands: Iterable[VerticalBand],
+    *,
+    default: VerticalBand | None = None,
+) -> VerticalBand:
+    """Return the smallest band containing every input band."""
+
+    collected = tuple(bands)
+    if not collected:
+        if default is None:
+            raise ValueError("at least one vertical band is required")
+        return default
+    return VerticalBand(
+        min(band.top_y for band in collected),
+        max(band.bottom_y for band in collected),
+    )
+
+
+@dataclass(frozen=True)
+class LinearFeatureLane:
+    """Measured geometry for one rendered Linear feature lane."""
+
+    strand_pool: str
+    track_id: int
+    top_y: float
+    middle_y: float
+    bottom_y: float
+    band: VerticalBand
+
+    @property
+    def positions(self) -> tuple[float, float, float]:
+        """Return the resolved feature path coordinates for this lane."""
+
+        return self.top_y, self.middle_y, self.bottom_y
+
+
+@dataclass(frozen=True)
+class LinearFeatureLaneGeometry:
+    """All feature lanes and their combined record-axis-local footprint."""
+
+    lanes: tuple[LinearFeatureLane, ...]
+    occupied_band: VerticalBand
+    _lanes_by_identity: Mapping[tuple[str, int], LinearFeatureLane] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __post_init__(self) -> None:
+        lanes_by_identity = {
+            (lane.strand_pool, lane.track_id): lane
+            for lane in self.lanes
+        }
+        if len(lanes_by_identity) != len(self.lanes):
+            raise ValueError("Linear feature lane identities must be unique")
+        object.__setattr__(
+            self,
+            "_lanes_by_identity",
+            MappingProxyType(lanes_by_identity),
+        )
+
+    def lane_for(
+        self,
+        *,
+        strand: str,
+        track_id: int,
+        separate_strands: bool,
+    ) -> LinearFeatureLane:
+        """Return the lane shared by measurement, labels, and SVG rendering."""
+
+        strand_pool = str(strand) if separate_strands else "shared"
+        resolved_track_id = int(track_id)
+        identity = (strand_pool, resolved_track_id)
+        try:
+            return self._lanes_by_identity[identity]
+        except KeyError:
+            raise KeyError(
+                "no measured Linear feature lane for "
+                f"strand_pool={strand_pool!r}, track_id={resolved_track_id}"
+            ) from None
+
 
 def _legacy_middle_factors(strand: str, track_id: int, separate_strands: bool) -> list[float]:
     """Legacy factor calculation used for backward-compatible 'middle' layout."""
@@ -142,9 +276,106 @@ def calculate_feature_position_factors_linear(
     return [middle - half_height, middle, middle + half_height]
 
 
+def measure_linear_feature_lanes(
+    feature_dict: Mapping[str, object],
+    *,
+    cds_height: float,
+    separate_strands: bool,
+    track_layout: str = "middle",
+    axis_gap: float | None = None,
+    stroke_width: float = 0.0,
+) -> LinearFeatureLaneGeometry:
+    """Measure feature lanes using the same factors consumed by the renderer."""
+
+    height = max(0.0, float(cds_height))
+    half_stroke = 0.5 * max(0.0, float(stroke_width))
+    axis_gap_factor = (
+        float(axis_gap) / height
+        if axis_gap is not None and height > 0.0
+        else None
+    )
+    lanes_by_identity: dict[tuple[str, int], LinearFeatureLane] = {}
+    for feature in feature_dict.values():
+        track_id = int(getattr(feature, "feature_track_id", 0))
+        strand = str(getattr(feature, "strand", "undefined"))
+        strand_pool = strand if separate_strands else "shared"
+        identity = (strand_pool, track_id)
+        if identity in lanes_by_identity:
+            continue
+        factors = calculate_feature_position_factors_linear(
+            strand=strand,
+            track_id=track_id,
+            separate_strands=bool(separate_strands),
+            track_layout=track_layout,
+            axis_gap_factor=axis_gap_factor,
+        )
+        top_y = height * float(factors[0])
+        middle_y = height * float(factors[1])
+        bottom_y = height * float(factors[2])
+        band = VerticalBand(top_y - half_stroke, bottom_y + half_stroke)
+        lanes_by_identity[identity] = LinearFeatureLane(
+            strand_pool=strand_pool,
+            track_id=track_id,
+            top_y=top_y,
+            middle_y=middle_y,
+            bottom_y=bottom_y,
+            band=band,
+        )
+
+    lanes = tuple(
+        sorted(
+            lanes_by_identity.values(),
+            key=lambda lane: (lane.band.top_y, lane.band.bottom_y, lane.strand_pool, lane.track_id),
+        )
+    )
+    occupied_band = union_vertical_bands(
+        (lane.band for lane in lanes),
+        default=VerticalBand(0.0, 0.0),
+    )
+    return LinearFeatureLaneGeometry(lanes=lanes, occupied_band=occupied_band)
+
+
+def measure_linear_label_band(
+    labels: Sequence[Mapping[str, object]],
+    *,
+    leader_stroke_width: float = 0.0,
+) -> VerticalBand | None:
+    """Measure the vertical paint extent of prepared Linear labels and leaders."""
+
+    # Imported lazily to keep the lane geometry module independent of label setup.
+    from ..labels.linear import calculate_label_y_bounds
+
+    if not labels:
+        return None
+    half_stroke = 0.5 * max(0.0, float(leader_stroke_width))
+    bands: list[VerticalBand] = []
+    for label in labels:
+        top_y, bottom_y = calculate_label_y_bounds(label)
+        leader_values = (
+            label.get("leader_start_y"),
+            label.get("leader_end_y"),
+        )
+        leader_y = [
+            float(value)
+            for value in leader_values
+            if value is not None and math.isfinite(float(value))
+        ]
+        if leader_y:
+            top_y = min(float(top_y), min(leader_y) - half_stroke)
+            bottom_y = max(float(bottom_y), max(leader_y) + half_stroke)
+        bands.append(VerticalBand(float(top_y), float(bottom_y)))
+    return union_vertical_bands(bands)
+
+
 __all__ = [
+    "LinearFeatureLane",
+    "LinearFeatureLaneGeometry",
+    "VerticalBand",
     "calculate_feature_position_factors_linear",
+    "measure_linear_feature_lanes",
+    "measure_linear_label_band",
     "resolve_feature_axis_gap_linear",
+    "union_vertical_bands",
 ]
 
 

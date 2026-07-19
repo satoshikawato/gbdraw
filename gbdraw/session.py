@@ -44,6 +44,7 @@ _RESOURCE_REQUIRED_FIELDS = frozenset(
     {"kind", "name", "type", "size", "encoding", "data"}
 )
 _RESOURCE_OPTIONAL_FIELDS = frozenset({"lastModified"})
+_LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32
 
 
 class SessionError(ValidationError):
@@ -303,7 +304,7 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
 
     try:
         return decode_canonical_request(
-            payload,
+            _canonical_payload_for_decode(document, payload),
             resource_paths=materialized.resource_paths,
             output_directory=materialized.output_directory,
         )
@@ -516,6 +517,97 @@ def _materialize_resources(
                 f"Canonical resource {resource_id!r} could not be materialized: {exc}"
             ) from exc
     return result
+
+
+def _canonical_payload_for_decode(
+    document: SessionDocument,
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return a detached payload with legacy slot semantics preserved."""
+
+    detached = copy.deepcopy(dict(payload))
+    if document.version > _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION:
+        return detached
+
+    diagram_options = detached.get("diagramOptions")
+    if not isinstance(diagram_options, Mapping):
+        return detached
+    detached_diagram_options = dict(diagram_options)
+    detached["diagramOptions"] = detached_diagram_options
+
+    tracks = detached_diagram_options.get("tracks")
+    if not isinstance(tracks, Mapping):
+        return detached
+    detached_tracks = dict(tracks)
+    detached_diagram_options["tracks"] = detached_tracks
+
+    slots = detached_tracks.get("linearTrackSlots")
+    if not isinstance(slots, list):
+        return detached
+    detached_tracks["linearTrackSlots"] = [
+        _migrate_legacy_linear_track_slot(slot) for slot in slots
+    ]
+    return detached
+
+
+def _migrate_legacy_linear_track_slot(slot: Any) -> Any:
+    """Remove v1 no-op feature geometry without changing other slot fields."""
+
+    if isinstance(slot, str):
+        return _migrate_legacy_linear_track_slot_spec(slot)
+    if not isinstance(slot, Mapping):
+        return slot
+
+    migrated = copy.deepcopy(dict(slot))
+    if (
+        migrated.get("kind") == "linearTrackSlot"
+        and str(migrated.get("renderer", "")).strip().lower() == "features"
+    ):
+        if "height" in migrated:
+            migrated["height"] = None
+        if "spacing" in migrated:
+            migrated["spacing"] = None
+    return migrated
+
+
+def _migrate_legacy_linear_track_slot_spec(spec: str) -> str:
+    """Strip height/spacing tokens from one v1 feature slot specification."""
+
+    head, separator, options = spec.partition("@")
+    if ":" not in head:
+        return spec
+    renderer = head.split(":", 1)[1].strip().lower()
+    if not separator:
+        return spec
+
+    option_parts = options.split(",")
+    parsed_parts: list[tuple[str, str]] = []
+    has_legacy_geometry = False
+    for part in option_parts:
+        stripped = part.strip()
+        if not stripped:
+            parsed_parts.append(("", part))
+            continue
+        if "=" not in stripped:
+            return spec
+        raw_key, raw_value = stripped.split("=", 1)
+        key = raw_key.strip().lower()
+        parsed_parts.append((key, part))
+        if key in {"h", "height", "spacing"}:
+            has_legacy_geometry = True
+        if key in {"renderer", "type"}:
+            renderer = raw_value.strip().lower()
+
+    if renderer != "features" or not has_legacy_geometry:
+        return spec
+    retained = [
+        part
+        for key, part in parsed_parts
+        if key not in {"h", "height", "spacing"}
+    ]
+    if not any(part.strip() for part in retained):
+        return head
+    return f"{head}@{','.join(retained)}"
 
 
 def _serialize_canonical_resource(

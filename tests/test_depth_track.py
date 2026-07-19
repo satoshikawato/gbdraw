@@ -334,20 +334,31 @@ def test_linear_depth_gc_track_offsets_reserve_visual_gap() -> None:
         canvas_config.plot_tracks_height
     )
 
-    svg = assemble_linear_diagram_from_records(
+    canvas = assemble_linear_diagram_from_records(
         [_make_record()],
         legend="none",
         depth_table=_depth_table("rec1"),
         config_overrides={"show_gc": True, "show_skew": True},
-    ).tostring()
+    )
+    svg = canvas.tostring()
     depth_y = _svg_group_translate_y(svg, "depth")
     gc_y = _svg_group_translate_y(svg, "gc_content")
     skew_y = _svg_group_translate_y(svg, "gc_skew")
+    geometry = canvas._gbdraw_track_slot_geometry["records"][0]
+    slots = {slot["slotId"]: slot for slot in geometry["slots"]}
 
-    assert (gc_y - (0.5 * canvas_config.gc_height)) - (depth_y + canvas_config.depth_height) == pytest.approx(
+    assert (
+        slots["gc_content"]["reserveBand"]["topPx"]
+        - slots["depth"]["reserveBand"]["bottomPx"]
+    ) == pytest.approx(
         cfg.canvas.linear.depth_padding
     )
-    assert skew_y - (0.5 * canvas_config.skew_height) == pytest.approx(gc_y + (0.5 * canvas_config.gc_height))
+    assert slots["gc_skew"]["reserveBand"]["topPx"] == pytest.approx(
+        slots["gc_content"]["reserveBand"]["bottomPx"]
+    )
+    assert depth_y == pytest.approx(geometry["axisYpx"] + slots["depth"]["resolvedOriginPx"])
+    assert gc_y == pytest.approx(geometry["axisYpx"] + slots["gc_content"]["resolvedOriginPx"])
+    assert skew_y == pytest.approx(geometry["axisYpx"] + slots["gc_skew"]["resolvedOriginPx"])
 
 
 @pytest.mark.circular
@@ -774,7 +785,7 @@ def test_linear_depth_track_is_optional() -> None:
 @pytest.mark.linear
 def test_linear_multiple_depth_tracks_have_unique_ids() -> None:
     records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
-    svg = assemble_linear_diagram_from_records(
+    canvas = assemble_linear_diagram_from_records(
         records,
         legend="none",
         depth_track_tables=[
@@ -794,7 +805,8 @@ def test_linear_multiple_depth_tracks_have_unique_ids() -> None:
         step=10,
         depth_window=10,
         depth_step=10,
-    ).tostring()
+    )
+    svg = canvas.tostring()
 
     for group_id in (
         "depth_1_record_1",
@@ -811,7 +823,7 @@ def test_linear_multiple_depth_tracks_have_unique_ids() -> None:
 @pytest.mark.linear
 def test_linear_multiple_depth_track_heights_are_per_track() -> None:
     record = _make_record("rec1", length=40)
-    svg = assemble_linear_diagram_from_records(
+    canvas = assemble_linear_diagram_from_records(
         [record],
         legend="none",
         depth_track_tables=[
@@ -826,7 +838,8 @@ def test_linear_multiple_depth_track_heights_are_per_track() -> None:
         step=10,
         depth_window=10,
         depth_step=10,
-    ).tostring()
+    )
+    svg = canvas.tostring()
 
     assert _svg_line_y_span(_svg_group(svg, "depth_1_axis")) == pytest.approx(12)
     assert _svg_line_y_span(_svg_group(svg, "depth_2_axis")) == pytest.approx(28)
@@ -1024,7 +1037,7 @@ def test_linear_custom_depth_slot_skips_leading_or_trailing_missing_record(
     present_record_id = records[present_record_index].id
     depth_rows[present_record_index][0] = _constant_depth_table(present_record_id, 25, length=40)
 
-    svg = assemble_linear_diagram_from_records(
+    canvas = assemble_linear_diagram_from_records(
         records,
         legend="none",
         depth_track_tables=depth_rows,
@@ -1037,7 +1050,8 @@ def test_linear_custom_depth_slot_skips_leading_or_trailing_missing_record(
         step=10,
         depth_window=10,
         depth_step=10,
-    ).tostring()
+    )
+    svg = canvas.tostring()
 
     present_number = present_record_index + 1
     missing_number = 2 if present_number == 1 else 1
@@ -1045,6 +1059,22 @@ def test_linear_custom_depth_slot_skips_leading_or_trailing_missing_record(
     assert svg.count(f'id="depth_record_{present_number}_axis"') == 1
     assert f'id="depth_record_{missing_number}"' not in svg
     assert f'id="depth_record_{missing_number}_axis"' not in svg
+    geometry = canvas._gbdraw_track_slot_geometry["records"]
+    depth_slots = [
+        next(slot for slot in record_geometry["slots"] if slot["slotId"] == "depth")
+        for record_geometry in geometry
+    ]
+    assert depth_slots[present_record_index]["dataAvailable"] is True
+    assert depth_slots[present_record_index]["paintBand"] is not None
+    assert depth_slots[1 - present_record_index]["dataAvailable"] is False
+    assert depth_slots[1 - present_record_index]["paintBand"] is None
+    assert depth_slots[0]["resolvedOriginPx"] == pytest.approx(
+        depth_slots[1]["resolvedOriginPx"]
+    )
+    for edge in ("topPx", "bottomPx"):
+        assert depth_slots[0]["reserveBand"][edge] == pytest.approx(
+            depth_slots[1]["reserveBand"][edge]
+        )
 
 
 @pytest.mark.linear
@@ -1120,6 +1150,42 @@ def test_linear_custom_slot_can_select_only_second_logical_depth_track() -> None
 
     assert 'fill="#445566"' in _svg_group(svg, "selected_depth")
     assert 'id="selected_depth_axis"' in svg
+
+
+@pytest.mark.linear
+def test_linear_custom_depth_slot_legend_uses_only_selected_sparse_logical_track() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    legend_label = "Selected Sample B"
+
+    svg = assemble_linear_diagram_from_records(
+        records,
+        legend="right",
+        depth_track_tables=[
+            [_constant_depth_table("rec1", 10, length=40), None],
+            [None, _constant_depth_table("rec2", 50, length=40)],
+        ],
+        depth_track_labels=["Original Sample A", "Original Sample B"],
+        depth_track_colors=["#112233", "#445566"],
+        linear_track_slots=[
+            f"selected_depth:depth@track_index=1,side=below,legend_label={legend_label}",
+            "features:features@side=overlay",
+        ],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    ).tostring()
+
+    assert 'id="selected_depth_record_1"' not in svg
+    assert 'id="selected_depth_record_1_axis"' not in svg
+    assert svg.count('id="selected_depth_record_2"') == 1
+    assert svg.count('id="selected_depth_record_2_axis"') == 1
+    assert 'fill="#445566"' in _svg_group(svg, "selected_depth_record_2")
+    assert "#112233" not in svg
+    assert f'data-legend-key="{legend_label}"' in svg
+    assert "Original Sample A" not in svg
+    assert "Original Sample B" not in svg
 
 
 @pytest.mark.linear

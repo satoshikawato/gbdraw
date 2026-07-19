@@ -35,6 +35,9 @@ import {
   depthSlotTrackIndex,
   depthTrackCoverageCount,
   depthTrackMatrixWidth,
+  isRecordMajorDepthFileMatrix,
+  normalizeRecordMajorDepthFileRows,
+  representativeDepthFiles,
   syncDepthSlotLabels
 } from './depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
@@ -1521,12 +1524,33 @@ json.dumps({
           ))
         );
     if (!form.show_depth && !customDepthRequested) return '';
-    const depthFileSlots = (value) => (Array.isArray(value) ? value.slice() : (value ? [value] : []));
-    const depthFiles = (value) => depthFileSlots(value).filter(Boolean);
     if (mode.value === 'circular') {
-      return depthFiles(files.c_depth).length > 0 ? '' : 'Please upload a Depth TSV file or disable Show depth track.';
+      const discoveredCount = Array.isArray(circularRecordList.value)
+        ? circularRecordList.value.length
+        : 0;
+      const recordCount = discoveredCount > 0
+        ? discoveredCount
+        : (
+            isRecordMajorDepthFileMatrix(files.c_depth)
+              ? Math.max(1, files.c_depth.length)
+              : 1
+          );
+      const rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
+      if (isRecordMajorDepthFileMatrix(files.c_depth) && files.c_depth.length !== recordCount) {
+        return `Circular Depth matrix has ${files.c_depth.length} record rows; expected ${recordCount}.`;
+      }
+      if (!rows.some((row) => row.some(Boolean))) {
+        return 'Please upload a Depth TSV file or disable Show depth track.';
+      }
+      const logicalWidth = depthTrackMatrixWidth(rows);
+      for (let trackIndex = 0; trackIndex < logicalWidth; trackIndex += 1) {
+        if (depthTrackCoverageCount(rows, trackIndex) > 0) continue;
+        return `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no TSV source in any record. Add a TSV or remove the series.`;
+      }
+      return '';
     }
 
+    const depthFileSlots = (value) => (Array.isArray(value) ? value.slice() : (value ? [value] : []));
     const perRecordDepthFiles = linearSeqs.map((seq) => depthFileSlots(seq.depth));
     const depthCount = perRecordDepthFiles.reduce((sum, items) => sum + items.filter(Boolean).length, 0);
     if (depthCount === 0) {
@@ -2132,9 +2156,19 @@ json.dumps({
           tickFontSize: normalizeDepthTrackValue(source.tick_font_size)
         };
       };
-      const depthTrackEntriesFromSlots = (slots) => depthFileSlotsFromValue(slots)
-        .map((file, index) => (file ? { file, index, config: depthTrackConfigAt(index, file) } : null))
-        .filter(Boolean);
+      const depthTrackEntriesFromRows = (rows) => Array.from(
+        { length: depthTrackMatrixWidth(rows) },
+        (_, index) => {
+          const filesForRecords = rows.map((row) => row[index] || null);
+          const file = filesForRecords.find(Boolean) || null;
+          return {
+            file,
+            files: filesForRecords,
+            index,
+            config: depthTrackConfigAt(index, file)
+          };
+        }
+      );
       const appendDepthTrackMetadataArgs = (trackEntries) => {
         if (!Array.isArray(trackEntries) || trackEntries.length === 0) return;
         const labels = trackEntries.map((entry) => (
@@ -2574,7 +2608,21 @@ json.dumps({
             args.push('--gc_skew_radius', adv.gc_skew_radius_circular);
           }
         }
-        const circularDepthEntries = depthTrackEntriesFromSlots(files.c_depth);
+        const discoveredCircularRecordCount = Array.isArray(circularRecordList.value)
+          ? circularRecordList.value.length
+          : 0;
+        const circularDepthRecordCount = discoveredCircularRecordCount > 0
+          ? discoveredCircularRecordCount
+          : (
+              isRecordMajorDepthFileMatrix(files.c_depth)
+                ? Math.max(1, files.c_depth.length)
+                : 1
+            );
+        const circularDepthRows = normalizeRecordMajorDepthFileRows(
+          files.c_depth,
+          circularDepthRecordCount
+        );
+        const circularDepthEntries = depthTrackEntriesFromRows(circularDepthRows);
         if (useCircularTrackSlots) {
           args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
           const circularDepthSlotIndexes = new Set();
@@ -2592,7 +2640,7 @@ json.dumps({
           });
           syncDepthSlotLegendLabelsFromTrackConfigs(
             circularTrackSlots,
-            circularDepthEntries.map((entry) => entry.file)
+            representativeDepthFiles(circularDepthRows)
           );
           validateEnabledDepthSlots(circularTrackSlots, circularDepthEntries.length, 'Circular');
           circularTrackSlots.forEach((slot, slotIndex) => {
@@ -2631,11 +2679,26 @@ json.dumps({
         if (form.show_depth || circularSlotNeedsDepth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
           for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
-            const depthPath = `/depth_track_${depthIndex + 1}.tsv`;
-            await stageUploadedFile(circularDepthEntries[depthIndex].file, depthPath, {
-              slot: circularDepthEntries.length === 1 ? 'files.c_depth' : `files.c_depth[${depthIndex}]`
-            });
-            args.push('--depth_track', depthPath);
+            const entry = circularDepthEntries[depthIndex];
+            if (!entry.file) {
+              throw new Error(
+                `Depth series #${depthIndex + 1} (logical track index ${depthIndex}) has no TSV source in any record.`
+              );
+            }
+            const depthPaths = [];
+            for (let recordIndex = 0; recordIndex < entry.files.length; recordIndex += 1) {
+              const depthFile = entry.files[recordIndex];
+              if (!depthFile) {
+                depthPaths.push('');
+                continue;
+              }
+              const depthPath = `/depth_track_${depthIndex + 1}_record_${recordIndex + 1}.tsv`;
+              await stageUploadedFile(depthFile, depthPath, {
+                slot: `files.c_depth[${recordIndex}][${depthIndex}]`
+              });
+              depthPaths.push(depthPath);
+            }
+            args.push('--depth_track', ...depthPaths);
           }
           appendDepthTrackMetadataArgs(circularDepthEntries);
           args.push('--show_depth');
