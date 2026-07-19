@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NoReturn, Optional, Tuple
 
+from ..exceptions import ValidationError
 from ..layout.spatial import IntervalIndex, split_circular_interval
 from .objects import FeatureObject
 
@@ -109,42 +110,35 @@ def check_feature_overlap(
     a_spans_origin = a_start > a_end
     b_spans_origin = b_start > b_end
 
+    def overlaps_half_open(s1: int, e1: int, s2: int, e2: int) -> bool:
+        """Return whether two Biopython-style ``[start, end)`` intervals overlap."""
+        return s1 < e2 and s2 < e1
+
     if not a_spans_origin and not b_spans_origin:
-        # Simple linear overlap check
-        return not (a_end < b_start or a_start > b_end)
+        return overlaps_half_open(a_start, a_end, b_start, b_end)
 
     if genome_length is None:
         # Can't determine accurately without genome_length, assume overlap
         return True
 
-    # Handle origin-spanning cases
-    def overlaps_circular(s1: int, e1: int, s2: int, e2: int, length: int) -> bool:
-        """Check overlap for circular genome coordinates."""
-        span1_origin = s1 > e1
-        span2_origin = s2 > e2
+    def split_interval(start: int, end: int) -> list[tuple[int, int]]:
+        if start <= end:
+            return [(start, end)]
+        return [(start, int(genome_length)), (1, end)]
 
-        if not span1_origin and not span2_origin:
-            # Neither spans origin
-            return not (e1 < s2 or s1 > e2)
+    return any(
+        overlaps_half_open(a_piece_start, a_piece_end, b_piece_start, b_piece_end)
+        for a_piece_start, a_piece_end in split_interval(a_start, a_end)
+        for b_piece_start, b_piece_end in split_interval(b_start, b_end)
+    )
 
-        if span1_origin and span2_origin:
-            # Both span origin - they definitely overlap (both cover position 1 and length)
-            return True
 
-        if span1_origin:
-            # Feature 1 spans origin: covers [s1, length] and [1, e1]
-            # Feature 2 is normal: covers [s2, e2]
-            # Overlap if: s2 <= length and s2 >= s1 (overlaps right part)
-            #         or: e2 >= 1 and e2 <= e1 (overlaps left part)
-            #         or: s2 <= e1 (feature 2 is within left part)
-            #         or: e2 >= s1 (feature 2 is within right part)
-            return (s2 >= s1) or (e2 <= e1) or (s2 <= e1 and e2 >= 1) or (e2 >= s1 and s2 <= length)
-
-        # span2_origin is True
-        # Feature 2 spans origin, feature 1 is normal
-        return (s1 >= s2) or (e1 <= e2) or (s1 <= e2 and e1 >= 1) or (e1 >= s2 and s1 <= length)
-
-    return overlaps_circular(a_start, a_end, b_start, b_end, genome_length)
+def _raise_feature_track_limit(feature: dict, max_track: int) -> NoReturn:
+    feature_id = feature.get("id", "<unknown>")
+    raise ValidationError(
+        f"Unable to place feature {feature_id!r} without overlap: "
+        f"all {max_track} feature lanes are occupied."
+    )
 
 
 def find_best_track(
@@ -193,6 +187,8 @@ def find_best_track(
             if not has_overlap:
                 return tn
 
+    if resolve_overlaps:
+        _raise_feature_track_limit(feature, max_track)
     return track_nums[0]
 
 
@@ -279,6 +275,8 @@ def _find_best_track_indexed(
             if not any(check_feature_overlap(feature, existing, separate_strands, genome_length) for existing in candidates):
                 return tn
 
+    if resolve_overlaps:
+        _raise_feature_track_limit(feature, max_track)
     return track_nums[0]
 
 
@@ -328,7 +326,7 @@ def _find_best_track_split_overlaps_by_strand_indexed(
         if not any(check_feature_overlap(feature, existing, False, genome_length) for existing in candidates):
             return sign * track_index
 
-    return sign * (max_track - 1)
+    _raise_feature_track_limit(feature, max_track)
 
 
 def arrange_feature_tracks(

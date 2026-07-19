@@ -6,8 +6,10 @@ from typing import Any, Literal, Mapping, Sequence
 from .parsing import (
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
+    parse_nonnegative_integer,
     split_kv_list,
     strip_inline_comment as _strip_inline_comment,
+    validate_overlay_annotation_anchors,
 )
 from .scalars import ScalarSpec
 from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
@@ -220,7 +222,10 @@ def parse_linear_track_slot(raw: str) -> LinearTrackSlot:
                 elif key in {"nt", "dinucleotide"}:
                     params["nt"] = value.upper()
                 elif key == "track_index":
-                    params["track_index"] = int(value)
+                    params["track_index"] = parse_nonnegative_integer(
+                        value,
+                        field_name="track_index",
+                    )
                 else:
                     params[key] = value
         except LinearTrackSlotParseError:
@@ -244,7 +249,7 @@ def parse_linear_track_slot(raw: str) -> LinearTrackSlot:
         params=params,
     )
     try:
-        normalize_linear_track_slots([slot])
+        _normalize_linear_track_slots([slot], validate_anchor_references=False)
     except Exception as exc:
         raise LinearTrackSlotParseError(str(exc), original) from exc
     return slot
@@ -265,7 +270,7 @@ def parse_linear_track_slots(specs: Sequence[str | LinearTrackSlot]) -> list[Lin
                 params = _normalize_dinucleotide_skew_color_params(params)
             slot = replace(item, renderer=renderer, params=params)
             try:
-                normalize_linear_track_slots([slot])
+                _normalize_linear_track_slots([slot], validate_anchor_references=False)
             except Exception as exc:
                 raise LinearTrackSlotParseError(str(exc), str(slot.id)) from exc
         else:
@@ -349,8 +354,12 @@ def linear_track_slots_with_axis_side(
     return out
 
 
-def normalize_linear_track_slots(slots: Sequence[LinearTrackSlot]) -> list[NormalizedLinearTrackSlot]:
-    """Validate and normalize slots for the linear vertical resolver."""
+def _normalize_linear_track_slots(
+    slots: Sequence[LinearTrackSlot],
+    *,
+    validate_anchor_references: bool,
+) -> list[NormalizedLinearTrackSlot]:
+    """Normalize slots, optionally deferring aggregate anchor validation."""
 
     if len(slots) == 0:
         raise ValueError("linear track slot list cannot be empty")
@@ -403,13 +412,14 @@ def normalize_linear_track_slots(slots: Sequence[LinearTrackSlot]) -> list[Norma
         elif renderer == "depth":
             raw_track_index = params.get("track_index", 0)
             try:
-                track_index = int(raw_track_index)
+                track_index = parse_nonnegative_integer(
+                    raw_track_index,
+                    field_name=f"depth slot '{slot.id}' track_index",
+                )
             except (TypeError, ValueError) as exc:
                 raise ValueError(
                     f"depth slot '{slot.id}' has invalid track_index={raw_track_index!r}"
                 ) from exc
-            if track_index < 0:
-                raise ValueError(f"depth slot '{slot.id}' track_index must be >= 0")
             params["track_index"] = track_index
         elif renderer == "annotations":
             annotation_params = annotation_track_params_from_mapping(params)
@@ -430,27 +440,26 @@ def normalize_linear_track_slots(slots: Sequence[LinearTrackSlot]) -> list[Norma
                 height=slot.height,
                 spacing=slot.spacing,
                 z=int(slot.z),
-                reserve=(renderer != "spacer" and side != "overlay"),
+                reserve=(
+                    renderer != "spacer"
+                    and not (renderer == "annotations" and side == "overlay")
+                ),
                 params=params,
                 annotation=annotation_params,
             )
         )
-    by_id = {slot.id: slot for slot in normalized}
-    for slot in normalized:
-        if slot.renderer != "annotations" or slot.side != "overlay" or slot.annotation is None:
-            continue
-        anchor = by_id.get(str(slot.annotation.anchor_slot))
-        if anchor is None and len(slots) == 1:
-            continue
-        if anchor is None:
-            raise ValueError(f"annotation slot '{slot.id}' references unknown anchor_slot={slot.annotation.anchor_slot!r}")
-        if anchor.renderer == "spacer":
-            raise ValueError(f"annotation slot '{slot.id}' anchor '{anchor.id}' has no drawable band")
-        if slot.annotation.layer == "underlay" and slot.z >= anchor.z:
-            raise ValueError(f"annotation underlay slot '{slot.id}' must have z less than anchor '{anchor.id}'")
-        if slot.annotation.layer == "foreground" and slot.z <= anchor.z:
-            raise ValueError(f"annotation foreground slot '{slot.id}' must have z greater than anchor '{anchor.id}'")
+    if validate_anchor_references:
+        validate_overlay_annotation_anchors(
+            normalized,
+            anchorless_renderers={"spacer"},
+        )
     return normalized
+
+
+def normalize_linear_track_slots(slots: Sequence[LinearTrackSlot]) -> list[NormalizedLinearTrackSlot]:
+    """Validate and normalize a complete linear track-slot list."""
+
+    return _normalize_linear_track_slots(slots, validate_anchor_references=True)
 
 
 def normalize_linear_track_slots_with_axis(

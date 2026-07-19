@@ -908,7 +908,8 @@ options:
                         <slot_id>:<renderer>@key=value,key=value. Repeat to
                         add slots. The annotations renderer requires set_id.
                         Use h for explicit height; an overlay also requires
-                        anchor_slot and layer.
+                        anchor_slot and layer. The anchor must name an enabled
+                        drawable, non-annotation slot in the complete stack.
   --linear_track_axis_index LINEAR_TRACK_AXIS_INDEX
                         Axis boundary index for linear custom track slots.
   --ruler_on_axis       Use each record axis as the ruler in linear mode.
@@ -1018,6 +1019,54 @@ options:
                         order matches input files). Accepted values: 1/0,
                         true/false, yes/no.
 ```
+
+`--resolve_overlaps` assigns overlapping genomic features to additional lanes.
+Linear layout measures those lanes and their labels per record, then repacks
+non-overlay tracks around the resulting occupied band.
+
+For a feature `--linear_track_slot`, `h` is a minimum reserved height. The
+effective reservation is the larger of the measured feature-and-label band and
+the configured value; use `--feature_height` to change feature glyph thickness.
+Feature-slot `spacing` is the clearance to the adjacent track farther from the
+axis. With `h` omitted, the measured reservation and resulting track positions
+are record-specific.
+
+For a Depth slot, `track_index` is the zero-based non-negative integer identity
+of a logical `--depth_track` series. Negative, fractional, nonnumeric, and
+globally out-of-range values are rejected. Slot order changes placement, not
+source binding. When a custom stack is active, enabled Depth slots are
+authoritative for the legend: entries follow slot order, `legend_label`
+overrides the series title, and series without an enabled slot are omitted.
+
+An overlay annotation's `anchor_slot` must resolve to an enabled drawable,
+non-annotation slot in the complete stack. Unknown IDs, non-drawing slots, and
+annotation-to-annotation anchor chains are rejected.
+
+`--comparison_height` sets the minimum clear corridor between neighboring
+records. Comparison endpoints attach to the outer edges of their measured
+exclusion bands. Taller occupancy moves record axes apart without placing links
+through track stacks; other row or definition constraints can make the corridor
+larger than the configured minimum.
+
+When a logical depth track has no file for one displayed record, keep that
+record's position with `''`, `-`, `none`, or `null`. The group must still
+contain at least one file. For example, these two logical tracks cover one
+record each:
+
+```bash
+gbdraw linear \
+  --gbk tests/test_inputs/AP027131.gb tests/test_inputs/AP027132.gb \
+  --depth_track tests/test_inputs/AP027131.DRR394921.depth.tsv '' \
+  --depth_track '' tests/test_inputs/AP027132.DRR394921.depth.tsv \
+  -o sparse-depth \
+  -f svg
+```
+
+The placeholder is a missing value, not a zero-coverage table. gbdraw omits
+the Depth group and quantitative axis for that record while preserving the
+logical index used by labels, colors, shared axes, and custom track slots. In
+Linear mode it also retains the missing slot's reserve band, so that cell does
+not compact or renumber the record's stack.
 
 For `--protein_blastp_mode`, gbdraw first uses a bundled native LOSAT binary
 when one is available. The current package bundles LOSAT for Linux x86_64.

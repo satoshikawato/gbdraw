@@ -13,6 +13,10 @@ from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from Bio import SeqIO  # type: ignore[reportMissingImports]
 from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
+from .analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+    depth_track_count,
+    normalize_depth_tracks,
+)
 from .io.cli_tables import (
     read_circular_track_table,
     read_conservation_table,
@@ -896,6 +900,10 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_track_groups,
         record_count=len(gb_records),
     )
+    logical_depth_track_count = max(
+        (len(row) for row in (depth_track_files or [])),
+        default=0,
+    )
 
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
@@ -1048,7 +1056,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         circular_track_slots_or_none = circular_track_slots_from_order(
             circular_track_order,
             show_depth=show_depth,
-            depth_track_count=max(1, len(depth_track_files[0]) if depth_track_files else 1),
+            depth_track_count=max(1, logical_depth_track_count),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
@@ -1057,7 +1065,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         circular_track_slots_or_none = circular_track_slots_from_order(
             "features,ticks,depth,gc_content,gc_skew",
             show_depth=show_depth,
-            depth_track_count=max(1, len(depth_track_files[0]) if depth_track_files else 1),
+            depth_track_count=max(1, logical_depth_track_count),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
@@ -1085,6 +1093,21 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 )
             updated_slots.append(slot)
         circular_track_slots_or_none = updated_slots
+
+    separate_record_depth_tracks = None
+    separate_depth_track_count = 0
+    if depth_track_files is not None and not (multi_record_canvas and len(gb_records) > 1):
+        separate_record_depth_tracks = normalize_depth_tracks(
+            gb_records,
+            depth_table=depth_table,
+            depth_track_files=depth_track_files,
+            depth_track_labels=depth_track_labels,
+            depth_track_colors=depth_track_colors,
+            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+        )
+        separate_depth_track_count = depth_track_count(separate_record_depth_tracks)
 
     if multi_record_canvas and len(gb_records) > 1:
         first_accession = gb_records[0].id if gb_records else "out"
@@ -1173,9 +1196,9 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
 
             outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
-            record_depth_track_files = (
-                [depth_track_files[record_count - 1]]
-                if depth_track_files is not None
+            record_depth_track_specs = (
+                separate_record_depth_tracks[record_count - 1]
+                if separate_record_depth_tracks is not None
                 else None
             )
             canvas = assemble_circular_diagram_from_record(
@@ -1199,13 +1222,19 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 step=step,
                 depth_window=depth_window,
                 depth_step=depth_step,
-                depth_table=depth_table,
-                depth_track_files=record_depth_track_files,
-                depth_track_labels=depth_track_labels,
-                depth_track_colors=depth_track_colors,
-                depth_track_large_tick_intervals=depth_track_large_tick_intervals,
-                depth_track_small_tick_intervals=depth_track_small_tick_intervals,
-                depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+                depth_table=depth_table if record_depth_track_specs is None else None,
+                depth_track_files=None,
+                depth_track_labels=(depth_track_labels if record_depth_track_specs is None else None),
+                depth_track_colors=(depth_track_colors if record_depth_track_specs is None else None),
+                depth_track_large_tick_intervals=(
+                    depth_track_large_tick_intervals if record_depth_track_specs is None else None
+                ),
+                depth_track_small_tick_intervals=(
+                    depth_track_small_tick_intervals if record_depth_track_specs is None else None
+                ),
+                depth_track_tick_font_sizes=(
+                    depth_track_tick_font_sizes if record_depth_track_specs is None else None
+                ),
                 species=species,
                 strain=strain,
                 plot_title=plot_title,
@@ -1221,6 +1250,10 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 bitscore=bitscore,
                 identity=identity,
                 alignment_length=alignment_length,
+                _precomputed_depth_track_specs=record_depth_track_specs,
+                _precomputed_depth_track_count=(
+                    separate_depth_track_count if record_depth_track_specs is not None else None
+                ),
             )
             if INTERACTIVE_SVG_FORMAT in out_formats:
                 interactive_context = _build_interactive_svg_context(

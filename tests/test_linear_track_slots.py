@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
@@ -23,6 +24,7 @@ from gbdraw.tracks import (
     LinearTrackSlotParseError,
     default_linear_track_slots,
     linear_track_slots_from_order,
+    normalize_linear_track_slots,
     normalize_linear_track_slots_with_axis,
     parse_linear_track_slot,
     parse_linear_track_slots,
@@ -118,6 +120,40 @@ def test_parse_linear_track_slot_with_layout_fields() -> None:
     assert slot.params["track_index"] == 0
 
 
+@pytest.mark.parametrize("track_index", [True, 1.9, -0.2, "1.9", "not-an-integer"])
+def test_normalize_linear_depth_track_index_rejects_non_integer_identity(
+    track_index: object,
+) -> None:
+    with pytest.raises(ValueError, match="invalid track_index"):
+        normalize_linear_track_slots(
+            [
+                LinearTrackSlot(
+                    id="depth",
+                    renderer="depth",
+                    params={"track_index": track_index},
+                )
+            ]
+        )
+
+
+@pytest.mark.parametrize("track_index", [2, "2", np.int64(2)])
+def test_normalize_linear_depth_track_index_accepts_integer_identity(
+    track_index: object,
+) -> None:
+    normalized = normalize_linear_track_slots(
+        [
+            LinearTrackSlot(
+                id="depth",
+                renderer="depth",
+                params={"track_index": track_index},
+            )
+        ]
+    )
+
+    assert normalized[0].params["track_index"] == 2
+    assert isinstance(normalized[0].params["track_index"], int)
+
+
 def test_linear_resolved_track_retains_spacing_after_px() -> None:
     layout, _canvas_config = _resolve_layout(
         [
@@ -145,8 +181,9 @@ def test_linear_track_slot_geometry_metadata_keeps_duplicate_record_instances() 
 
     geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
 
-    assert geometry["schema"] == 1
+    assert geometry["schema"] == 2
     assert geometry["mode"] == "linear"
+    assert geometry["source"] == "resolved"
     assert [record["recordIndex"] for record in geometry["records"]] == [0, 1]
     assert [record["recordId"] for record in geometry["records"]] == ["duplicate", "duplicate"]
     gc_slots = [
@@ -155,6 +192,52 @@ def test_linear_track_slot_geometry_metadata_keeps_duplicate_record_instances() 
     ]
     assert [slot["slotIndex"] for slot in gc_slots] == [1, 1]
     assert [slot["spacingAfterPx"] for slot in gc_slots] == [pytest.approx(8.0), pytest.approx(8.0)]
+    assert all(slot["dataAvailable"] for slot in gc_slots)
+    assert all(slot["paintBand"] is not None for slot in gc_slots)
+    assert all(slot["reserveBand"] is not None for slot in gc_slots)
+    assert all(record["recordBodyBand"] is not None for record in geometry["records"])
+    assert all(record["comparisonExclusionBand"] is not None for record in geometry["records"])
+    assert all(record["canvasBand"] is not None for record in geometry["records"])
+
+
+def test_linear_record_plans_expand_only_records_with_extra_feature_lanes() -> None:
+    shallow = _record("shallow")
+    deep = _record("deep")
+    shallow.features = [
+        SeqFeature(FeatureLocation(100, 400, strand=-1), type="CDS"),
+    ]
+    deep.features = [
+        SeqFeature(FeatureLocation(100, 400, strand=-1), type="CDS")
+        for _ in range(3)
+    ]
+    canvas = assemble_linear_diagram_from_records(
+        [shallow, deep],
+        legend="none",
+        depth_track_tables=[[_depth_table("shallow")], [_depth_table("deep")]],
+        linear_track_slots=[
+            "features:features@side=overlay",
+            "depth:depth@track_index=0,side=below,h=10px",
+        ],
+        config_overrides={
+            "show_labels": False,
+            "show_gc": False,
+            "show_skew": False,
+            "strandedness": True,
+            "resolve_overlaps": True,
+        },
+    )
+    records = canvas._gbdraw_track_slot_geometry["records"]
+    features = [
+        next(slot for slot in record["slots"] if slot["slotId"] == "features")
+        for record in records
+    ]
+    depth = [
+        next(slot for slot in record["slots"] if slot["slotId"] == "depth")
+        for record in records
+    ]
+
+    assert features[1]["reserveBand"]["bottomPx"] > features[0]["reserveBand"]["bottomPx"]
+    assert depth[1]["resolvedOriginPx"] > depth[0]["resolvedOriginPx"]
 
 
 def test_parse_linear_track_slot_aliases() -> None:

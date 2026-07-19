@@ -1,5 +1,6 @@
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+import pytest
 
 from gbdraw.api import (
     AnnotationOptions,
@@ -12,13 +13,75 @@ from gbdraw.api import (
     build_circular_multi_diagram,
     parse_record_selector,
 )
-from gbdraw.tracks import parse_circular_track_slot
+from gbdraw.tracks import (
+    CircularTrackSlot,
+    normalize_circular_track_slots,
+    parse_circular_track_slot,
+)
 
 
 def test_circular_annotation_renderer_parses_width() -> None:
     slot = parse_circular_track_slot("regions:annotations@set_id=s,w=28px")
     assert slot.renderer == "annotations"
     assert slot.width is not None and slot.width.value == 28
+
+
+def test_circular_annotation_overlay_rejects_unknown_anchor_in_complete_list() -> None:
+    annotation = CircularTrackSlot(
+        "a",
+        "annotations",
+        side="overlay",
+        z=1,
+        params={"set_id": "s", "anchor_slot": "missing", "layer": "foreground"},
+    )
+
+    with pytest.raises(ValueError, match="unknown anchor_slot='missing'"):
+        normalize_circular_track_slots([annotation])
+
+
+def test_circular_annotation_overlay_rejects_annotation_anchor() -> None:
+    anchor = CircularTrackSlot(
+        "base_notes",
+        "annotations",
+        side="outside",
+        z=0,
+        params={"set_id": "base"},
+    )
+    annotation = CircularTrackSlot(
+        "overlay_notes",
+        "annotations",
+        side="overlay",
+        z=1,
+        params={
+            "set_id": "overlay",
+            "anchor_slot": "base_notes",
+            "layer": "foreground",
+        },
+    )
+
+    with pytest.raises(ValueError, match="cannot use annotation slot 'base_notes' as anchor"):
+        normalize_circular_track_slots([anchor, annotation])
+
+
+def test_circular_annotation_overlay_allows_split_feature_anchor() -> None:
+    feature = CircularTrackSlot("features", "features", side="overlay", z=0)
+    annotation = CircularTrackSlot(
+        "overlay_notes",
+        "annotations",
+        side="overlay",
+        z=1,
+        params={
+            "set_id": "overlay",
+            "anchor_slot": "features",
+            "layer": "foreground",
+        },
+    )
+
+    normalized = normalize_circular_track_slots([feature, annotation])
+
+    assert normalized[0].side == "overlay"
+    assert normalized[0].reserve is True
+    assert normalized[1].annotation is not None
 
 
 def test_circular_origin_annotation_renders_two_safe_paths() -> None:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from numbers import Integral
+from typing import Any, Collection, Sequence
 
 
 @dataclass
@@ -19,6 +22,59 @@ def parse_bool(raw: object) -> bool:
     if s in {"0", "false", "no", "off"}:
         return False
     raise ValueError(f"invalid bool: {raw!r}")
+
+
+def parse_nonnegative_integer(raw: object, *, field_name: str) -> int:
+    """Parse an integer identity without silently truncating numeric values."""
+
+    if isinstance(raw, bool):
+        raise ValueError(f"{field_name} must be a nonnegative integer")
+    if isinstance(raw, Integral):
+        value = int(raw)
+    elif isinstance(raw, str) and re.fullmatch(r"[+-]?\d+", raw.strip()):
+        value = int(raw.strip())
+    else:
+        raise ValueError(f"{field_name} must be a nonnegative integer")
+    if value < 0:
+        raise ValueError(f"{field_name} must be >= 0")
+    return value
+
+
+def validate_overlay_annotation_anchors(
+    slots: Sequence[Any],
+    *,
+    anchorless_renderers: Collection[str],
+) -> None:
+    """Validate aggregate overlay references after every slot is normalized."""
+
+    by_id = {str(slot.id): slot for slot in slots}
+    for slot in slots:
+        annotation = getattr(slot, "annotation", None)
+        if slot.renderer != "annotations" or slot.side != "overlay" or annotation is None:
+            continue
+        anchor = by_id.get(str(annotation.anchor_slot))
+        if anchor is None:
+            raise ValueError(
+                f"annotation slot '{slot.id}' references unknown "
+                f"anchor_slot={annotation.anchor_slot!r}"
+            )
+        if anchor.renderer in anchorless_renderers:
+            raise ValueError(
+                f"annotation slot '{slot.id}' anchor '{anchor.id}' has no drawable band"
+            )
+        if anchor.renderer == "annotations":
+            raise ValueError(
+                f"annotation slot '{slot.id}' cannot use annotation slot "
+                f"'{anchor.id}' as anchor"
+            )
+        if annotation.layer == "underlay" and slot.z >= anchor.z:
+            raise ValueError(
+                f"annotation underlay slot '{slot.id}' must have z less than anchor '{anchor.id}'"
+            )
+        if annotation.layer == "foreground" and slot.z <= anchor.z:
+            raise ValueError(
+                f"annotation foreground slot '{slot.id}' must have z greater than anchor '{anchor.id}'"
+            )
 
 
 def split_kv_list(raw: str) -> list[tuple[str, str]]:
@@ -55,5 +111,7 @@ def strip_inline_comment(raw: str) -> str:
 __all__ = [
     "CircularTrackSlotParseError",
     "parse_bool",
+    "parse_nonnegative_integer",
     "split_kv_list",
+    "validate_overlay_annotation_anchors",
 ]

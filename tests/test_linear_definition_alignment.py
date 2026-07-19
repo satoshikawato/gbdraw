@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+import re
 from types import SimpleNamespace
 
 import pytest
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core import text as text_module
@@ -385,6 +388,64 @@ def test_linear_definition_gap_reads_explicit_config_value() -> None:
     cfg = GbdrawConfig.from_dict(config_dict)
 
     assert cfg.canvas.linear.definition_gap == pytest.approx(34.0)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(("track_layout", "direction"), [("above", -1), ("below", 1)])
+def test_linear_definition_band_matches_resolved_feature_center(
+    track_layout: str,
+    direction: int,
+) -> None:
+    record = _record("Definition follows resolved feature lane")
+    record.annotations["molecule_type"] = "DNA"
+    record.features = [
+        SeqFeature(FeatureLocation(20, 80, strand=1), type="CDS")
+    ]
+    config_dict = _definition_only_config()
+    config_dict["canvas"]["linear"]["track_layout"] = track_layout
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    definition_height = DefinitionGroup(
+        record,
+        config_dict,
+        canvas_config,
+        cfg=cfg,
+    ).definition_bounding_box_height
+
+    drawing = assemble_linear_diagram_from_records(
+        [record],
+        config_dict=config_dict,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+    elements = {
+        element.attribs.get("id"): element
+        for element in drawing.elements
+        if element.attribs.get("id")
+    }
+
+    def translate_y(element) -> float:
+        match = re.search(
+            r"translate\([^,]+,([-+0-9.eE]+)\)",
+            str(element.attribs["transform"]),
+        )
+        assert match is not None
+        return float(match.group(1))
+
+    axis_y = translate_y(elements["record_a"])
+    definition_center_y = translate_y(elements["record_a_definition"])
+    half_height = 0.5 * definition_height
+    canvas_band = drawing._gbdraw_track_slot_geometry["records"][0]["canvasBand"]
+
+    assert (definition_center_y - axis_y) * direction > 0.0
+    assert canvas_band["absoluteTopPx"] <= definition_center_y - half_height
+    assert canvas_band["absoluteBottomPx"] >= definition_center_y + half_height
 
 
 @pytest.mark.linear

@@ -18,7 +18,10 @@ from ..features.ids import compute_feature_object_hash
 from ..core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ..layout.linear_coords import normalize_position_to_linear_track  # type: ignore[reportMissingImports]
-from ..layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
+from ..layout.linear import (  # type: ignore[reportMissingImports]
+    LinearFeatureLaneGeometry,
+    calculate_feature_position_factors_linear,
+)
 from ..layout.spatial import Aabb, AabbIndex, Interval, IntervalIndex
 from ..layout.text_geometry import (
     aabb_from_points,
@@ -363,6 +366,7 @@ def prepare_label_list_linear(
     label_font_size: float | None = None,
     orthogroup_label_member_ids: set[str] | None = None,
     orthogroup_label_top_member_ids: set[str] | None = None,
+    feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
 ):
     """
     Prepares a list of labels for linear genome visualization with proper track organization.
@@ -412,18 +416,27 @@ def prepare_label_list_linear(
         strand = get_strand(coordinate.strand)
         feature_track_id = feature_object.feature_track_id
 
-        # Calculate track position using the same logic as for features
-        factors = calculate_feature_position_factors_linear(
-            strand,
-            feature_track_id,
-            strandedness,
-            track_layout=track_layout,
-            axis_gap_factor=axis_gap_factor,
-        )
-
-        track_y_position = cds_height * factors[1]  # Use middle factor
-        track_top_y = cds_height * factors[0]
-        track_bottom_y = cds_height * factors[2]
+        if feature_lane_geometry is not None:
+            lane = feature_lane_geometry.lane_for(
+                strand=strand,
+                track_id=feature_track_id,
+                separate_strands=strandedness,
+            )
+            track_top_y, track_y_position, track_bottom_y = lane.positions
+        else:
+            # Compatibility fallback for direct callers that have not measured lanes.
+            factors = calculate_feature_position_factors_linear(
+                strand,
+                feature_track_id,
+                strandedness,
+                track_layout=track_layout,
+                axis_gap_factor=axis_gap_factor,
+            )
+            track_top_y, track_y_position, track_bottom_y = (
+                cds_height * factors[0],
+                cds_height * factors[1],
+                cds_height * factors[2],
+            )
 
         # Store track position for this feature
         feature_track_positions[feature_id] = {
@@ -449,8 +462,9 @@ def prepare_label_list_linear(
         ):
             continue
         feature_label_text = get_label_text(feature_object, label_filtering)
-        feature_track_id = feature_object.feature_track_id
         if not feature_label_text:
+            continue
+        if feature_id not in feature_track_positions:
             continue
 
         # Calculate label dimensions and positions
@@ -460,19 +474,11 @@ def prepare_label_list_linear(
         # Find the longest segment and its middle point
         longest_segment_length = 0
         coordinate_strand = None
-        factors = None
         longest_segment_start = 0
         longest_segment_end = 0
 
         for coordinate in feature_object.coordinates:
             coordinate_strand = get_strand(coordinate.strand)
-            factors = calculate_feature_position_factors_linear(
-                coordinate_strand,
-                feature_track_id,
-                strandedness,
-                track_layout=track_layout,
-                axis_gap_factor=axis_gap_factor,
-            )
             start = int(coordinate.start)
             end = int(coordinate.end)
             segment_length = abs(end - start + 1)
@@ -526,14 +532,7 @@ def prepare_label_list_linear(
         bbox_end = label_anchor_x + (bbox_width_px / 2)
 
         # Get actual feature track position
-        feature_position = feature_track_positions.get(
-            feature_id,
-            {
-                "middle_y": cds_height * factors[1],
-                "top_y": cds_height * factors[0],
-                "bottom_y": cds_height * factors[2],
-            },
-        )
+        feature_position = feature_track_positions[feature_id]
         feature_y = feature_position["middle_y"]
         feature_top_y = feature_position["top_y"]
         feature_bottom_y = feature_position["bottom_y"]

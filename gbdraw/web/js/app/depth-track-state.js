@@ -55,6 +55,51 @@ export const depthFileSlotsFromValue = (value) => {
   return value ? [value] : [];
 };
 
+export const isRecordMajorDepthFileMatrix = (value) => (
+  Array.isArray(value) && value.every((row) => Array.isArray(row))
+);
+
+export const parseDepthTrackIndexIdentity = (value, fieldName = 'track_index') => {
+  let numeric = null;
+  if (typeof value === 'number') {
+    numeric = value;
+  } else if (
+    typeof value === 'string' &&
+    /^[+-]?\d+$/.test(value.trim())
+  ) {
+    numeric = Number(value.trim());
+  }
+  if (!Number.isSafeInteger(numeric) || numeric < 0) {
+    throw new Error(`${fieldName} must be a non-negative integer.`);
+  }
+  return numeric;
+};
+
+export const normalizeRecordMajorDepthFileRows = (value, recordCount = 1) => {
+  const requestedCount = Math.max(1, Number(recordCount) || 1);
+  const sourceIsMatrix = isRecordMajorDepthFileMatrix(value);
+  const rows = sourceIsMatrix
+    ? value.map((row) => depthFileSlotsFromValue(row))
+    : Array.from(
+        { length: requestedCount },
+        () => depthFileSlotsFromValue(value)
+      );
+  const targetCount = Math.max(requestedCount, rows.length);
+  while (rows.length < targetCount) rows.push([]);
+  const width = depthTrackMatrixWidth(rows);
+  return rows.map((row) => padDepthFileSlots(row, width));
+};
+
+export const representativeDepthFiles = (value) => {
+  const rows = isRecordMajorDepthFileMatrix(value)
+    ? normalizeRecordMajorDepthFileRows(value, value.length)
+    : [depthFileSlotsFromValue(value)];
+  const width = depthTrackMatrixWidth(rows);
+  return Array.from({ length: width }, (_, trackIndex) => (
+    rows.map((row) => row[trackIndex]).find(Boolean) || null
+  ));
+};
+
 export const compactDepthFileSlots = (slots) => {
   const next = depthFileSlotsFromValue(slots);
   while (next.length > 0 && !next[next.length - 1]) {
@@ -66,6 +111,63 @@ export const compactDepthFileSlots = (slots) => {
 export const uploadedDepthFileCount = (value) => (
   depthFileSlotsFromValue(value).filter(Boolean).length
 );
+
+export const depthTrackMatrixWidth = (rows) => (
+  (Array.isArray(rows) ? rows : []).reduce(
+    (width, row) => Math.max(width, depthFileSlotsFromValue(row).length),
+    0
+  )
+);
+
+export const activeDepthTrackIndices = (rows) => {
+  const active = new Set();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    depthFileSlotsFromValue(row).forEach((file, trackIndex) => {
+      if (file) active.add(trackIndex);
+    });
+  });
+  return Array.from(active).sort((left, right) => left - right);
+};
+
+export const depthTrackCoverageCount = (rows, trackIndex) => {
+  const idx = Number(trackIndex);
+  if (!Number.isInteger(idx) || idx < 0) return 0;
+  return (Array.isArray(rows) ? rows : []).reduce(
+    (count, row) => count + (depthFileSlotsFromValue(row)[idx] ? 1 : 0),
+    0
+  );
+};
+
+export const padDepthFileSlots = (value, width) => {
+  const next = depthFileSlotsFromValue(value);
+  const targetWidth = Math.max(next.length, Math.max(0, Number(width) || 0));
+  while (next.length < targetWidth) next.push(null);
+  return next;
+};
+
+export const clearDepthTrackSourceAt = (value, trackIndex, width = null) => {
+  const idx = Number(trackIndex);
+  if (!Number.isInteger(idx) || idx < 0) return depthFileSlotsFromValue(value);
+  const targetWidth = width === null || width === undefined
+    ? idx + 1
+    : Math.max(idx + 1, Number(width) || 0);
+  const next = padDepthFileSlots(value, targetWidth);
+  next[idx] = null;
+  return next;
+};
+
+export const removeDepthTrackColumnAt = (rows, trackIndex) => {
+  const idx = Number(trackIndex);
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  if (!Number.isInteger(idx) || idx < 0) {
+    return sourceRows.map((row) => depthFileSlotsFromValue(row));
+  }
+  return sourceRows.map((row) => {
+    const next = depthFileSlotsFromValue(row);
+    if (idx < next.length) next.splice(idx, 1);
+    return next;
+  });
+};
 
 export const normalizeDepthTrackConfig = (entry, index, defaults = {}) => {
   const source = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
@@ -201,6 +303,7 @@ export const depthSlotTrackIndex = (slot, fallbackIndex = null) => {
     const parsed = Number(rawTrackIndex);
     if (Number.isInteger(parsed) && parsed >= 0) return parsed;
   }
+  if (slot?.depth_binding_error) return null;
   const idMatch = String(slot?.id || '').trim().match(/^depth_(\d+)$/);
   if (idMatch) return Math.max(0, Number(idMatch[1]) - 1);
   if (fallbackIndex !== null && fallbackIndex !== undefined) {
@@ -209,6 +312,22 @@ export const depthSlotTrackIndex = (slot, fallbackIndex = null) => {
   }
   return null;
 };
+
+export const referencedDepthTrackWidth = (slots) => {
+  let width = 0;
+  (Array.isArray(slots) ? slots : []).forEach((slot) => {
+    if (!slot || String(slot.renderer || '') !== 'depth') return;
+    const trackIndex = depthSlotTrackIndex(slot);
+    if (trackIndex !== null) width = Math.max(width, trackIndex + 1);
+  });
+  return width;
+};
+
+export const depthTrackSessionWidth = ({ rows, depthTracks, slots } = {}) => Math.max(
+  depthTrackMatrixWidth(rows),
+  Array.isArray(depthTracks) ? depthTracks.length : 0,
+  referencedDepthTrackWidth(slots)
+);
 
 const slotHasGeometry = (slot) => (
   normalizeOptionalText(slot?.width) !== null ||
@@ -240,12 +359,16 @@ const cloneSlot = (slot) => ({
   params: cloneParams(slot?.params)
 });
 
-const disableInvalidManualDepthSlot = (slot) => {
+const disableInvalidManualDepthSlot = (slot, removedTrackIndex = null) => {
   const next = cloneSlot(slot);
   next.enabled = false;
   if (/^depth(?:_\d+)?$/.test(String(next.id || '').trim())) {
     next.id = `disabled_${next.id}`;
   }
+  const indexText = Number.isInteger(Number(removedTrackIndex))
+    ? ` ${Number(removedTrackIndex)}`
+    : '';
+  next.depth_binding_error = `Depth logical track index${indexText} is no longer available.`;
   delete next.params.track_index;
   delete next.params.legend_label;
   return next;
@@ -271,12 +394,12 @@ export const reindexDepthSlots = ({
     const oldTrackIndex = depthSlotTrackIndex(slot, ordinal);
     const isManaged = managedPredicate(slot);
     if (oldTrackIndex === null || oldTrackIndex === idx) {
-      if (!isManaged) nextSlots.push(disableInvalidManualDepthSlot(slot));
+      if (!isManaged) nextSlots.push(disableInvalidManualDepthSlot(slot, oldTrackIndex ?? idx));
       return;
     }
     const newTrackIndex = oldTrackIndex > idx ? oldTrackIndex - 1 : oldTrackIndex;
     if (newTrackIndex < 0 || newTrackIndex >= count) {
-      if (!isManaged) nextSlots.push(disableInvalidManualDepthSlot(slot));
+      if (!isManaged) nextSlots.push(disableInvalidManualDepthSlot(slot, oldTrackIndex));
       return;
     }
     const next = cloneSlot(slot);
@@ -302,7 +425,7 @@ export const dropInvalidManagedDepthSlots = ({
         next.params.track_index = trackIndex;
         return next;
       }
-      return managedPredicate(slot) ? null : disableInvalidManualDepthSlot(slot);
+      return managedPredicate(slot) ? null : disableInvalidManualDepthSlot(slot, trackIndex);
     })
     .filter(Boolean);
 };

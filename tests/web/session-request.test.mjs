@@ -14,6 +14,264 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const { buildCanonicalSessionRequest, projectCanonicalSessionRequest } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
+const {
+  buildLinearTrackSlotSpec,
+  linearTrackAxisIndexForEnabledSlots,
+  migrateLinearTrackSlotsToCurrentSchema,
+  parseLinearTrackSlotSpec,
+  parseLinearTrackSlotSpecs
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-track-slots.js'))
+);
+const { validateTrackSlotBindingInvariants } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'track-slot-validation.js'))
+);
+
+assert.equal(linearTrackAxisIndexForEnabledSlots([
+  { id: 'above', renderer: 'depth', enabled: true, params: { track_index: 0 } },
+  { id: 'removed', renderer: 'depth', enabled: false, params: {} },
+  { id: 'features', renderer: 'features', enabled: true, params: {} }
+], 2), 1);
+
+const legacyLinearSlots = [
+  {
+    id: 'features', renderer: 'features', enabled: false, side: 'overlay',
+    height: '48px', spacing: '7px', z: 3, params: { legend_label: 'Genes' }
+  },
+  {
+    id: 'gc', renderer: 'dinucleotide_content', enabled: true, side: 'below',
+    height: '22px', spacing: '4px', z: 1, params: { nt: 'AT' }
+  }
+];
+const migratedLinearSlots = migrateLinearTrackSlotsToCurrentSchema(legacyLinearSlots, 1);
+assert.equal(migratedLinearSlots[0].height, undefined);
+assert.equal(migratedLinearSlots[0].spacing, undefined);
+assert.equal(migratedLinearSlots[0].enabled, false);
+assert.equal(migratedLinearSlots[0].side, 'overlay');
+assert.equal(migratedLinearSlots[0].z, 3);
+assert.deepEqual(migratedLinearSlots[0].params, { legend_label: 'Genes' });
+assert.equal(migratedLinearSlots[1].height, '22px');
+assert.equal(migratedLinearSlots[1].spacing, '4px');
+assert.equal(legacyLinearSlots[0].height, '48px', 'migration must not mutate imported session data');
+const currentLinearSlots = migrateLinearTrackSlotsToCurrentSchema(legacyLinearSlots, 2);
+assert.equal(currentLinearSlots[0].height, '48px');
+assert.equal(currentLinearSlots[0].spacing, '7px');
+assert.throws(
+  () => migrateLinearTrackSlotsToCurrentSchema(legacyLinearSlots, '1'),
+  /Unsupported linear track slot schema version/
+);
+
+const parsedLinearSlot = parseLinearTrackSlotSpec(
+  'genes:features@side=above,h=31px,spacing=5px,z=2,legend_label=Genes'
+);
+assert.equal(parsedLinearSlot.id, 'genes');
+assert.equal(parsedLinearSlot.renderer, 'features');
+assert.equal(parsedLinearSlot.height, '31px');
+assert.equal(parsedLinearSlot.spacing, '5px');
+assert.equal(parsedLinearSlot.side, 'above');
+assert.equal(parsedLinearSlot.z, 2);
+assert.equal(parsedLinearSlot.params.legend_label, 'Genes');
+assert.equal(buildLinearTrackSlotSpec(parsedLinearSlot), 'genes:features@side=above,h=31px,spacing=5px,z=2,legend_label=Genes');
+
+const aliasedLinearSlot = parseLinearTrackSlotSpec(
+  'depth:depth@ID=coverage,TYPE=features,SHOW=no,HEIGHT=40px,spacing=5,Z_INDEX=4'
+);
+assert.equal(aliasedLinearSlot.id, 'coverage');
+assert.equal(aliasedLinearSlot.renderer, 'features');
+assert.equal(aliasedLinearSlot.enabled, false);
+assert.equal(aliasedLinearSlot.height, '40px');
+assert.equal(aliasedLinearSlot.spacing, '5px');
+assert.equal(aliasedLinearSlot.z, 4);
+
+const structuredLinearSlot = parseLinearTrackSlotSpec({
+  kind: 'linearTrackSlot',
+  id: 'depth_2',
+  renderer: 'depth',
+  enabled: true,
+  side: 'below',
+  height: { value: 12.5, unit: 'px' },
+  spacing: { value: 3, unit: 'px' },
+  z: 2,
+  params: { track_index: 1, legend_label: 'Depth 2' }
+});
+assert.deepEqual(structuredLinearSlot, {
+  id: 'depth_2',
+  renderer: 'depth',
+  enabled: true,
+  side: 'below',
+  height: '12.5px',
+  spacing: '3px',
+  z: 2,
+  params: { track_index: 1, legend_label: 'Depth 2' }
+});
+assert.throws(() => parseLinearTrackSlotSpec('missing-renderer'), /requires '<slot_id>:<renderer>'/);
+assert.throws(() => parseLinearTrackSlotSpec('mystery:not_a_renderer'), /Unsupported linear track renderer/);
+assert.throws(() => parseLinearTrackSlotSpec('features:features@spacing='), /Invalid linear track slot spacing/);
+assert.throws(
+  () => parseLinearTrackSlotSpec({
+    kind: 'linearTrackSlot', id: 'bad', renderer: 'features', enabled: true,
+    side: 'overlay', height: { value: 1, unit: 'factor' }, spacing: null, z: 0, params: {}
+  }),
+  /only accepts px/
+);
+assert.throws(
+  () => parseLinearTrackSlotSpec({
+    kind: 'linearTrackSlot', id: 'bad', renderer: 'features', enabled: true,
+    side: 'overlay', height: null, spacing: null, z: 0, params: {}, unknown: true
+  }),
+  /unsupported field unknown/
+);
+assert.throws(
+  () => parseLinearTrackSlotSpecs(['same:features', 'same:depth']),
+  /Duplicate canonical linear track slot id/
+);
+assert.throws(() => parseLinearTrackSlotSpecs([]), /cannot be empty/);
+assert.throws(
+  () => parseLinearTrackSlotSpec('depth:depth@track_index=1.0'),
+  /non-negative integer/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    {
+      id: 'depth', renderer: 'depth', enabled: true, side: 'below', z: 0,
+      params: { track_index: 1.5 }
+    }
+  ], {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: ['features', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer'],
+    depthTrackCount: 1
+  }),
+  /non-negative integer/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    {
+      id: 'depth', renderer: 'depth', enabled: true, side: 'below', z: 0,
+      params: { track_index: 2 }
+    }
+  ], {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: ['features', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer'],
+    depthTrackCount: 1
+  }),
+  /available range is 0\.\.0/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    {
+      id: 'annotation', renderer: 'annotations', enabled: true,
+      side: 'overlay', z: 2, params: { anchor_slot: 'missing', layer: 'foreground' }
+    }
+  ], {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: ['features', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer']
+  }),
+  /unknown anchor_slot/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    {
+      id: 'depth', renderer: 'depth', enabled: true, side: 'overlay', z: 0,
+      params: { track_index: 0 }
+    }
+  ], {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: ['features', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer'],
+    depthTrackCount: 1
+  }),
+  /only supported for features and annotations/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    { id: 'features_a', renderer: 'features', enabled: true, side: 'overlay', z: 0, params: {} },
+    { id: 'features_b', renderer: 'features', enabled: true, side: 'above', z: 0, params: {} }
+  ], {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: ['features', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer']
+  }),
+  /only one enabled features slot/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    {
+      id: 'annotation', renderer: 'annotations', enabled: true,
+      side: 'above', z: 2, params: { anchor_slot: 'features' }
+    },
+    { id: 'features', renderer: 'features', enabled: true, side: 'overlay', z: 0, params: {} }
+  ], {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: ['features', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer']
+  }),
+  /uses anchor_slot without side=overlay/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    {
+      id: 'features', renderer: 'features', enabled: true, side: 'overlay',
+      height: '-1px', z: 0, params: {}
+    }
+  ], {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: ['features', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer']
+  }),
+  /height must be positive/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    {
+      id: 'depth', renderer: 'depth', enabled: true, side: 'inside',
+      spacing: '0.1', inner_gap_px: '2', z: 0, params: { track_index: 0 }
+    }
+  ], {
+    modeLabel: 'Circular',
+    layoutKind: 'circular',
+    supportedRenderers: ['features', 'ticks', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['inside', 'outside', 'overlay'],
+    anchorlessRenderers: ['ticks', 'spacer'],
+    depthTrackCount: 1
+  }),
+  /cannot combine spacing/
+);
+assert.throws(
+  () => validateTrackSlotBindingInvariants([
+    { id: 'features', renderer: 'features', enabled: true, side: 'overlay', z: 0, params: null }
+  ], {
+    modeLabel: 'Linear',
+    layoutKind: 'linear',
+    supportedRenderers: ['features', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'],
+    anchorlessRenderers: ['spacer']
+  }),
+  /params must be an object/
+);
+assert.throws(
+  () => parseLinearTrackSlotSpec({
+    kind: 'linearTrackSlot', id: 'depth', renderer: 'depth', enabled: true,
+    side: 'below', height: null, spacing: null, z: 0, params: { track_index: 1.5 }
+  }),
+  /non-negative integer/
+);
 
 const ref = (value) => ({ value });
 const state = {
@@ -98,6 +356,34 @@ assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
 assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
 assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
+
+const invalidCircularDepthIndex = structuredClone(canonical);
+invalidCircularDepthIndex.renderRequest.diagramOptions.tracks = {
+  circularTrackSlots: ['depth:depth@track_index=1.5']
+};
+assert.throws(
+  () => projectCanonicalSessionRequest(invalidCircularDepthIndex),
+  /non-negative integer/
+);
+
+const invalidCircularOverlay = structuredClone(canonical);
+invalidCircularOverlay.renderRequest.diagramOptions.tracks = {
+  circularTrackSlots: [
+    'review:annotations@side=overlay,set_id=review,anchor_slot=missing,layer=foreground,z=1'
+  ]
+};
+assert.throws(
+  () => projectCanonicalSessionRequest(invalidCircularOverlay),
+  /references unknown anchor_slot/
+);
+
+const emptyDepthColumn = structuredClone(canonical);
+emptyDepthColumn.renderRequest.diagramOptions.depthTrackFiles = [[null]];
+emptyDepthColumn.renderRequest.diagramOptions.depthTrackLabels = ['Empty'];
+assert.throws(
+  () => projectCanonicalSessionRequest(emptyDepthColumn),
+  /logical track index 0.*no source/
+);
 
 const blastTable = { ...genbank, name: 'hits.tsv', data: btoa('ref\tcmp\t99\t4\t0\t0\t1\t4\t4\t1\t1e-20\t50\n') };
 const comparisonFasta = { ...genbank, name: 'comparison.fna', data: btoa('>cmp\nAACCGG\n') };
@@ -279,6 +565,235 @@ assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
 assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
 assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
 
+const depthA = {
+  ...genbank,
+  name: 'sample-a.depth.tsv',
+  type: 'text/tab-separated-values',
+  data: btoa('position\tdepth\n1\t10\n')
+};
+const depthB = {
+  ...genbank,
+  name: 'sample-b.depth.tsv',
+  type: 'text/tab-separated-values',
+  data: btoa('position\tdepth\n1\t20\n')
+};
+state.form.show_depth = true;
+state.adv.resolve_overlaps = true;
+state.adv.feature_height = 9;
+state.adv.depth_tracks = [
+  { label: 'Sample A', color: '#112233', height: 12 },
+  { label: 'Sample B', color: '#445566', height: 18 }
+];
+
+const combinedGenbankText = `${genbankText}${genbankText.replaceAll('WEBTEST', 'WEBTWO')}`;
+const combinedGenbank = {
+  ...genbank,
+  name: 'combined.gb',
+  size: new TextEncoder().encode(combinedGenbankText).byteLength,
+  data: btoa(combinedGenbankText)
+};
+state.mode.value = 'circular';
+state.form.multi_record_canvas = true;
+state.circularRecordList.value = [
+  { selector: '#1' },
+  { selector: '#2' }
+];
+const circularSparseFilesData = {
+  c_gb: combinedGenbank,
+  c_depth: [
+    [depthA, null],
+    [null, depthB]
+  ],
+  linearSeqs: []
+};
+const circularSparseCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: circularSparseFilesData
+});
+assert.equal(circularSparseCanonical.renderRequest.records.length, 2);
+assert.deepEqual(
+  circularSparseCanonical.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
+    row.map((entry) => Boolean(entry?.resourceId))
+  )),
+  [[true, false], [false, true]]
+);
+const circularSparseProjection = projectCanonicalSessionRequest(circularSparseCanonical);
+assert.deepEqual(
+  circularSparseProjection.files.c_depth.map((row) => row.map(Boolean)),
+  [[true, false], [false, true]]
+);
+assert.equal(circularSparseProjection.files.c_depth[0][0].data, depthA.data);
+assert.equal(circularSparseProjection.files.c_depth[0][1], null);
+assert.equal(circularSparseProjection.files.c_depth[1][0], null);
+assert.equal(circularSparseProjection.files.c_depth[1][1].data, depthB.data);
+assert.deepEqual(circularSparseProjection.config.adv.depth_tracks.map((track) => track.label), [
+  'Sample A',
+  'Sample B'
+]);
+const circularSparseRebuilt = buildCanonicalSessionRequest({
+  state,
+  filesData: circularSparseProjection.files
+});
+assert.deepEqual(
+  circularSparseRebuilt.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
+    row.map((entry) => Boolean(entry?.resourceId))
+  )),
+  [[true, false], [false, true]]
+);
+
+const circularLegacyFlatCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: {
+    c_gb: combinedGenbank,
+    c_depth: [depthA, depthB],
+    linearSeqs: []
+  }
+});
+assert.deepEqual(
+  circularLegacyFlatCanonical.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
+    row.map((entry) => Boolean(entry?.resourceId))
+  )),
+  [[true, true], [true, true]]
+);
+assert.throws(
+  () => buildCanonicalSessionRequest({
+    state,
+    filesData: {
+      c_gb: combinedGenbank,
+      c_depth: [[depthA, depthB]],
+      linearSeqs: []
+    }
+  }),
+  /Circular Depth matrix has 1 record rows; expected 2/
+);
+
+state.mode.value = 'linear';
+state.form.multi_record_canvas = false;
+state.circularRecordList.value = [];
+state.adv.linear_track_slots_enabled = true;
+state.adv.linear_track_slots_axis_index = 1;
+state.adv.linear_track_slots = [
+  {
+    id: 'depth_b', renderer: 'depth', enabled: true, side: 'above',
+    height: '18px', spacing: '2px', params: { track_index: 1 }
+  },
+  {
+    id: 'features', renderer: 'features', enabled: true, side: 'overlay',
+    height: '44px', spacing: '6px', params: {}
+  },
+  { id: 'depth_a', renderer: 'depth', enabled: true, side: 'below', params: { track_index: 0 } }
+];
+const sparseDepthFilesData = {
+  ...linearFilesData,
+  linearSeqs: linearFilesData.linearSeqs.slice(0, 2).map((seq, index) => ({
+    ...seq,
+    depth: index === 0 ? [depthA, null] : [null, depthB]
+  }))
+};
+const sparseDepthCanonical = buildCanonicalSessionRequest({ state, filesData: sparseDepthFilesData });
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles.length, 2);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[0].length, 2);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[0][1], null);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[1][0], null);
+assert.deepEqual(
+  sparseDepthCanonical.renderRequest.diagramOptions.depthTrackLabels,
+  ['Sample A', 'Sample B']
+);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 1);
+assert.deepEqual(
+  sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.split(':')[0]),
+  ['depth_b', 'features', 'depth_a']
+);
+const sparseDepthProjection = projectCanonicalSessionRequest(sparseDepthCanonical);
+assert.equal(sparseDepthProjection.files.linearSeqs[0].depth.length, 2);
+assert.equal(sparseDepthProjection.files.linearSeqs[0].depth[0].data, depthA.data);
+assert.equal(sparseDepthProjection.files.linearSeqs[0].depth[1], null);
+assert.equal(sparseDepthProjection.files.linearSeqs[1].depth[0], null);
+assert.equal(sparseDepthProjection.files.linearSeqs[1].depth[1].data, depthB.data);
+assert.equal(sparseDepthProjection.config.adv.linear_track_slots_enabled, true);
+assert.equal(sparseDepthProjection.config.adv.linear_track_slots_schema_version, 2);
+assert.equal(sparseDepthProjection.config.adv.linear_track_slots_axis_index, 1);
+assert.deepEqual(
+  sparseDepthProjection.config.adv.linear_track_slots.map((slot) => slot.id),
+  ['depth_b', 'features', 'depth_a']
+);
+assert.equal(sparseDepthProjection.config.adv.linear_track_slots[0].height, '18px');
+assert.equal(sparseDepthProjection.config.adv.linear_track_slots[0].spacing, '2px');
+assert.equal(sparseDepthProjection.config.adv.linear_track_slots[1].height, '44px');
+assert.equal(sparseDepthProjection.config.adv.linear_track_slots[1].spacing, '6px');
+assert.equal(sparseDepthProjection.config.adv.resolve_overlaps, true);
+assert.equal(sparseDepthProjection.config.adv.feature_height, 9);
+
+const structuredSparseDepthCanonical = {
+  ...sparseDepthCanonical,
+  renderRequest: {
+    ...sparseDepthCanonical.renderRequest,
+    diagramOptions: {
+      ...sparseDepthCanonical.renderRequest.diagramOptions,
+      tracks: {
+        ...sparseDepthCanonical.renderRequest.diagramOptions.tracks,
+        linearTrackSlots: [
+          {
+            kind: 'linearTrackSlot', id: 'depth_b', renderer: 'depth', enabled: true,
+            side: 'above', height: { value: 18, unit: 'px' }, spacing: { value: 2, unit: 'px' },
+            z: 3, params: { track_index: 1, legend_label: 'Sample B' }
+          },
+          {
+            kind: 'linearTrackSlot', id: 'features', renderer: 'features', enabled: true,
+            side: 'overlay', height: { value: 44, unit: 'px' }, spacing: { value: 6, unit: 'px' },
+            z: 1, params: {}
+          },
+          {
+            kind: 'linearTrackSlot', id: 'depth_a', renderer: 'depth', enabled: true,
+            side: 'below', height: null, spacing: null, z: 0,
+            params: { track_index: 0, legend_label: 'Sample A' }
+          }
+        ]
+      }
+    }
+  }
+};
+const structuredV33Projection = projectCanonicalSessionRequest(structuredSparseDepthCanonical);
+assert.deepEqual(
+  structuredV33Projection.config.adv.linear_track_slots.map((slot) => slot.id),
+  ['depth_b', 'features', 'depth_a']
+);
+assert.equal(structuredV33Projection.config.adv.linear_track_slots[0].renderer, 'depth');
+assert.equal(structuredV33Projection.config.adv.linear_track_slots[0].height, '18px');
+assert.equal(structuredV33Projection.config.adv.linear_track_slots[0].spacing, '2px');
+assert.equal(structuredV33Projection.config.adv.linear_track_slots[0].z, 3);
+assert.deepEqual(
+  structuredV33Projection.config.adv.linear_track_slots[0].params,
+  { track_index: 1, legend_label: 'Sample B' }
+);
+assert.equal(structuredV33Projection.config.adv.linear_track_slots[1].height, '44px');
+assert.equal(structuredV33Projection.config.adv.linear_track_slots[1].spacing, '6px');
+
+const legacySparseDepthProjection = projectCanonicalSessionRequest({
+  ...structuredSparseDepthCanonical,
+  linearTrackSlotSchemaVersion: 1
+});
+assert.equal(legacySparseDepthProjection.config.adv.linear_track_slots[0].height, '18px');
+assert.equal(legacySparseDepthProjection.config.adv.linear_track_slots[0].spacing, '2px');
+assert.equal(legacySparseDepthProjection.config.adv.linear_track_slots[1].height, undefined);
+assert.equal(legacySparseDepthProjection.config.adv.linear_track_slots[1].spacing, undefined);
+
+state.adv.linear_track_slots_axis_index = 1;
+state.adv.linear_track_slots = [
+  {
+    id: 'custom_removed', renderer: 'depth', enabled: false, side: 'above',
+    depth_binding_error: 'Depth logical track index 0 is no longer available.', params: {}
+  },
+  { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: {} },
+  { id: 'depth_b', renderer: 'depth', enabled: true, side: 'below', params: { track_index: 1 } }
+];
+const filteredAxisCanonical = buildCanonicalSessionRequest({ state, filesData: sparseDepthFilesData });
+assert.equal(filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 0);
+assert.deepEqual(
+  filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.split(':')[0]),
+  ['features', 'depth_b']
+);
+
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];
@@ -290,7 +805,8 @@ if (projectSessionIndex >= 0) {
   const session = JSON.parse(sessionText);
   const projectedSession = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
-    resources: session.resources
+    resources: session.resources,
+    linearTrackSlotSchemaVersion: Number(session.version) <= 32 ? 1 : 2
   });
   assert.ok(['circular', 'linear'].includes(projectedSession.mode));
   assert.ok(

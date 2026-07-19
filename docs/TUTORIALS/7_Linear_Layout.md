@@ -33,6 +33,10 @@ gbdraw linear \
 
 This writes `majani_tracks_below.svg`. Use `--track_axis_gap 12` when you want an explicit pixel gap instead of automatic spacing.
 
+Add `--resolve_overlaps` when overlapping genomic features should use additional lanes. gbdraw measures the resulting feature lanes and labels for each record, then moves GC, skew, Depth, and other non-overlay tracks outward only when they need more clearance. Records with different feature occupancy can therefore use different vertical track positions. In the web app, the `middle` choice is labeled **Features on axis**.
+
+In a comparison diagram, ribbons attach to the outer edges of the two records' measured exclusion bands. `--comparison_height` is the minimum clear corridor between those edges. Taller occupancy moves the record axes apart without placing ribbons through the track stacks; other row or definition spacing can make the corridor larger than the minimum.
+
 ![Two majanivirus records with feature, GC content, and GC skew tracks placed below each record axis](../../examples/tutorial-7-track-layout-below.svg)
 
 ## 3. Use a ruler on the axis
@@ -133,6 +137,12 @@ gbdraw linear \
 
 The axis index is the boundary in the slot list. Here the feature slot overlays boundary `0`, and the two later slots are placed below it.
 
+For a feature slot, `h` is the minimum reserved height, not the feature glyph thickness. The actual reservation is the larger of the measured feature-and-label band and the configured `h`; use `--feature_height` to change the glyph thickness itself. Feature-slot `spacing` is the clearance between that reserved band and the adjacent track farther from the axis. With `h` left automatic, the measured reservation and resulting track positions are record-specific.
+
+For a Depth slot, `track_index=0` selects the first repeated `--depth_track` group, `track_index=1` selects the second, and so on. It must be a zero-based non-negative integer for a logical Depth series that exists somewhere in the diagram; negative, fractional, nonnumeric, and globally out-of-range values are rejected. Moving the slot above or below the axis changes its vertical position without changing the selected depth series. If that series has no file for one record, gbdraw omits the depth area, axis, and ticks for that record while retaining the slot band. See [Plot read depth and other numeric tracks](./6_Depth_Quantitative_Tracks.md#3-compare-depth-across-records) for an empty-placeholder example.
+
+When a custom stack is active, its enabled Depth slots are authoritative for the legend. Entries follow slot order, `legend_label` overrides the selected logical series title, and series without an enabled slot are omitted. A selected sparse series is still listed when its data exists only in a later record.
+
 ![Linear MjeNMV diagram with an overlay feature slot followed by custom-height GC content and GC skew slots](../../examples/tutorial-7-linear-track-slots.svg)
 
 Add a reusable annotation row with the same table used in Circular mode:
@@ -148,7 +158,9 @@ gbdraw linear \
   -f svg
 ```
 
-Leave `h` out to size the row from its lanes and labels. For an overlay, set `side=overlay`, `anchor_slot=<slot_id>`, and `layer=underlay` or `foreground`. An underlay slot must have a lower `z` value than its anchor; a foreground slot must have a higher value. `overflow=error`, `compress`, or `clip` controls what happens when an explicit height is too small.
+Leave `h` out to size the row from its lanes and labels. For an overlay, set `side=overlay`, `anchor_slot=<slot_id>`, and `layer=underlay` or `foreground`. The anchor must be an enabled drawable, non-annotation slot in the complete stack; unknown IDs, non-drawing slots, and annotation-to-annotation anchor chains are rejected. An underlay slot must have a lower `z` value than its anchor; a foreground slot must have a higher value. `overflow=error`, `compress`, or `clip` controls what happens when an explicit height is too small.
+
+In the web app, opening or closing **Custom Track Slots** only shows or hides the editor. Select **Use custom stack** to use the saved stack for rendering; disabling and re-enabling it preserves the slots and axis position. **Reset** is the only action that rebuilds the custom stack from the simple Track Layout, GC, skew, and Depth controls. Those simple controls are disabled while the custom stack is active.
 
 ## 7. Select records, regions, and orientation
 

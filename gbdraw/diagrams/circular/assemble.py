@@ -12,7 +12,7 @@ import logging
 import math
 import copy
 from dataclasses import replace
-from typing import Any, Optional, Callable, Sequence
+from typing import Any, Optional, Callable, Mapping, Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -25,6 +25,8 @@ from ...analysis.conservation import (  # type: ignore[reportMissingImports]
 )
 from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     DepthTrackData,
+    depth_track_data_count,
+    index_depth_track_row,
     sync_depth_track_legend_entries,
 )
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -59,6 +61,7 @@ from ...tracks import (  # type: ignore[reportMissingImports]
     ScalarSpec,
     default_circular_track_slots,
     normalize_circular_track_slots,
+    parse_nonnegative_integer,
 )
 from ...annotations import (
     AnnotationOptions,
@@ -1249,19 +1252,20 @@ def _sync_legend_table_for_circular_slots(
     for key in removable:
         out.pop(key, None)
 
+    depth_by_index = index_depth_track_row(depth_tracks or ())
     for slot in circular_track_slots:
         if not slot.enabled:
             continue
         renderer = str(slot.renderer)
         if renderer == "depth":
-            if depth_tracks:
-                try:
-                    track_index = int((slot.params or {}).get("track_index", 0) or 0)
-                except (TypeError, ValueError):
-                    track_index = 0
-                if track_index < 0 or track_index >= len(depth_tracks):
+            if depth_by_index:
+                track_index = parse_nonnegative_integer(
+                    (slot.params or {}).get("track_index", 0),
+                    field_name=f"depth slot '{slot.id}' track_index",
+                )
+                track = depth_by_index.get(track_index)
+                if track is None:
                     continue
-                track = depth_tracks[track_index]
                 label = _slot_legend_label(slot, track.label)
                 out[_unique_legend_key(out, label)] = {
                     "type": "solid",
@@ -1367,7 +1371,7 @@ def _draw_resolved_circular_slot(
     skew_config: GcSkewConfigurator,
     depth_df: DataFrame | None,
     depth_config: DepthConfigurator | None,
-    depth_tracks: Sequence[DepthTrackData] | None,
+    depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
     conservation_tracks: Sequence[ConservationTrack] | None,
     conservation_min_identity: float,
     cfg: GbdrawConfig,
@@ -1509,19 +1513,14 @@ def _draw_resolved_circular_slot(
         depth_group_id = str(resolved_slot.id)
         selected_depth_df = depth_df
         selected_depth_config = depth_config
-        if depth_tracks:
-            try:
-                track_index = int(resolved_slot.params.get("track_index", 0) or 0)
-            except (TypeError, ValueError):
-                track_index = 0
-            if track_index < 0 or track_index >= len(depth_tracks):
-                logger.warning(
-                    "Skipping circular depth slot '%s' because track_index=%s is unavailable.",
-                    resolved_slot.id,
-                    track_index,
-                )
+        if depth_tracks_by_index is not None:
+            track_index = parse_nonnegative_integer(
+                resolved_slot.params.get("track_index", 0),
+                field_name=f"depth slot '{resolved_slot.id}' track_index",
+            )
+            depth_track = depth_tracks_by_index.get(track_index)
+            if depth_track is None:
                 return canvas
-            depth_track = depth_tracks[track_index]
             selected_depth_df = depth_track.df
             selected_depth_config = depth_track.config
             if not use_slot_group_id:
@@ -1945,6 +1944,7 @@ def add_record_on_circular_canvas(
     depth_config: DepthConfigurator | None = None,
     depth_df: DataFrame | None = None,
     depth_tracks: Sequence[DepthTrackData] | None = None,
+    depth_track_count_value: int | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
     cfg: GbdrawConfig | None = None,
@@ -1979,15 +1979,22 @@ def add_record_on_circular_canvas(
     Drawing: The updated SVG drawing with all record-related groups added.
     """
     cfg = cfg or canvas_config._cfg
+    depth_tracks_by_index = (
+        index_depth_track_row(depth_tracks)
+        if depth_tracks is not None
+        else None
+    )
+    resolved_depth_track_count = (
+        int(depth_track_count_value)
+        if depth_track_count_value is not None
+        else depth_track_data_count([depth_tracks or ()])
+    )
 
     raw_show_labels = cfg.canvas.show_labels
     show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
     depth_enabled = bool(
         canvas_config.show_depth
-        and (
-            bool(depth_tracks)
-            or (depth_config is not None and depth_df is not None)
-        )
+        and depth_config is not None
     )
     effective_circular_track_slots, resolved_annotations, annotation_track_layouts = _prepare_circular_annotation_tracks(
         gb_record,
@@ -1996,7 +2003,7 @@ def add_record_on_circular_canvas(
         canvas_config=canvas_config,
         record_index=annotation_record_index,
         show_depth=depth_enabled,
-        depth_track_count=max(1, len(depth_tracks or ())),
+        depth_track_count=max(1, resolved_depth_track_count),
     )
     user_slot_mode = effective_circular_track_slots is not None
     user_active_slot_renderers = {
@@ -2505,7 +2512,7 @@ def add_record_on_circular_canvas(
             skew_config=skew_config,
             depth_df=depth_df,
             depth_config=depth_config,
-            depth_tracks=depth_tracks,
+            depth_tracks_by_index=depth_tracks_by_index,
             conservation_tracks=conservation_tracks,
             conservation_min_identity=conservation_min_identity,
             cfg=cfg,
@@ -2601,6 +2608,7 @@ def assemble_circular_diagram(
     depth_df: DataFrame | None = None,
     depth_config: DepthConfigurator | None = None,
     depth_tracks: Sequence[DepthTrackData] | None = None,
+    depth_track_count_value: int | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
     cfg: GbdrawConfig | None = None,
@@ -2638,14 +2646,19 @@ def assemble_circular_diagram(
 
     # Prefer a pre-parsed config model when available to avoid repeated from_dict() calls.
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    resolved_depth_track_count = (
+        int(depth_track_count_value)
+        if depth_track_count_value is not None
+        else depth_track_data_count([depth_tracks or ()])
+    )
     effective_circular_track_slots, resolved_annotations, _annotation_layouts = _prepare_circular_annotation_tracks(
         gb_record,
         annotations,
         circular_track_slots,
         canvas_config=canvas_config,
         record_index=annotation_record_index,
-        show_depth=bool(depth_config is not None and (depth_df is not None or depth_tracks)),
-        depth_track_count=max(1, len(depth_tracks or ())),
+        show_depth=bool(canvas_config.show_depth and depth_config is not None),
+        depth_track_count=max(1, resolved_depth_track_count),
     )
 
     legend_table: dict = {}
@@ -2675,7 +2688,7 @@ def assemble_circular_diagram(
             default_used_features=default_used_features,
             depth_config=depth_config if (
                 depth_config is not None
-                and (depth_df is not None or len(depth_tracks or ()) == 1)
+                and (depth_df is not None or resolved_depth_track_count == 1)
             ) else None,
         )
         if depth_tracks and effective_circular_track_slots is None:
@@ -2722,6 +2735,7 @@ def assemble_circular_diagram(
         depth_config=depth_config,
         depth_df=depth_df,
         depth_tracks=depth_tracks,
+        depth_track_count_value=resolved_depth_track_count,
         conservation_tracks=conservation_tracks,
         conservation_min_identity=conservation_min_identity,
         cfg=cfg,

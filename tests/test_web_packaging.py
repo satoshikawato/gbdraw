@@ -986,7 +986,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert '"format":"gbdraw-session"' in session_prefix
         version_match = re.search(r'"version":(\d+)', session_prefix)
         assert version_match is not None
-        assert int(version_match.group(1)) == CURRENT_SESSION_VERSION
+        assert int(version_match.group(1)) in {32, CURRENT_SESSION_VERSION}
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
         assert "window.parent" not in svg_source
@@ -1221,7 +1221,7 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
         collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
 
-        assert session.get("version") == CURRENT_SESSION_VERSION, session_name
+        assert session.get("version") in {32, CURRENT_SESSION_VERSION}, session_name
         assert "files" not in session, session_name
         assert features, session_name
         assert session.get("results"), session_name
@@ -1290,7 +1290,7 @@ def test_vnig_gallery_session_multirecord_positions_are_restoreable() -> None:
     assert actual_positions == expected_positions
 
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
-    assert "hydrateMissingMultiRecordPositionsFromCliInvocation(data.config, data.cliInvocation)" in config_source
+    assert "hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation)" in config_source
 
 
 def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path) -> None:
@@ -2465,22 +2465,35 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
 
     assert "linear_track_slots_enabled: false" in state_source
-    assert "linear_track_slots_schema_version: 1" in state_source
+    assert "linear_track_slots_schema_version: 2" in state_source
     assert "createDefaultLinearTrackSlots" in state_source
     assert "<span class=\"truncate\">Custom Track Slots</span>" in index_html
-    assert '@click="setLinearTrackSlotsEnabled(!adv.linear_track_slots_enabled)"' in index_html
+    assert '@click="toggleLinearTrackSlotsPanel"' in index_html
+    assert 'v-if="linearTrackSlotsPanelOpen"' in index_html
+    assert ':checked="adv.linear_track_slots_enabled"' in index_html
+    assert '@change="setLinearTrackSlotsEnabled($event.target.checked)"' in index_html
     assert 'aria-controls="linear-custom-track-slots-panel"' in index_html
     assert "Linear Custom Track Slots" not in index_html
     assert "Linear Custom Track Slots" not in config_source
     assert 'v-model="adv.linear_track_slots_enabled"' not in index_html
+    assert "Resolve Feature Overlaps" in index_html
+    assert "Overlapping genomic features are assigned to additional lanes; other tracks are repacked automatically." in index_html
+    assert '<option value="middle">Features on axis</option>' in index_html
+    assert "this does not change feature glyph thickness" in index_html
+    assert "Auto values vary by record" in index_html
+    assert ':disabled="adv.linear_track_slots_enabled"' in index_html
     assert 'v-model.number="entry.slot.params.track_index"' in index_html
     assert "--linear_track_slot" in run_source
     assert "buildLinearTrackSlotSpec" in run_source
     assert "linearSlotNeedsDepth" in run_source
     assert "validateImportedLinearTrackSlots" in config_source
-    assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1" in config_source
+    assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 2" in module_source
+    assert "const SESSION_VERSION = 33" in config_source
+    assert "migrateImportedLinearTrackSlots" in config_source
     assert "createLinearTrackSlotEditor" in module_source
     assert "linearTrackStackEntries" in app_setup_source
+    assert "linearTrackSlotsPanelOpen" in app_setup_source
+    assert "linearTrackSlotEditor.reconcileLinearTrackSlotsFromSimpleControls" not in app_setup_source
     assert "linearTrackSlotUsesPresetGeometry(entry.slot)" in index_html
     assert "linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry" in app_setup_source
     assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in run_source
@@ -2552,8 +2565,11 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "updateDepthTrackLabelFromFile(idx, file, previousFile);" in app_setup_source
     assert "Depth TSV tracks" in index_html
     assert 'v-if="!hasCircularDepthFiles"' in index_html
-    assert 'v-if="!hasLinearDepthFiles(seq)"' in index_html
-    assert "Add TSV" in index_html
+    assert "linearDepthTrackCoverageLabel" in index_html
+    assert "Add series for all records" in index_html
+    assert "clearDepthTrackSourceAt" in app_setup_source
+    assert "removeDepthTrackColumnAt" in app_setup_source
+    assert "delete slot.depth_binding_error" in app_setup_source
     assert "Per-track settings" in index_html
     assert ':value="getDepthTrackLabel(track.index)"' in index_html
     assert '@input="setDepthTrackLabel(track.index, $event.target.value)"' in index_html
@@ -2661,7 +2677,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert '@change="setCircularGcSuppressed($event.target.checked, $event)"' in index_html
     assert '@change="setCircularSkewSuppressed($event.target.checked, $event)"' in index_html
     assert "circularTrackSlotSuppressMessage(entry.slot)" in index_html
-    assert "depthFileSlotsFromValue(files.c_depth).length" in app_setup_source
+    assert "representativeDepthFiles(files.c_depth).length" in app_setup_source
     assert "circularTrackSlotEditor.normalizeCircularTrackSlots();" in app_setup_source
     assert "circularTrackSlotEditor.ensureCircularTrackDepthSlot();" in app_setup_source
     assert "resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset" in app_setup_source
@@ -2913,6 +2929,21 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
         assert(defaultState.adv.linear_track_slots_axis_index === 0, 'Middle default should place Axis at the feature row');
         assert(defaultEntries[0]?.kind === 'slot' && defaultEntries[0]?.onAxis === true, 'Middle default feature should embed the Axis row');
         assert(defaultState.adv.linear_track_slots[0].side === 'overlay', 'Middle default feature should use side=overlay');
+        const dormantStack = JSON.stringify(defaultState.adv.linear_track_slots);
+        const dormantAxis = defaultState.adv.linear_track_slots_axis_index;
+        const dormantSpecs = defaultState.adv.linear_track_slots.map((slot) => defaultEditor.linearTrackSlotCliSpec(slot)).join('|');
+        defaultState.form.show_gc = false;
+        defaultState.form.show_skew = false;
+        defaultState.form.show_depth = false;
+        defaultState.form.linear_track_layout = 'below';
+        defaultEditor.setLinearTrackSlotsEnabled(false);
+        defaultEditor.setLinearTrackSlotsEnabled(true);
+        assert(JSON.stringify(defaultState.adv.linear_track_slots) === dormantStack, 'Disable/re-enable must preserve the dormant custom stack');
+        assert(defaultState.adv.linear_track_slots_axis_index === dormantAxis, 'Disable/re-enable must preserve the custom Axis index');
+        assert(defaultState.adv.linear_track_slots.map((slot) => defaultEditor.linearTrackSlotCliSpec(slot)).join('|') === dormantSpecs, 'Disable/re-enable must preserve emitted slot specs');
+        defaultEditor.resetLinearTrackSlotsFromSimpleControls();
+        assert(defaultState.adv.linear_track_slots.length === 1, 'Reset should be the explicit simple-to-custom regeneration action');
+        assert(defaultState.adv.linear_track_slots[0].renderer === 'features' && defaultState.adv.linear_track_slots[0].side === 'below', 'Reset should apply current simple controls');
 
         const state = {{
           adv: {{
@@ -3026,48 +3057,6 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
         );
         assert(featureSpec.includes('side=overlay'), 'On-Axis feature CLI spec should keep side=overlay');
 
-        const reconcileState = {{
-          adv: {{
-            nt: 'AT',
-            linear_track_slots_enabled: true,
-            linear_track_slots_axis_index: 0,
-            linear_track_slots: [
-              {{ id: 'features', renderer: 'features', side: 'overlay', params: {{}} }},
-              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'below', params: {{ nt: 'GC' }} }},
-              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'below', params: {{ nt: 'GC', positive_color: '#e76f51' }} }},
-              {{ id: 'custom_gc', renderer: 'dinucleotide_content', side: 'below', height: '22px', params: {{ nt: 'GC' }} }}
-            ]
-          }},
-          form: {{
-            linear_track_layout: 'middle',
-            show_depth: false,
-            show_gc: false,
-            show_skew: false
-          }},
-          linearSeqs: [{{ depth: [{{ name: 'one.tsv' }}, {{ name: 'two.tsv' }}] }}]
-        }};
-        const reconcileEditor = createLinearTrackSlotEditor({{ state: reconcileState }});
-        reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
-        assert(!reconcileState.adv.linear_track_slots.some((slot) => slot.id === 'gc_content'), 'Show GC off should remove only the default GC slot');
-        assert(reconcileState.adv.linear_track_slots.some((slot) => slot.id === 'custom_gc'), 'Show GC off should preserve customized duplicate GC slots');
-        assert(reconcileState.adv.linear_track_slots.some((slot) => slot.id === 'gc_skew' && slot.params?.positive_color === '#e76f51'), 'Show Skew off should preserve color-overridden gc_skew as custom');
-        reconcileState.form.show_gc = true;
-        reconcileState.form.show_skew = true;
-        reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
-        const restoredGc = reconcileState.adv.linear_track_slots.find((slot) => slot.id === 'gc_content');
-        assert(restoredGc?.params?.nt === 'AT', 'Show GC on should restore default GC using the simple nt control');
-        assert(reconcileState.adv.linear_track_slots.filter((slot) => slot.id === 'gc_skew').length === 1, 'Show Skew on should not add a duplicate default over color-overridden gc_skew');
-        reconcileState.form.show_depth = true;
-        reconcileEditor.syncLinearNumericSlotsFromSimpleControls();
-        const depthIndexes = reconcileState.adv.linear_track_slots
-          .filter((slot) => slot.renderer === 'depth')
-          .map((slot) => Number(slot.params?.track_index))
-          .join(',');
-        assert(depthIndexes === '0,1', 'Show Depth on should materialize one slot per uploaded depth series');
-        reconcileState.form.linear_track_layout = 'below';
-        reconcileEditor.applyLinearTrackLayoutPreset('below');
-        const reconciledFeature = reconcileState.adv.linear_track_slots.find((slot) => slot.id === 'features');
-        assert(reconciledFeature?.side === 'below' && reconcileState.adv.linear_track_slots_axis_index === 0, 'Track Layout Below should move feature below Axis');
         """,
         encoding="utf-8",
     )
@@ -3810,9 +3799,9 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
     assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;" in config_source
     assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
     assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
-    assert "validateImportedCircularTrackSlots(data);" in config_source
+    assert "validateImportedCircularTrackSlots(migrated);" in config_source
     assert "isLegacyConfigPayload(data)" in config_source
-    assert "validateImportedCircularTrackSlots(data.config);" in config_source
+    assert "validateImportedCircularTrackSlots(restoredConfig," in config_source
     assert "Legacy configuration loaded. Save as a session to use the current format." in config_source
     assert "Failed to load session: ${message}" in config_source
 

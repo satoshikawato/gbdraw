@@ -385,6 +385,11 @@ class LinearCanvasConfigurator:
         # Keep the alignment width fixed to the configured figure width so the longest record fits.
         # Horizontal offsets and legend widths expand the total canvas width around that baseline.
         self.alignment_width = self.fig_width
+        if self.legend_position in {"left", "right"}:
+            self.total_height = max(
+                float(self.total_height),
+                float(legend_group.legend_height) + (2.0 * float(self.vertical_padding)),
+            )
 
         def calculate_optimal_legend_y():
             genome_area_top = self.vertical_offset
@@ -392,10 +397,14 @@ class LinearCanvasConfigurator:
             genome_area_center_y = genome_area_top + (genome_area_bottom - genome_area_top) / 2
             legend_y = genome_area_center_y - (legend_group.legend_height / 2)
 
-            if legend_y < 0 or (legend_y + legend_group.legend_height) > self.total_height:
-                legend_y = max((self.total_height - legend_group.legend_height) / 2, self.vertical_padding)
-
-            return legend_y
+            minimum_y = float(self.vertical_padding)
+            maximum_y = max(
+                minimum_y,
+                float(self.total_height)
+                - float(legend_group.legend_height)
+                - float(self.vertical_padding),
+            )
+            return min(max(float(legend_y), minimum_y), maximum_y)
 
         padding = self.canvas_padding
         legend_width = legend_group.legend_width

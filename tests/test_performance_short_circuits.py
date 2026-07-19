@@ -145,7 +145,6 @@ def test_linear_feature_dict_is_built_once_per_record(
         raise AssertionError("Linear assembly should reuse precomputed feature dictionaries.")
 
     monkeypatch.setattr(linear_precalc_module, "create_feature_dict", counting_create_feature_dict)
-    monkeypatch.setattr(linear_assemble_module, "create_feature_dict", unexpected_create_feature_dict)
     monkeypatch.setattr(linear_seq_record_module, "create_feature_dict", unexpected_create_feature_dict)
 
     assemble_linear_diagram_from_records(

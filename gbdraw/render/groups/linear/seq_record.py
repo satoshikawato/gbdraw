@@ -14,6 +14,7 @@ from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
 from ....labels.placement import prepare_label_list_linear
+from ....layout.linear import LinearFeatureLaneGeometry
 from ....features.factory import create_feature_dict
 from ....features.objects import FeatureObject
 from ....features.colors import preprocess_color_tables
@@ -52,6 +53,8 @@ class SeqRecordGroup:
         group_id: str | None = None,
         sequence_width: float | None = None,
         record_local_ruler: bool = False,
+        feature_offset_y: float = 0.0,
+        feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
     ) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
@@ -68,6 +71,8 @@ class SeqRecordGroup:
         self.record_group_id = str(group_id) if group_id else str(gb_record.id)
         self.sequence_width = float(sequence_width) if sequence_width is not None else None
         self.record_local_ruler = bool(record_local_ruler)
+        self.feature_offset_y = float(feature_offset_y)
+        self.feature_lane_geometry = feature_lane_geometry
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -251,6 +256,11 @@ class SeqRecordGroup:
         group.add(axis_path)
         self._draw_axis_ruler(group, bar_length=bar_length, record_length=record_length)
 
+        feature_group = group
+        has_feature_shift = abs(self.feature_offset_y) > 1e-9
+        if has_feature_shift:
+            feature_group = Group(id=f"{self.record_group_id}_features", debug=False)
+
         # Process labels if enabled
         if self.show_labels and self.draw_features_enabled:
             for label in label_list:
@@ -261,7 +271,7 @@ class SeqRecordGroup:
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width,
                     )
-                    group.add(line_path)
+                    feature_group.add(line_path)
                 elif not label["is_embedded"]:
                     label_middle_y = float(label["middle_y"])
                     feature_middle_y = float(label["feature_middle_y"])
@@ -278,15 +288,15 @@ class SeqRecordGroup:
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width,
                     )
-                    group.add(line_path)
+                    feature_group.add(line_path)
 
         # Draw features
         if self.draw_features_enabled:
             for feature_object in feature_dict.values():
                 feature_strand = feature_object.strand
-                group = FeatureDrawer(self.feature_config).draw(
+                feature_group = FeatureDrawer(self.feature_config).draw(
                     feature_object=feature_object,
-                    group=group,
+                    group=feature_group,
                     genome_length=record_length,
                     cds_height=cds_height,
                     alignment_width=alignment_width,
@@ -296,6 +306,7 @@ class SeqRecordGroup:
                     arrow_length=arrow_length,
                     track_layout=self.track_layout,
                     track_axis_gap=self.canvas_config.track_axis_gap,
+                    feature_lane_geometry=self.feature_lane_geometry,
                     record_index=self.record_index,
                     record_count=self.record_count,
                 )
@@ -303,7 +314,12 @@ class SeqRecordGroup:
         # Add labels
         if self.show_labels:
             for label in label_list:
-                group = LabelDrawer(self.config_dict).draw(label, group)
+                feature_group = LabelDrawer(self.config_dict).draw(label, feature_group)
+
+        if has_feature_shift:
+            feature_group.translate(0.0, self.feature_offset_y)
+            feature_group.attribs["data-gbdraw-feature-offset-y"] = f"{self.feature_offset_y:g}"
+            group.add(feature_group)
 
         return group
 
@@ -382,6 +398,7 @@ class SeqRecordGroup:
                     label_font_size=self.label_font_size,
                     orthogroup_label_member_ids=self.orthogroup_label_member_ids,
                     orthogroup_label_top_member_ids=self.orthogroup_label_top_member_ids,
+                    feature_lane_geometry=self.feature_lane_geometry,
                 )
 
         record_group: Group = self.draw_record(
