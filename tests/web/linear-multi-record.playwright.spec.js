@@ -7,6 +7,7 @@ const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
@@ -76,6 +77,194 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   expect(new Set(state.endpoints.map((pair) => pair.join('->'))).size).toBe(4);
   await expect(page.locator('input[aria-label="Linear record row"]')).toHaveCount(4);
   await expect(page.getByText('All adjacent-row pairs', { exact: true })).toBeVisible();
+});
+
+test('Label-scoped feature colors and legends survive linear regeneration', async ({ page }) => {
+  test.setTimeout(240000);
+  const makeGenbank = (recordId) => {
+    const sequence = 'atg'.repeat(100);
+    const origin = sequence.match(/.{1,60}/g).map((chunk, index) => {
+      const groups = chunk.match(/.{1,10}/g).join(' ');
+      return `${String(index * 60 + 1).padStart(9)} ${groups}`;
+    }).join('\n');
+    return `LOCUS       ${recordId.padEnd(24)} 300 bp    DNA     linear   UNA 01-JAN-2000
+DEFINITION  feature color regeneration test.
+ACCESSION   ${recordId}
+VERSION     ${recordId}
+KEYWORDS    .
+SOURCE      synthetic construct
+  ORGANISM  synthetic construct
+            .
+FEATURES             Location/Qualifiers
+     CDS             1..90
+                     /product="wsv360-like protein"
+ORIGIN
+${origin}
+//
+`;
+  };
+
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.pyodideReady === true, null, { timeout: 180000 });
+
+  await page.evaluate(({ firstRecord, secondRecord }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.addLinearSeq();
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([firstRecord], 'record-a.gbk', {
+      type: 'text/plain', lastModified: 1
+    }));
+    app.setLinearSeqPrimaryFile(1, 'gb', new File([secondRecord], 'record-b.gbk', {
+      type: 'text/plain', lastModified: 2
+    }));
+    Object.assign(app.form, {
+      legend: 'bottom',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+  }, {
+    firstRecord: makeGenbank('ColorRecA'),
+    secondRecord: makeGenbank('ColorRecB')
+  });
+
+  const firstRun = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return { result, errorLog: app.errorLog };
+  });
+  expect(firstRun).toEqual({ result: { status: 'ok' }, errorLog: null });
+
+  const edited = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const target = app.extractedFeatures.find((feature) => feature.product === 'wsv360-like protein');
+    if (!target) throw new Error('Expected product feature was not extracted.');
+    await app.requestFeatureColorChange(target, '#8cf04f');
+    const dialog = {
+      displayLabel: app.colorScopeDialog.displayLabel,
+      displayLabelSiblingCount: app.colorScopeDialog.displayLabelSiblingCount
+    };
+    await app.handleColorScopeChoice('displayLabel');
+    return {
+      dialog,
+      rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
+        feat, qual, val, color, cap
+      }))
+    };
+  });
+  expect(edited.dialog).toEqual({
+    displayLabel: 'wsv360-like protein',
+    displayLabelSiblingCount: 1
+  });
+  expect(edited.rules).toEqual([{
+    feat: 'CDS',
+    qual: 'product',
+    val: '^wsv360-like protein$',
+    color: '#8cf04f',
+    cap: 'wsv360-like protein'
+  }]);
+
+  const secondRun = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return { result, errorLog: app.errorLog };
+  });
+  expect(secondRun).toEqual({ result: { status: 'ok' }, errorLog: null });
+
+  const regenerated = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const svgText = app.results?.[0]?.content || '';
+    const svg = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
+    const featureIds = app.extractedFeatures
+      .filter((feature) => feature.product === 'wsv360-like protein')
+      .map((feature) => feature.svg_id);
+    const featureFills = featureIds.map((featureId) => {
+      const roots = [...svg.querySelectorAll('[data-gbdraw-feature-id]')]
+        .filter((element) => element.getAttribute('data-gbdraw-feature-id') === featureId);
+      return [...roots, ...roots.flatMap((root) => [...root.querySelectorAll('[fill]')])]
+        .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
+        .filter((fill) => fill && fill !== 'none');
+    });
+    const legendEntries = [...svg.querySelectorAll('[data-legend-key]')]
+      .filter((entry) => entry.getAttribute('data-legend-key') === 'wsv360-like protein');
+    const legendFills = legendEntries.flatMap((entry) => [...entry.querySelectorAll('[fill]')])
+      .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
+      .filter((fill) => fill && fill !== 'none');
+    return {
+      featureIds,
+      featureFills,
+      legendEntryCount: legendEntries.length,
+      legendFills,
+      rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
+        feat, qual, val, color, cap
+      }))
+    };
+  });
+
+  expect(regenerated.featureIds).toHaveLength(2);
+  regenerated.featureFills.forEach((fills) => expect(fills).toContain('#8cf04f'));
+  expect(regenerated.legendEntryCount).toBeGreaterThan(0);
+  expect(regenerated.legendFills).toContain('#8cf04f');
+  expect(regenerated.rules).toEqual(edited.rules);
+
+  const reset = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const target = app.extractedFeatures.find((feature) => feature.product === 'wsv360-like protein');
+    if (!target) throw new Error('Expected a feature to reset.');
+    const defaultColor = app.appliedPaletteColors.CDS;
+    app.clickedFeature = {
+      svg_id: target.svg_id,
+      feat: target,
+      color: '#8cf04f'
+    };
+    app.resetColorDialog.defaultColor = defaultColor;
+    app.resetColorDialog.caption = 'wsv360-like protein';
+    await app.handleResetColorChoice('this');
+    return {
+      defaultColor,
+      targetId: target.svg_id,
+      rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
+        feat, qual, val, color, cap
+      }))
+    };
+  });
+  expect(reset.rules).toContainEqual({
+    feat: 'CDS',
+    qual: 'hash',
+    val: reset.targetId.replace(/_record_\d+$/i, ''),
+    color: reset.defaultColor,
+    cap: 'other proteins'
+  });
+  expect(reset.rules).toContainEqual(edited.rules[0]);
+
+  const thirdRun = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    const svg = new DOMParser().parseFromString(app.results?.[0]?.content || '', 'image/svg+xml').documentElement;
+    const fillsById = Object.fromEntries(
+      app.extractedFeatures
+        .filter((feature) => feature.product === 'wsv360-like protein')
+        .map((feature) => {
+          const roots = [...svg.querySelectorAll('[data-gbdraw-feature-id]')]
+            .filter((element) => element.getAttribute('data-gbdraw-feature-id') === feature.svg_id);
+          const fills = [...roots, ...roots.flatMap((root) => [...root.querySelectorAll('[fill]')])]
+            .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
+            .filter((fill) => fill && fill !== 'none');
+          return [feature.svg_id, fills];
+        })
+    );
+    return { result, errorLog: app.errorLog, fillsById };
+  });
+  expect(thirdRun.result).toEqual({ status: 'ok' });
+  expect(thirdRun.errorLog).toBeNull();
+  expect(thirdRun.fillsById[reset.targetId]).toContain(reset.defaultColor.toLowerCase());
+  const siblingFills = Object.entries(thirdRun.fillsById)
+    .filter(([featureId]) => featureId !== reset.targetId)
+    .flatMap(([, fills]) => fills);
+  expect(siblingFills).toContain('#8cf04f');
 });
 
 test('Region annotations expose and persist an explicit target-record selection', async ({ page }) => {

@@ -1,6 +1,7 @@
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
-import { ruleMatchesFeature } from '../feature-utils.js';
+import { getFeatureGenerationHash, ruleMatchesFeature } from '../feature-utils.js';
+import { resolveFeatureLabelSelector } from '../feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
   defaultFeatureRendering,
@@ -329,7 +330,31 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const canEditFeatureColor = () => true;
 
   const getFeatureQualifier = (feat) => {
-    return { qual: 'hash', val: feat.svg_id };
+    const generationHash = getFeatureGenerationHash(feat);
+    if (!generationHash) return null;
+    const collisionCount = extractedFeatures.value.filter(
+      (candidate) => candidate?.type === feat?.type && getFeatureGenerationHash(candidate) === generationHash
+    ).length;
+    const renderedId = String(feat?.svg_id || '').trim();
+    // Preserve the rendered instance when duplicate records share one generation hash.
+    const value = collisionCount > 1 && renderedId ? renderedId : generationHash;
+    return { qual: 'hash', val: value };
+  };
+
+  const getLabelSpecificRule = (feat, label) => {
+    if (!feat) return null;
+    const priorityRule = manualPriorityRules.find((rule) => rule.feat === feat.type);
+    const priority = String(priorityRule?.order || '')
+      .split(',')
+      .map((qualifier) => qualifier.trim())
+      .filter(Boolean);
+    const selector = resolveFeatureLabelSelector(feat, label, { priority });
+    if (!selector) return null;
+    return {
+      feat: feat.type,
+      qual: selector.qualifier,
+      val: selector.pattern
+    };
   };
 
   const refreshFeatureOverrides = (features) => {
@@ -441,6 +466,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,
+    getLabelSpecificRule,
     moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
     moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
     refreshFeatureOverrides,

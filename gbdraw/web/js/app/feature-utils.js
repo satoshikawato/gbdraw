@@ -34,6 +34,26 @@ export const firstFeatureText = (...values) => {
   return '';
 };
 
+const LINEAR_RENDERED_RECORD_SUFFIX = /_record_\d+$/i;
+
+export const getFeatureHashCandidates = (feature) => {
+  if (!feature || typeof feature !== 'object') return [];
+
+  const renderedId = firstFeatureText(
+    feature.rendered_svg_id,
+    feature.renderedSvgId,
+    feature.rendered_feature_svg_id,
+    feature.renderedFeatureSvgId,
+    feature.svg_id,
+    feature.svgId
+  );
+  const generationId = renderedId.replace(LINEAR_RENDERED_RECORD_SUFFIX, '');
+
+  return [...new Set([generationId, renderedId].filter(Boolean))];
+};
+
+export const getFeatureGenerationHash = (feature) => getFeatureHashCandidates(feature)[0] || '';
+
 export const getFeatureQualifierFirstValue = (feature, key) => {
   const normalizedKey = String(key || '').trim().toLowerCase();
   if (!feature || !normalizedKey) return '';
@@ -128,8 +148,27 @@ export const ruleMatchesFeature = (feat, rule) => {
   const qualKey = (rule.qual || '').toLowerCase();
 
   if (qualKey === 'hash') {
-    if (!feat.svg_id) return false;
-    return matchRuleValue(feat.svg_id, rule.val, true);
+    return getFeatureHashCandidates(feat).some((candidate) => matchRuleValue(candidate, rule.val, true));
+  }
+
+  if (qualKey === 'record_location') {
+    const recordId = firstFeatureText(feat.record_id, feat.recordId, feat.record);
+    const location = firstFeatureText(
+      feat.selector?.location,
+      feat.location,
+      feat.start !== undefined && feat.end !== undefined ? `${feat.start}..${feat.end}` : ''
+    );
+    const strandToken = String(feat.strand ?? '').trim().toLowerCase();
+    const strand = ['positive', 'plus', 'forward', '1'].includes(strandToken)
+      ? '+'
+      : (['negative', 'minus', 'reverse', '-1'].includes(strandToken) ? '-' : strandToken);
+    const value = firstFeatureText(
+      feat.selector?.record_location,
+      feat.record_location,
+      feat.recordLocation,
+      recordId && location && strand ? `${recordId}:${location}:${strand}` : ''
+    );
+    return matchRuleValue(value, rule.val);
   }
 
   if (qualKey === 'location') {

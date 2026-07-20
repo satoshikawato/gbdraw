@@ -1,5 +1,6 @@
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption, ruleMatchesFeature } from '../feature-utils.js';
+import { getFeatureCaption, getFeatureHashCandidates, ruleMatchesFeature } from '../feature-utils.js';
+import { exactRegexValue } from '../feature-selector.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 export const createFeatureColorActions = ({
@@ -18,6 +19,7 @@ export const createFeatureColorActions = ({
     appliedPaletteColors,
     manualSpecificRules,
     extractedFeatures,
+    biologicalFeatures,
     featureColorOverrides,
     svgContainer,
     clickedFeature,
@@ -56,7 +58,8 @@ export const createFeatureColorActions = ({
     getDisplayedFeatureLabel,
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
-    getFeatureQualifier
+    getFeatureQualifier,
+    getLabelSpecificRule
   } = ruleActions;
   const { applyInstantPreview, getFeatureElements, getFeatureFillElements } = featureSvgActions;
   const normalizeCaption = (value) => String(value || '').trim();
@@ -67,6 +70,23 @@ export const createFeatureColorActions = ({
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
   const SUFFIXED_CAPTION_PATTERN = /^(.*?)\s*\((\d+)\)$/;
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
+
+  const hashRuleTargetsFeatureExactly = (rule, feature) => {
+    if (!isHashSpecificRule(rule) || rule?.feat !== feature?.type) return false;
+    const ruleValue = String(rule?.val || '').trim();
+    const candidates = getFeatureHashCandidates(feature);
+    const generationHash = candidates[0] || '';
+    const renderedId = candidates[candidates.length - 1] || '';
+    const isExact = (candidate) => (
+      Boolean(candidate) && (ruleValue === candidate || ruleValue === exactRegexValue(candidate))
+    );
+    if (renderedId !== generationHash && isExact(renderedId)) return true;
+    if (!isExact(generationHash)) return false;
+    const collisionCount = extractedFeatures.value.filter(
+      (candidate) => candidate?.type === feature?.type && getFeatureHashCandidates(candidate)[0] === generationHash
+    ).length;
+    return collisionCount <= 1;
+  };
 
   const normalizeStrokeWidthValue = (value) => {
     if (value === null || value === undefined || value === '') return null;
@@ -370,25 +390,131 @@ export const createFeatureColorActions = ({
   };
 
   const upsertFeatureHashRule = (feat, color, caption) => {
-    if (!feat?.svg_id) return;
+    const qualifier = getFeatureQualifier(feat);
+    if (!qualifier?.val) return;
     const existingIdx = manualSpecificRules.findIndex(
-      (rule) => String(rule.qual || '').toLowerCase() === 'hash' && rule.val === feat.svg_id
+      (rule) => hashRuleTargetsFeatureExactly(rule, feat)
     );
 
     if (existingIdx >= 0) {
       manualSpecificRules[existingIdx].feat = feat.type;
+      manualSpecificRules[existingIdx].qual = 'hash';
+      manualSpecificRules[existingIdx].val = qualifier.val;
       manualSpecificRules[existingIdx].color = color;
       manualSpecificRules[existingIdx].cap = caption;
+      delete manualSpecificRules[existingIdx].fromFile;
       return;
     }
 
-    manualSpecificRules.push({
+    const nextRule = {
       feat: feat.type,
       qual: 'hash',
-      val: feat.svg_id,
+      val: qualifier.val,
       color,
       cap: caption
+    };
+    const firstConflictingHashIdx = manualSpecificRules.findIndex(
+      (rule) => rule?.feat === feat.type && isHashSpecificRule(rule) && ruleMatchesFeature(feat, rule)
+    );
+    if (firstConflictingHashIdx >= 0) {
+      manualSpecificRules.splice(firstConflictingHashIdx, 0, nextRule);
+    } else {
+      manualSpecificRules.push(nextRule);
+    }
+  };
+
+  const removeFeatureHashRules = (feature) => {
+    for (let index = manualSpecificRules.length - 1; index >= 0; index -= 1) {
+      if (hashRuleTargetsFeatureExactly(manualSpecificRules[index], feature)) {
+        manualSpecificRules.splice(index, 1);
+      }
+    }
+  };
+
+  const upsertLabelSpecificRule = (rule, color, caption) => {
+    if (!rule?.feat || !rule?.qual || !rule?.val) return false;
+    const qualifier = String(rule.qual).toLowerCase();
+    const existingIdx = manualSpecificRules.findIndex(
+      (candidate) =>
+        candidate.feat === rule.feat &&
+        String(candidate.qual || '').toLowerCase() === qualifier &&
+        candidate.val === rule.val
+    );
+    if (existingIdx >= 0) {
+      const [existing] = manualSpecificRules.splice(existingIdx, 1);
+      Object.assign(existing, { ...rule, color, cap: caption });
+      delete existing.fromFile;
+      const firstSameQualifierIdx = manualSpecificRules.findIndex(
+        (candidate) =>
+          candidate.feat === rule.feat && String(candidate.qual || '').toLowerCase() === qualifier
+      );
+      manualSpecificRules.splice(
+        firstSameQualifierIdx >= 0 ? firstSameQualifierIdx : manualSpecificRules.length,
+        0,
+        existing
+      );
+      return true;
+    }
+
+    const firstSameQualifierIdx = manualSpecificRules.findIndex(
+      (candidate) =>
+        candidate.feat === rule.feat && String(candidate.qual || '').toLowerCase() === qualifier
+    );
+    const nextRule = { ...rule, color, cap: caption };
+    if (firstSameQualifierIdx >= 0) {
+      manualSpecificRules.splice(firstSameQualifierIdx, 0, nextRule);
+    } else {
+      manualSpecificRules.push(nextRule);
+    }
+    return true;
+  };
+
+  const featureIdentityKey = (feature) => String(
+    feature?.id || `${feature?.type || ''}:${feature?.svg_id || ''}`
+  );
+
+  const getSafeLabelSpecificRule = (features, label) => {
+    if (typeof getLabelSpecificRule !== 'function') return null;
+    const candidates = features.map((feature) => getLabelSpecificRule(feature, label));
+    if (candidates.some((rule) => !rule)) return null;
+
+    const first = candidates[0];
+    const sameSelector = candidates.every(
+      (rule) =>
+        rule.feat === first.feat &&
+        String(rule.qual || '').toLowerCase() === String(first.qual || '').toLowerCase() &&
+        rule.val === first.val
+    );
+    if (!sameSelector) return null;
+
+    const selectedKeys = new Set(features.map(featureIdentityKey));
+    const matchedFeatures = extractedFeatures.value.filter((feature) => ruleMatchesFeature(feature, first));
+    if (
+      matchedFeatures.length !== selectedKeys.size ||
+      matchedFeatures.some((feature) => !selectedKeys.has(featureIdentityKey(feature)))
+    ) {
+      return null;
+    }
+
+    const safetyFeatures = Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
+      ? biologicalFeatures.value
+      : extractedFeatures.value;
+    if (safetyFeatures.filter((feature) => ruleMatchesFeature(feature, first)).length !== selectedKeys.size) {
+      return null;
+    }
+
+    const hasPrecedenceConflict = manualSpecificRules.some((existing) => {
+      const matchingSelected = features.filter((feature) => ruleMatchesFeature(feature, existing));
+      if (matchingSelected.length === 0) return false;
+      if (isHashSpecificRule(existing)) {
+        return matchingSelected.some((feature) => !hashRuleTargetsFeatureExactly(existing, feature));
+      }
+      if (existing.feat !== first.feat) return false;
+      const existingQualifier = String(existing.qual || '').toLowerCase();
+      const candidateQualifier = String(first.qual || '').toLowerCase();
+      return existingQualifier !== candidateQualifier;
     });
+    return hasPrecedenceConflict ? null : first;
   };
 
   const syncFeatureLegendOverrides = (features, caption, color) => {
@@ -813,7 +939,12 @@ export const createFeatureColorActions = ({
     return changed;
   };
 
-  const applyColorToFeatureGroup = async (features, targetCaption, color) => {
+  const applyColorToFeatureGroup = async (
+    features,
+    targetCaption,
+    color,
+    { preferLabelRules = false } = {}
+  ) => {
     if (!Array.isArray(features) || features.length === 0) return;
 
     const normalizedTargetCaption = normalizeCaption(targetCaption);
@@ -832,22 +963,20 @@ export const createFeatureColorActions = ({
       }
     }
 
-    for (const feature of features) {
-      const existingIdx = manualSpecificRules.findIndex(
-        (rule) => String(rule.qual || '').toLowerCase() === 'hash' && rule.val === feature.svg_id
-      );
-      if (existingIdx >= 0) {
-        manualSpecificRules[existingIdx].color = color;
-        manualSpecificRules[existingIdx].cap = finalCaption;
-      } else {
-        manualSpecificRules.push({
-          feat: feature.type,
-          qual: 'hash',
-          val: feature.svg_id,
-          color: color,
-          cap: finalCaption
-        });
+    const labelRule = preferLabelRules
+      ? getSafeLabelSpecificRule(features, normalizedTargetCaption)
+      : null;
+    if (labelRule) {
+      for (const feature of features) {
+        removeFeatureHashRules(feature);
       }
+      upsertLabelSpecificRule(labelRule, color, finalCaption);
+    } else {
+      for (const feature of features) {
+        upsertFeatureHashRule(feature, color, finalCaption);
+      }
+    }
+    for (const feature of features) {
       featureColorOverrides[feature.id] = { color, caption: finalCaption };
       updateClickedFeatureLegendState(feature, finalCaption, color);
     }
@@ -878,14 +1007,10 @@ export const createFeatureColorActions = ({
     const coveredFeatures = extractedFeatures.value.filter((feature) =>
       specificRules.some((rule) => ruleMatchesFeature(feature, rule))
     );
-    const coveredFeatureIds = new Set(
-      coveredFeatures.map((feature) => String(feature?.svg_id || '').trim()).filter(Boolean)
-    );
-
     for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
       const rule = manualSpecificRules[i];
       if (!isHashSpecificRule(rule) || !captionsMatch(rule.cap, finalCaption)) continue;
-      if (coveredFeatureIds.has(String(rule.val || '').trim())) {
+      if (coveredFeatures.some((feature) => hashRuleTargetsFeatureExactly(rule, feature))) {
         manualSpecificRules.splice(i, 1);
       } else {
         rule.color = color;
@@ -1117,7 +1242,7 @@ export const createFeatureColorActions = ({
       }
       const displaySiblings = findFeaturesWithSameDisplayedLabel(feat, displayLabel);
       const allFeatures = [feat, ...displaySiblings];
-      await applyColorToFeatureGroup(allFeatures, displayLabel, color);
+      await applyColorToFeatureGroup(allFeatures, displayLabel, color, { preferLabelRules: true });
     } else if (choice === 'single') {
       let singleCaption = legendName;
       if (matchingRule && colorScopeDialog.ruleMatchCount > 1) {
@@ -1136,24 +1261,11 @@ export const createFeatureColorActions = ({
       }
       const annotationSiblings = findFeaturesWithSameIndividualLabel(feat, annotationLabel);
       const allFeatures = [feat, ...annotationSiblings];
-      await applyColorToFeatureGroup(allFeatures, annotationLabel, color);
+      await applyColorToFeatureGroup(allFeatures, annotationLabel, color, { preferLabelRules: true });
     } else if (choice === 'useExisting') {
       if (existingCaptionColor) {
         const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
-        const existingRule = manualSpecificRules.find(
-          (r) => String(r.qual || '').toLowerCase() === 'hash' && r.val === feat.svg_id
-        );
-        if (existingRule) {
-          existingRule.color = existingCaptionColor;
-        } else {
-          manualSpecificRules.push({
-            feat: feat.type,
-            qual: 'hash',
-            val: feat.svg_id,
-            color: existingCaptionColor,
-            cap: targetLegendName
-          });
-        }
+        upsertFeatureHashRule(feat, existingCaptionColor, targetLegendName);
         if (clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) {
           clickedFeature.value.color = existingCaptionColor;
           clickedFeature.value.legendName = targetLegendName;
@@ -1296,22 +1408,32 @@ export const createFeatureColorActions = ({
 
       clickedFeature.value.color = defaultColor;
 
-      const ruleIdx = manualSpecificRules.findIndex((r) => r.qual === 'hash' && r.val === svgId);
-      if (ruleIdx !== -1) {
-        manualSpecificRules.splice(ruleIdx, 1);
-      }
+      removeFeatureHashRules(feat);
 
+      let resetCaption = feat.type === 'CDS' ? 'other proteins' : `other ${feat.type}s`;
       if (choice === 'this_with_legend') {
         console.log(`Attempting to add legend entry: caption="${caption}", color="${defaultColor}"`);
         const addedCaption = await addLegendEntry(caption, defaultColor);
         console.log(`addLegendEntry returned: ${addedCaption}`);
         if (addedCaption) {
+          resetCaption = addedCaption;
           extractLegendEntries();
           console.log(`Added legend entry: ${addedCaption} with color: ${defaultColor}`);
         } else {
           console.error(`Failed to add legend entry for caption="${caption}"`);
         }
       }
+
+      const remainsCoveredBySpecificRule = manualSpecificRules.some(
+        (rule) => ruleMatchesFeature(feat, rule)
+      );
+      if (remainsCoveredBySpecificRule || choice === 'this_with_legend') {
+        upsertFeatureHashRule(feat, defaultColor, resetCaption);
+        featureColorOverrides[feat.id] = { color: defaultColor, caption: resetCaption };
+      } else {
+        delete featureColorOverrides[feat.id];
+      }
+      applySpecificRulesToSvg();
 
       console.log(`Reset fill color to default (${defaultColor}) for feature: ${svgId}`);
     } else if (choice === 'all') {
@@ -1556,8 +1678,6 @@ export const createFeatureColorActions = ({
       );
       return;
     }
-    const { qual, val } = qualInfo;
-
     const featureKey = feat.id;
 
     const caption = normalizeCaption(
@@ -1614,22 +1734,7 @@ export const createFeatureColorActions = ({
     skipExtractOnSvgChange.value = true;
 
     const finalCaption = actualCaption && typeof actualCaption === 'string' ? actualCaption : caption;
-    const existingIdx = manualSpecificRules.findIndex(
-      (r) => r.feat === feat.type && String(r.qual || '').toLowerCase() === String(qual || '').toLowerCase() && r.val === val
-    );
-
-    if (existingIdx >= 0) {
-      manualSpecificRules[existingIdx].color = color;
-      manualSpecificRules[existingIdx].cap = finalCaption;
-    } else {
-      manualSpecificRules.push({
-        feat: feat.type,
-        qual: qual,
-        val: val,
-        color: color,
-        cap: finalCaption
-      });
-    }
+    upsertFeatureHashRule(feat, color, finalCaption);
 
     featureColorOverrides[featureKey] = { color, caption: finalCaption };
     updateClickedFeatureLegendState(feat, finalCaption, color);
