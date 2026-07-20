@@ -156,8 +156,8 @@ options:
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --feature_shape TYPE=SHAPE
-                        Feature shape override (repeatable): TYPE=SHAPE where
-                        SHAPE is arrow or rectangle.
+                        Feature rendering override (repeatable): TYPE=SHAPE
+                        where SHAPE is arrow, rectangle, or underlay.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -403,6 +403,20 @@ options:
 Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for these rings, so provide precomputed BLAST output.
 
 For `interactive_svg`, add one `--conservation_fasta` value per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
+
+## Feature rendering
+
+`--feature_shape TYPE=SHAPE` accepts three rendering policies and may be repeated:
+
+- `arrow` draws a strand-aware foreground glyph.
+- `rectangle` draws a non-directional foreground glyph.
+- `underlay` removes the feature from overlap lanes and feature labels, then highlights the full feature-track band behind foreground features.
+
+Fresh configurations render `CDS`, `rRNA`, `tRNA`, `tmRNA`, `ncRNA`, and `misc_RNA` as arrows, `repeat_region` as an underlay, and other feature types as rectangles. Restore the earlier repeat appearance with `--feature_shape repeat_region=rectangle`. Underlays keep the feature's resolved palette or specific-rule color and remain in the feature legend, interactive metadata, and protein-matching inputs.
+
+A rendering assignment does not make a feature visible. The selected feature list, specific color rules, and feature visibility table retain their existing precedence; `off` still hides the feature, while a matching `show` or specific color rule can reveal an otherwise unselected type and use its assigned rendering.
+
+Automatic feature underlays are derived at render time and are not annotation rows. A custom track stack must contain exactly one enabled `features` slot when a visible underlay exists; the underlay is anchored to that slot's actual ID. Manual annotation `highlight` rows remain independently editable and may intentionally overlap an automatic underlay.
 
 ## TSV manifest inputs
 
@@ -843,8 +857,8 @@ options:
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --feature_shape TYPE=SHAPE
-                        Feature shape override (repeatable): TYPE=SHAPE where
-                        SHAPE is arrow or rectangle.
+                        Feature rendering override (repeatable): TYPE=SHAPE
+                        where SHAPE is arrow, rectangle, or underlay.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH

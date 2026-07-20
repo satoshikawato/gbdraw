@@ -357,6 +357,14 @@ def test_web_cli_arg_helpers_omit_default_values() -> None:
     subprocess.run([node, "tests/web/cli-args.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_feature_rendering_contract() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/feature-shapes.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
 def test_web_canonical_session_request_codec() -> None:
     node = shutil.which("node")
     if node is None:

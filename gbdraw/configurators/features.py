@@ -9,6 +9,7 @@ from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImpor
 from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
     resolve_directional_feature_types,
+    resolve_underlay_feature_types,
 )
 from gbdraw.features.visibility import compile_feature_visibility_rules
 
@@ -53,6 +54,9 @@ class FeatureDrawingConfigurator:
         self.selected_features_set: List[str] = selected_features_set
         self.feature_shapes = normalize_feature_shape_overrides(feature_shapes)
         self.directional_feature_types: set[str] = resolve_directional_feature_types(
+            self.feature_shapes
+        )
+        self.underlay_feature_types: set[str] = resolve_underlay_feature_types(
             self.feature_shapes
         )
         self.canvas_config = canvas_config

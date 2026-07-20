@@ -265,6 +265,8 @@ Optional presentation columns are `label`, `lane`, `legend_label`, `stroke`, `st
 
 `legend_label` is the only value that adds an annotation entry to the shared diagram legend. A normal bracket label does not create a duplicate legend entry.
 
+Annotation `highlight` rows are user-owned regions saved in this table. They are distinct from feature rendering such as `--feature_shape repeat_region=underlay`: automatic feature underlays are derived from visible features, inherit feature colors and metadata, and are never added to an annotation table. Both may be drawn together when intentional.
+
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Draw protein matches from CDS features](./4_Protein_Comparisons.md) | [Next: Plot read depth and numeric tracks >](./6_Depth_Quantitative_Tracks.md)
 

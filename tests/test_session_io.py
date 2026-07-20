@@ -13,10 +13,12 @@ import gbdraw.circular as circular_cli_module
 from gbdraw.circular import circular_main
 from gbdraw.linear import _get_args as get_linear_args
 from gbdraw.cli_utils.session import (
+    DiagramRunResult,
     collect_embedded_files_from_cli_args,
     make_rendered_svg,
     parse_session_pre_args,
     resolve_session_sidecar_path,
+    save_session_sidecar_if_requested,
     strip_session_output_args,
 )
 from gbdraw.exceptions import ValidationError
@@ -38,6 +40,7 @@ from gbdraw.session_io import (
     decode_depth_payload,
     load_session,
     materialize_embedded_file,
+    migrate_legacy_repeat_feature_shape_args,
     session_to_cli_args,
     validate_session,
     write_session_json,
@@ -73,11 +76,53 @@ def _canonical_request(mode: str):
     return CircularDiagramRequest(records=(record_input,))
 
 
+def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None:
+    output_prefix = tmp_path / "diagram"
+    rendered_svg = make_rendered_svg(str(output_prefix))
+    rendered_svg.svg_path.write_text("<svg></svg>", encoding="utf-8")
+    sidecar = tmp_path / "diagram.gbdraw-session.json"
+    run_result = DiagramRunResult(
+        mode="linear",
+        render_formats=("interactive_svg",),
+        outputs=(rendered_svg,),
+        feature_metadata=({"svg_id": "feature-1", "orthogroup_id": "og_1"},),
+        orthogroup_metadata=(
+            {
+                "id": "og_1",
+                "member_count": 2,
+                "members": [
+                    {"featureSvgId": "feature-1", "proteinId": "protein-1"},
+                    {"featureSvgId": "feature-2", "proteinId": "protein-2"},
+                ],
+            },
+        ),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    saved = save_session_sidecar_if_requested(
+        save_session=True,
+        session_output=str(sidecar),
+        output_prefix=str(output_prefix),
+        run_result=run_result,
+        cmd_args=(),
+    )
+
+    assert saved == sidecar
+    payload = load_session(sidecar)
+    assert payload["features"]["extractedFeatures"][0]["orthogroup_id"] == "og_1"
+    group = payload["orthogroupState"]["groups"][0]
+    assert group["id"] == "og_1"
+    assert [member["proteinId"] for member in group["members"]] == [
+        "protein-1",
+        "protein-2",
+    ]
+
+
 def test_current_session_version_matches_web_config() -> None:
     source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
     match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
     assert match is not None
-    assert CURRENT_SESSION_VERSION == 33
+    assert CURRENT_SESSION_VERSION == 34
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
 
 
@@ -95,6 +140,48 @@ def test_session_version_27_remains_supported() -> None:
 
     validate_session(session)
     assert 27 in SUPPORTED_SESSION_VERSIONS
+
+
+def test_legacy_cli_repeat_shape_migration_is_selective_and_idempotent() -> None:
+    args = ["--gbk", "input.gb", "-f", "svg"]
+    migrated = migrate_legacy_repeat_feature_shape_args(args, session_version=30)
+    assert migrated == [
+        "--gbk",
+        "input.gb",
+        "--feature_shape",
+        "repeat_region=rectangle",
+        "-f",
+        "svg",
+    ]
+    assert migrate_legacy_repeat_feature_shape_args(
+        migrated, session_version=30
+    ) == migrated
+    assert migrate_legacy_repeat_feature_shape_args(
+        ["--features", "CDS,tRNA"], session_version=30
+    ) == ["--features", "CDS,tRNA"]
+    assert migrate_legacy_repeat_feature_shape_args(
+        ["--feature_shape", "repeat_region=underlay"], session_version=30
+    ) == ["--feature_shape", "repeat_region=underlay"]
+    assert migrate_legacy_repeat_feature_shape_args(args, session_version=31) == args
+
+
+def test_legacy_gui_config_migrates_repeat_to_rectangle_without_mutating_source(
+    tmp_path: Path,
+) -> None:
+    session = _minimal_session({"c_gb": _file_entry("input.gb", b"LOCUS       A\n")})
+    session["config"]["adv"]["features"] = ["CDS", "repeat_region"]
+
+    spec = session_to_cli_args(
+        session,
+        mode="circular",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assignment_index = spec.args.index("--feature_shape")
+    assert spec.args[assignment_index + 1] == "repeat_region=rectangle"
+    assert "feature_shapes" not in session["config"]["adv"]
 
 
 def test_canonical_session_version_32_remains_supported() -> None:

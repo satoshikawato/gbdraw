@@ -601,8 +601,15 @@ def _validate_source_feature_ids(
         )
 
 
-def _read_or_create_source_svg(example: GallerySessionExample, session: dict[str, Any]) -> str:
-    if example.source_svg_path.exists():
+def _read_or_create_source_svg(
+    example: GallerySessionExample,
+    session: dict[str, Any],
+    *,
+    refresh_from_session: bool = False,
+) -> str:
+    if refresh_from_session and example.sync_result_svg:
+        source = _session_result_svg(session, example)
+    elif example.source_svg_path.exists():
         source = example.source_svg_path.read_text(encoding="utf-8")
     else:
         source = _session_result_svg(session, example)
@@ -724,7 +731,7 @@ def _validate_source_assets(example: GallerySessionExample) -> None:
         raise FileNotFoundError(f"Missing gallery source asset(s): {', '.join(missing)}")
 
 
-def prepare_gallery_assets() -> list[dict[str, object]]:
+def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, object]]:
     EXAMPLE_ROOT.mkdir(parents=True, exist_ok=True)
     SESSION_ROOT.mkdir(parents=True, exist_ok=True)
     SOURCE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -734,7 +741,11 @@ def prepare_gallery_assets() -> list[dict[str, object]]:
     payload: list[dict[str, object]] = []
     for example in EXAMPLES:
         session = _load_session(example)
-        source = _read_or_create_source_svg(example, session)
+        source = _read_or_create_source_svg(
+            example,
+            session,
+            refresh_from_session=refresh_sources,
+        )
         if example.sync_result_svg:
             _sync_session_result_svg(example, session, source)
         _write_gallery_svg(example, session, source)

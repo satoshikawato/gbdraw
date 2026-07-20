@@ -77,7 +77,7 @@ def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
 def _add_feature_shape_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--feature_shape',
-        help='Feature shape override (repeatable): TYPE=SHAPE where SHAPE is arrow or rectangle.',
+        help='Feature rendering override (repeatable): TYPE=SHAPE where SHAPE is arrow, rectangle, or underlay.',
         type=parse_feature_shape_assignment_arg,
         action='append',
         default=[],

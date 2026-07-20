@@ -18,7 +18,7 @@ import gbdraw.linear as linear_cli_module
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
 from gbdraw.features.colors import compute_feature_hash, precompute_used_color_rules, preprocess_color_tables
-from gbdraw.features.factory import create_feature_dict
+from gbdraw.features.factory import create_feature_dict, create_feature_layers
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
@@ -467,6 +467,35 @@ def test_specific_color_rule_draws_matching_feature_outside_selected_types() -> 
     rendered_types = {obj.feature_type for obj in feature_dict.values()}
     assert rendered_types == {"misc_feature"}
     assert used_rules == {("Insertion", "#ff00aa")}
+
+
+def test_specific_color_rule_can_reveal_unselected_underlay_with_resolved_color() -> None:
+    record = _make_record()
+    default_colors_df = load_default_colors("", "default")
+    color_table_df = pd.DataFrame(
+        [["misc_feature", "note", "transposase", "#ff00aa", "Insertion"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    color_map, default_color_map = preprocess_color_tables(color_table_df, default_colors_df)
+    label_filtering = preprocess_label_filtering(_base_label_filtering())
+
+    result = create_feature_layers(
+        record,
+        color_map,
+        ["tRNA"],
+        default_color_map,
+        separate_strands=False,
+        resolve_overlaps=False,
+        label_filtering=label_filtering,
+        feature_shapes={"misc_feature": "underlay"},
+    )
+
+    assert result.foreground_features == {}
+    assert [feature.feature_type for feature in result.underlay_features] == [
+        "misc_feature"
+    ]
+    assert result.underlay_features[0].color == "#ff00aa"
+    assert result.used_color_rules == {("Insertion", "#ff00aa")}
 
 
 def test_extract_cds_proteins_off_and_exclude_matching_remove_cds() -> None:

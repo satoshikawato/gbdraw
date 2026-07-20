@@ -45,6 +45,7 @@ class DiagramRunResult:
     render_formats: tuple[str, ...]
     outputs: tuple[RenderedSvg, ...]
     feature_metadata: tuple[Mapping[str, Any], ...] = ()
+    orthogroup_metadata: tuple[Mapping[str, Any], ...] | None = None
     losat_cache_entries: tuple[Mapping[str, Any], ...] | None = None
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
@@ -288,6 +289,12 @@ def save_session_sidecar_if_requested(
             features_payload["extractedFeatures"] = [
                 dict(feature) for feature in run_result.feature_metadata
             ]
+    if run_result.orthogroup_metadata is not None:
+        orthogroup_payload = payload.setdefault("orthogroupState", {})
+        if isinstance(orthogroup_payload, dict):
+            orthogroup_payload["groups"] = [
+                dict(group) for group in run_result.orthogroup_metadata
+            ]
     write_session_json(sidecar_path, payload)
     return sidecar_path
 
@@ -375,6 +382,17 @@ def render_canonical_session_if_present(
                     dict(feature) for feature in interactive_context.features
                 ]
                 adjunct["features"] = features
+            if interactive_context is not None:
+                orthogroup_state = adjunct.get("orthogroupState")
+                orthogroup_state = (
+                    dict(orthogroup_state)
+                    if isinstance(orthogroup_state, Mapping)
+                    else {}
+                )
+                orthogroup_state["groups"] = [
+                    dict(group) for group in interactive_context.orthogroups
+                ]
+                adjunct["orthogroupState"] = orthogroup_state
             save_session_document(
                 sidecar_path,
                 request,

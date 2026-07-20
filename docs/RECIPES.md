@@ -87,6 +87,23 @@ gbdraw circular --gbk genome.gb -o output -f svg --suppress_gc --suppress_skew -
 gbdraw circular --gbk plasmid.gb -o output -f svg --resolve_overlaps
 ```
 
+### Render feature types behind the feature track
+
+New diagrams render `repeat_region` as an underlay by default. Underlays use each feature's resolved color, cover the full feature band, and do not consume overlap lanes or produce feature labels.
+
+```bash
+gbdraw circular \
+  --gbk genome.gb \
+  --feature_shape misc_feature=underlay \
+  -k CDS,rRNA,tRNA,repeat_region,misc_feature \
+  -o feature_underlays \
+  -f interactive_svg
+```
+
+Use `--feature_shape repeat_region=rectangle` to restore the older foreground repeat blocks, or `repeat_region=arrow` for strand-aware repeat glyphs. Rendering does not change visibility: an unselected feature remains hidden unless a specific color rule or feature visibility `show` rule reveals it.
+
+Automatic feature underlays remain feature metadata, not region-annotation rows. With custom track slots, provide exactly one enabled feature slot; the underlay follows that slot even when its ID is not `features`.
+
 ### Place multiple records on one shared canvas
 
 ```bash

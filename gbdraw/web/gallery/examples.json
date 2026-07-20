@@ -314,7 +314,7 @@
       "MeenMJNV.gb",
       "MejoMJNV.gb"
     ],
-    "fileSizeLabel": "5.7 MB",
+    "fileSizeLabel": "6.1 MB",
     "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup",
     "commandKind": "runnable",
     "commandNote": "Download the nine accession-pinned records and both repository-managed color tables from Files.",

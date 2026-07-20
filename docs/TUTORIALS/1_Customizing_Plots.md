@@ -113,7 +113,25 @@ Radial placement works with `auto`, `embedded_only`, and `external_only`. Unlike
 > [!WARNING]
 > Avoid `--labels` or `--labels both` on feature-dense genomes unless you also filter labels with `--label_blacklist` or `--label_whitelist`.
 
-## 5. Simplify the diagram
+## 5. Choose arrow, rectangle, or underlay rendering
+
+Use repeatable `--feature_shape TYPE=SHAPE` options to choose how a feature type is drawn. `arrow` and `rectangle` are normal foreground glyphs. `underlay` uses the feature's resolved color to highlight the full feature-track band behind other features, without consuming an overlap lane or creating a feature label.
+
+`repeat_region` uses `underlay` by default in new commands. To restore the earlier foreground block style:
+
+```bash
+gbdraw circular \
+  --gbk AP027280.gb \
+  --feature_shape repeat_region=rectangle \
+  -o WSSV_repeat_blocks \
+  -f svg
+```
+
+The same option works for arbitrary types, for example `--feature_shape misc_feature=underlay`. It changes rendering only: the feature must still be selected with `-k/--features` or revealed by a matching specific color or visibility `show` rule. Underlays keep their feature legend, metadata, popup/search behavior, and comparison eligibility.
+
+Automatic feature underlays are separate from manual region annotations and do not appear in annotation tables or the Web annotation editor. If you define custom track slots, keep exactly one enabled feature slot so the underlay has an unambiguous band to cover.
+
+## 6. Simplify the diagram
 
 Suppress the GC tracks and legend to leave more space for annotated features:
 
@@ -134,7 +152,7 @@ The output remains a labeled, strand-separated feature map.
 
 ![Simplified circular white spot syndrome virus map without GC tracks, GC skew, or a legend](../../examples/WSSV_filtered.svg)
 
-## 6. Mark chloroplast genome regions
+## 7. Mark chloroplast genome regions
 
 Region annotations are independent of GenBank features. This example adds LSC, SSC, IRa, and IRb brackets to the *Nicotiana tabacum* chloroplast map while retaining its feature colors and inner GC-content track.
 
@@ -187,7 +205,7 @@ Coordinates in annotation tables are 1-based and inclusive. Use `wraps_origin=tr
 
 In the web app, open **Region Annotations**, import `nicotiana-tabacum-regions.tsv`, then choose **Annotations** in **Custom Track Slots** and bind the track to `plastome_regions`.
 
-## 7. When you move to linear mode
+## 8. When you move to linear mode
 
 Linear mode has its own input selectors:
 

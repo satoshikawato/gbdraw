@@ -2,6 +2,10 @@ import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
 import { ruleMatchesFeature } from '../feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import {
+  defaultFeatureRendering,
+  normalizeFeatureRendering
+} from '../../utils/feature-rendering.js';
 
 export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
   const {
@@ -29,7 +33,6 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   } = state;
 
   const { addLegendEntry, removeLegendEntry, extractLegendEntries } = legendActions;
-  const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
   const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
@@ -287,7 +290,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
         adv.feature_shapes = {};
       }
       if (!Object.prototype.hasOwnProperty.call(adv.feature_shapes, newFeatureToAdd.value)) {
-        adv.feature_shapes[newFeatureToAdd.value] = 'rectangle';
+        adv.feature_shapes[newFeatureToAdd.value] = defaultFeatureRendering(newFeatureToAdd.value);
       }
     }
   };
@@ -297,23 +300,22 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     if (idx >= 0) {
       adv.features.splice(idx, 1);
     }
-    if (adv.feature_shapes && typeof adv.feature_shapes === 'object') {
-      delete adv.feature_shapes[featureType];
-    }
   };
 
   const getFeatureShape = (featureType) => {
     if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
-      return 'rectangle';
+      return defaultFeatureRendering(featureType);
     }
-    return normalizeFeatureShape(adv.feature_shapes[featureType]);
+    return Object.prototype.hasOwnProperty.call(adv.feature_shapes, featureType)
+      ? normalizeFeatureRendering(adv.feature_shapes[featureType])
+      : defaultFeatureRendering(featureType);
   };
 
   const setFeatureShape = (featureType, shape) => {
     if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
       adv.feature_shapes = {};
     }
-    adv.feature_shapes[featureType] = normalizeFeatureShape(shape);
+    adv.feature_shapes[featureType] = normalizeFeatureRendering(shape);
   };
 
   const getFeatureColor = (feat) => {

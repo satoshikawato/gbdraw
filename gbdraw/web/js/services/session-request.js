@@ -37,8 +37,12 @@ import {
 import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
+import {
+  defaultFeatureRendering,
+  normalizeFeatureRenderingMap
+} from '../utils/feature-rendering.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 2;
+export const CANONICAL_REQUEST_SCHEMA = 3;
 
 const safePrefix = (value) => {
   const normalized = String(value || '').trim().replace(/[\\/]+/g, '_');
@@ -558,7 +562,10 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
       plotTitlePosition: String(state.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
     },
     selectedFeaturesSet: Array.from(state.adv.features || []).map((value) => String(value)),
-    featureShapes: { ...(state.adv.feature_shapes || {}) },
+    featureShapes: {
+      repeat_region: defaultFeatureRendering('repeat_region'),
+      ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
+    },
     dinucleotide: String(state.adv.nt || 'GC').toUpperCase(),
     window: optionalPositiveInteger(state.adv.window_size),
     step: optionalPositiveInteger(state.adv.step_size),
@@ -725,7 +732,7 @@ export const projectCanonicalSessionRequest = ({
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false
 }) => {
-  if (!renderRequest || ![1, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
+  if (!renderRequest || ![1, 2, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
   }
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
@@ -988,9 +995,24 @@ export const projectCanonicalSessionRequest = ({
     species: renderRequest.mode === 'circular' ? (options.species || '') : '',
     strain: renderRequest.mode === 'circular' ? (options.strain || '') : ''
   };
+  const projectedFeatureShapes = normalizeFeatureRenderingMap(options.featureShapes || {});
+  if (
+    !Object.prototype.hasOwnProperty.call(projectedFeatureShapes, 'repeat_region') &&
+    (
+      renderRequest.schema <= 2 ||
+      (
+        Array.isArray(options.selectedFeaturesSet) &&
+        options.selectedFeaturesSet.includes('repeat_region')
+      )
+    )
+  ) {
+    projectedFeatureShapes.repeat_region = renderRequest.schema <= 2
+      ? 'rectangle'
+      : defaultFeatureRendering('repeat_region');
+  }
   const adv = {
     features: options.selectedFeaturesSet || [],
-    feature_shapes: options.featureShapes || {},
+    feature_shapes: projectedFeatureShapes,
     nt: options.dinucleotide || 'GC',
     window_size: options.window ?? null,
     step_size: options.step ?? null,

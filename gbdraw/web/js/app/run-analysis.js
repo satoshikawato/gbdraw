@@ -1298,7 +1298,7 @@ json.dumps({
     if (featureShapeSupportCache) return featureShapeSupportCache;
     const pyodide = getPyodide();
     if (!pyodide) {
-      featureShapeSupportCache = { circular: false, linear: false };
+      featureShapeSupportCache = { circular: false, linear: false, underlay: false };
       return featureShapeSupportCache;
     }
     try {
@@ -1306,16 +1306,18 @@ json.dumps({
 import inspect, json
 import gbdraw.circular as _gbdraw_circular
 import gbdraw.linear as _gbdraw_linear
+from gbdraw.features.shapes import normalize_feature_shape as _normalize_feature_shape
 _circular_source = inspect.getsource(_gbdraw_circular._get_args)
 _linear_source = inspect.getsource(_gbdraw_linear._get_args)
 json.dumps({
   "circular": "--feature_shape" in _circular_source,
   "linear": "--feature_shape" in _linear_source,
+  "underlay": _normalize_feature_shape("underlay") == "underlay",
 })
       `);
       featureShapeSupportCache = JSON.parse(String(raw));
     } catch (_err) {
-      featureShapeSupportCache = { circular: false, linear: false };
+      featureShapeSupportCache = { circular: false, linear: false, underlay: false };
     }
     return featureShapeSupportCache;
   };
@@ -2409,9 +2411,12 @@ json.dumps({
 
         if (selectedFeatureShapes.length > 0) {
           const shapeOptionSupport = getFeatureShapeOptionSupport();
-          if (!shapeOptionSupport.circular) {
+          if (!shapeOptionSupport.circular || (
+            selectedFeatureShapes.some((assignment) => assignment.endsWith('=underlay')) &&
+            !shapeOptionSupport.underlay
+          )) {
             throw new Error(
-              'Current gbdraw wheel does not support --feature_shape. Rebuild and redeploy the web wheel.'
+              'Current gbdraw wheel does not support the selected feature rendering. Rebuild and redeploy the web wheel.'
             );
           }
           selectedFeatureShapes.forEach((assignment) => {
@@ -3100,9 +3105,12 @@ json.dumps({
         }
         if (selectedFeatureShapes.length > 0) {
           const shapeOptionSupport = getFeatureShapeOptionSupport();
-          if (!shapeOptionSupport.linear) {
+          if (!shapeOptionSupport.linear || (
+            selectedFeatureShapes.some((assignment) => assignment.endsWith('=underlay')) &&
+            !shapeOptionSupport.underlay
+          )) {
             throw new Error(
-              'Current gbdraw wheel does not support --feature_shape. Rebuild and redeploy the web wheel.'
+              'Current gbdraw wheel does not support the selected feature rendering. Rebuild and redeploy the web wheel.'
             );
           }
           selectedFeatureShapes.forEach((assignment) => {

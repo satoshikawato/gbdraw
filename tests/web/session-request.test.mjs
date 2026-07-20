@@ -349,13 +349,37 @@ const genbank = {
 const filesData = { c_gb: genbank, linearSeqs: [] };
 
 const canonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(canonical.renderRequest.schema, 2);
+assert.equal(canonical.renderRequest.schema, 3);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
 assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
 assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
 assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
+assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
+
+const legacyRepeatCanonical = structuredClone(canonical);
+legacyRepeatCanonical.renderRequest.schema = 2;
+legacyRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
+delete legacyRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
+assert.equal(
+  projectCanonicalSessionRequest(legacyRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'rectangle'
+);
+
+const currentRepeatCanonical = structuredClone(legacyRepeatCanonical);
+currentRepeatCanonical.renderRequest.schema = 3;
+assert.equal(
+  projectCanonicalSessionRequest(currentRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'underlay'
+);
+
+const explicitRepeatCanonical = structuredClone(currentRepeatCanonical);
+explicitRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region = 'underlay';
+assert.equal(
+  projectCanonicalSessionRequest(explicitRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'underlay'
+);
 
 state.paletteDefinitions.value = { default: { CDS: '#cccccc' } };
 state.currentColors.value = { CDS: '#112233' };

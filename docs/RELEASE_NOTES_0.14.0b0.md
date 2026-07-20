@@ -23,6 +23,14 @@ and rendering components remain available from `gbdraw.api` for integrations.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
 
+## Feature underlay rendering and session version 34
+
+- Feature rendering now accepts `arrow`, `rectangle`, or `underlay` through `--feature_shape`, Python `feature_shapes`, and the Web feature editor.
+- New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
+- Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
+- Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
+- Session version 34 and canonical request schema 3 record the new default. Older sessions and schema 1/2 requests with no repeat assignment migrate to `repeat_region=rectangle` so visual replay remains stable.
+
 ## Python/Web session version 33
 
 - Session version 33 updates Linear custom track geometry to schema v2. Feature

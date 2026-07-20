@@ -305,9 +305,18 @@ def _preset_from_lane_direction(lane_direction: str | None) -> str:
     return "tuckin"
 
 
-def _feature_track_ids(feature_dict: Mapping[str, Any] | None) -> tuple[int, ...]:
+def _feature_track_ids(
+    feature_dict: Mapping[str, Any] | None,
+    *,
+    strandedness: bool = False,
+    include_nominal_lanes: bool = False,
+) -> tuple[int, ...]:
     if not feature_dict:
-        return (0,)
+        return (
+            (0, -1)
+            if include_nominal_lanes and strandedness
+            else (0,)
+        )
     track_ids = {
         int(getattr(feature_object, "feature_track_id", 0))
         for feature_object in feature_dict.values()
@@ -471,6 +480,7 @@ def build_circular_feature_layout(
     strandedness: bool,
     anchor_radius_px: float | None = None,
     lane_spacing_px: float | None = None,
+    include_nominal_lanes: bool = False,
 ) -> CircularFeatureLayout | None:
     width = max(0.0, float(width_px))
     direction = (
@@ -478,7 +488,11 @@ def build_circular_feature_layout(
         if lane_direction is not None
         else _lane_direction_from_legacy_track_type(track_type)
     )
-    track_ids = _feature_track_ids(feature_dict)
+    track_ids = _feature_track_ids(
+        feature_dict,
+        strandedness=bool(strandedness),
+        include_nominal_lanes=include_nominal_lanes,
+    )
     metrics = measure_circular_feature_stack(
         axis_radius_px=float(axis_radius_px),
         lane_width_px=width,
@@ -766,6 +780,9 @@ def _measure_radial_slot(
             strandedness=bool(cfg.canvas.strandedness),
             anchor_radius_px=anchor_radius_px,
             lane_spacing_px=float(intent.spacing_px),
+            include_nominal_lanes=bool(
+                getattr(canvas_config, "_feature_underlay_present", False)
+            ),
         )
         if feature_layout is not None:
             anchor_radius_px = float(feature_layout.anchor_radius_px)

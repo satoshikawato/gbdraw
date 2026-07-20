@@ -284,6 +284,7 @@ def measure_linear_feature_lanes(
     track_layout: str = "middle",
     axis_gap: float | None = None,
     stroke_width: float = 0.0,
+    include_nominal_lanes: bool = False,
 ) -> LinearFeatureLaneGeometry:
     """Measure feature lanes using the same factors consumed by the renderer."""
 
@@ -295,9 +296,20 @@ def measure_linear_feature_lanes(
         else None
     )
     lanes_by_identity: dict[tuple[str, int], LinearFeatureLane] = {}
-    for feature in feature_dict.values():
-        track_id = int(getattr(feature, "feature_track_id", 0))
-        strand = str(getattr(feature, "strand", "undefined"))
+    lane_sources = [
+        (
+            str(getattr(feature, "strand", "undefined")),
+            int(getattr(feature, "feature_track_id", 0)),
+        )
+        for feature in feature_dict.values()
+    ]
+    if not lane_sources and include_nominal_lanes:
+        lane_sources = (
+            [("positive", 0), ("negative", -1)]
+            if separate_strands
+            else [("undefined", 0)]
+        )
+    for strand, track_id in lane_sources:
         strand_pool = strand if separate_strands else "shared"
         identity = (strand_pool, track_id)
         if identity in lanes_by_identity:

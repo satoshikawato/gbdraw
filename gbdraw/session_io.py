@@ -29,10 +29,10 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 33
+CURRENT_SESSION_VERSION = 34
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
 )
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
@@ -577,6 +577,15 @@ def _session_cli_invocation_to_args(
     run_args = _apply_option_override(run_args, "-f", "--format", format_override)
     invocation_args = _apply_option_override(invocation_args, "-o", "--output", output_override)
     invocation_args = _apply_option_override(invocation_args, "-f", "--format", format_override)
+    session_version = int(session.get("version", 0))
+    run_args = migrate_legacy_repeat_feature_shape_args(
+        run_args,
+        session_version=session_version,
+    )
+    invocation_args = migrate_legacy_repeat_feature_shape_args(
+        invocation_args,
+        session_version=session_version,
+    )
 
     return SessionRunSpec(
         mode=mode,
@@ -605,7 +614,23 @@ def _gui_session_to_cli_args(
     if not isinstance(ui, Mapping):
         ui = {}
     form = config.get("form") if isinstance(config.get("form"), Mapping) else {}
-    adv = config.get("adv") if isinstance(config.get("adv"), Mapping) else {}
+    adv = dict(config.get("adv")) if isinstance(config.get("adv"), Mapping) else {}
+    if int(session.get("version", 0)) <= 30:
+        effective_features = adv.get("features")
+        if not isinstance(effective_features, list):
+            effective_features = [
+                "CDS",
+                "rRNA",
+                "tRNA",
+                "tmRNA",
+                "ncRNA",
+                "misc_RNA",
+                "repeat_region",
+            ]
+        if "repeat_region" in effective_features:
+            feature_shapes = dict(adv.get("feature_shapes") or {})
+            feature_shapes.setdefault("repeat_region", "rectangle")
+            adv["feature_shapes"] = feature_shapes
 
     run_args: list[str] = []
     invocation_args: list[str] = []
@@ -781,6 +806,15 @@ def _append_common_gui_args(
     features = adv.get("features")
     if isinstance(features, list) and features:
         _append_pair(run_args, invocation_args, "-k", ",".join(str(item) for item in features if item))
+    feature_shapes = adv.get("feature_shapes")
+    if isinstance(feature_shapes, Mapping):
+        for feature_type, rendering in feature_shapes.items():
+            _append_pair(
+                run_args,
+                invocation_args,
+                "--feature_shape",
+                f"{str(feature_type).strip()}={str(rendering).strip().lower()}",
+            )
     for key, option in (
         ("window_size", "--window"),
         ("step_size", "--step"),
@@ -2391,13 +2425,56 @@ def _cli_option_key(option: str) -> str:
     return option.lstrip("-").replace("-", "_")
 
 
+def migrate_legacy_repeat_feature_shape_args(
+    args: Sequence[str],
+    *,
+    session_version: int,
+) -> list[str]:
+    """Preserve the old repeat rectangle for non-canonical v27-30 replay."""
+
+    migrated = [str(arg) for arg in args]
+    if int(session_version) > 30:
+        return migrated
+    features_raw = _option_value(migrated, "-k", "--features")
+    effective_features = (
+        {item.strip() for item in features_raw.split(",") if item.strip()}
+        if features_raw is not None
+        else {
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "tmRNA",
+            "ncRNA",
+            "misc_RNA",
+            "repeat_region",
+        }
+    )
+    if (
+        "repeat_region" in effective_features
+        and "repeat_region" not in _feature_shapes_from_cli_args(migrated)
+    ):
+        insertion_index = next(
+            (
+                index
+                for index, token in enumerate(migrated)
+                if token in {"-f", "--format"} or token.startswith("--format=")
+            ),
+            len(migrated),
+        )
+        migrated[insertion_index:insertion_index] = [
+            "--feature_shape",
+            "repeat_region=rectangle",
+        ]
+    return migrated
+
+
 def _feature_shapes_from_cli_args(args: Sequence[str]) -> dict[str, str]:
     shapes: dict[str, str] = {}
     for assignment in _option_all_values(args, "--feature_shape", "--feature-shape"):
         feature_type, separator, shape = str(assignment).partition("=")
         feature_type = feature_type.strip()
         shape = shape.strip().lower()
-        if separator and feature_type and shape in {"arrow", "rectangle"}:
+        if separator and feature_type and shape in {"arrow", "rectangle", "underlay"}:
             shapes[feature_type] = shape
     return shapes
 
@@ -2537,6 +2614,7 @@ __all__ = [
     "get_session_slot",
     "load_session",
     "materialize_embedded_file",
+    "migrate_legacy_repeat_feature_shape_args",
     "safe_embedded_filename",
     "serialize_file_entry",
     "session_mode",

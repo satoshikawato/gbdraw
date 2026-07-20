@@ -14,7 +14,9 @@ from svgwrite.text import Text  # type: ignore[reportMissingImports]
 from gbdraw.annotations import (
     AnnotationTrackParams,
     ResolvedAnnotationTrack,
+    apply_feature_underlay_dom_attributes,
     effective_annotation_style,
+    is_auto_feature_underlay,
 )
 from gbdraw.render.patterns import ensure_hatch_pattern
 
@@ -66,6 +68,7 @@ def draw_linear_annotation_track(
 
     for placement in placements:
         annotation = placement.annotation
+        auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
         lane_center = float(y_offset_px) + (
             params.padding_px + (placement.lane + 0.5) * lane_height
@@ -77,19 +80,21 @@ def draw_linear_annotation_track(
             annotation_id=annotation.id,
         )
         item_group = Group(id=item_id, debug=False)
-        item_group.attribs.update(
-            {
-                "data-gbdraw-annotation-id": annotation.id,
-                "data-gbdraw-annotation-set-id": track.set_id,
-                "data-gbdraw-annotation-track-id": track.slot_id,
-                "data-gbdraw-record-id": record_id,
-                "data-gbdraw-record-index": str(record_index),
-                "data-gbdraw-annotation-mark": annotation.mark,
-                "data-gbdraw-annotation-label": annotation.label,
-            }
-        )
+        if not auto_feature_underlay:
+            item_group.attribs.update(
+                {
+                    "data-gbdraw-annotation-id": annotation.id,
+                    "data-gbdraw-annotation-set-id": track.set_id,
+                    "data-gbdraw-annotation-track-id": track.slot_id,
+                    "data-gbdraw-record-id": record_id,
+                    "data-gbdraw-record-index": str(record_index),
+                    "data-gbdraw-annotation-mark": annotation.mark,
+                    "data-gbdraw-annotation-label": annotation.label,
+                }
+            )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
-        for start, end in annotation.segments:
+        part_count = len(annotation.segments)
+        for part_index, (start, end) in enumerate(annotation.segments, start=1):
             x1, x2 = float(start) * scale, float(end) * scale
             if annotation.mark in {"band", "highlight"}:
                 fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (
@@ -101,11 +106,22 @@ def draw_linear_annotation_track(
                     size=(max(0.1, x2 - x1), height_factor * lane_height),
                     fill=fill,
                     fill_opacity=style.fill_opacity,
-                    stroke=style.stroke,
-                    stroke_width=style.stroke_width,
+                    stroke="none" if auto_feature_underlay else style.stroke,
+                    stroke_width=0 if auto_feature_underlay else style.stroke_width,
+                    debug=False,
                 )
                 if dash:
                     rect.attribs["stroke-dasharray"] = dash
+                if auto_feature_underlay:
+                    apply_feature_underlay_dom_attributes(
+                        rect,
+                        annotation,
+                        record_id=record_id,
+                        record_index=record_index,
+                        part_index=part_index,
+                        part_count=part_count,
+                        include_stable_id=True,
+                    )
                 item_group.add(rect)
                 continue
             line = Line(

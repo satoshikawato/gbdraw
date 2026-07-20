@@ -90,7 +90,10 @@ from ...annotations import (
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
     annotation_track_params_from_mapping,
+    feature_underlay_anchor_slot_id,
+    feature_underlay_slot_id,
     layout_annotation_track,
+    merge_feature_underlays,
     resolve_annotations,
     sync_annotation_legend_entries,
 )
@@ -115,7 +118,7 @@ from .orthogroup_alignment import (
 from .precalc import (
     FeatureDict,
     _precalculate_definition_metrics,
-    _precalculate_feature_dicts,
+    _precalculate_feature_layers,
     _precalculate_label_dimensions,
     _resolve_linear_diagram_label_font_size,
 )
@@ -301,6 +304,59 @@ def _layout_linear_annotation_tracks(
             else slot
         )
     return updated_slots, layouts
+
+
+def _add_linear_feature_underlays(
+    records: list[SeqRecord],
+    feature_layers: list,
+    slots: list[LinearTrackSlot],
+    bundle: ResolvedAnnotationBundle,
+    layouts: dict[str, ResolvedAnnotationTrack],
+    auto_slot_ids: frozenset[str],
+    *,
+    canvas_config: LinearCanvasConfigurator,
+) -> tuple[
+    list[LinearTrackSlot],
+    ResolvedAnnotationBundle,
+    dict[str, ResolvedAnnotationTrack],
+    frozenset[str],
+]:
+    merged, set_id = merge_feature_underlays(
+        bundle,
+        [result.underlay_features for result in feature_layers],
+        records,
+        mode="linear",
+    )
+    if set_id is None:
+        return slots, bundle, layouts, auto_slot_ids
+    anchor_id = feature_underlay_anchor_slot_id(slots)
+    anchor = next(slot for slot in slots if str(slot.id) == anchor_id)
+    slot_id = feature_underlay_slot_id(slots)
+    underlay_slot = LinearTrackSlot(
+        id=slot_id,
+        renderer="annotations",
+        side="overlay",
+        z=int(anchor.z) - 1,
+        params={
+            "set_id": set_id,
+            "marks": ("highlight",),
+            "anchor_slot": anchor_id,
+            "layer": "underlay",
+            "cover_anchor": True,
+            "padding_px": 0.0,
+            "show_labels": False,
+        },
+    )
+    updated_slots = [underlay_slot, *slots]
+    updated_auto_ids = frozenset((*auto_slot_ids, slot_id))
+    updated_slots, updated_layouts = _layout_linear_annotation_tracks(
+        records,
+        updated_slots,
+        merged,
+        canvas_config=canvas_config,
+        auto_slot_ids=updated_auto_ids,
+    )
+    return updated_slots, merged, updated_layouts, updated_auto_ids
 
 
 def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> bool:
@@ -1165,13 +1221,38 @@ def assemble_linear_diagram(
             "WARNING: --show_labels orthogroup_top requires orthogroup metadata; no orthogroup-specific label suppression was applied."
         )
 
-    record_feature_dicts = _precalculate_feature_dicts(
+    record_feature_layers = _precalculate_feature_layers(
         records,
         feature_config,
         canvas_config,
         config_dict,
         cfg=cfg,
         orthogroup_label_eligibility=orthogroup_label_eligibility,
+    )
+    record_feature_dicts = [
+        result.foreground_features for result in record_feature_layers
+    ]
+    (
+        linear_track_slots,
+        resolved_annotations,
+        annotation_track_layouts,
+        auto_annotation_slot_ids,
+    ) = _add_linear_feature_underlays(
+        records,
+        record_feature_layers,
+        linear_track_slots,
+        resolved_annotations,
+        annotation_track_layouts,
+        auto_annotation_slot_ids,
+        canvas_config=canvas_config,
+    )
+    normalized_linear_track_slots = normalize_linear_track_slots_with_axis(
+        linear_track_slots,
+        linear_track_axis_index,
+    )
+    normalized_linear_track_slots = _apply_depth_track_heights_to_linear_slots(
+        normalized_linear_track_slots,
+        record_depth_tracks,
     )
     record_feature_lane_geometries = [
         measure_linear_feature_lanes(
@@ -1184,8 +1265,11 @@ def assemble_linear_diagram(
                 float(feature_config.block_stroke_width),
                 float(feature_config.line_stroke_width),
             ),
+            include_nominal_lanes=bool(
+                record_feature_layers[index].underlay_features
+            ),
         )
-        for feature_dict in record_feature_dicts
+        for index, feature_dict in enumerate(record_feature_dicts)
     ]
     _unused_label_height, all_labels, _record_label_heights_above = _precalculate_label_dimensions(
         records,
@@ -1867,7 +1951,11 @@ def assemble_linear_diagram(
                         continue
                     params = annotation_track_params_from_mapping(slot.params)
                     annotation_height = float(slot.height)
-                    if params.cover_anchor and params.anchor_slot == "features":
+                    if params.cover_anchor and any(
+                        anchor.renderer == "features"
+                        and anchor.id == params.anchor_slot
+                        for anchor in linear_track_layout.slots
+                    ):
                         feature_band = record_feature_lane_geometries[
                             record_index
                         ].occupied_band

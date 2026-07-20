@@ -67,6 +67,7 @@ def find_input(filename: str) -> Optional[Path]:
     """Find an input file in examples or external directories."""
     search_dirs = [
         EXAMPLES_DIR,
+        TESTS_DIR / "test_inputs",
         Path("/home/kawato/study/2025-09-17_gbdraw_test"),
         Path("/home/kawato/study/2025-05-15_gbdraw"),
     ]
@@ -171,6 +172,11 @@ TEST_CASES = {
         "gbk": "MjeNMV.gb",
         "args": ["--suppress_gc", "--suppress_skew", "--legend", "none"],
     },
+    "circular_hepatoplasma_repeat_underlay": {
+        "type": "circular",
+        "gbk": "AP027078.gb",
+        "args": ["--suppress_gc", "--suppress_skew", "--legend", "none"],
+    },
     # Linear test cases
     "linear_basic": {
         "type": "linear",
@@ -197,6 +203,11 @@ TEST_CASES = {
         "gbk": ["MjeNMV.gb", "MelaMJNV.gb"],
         "blast": ["MjeNMV.MelaMJNV.tblastx.out"],
         "args": ["--align_center", "--legend", "none"],
+    },
+    "linear_hepatoplasma_repeat_underlay": {
+        "type": "linear",
+        "gbk": ["AP027078.gb"],
+        "args": ["--legend", "none"],
     },
 }
 

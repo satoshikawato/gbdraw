@@ -74,7 +74,7 @@ from .api.requests import (
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 2
+CANONICAL_REQUEST_SCHEMA = 3
 UNKNOWN_FIELD_POLICY = "reject"
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -157,11 +157,11 @@ class CanonicalRequestCodecError(ValidationError):
 
 
 class CanonicalRequestEncodingError(CanonicalRequestCodecError):
-    """Raised when a typed request cannot be represented by schema 1."""
+    """Raised when a typed request cannot be represented canonically."""
 
 
 class CanonicalRequestDecodingError(CanonicalRequestCodecError):
-    """Raised when a schema 1 payload cannot produce a typed request."""
+    """Raised when a canonical payload cannot produce a typed request."""
 
 
 @dataclass(frozen=True)
@@ -305,7 +305,7 @@ def decode_canonical_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
 ) -> DiagramRequest:
-    """Decode canonical schemas 1 or 2 and normalize validation failures."""
+    """Decode canonical schemas 1, 2, or 3 and normalize validation failures."""
 
     try:
         return _decode_canonical_request(
@@ -333,7 +333,7 @@ def _decode_canonical_request(
     schema = top["schema"]
     if not isinstance(schema, int) or isinstance(schema, bool):
         raise CanonicalRequestDecodingError("renderRequest.schema must be an integer.")
-    if schema not in {1, CANONICAL_REQUEST_SCHEMA}:
+    if schema not in {1, 2, CANONICAL_REQUEST_SCHEMA}:
         raise CanonicalRequestDecodingError(
             f"Unsupported canonical request schema: {schema!r}."
         )
@@ -361,7 +361,7 @@ def _decode_canonical_request(
         for index, value in enumerate(raw_records, start=1)
     )
     options_kwargs = _decode_diagram_options(
-        top["diagramOptions"], resource_paths=resource_paths
+        top["diagramOptions"], schema=schema, resource_paths=resource_paths
     )
     comparison_kwargs = _decode_comparisons(
         top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths
@@ -719,6 +719,7 @@ def _encode_diagram_options(
 def _decode_diagram_options(
     value: object,
     *,
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> dict[str, Any]:
     payload = _object(value, path="renderRequest.diagramOptions")
@@ -734,12 +735,17 @@ def _decode_diagram_options(
             + ", ".join(sorted(unknown))
             + "."
         )
-    return {
+    decoded = {
         known[key]: _decode_option_value(
             known[key], raw, resource_paths=resource_paths
         )
         for key, raw in payload.items()
     }
+    if schema in {1, 2}:
+        feature_shapes = dict(decoded.get("feature_shapes") or {})
+        feature_shapes.setdefault("repeat_region", "rectangle")
+        decoded["feature_shapes"] = feature_shapes
+    return decoded
 
 
 def _encode_option_value(

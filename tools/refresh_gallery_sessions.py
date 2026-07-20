@@ -84,6 +84,42 @@ def _with_interactive_svg_format(args: list[Any]) -> list[str]:
     return updated
 
 
+def _with_current_gallery_feature_defaults(
+    session: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Opt curated gallery renders into current defaults, without changing legacy replay."""
+
+    updated = copy.deepcopy(dict(session))
+    render_request = updated.get("renderRequest")
+    if not isinstance(render_request, dict):
+        return updated
+    render_request["schema"] = 3
+    diagram_options = render_request.get("diagramOptions")
+    if not isinstance(diagram_options, dict):
+        diagram_options = {}
+        render_request["diagramOptions"] = diagram_options
+    feature_shapes = diagram_options.get("featureShapes")
+    feature_shapes = dict(feature_shapes) if isinstance(feature_shapes, Mapping) else {}
+
+    raw_args = _session_cli_invocation(session)
+    args = list(raw_args.get("args", ())) if raw_args is not None else []
+    explicit_repeat = False
+    for index, value in enumerate(args):
+        token = str(value)
+        if token in {"--feature_shape", "--feature-shape"} and index + 1 < len(args):
+            assignment = str(args[index + 1])
+            explicit_repeat = assignment.split("=", 1)[0].strip() == "repeat_region"
+        elif token.startswith(("--feature_shape=", "--feature-shape=")):
+            assignment = token.split("=", 1)[1]
+            explicit_repeat = assignment.split("=", 1)[0].strip() == "repeat_region"
+        if explicit_repeat:
+            break
+    if not explicit_repeat:
+        feature_shapes["repeat_region"] = "underlay"
+    diagram_options["featureShapes"] = feature_shapes
+    return updated
+
+
 def _preserve_gallery_cli_invocation(
     source_session: Mapping[str, Any],
     refreshed_session: dict[str, Any],
@@ -125,6 +161,8 @@ def _refresh_one_session(session_path: Path) -> None:
     )
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
         tmpdir_path = Path(tmpdir)
+        render_session = tmpdir_path / f"input-{session_path.name}"
+        write_session_json(render_session, _with_current_gallery_feature_defaults(session))
         refreshed_session = tmpdir_path / session_path.name
         subprocess.run(
             [
@@ -133,7 +171,7 @@ def _refresh_one_session(session_path: Path) -> None:
                 "gbdraw.cli",
                 mode,
                 "--session",
-                str(session_path),
+                str(render_session),
                 "-f",
                 "interactive_svg",
                 "-o",
@@ -168,7 +206,7 @@ def refresh_gallery_sessions(session_names: tuple[str, ...] = GALLERY_SESSION_FI
 def prepare_gallery_assets() -> None:
     from tools.prepare_interactive_gallery_assets import prepare_gallery_assets as prepare_assets
 
-    prepare_assets()
+    prepare_assets(refresh_sources=True)
 
 
 def main(argv: list[str] | None = None) -> int:

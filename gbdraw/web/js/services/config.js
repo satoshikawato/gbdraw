@@ -67,6 +67,10 @@ import { downloadCompressedSession, readSessionText } from './session-file.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
 import {
+  defaultFeatureRendering,
+  normalizeFeatureRenderingMap
+} from '../utils/feature-rendering.js';
+import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
@@ -75,9 +79,9 @@ import {
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 33;
+const SESSION_VERSION = 34;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, 31, 32, SESSION_VERSION]);
+const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, 31, 32, 33, SESSION_VERSION]);
 const LOSAT_CACHE_SCHEMA = 2;
 const LOSAT_DERIVED_CACHE_SCHEMA = 1;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -498,8 +502,6 @@ const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion =
 
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
-const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
-
 const normalizePositiveInteger = (value, fallback) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback;
@@ -646,19 +648,6 @@ const normalizeCircularConservationSeries = (series) => {
     }));
 };
 
-const normalizeFeatureShapes = (featureShapes) => {
-  const normalized = {};
-  if (!featureShapes || typeof featureShapes !== 'object' || Array.isArray(featureShapes)) {
-    return normalized;
-  }
-  Object.entries(featureShapes).forEach(([featureTypeRaw, shape]) => {
-    const featureType = String(featureTypeRaw || '').trim();
-    if (!featureType) return;
-    normalized[featureType] = normalizeFeatureShape(shape);
-  });
-  return normalized;
-};
-
 const DEPTH_TRACK_FALLBACK_COLORS = [
   '#4A90E2',
   '#E45756',
@@ -715,7 +704,13 @@ const cloneLosatForConfig = () => {
 
 export const buildConfigData = () => ({
   form: state.form,
-  adv: state.adv,
+  adv: {
+    ...state.adv,
+    feature_shapes: {
+      repeat_region: defaultFeatureRendering('repeat_region'),
+      ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
+    }
+  },
   losat: cloneLosatForConfig(),
   cliOptions: preservedCliOptions ? cloneJsonData(preservedCliOptions) : undefined,
   colors: state.currentColors.value,
@@ -871,10 +866,30 @@ const normalizeSessionData = (data) => {
   };
 };
 
+const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
+  if (!legacy || !isPlainObject(configData)) return configData;
+  const adv = isPlainObject(configData.adv) ? configData.adv : null;
+  if (!adv) return configData;
+  const features = Array.isArray(adv.features) ? adv.features : null;
+  if (features && !features.includes('repeat_region')) return configData;
+  const featureShapes = isPlainObject(adv.feature_shapes) ? adv.feature_shapes : {};
+  if (Object.prototype.hasOwnProperty.call(featureShapes, 'repeat_region')) return configData;
+  return {
+    ...configData,
+    adv: {
+      ...adv,
+      feature_shapes: { ...featureShapes, repeat_region: 'rectangle' }
+    }
+  };
+};
+
 const migrateSessionDataToCurrent = (data, sourceSessionVersion) => ({
   ...data,
   version: SESSION_VERSION,
-  config: migrateImportedLinearTrackSlots(data.config, sourceSessionVersion)
+  config: migrateLegacyFeatureRenderingConfig(
+    migrateImportedLinearTrackSlots(data.config, sourceSessionVersion),
+    sourceSessionVersion <= 33
+  )
 });
 
 const LEGACY_CONFIG_KEYS = new Set([
@@ -900,7 +915,10 @@ const isLegacyConfigPayload = (data) =>
   Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
 
 const applyLegacyConfigPayload = (data) => {
-  const migrated = migrateImportedLinearTrackSlots(data);
+  const migrated = migrateLegacyFeatureRenderingConfig(
+    migrateImportedLinearTrackSlots(data),
+    true
+  );
   validateImportedCircularTrackSlots(migrated);
   validateImportedLinearTrackSlots(migrated);
   state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(migrated.form);
@@ -1151,7 +1169,7 @@ export const applyConfigData = (data) => {
   }
   state.form.plot_title = String(state.form.plot_title || '');
   state.form.legend = normalizeLegendPosition(state.form.legend, state.mode.value === 'linear' ? 'bottom' : 'left');
-  state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
+  state.adv.feature_shapes = normalizeFeatureRenderingMap(state.adv.feature_shapes);
   const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
   if (normalizedMultiRecordSizeMode === 'sqrt') {
     state.adv.multi_record_size_mode = 'auto';
