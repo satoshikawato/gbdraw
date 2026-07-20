@@ -612,15 +612,13 @@ def test_linear_pairwise_starts_at_percent_gc_skew_stack_bottom(tmp_path: Path) 
     cfg = GbdrawConfig.from_dict(config_dict)
     comparison_group_y = _extract_comparison_group_y(svg_content)
     gc_skew_y = _extract_group_translate_y(svg_content, "gc_skew")
-    gc_skew_reserve_bottom_y = (
+    gc_skew_paint_bottom_y = (
         gc_skew_y
         + (0.5 * cfg.canvas.linear.default_gc_height)
         + (0.5 * cfg.objects.gc_skew.stroke_width)
     )
 
-    assert comparison_group_y == pytest.approx(
-        gc_skew_reserve_bottom_y + cfg.canvas.linear.vertical_padding
-    )
+    assert comparison_group_y == pytest.approx(gc_skew_paint_bottom_y)
 
 
 @pytest.mark.linear

@@ -56,7 +56,7 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 
 Repeated `--depth_track` groups and the corresponding Python depth-track matrices can now omit a file for an individual record without changing the series identity. Use `''`, `-`, `none`, or `null` as a CLI placeholder when supplying one value per record. A group that is empty for every record remains invalid.
 
-For a missing record/series cell, gbdraw draws no depth area, quantitative axis, or ticks. It does not substitute another record's file or treat the missing cell as zero coverage. Labels, colors, heights, shared-axis ranges, legends, and custom-slot `track_index` values remain attached to the original logical series. Linear default and custom slots and Circular multi-record diagrams use the same sparse binding behavior. In Linear mode, the per-record planner keeps the logical slot's reserve band even when there is no painted Depth geometry, so that cell does not compact or renumber its record's stack.
+For a missing record/series cell, gbdraw draws no depth area, quantitative axis, or ticks. It does not substitute another record's file or treat the missing cell as zero coverage. Labels, colors, heights, shared-axis ranges, legends, and custom-slot `track_index` values remain attached to the original logical series. Linear default and custom slots and Circular multi-record diagrams use the same sparse binding behavior. In Linear mode, a missing cell reserves no vertical geometry, so that record's stack compacts without changing the logical series identity.
 
 Web canonical requests and sessions keep Depth files as a record-major matrix in
 both Linear and Circular mode: one row per displayed record and one column per
@@ -77,14 +77,14 @@ Default tracks and custom slots use the same packer.
 Feature-slot `height` is now a minimum reservation: the effective band is
 `max(measured, configured)`. It does not change glyph thickness, which remains
 controlled by `--feature_height`. Feature-slot `spacing` is clearance to the
-adjacent outer track. Missing Depth data reserves its logical band but produces
-no paint, axis, or ticks.
+adjacent outer track. Missing Depth data produces no paint, reserve, axis, or
+ticks; logical identity remains independent of record-local geometry.
 
-Comparison links now begin and end at the outer edges of the records' measured
-exclusion bands. `--comparison_height` remains a minimum corridor; record
-spacing expands around taller occupancy while keeping links outside the track
-stacks. Geometry metadata schema v2 reports record-specific paint, reserve,
-comparison-exclusion, and canvas bands.
+Comparison links now begin and end at the outer edges of the records' painted
+exclusion bands without an additional endpoint pad. `--comparison_height`
+remains a minimum corridor; record spacing expands around taller occupancy while
+keeping links outside the track stacks. Geometry metadata schema v2 reports
+record-specific paint, reserve, comparison-exclusion, and canvas bands.
 
 In the web app, the Custom Track Slots caret controls only whether the editor is
 open. **Use custom stack** controls rendering, disabling and re-enabling it

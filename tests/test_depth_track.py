@@ -31,6 +31,8 @@ from gbdraw.api.diagram import (
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.linear_comparison import LinearComparison
 
 
 def _make_record(record_id: str = "rec1", length: int = 120) -> SeqRecord:
@@ -1068,13 +1070,56 @@ def test_linear_custom_depth_slot_skips_leading_or_trailing_missing_record(
     assert depth_slots[present_record_index]["paintBand"] is not None
     assert depth_slots[1 - present_record_index]["dataAvailable"] is False
     assert depth_slots[1 - present_record_index]["paintBand"] is None
-    assert depth_slots[0]["resolvedOriginPx"] == pytest.approx(
-        depth_slots[1]["resolvedOriginPx"]
+    present_slot = depth_slots[present_record_index]
+    missing_slot = depth_slots[1 - present_record_index]
+    assert present_slot["reserveBand"]["bottomPx"] > present_slot["reserveBand"]["topPx"]
+    assert missing_slot["reserveBand"]["bottomPx"] == pytest.approx(
+        missing_slot["reserveBand"]["topPx"]
     )
-    for edge in ("topPx", "bottomPx"):
-        assert depth_slots[0]["reserveBand"][edge] == pytest.approx(
-            depth_slots[1]["reserveBand"][edge]
-        )
+    present_body = geometry[present_record_index]["recordBodyBand"]
+    missing_body = geometry[1 - present_record_index]["recordBodyBand"]
+    if depth_side == "above":
+        assert missing_body["topPx"] > present_body["topPx"]
+    else:
+        assert missing_body["bottomPx"] < present_body["bottomPx"]
+
+
+@pytest.mark.linear
+def test_sparse_depth_does_not_separate_pairwise_match_from_missing_record_features() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    comparison = LinearComparison(
+        0,
+        1,
+        pd.DataFrame(
+            [["rec1", "rec2", 90.0, 20, 0, 0, 5, 25, 5, 25, 1e-10, 100]],
+            columns=COMPARISON_COLUMNS,
+        ),
+    )
+    canvas = assemble_linear_diagram_from_records(
+        records,
+        legend="none",
+        depth_track_tables=[[_constant_depth_table("rec1", 25, length=40)], [None]],
+        linear_track_slots=[
+            "depth:depth@track_index=0,side=above",
+            "features:features@side=above",
+        ],
+        linear_comparisons=[comparison],
+        config_overrides={"show_gc": False, "show_skew": False},
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    )
+
+    missing_record = canvas._gbdraw_track_slot_geometry["records"][1]
+    slots = {slot["slotId"]: slot for slot in missing_record["slots"]}
+    assert slots["depth"]["dataAvailable"] is False
+    assert slots["depth"]["reserveBand"]["topPx"] == pytest.approx(
+        slots["depth"]["reserveBand"]["bottomPx"]
+    )
+    assert missing_record["comparisonExclusionBand"]["topPx"] == pytest.approx(
+        slots["features"]["paintBand"]["topPx"]
+    )
 
 
 @pytest.mark.linear
@@ -1115,10 +1160,10 @@ def test_linear_diagonal_sparse_depth_binding_survives_slot_order_reversal() -> 
         assert 'fill="#445566"' in _svg_group(svg, "depth_b_record_2")
         assert 'id="depth_a_record_2"' not in svg
         assert 'id="depth_b_record_1"' not in svg
-    assert _svg_group_translate_y(original, "depth_a_record_1") != pytest.approx(
+    assert _svg_group_translate_y(original, "depth_a_record_1") == pytest.approx(
         _svg_group_translate_y(reversed_order, "depth_a_record_1")
     )
-    assert _svg_group_translate_y(original, "depth_b_record_2") != pytest.approx(
+    assert _svg_group_translate_y(original, "depth_b_record_2") == pytest.approx(
         _svg_group_translate_y(reversed_order, "depth_b_record_2")
     )
 

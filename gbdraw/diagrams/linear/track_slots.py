@@ -416,27 +416,42 @@ def _pack_side_slots(
     preferred_inner_edge = axis_band.top_y if direction == "above" else axis_band.bottom_y
     spacing_from_inner = max(0.0, float(initial_spacing))
 
-    for track in ordered:
-        base_footprint = footprints.get(track.id, _default_slot_footprint(track))
-        footprint = _combine_slot_footprint(
-            base_footprint,
-            overlays_by_anchor.get(track.id, ()),
+    prepared = [
+        (
+            track,
+            _combine_slot_footprint(
+                footprints.get(track.id, _default_slot_footprint(track)),
+                overlays_by_anchor.get(track.id, ()),
+            ),
         )
+        for track in ordered
+    ]
+    compact_missing = any(
+        footprint.paint_band is None and footprint.reserve_band.height <= 0.0
+        for _track, footprint in prepared
+    )
+
+    for track, footprint in prepared:
+        if footprint.paint_band is None and footprint.reserve_band.height <= 0.0:
+            resolved.append(
+                _resolved_slot(
+                    track,
+                    footprint,
+                    occupied_edge - footprint.reserve_band.top_y,
+                )
+            )
+            continue
         preferred_band = footprint.reserve_band.translate(track.y_offset)
         if direction == "above":
             preferred_gap = max(0.0, preferred_inner_edge - preferred_band.bottom_y)
-            gap = max(spacing_from_inner, preferred_gap)
-            origin_y = min(
-                float(track.y_offset),
-                occupied_edge - gap - footprint.reserve_band.bottom_y,
-            )
+            gap = spacing_from_inner if compact_missing else max(spacing_from_inner, preferred_gap)
+            packed_origin = occupied_edge - gap - footprint.reserve_band.bottom_y
+            origin_y = packed_origin if compact_missing else min(float(track.y_offset), packed_origin)
         else:
             preferred_gap = max(0.0, preferred_band.top_y - preferred_inner_edge)
-            gap = max(spacing_from_inner, preferred_gap)
-            origin_y = max(
-                float(track.y_offset),
-                occupied_edge + gap - footprint.reserve_band.top_y,
-            )
+            gap = spacing_from_inner if compact_missing else max(spacing_from_inner, preferred_gap)
+            packed_origin = occupied_edge + gap - footprint.reserve_band.top_y
+            origin_y = packed_origin if compact_missing else max(float(track.y_offset), packed_origin)
 
         item = _resolved_slot(track, footprint, origin_y)
         resolved.append(item)
@@ -458,7 +473,6 @@ def resolve_linear_record_vertical_plan(
     *,
     axis_band: VerticalBand,
     footprints: Mapping[str, LinearSlotFootprint] | None = None,
-    comparison_gap: float = 0.0,
 ) -> LinearRecordVerticalPlan:
     """Pack one record's slots around its axis from measured footprints."""
 
@@ -551,8 +565,11 @@ def resolve_linear_record_vertical_plan(
     )
     reserve_bands = [axis_band, *(slot.reserve_band for slot in resolved_slots)]
     body_band = union_vertical_bands(reserve_bands)
-    gap = max(0.0, float(comparison_gap))
-    comparison_band = body_band.expand(gap)
+    paint_bands = [
+        axis_band,
+        *(slot.paint_band for slot in resolved_slots if slot.paint_band is not None),
+    ]
+    comparison_band = union_vertical_bands(paint_bands)
     return LinearRecordVerticalPlan(
         axis_band=axis_band,
         slots=resolved_slots,

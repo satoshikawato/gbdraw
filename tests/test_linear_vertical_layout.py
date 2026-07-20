@@ -142,7 +142,7 @@ def test_record_planner_reserves_middle_feature_band_before_depth() -> None:
     assert plan.record_body_band == VerticalBand(-12.0, depth.reserve_band.bottom_y)
 
 
-def test_record_planner_missing_depth_has_reserve_without_paint() -> None:
+def test_record_planner_missing_depth_has_no_paint_or_reserve() -> None:
     layout, _canvas_config = _base_layout(
         [
             "features:features@side=overlay",
@@ -155,8 +155,8 @@ def test_record_planner_missing_depth_has_reserve_without_paint() -> None:
         footprints={
             "features": LinearSlotFootprint(VerticalBand(-5.0, 5.0), VerticalBand(-5.0, 5.0)),
             "depth": LinearSlotFootprint(
-                paint_band=VerticalBand(0.0, 20.0),
-                reserve_band=VerticalBand(0.0, 20.0),
+                paint_band=None,
+                reserve_band=VerticalBand(0.0, 0.0),
                 data_available=False,
             ),
         },
@@ -165,8 +165,25 @@ def test_record_planner_missing_depth_has_reserve_without_paint() -> None:
     depth = plan.slot_by_id("depth")
     assert not depth.data_available
     assert depth.paint_band is None
-    assert depth.reserve_band.height == pytest.approx(20.0)
-    assert plan.bottom_extent >= depth.reserve_band.bottom_y
+    assert depth.reserve_band.height == pytest.approx(0.0)
+    assert plan.record_body_band == VerticalBand(-5.0, 5.0)
+
+
+def test_record_planner_comparison_band_uses_paint_not_empty_reserve() -> None:
+    layout, _canvas_config = _base_layout(["features:features@side=overlay,h=40px"])
+    plan = resolve_linear_record_vertical_plan(
+        layout,
+        axis_band=VerticalBand(-0.5, 0.5),
+        footprints={
+            "features": LinearSlotFootprint(
+                paint_band=VerticalBand(-5.0, 5.0),
+                reserve_band=VerticalBand(-20.0, 20.0),
+            ),
+        },
+    )
+
+    assert plan.record_body_band == VerticalBand(-20.0, 20.0)
+    assert plan.comparison_exclusion_band == VerticalBand(-5.0, 5.0)
 
 
 def test_record_planner_packs_same_side_feature_and_depth_in_slot_order() -> None:

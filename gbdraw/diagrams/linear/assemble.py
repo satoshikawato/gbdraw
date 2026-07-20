@@ -660,7 +660,7 @@ def _linear_slot_footprints_for_record(
             available = track_index in available_depth_indices
             footprints[slot.id] = LinearSlotFootprint(
                 paint_band=expanded if available else None,
-                reserve_band=expanded,
+                reserve_band=expanded if available else VerticalBand(0.0, 0.0),
                 data_available=available,
             )
             continue
@@ -831,7 +831,6 @@ def _build_linear_record_vertical_plans(
     has_comparisons: bool,
 ) -> tuple[list[LinearRecordVerticalPlan], list[_LinearRecordDefinitionGeometry]]:
     axis_band = _linear_axis_band(canvas_config, cfg)
-    comparison_gap = float(canvas_config.vertical_padding) if has_comparisons else 0.0
     plans: list[LinearRecordVerticalPlan] = []
     definition_geometries: list[_LinearRecordDefinitionGeometry] = []
     feature_slot_id = next(
@@ -865,7 +864,6 @@ def _build_linear_record_vertical_plans(
             layout,
             axis_band=axis_band,
             footprints=footprints,
-            comparison_gap=comparison_gap,
         )
         feature_origin_y = (
             plan.slot_by_id(feature_slot_id).origin_y

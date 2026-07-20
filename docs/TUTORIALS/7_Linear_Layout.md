@@ -35,7 +35,7 @@ This writes `majani_tracks_below.svg`. Use `--track_axis_gap 12` when you want a
 
 Add `--resolve_overlaps` when overlapping genomic features should use additional lanes. gbdraw measures the resulting feature lanes and labels for each record, then moves GC, skew, Depth, and other non-overlay tracks outward only when they need more clearance. Records with different feature occupancy can therefore use different vertical track positions. In the web app, the `middle` choice is labeled **Features on axis**.
 
-In a comparison diagram, ribbons attach to the outer edges of the two records' measured exclusion bands. `--comparison_height` is the minimum clear corridor between those edges. Taller occupancy moves the record axes apart without placing ribbons through the track stacks; other row or definition spacing can make the corridor larger than the minimum.
+In a comparison diagram, ribbons attach directly to the outer edges of the two records' painted exclusion bands. Empty reservations, including missing Depth cells, do not move those endpoints. `--comparison_height` is the minimum clear corridor between the painted edges. Taller painted occupancy moves the record axes apart without placing ribbons through the track stacks; other row or definition spacing can make the corridor larger than the minimum.
 
 ![Two majanivirus records with feature, GC content, and GC skew tracks placed below each record axis](../../examples/tutorial-7-track-layout-below.svg)
 

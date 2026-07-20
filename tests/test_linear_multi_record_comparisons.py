@@ -75,7 +75,7 @@ def test_explicit_comparison_metadata_uses_selected_endpoints() -> None:
     assert 'data-subject-row="1"' in svg
 
 
-def test_comparison_ribbons_keep_endpoint_padding_without_labels() -> None:
+def test_comparison_ribbons_attach_to_painted_occupancy_without_extra_padding() -> None:
     records = _records()[:3]
     for record in records:
         record.features.extend(
@@ -145,6 +145,12 @@ def test_comparison_ribbons_keep_endpoint_padding_without_labels() -> None:
     )
     assert comparison_bottom == pytest.approx(
         geometry[2]["comparisonExclusionBand"]["absoluteTopPx"]
+    )
+    bottom_features = next(
+        slot for slot in geometry[2]["slots"] if slot["renderer"] == "features"
+    )
+    assert comparison_bottom == pytest.approx(
+        bottom_features["paintBand"]["absoluteTopPx"]
     )
 
 
