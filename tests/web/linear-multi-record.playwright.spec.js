@@ -142,6 +142,29 @@ ORIGIN
   expect(target).toEqual({ kind: 'recordId', value: 'RecB' });
 });
 
+test('Region annotation IDs accept continuous typing without losing focus', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const set = app.addAnnotationSet('review');
+    app.addCoordinateAnnotation(set);
+  });
+
+  await page.getByText('Region Annotations', { exact: false }).click();
+  const idInput = page.getByPlaceholder('annotation_id');
+  await idInput.selectText();
+  await idInput.pressSequentially('Repeat');
+
+  await expect(idInput).toBeFocused();
+  await expect(idInput).toHaveValue('Repeat');
+  await idInput.press('Tab');
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.annotationSets[0].annotations[0].id
+  ))).toBe('Repeat');
+});
+
 test('GFF annotation targets follow FASTA record order', async ({ page }) => {
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);

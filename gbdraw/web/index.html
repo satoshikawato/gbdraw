@@ -1707,7 +1707,7 @@
                                 <input v-model.trim="set.legendLabel" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)">
                                 <div v-for="item in set.annotations" :key="item.id" class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
                                     <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
-                                        <input v-model.trim="item.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id">
+                                        <input v-model.lazy.trim="item.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id">
                                         <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
                                             <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
                                         </select>
