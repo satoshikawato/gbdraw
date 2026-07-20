@@ -253,13 +253,15 @@ gbdraw circular \
   -f svg
 ```
 
-Required columns are `set_id`, `id`, and `mark`. `mark` accepts `line`, `bracket`, or `band`.
+Required columns are `set_id`, `id`, and `mark`. `mark` accepts `line`, `bracket`, `band`, or `highlight`. Without custom track slots, highlights are drawn automatically behind the feature track while other marks use a separate annotation lane. Mixed sets are split automatically.
 
 For a coordinate target, provide `start` and `end`. Optional coordinate fields are `record`, `coordinate_space` (`source` or `local`), `wraps_origin`, and `out_of_bounds` (`clip`, `skip`, or `error`). Coordinates are 1-based and inclusive. `record` accepts a record ID or a quoted `#index` selector.
 
 For a feature target, provide `feature_selector`. Separate multiple selectors with semicolons, for example `locus_tag=ABC_001;gene=repA`. `envelope` accepts `outer_bounds` or `segments`; `circular_path` accepts `shortest`, `forward`, or `reverse`.
 
 Optional presentation columns are `label`, `lane`, `legend_label`, `stroke`, `stroke_width`, `stroke_dasharray`, `line_cap`, `fill`, `fill_opacity`, `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`, `label_color`, `label_font_size`, `label_orientation`, `label_position`, and `label_offset`.
+
+`lane` is zero-based and controls the collision-avoidance row. Leave it blank for automatic packing; use `0`, `1`, and so on only to force a row. Highlights cover the full feature band and ignore `lane`.
 
 `legend_label` is the only value that adds an annotation entry to the shared diagram legend. A normal bracket label does not create a duplicate legend entry.
 

@@ -45,14 +45,14 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
   const addCoordinateAnnotation = (set, options = {}) => {
     if (!set) return null;
     const id = `region_${set.annotations.length + 1}`;
-    const item = { id, target: coordinateTarget({ start: 1, end: 1, ...options }), label: '', mark: 'bracket', lane: null, style: null, legendLabel: null, metadata: {} };
+    const item = { id, target: coordinateTarget({ start: 1, end: 1, ...options }), label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
     set.annotations.push(item);
     return item;
   };
   const addSelectedFeatures = (set) => {
     if (!set) return [];
     const targets = featureTargetsFromSelection(state.selectedFeatures?.value ?? state.selectedFeatures ?? []);
-    const items = targets.map((target, index) => ({ id: `feature_${set.annotations.length + index + 1}`, target, label: '', mark: 'bracket', lane: null, style: null, legendLabel: null, metadata: {} }));
+    const items = targets.map((target, index) => ({ id: `feature_${set.annotations.length + index + 1}`, target, label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} }));
     set.annotations.push(...items);
     reconcileRecords(items.length ? [{ annotations: items }] : []);
     return items;

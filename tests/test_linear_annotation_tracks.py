@@ -1,6 +1,8 @@
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 import pytest
+from xml.etree import ElementTree
 
 from gbdraw.api import (
     AnnotationOptions,
@@ -48,6 +50,68 @@ def test_linear_annotation_track_renders_metadata_and_hatch() -> None:
     assert 'data-gbdraw-annotation-id="region"' in svg
     assert "gbdraw-hatch-" in svg
     assert ">Region<" in svg
+
+
+def test_linear_highlight_automatically_renders_behind_features() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    record.features = [
+        SeqFeature(FeatureLocation(120, 250, strand=1), type="CDS")
+    ]
+    annotation = RegionAnnotation(
+        "highlighted",
+        CoordinateSpan(None, 100, 300),
+        label="Highlighted region",
+        mark="highlight",
+    )
+    drawing = build_linear_diagram(
+        [record],
+        options=DiagramOptions(
+            annotations=AnnotationOptions(
+                sets=(AnnotationSet("regions", (annotation,)),)
+            )
+        ),
+    )
+    svg = drawing.tostring()
+    slots = {
+        slot["slotId"]: slot
+        for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert slots["annotations_1"]["side"] == "overlay"
+    assert 'data-gbdraw-annotation-mark="highlight"' in svg
+    assert 'fill="#94a3b8"' in svg
+    assert svg.index('data-gbdraw-annotation-id="highlighted"') < svg.index('<g id="r1"')
+    root = ElementTree.fromstring(svg)
+    highlight_group = next(
+        element
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-annotation-id") == "highlighted"
+    )
+    highlight_rect = next(element for element in highlight_group if element.tag.endswith("rect"))
+    assert float(highlight_rect.attrib["height"]) >= 14.0
+
+
+def test_linear_mixed_annotation_set_splits_highlight_from_lane_marks() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    annotations = (
+        RegionAnnotation("highlighted", CoordinateSpan(None, 100, 300), mark="highlight"),
+        RegionAnnotation("bracketed", CoordinateSpan(None, 400, 600), mark="bracket"),
+    )
+    drawing = build_linear_diagram(
+        [record],
+        options=DiagramOptions(
+            annotations=AnnotationOptions(
+                sets=(AnnotationSet("regions", annotations),)
+            )
+        ),
+    )
+    slots = {
+        slot["slotId"]: slot
+        for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert slots["annotations_1"]["side"] == "above"
+    assert slots["annotations_1_highlight"]["side"] == "overlay"
 
 
 def test_linear_annotation_overlay_requires_anchor_and_consistent_z() -> None:

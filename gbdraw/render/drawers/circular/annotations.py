@@ -103,8 +103,10 @@ def draw_circular_annotation_track(
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
         for raw_start, raw_end in annotation.segments:
             for start, end in _safe_segments(raw_start, raw_end, record_length):
-                if annotation.mark == "band":
-                    fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (style.fill or "none")
+                if annotation.mark in {"band", "highlight"}:
+                    fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (
+                        style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
+                    )
                     path = Path(
                         d=_band_path(start, end, record_length, lane_inner, lane_outer),
                         fill=fill,

@@ -2302,12 +2302,23 @@ def resolve_circular_radial_layout(
             if anchor_band is not None
             else float(anchor.anchor_radius_px or axis_radius_px)
         )
-        width = max(0.0, float(resolved.resolved_width_px or intent.width_px))
+        cover_anchor = str(intent.params.get("cover_anchor", "false")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        width = (
+            float(anchor_band.width_px)
+            if cover_anchor and anchor_band is not None
+            else max(0.0, float(resolved.resolved_width_px or intent.width_px))
+        )
         draw_band = _band_from_center_width(anchor_radius, width)
         anchored = replace(
             resolved,
             anchor_radius_px=anchor_radius,
             anchor_offset_px=anchor_radius - axis_radius_px,
+            resolved_width_px=width,
             packing_band_px=None,
             draw_band_px=draw_band,
             reserved_band_px=None,

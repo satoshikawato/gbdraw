@@ -16,8 +16,10 @@ from gbdraw.annotations import (
     RegionAnnotation,
     RegionAnnotationStyle,
     annotation_sets_from_dataframe,
+    annotation_track_params_from_mapping,
     assign_annotation_lanes,
     effective_annotation_style,
+    layout_annotation_track,
     resolve_annotations,
 )
 from gbdraw.exceptions import ValidationError
@@ -33,6 +35,42 @@ def test_coordinate_contract_is_one_based_inclusive() -> None:
     bundle = resolve_annotations((AnnotationSet("s", (annotation,)),), [_record()], mode="linear")
     assert bundle.annotations[0].segments == ((1, 5),)
     assert bundle.annotations[0].span_bp == 4
+
+
+def test_highlight_is_a_supported_region_mark() -> None:
+    annotation = RegionAnnotation(
+        "highlighted",
+        CoordinateSpan(None, 2, 5),
+        mark="highlight",
+    )
+
+    assert annotation.mark == "highlight"
+
+
+def test_highlight_track_flattens_overlaps_and_ignores_explicit_lanes() -> None:
+    annotations = (
+        RegionAnnotation("first", CoordinateSpan(None, 2, 10), mark="highlight", lane=0),
+        RegionAnnotation("second", CoordinateSpan(None, 5, 15), mark="highlight", lane=0),
+    )
+    bundle = resolve_annotations(
+        (AnnotationSet("s", annotations),),
+        [_record()],
+        mode="linear",
+    )
+    params = annotation_track_params_from_mapping(
+        {"set_id": "s", "marks": "highlight", "cover_anchor": "true"}
+    )
+    track = layout_annotation_track(
+        "highlight",
+        "s",
+        bundle.annotations,
+        record_lengths={0: 100},
+        params=params,
+    )
+
+    assert params.cover_anchor is True
+    assert {placement.lane for placement in track.placements} == {0}
+    assert track.required_extent_px == 18.0
 
 
 def test_source_coordinates_follow_reverse_coordinate_map() -> None:

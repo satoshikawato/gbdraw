@@ -123,6 +123,15 @@ SINGLE_LEGEND_CONTENT_GAP_MIN_PX = 12.0
 logger = logging.getLogger(__name__)
 
 
+def _annotation_marks_for_set(
+    bundle: ResolvedAnnotationBundle,
+    set_id: str,
+) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(item.mark for item in bundle.annotations if item.set_id == set_id)
+    )
+
+
 def _prepare_circular_annotation_tracks(
     gb_record: SeqRecord,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
@@ -151,15 +160,42 @@ def _prepare_circular_annotation_tracks(
             show_gc=bool(canvas_config.show_gc),
             show_skew=bool(canvas_config.show_skew),
         )
-        slots = [
-            CircularTrackSlot(
-                id=f"annotations_{index + 1}",
-                renderer="annotations",
-                side="outside",
-                params={"set_id": set_id},
-            )
-            for index, set_id in enumerate(set_ids)
-        ] + slots
+        auto_annotation_slots = []
+        for index, set_id in enumerate(set_ids):
+            marks = _annotation_marks_for_set(bundle, set_id)
+            lane_marks = tuple(mark for mark in marks if mark != "highlight")
+            if lane_marks:
+                auto_annotation_slots.append(
+                    CircularTrackSlot(
+                        id=f"annotations_{index + 1}",
+                        renderer="annotations",
+                        side="outside",
+                        params={"set_id": set_id, "marks": lane_marks},
+                    )
+                )
+            if "highlight" in marks:
+                highlight_slot_id = (
+                    f"annotations_{index + 1}_highlight"
+                    if lane_marks
+                    else f"annotations_{index + 1}"
+                )
+                auto_annotation_slots.append(
+                    CircularTrackSlot(
+                        id=highlight_slot_id,
+                        renderer="annotations",
+                        side="overlay",
+                        z=-1,
+                        params={
+                            "set_id": set_id,
+                            "marks": ("highlight",),
+                            "anchor_slot": "features",
+                            "layer": "underlay",
+                            "cover_anchor": True,
+                            "padding_px": 0.0,
+                        },
+                    )
+                )
+        slots = auto_annotation_slots + slots
     requested = {
         str(slot.params.get("set_id", "")).strip()
         for slot in slots

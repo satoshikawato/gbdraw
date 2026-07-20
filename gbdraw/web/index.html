@@ -1691,7 +1691,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-brackets-curly"></i> Region Annotations <help-tip text="Create reusable coordinate- or feature-targeted annotation sets, then add an Annotations row in Custom Track Slots."></help-tip></summary>
+                        <summary><i class="ph ph-brackets-curly"></i> Region Annotations <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()"><i class="ph ph-plus"></i> Add set</button>
@@ -1744,8 +1744,11 @@
                                     </div>
                                     <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
                                         <input v-model="item.label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Label">
-                                        <select v-model="item.mark" class="form-input px-1 py-0.5 text-[10px]"><option value="line">Line</option><option value="bracket">Bracket</option><option value="band">Band</option></select>
-                                        <input type="number" min="0" v-model.number="item.lane" class="form-input w-14 px-1 py-0.5 text-[10px]" placeholder="Lane">
+                                        <select v-model="item.mark" class="form-input px-1 py-0.5 text-[10px]"><option value="highlight">Highlight (behind features)</option><option value="band">Band (annotation lane)</option><option value="line">Line</option><option value="bracket">Bracket</option></select>
+                                        <div class="flex items-center gap-0.5">
+                                            <input type="number" min="0" v-model.number="item.lane" :disabled="item.mark === 'highlight'" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" placeholder="Auto" aria-label="Annotation lane">
+                                            <help-tip text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
+                                        </div>
                                     </div>
                                     <div class="grid grid-cols-3 gap-1 items-center">
                                         <input type="color" v-model="set.defaultStyle.stroke" class="form-input h-7 p-0" title="Stroke color">

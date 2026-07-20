@@ -137,6 +137,15 @@ if TYPE_CHECKING:
     from ...api.options import LinearMultiRecordOptions
 
 
+def _annotation_marks_for_set(
+    bundle: ResolvedAnnotationBundle,
+    set_id: str,
+) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(item.mark for item in bundle.annotations if item.set_id == set_id)
+    )
+
+
 def _prepare_linear_annotation_tracks(
     records: list[SeqRecord],
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
@@ -167,15 +176,42 @@ def _prepare_linear_annotation_tracks(
             show_skew=bool(canvas_config.show_skew),
             track_layout=str(canvas_config.track_layout),
         )
-        slots = [
-            LinearTrackSlot(
-                id=f"annotations_{index + 1}",
-                renderer="annotations",
-                side="above",
-                params={"set_id": set_id},
-            )
-            for index, set_id in enumerate(set_ids)
-        ] + slots
+        auto_annotation_slots = []
+        for index, set_id in enumerate(set_ids):
+            marks = _annotation_marks_for_set(bundle, set_id)
+            lane_marks = tuple(mark for mark in marks if mark != "highlight")
+            if lane_marks:
+                auto_annotation_slots.append(
+                    LinearTrackSlot(
+                        id=f"annotations_{index + 1}",
+                        renderer="annotations",
+                        side="above",
+                        params={"set_id": set_id, "marks": lane_marks},
+                    )
+                )
+            if "highlight" in marks:
+                highlight_slot_id = (
+                    f"annotations_{index + 1}_highlight"
+                    if lane_marks
+                    else f"annotations_{index + 1}"
+                )
+                auto_annotation_slots.append(
+                    LinearTrackSlot(
+                        id=highlight_slot_id,
+                        renderer="annotations",
+                        side="overlay",
+                        z=-1,
+                        params={
+                            "set_id": set_id,
+                            "marks": ("highlight",),
+                            "anchor_slot": "features",
+                            "layer": "underlay",
+                            "cover_anchor": True,
+                            "padding_px": 0.0,
+                        },
+                    )
+                )
+        slots = auto_annotation_slots + slots
 
     requested_set_ids = {
         str(slot.params.get("set_id", "")).strip()
@@ -702,7 +738,10 @@ def _linear_slot_footprints_for_record(
                     label_overhang = float(style.label_offset) + 0.5 * float(
                         style.label_font_size or 10.0
                     )
-                    if slot.side == "above":
+                    labels_above = slot.side == "above" or (
+                        slot.side == "overlay" and params.layer == "underlay"
+                    )
+                    if labels_above:
                         top_overhang = max(top_overhang, label_overhang)
                     else:
                         bottom_overhang = max(bottom_overhang, label_overhang)
@@ -1827,6 +1866,14 @@ def assemble_linear_diagram(
                     if annotation_layout is None:
                         continue
                     params = annotation_track_params_from_mapping(slot.params)
+                    annotation_height = float(slot.height)
+                    if params.cover_anchor and params.anchor_slot == "features":
+                        feature_band = record_feature_lane_geometries[
+                            record_index
+                        ].occupied_band
+                        if feature_band.height > 0.0:
+                            track_offset_y = float(feature_band.top_y)
+                            annotation_height = float(feature_band.height)
                     bar_length = (
                         float(sequence_width)
                         if sequence_width is not None
@@ -1846,7 +1893,7 @@ def assemble_linear_diagram(
                         bar_length_px=bar_length,
                         y_offset_px=0.0,
                         side=slot.side,
-                        height_px=slot.height,
+                        height_px=annotation_height,
                         font_family=str(cfg.objects.text.font_family),
                         params=params,
                     )

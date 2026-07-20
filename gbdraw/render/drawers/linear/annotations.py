@@ -58,7 +58,11 @@ def draw_linear_annotation_track(
     usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px)
     lane_height = 14.0 if track.clipped else usable_height / max(1, lane_count)
     scale = float(bar_length_px) / max(1, int(record_length))
-    label_direction = -1.0 if side == "above" else 1.0
+    label_direction = (
+        -1.0
+        if side == "above" or (side == "overlay" and params.layer == "underlay")
+        else 1.0
+    )
 
     for placement in placements:
         annotation = placement.annotation
@@ -87,11 +91,14 @@ def draw_linear_annotation_track(
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
         for start, end in annotation.segments:
             x1, x2 = float(start) * scale, float(end) * scale
-            if annotation.mark == "band":
-                fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (style.fill or "none")
+            if annotation.mark in {"band", "highlight"}:
+                fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (
+                    style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
+                )
+                height_factor = 1.0 if annotation.mark == "highlight" else 0.84
                 rect = Rect(
-                    insert=(x1, lane_center - 0.42 * lane_height),
-                    size=(max(0.1, x2 - x1), 0.84 * lane_height),
+                    insert=(x1, lane_center - 0.5 * height_factor * lane_height),
+                    size=(max(0.1, x2 - x1), height_factor * lane_height),
                     fill=fill,
                     fill_opacity=style.fill_opacity,
                     stroke=style.stroke,
