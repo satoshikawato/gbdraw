@@ -365,6 +365,30 @@ def test_web_feature_rendering_contract() -> None:
     subprocess.run([node, "tests/web/feature-shapes.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_feature_shape_support_probe_matches_cli_behavior() -> None:
+    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(
+        r"const getFeatureShapeOptionSupport = \(\) => \{.*?"
+        r"const raw = pyodide\.runPython\(`\n(?P<probe>.*?)\n      `\);",
+        source,
+        re.DOTALL,
+    )
+    assert match is not None
+    probe = match.group("probe").replace(
+        "\njson.dumps({", "\n_probe_result = json.dumps({", 1
+    )
+    namespace: dict[str, object] = {}
+    exec(probe, namespace)
+
+    assert json.loads(str(namespace["_probe_result"])) == {
+        "circular": True,
+        "linear": True,
+        "underlay": True,
+    }
+
+
 def test_web_canonical_session_request_codec() -> None:
     node = shutil.which("node")
     if node is None:

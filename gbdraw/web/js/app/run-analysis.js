@@ -1347,15 +1347,26 @@ json.dumps({
     }
     try {
       const raw = pyodide.runPython(`
-import inspect, json
+import contextlib, io, json
 import gbdraw.circular as _gbdraw_circular
 import gbdraw.linear as _gbdraw_linear
 from gbdraw.features.shapes import normalize_feature_shape as _normalize_feature_shape
-_circular_source = inspect.getsource(_gbdraw_circular._get_args)
-_linear_source = inspect.getsource(_gbdraw_linear._get_args)
+
+def _cli_help(_get_args):
+  _output = io.StringIO()
+  try:
+    with contextlib.redirect_stdout(_output), contextlib.redirect_stderr(_output):
+      _get_args(["--help"])
+  except SystemExit as _exc:
+    if _exc.code not in (None, 0):
+      return ""
+  return _output.getvalue()
+
+_circular_help = _cli_help(_gbdraw_circular._get_args)
+_linear_help = _cli_help(_gbdraw_linear._get_args)
 json.dumps({
-  "circular": "--feature_shape" in _circular_source,
-  "linear": "--feature_shape" in _linear_source,
+  "circular": "--feature_shape" in _circular_help,
+  "linear": "--feature_shape" in _linear_help,
   "underlay": _normalize_feature_shape("underlay") == "underlay",
 })
       `);
