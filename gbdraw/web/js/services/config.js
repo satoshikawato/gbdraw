@@ -934,6 +934,67 @@ const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
   return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
+const restoreStoredNonCanonicalConfig = (projectedConfig, storedConfig) => {
+  const restored = cloneJsonData(projectedConfig);
+  if (!isPlainObject(storedConfig)) return restored;
+  // Keep canonical drawing values authoritative; only supplement state that the
+  // canonical request does not currently represent.
+  [
+    'losat',
+    'blastSource',
+    'losatProgram',
+    'cliOptions',
+    'paletteInstantPreviewEnabled',
+    'webEdits'
+  ].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(storedConfig, key)) {
+      restored[key] = cloneJsonData(storedConfig[key]);
+    }
+  });
+  const storedAdv = storedConfig.adv;
+  if (isPlainObject(storedAdv) && isPlainObject(restored.adv)) {
+    [
+      'rich_feature_popup',
+      'feature_width_circular',
+      'depth_width_circular',
+      'gc_content_width_circular',
+      'gc_content_radius_circular',
+      'gc_skew_width_circular',
+      'gc_skew_radius_circular'
+    ].forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(storedAdv, key)) {
+        restored.adv[key] = cloneJsonData(storedAdv[key]);
+      }
+    });
+  }
+  const storedConservation = storedConfig?.circularConservation;
+  if (!isPlainObject(storedConservation)) {
+    return restored;
+  }
+  if (!isPlainObject(restored?.circularConservation)) {
+    restored.circularConservation = cloneJsonData(storedConservation);
+    return restored;
+  }
+
+  ['enabled', 'source', 'losat_program', 'subject_gencode'].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(storedConservation, key)) {
+      restored.circularConservation[key] = cloneJsonData(storedConservation[key]);
+    }
+  });
+  if (
+    Array.isArray(restored.circularConservation.series) &&
+    Array.isArray(storedConservation.series)
+  ) {
+    restored.circularConservation.series = restored.circularConservation.series.map((entry, index) => {
+      const storedEntry = storedConservation.series[index];
+      if (!isPlainObject(entry) || !isPlainObject(storedEntry)) return entry;
+      if (!Object.prototype.hasOwnProperty.call(storedEntry, 'losat_gencode')) return entry;
+      return { ...entry, losat_gencode: cloneJsonData(storedEntry.losat_gencode) };
+    });
+  }
+  return restored;
+};
+
 const preflightSessionImport = (rawData) => {
   const sourceSessionVersion = rawData.version;
   const normalizedData = normalizeSessionData(rawData);
@@ -944,6 +1005,8 @@ const preflightSessionImport = (rawData) => {
         renderRequest: data.renderRequest,
         resources: data.resources,
         webFiles: data.webFiles,
+        legacyFiles: data.files,
+        fileBindings: data.cliInvocation?.fileBindings,
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
           : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
@@ -952,7 +1015,7 @@ const preflightSessionImport = (rawData) => {
     : null;
   const restoredConfig = canonicalProjection
     ? {
-        ...canonicalProjection.config,
+        ...restoreStoredNonCanonicalConfig(canonicalProjection.config, data.config),
         rules: applySpecificRuleProvenance(
           canonicalProjection.config.rules,
           data.config?.rules

@@ -94,8 +94,20 @@ const normalizeResourceName = (resourceId, name) => {
   return `${prefix}${leaf || 'resource.dat'}`;
 };
 
+const normalizeOriginalResourceName = (name) => {
+  const basename = String(name || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .pop()
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim();
+  if (!basename || basename === '.' || basename === '..') return '';
+  return basename.slice(0, 1024);
+};
+
 const createResourceBuilder = () => {
   const resources = {};
+  const resourceOriginalNames = {};
 
   const addFile = (resourceId, kind, entry) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
@@ -111,6 +123,8 @@ const createResourceBuilder = () => {
       encoding: entry.encoding || 'base64',
       data: entry.data
     };
+    const originalName = normalizeOriginalResourceName(entry.name);
+    if (originalName) resourceOriginalNames[resourceId] = originalName;
     return resourceId;
   };
 
@@ -130,7 +144,7 @@ const createResourceBuilder = () => {
     return resourceId;
   };
 
-  return { resources, addFile, addText };
+  return { resources, resourceOriginalNames, addFile, addText };
 };
 
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
@@ -300,6 +314,10 @@ const buildConfigOverrides = (state) => {
     ruler_label_font_size: circular ? null : optionalNumber(adv.scale_font_size),
     scale_interval: optionalNumber(adv.scale_interval),
     tick_label_font_size: circular ? optionalNumber(adv.tick_label_font_size) : null,
+    outer_label_x_radius_offset: circular ? optionalNumber(adv.outer_label_x_offset) : null,
+    outer_label_y_radius_offset: circular ? optionalNumber(adv.outer_label_y_offset) : null,
+    inner_label_x_radius_offset: circular ? optionalNumber(adv.inner_label_x_offset) : null,
+    inner_label_y_radius_offset: circular ? optionalNumber(adv.inner_label_y_offset) : null,
     pairwise_match_style: circular ? null : adv.pairwise_match_style,
     legend_box_size: optionalNumber(adv.legend_box_size),
     legend_font_size: optionalNumber(adv.legend_font_size),
@@ -628,6 +646,32 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
   addGeneratedTableResources(state, resources, diagramOptions);
   buildDepthResources({ state, filesData, resources, diagramOptions, recordCount: records.length });
 
+  [
+    ['colors-default-colors-file', filesData.d_color],
+    ['colors-color-table-file', filesData.t_color],
+    ['label-whitelist-file', filesData.whitelist],
+    ['qualifier-priority-file', filesData.qualifier_priority]
+  ].forEach(([resourceId, entry]) => {
+    if (!resources.resources[resourceId]) return;
+    const originalName = normalizeOriginalResourceName(entry?.name);
+    if (originalName) resources.resourceOriginalNames[resourceId] = originalName;
+  });
+
+  if (Object.keys(resources.resourceOriginalNames).length > 0) {
+    webFiles.resourceOriginalNames = { ...resources.resourceOriginalNames };
+  }
+  if (state.mode.value === 'circular' && state.cInputType.value === 'gb') {
+    const circularInputOriginalName = normalizeOriginalResourceName(filesData.c_gb?.name);
+    if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
+  }
+  if (state.mode.value === 'linear') {
+    webFiles.linearRecordMetadata = (filesData.linearSeqs || []).map((sequence, index) => ({
+      recordKey: String(records[index]?.recordKey || sequence?.uid || `record-${index + 1}`),
+      losatGencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
+      losatFilename: String(sequence?.losat_filename || '')
+    }));
+  }
+
   return {
     renderRequest: {
       schema: CANONICAL_REQUEST_SCHEMA,
@@ -646,6 +690,116 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
     resources: resources.resources,
     webFiles
   };
+};
+
+const recordSourceResourceId = (record, field) => {
+  const source = record?.source || {};
+  if (field === 'gb' && source.kind === 'genbank') return String(source.resourceId || '');
+  if (field === 'gff' && source.kind === 'gffFasta') return String(source.gffResourceId || '');
+  if (field === 'fasta' && source.kind === 'gffFasta') return String(source.fastaResourceId || '');
+  return '';
+};
+
+const referencedResourceId = (ref) => String(ref?.resourceId || '').trim();
+
+const addResourceOriginalNameHint = (target, resourceId, name) => {
+  const id = String(resourceId || '').trim();
+  const originalName = normalizeOriginalResourceName(name);
+  if (!id || !originalName || Object.prototype.hasOwnProperty.call(target, id)) return;
+  target[id] = originalName;
+};
+
+const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings }) => {
+  const hints = {};
+  const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
+  const options = renderRequest?.diagramOptions || {};
+  const files = legacyFiles && typeof legacyFiles === 'object' && !Array.isArray(legacyFiles)
+    ? legacyFiles
+    : {};
+  const namedOptionResources = {
+    d_color: referencedResourceId(options.colors?.defaultColorsFile || options.colors?.defaultColors),
+    t_color: referencedResourceId(options.colors?.colorTableFile || options.colors?.colorTable),
+    whitelist: referencedResourceId(options.labelWhitelistFile),
+    qualifier_priority: referencedResourceId(
+      options.qualifierPriorityFile || options.qualifierPriorityTable
+    )
+  };
+  Object.entries(namedOptionResources).forEach(([slot, resourceId]) => {
+    addResourceOriginalNameHint(hints, resourceId, files?.[slot]?.name);
+  });
+
+  if (renderRequest?.mode === 'linear') {
+    const sequences = Array.isArray(files.linearSeqs) ? files.linearSeqs : [];
+    records.forEach((record, index) => {
+      const sequence = sequences[index] || {};
+      ['gb', 'gff', 'fasta'].forEach((field) => {
+        addResourceOriginalNameHint(
+          hints,
+          recordSourceResourceId(record, field),
+          sequence?.[field]?.name
+        );
+      });
+    });
+  } else {
+    const record = records[0];
+    ['gb', 'gff', 'fasta'].forEach((field) => {
+      addResourceOriginalNameHint(
+        hints,
+        recordSourceResourceId(record, field),
+        files?.[`c_${field}`]?.name
+      );
+    });
+  }
+
+  (Array.isArray(fileBindings) ? fileBindings : []).forEach((binding) => {
+    const slot = String(binding?.slot || '');
+    const normalizedSlot = slot.replace(/^files\./, '');
+    if (Object.prototype.hasOwnProperty.call(namedOptionResources, normalizedSlot)) {
+      addResourceOriginalNameHint(
+        hints,
+        namedOptionResources[normalizedSlot],
+        binding?.name
+      );
+      return;
+    }
+    const linearMatch = slot.match(/^(?:files\.)?linearSeqs\[(\d+)\]\.(gb|gff|fasta)$/);
+    if (linearMatch) {
+      const record = records[Number(linearMatch[1])];
+      addResourceOriginalNameHint(
+        hints,
+        recordSourceResourceId(record, linearMatch[2]),
+        binding?.name
+      );
+      return;
+    }
+    const circularMatch = slot.match(/^(?:files\.)?c_(gb|gff|fasta)$/);
+    if (circularMatch) {
+      addResourceOriginalNameHint(
+        hints,
+        recordSourceResourceId(records[0], circularMatch[1]),
+        binding?.name
+      );
+    }
+  });
+
+  return hints;
+};
+
+const resourcesWithOriginalNames = (resources, originalNameHints) => {
+  const hints = originalNameHints && typeof originalNameHints === 'object' && !Array.isArray(originalNameHints)
+    ? originalNameHints
+    : {};
+  return Object.fromEntries(Object.entries(resources || {}).map(([resourceId, entry]) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [resourceId, entry];
+    const storedName = normalizeOriginalResourceName(entry.name);
+    const prefix = `${resourceId}-`;
+    let inferredName = storedName;
+    while (inferredName.startsWith(prefix) && inferredName.length > prefix.length) {
+      inferredName = inferredName.slice(prefix.length);
+    }
+    const originalName = normalizeOriginalResourceName(hints[resourceId]) || inferredName;
+    return [resourceId, originalName && originalName !== entry.name ? { ...entry, name: originalName } : entry];
+  }));
 };
 
 const resourceAsLegacyFile = (resources, resourceId) => {
@@ -689,9 +843,33 @@ const nestedConfigValue = (config, path) => {
   return current;
 };
 
-const projectFullConfigOverrides = (config) => {
+const sharedLengthConfigValue = (config, path) => {
+  const value = nestedConfigValue(config, path);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  // The Web UI has one control for values that Python stores per genome length.
+  // Project them only when both variants encode the same explicit setting.
+  const shortValue = value.short;
+  const longValue = value.long;
+  if (shortValue === undefined || longValue === undefined) return undefined;
+  if (Object.is(shortValue, longValue)) return longValue;
+  const shortNumber = shortValue === null || String(shortValue).trim() === ''
+    ? Number.NaN
+    : Number(shortValue);
+  const longNumber = longValue === null || String(longValue).trim() === ''
+    ? Number.NaN
+    : Number(longValue);
+  return Number.isFinite(shortNumber) && shortNumber === longNumber ? longValue : undefined;
+};
+
+const projectFullConfigOverrides = (config, mode) => {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
   const paths = {
+    block_stroke_color: 'objects.features.block_stroke_color',
+    circular_axis_stroke_color: 'objects.axis.circular.stroke_color',
+    linear_axis_stroke_color: 'objects.axis.linear.stroke_color',
+    line_stroke_color: 'objects.features.line_stroke_color',
+    circular_definition_font_size: 'objects.definition.circular.font_size',
+    plot_title_font_size: 'objects.definition.circular.plot_title_font_size',
     show_gc: 'canvas.show_gc',
     show_skew: 'canvas.show_skew',
     show_depth: 'canvas.show_depth',
@@ -744,13 +922,35 @@ const projectFullConfigOverrides = (config) => {
     scale_stroke_width: 'objects.scale.stroke_width',
     scale_interval: 'objects.scale.interval',
     tick_label_font_size: 'objects.ticks.tick_labels.font_size',
+    outer_label_x_radius_offset: 'labels.unified_adjustment.outer_labels.x_radius_offset',
+    outer_label_y_radius_offset: 'labels.unified_adjustment.outer_labels.y_radius_offset',
+    inner_label_x_radius_offset: 'labels.unified_adjustment.inner_labels.x_radius_offset',
+    inner_label_y_radius_offset: 'labels.unified_adjustment.inner_labels.y_radius_offset',
     pairwise_match_style: 'objects.blast_match.style'
   };
-  return Object.fromEntries(
+  const projected = Object.fromEntries(
     Object.entries(paths)
       .map(([name, path]) => [name, nestedConfigValue(config, path)])
       .filter(([, value]) => value !== undefined)
   );
+  const sharedLengthPaths = {
+    block_stroke_width: 'objects.features.block_stroke_width',
+    circular_axis_stroke_width: 'objects.axis.circular.stroke_width',
+    linear_axis_stroke_width: 'objects.axis.linear.stroke_width',
+    line_stroke_width: 'objects.features.line_stroke_width',
+    linear_definition_font_size: 'objects.definition.linear.font_size',
+    default_cds_height: 'canvas.linear.default_cds_height',
+    legend_box_size: 'objects.legends.color_rect_size',
+    legend_font_size: 'objects.legends.font_size',
+    scale_font_size: 'objects.scale.font_size',
+    ruler_label_font_size: 'objects.scale.ruler_label_font_size',
+    label_font_size: mode === 'linear' ? 'labels.font_size.linear' : 'labels.font_size'
+  };
+  Object.entries(sharedLengthPaths).forEach(([name, path]) => {
+    const value = sharedLengthConfigValue(config, path);
+    if (value !== undefined) projected[name] = value;
+  });
+  return projected;
 };
 
 const projectCircularConservationConfig = (options, files) => {
@@ -807,7 +1007,7 @@ const projectCanonicalCircularSlot = (slot) => ({
   outer_gap_px: projectCanonicalCircularMeasure(slot?.outerGapPx ?? slot?.outer_gap_px)
 });
 
-const combineCircularGenbankResources = (resources, records) => {
+const combineCircularGenbankResources = (resources, records, originalName = '') => {
   const resourceIds = [];
   const seen = new Set();
   records.forEach((record) => {
@@ -831,7 +1031,7 @@ const combineCircularGenbankResources = (resources, records) => {
     })
     .join('');
   return {
-    name: 'canonical-circular-records.gb',
+    name: normalizeOriginalResourceName(originalName) || 'canonical-circular-records.gb',
     type: 'text/plain',
     size: binary.length,
     lastModified: Math.max(0, ...files.map((file) => Number(file.lastModified) || 0)),
@@ -842,8 +1042,10 @@ const combineCircularGenbankResources = (resources, records) => {
 
 export const projectCanonicalSessionRequest = ({
   renderRequest,
-  resources,
+  resources: canonicalResources,
   webFiles = {},
+  legacyFiles = null,
+  fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false
 }) => {
@@ -855,10 +1057,40 @@ export const projectCanonicalSessionRequest = ({
   }
   const records = Array.isArray(renderRequest.records) ? renderRequest.records : [];
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
+  const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
+    ? webFiles
+    : {};
+  const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
+  const resources = resourcesWithOriginalNames(canonicalResources, {
+    ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
+    ...(storedResourceOriginalNames && typeof storedResourceOriginalNames === 'object' &&
+      !Array.isArray(storedResourceOriginalNames) ? storedResourceOriginalNames : {})
+  });
+  const legacyCircularInputBinding = (Array.isArray(fileBindings) ? fileBindings : [])
+    .find((binding) => /^(?:files\.)?c_gb$/.test(String(binding?.slot || '')));
+  const circularInputOriginalName = normalizeOriginalResourceName(
+    webMetadata.circularInputOriginalName ||
+    legacyFiles?.c_gb?.name ||
+    legacyCircularInputBinding?.name ||
+    (records.length === 1 ? resources?.[records[0]?.source?.resourceId]?.name : '')
+  );
+  const savedLinearRecordMetadata = Array.isArray(webMetadata.linearRecordMetadata)
+    ? webMetadata.linearRecordMetadata
+    : [];
+  const savedLinearRecordMetadataByKey = new Map(
+    savedLinearRecordMetadata
+      .map((entry) => [String(entry?.recordKey || ''), entry])
+      .filter(([recordKey]) => recordKey)
+  );
+  const legacyLinearSequences = Array.isArray(legacyFiles?.linearSeqs)
+    ? legacyFiles.linearSeqs
+    : [];
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     const source = records[0]?.source || {};
-    if (source.kind === 'genbank') files.c_gb = combineCircularGenbankResources(resources, records);
+    if (source.kind === 'genbank') {
+      files.c_gb = combineCircularGenbankResources(resources, records, circularInputOriginalName);
+    }
     if (source.kind === 'gffFasta') {
       files.c_gff = resourceAsLegacyFile(resources, source.gffResourceId);
       files.c_fasta = resourceAsLegacyFile(resources, source.fastaResourceId);
@@ -868,6 +1100,8 @@ export const projectCanonicalSessionRequest = ({
       const source = record.source || {};
       const region = record.region || null;
       const selector = region?.selector || record.selector;
+      const savedMetadata = savedLinearRecordMetadataByKey.get(String(record.recordKey || '')) ||
+        savedLinearRecordMetadata[index] || legacyLinearSequences[index] || {};
       return {
         uid: String(record.recordKey || `canonical-seq-${index + 1}`),
         gb: source.kind === 'genbank' ? resourceAsLegacyFile(resources, source.resourceId) : null,
@@ -875,8 +1109,12 @@ export const projectCanonicalSessionRequest = ({
         fasta: source.kind === 'gffFasta' ? resourceAsLegacyFile(resources, source.fastaResourceId) : null,
         depth: null,
         blast: null,
-        losat_gencode: 1,
-        losat_filename: '',
+        losat_gencode: optionalPositiveInteger(
+          savedMetadata.losatGencode ?? savedMetadata.losat_gencode
+        ) || 1,
+        losat_filename: String(
+          savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
+        ),
         definition: record.presentation?.label || '',
         record_subtitle: record.presentation?.subtitle || '',
         region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),
@@ -1000,13 +1238,13 @@ export const projectCanonicalSessionRequest = ({
       .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
       .filter(Boolean);
   }
-  if (renderRequest.mode === 'circular' && Array.isArray(webFiles.conservationSequenceSources)) {
-    files.c_conservation_sequence_sources = webFiles.conservationSequenceSources.map((resourceId) => (
+  if (renderRequest.mode === 'circular' && Array.isArray(webMetadata.conservationSequenceSources)) {
+    files.c_conservation_sequence_sources = webMetadata.conservationSequenceSources.map((resourceId) => (
       resourceId ? resourceAsLegacyFile(resources, resourceId) : null
     ));
   }
   const overrides = {
-    ...projectFullConfigOverrides(options.config),
+    ...projectFullConfigOverrides(options.config, renderRequest.mode),
     ...(options.configOverrides || {})
   };
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
@@ -1146,7 +1384,7 @@ export const projectCanonicalSessionRequest = ({
       ? (overrides.linear_label_spacing ?? null)
       : null,
     plot_title_position: options.output?.plotTitlePosition || (renderRequest.mode === 'linear' ? 'bottom' : 'none'),
-    plot_title_font_size: options.plotTitleFontSize ?? null,
+    plot_title_font_size: options.plotTitleFontSize ?? overrides.plot_title_font_size ?? null,
     def_font_size: renderRequest.mode === 'circular'
       ? (overrides.circular_definition_font_size ?? null)
       : (overrides.linear_definition_font_size ?? null),
@@ -1203,12 +1441,32 @@ export const projectCanonicalSessionRequest = ({
     depth_window_size: options.depthWindow ?? null,
     depth_step_size: options.depthStep ?? null,
     depth_tracks: projectedDepthTracks,
+    min_bitscore: options.bitscore ?? 50,
+    evalue: options.evalue === null || options.evalue === undefined
+      ? '1e-2'
+      : String(options.evalue),
+    identity: options.identity ?? 0,
+    alignment_length: options.alignmentLength ?? 0,
     scale_stroke_color: overrides.scale_stroke_color ?? null,
     ruler_label_color: overrides.scale_label_color ?? null,
     scale_stroke_width: overrides.scale_stroke_width ?? null,
-    scale_font_size: overrides.ruler_label_font_size ?? overrides.scale_font_size ?? null,
+    scale_font_size: form.scale_style === 'ruler'
+      ? (overrides.ruler_label_font_size ?? overrides.scale_font_size ?? null)
+      : (overrides.scale_font_size ?? overrides.ruler_label_font_size ?? null),
     scale_interval: overrides.scale_interval ?? null,
     tick_label_font_size: overrides.tick_label_font_size ?? null,
+    outer_label_x_offset: renderRequest.mode === 'circular'
+      ? (overrides.outer_label_x_radius_offset ?? null)
+      : null,
+    outer_label_y_offset: renderRequest.mode === 'circular'
+      ? (overrides.outer_label_y_radius_offset ?? null)
+      : null,
+    inner_label_x_offset: renderRequest.mode === 'circular'
+      ? (overrides.inner_label_x_radius_offset ?? null)
+      : null,
+    inner_label_y_offset: renderRequest.mode === 'circular'
+      ? (overrides.inner_label_y_radius_offset ?? null)
+      : null,
     pairwise_match_style: overrides.pairwise_match_style || options.pairwiseMatchStyle || 'ribbon',
     circular_track_slots_enabled: renderRequest.mode === 'circular' && Array.isArray(tracks.circularTrackSlots),
     circular_track_slots_schema_version: 4,
@@ -1239,6 +1497,9 @@ export const projectCanonicalSessionRequest = ({
         comparisons: (files.linearComparisons || []).map(({ file: _file, ...comparison }) => comparison)
       }
     : undefined;
+  const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
+    ? overrides.label_blacklist.join(', ')
+    : String(overrides.label_blacklist || '');
   return {
     mode: renderRequest.mode,
     inputType: records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb',
@@ -1253,11 +1514,9 @@ export const projectCanonicalSessionRequest = ({
       qualifierPriorityRules: projectedPriorityRules,
       filterMode: projectedWhitelist.length > 0
         ? 'Whitelist'
-        : (overrides.label_blacklist ? 'Blacklist' : 'None'),
+        : (projectedBlacklistText.trim() ? 'Blacklist' : 'None'),
       whitelist: projectedWhitelist,
-      blacklistText: Array.isArray(overrides.label_blacklist)
-        ? overrides.label_blacklist.join(', ')
-        : String(overrides.label_blacklist || ''),
+      blacklistText: projectedBlacklistText,
       linearRecordLayout: linearLayout,
       annotationSets: normalizeAnnotationSets(options.annotations?.sets),
       circularConservation: renderRequest.mode === 'circular'

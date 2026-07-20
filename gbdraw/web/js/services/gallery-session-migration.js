@@ -316,6 +316,8 @@ const promoteGuiAuthoredSession = (session, args) => {
     renderRequest: session.renderRequest,
     resources: session.resources,
     webFiles: session.webFiles || {},
+    legacyFiles: session.files,
+    fileBindings: session.cliInvocation?.fileBindings,
     repairInvalidComparisonHeight: Number(session.version) <= 33
   });
   const config = mergedGuiConfig(session, projection);

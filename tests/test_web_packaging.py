@@ -395,20 +395,22 @@ def test_web_canonical_session_request_codec() -> None:
         pytest.skip("node is not available")
 
     subprocess.run([node, "tests/web/session-request.test.mjs"], check=True, cwd=REPO_ROOT)
-    subprocess.run(
-        [
-            node,
-            "tests/web/session-request.test.mjs",
-            "--project-session",
-            str(
-                GALLERY_ROOT
-                / "sessions"
-                / "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
-            ),
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-    )
+    for session_name in (
+        "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+        "majanivirus_orthogroup.gbdraw-session.json.gz",
+        "tobacco-chloroplast.gbdraw-session.json",
+        "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+    ):
+        subprocess.run(
+            [
+                node,
+                "tests/web/session-request.test.mjs",
+                "--project-session",
+                str(GALLERY_ROOT / "sessions" / session_name),
+            ],
+            check=True,
+            cwd=REPO_ROOT,
+        )
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(
         encoding="utf-8"
     )
@@ -4323,6 +4325,203 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
             "FastaA (4 bp)",
             "FastaB (6 bp)",
         ]
+        browser.close()
+
+
+@pytest.mark.slow
+def test_web_session_round_trip_preserves_losat_and_source_names(tmp_path: Path) -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    session_path = tmp_path / "losat-round-trip.gbdraw-session.json.gz"
+    historical_session_path = (
+        GALLERY_ROOT / "sessions" / "hepatoplasmataceae_collinear.gbdraw-session.json.gz"
+    )
+    historical_session = load_session(historical_session_path)
+    historical_losat = json.loads(json.dumps(historical_session["config"]["losat"]))
+    if historical_losat.get("parallelWorkers") is None:
+        historical_losat.pop("parallelWorkers", None)
+    custom_losat = {
+        "outfmt": "6",
+        "parallelWorkers": "3",
+        "executionMode": "threaded",
+        "totalThreadBudget": "12",
+        "threadsPerJob": "4",
+        "blastn": {"task": "dc-megablast"},
+        "blastp": {
+            "mode": "collinear",
+            "maxHits": 17,
+            "candidateLimit": None,
+            "orthogroupMembershipMode": "anchor_core_v1",
+            "orthogroupMemberMaxHits": 13,
+            "collinearMinAnchors": 4,
+            "collinearMaxGeneGap": 6,
+            "collinearMaxDiagonalDrift": 2,
+            "collinearMaxConflictsInMergeGap": 3,
+            "collinearMaxParalogLinksPerOrthogroup": 7,
+            "collinearColorMode": "orientation_identity",
+            "collinearUnitMode": "locus",
+            "collinearAnchorMode": "rbh",
+            "collinearSearchScope": "all",
+        },
+    }
+    genbank_template = """LOCUS       {record_id} 4 bp DNA linear UNK 01-JAN-1980
+DEFINITION  Session round-trip fixture.
+ACCESSION   {record_id}
+VERSION     {record_id}
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+"""
+
+    ensure_prepared_browser_wheel()
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__")
+        page.evaluate(
+            """({ losat, firstText, secondText }) => {
+                window.__gbdrawDialogMessages = [];
+                window.alert = (message) => window.__gbdrawDialogMessages.push(String(message || ''));
+                window.confirm = () => true;
+                const app = window.__GBDRAW_APP__;
+                app.mode = 'linear';
+                app.sessionTitle = 'LOSAT round trip';
+                app.blastSource = 'losat';
+                app.losatProgram = 'blastp';
+                Object.assign(app.losat, losat);
+                Object.assign(app.adv, {
+                    rich_feature_popup: false,
+                    feature_width_circular: 12,
+                    depth_width_circular: 0.15,
+                    gc_content_width_circular: 0.16,
+                    gc_content_radius_circular: 0.61,
+                    gc_skew_width_circular: 0.17,
+                    gc_skew_radius_circular: 0.49
+                });
+                app.setLinearSeqPrimaryFile(0, 'gb', new File([firstText], 'first-original.gbk'));
+                app.addLinearSeq();
+                app.setLinearSeqPrimaryFile(1, 'gb', new File([secondText], 'second-original.gbk'));
+                app.linearSeqs[0].losat_gencode = 11;
+                app.linearSeqs[0].losat_filename = 'first-vs-second.losat.tsv';
+                app.linearSeqs[1].losat_gencode = 4;
+            }""",
+            {
+                "losat": custom_losat,
+                "firstText": genbank_template.format(record_id="FIRST"),
+                "secondText": genbank_template.format(record_id="SECOND"),
+            },
+        )
+
+        with page.expect_download() as download_info:
+            page.get_by_role("button", name="Save Session", exact=True).click()
+        download_info.value.save_as(session_path)
+
+        page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                app.blastSource = 'files';
+                app.losatProgram = 'blastn';
+                app.losat.executionMode = 'serial';
+                app.losat.threadsPerJob = 'auto';
+            }"""
+        )
+        page.locator('input[type="file"][accept^=".json,"]').set_input_files(str(session_path))
+        page.wait_for_function(
+            """() => window.__gbdrawDialogMessages
+                .includes('Session loaded successfully!')""",
+            timeout=60_000,
+        )
+        restored = page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                return {
+                    blastSource: app.blastSource,
+                    losatProgram: app.losatProgram,
+                    losat: JSON.parse(JSON.stringify(app.losat)),
+                    webOnlyAdv: {
+                        richFeaturePopup: app.adv.rich_feature_popup,
+                        featureWidth: app.adv.feature_width_circular,
+                        depthWidth: app.adv.depth_width_circular,
+                        gcContentWidth: app.adv.gc_content_width_circular,
+                        gcContentRadius: app.adv.gc_content_radius_circular,
+                        gcSkewWidth: app.adv.gc_skew_width_circular,
+                        gcSkewRadius: app.adv.gc_skew_radius_circular
+                    },
+                    sequences: app.linearSeqs.map((sequence) => ({
+                        gbName: sequence.gb?.name || '',
+                        losatGencode: sequence.losat_gencode,
+                        losatFilename: sequence.losat_filename
+                    }))
+                };
+            }"""
+        )
+        assert restored == {
+            "blastSource": "losat",
+            "losatProgram": "blastp",
+            "losat": custom_losat,
+            "webOnlyAdv": {
+                "richFeaturePopup": False,
+                "featureWidth": 12,
+                "depthWidth": 0.15,
+                "gcContentWidth": 0.16,
+                "gcContentRadius": 0.61,
+                "gcSkewWidth": 0.17,
+                "gcSkewRadius": 0.49,
+            },
+            "sequences": [
+                {
+                    "gbName": "first-original.gbk",
+                    "losatGencode": 11,
+                    "losatFilename": "first-vs-second.losat.tsv",
+                },
+                {
+                    "gbName": "second-original.gbk",
+                    "losatGencode": 4,
+                    "losatFilename": "",
+                },
+            ],
+        }
+
+        page.evaluate("() => { window.__gbdrawDialogMessages = []; }")
+        page.locator('input[type="file"][accept^=".json,"]').set_input_files(
+            str(historical_session_path)
+        )
+        page.wait_for_function(
+            """() => window.__gbdrawDialogMessages
+                .includes('Session loaded successfully!') &&
+                window.__GBDRAW_APP__?.linearSeqs?.length === 5""",
+            timeout=60_000,
+        )
+        historical_restored = page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                return {
+                    blastSource: app.blastSource,
+                    losatProgram: app.losatProgram,
+                    losat: JSON.parse(JSON.stringify(app.losat)),
+                    genbankNames: app.linearSeqs.map((sequence) => sequence.gb?.name || '')
+                };
+            }"""
+        )
+        assert historical_restored == {
+            "blastSource": "losat",
+            "losatProgram": "blastp",
+            "losat": historical_losat,
+            "genbankNames": [
+                "AP027078.gb",
+                "AP027131.gb",
+                "AP027133.gb",
+                "AP027132.gb",
+                "NZ_CP006932.gb",
+            ],
+        }
         browser.close()
 
 
