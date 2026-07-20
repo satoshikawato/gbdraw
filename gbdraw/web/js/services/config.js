@@ -64,6 +64,7 @@ import {
   buildCanonicalSessionRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
+import { promoteGallerySessionToCanonicalV3 } from './gallery-session-migration.js';
 import { downloadCompressedSession, readSessionText } from './session-file.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
@@ -999,7 +1000,13 @@ const preflightSessionImport = (rawData) => {
   const sourceSessionVersion = rawData.version;
   const normalizedData = normalizeSessionData(rawData);
   validateSessionAuthorityInventory(normalizedData, sourceSessionVersion);
-  const data = migrateSessionDataToCurrent(normalizedData, sourceSessionVersion);
+  const promotedData = (
+    sourceSessionVersion >= 31 &&
+    Number(normalizedData.renderRequest?.schema) === 2
+  )
+    ? promoteGallerySessionToCanonicalV3(normalizedData)
+    : normalizedData;
+  const data = migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
   const canonicalProjection = sourceSessionVersion >= 31
     ? projectCanonicalSessionRequest({
         renderRequest: data.renderRequest,
