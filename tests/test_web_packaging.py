@@ -391,6 +391,18 @@ def test_web_canonical_session_request_codec() -> None:
     assert "files: serializedFiles" not in config_source
 
 
+def test_web_gallery_session_migration() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/gallery-session-migration.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
 def test_web_losat_settings_preserve_requested_thread_count() -> None:
     node = shutil.which("node")
     if node is None:
@@ -1022,6 +1034,61 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert any(feature.get("qualifiers") for feature in features)
             assert any(feature.get("location_parts") for feature in features)
             assert all(feature.get("nucleotide_sequence") for feature in features)
+            assigned_orthogroups = {
+                str(feature.get("orthogroup_id") or "")
+                for feature in features
+                if feature.get("orthogroup_id")
+            }
+            if assigned_orthogroups:
+                orthogroups = {
+                    str(group.get("id") or ""): group
+                    for group in payload.get("orthogroups", [])
+                }
+                assert assigned_orthogroups <= orthogroups.keys()
+                rendered_features_by_id = {
+                    str(feature["svg_id"]): feature for feature in features
+                }
+                biological_features = payload.get("biological_features") or features
+                biological_features_by_key = {
+                    (
+                        int(
+                            feature.get(
+                                "record_idx",
+                                feature.get("record_index", feature.get("recordIndex", -1)),
+                            )
+                        ),
+                        str(
+                            feature.get("stable_feature_id")
+                            or feature.get("stable_svg_id")
+                            or feature.get("svg_id")
+                            or ""
+                        ),
+                    ): feature
+                    for feature in biological_features
+                }
+                for orthogroup_id in assigned_orthogroups:
+                    members = orthogroups[orthogroup_id].get("members", [])
+                    assert members
+                    for member in members:
+                        stable_id = str(
+                            member.get("stable_feature_svg_id")
+                            or member.get("stableFeatureSvgId")
+                            or member.get("feature_svg_id")
+                            or member.get("featureSvgId")
+                            or ""
+                        )
+                        record_index = int(
+                            member.get("record_index", member.get("recordIndex", -1))
+                        )
+                        feature = biological_features_by_key[(record_index, stable_id)]
+                        assert feature.get("nucleotide_sequence")
+                        rendered_id = str(
+                            member.get("rendered_feature_svg_id")
+                            or member.get("renderedFeatureSvgId")
+                            or ""
+                        )
+                        if rendered_id:
+                            assert rendered_id in rendered_features_by_id
 
         assert thumbnail_header.startswith(b"RIFF")
         assert b"WEBP" in thumbnail_header
@@ -1572,7 +1639,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         assert needle not in standalone_source
 
     assert "popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'" in export_source
-    assert "features: state.extractedFeatures.value" in export_source
+    assert "state.biologicalFeatures?.value" in export_source
+    assert "features: biologicalFeatures" in export_source
     assert "editableLabels: state.editableLabels.value" in export_source
     assert "orthogroups: state.orthogroups.value" in export_source
     assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
@@ -1910,6 +1978,44 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         assert(hoverLabels.includes('Orthogroup'), `Hover orthogroup row missing: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Subject'), `Hover subject row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
+
+        const hiddenMemberPayload = buildPairwiseMatchPayload(element, {{
+          featureLookup,
+          sourceFeatures: [{{
+            svg_id: 'fh',
+            stable_svg_id: 'fh',
+            record_idx: 2,
+            record_id: 'record_hidden',
+            start: 149,
+            end: 180,
+            strand: '+',
+            product: 'hidden product',
+            qualifiers: {{ protein_id: ['WP_HIDDEN.1'], translation: ['MHIDDEN'] }},
+            nucleotide_sequence: 'ATGCCCTAA',
+            amino_acid_sequence: 'MHIDDEN'
+          }}],
+          orthogroups: [{{
+            id: 'og_1',
+            name: 'rpoB',
+            member_count: 3,
+            record_coverage_count: 3,
+            members: [
+              {{ recordId: 'record_a', recordIndex: 0, featureSvgId: 'fq', sourceProteinId: 'WP_000001.1' }},
+              {{ recordId: 'record_b', recordIndex: 1, featureSvgId: 'fs', sourceProteinId: 'WP_000002.1' }},
+              {{
+                recordId: 'record_hidden', recordIndex: 2, featureSvgId: 'fh',
+                stableFeatureSvgId: 'fh', sourceProteinId: 'WP_HIDDEN.1',
+                start: 149, end: 180, strand: '+', product: 'hidden product'
+              }}
+            ]
+          }}]
+        }});
+        const hiddenRows = hiddenMemberPayload.sections[0].memberRows;
+        assert(hiddenRows.length === 3, JSON.stringify(hiddenRows));
+        const hiddenRow = hiddenRows.find((row) => row.proteinId === 'WP_HIDDEN.1');
+        assert(hiddenRow && hiddenRow.ntFasta.includes('ATGCCCTAA'), JSON.stringify(hiddenRow));
+        assert(hiddenRow && hiddenRow.aaFasta.includes('MHIDDEN'), JSON.stringify(hiddenRow));
+        assert(hiddenRow && hiddenRow.canOpen === false, JSON.stringify(hiddenRow));
 
         const fallbackPayload = buildPairwiseMatchPayload(element, {{
           featureLookup,

@@ -358,6 +358,12 @@ assert.equal(canonical.renderRequest.output.prefix, 'web-session');
 assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 
+state.adv.circular_track_slots_axis_index = 2;
+const circularSlotsDisabled = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(circularSlotsDisabled.renderRequest.diagramOptions.tracks.circularTrackSlots, null);
+assert.equal(circularSlotsDisabled.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, null);
+state.adv.circular_track_slots_axis_index = null;
+
 const legacyRepeatCanonical = structuredClone(canonical);
 legacyRepeatCanonical.renderRequest.schema = 2;
 legacyRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
@@ -451,7 +457,11 @@ assert.throws(
 
 const blastTable = { ...genbank, name: 'hits.tsv', data: btoa('ref\tcmp\t99\t4\t0\t0\t1\t4\t4\t1\t1e-20\t50\n') };
 const comparisonFasta = { ...genbank, name: 'comparison.fna', data: btoa('>cmp\nAACCGG\n') };
+state.circularConservation.reference = 'subject';
+state.circularConservation.labels = 'Comparison';
 state.circularConservation.series = [{ label: 'Comparison', color: '#E15759' }];
+state.circularConservation.ring_width = 14;
+state.circularConservation.ring_gap = 3;
 const conservationCanonical = buildCanonicalSessionRequest({
   state,
   filesData: {
@@ -466,7 +476,30 @@ assert.equal(
   projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0].data,
   comparisonFasta.data
 );
+const conservationProjection = projectCanonicalSessionRequest(conservationCanonical);
+assert.equal(conservationProjection.config.circularConservation.enabled, true);
+assert.equal(conservationProjection.config.circularConservation.source, 'upload');
+assert.equal(conservationProjection.config.circularConservation.reference, 'subject');
+assert.equal(conservationProjection.config.circularConservation.labels, 'Comparison');
+assert.equal(conservationProjection.config.circularConservation.ring_width, 14);
+assert.equal(conservationProjection.config.circularConservation.ring_gap, 3);
+assert.deepEqual(
+  conservationProjection.config.circularConservation.series.map((entry) => ({
+    sourceIndex: entry.sourceIndex,
+    label: entry.label,
+    color: entry.color
+  })),
+  [{ sourceIndex: 0, label: 'Comparison', color: '#E15759' }]
+);
+assert.equal(
+  conservationProjection.config.circularConservation.series[0].fileName,
+  conservationProjection.files.c_conservation_blasts[0].name
+);
+state.circularConservation.reference = 'auto';
+state.circularConservation.labels = '';
 state.circularConservation.series = [];
+state.circularConservation.ring_width = null;
+state.circularConservation.ring_gap = null;
 
 state.annotationSets = [{
   id: 'review',
@@ -574,6 +607,7 @@ assert.match(combinedCircularGenbank, /WEBTWO/);
 state.mode.value = 'linear';
 state.lInputType.value = 'gb';
 state.adv.comparison_height = 42.5;
+state.adv.linear_track_slots_axis_index = 2;
 const linearFilesData = {
   linearSeqs: [
     { uid: 'first', gb: genbank, region_record_id: '', region_start: null, region_end: null, region_reverse: false },
@@ -583,6 +617,9 @@ const linearFilesData = {
   linearComparisons: []
 };
 const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots, null);
+assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, null);
+state.adv.linear_track_slots_axis_index = null;
 assert.equal(linearCanonical.renderRequest.diagramOptions.configOverrides.comparison_height, 42.5);
 assert.equal(linearCanonical.renderRequest.records[0].selector, null);
 assert.deepEqual(linearCanonical.renderRequest.records[1].selector, { kind: 'recordId', value: 'RecA' });
@@ -631,6 +668,79 @@ assert.deepEqual(
 assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
 assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
 assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
+
+const pythonConfigCanonical = structuredClone(linearCanonical);
+delete pythonConfigCanonical.renderRequest.diagramOptions.configOverrides;
+pythonConfigCanonical.renderRequest.diagramOptions.config = {
+  canvas: {
+    show_gc: true,
+    show_skew: true,
+    show_depth: false,
+    show_labels: 'orthogroup_top',
+    strandedness: true,
+    resolve_overlaps: true,
+    circular: { track_type: 'spreadout', allow_inner_labels: false },
+    linear: {
+      align_center: true,
+      keep_definition_left_aligned: true,
+      track_layout: 'above',
+      track_axis_gap: 7,
+      ruler_on_axis: true,
+      comparison_height: 31,
+      default_gc_height: 18,
+      depth_height: 12,
+      normalize_length: true
+    }
+  },
+  labels: {
+    rendering: 'auto',
+    spacing: { circular: 4, linear: 5 },
+    circular: { placement: 'radial' },
+    linear: { placement: 'strand', rotation: 30 },
+    filtering: { blacklist_keywords: ['hypothetical'] }
+  },
+  objects: {
+    definition: {
+      linear: {
+        show_replicon: true,
+        show_accession: false,
+        show_length: false,
+        line_styles: { name: { font_weight: 'bold', fill: '#112233' } }
+      }
+    },
+    blast_match: { style: 'curve' }
+  }
+};
+const pythonConfigProjection = projectCanonicalSessionRequest(pythonConfigCanonical);
+assert.equal(pythonConfigProjection.config.form.separate_strands, true);
+assert.equal(pythonConfigProjection.config.form.align_center, true);
+assert.equal(pythonConfigProjection.config.form.keep_definition_left_aligned, true);
+assert.equal(pythonConfigProjection.config.form.linear_track_layout, 'above');
+assert.equal(pythonConfigProjection.config.form.linear_ruler_on_axis, true);
+assert.equal(pythonConfigProjection.config.form.normalize_length, true);
+assert.equal(pythonConfigProjection.config.form.show_labels_linear, 'orthogroup_top');
+assert.equal(pythonConfigProjection.config.adv.comparison_height, 31);
+assert.equal(pythonConfigProjection.config.adv.track_axis_gap, 7);
+assert.equal(pythonConfigProjection.config.adv.linear_show_replicon, true);
+assert.equal(pythonConfigProjection.config.adv.linear_show_accession, false);
+assert.equal(pythonConfigProjection.config.adv.linear_show_length, false);
+assert.deepEqual(
+  pythonConfigProjection.config.adv.linear_definition_line_styles,
+  { name: { font_weight: 'bold', fill: '#112233' } }
+);
+assert.equal(pythonConfigProjection.config.adv.pairwise_match_style, 'curve');
+assert.equal(pythonConfigProjection.config.blacklistText, 'hypothetical');
+
+const explicitOverrideCanonical = structuredClone(pythonConfigCanonical);
+explicitOverrideCanonical.renderRequest.diagramOptions.configOverrides = {
+  strandedness: false,
+  align_center: false,
+  keep_definition_left_aligned: false
+};
+const explicitOverrideProjection = projectCanonicalSessionRequest(explicitOverrideCanonical);
+assert.equal(explicitOverrideProjection.config.form.separate_strands, false);
+assert.equal(explicitOverrideProjection.config.form.align_center, false);
+assert.equal(explicitOverrideProjection.config.form.keep_definition_left_aligned, false);
 
 state.adv.comparison_height = null;
 const autoHeightCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });

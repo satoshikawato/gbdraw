@@ -39,8 +39,11 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
   stripTransientPreviewState(clone, { stripCursor: false });
   stripPreviewFeatureSearchClasses(clone);
   if (interactive) {
+    const biologicalFeatures = Array.isArray(state.biologicalFeatures?.value) && state.biologicalFeatures.value.length > 0
+      ? state.biologicalFeatures.value
+      : state.extractedFeatures.value;
     enrichSvgWithStandaloneInteractivity(clone, {
-      features: state.extractedFeatures.value,
+      features: biologicalFeatures,
       popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich',
       editableLabels: state.editableLabels.value,
       labelTextFeatureOverrides: state.labelTextFeatureOverrides,

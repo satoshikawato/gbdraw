@@ -1027,6 +1027,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     outputs = []
     track_slot_geometry_records = []
     session_feature_metadata = []
+    session_biological_feature_metadata = []
 
 
 
@@ -1177,6 +1178,9 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 interactive_context=interactive_context,
             )
             session_feature_metadata.extend(interactive_context.features)
+            session_biological_feature_metadata.extend(
+                interactive_context.biological_features
+            )
         else:
             save_figure(canvas, out_formats)
         rendered_svg = make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name)
@@ -1271,6 +1275,9 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                     interactive_context=interactive_context,
                 )
                 session_feature_metadata.extend(interactive_context.features)
+                session_biological_feature_metadata.extend(
+                    interactive_context.biological_features
+                )
             else:
                 save_figure(canvas, out_formats)
             rendered_svg = make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name)
@@ -1371,6 +1378,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         render_formats=tuple(out_formats),
         outputs=tuple(outputs),
         feature_metadata=tuple(session_feature_metadata),
+        biological_feature_metadata=tuple(session_biological_feature_metadata),
         run_metadata=build_track_slot_geometry_run_metadata(
             mode="circular",
             records=track_slot_geometry_records,

@@ -16,6 +16,7 @@ from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.regions import apply_region_specs, parse_region_specs
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_gff_fasta_payload
+from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 from gbdraw.features.visibility import compile_feature_visibility_rules, should_render_feature
 
 
@@ -344,6 +345,10 @@ def test_web_feature_extraction_region_uses_absolute_display_coordinates(
         {"start": 9, "end": 20, "strand": "+", "display": "10..20"}
     ]
     assert feature["svg_id"] == compute_feature_hash(
+        record.features[0],
+        record_id=record.id,
+    )
+    assert feature["rendered_feature_svg_id"] == compute_feature_hash(
         cropped_record.features[0],
         record_id=cropped_record.id,
     )
@@ -367,10 +372,14 @@ def test_web_feature_extraction_region_reverse_uses_absolute_display_coordinates
 
     assert feature["start"] == 89
     assert feature["end"] == 99
-    assert feature["strand"] == "-"
+    assert feature["strand"] == "+"
     assert feature["location_parts"] == [
-        {"start": 89, "end": 99, "strand": "-", "display": "90..99"}
+        {"start": 89, "end": 99, "strand": "+", "display": "90..99"}
     ]
+    assert feature["svg_id"] == compute_feature_hash(
+        record.features[0],
+        record_id=record.id,
+    )
 
 
 def test_web_feature_selector_record_location_matches_visibility_rule(
@@ -440,3 +449,48 @@ def test_web_feature_selector_safety_scope_precedes_visibility_filtering(
     scope_types = [entry["feature_type"] for entry in payload["selector_safety_scope"]]
     assert scope_types == ["CDS", "misc_feature"]
     assert payload["selector_safety_scope"][0]["selector"]["qualifiers"]["locus_tag"] == ["HIDDEN_0006"]
+
+
+def test_biological_feature_catalog_keeps_features_excluded_from_rendering() -> None:
+    hidden_cds = SeqFeature(
+        FeatureLocation(0, 9, strand=1),
+        type="CDS",
+        qualifiers={
+            "locus_tag": ["HIDDEN_0007"],
+            "protein_id": ["WP_HIDDEN.1"],
+            "translation": ["MK"],
+        },
+    )
+    visible_trna = SeqFeature(
+        FeatureLocation(12, 21, strand=-1),
+        type="tRNA",
+        qualifiers={"locus_tag": ["VISIBLE_0007"]},
+    )
+    record = SeqRecord(
+        Seq("ATGAAATAAGGGTTTCCCAAA"),
+        id="NC_000007",
+        features=[hidden_cds, visible_trna],
+    )
+
+    legacy_payload = extract_features_from_records_payload(
+        [record],
+        selected_features=["tRNA"],
+    )
+    payload = extract_features_from_records_payload(
+        [record],
+        selected_features=["tRNA"],
+        include_biological_features=True,
+    )
+
+    assert "biological_features" not in legacy_payload
+    assert payload["features"] == legacy_payload["features"]
+    assert [feature["type"] for feature in payload["features"]] == ["tRNA"]
+    assert [feature["type"] for feature in payload["biological_features"]] == [
+        "CDS",
+        "tRNA",
+    ]
+    hidden = payload["biological_features"][0]
+    assert hidden["feature_index"] == 0
+    assert hidden["svg_id"] == hidden["stable_feature_id"] == hidden["stable_svg_id"]
+    assert hidden["nucleotide_sequence"] == "ATGAAATAA"
+    assert hidden["amino_acid_sequence"] == "MK"

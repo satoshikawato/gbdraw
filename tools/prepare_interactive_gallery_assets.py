@@ -297,7 +297,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
             "GCF_000196095.1_ASM19609v1_genomic.gbff",
             "GCF_000354175.2_ASM35417v2_genomic.gbff",
         ),
-        sync_result_svg=False,
         compressed_metadata=True,
         compressed_session=True,
         source_note=(
@@ -481,11 +480,19 @@ def _session_interactive_context(session: dict[str, Any]) -> InteractiveSvgConte
     legend = editor_state.get("legend") if isinstance(editor_state.get("legend"), dict) else {}
 
     features = feature_state.get("extractedFeatures")
+    biological_features = feature_state.get("biologicalFeatures")
     orthogroups = orthogroup_state.get("groups")
     legend_entries = legend.get("entries")
     current_colors = ui.get("appliedPaletteColors") or config.get("colors")
     return InteractiveSvgContext(
         features=features if isinstance(features, list) else (),
+        biological_features=(
+            biological_features
+            if isinstance(biological_features, list)
+            else features
+            if isinstance(features, list)
+            else ()
+        ),
         orthogroups=orthogroups if isinstance(orthogroups, list) else (),
         legend_entries=legend_entries if isinstance(legend_entries, list) else (),
         current_colors=current_colors if isinstance(current_colors, dict) else {},
@@ -565,7 +572,12 @@ def _validate_source_feature_ids(
         _SVG_PART_SUFFIX_RE.sub("", match)
         for match in _SVG_FEATURE_ID_RE.findall(source)
     }
-    missing_ids = sorted(rendered_ids - metadata_ids)
+    missing_ids = sorted(
+        rendered_id
+        for rendered_id in rendered_ids
+        if rendered_id not in metadata_ids
+        and _RENDERED_RECORD_SUFFIX_RE.sub("", rendered_id) not in metadata_ids
+    )
     if missing_ids:
         preview = ", ".join(missing_ids[:5])
         raise ValueError(
@@ -601,6 +613,166 @@ def _validate_source_feature_ids(
         )
 
 
+def _metadata_record_index(value: object) -> int | None:
+    try:
+        return int(value) if value is not None and value != "" else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _metadata_stable_feature_id(value: dict[str, Any]) -> str:
+    stable_id = str(
+        value.get("stable_feature_svg_id")
+        or value.get("stableFeatureSvgId")
+        or value.get("stable_feature_id")
+        or value.get("stable_svg_id")
+        or value.get("feature_svg_id")
+        or value.get("featureSvgId")
+        or value.get("svg_id")
+        or ""
+    ).strip()
+    return _RENDERED_RECORD_SUFFIX_RE.sub("", stable_id)
+
+
+def _validate_interactive_orthogroup_payload(
+    example: GallerySessionExample,
+    payload: dict[str, Any],
+) -> None:
+    features = [item for item in payload.get("features", []) if isinstance(item, dict)]
+    biological_features = [
+        item for item in payload.get("biological_features", []) if isinstance(item, dict)
+    ]
+    if not biological_features:
+        biological_features = features
+    features_by_group: dict[str, list[dict[str, Any]]] = {}
+    for feature in biological_features:
+        group_id = str(feature.get("orthogroup_id") or "").strip()
+        if group_id:
+            features_by_group.setdefault(group_id, []).append(feature)
+    groups = [item for item in payload.get("orthogroups", []) if isinstance(item, dict)]
+    groups_by_id = {str(group.get("id") or "").strip(): group for group in groups}
+    if not groups_by_id and not features_by_group:
+        return
+    missing_groups = sorted(features_by_group.keys() - groups_by_id.keys())
+    if missing_groups:
+        preview = ", ".join(missing_groups[:5])
+        raise ValueError(
+            f"{example.id} interactive metadata is missing {len(missing_groups)} "
+            f"orthogroup(s) referenced by features: {preview}"
+        )
+
+    rendered_features_by_id = {
+        str(feature.get("svg_id") or "").strip(): feature
+        for feature in features
+        if str(feature.get("svg_id") or "").strip()
+    }
+    biological_features_by_key: dict[tuple[int | None, str], dict[str, Any]] = {}
+    biological_features_by_stable_id: dict[str, list[dict[str, Any]]] = {}
+    for feature in biological_features:
+        stable_id = _metadata_stable_feature_id(feature)
+        if not stable_id:
+            continue
+        record_index = _metadata_record_index(
+            feature.get("record_idx", feature.get("record_index", feature.get("recordIndex")))
+        )
+        biological_features_by_key[(record_index, stable_id)] = feature
+        biological_features_by_stable_id.setdefault(stable_id, []).append(feature)
+
+    def feature_for_member(member: dict[str, Any]) -> dict[str, Any] | None:
+        stable_id = _metadata_stable_feature_id(member)
+        record_index = _metadata_record_index(
+            member.get("record_index", member.get("recordIndex"))
+        )
+        exact = biological_features_by_key.get((record_index, stable_id))
+        if exact is not None:
+            return exact
+        candidates = biological_features_by_stable_id.get(stable_id, [])
+        return candidates[0] if len(candidates) == 1 else None
+
+    problems: list[str] = []
+    for group_id, group in sorted(groups_by_id.items()):
+        assigned_features = features_by_group.get(group_id, [])
+        members = group.get("members")
+        members = [item for item in members if isinstance(item, dict)] if isinstance(members, list) else []
+        if not members:
+            problems.append(f"{group_id}: no members")
+            continue
+        member_keys: set[tuple[int | None, str]] = set()
+        for member in members:
+            stable_id = _metadata_stable_feature_id(member)
+            record_index = _metadata_record_index(
+                member.get("record_index", member.get("recordIndex"))
+            )
+            member_keys.add((record_index, stable_id))
+            feature = feature_for_member(member)
+            if feature is None:
+                problems.append(f"{group_id}: unresolved member {stable_id or '<empty>'}")
+                continue
+            if not str(feature.get("nucleotide_sequence") or "").strip():
+                problems.append(f"{group_id}: member {stable_id} has no nucleotide sequence")
+            rendered_id = str(
+                member.get("rendered_feature_svg_id")
+                or member.get("renderedFeatureSvgId")
+                or ""
+            ).strip()
+            if rendered_id and rendered_id not in rendered_features_by_id:
+                problems.append(
+                    f"{group_id}: rendered member {stable_id} points to missing {rendered_id}"
+                )
+        for feature in assigned_features:
+            stable_id = _metadata_stable_feature_id(feature)
+            record_index = _metadata_record_index(
+                feature.get("record_idx", feature.get("record_index", feature.get("recordIndex")))
+            )
+            if (record_index, stable_id) not in member_keys:
+                problems.append(
+                    f"{group_id}: assigned feature {stable_id or '<empty>'} is not a member"
+                )
+
+    if problems:
+        preview = "; ".join(problems[:5])
+        raise ValueError(
+            f"{example.id} interactive orthogroup metadata is inconsistent "
+            f"({len(problems)} problem(s)): {preview}"
+        )
+
+
+def _validate_session_interactive_orthogroups(
+    example: GallerySessionExample,
+    session: dict[str, Any],
+) -> None:
+    context = _session_interactive_context(session)
+    _validate_interactive_orthogroup_payload(
+        example,
+        {
+            "features": list(context.features),
+            "biological_features": list(context.biological_features),
+            "orthogroups": list(context.orthogroups),
+        },
+    )
+
+
+def _validate_gallery_svg_orthogroups(
+    example: GallerySessionExample,
+    output: str,
+) -> None:
+    root = ET.fromstring(output)
+    metadata = next(
+        (
+            element
+            for element in root.iter()
+            if element.get("id") == "gbdraw-interactive-feature-metadata"
+        ),
+        None,
+    )
+    if metadata is None:
+        raise ValueError(f"Interactive metadata is missing from {example.id}")
+    payload = json.loads(metadata.text or "{}")
+    if not isinstance(payload, dict):
+        raise ValueError(f"Interactive metadata is invalid in {example.id}")
+    _validate_interactive_orthogroup_payload(example, payload)
+
+
 def _read_or_create_source_svg(
     example: GallerySessionExample,
     session: dict[str, Any],
@@ -633,6 +805,8 @@ def _write_gallery_svg(
         if example.interactive_svg
         else source
     )
+    if example.interactive_svg:
+        _validate_gallery_svg_orthogroups(example, output)
     if example.compressed_metadata:
         root = ET.fromstring(output)
         metadata = next(
@@ -694,7 +868,11 @@ def _remove_stale_assets() -> None:
             path.unlink()
 
 
-def _render_thumbnail(example: GallerySessionExample) -> None:
+def _render_thumbnail(
+    example: GallerySessionExample,
+    *,
+    allow_placeholder: bool = True,
+) -> None:
     source_path = example.source_svg_path if example.source_svg_path.exists() else example.output_svg_path
     try:
         png_bytes = cairosvg.svg2png(
@@ -713,6 +891,8 @@ def _render_thumbnail(example: GallerySessionExample) -> None:
         top = (360 - image.height) // 2
         thumbnail.paste(image, (left, top))
     except Exception:
+        if not allow_placeholder:
+            raise
         thumbnail = Image.new("RGB", (640, 360), "#ffffff")
         draw = ImageDraw.Draw(thumbnail)
         draw.rectangle((24, 28, 616, 332), outline="#b9c7ca", width=2)
@@ -732,6 +912,12 @@ def _validate_source_assets(example: GallerySessionExample) -> None:
 
 
 def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, object]]:
+    for example in EXAMPLES:
+        _validate_session_interactive_orthogroups(
+            example,
+            _load_session(example),
+        )
+
     EXAMPLE_ROOT.mkdir(parents=True, exist_ok=True)
     SESSION_ROOT.mkdir(parents=True, exist_ok=True)
     SOURCE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -750,7 +936,7 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
             _sync_session_result_svg(example, session, source)
         _write_gallery_svg(example, session, source)
         _validate_source_assets(example)
-        _render_thumbnail(example)
+        _render_thumbnail(example, allow_placeholder=not refresh_sources)
 
         entry = {
             "id": example.id,

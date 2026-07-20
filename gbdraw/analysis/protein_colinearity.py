@@ -29,8 +29,12 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
+from gbdraw.core.record_metadata import (
+    _absolute_display_interval,
+    _read_coord_map as _read_record_coord_map,
+)
 from gbdraw.exceptions import ParseError, ValidationError
-from gbdraw.features.colors import compute_feature_hash
+from gbdraw.features.ids import compute_feature_hash_from_location_parts
 from gbdraw.features.visibility import should_include_feature_in_analysis
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
@@ -932,7 +936,13 @@ def _cds_span(feature: SeqFeature) -> tuple[int, int, int | None] | None:
     return start, end, strand
 
 
-def _feature_hash_parts(feature: SeqFeature) -> tuple[tuple[int, int, int | None], ...]:
+def _feature_hash_parts(
+    feature: SeqFeature,
+    coord_base: int = 1,
+    coord_step: int = 1,
+) -> tuple[tuple[int, int, int | None], ...]:
+    """Return hash parts in the source-record biological coordinate system."""
+
     location = feature.location
     if location is None:
         return ()
@@ -943,7 +953,18 @@ def _feature_hash_parts(feature: SeqFeature) -> tuple[tuple[int, int, int | None
     parts: list[tuple[int, int, int | None]] = []
     for part in raw_parts:
         strand = part.strand if part.strand in {-1, 1} else None
-        parts.append((int(part.start), int(part.end), strand))
+        start, end = _absolute_display_interval(
+            int(part.start),
+            int(part.end),
+            coord_base,
+            coord_step,
+        )
+        biological_strand = (
+            int(strand) * (1 if int(coord_step) >= 0 else -1)
+            if strand is not None
+            else None
+        )
+        parts.append((start, end, biological_strand))
     return tuple(parts)
 
 
@@ -970,6 +991,7 @@ def extract_cds_proteins(
 
     for record_index, record in enumerate(records):
         global_record_index = record_index + record_index_offset
+        coord_base, coord_step = _read_record_coord_map(record)
         record_candidates: list[_CdsProteinCandidate] = []
         cds_count = 0
         feature_items = _iter_record_features(record)
@@ -998,7 +1020,7 @@ def extract_cds_proteins(
                 continue
 
             cds_count += 1
-            hash_parts = _feature_hash_parts(feature)
+            hash_parts = _feature_hash_parts(feature, coord_base, coord_step)
             hash_start, hash_end, hash_strand = hash_parts[0] if hash_parts else (None, None, None)
             synthetic_protein_id = f"gbd_r{global_record_index + 1:04d}_cds{cds_count:06d}"
             source_protein_id = _first_qualifier(feature, "protein_id")
@@ -1038,7 +1060,11 @@ def extract_cds_proteins(
                     label=label,
                     protein_length=len(protein_sequence),
                     sequence=protein_sequence,
-                    feature_svg_id=compute_feature_hash(feature, record_id=record.id),
+                    feature_svg_id=compute_feature_hash_from_location_parts(
+                        str(feature.type or ""),
+                        hash_parts,
+                        record_id=record.id,
+                    ),
                     gene=gene,
                     product=product,
                     note=note,

@@ -50,6 +50,7 @@ class DiagramRunResult:
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
     canonical_request: DiagramRequest | None = None
+    biological_feature_metadata: tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -283,11 +284,14 @@ def save_session_sidecar_if_requested(
         canonical_request=run_result.canonical_request,
     )
     payload.pop("files", None)
-    if run_result.feature_metadata:
+    if run_result.feature_metadata or run_result.biological_feature_metadata:
         features_payload = payload.setdefault("features", {})
         if isinstance(features_payload, dict):
             features_payload["extractedFeatures"] = [
                 dict(feature) for feature in run_result.feature_metadata
+            ]
+            features_payload["biologicalFeatures"] = [
+                dict(feature) for feature in run_result.biological_feature_metadata
             ]
     if run_result.orthogroup_metadata is not None:
         orthogroup_payload = payload.setdefault("orthogroupState", {})
@@ -375,11 +379,14 @@ def render_canonical_session_if_present(
             if svg_results:
                 adjunct["results"] = svg_results
             interactive_context = rendered.interactive_context
-            if interactive_context is not None and interactive_context.features:
+            if interactive_context is not None:
                 features = adjunct.get("features")
                 features = dict(features) if isinstance(features, Mapping) else {}
                 features["extractedFeatures"] = [
                     dict(feature) for feature in interactive_context.features
+                ]
+                features["biologicalFeatures"] = [
+                    dict(feature) for feature in interactive_context.biological_features
                 ]
                 adjunct["features"] = features
             if interactive_context is not None:

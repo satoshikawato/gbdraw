@@ -39,6 +39,7 @@ export const setupWatchers = ({
   const {
     manualSpecificRules,
     extractedFeatures,
+    biologicalFeatures,
     featureSelectorSafetyScope,
     addedLegendCaptions,
     layoutRepositionMode,
@@ -598,6 +599,7 @@ export const setupWatchers = ({
       }
 
       extractedFeatures.value = [];
+      if (biologicalFeatures) biologicalFeatures.value = [];
       featureSelectorSafetyScope.value = [];
       featureRecordIds.value = [];
       selectedFeatureRecordIdx.value = 0;

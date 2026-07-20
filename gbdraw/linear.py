@@ -2130,6 +2130,11 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         render_formats=tuple(out_formats),
         outputs=(rendered_svg,),
         feature_metadata=tuple(interactive_context.features) if interactive_context else (),
+        biological_feature_metadata=(
+            tuple(interactive_context.biological_features)
+            if interactive_context
+            else ()
+        ),
         orthogroup_metadata=(
             tuple(interactive_context.orthogroups)
             if interactive_context is not None

@@ -59,6 +59,11 @@ import {
   normalizePaletteColors
 } from './color-utils.js';
 import { extractFeatureMetadataForPreview } from './feature-metadata-extraction.js';
+import {
+  alignRecoveredFeatureIdsToRenderedSvg,
+  collectRenderedFeatureIdsFromResults,
+  featureRenderedCandidate
+} from './session-feature-metadata.js';
 import { serializeSpecificRules } from './file-imports.js';
 import { serializeFeatureVisibilityRules } from './feature-visibility.js';
 import {
@@ -732,6 +737,7 @@ export const createRunAnalysis = ({
     generatedCircularPlotTitlePosition,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
+    biologicalFeatures,
     featureSelectorSafetyScope,
     featureEditorStatus,
     featureExtractionPending,
@@ -915,6 +921,19 @@ export const createRunAnalysis = ({
   const setOrthogroupMetadata = (orthogroupPayload) => {
     const groups = Array.isArray(orthogroupPayload) ? orthogroupPayload : [];
     const index = new Map();
+    const indexOwners = new Map();
+    const ambiguousIndexKeys = new Set();
+    const addUniqueIndexEntry = (key, owner, entry) => {
+      if (!key || ambiguousIndexKeys.has(key)) return;
+      const existingOwner = indexOwners.get(key);
+      if (existingOwner && existingOwner !== owner) {
+        index.delete(key);
+        ambiguousIndexKeys.add(key);
+        return;
+      }
+      indexOwners.set(key, owner);
+      index.set(key, entry);
+    };
     const groupIds = [];
     groups.forEach((group) => {
       const orthogroupId = String(group?.id || '').trim();
@@ -926,10 +945,15 @@ export const createRunAnalysis = ({
       ).size || 0);
       const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
       const sourceRecordIndex = Number(group?.source_record_index);
-      members.forEach((member) => {
-        const featureSvgId = String(member?.featureSvgId || '').trim();
+      members.forEach((member, memberIndex) => {
+        const featureSvgIds = Array.from(new Set([
+          member?.stableFeatureSvgId,
+          member?.stable_feature_svg_id,
+          member?.featureSvgId,
+          member?.feature_svg_id
+        ].map((value) => String(value || '').trim()).filter(Boolean)));
         const recordIndex = Number(member?.recordIndex);
-        if (!featureSvgId || !Number.isInteger(recordIndex)) return;
+        if (featureSvgIds.length === 0 || !Number.isInteger(recordIndex)) return;
         const entry = {
           orthogroupId,
           orthogroupMemberCount: memberCount,
@@ -941,8 +965,15 @@ export const createRunAnalysis = ({
           orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
           orthogroupMember: member
         };
-        index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);
-        if (!index.has(featureSvgId)) index.set(featureSvgId, entry);
+        const owner = `${recordIndex}\u001f${member?.featureIndex ?? memberIndex}\u001f${orthogroupId}`;
+        featureSvgIds.forEach((featureSvgId) => {
+          addUniqueIndexEntry(
+            buildOrthogroupIndexKey(recordIndex, featureSvgId),
+            owner,
+            entry
+          );
+          addUniqueIndexEntry(featureSvgId, owner, entry);
+        });
       });
     });
     orthogroups.value = groups;
@@ -1059,7 +1090,20 @@ export const createRunAnalysis = ({
         return;
       }
 
-      extractedFeatures.value = metadata.extractedFeatures || [];
+      const renderedIdentities = collectRenderedFeatureIdsFromResults(results.value).allIdentities;
+      const alignedFeatures = alignRecoveredFeatureIdsToRenderedSvg({
+        features: metadata.extractedFeatures || [],
+        renderedIdentities,
+        writeRenderedSvgIdToSvgId: true
+      });
+      extractedFeatures.value = alignedFeatures.features
+        .filter((feature) => Boolean(featureRenderedCandidate(feature)));
+      if (biologicalFeatures) {
+        biologicalFeatures.value = alignRecoveredFeatureIdsToRenderedSvg({
+          features: metadata.biologicalFeatures || metadata.extractedFeatures || [],
+          renderedIdentities
+        }).features;
+      }
       featureSelectorSafetyScope.value = metadata.featureSelectorSafetyScope || [];
       featureRecordIds.value = metadata.featureRecordIds || [];
       selectedFeatureRecordIdx.value = Number.isInteger(metadata.selectedFeatureRecordIdx)
@@ -4513,6 +4557,7 @@ json.dumps({
 
       if (!isReflow) {
         extractedFeatures.value = [];
+        if (biologicalFeatures) biologicalFeatures.value = [];
         featureSelectorSafetyScope.value = [];
         featureRecordIds.value = [];
         selectedFeatureRecordIdx.value = 0;

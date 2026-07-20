@@ -86,6 +86,20 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
         render_formats=("interactive_svg",),
         outputs=(rendered_svg,),
         feature_metadata=({"svg_id": "feature-1", "orthogroup_id": "og_1"},),
+        biological_feature_metadata=(
+            {
+                "svg_id": "feature-1",
+                "stable_feature_id": "feature-1",
+                "record_idx": 0,
+                "nucleotide_sequence": "ATGC",
+            },
+            {
+                "svg_id": "feature-2",
+                "stable_feature_id": "feature-2",
+                "record_idx": 1,
+                "nucleotide_sequence": "ATGA",
+            },
+        ),
         orthogroup_metadata=(
             {
                 "id": "og_1",
@@ -110,6 +124,10 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     assert saved == sidecar
     payload = load_session(sidecar)
     assert payload["features"]["extractedFeatures"][0]["orthogroup_id"] == "og_1"
+    assert [
+        feature["stable_feature_id"]
+        for feature in payload["features"]["biologicalFeatures"]
+    ] == ["feature-1", "feature-2"]
     group = payload["orthogroupState"]["groups"][0]
     assert group["id"] == "og_1"
     assert [member["proteinId"] for member in group["members"]] == [

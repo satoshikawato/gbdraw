@@ -828,7 +828,7 @@ def _dataframe_json_rows(df):
     return rows
 
 def _serialize_orthogroups_payload(orthogroups):
-    return _serialize_shared_orthogroups_payload(orthogroups, include_stable_feature_ids=False)
+    return _serialize_shared_orthogroups_payload(orthogroups, include_stable_feature_ids=True)
 
 def _web_orthogroup_member_display_metadata(record_payloads):
     metadata = {}
@@ -1534,7 +1534,7 @@ def regenerate_definition_svg(
         }
     )
 
-def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None):
+def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
         gb_path,
@@ -1543,9 +1543,10 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
         reverse_flag=reverse_flag,
         selected_features=selected_features,
         feature_visibility_table_path=feature_visibility_table_path,
+        include_biological_features=include_biological_features,
     )
 
-def extract_features_from_gff_fasta(gff_path, fasta_path, mode="linear", region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None):
+def extract_features_from_gff_fasta(gff_path, fasta_path, mode="linear", region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from paired GFF3 and FASTA files for UI display."""
     return extract_features_from_gff_fasta_json(
         gff_path,
@@ -1556,6 +1557,7 @@ def extract_features_from_gff_fasta(gff_path, fasta_path, mode="linear", region_
         reverse_flag=reverse_flag,
         selected_features=selected_features,
         feature_visibility_table_path=feature_visibility_table_path,
+        include_biological_features=include_biological_features,
     )
 
 `;

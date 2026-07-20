@@ -57,7 +57,8 @@ import {
 } from '../app/feature-visibility.js';
 import {
   buildSessionFeatureRecoveryPlan,
-  classifyFeatureMetadataState
+  classifyFeatureMetadataState,
+  hasUsableBiologicalFeatureCatalog
 } from '../app/session-feature-metadata.js';
 import {
   buildCanonicalSessionRequest,
@@ -1807,10 +1808,8 @@ const applyLosatDerivedCache = (entries) => {
 const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
 const enrichExtractedFeaturesWithOrthogroups = (index) => {
-  if (!(index instanceof Map) || !Array.isArray(state.extractedFeatures.value) || state.extractedFeatures.value.length === 0) {
-    return;
-  }
-  state.extractedFeatures.value = state.extractedFeatures.value.map((feature) => {
+  if (!(index instanceof Map)) return;
+  const enrichFeatures = (features) => (Array.isArray(features) ? features : []).map((feature) => {
     const ids = [
       feature?.svg_id,
       feature?.stable_svg_id,
@@ -1848,6 +1847,10 @@ const enrichExtractedFeaturesWithOrthogroups = (index) => {
       orthogroupMember: entry.orthogroupMember
     };
   });
+  state.extractedFeatures.value = enrichFeatures(state.extractedFeatures.value);
+  if (state.biologicalFeatures) {
+    state.biologicalFeatures.value = enrichFeatures(state.biologicalFeatures.value);
+  }
 };
 
 export const applyOrthogroupStateData = (orthogroupState = {}) => {
@@ -1857,6 +1860,19 @@ export const applyOrthogroupStateData = (orthogroupState = {}) => {
     .filter(Boolean);
   const groupIdSet = new Set(groupIds);
   const index = new Map();
+  const indexOwners = new Map();
+  const ambiguousIndexKeys = new Set();
+  const addUniqueIndexEntry = (key, owner, entry) => {
+    if (!key || ambiguousIndexKeys.has(key)) return;
+    const existingOwner = indexOwners.get(key);
+    if (existingOwner && existingOwner !== owner) {
+      index.delete(key);
+      ambiguousIndexKeys.add(key);
+      return;
+    }
+    indexOwners.set(key, owner);
+    index.set(key, entry);
+  };
 
   groups.forEach((group) => {
     const orthogroupId = String(group?.id || '').trim();
@@ -1867,10 +1883,15 @@ export const applyOrthogroupStateData = (orthogroupState = {}) => {
     ).size || 0);
     const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
     const sourceRecordIndex = Number(group?.source_record_index);
-    members.forEach((member) => {
-      const featureSvgId = String(member?.featureSvgId || '').trim();
+    members.forEach((member, memberIndex) => {
+      const featureSvgIds = Array.from(new Set([
+        member?.stableFeatureSvgId,
+        member?.stable_feature_svg_id,
+        member?.featureSvgId,
+        member?.feature_svg_id
+      ].map((value) => String(value || '').trim()).filter(Boolean)));
       const recordIndex = Number(member?.recordIndex);
-      if (!featureSvgId || !Number.isInteger(recordIndex)) return;
+      if (featureSvgIds.length === 0 || !Number.isInteger(recordIndex)) return;
       const entry = {
         orthogroupId,
         orthogroupMemberCount: memberCount,
@@ -1882,8 +1903,15 @@ export const applyOrthogroupStateData = (orthogroupState = {}) => {
         orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
         orthogroupMember: member
       };
-      index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);
-      if (!index.has(featureSvgId)) index.set(featureSvgId, entry);
+      const owner = `${recordIndex}\u001f${member?.featureIndex ?? memberIndex}\u001f${orthogroupId}`;
+      featureSvgIds.forEach((featureSvgId) => {
+        addUniqueIndexEntry(
+          buildOrthogroupIndexKey(recordIndex, featureSvgId),
+          owner,
+          entry
+        );
+        addUniqueIndexEntry(featureSvgId, owner, entry);
+      });
     });
   });
 
@@ -2250,6 +2278,7 @@ const resetSessionBaseline = () => {
   clearObject(state.orthogroupNameOverrides);
   clearObject(state.orthogroupDescriptionOverrides);
   state.extractedFeatures.value = [];
+  if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureSelectorSafetyScope.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
@@ -2479,6 +2508,7 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 
 export const buildFeatureStateData = () => ({
   extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+  biologicalFeatures: sanitizeExtractedFeaturesForSession(state.biologicalFeatures?.value),
   featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
@@ -2497,6 +2527,11 @@ export const applyFeatureStateData = (features = {}) => {
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
     ? features.extractedFeatures
     : [];
+  if (state.biologicalFeatures) {
+    state.biologicalFeatures.value = Array.isArray(features.biologicalFeatures)
+      ? features.biologicalFeatures
+      : [];
+  }
   state.featureSelectorSafetyScope.value = Array.isArray(features.featureSelectorSafetyScope)
     ? features.featureSelectorSafetyScope
     : [];
@@ -2608,7 +2643,10 @@ const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-f
     extractedFeatures: state.extractedFeatures.value
   });
 
-  if (validation.state === 'ready' || validation.state === 'not-needed') {
+  if (
+    (validation.state === 'ready' || validation.state === 'not-needed') &&
+    hasUsableBiologicalFeatureCatalog({ biologicalFeatures: state.biologicalFeatures?.value })
+  ) {
     applySessionFeatureRecoveryPlan({ status: 'ready', validation }, { generationId });
     return { status: 'ready', validation };
   }
@@ -2800,6 +2838,7 @@ export const exportSession = async (titleOverride = null) => {
     results: serializeResults(),
     features: {
       extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+      biologicalFeatures: sanitizeExtractedFeaturesForSession(state.biologicalFeatures?.value),
       featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,

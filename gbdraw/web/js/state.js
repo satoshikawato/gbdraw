@@ -649,15 +649,26 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
+const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
 );
 const featureSelectorSafetyScope = ref([]); // Python selector scope before feature visibility filtering
+const renderedFeatureSvgId = (feature) => {
+  return String(
+    feature?.rendered_svg_id ||
+    feature?.renderedSvgId ||
+    feature?.rendered_feature_svg_id ||
+    feature?.renderedFeatureSvgId ||
+    feature?.svg_id ||
+    ''
+  ).trim();
+};
 const featuresBySvgId = computed(() => {
   const indexed = new Map();
   const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
   for (const feat of features) {
-    const svgId = String(feat?.svg_id || '').trim();
+    const svgId = renderedFeatureSvgId(feat);
     if (!svgId || indexed.has(svgId)) continue;
     indexed.set(svgId, feat);
   }
@@ -686,7 +697,7 @@ const selectedFeatures = computed(() => {
   const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
   const fallback = new Map();
   (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
-    const svgId = String(feature?.svg_id || '').trim();
+    const svgId = renderedFeatureSvgId(feature);
     if (svgId && !fallback.has(svgId)) fallback.set(svgId, feature);
   });
 
@@ -1180,6 +1191,7 @@ export const state = {
   specificRulePresetLoading,
   downloadDpi,
   extractedFeatures,
+  biologicalFeatures,
   featureSelectorSafetyScope,
   featuresBySvgId,
   selectedFeatureIds,

@@ -86,7 +86,12 @@ const textToBase64 = (text) => {
 const normalizeResourceName = (resourceId, name) => {
   const basename = String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop();
   const safe = basename.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '');
-  return `${resourceId}-${safe || 'resource.dat'}`;
+  const prefix = `${resourceId}-`;
+  let leaf = safe || 'resource.dat';
+  while (leaf.startsWith(prefix)) {
+    leaf = leaf.slice(prefix.length);
+  }
+  return `${prefix}${leaf || 'resource.dat'}`;
 };
 
 const createResourceBuilder = () => {
@@ -418,14 +423,16 @@ const buildTracks = (state) => {
         state.adv.linear_track_slots,
         storedLinearAxisIndex
       )
-    : storedLinearAxisIndex;
+    : null;
   return {
     circularTrackSlots: circular && state.adv.circular_track_slots_enabled
       ? state.adv.circular_track_slots
           .filter((slot) => slot?.enabled !== false)
           .map((slot) => buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type))
       : null,
-    circularTrackAxisIndex: circular ? optionalNumber(state.adv.circular_track_slots_axis_index) : null,
+    circularTrackAxisIndex: circular && state.adv.circular_track_slots_enabled
+      ? optionalNumber(state.adv.circular_track_slots_axis_index)
+      : null,
     linearTrackSlots: !circular && state.adv.linear_track_slots_enabled
       ? state.adv.linear_track_slots
           .filter((slot) => slot?.enabled !== false)
@@ -673,6 +680,114 @@ const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
 
+const nestedConfigValue = (config, path) => {
+  let current = config;
+  for (const key of path.split('.')) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+    current = current[key];
+  }
+  return current;
+};
+
+const projectFullConfigOverrides = (config) => {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+  const paths = {
+    show_gc: 'canvas.show_gc',
+    show_skew: 'canvas.show_skew',
+    show_depth: 'canvas.show_depth',
+    show_labels: 'canvas.show_labels',
+    strandedness: 'canvas.strandedness',
+    resolve_overlaps: 'canvas.resolve_overlaps',
+    track_type: 'canvas.circular.track_type',
+    allow_inner_labels: 'canvas.circular.allow_inner_labels',
+    align_center: 'canvas.linear.align_center',
+    keep_definition_left_aligned: 'canvas.linear.keep_definition_left_aligned',
+    linear_track_layout: 'canvas.linear.track_layout',
+    linear_track_axis_gap: 'canvas.linear.track_axis_gap',
+    linear_ruler_on_axis: 'canvas.linear.ruler_on_axis',
+    comparison_height: 'canvas.linear.comparison_height',
+    gc_height: 'canvas.linear.default_gc_height',
+    depth_height: 'canvas.linear.depth_height',
+    normalize_length: 'canvas.linear.normalize_length',
+    label_rendering: 'labels.rendering',
+    circular_label_spacing: 'labels.spacing.circular',
+    circular_label_placement: 'labels.circular.placement',
+    linear_label_spacing: 'labels.spacing.linear',
+    label_placement: 'labels.linear.placement',
+    label_rotation: 'labels.linear.rotation',
+    label_blacklist: 'labels.filtering.blacklist_keywords',
+    linear_definition_line_styles: 'objects.definition.linear.line_styles',
+    linear_definition_show_replicon: 'objects.definition.linear.show_replicon',
+    linear_definition_show_accession: 'objects.definition.linear.show_accession',
+    linear_definition_show_length: 'objects.definition.linear.show_length',
+    gc_content_mode: 'objects.gc_content.mode',
+    gc_content_min_percent: 'objects.gc_content.min_percent',
+    gc_content_max_percent: 'objects.gc_content.max_percent',
+    gc_content_show_axis: 'objects.gc_content.show_axis',
+    gc_content_show_ticks: 'objects.gc_content.show_ticks',
+    gc_content_large_tick_interval: 'objects.gc_content.large_tick_interval',
+    gc_content_small_tick_interval: 'objects.gc_content.small_tick_interval',
+    gc_content_tick_font_size: 'objects.gc_content.tick_font_size',
+    depth_color: 'objects.depth.fill_color',
+    depth_min: 'objects.depth.min_depth',
+    depth_max: 'objects.depth.max_depth',
+    depth_normalize: 'objects.depth.normalize',
+    depth_show_axis: 'objects.depth.show_axis',
+    depth_show_ticks: 'objects.depth.show_ticks',
+    depth_large_tick_interval: 'objects.depth.large_tick_interval',
+    depth_small_tick_interval: 'objects.depth.small_tick_interval',
+    depth_tick_font_size: 'objects.depth.tick_font_size',
+    depth_share_axis: 'objects.depth.share_axis',
+    scale_style: 'objects.scale.style',
+    scale_stroke_color: 'objects.scale.stroke_color',
+    scale_label_color: 'objects.scale.label_color',
+    scale_stroke_width: 'objects.scale.stroke_width',
+    scale_interval: 'objects.scale.interval',
+    tick_label_font_size: 'objects.ticks.tick_labels.font_size',
+    pairwise_match_style: 'objects.blast_match.style'
+  };
+  return Object.fromEntries(
+    Object.entries(paths)
+      .map(([name, path]) => [name, nestedConfigValue(config, path)])
+      .filter(([, value]) => value !== undefined)
+  );
+};
+
+const projectCircularConservationConfig = (options, files) => {
+  const sourceFiles = Array.isArray(files.c_conservation_blasts)
+    ? files.c_conservation_blasts
+    : [];
+  if (sourceFiles.length === 0) return undefined;
+  const labels = Array.isArray(options.conservationLabels)
+    ? options.conservationLabels.map((value) => String(value || '').trim())
+    : [];
+  const colors = Array.isArray(options.conservationColors)
+    ? options.conservationColors.map((value) => String(value || '').trim())
+    : [];
+  const series = sourceFiles.map((file, index) => {
+    const fileName = String(file?.name || `comparison-${index + 1}.tsv`);
+    const defaultLabel = fileName.replace(/\.[^.]+$/, '').trim() || `Comparison ${index + 1}`;
+    return {
+      fileName,
+      sourceIndex: index,
+      label: labels[index] || defaultLabel,
+      color: colors[index] || '',
+      losat_gencode: 1
+    };
+  });
+  return {
+    enabled: true,
+    source: 'upload',
+    losat_program: 'blastn',
+    subject_gencode: 1,
+    reference: String(options.conservationReference || 'auto'),
+    labels: series.map((entry) => entry.label).join(','),
+    series,
+    ring_width: optionalNumber(options.conservationRingWidth),
+    ring_gap: optionalNumber(options.conservationRingGap)
+  };
+};
+
 const projectCanonicalCircularMeasure = (measure) => {
   if (measure === null || measure === undefined) return null;
   if (!measure || typeof measure !== 'object' || Array.isArray(measure)) return measure;
@@ -890,7 +1005,10 @@ export const projectCanonicalSessionRequest = ({
       resourceId ? resourceAsLegacyFile(resources, resourceId) : null
     ));
   }
-  const overrides = options.configOverrides || {};
+  const overrides = {
+    ...projectFullConfigOverrides(options.config),
+    ...(options.configOverrides || {})
+  };
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
   if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
     if (!repairInvalidComparisonHeight) {
@@ -1141,7 +1259,10 @@ export const projectCanonicalSessionRequest = ({
         ? overrides.label_blacklist.join(', ')
         : String(overrides.label_blacklist || ''),
       linearRecordLayout: linearLayout,
-      annotationSets: normalizeAnnotationSets(options.annotations?.sets)
+      annotationSets: normalizeAnnotationSets(options.annotations?.sets),
+      circularConservation: renderRequest.mode === 'circular'
+        ? projectCircularConservationConfig(options, files)
+        : undefined
     },
     semanticFeatureState: {
       featureVisibilityManualRules: projectedFeatureVisibilityRules,

@@ -157,15 +157,56 @@ const getOrthogroupById = (orthogroups, orthogroupId) => {
     .find((entry) => normalizeText(entry?.id || entry?.orthogroupId || entry?.orthogroup_id) === id) || null;
 };
 
-const memberFeatureSvgId = (member) => firstText(member?.featureSvgId, member?.feature_svg_id);
+const memberFeatureSvgId = (member) => firstText(
+  member?.stableFeatureSvgId,
+  member?.stable_feature_svg_id,
+  member?.stableFeatureId,
+  member?.stable_feature_id,
+  member?.featureSvgId,
+  member?.feature_svg_id
+);
 const memberRecordIndex = (member) => {
   const recordIndex = Number(member?.recordIndex ?? member?.record_index);
   return Number.isInteger(recordIndex) ? recordIndex : null;
 };
 
 const featureRecordIndex = (feature) => {
-  const recordIndex = Number(feature?.fileIdx ?? feature?.recordIndex ?? feature?.record_index);
+  const recordIndex = Number(
+    feature?.fileIdx ?? feature?.recordIndex ?? feature?.record_index ?? feature?.record_idx
+  );
   return Number.isInteger(recordIndex) ? recordIndex : null;
+};
+
+const featureStableSvgId = (feature) => firstText(
+  feature?.stable_feature_id,
+  feature?.stableFeatureId,
+  feature?.stable_svg_id,
+  feature?.stableFeatureSvgId,
+  feature?.svg_id,
+  feature?.svgId
+);
+
+const featureRenderedSvgId = (feature) => firstText(
+  feature?.rendered_svg_id,
+  feature?.renderedSvgId,
+  feature?.rendered_feature_svg_id,
+  feature?.renderedFeatureSvgId,
+  feature?.svg_id
+);
+
+const getRenderedFeatureForMember = (member, feature, featureLookup) => {
+  if (!feature || !featureLookup) return null;
+  const renderedSvgId = featureRenderedSvgId(feature);
+  const renderedFeature = renderedSvgId ? featureLookup.get?.(renderedSvgId) || null : null;
+  if (!renderedFeature) return null;
+  const stableId = memberFeatureSvgId(member);
+  if (stableId && featureStableSvgId(renderedFeature) !== stableId) return null;
+  const recordIndex = memberRecordIndex(member);
+  const renderedRecordIndex = featureRecordIndex(renderedFeature);
+  if (recordIndex !== null && renderedRecordIndex !== null && renderedRecordIndex !== recordIndex) {
+    return null;
+  }
+  return renderedFeature;
 };
 
 const getFeatureLookupValues = (featureLookup) => {
@@ -176,30 +217,50 @@ const getFeatureLookupValues = (featureLookup) => {
   return [];
 };
 
-const getFeatureForMember = (member, featureLookup) => {
-  const svgId = memberFeatureSvgId(member);
-  if (!svgId || !featureLookup) return null;
+const uniqueFeatureValues = (...sources) => {
+  const seen = new Set();
+  const features = [];
+  sources.flatMap(getFeatureLookupValues).forEach((feature) => {
+    if (!feature || seen.has(feature)) return;
+    seen.add(feature);
+    features.push(feature);
+  });
+  return features;
+};
+
+const getFeatureForMember = (member, featureLookup, sourceFeatures = []) => {
+  const stableId = memberFeatureSvgId(member);
+  if (!stableId) return null;
   const recordIndex = memberRecordIndex(member);
-  const renderedSvgId = recordIndex === null ? '' : `${svgId}_record_${recordIndex + 1}`;
-  const direct = featureLookup.get?.(renderedSvgId) || featureLookup.get?.(svgId) || null;
-  if (direct && (recordIndex === null || featureRecordIndex(direct) === recordIndex)) return direct;
-  return getFeatureLookupValues(featureLookup).find((feature) => {
-    const featureSvgIds = [
-      feature?.svg_id,
-      feature?.svgId,
-      feature?.stable_svg_id,
-      feature?.stableSvgId
-    ].map(normalizeText).filter(Boolean);
-    if (!featureSvgIds.includes(svgId)) return false;
+  const direct = featureLookup?.get?.(stableId) || null;
+  if (
+    direct &&
+    featureStableSvgId(direct) === stableId &&
+    (recordIndex === null || featureRecordIndex(direct) === recordIndex)
+  ) return direct;
+  return uniqueFeatureValues(sourceFeatures, featureLookup).find((feature) => {
+    if (featureStableSvgId(feature) !== stableId) return false;
     return recordIndex === null || featureRecordIndex(feature) === recordIndex;
   }) || direct || null;
 };
 
-const groupHasFeatureSvgId = (group, featureSvgId) => {
+const getGroupMemberForFeatureSvgId = (group, featureSvgId, featureLookup = null) => {
+  const id = normalizeText(featureSvgId);
+  if (!id) return null;
+  const feature = featureLookup?.get?.(id) || null;
+  const stableId = featureStableSvgId(feature) || id;
+  const recordIndex = featureRecordIndex(feature);
+  const members = Array.isArray(group?.members) ? group.members : [];
+  return members.find((member) => (
+    memberFeatureSvgId(member) === stableId &&
+    (recordIndex === null || memberRecordIndex(member) === recordIndex)
+  )) || null;
+};
+
+const groupHasFeatureSvgId = (group, featureSvgId, featureLookup = null) => {
   const ids = splitMetadataValues(featureSvgId);
   if (ids.length === 0) return false;
-  return (Array.isArray(group?.members) ? group.members : [])
-    .some((member) => ids.includes(memberFeatureSvgId(member)));
+  return ids.some((id) => Boolean(getGroupMemberForFeatureSvgId(group, id, featureLookup)));
 };
 
 const getOrthogroupForMatch = (
@@ -207,15 +268,16 @@ const getOrthogroupForMatch = (
   {
     orthogroupId,
     queryFeatureSvgId,
-    subjectFeatureSvgId
+    subjectFeatureSvgId,
+    featureLookup
   } = {}
 ) => {
   const direct = getOrthogroupById(orthogroups, orthogroupId);
   if (direct) return direct;
   const groups = Array.isArray(orthogroups) ? orthogroups : [];
   return groups.find((group) => (
-    groupHasFeatureSvgId(group, queryFeatureSvgId) ||
-    groupHasFeatureSvgId(group, subjectFeatureSvgId)
+    groupHasFeatureSvgId(group, queryFeatureSvgId, featureLookup) ||
+    groupHasFeatureSvgId(group, subjectFeatureSvgId, featureLookup)
   )) || null;
 };
 
@@ -255,7 +317,7 @@ const featureToOrthogroupMember = (feature) => {
     ),
     product: firstText(member?.product, featureProduct(feature)),
     note: firstText(member?.note, feature?.note, qualifierFirstValue(feature, 'note')),
-    featureSvgId: firstText(member?.featureSvgId, member?.feature_svg_id, feature?.svg_id)
+    featureSvgId: firstText(memberFeatureSvgId(member), featureStableSvgId(feature))
   };
 };
 
@@ -395,14 +457,17 @@ const orthogroupMemberSequenceFilename = (member, orthogroupId, sequenceKind) =>
   return `${makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`)}.${sequenceExtension(sequenceKind)}`;
 };
 
-const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId) => {
+const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId, sourceFeatures = []) => {
   const members = Array.isArray(group?.members) ? group.members : [];
   return members
     .map((member) => {
-      const feature = getFeatureForMember(member, featureLookup);
+      const feature = getFeatureForMember(member, featureLookup, sourceFeatures);
+      const renderedFeature = getRenderedFeatureForMember(member, feature, featureLookup);
       const nucleotideSequence = memberSequence(member, feature, 'nt');
       const aminoAcidSequence = memberSequence(member, feature, 'aa');
       return {
+        feature,
+        canOpen: Boolean(renderedFeature),
         record: firstText(member?.recordId, member?.record_id),
         coordinates: memberLocationText(member),
         proteinId: resolveDisplayProteinId(null, member),
@@ -417,13 +482,6 @@ const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId) => {
       };
     })
     .filter((row) => row.record || row.coordinates || row.proteinId || row.role || row.confidence || row.assignmentReason || row.productOrNote || row.ntFasta || row.aaFasta);
-};
-
-const getGroupMemberForFeatureSvgId = (group, featureSvgId) => {
-  const id = normalizeText(featureSvgId);
-  if (!id) return null;
-  const members = Array.isArray(group?.members) ? group.members : [];
-  return members.find((member) => memberFeatureSvgId(member) === id) || null;
 };
 
 const resolveFeatureSectionProteinIds = ({
@@ -444,11 +502,11 @@ const resolveFeatureSectionProteinIds = ({
   const ids = splitMetadataValues(featureSvgIds);
   ids.forEach((featureSvgId) => {
     const candidateFeature = featureLookup?.get?.(featureSvgId) || null;
-    const member = getGroupMemberForFeatureSvgId(group, featureSvgId);
+    const member = getGroupMemberForFeatureSvgId(group, featureSvgId, featureLookup);
     addFeatureProteinId(candidateFeature, member);
   });
   if (feature) {
-    addFeatureProteinId(feature, ids.length === 1 ? getGroupMemberForFeatureSvgId(group, ids[0]) : null);
+    addFeatureProteinId(feature, ids.length === 1 ? getGroupMemberForFeatureSvgId(group, ids[0], featureLookup) : null);
   }
   if (values.length === 0) {
     splitMetadataValues(locusId).forEach((value) => addUniqueDisplayText(values, value));
@@ -526,7 +584,7 @@ const buildFeatureListRows = ({
   return Array.from({ length: count }, (_unused, index) => {
     const svgId = featureIds[index] || '';
     const feature = svgId ? featureLookup?.get?.(svgId) || null : null;
-    const member = svgId ? getGroupMemberForFeatureSvgId(group, svgId) : null;
+    const member = svgId ? getGroupMemberForFeatureSvgId(group, svgId, featureLookup) : null;
     const fallbackProteinId = firstNonInternalDisplayText(
       locusIds[index],
       displayNames[index],
@@ -562,7 +620,7 @@ const buildFeatureListRows = ({
       key: `${svgId || 'feature'}-${index}`,
       svgId,
       feature,
-      canOpen: Boolean(feature?.svg_id),
+      canOpen: Boolean(featureRenderedSvgId(feature)),
       label,
       record: rowRecord,
       location: rowLocation,
@@ -633,7 +691,7 @@ const resolveBlockMemberLabels = ({
   const values = [];
   uniqueMetadataValues(featureSvgIds).forEach((featureSvgId) => {
     const feature = featureLookup?.get?.(featureSvgId) || null;
-    const member = group ? getGroupMemberForFeatureSvgId(group, featureSvgId) : null;
+    const member = group ? getGroupMemberForFeatureSvgId(group, featureSvgId, featureLookup) : null;
     if (!member) return;
     addUniqueDisplayText(values, resolveDisplayProteinId(feature, member, ''));
   });
@@ -669,6 +727,7 @@ const buildBlockOrthogroups = ({
   orthogroupIds,
   orthogroups,
   featureLookup,
+  sourceFeatures,
   queryFeatureSvgId,
   subjectFeatureSvgId,
   orthogroupNameOverrides,
@@ -698,7 +757,7 @@ const buildBlockOrthogroups = ({
   const rbhOrthogroups = Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds : [];
   const orthologPathCount = Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '';
   const relatedEdgeCount = Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : '';
-  const memberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId);
+  const memberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId, sourceFeatures);
   return {
     id: orthogroupId,
     displayName,
@@ -833,6 +892,7 @@ export const buildMatchPopupPayload = (
   element,
   {
     featureLookup = new Map(),
+    sourceFeatures = [],
     orthogroups = [],
     orthogroupNameOverrides = null,
     orthogroupDescriptionOverrides = null,
@@ -855,7 +915,8 @@ export const buildMatchPopupPayload = (
     : getOrthogroupForMatch(orthogroups, {
       orthogroupId,
       queryFeatureSvgId,
-      subjectFeatureSvgId
+      subjectFeatureSvgId,
+      featureLookup
     }) || buildFallbackOrthogroup({
       orthogroupId,
       queryFeature,
@@ -867,6 +928,7 @@ export const buildMatchPopupPayload = (
       orthogroupIds,
       orthogroups,
       featureLookup,
+      sourceFeatures,
       queryFeatureSvgId,
       subjectFeatureSvgId,
       orthogroupNameOverrides,
@@ -961,7 +1023,12 @@ export const buildMatchPopupPayload = (
     addRow(orthogroupRows, 'Ortholog paths', Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '');
     addRow(orthogroupRows, 'Related edges', Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : '');
   }
-  const orthogroupMemberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId);
+  const orthogroupMemberRows = buildOrthogroupMemberRows(
+    group,
+    featureLookup,
+    orthogroupId,
+    sourceFeatures
+  );
 
   if (matchKind === 'orthogroup') {
     const summarySection = section(
