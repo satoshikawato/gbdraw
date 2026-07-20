@@ -108,6 +108,7 @@ const resetEditorDraftState = (state) => {
   state.newLegendCaption.value = editorDefaults.newLegendCaption;
   state.newLegendColor.value = editorDefaults.newLegendColor;
   state.addedLegendCaptions.value = new Set();
+  state.fileLegendCaptions.value = new Set();
 
   clearReactiveObject(state.labelTextFeatureOverrides);
   clearReactiveObject(state.labelTextBulkOverrides);

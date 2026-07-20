@@ -266,6 +266,20 @@ export const buildLabelOverrideTsv = (featureOverrides, bulkOverrides, options =
   };
 };
 
+export const serializeLabelOverrideRows = (rows) => {
+  const serialized = (Array.isArray(rows) ? rows : [])
+    .map((row) => [
+      normalizeTsvCell(row?.recordId ?? row?.record_id),
+      normalizeTsvCell(row?.featureType ?? row?.feature_type),
+      normalizeTsvCell(row?.qualifier),
+      normalizeTsvCell(row?.valueRegex ?? row?.value),
+      normalizeTsvCell(row?.labelText ?? row?.label_text)
+    ])
+    .filter((fields) => fields.slice(0, 4).every(Boolean))
+    .map((fields) => fields.join('\t'));
+  return serialized.length > 0 ? `${serialized.join('\n')}\n` : '';
+};
+
 export const parseLabelOverrideTsv = (text) => {
   const rows = [];
   const sourceText = String(text ?? '');

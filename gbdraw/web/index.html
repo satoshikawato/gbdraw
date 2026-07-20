@@ -3584,8 +3584,14 @@
                             <div>
                                 <label class="input-label text-[10px]">Pairwise Match Height <help-tip text="Height of the comparison blocks."></help-tip></label>
                                 <auto-value-field :visible="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" :text="autoValueText('pairwiseMatchHeight')">
-                                    <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact auto-value-input">
+                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height"
+                                           :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'"
+                                           :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''"
+                                           class="form-input form-input-compact auto-value-input">
                                 </auto-value-field>
+                                <p v-if="comparisonHeightValidationError" class="mt-1 text-[10px] text-red-600">
+                                    {{ comparisonHeightValidationError }}
+                                </p>
                             </div>
                             <div v-if="!(blastSource === 'losat' && losatProgram === 'blastp')" class="grid grid-cols-2 gap-1.5">
                                 <div>

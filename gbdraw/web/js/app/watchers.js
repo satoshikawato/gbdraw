@@ -2,9 +2,12 @@ import {
   parseBlacklistWords,
   parseColorTable,
   parsePriorityRules,
-  parseSpecificRules,
   parseWhitelistRules
 } from './file-imports.js';
+import {
+  buildLegendIntents,
+  prepareSpecificColorImport
+} from './specific-color-rules.js';
 import {
   buildFeatureVisibilitySelectorCache,
   preserveFeatureVisibilitySelectorCacheForOverrides
@@ -87,6 +90,7 @@ export const setupWatchers = ({
     labelOverrideContextKey,
     labelTextBulkOverrides,
     labelTextFeatureOverrides,
+    canonicalLabelOverrideRows,
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
     labelOverrideBuildWarning,
@@ -102,6 +106,7 @@ export const setupWatchers = ({
     pendingPaletteName,
     pyodideReady,
     fileLegendCaptions,
+    semanticFileWatchersSuppressed,
     manualPriorityRules,
     manualWhitelist,
     manualBlacklist,
@@ -121,7 +126,8 @@ export const setupWatchers = ({
     extractLegendEntries,
     setupLegendDrag,
     refreshLegendDragAffordances,
-    reapplyStrokeOverrides
+    reapplyStrokeOverrides,
+    syncFileLegendEntries
   } = legendActions;
 
   const {
@@ -281,6 +287,7 @@ export const setupWatchers = ({
   watch(
     () => [...manualSpecificRules],
     async (newRules, oldRules) => {
+      if (semanticFileWatchersSuppressed.value) return;
       applyPaletteToSvg();
       applySpecificRulesToSvg();
       if (extractedFeatures.value.length > 0) {
@@ -521,9 +528,11 @@ export const setupWatchers = ({
   });
 
   watch(extractedFeatures, () => {
+    if (semanticFileWatchersSuppressed.value) return;
     refreshFeatureVisibilitySelectorCache();
     if (!svgContent.value) return;
     nextTick(() => {
+      if (semanticFileWatchersSuppressed.value) return;
       const timingEntries = [];
       measureTiming(timingEntries, 'watch(extractedFeatures) apply palette colors', applyPaletteToSvg);
       measureTiming(timingEntries, 'watch(extractedFeatures) apply specific rules', applySpecificRulesToSvg);
@@ -533,6 +542,15 @@ export const setupWatchers = ({
   });
 
   watch(featureSelectorSafetyScope, refreshFeatureVisibilitySelectorCache, { immediate: true });
+
+  watch(
+    [labelTextFeatureOverrides, labelTextBulkOverrides, labelVisibilityOverrides],
+    () => {
+      if (semanticFileWatchersSuppressed.value) return;
+      canonicalLabelOverrideRows.value = [];
+    },
+    { deep: true }
+  );
 
   watch(
     () => labelReflowRequestSeq.value,
@@ -558,6 +576,7 @@ export const setupWatchers = ({
   watch(
     () => mode.value,
     (newMode, oldMode) => {
+      if (semanticFileWatchersSuppressed.value) return;
       cancelDefinitionUpdate();
 
       if (oldMode === 'circular') {
@@ -624,6 +643,7 @@ export const setupWatchers = ({
   );
 
   watch(() => files.d_color, async (newFile) => {
+    if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
       const text = await newFile.text();
@@ -639,46 +659,35 @@ export const setupWatchers = ({
   });
 
   watch(() => files.t_color, async (newFile) => {
+    if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
-      const previousFileRules = manualSpecificRules.filter((r) => r.fromFile);
-      for (const rule of previousFileRules) {
-        if (rule.cap) {
-          await removeLegendEntry(rule.cap);
-          fileLegendCaptions.value.delete(rule.cap);
-        }
-      }
-      for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
-        if (manualSpecificRules[i].fromFile) {
-          manualSpecificRules.splice(i, 1);
-        }
-      }
-
       const text = await newFile.text();
-      const { rules, rulesWithCaptions, count } = parseSpecificRules(text);
-
-      rules.forEach((rule) => manualSpecificRules.push(rule));
-      console.log(`Loaded ${count} rules from file.`);
-
-      if (rulesWithCaptions.length > 0 && pyodideReady.value) {
+      const prepared = prepareSpecificColorImport(text, manualSpecificRules);
+      const previousCaptions = Array.from(fileLegendCaptions.value);
+      const previousFileIntents = buildLegendIntents(
+        manualSpecificRules.filter((rule) => rule.fromFile),
+        { conflictPolicy: 'last-wins' }
+      ).intents;
+      if (pyodideReady.value && svgContent.value) {
         await nextTick();
-        for (const rule of rulesWithCaptions) {
-          const actualCaption = await addLegendEntry(rule.cap, rule.color);
-          if (actualCaption && typeof actualCaption === 'string') {
-            addedLegendCaptions.value.add(actualCaption);
-            fileLegendCaptions.value.add(actualCaption);
-          }
-        }
-        extractLegendEntries();
-        console.log(`Added ${rulesWithCaptions.length} legend entries from specific table.`);
+        await syncFileLegendEntries(prepared.intents, { previousFileIntents });
       }
+
+      manualSpecificRules.splice(0, manualSpecificRules.length, ...prepared.nextRules);
+      previousCaptions.forEach((caption) => addedLegendCaptions.value.delete(caption));
+      fileLegendCaptions.value = new Set(prepared.fileLegendCaptions);
+      prepared.fileLegendCaptions.forEach((caption) => addedLegendCaptions.value.add(caption));
+      extractLegendEntries();
+      console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
       console.error('Failed to load rules file:', e);
-      alert('Failed to load rules file. Please check the TSV format.');
+      alert(`Failed to load rules file. ${e?.message || 'Please check the TSV format.'}`);
     }
   });
 
   watch(() => files.qualifier_priority, async (newFile) => {
+    if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
       const text = await newFile.text();
@@ -699,6 +708,7 @@ export const setupWatchers = ({
   });
 
   watch(() => files.whitelist, async (newFile) => {
+    if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
       const text = await newFile.text();
@@ -712,6 +722,7 @@ export const setupWatchers = ({
   });
 
   watch(() => files.blacklist, async (newFile) => {
+    if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
       const text = await newFile.text();

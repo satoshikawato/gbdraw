@@ -486,7 +486,7 @@ ORIGIN
         1 atgc
 //
 `;
-  const invalidStoredSlotSession = {
+  const unknownAuthoritySession = {
     format: 'gbdraw-session',
     version: 33,
     renderRequest: {
@@ -523,6 +523,7 @@ ORIGIN
         encoding: 'base64', data: Buffer.from(recordText).toString('base64')
       }
     },
+    unknownSemanticState: { shouldNotBeAccepted: true },
     config: {
       adv: {
         linear_track_slots_enabled: true,
@@ -542,12 +543,12 @@ ORIGIN
     }
   };
   await input.setInputFiles({
-    name: 'invalid-stored-slot.gbdraw-session.json',
+    name: 'unknown-authority.gbdraw-session.json',
     mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(invalidStoredSlotSession))
+    buffer: Buffer.from(JSON.stringify(unknownAuthoritySession))
   });
   await expect.poll(() => dialogs.length).toBe(3);
-  expect(dialogs[2]).toContain('non-negative integer');
+  expect(dialogs[2]).toContain('unclassified top-level field');
   expect(await snapshot()).toEqual(before);
 
   const invalidLegacyConfig = {
@@ -564,6 +565,130 @@ ORIGIN
   await expect.poll(() => dialogs.length).toBe(4);
   expect(dialogs[3]).toContain('Custom Track Slots use an obsolete schema.');
   expect(await snapshot()).toEqual(before);
+
+  const repairedCanonicalSession = {
+    ...unknownAuthoritySession,
+    unknownSemanticState: undefined,
+    renderRequest: {
+      ...unknownAuthoritySession.renderRequest,
+      diagramOptions: {
+        configOverrides: { comparison_height: -2 },
+        output: { legend: 'bottom', plotTitlePosition: 'top' },
+        tracks: {}
+      }
+    },
+    config: {
+      form: { legend: 'right' },
+      adv: { comparison_height: 99, plot_title_position: 'bottom' }
+    },
+    ui: { mode: 'circular', legend: 'left', linearLegendPosition: 'right' }
+  };
+  await input.setInputFiles({
+    name: 'repaired-canonical.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(repairedCanonicalSession))
+  });
+  await expect.poll(() => dialogs.length).toBe(5);
+  expect(dialogs[4]).toBe('Session loaded successfully!');
+  expect(await page.evaluate(() => ({
+    mode: window.__GBDRAW_APP__.mode,
+    comparisonHeight: window.__GBDRAW_APP__.adv.comparison_height,
+    legend: window.__GBDRAW_APP__.form.legend,
+    plotTitlePosition: window.__GBDRAW_APP__.adv.plot_title_position
+  }))).toEqual({
+    mode: 'linear',
+    comparisonHeight: null,
+    legend: 'bottom',
+    plotTitlePosition: 'top'
+  });
+});
+
+test('Session commit failure restores the pre-import state', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const recordText = `LOCUS       ROLLBACK                    4 bp    DNA     linear   UNK 01-JAN-1980
+DEFINITION  Session rollback fixture.
+ACCESSION   ROLLBACK
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+`;
+  const session = {
+    format: 'gbdraw-session',
+    version: 33,
+    title: 'replacement',
+    renderRequest: {
+      schema: 2,
+      mode: 'linear',
+      records: [{
+        recordKey: 'record-1',
+        source: { kind: 'genbank', resourceId: 'record-1-genbank' },
+        selector: null,
+        region: null,
+        presentation: {
+          label: null, subtitle: null, reverseComplement: false,
+          gridRow: null, gridColumn: null
+        }
+      }],
+      diagramOptions: { configOverrides: {}, tracks: {} },
+      layout: {},
+      comparisons: [],
+      output: {
+        prefix: 'rollback', formats: ['interactive_svg'], overwrite: true,
+        interactiveMetadataPolicy: 'auto'
+      }
+    },
+    resources: {
+      'record-1-genbank': {
+        kind: 'genbank', name: 'rollback.gb', type: 'text/plain',
+        size: Buffer.byteLength(recordText), lastModified: 0,
+        encoding: 'base64', data: Buffer.from(recordText).toString('base64')
+      }
+    }
+  };
+
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    app.mode = 'circular';
+    app.sessionTitle = 'keep-after-rollback';
+    app.form.legend = 'left';
+    app.adv.comparison_height = 37;
+    const original = state.normalizePaletteColors;
+    let injected = false;
+    state.normalizePaletteColors = (...args) => {
+      if (!injected) {
+        injected = true;
+        throw new Error('Injected session commit failure');
+      }
+      return original(...args);
+    };
+  });
+  const dialogs = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles({
+    name: 'rollback.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(session))
+  });
+  await expect.poll(() => dialogs.length).toBe(1);
+  expect(dialogs[0]).toContain('Injected session commit failure');
+  expect(await page.evaluate(() => ({
+    mode: window.__GBDRAW_APP__.mode,
+    title: window.__GBDRAW_APP__.sessionTitle,
+    legend: window.__GBDRAW_APP__.form.legend,
+    comparisonHeight: window.__GBDRAW_APP__.adv.comparison_height
+  }))).toEqual({
+    mode: 'circular',
+    title: 'keep-after-rollback',
+    legend: 'left',
+    comparisonHeight: 37
+  });
 });
 
 test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint', async ({ page }) => {

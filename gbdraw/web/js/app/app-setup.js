@@ -61,6 +61,7 @@ import {
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
 import { validateAnnotationRecordTargets } from './annotations/validation.js';
+import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
@@ -312,11 +313,31 @@ export const createAppSetup = () => {
     filteredFeatures
   } = state;
 
+  const comparisonHeightValidationError = computed(() => (
+    classifyOptionalPositiveNumber(adv.comparison_height).status === 'invalid'
+      ? 'Pairwise Match Height must be Auto or a positive finite number.'
+      : ''
+  ));
+
   const syncLinearRecordLayout = () => {
     const next = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
-    linearRecordRows.splice(0, linearRecordRows.length, ...next);
+    const rowsUnchanged = next.length === linearRecordRows.length && next.every((entry, index) => (
+      entry.uid === linearRecordRows[index]?.uid && entry.row === linearRecordRows[index]?.row
+    ));
+    if (!rowsUnchanged) linearRecordRows.splice(0, linearRecordRows.length, ...next);
     const nextComparisons = reconcileLinearComparisons(linearSeqs, linearComparisons);
-    linearComparisons.splice(0, linearComparisons.length, ...nextComparisons);
+    const comparisonsUnchanged = nextComparisons.length === linearComparisons.length &&
+      nextComparisons.every((comparison, index) => (
+        comparison.id === linearComparisons[index]?.id &&
+        comparison.queryUid === linearComparisons[index]?.queryUid &&
+        comparison.subjectUid === linearComparisons[index]?.subjectUid &&
+        comparison.source === linearComparisons[index]?.source &&
+        comparison.file === linearComparisons[index]?.file
+      ));
+    if (!comparisonsUnchanged) {
+      linearComparisons.splice(0, linearComparisons.length, ...nextComparisons);
+    }
+    return !rowsUnchanged || !comparisonsUnchanged;
   };
   const setLinearRecordRow = (uid, row) => {
     syncLinearRecordLayout();
@@ -344,7 +365,6 @@ export const createAppSetup = () => {
     });
   };
   const linearRecordRowFor = (uid, fallback) => {
-    syncLinearRecordLayout();
     return linearRecordRows.find((entry) => entry.uid === uid)?.row || fallback;
   };
   const linearLayoutTokens = computed(() => (
@@ -2518,6 +2538,7 @@ export const createAppSetup = () => {
     linearRecordSelectorWarning: linearRecordSelector.warningFor,
     form,
     adv,
+    comparisonHeightValidationError,
     optionalNumberInputValue,
     setOptionalNumberInputValue,
     autoValueText: autoValueDisplay.autoValueText,

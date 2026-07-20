@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+import math
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -195,6 +197,54 @@ def test_linear_cli_rejects_invalid_pairwise_match_style(capsys: pytest.CaptureF
         linear_cli_module._get_args(["--gbk", "dummy.gb", "--pairwise_match_style", "line"])
 
     assert "pairwise_match_style must be one of: ribbon, curve" in capsys.readouterr().err
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("value", ["0", "-2", "nan", "inf", "-inf"])
+def test_linear_cli_rejects_invalid_comparison_height(
+    value: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        linear_cli_module._get_args(["--gbk", "dummy.gb", f"--comparison_height={value}"])
+
+    assert "--comparison_height must be a positive finite number" in capsys.readouterr().err
+
+
+@pytest.mark.linear
+def test_linear_cli_accepts_positive_comparison_height() -> None:
+    args = linear_cli_module._get_args(
+        ["--gbk", "dummy.gb", "--comparison_height", "2.5e1"]
+    )
+
+    assert args.comparison_height == 25
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("value", [0, -2, math.nan, math.inf, True, {}, []])
+def test_linear_canvas_config_rejects_invalid_comparison_height(value: object) -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict["canvas"]["linear"]["comparison_height"] = value
+
+    with pytest.raises(ValidationError, match="comparison_height must be a positive finite number"):
+        GbdrawConfig.from_dict(config_dict)
+
+
+@pytest.mark.linear
+def test_optional_positive_number_shared_contract() -> None:
+    fixture_path = Path(__file__).parent / "fixtures" / "optional-positive-number.json"
+    cases = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    for case in cases:
+        value = case["value"]
+        config_dict = load_config_toml("gbdraw.data", "config.toml")
+        if case["status"] == "valid":
+            config_dict["canvas"]["linear"]["comparison_height"] = value
+            parsed = GbdrawConfig.from_dict(config_dict).canvas.linear.comparison_height
+            assert parsed == case["normalized"]
+        elif case["status"] == "invalid":
+            config_dict["canvas"]["linear"]["comparison_height"] = value
+            with pytest.raises(ValidationError):
+                GbdrawConfig.from_dict(config_dict)
 
 
 @pytest.mark.linear

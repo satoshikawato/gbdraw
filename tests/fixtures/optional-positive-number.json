@@ -1,0 +1,19 @@
+[
+  { "value": null, "status": "auto", "normalized": null },
+  { "value": "", "status": "auto", "normalized": null },
+  { "value": "  AUTO  ", "status": "auto", "normalized": null },
+  { "value": 0.01, "status": "valid", "normalized": 0.01 },
+  { "value": "2.5", "status": "valid", "normalized": 2.5 },
+  { "value": ".75", "status": "valid", "normalized": 0.75 },
+  { "value": "1e2", "status": "valid", "normalized": 100 },
+  { "value": "+4.0E-1", "status": "valid", "normalized": 0.4 },
+  { "value": 0, "status": "invalid" },
+  { "value": -2, "status": "invalid" },
+  { "value": "-2", "status": "invalid" },
+  { "value": "0x10", "status": "invalid" },
+  { "value": "Infinity", "status": "invalid" },
+  { "value": true, "status": "invalid" },
+  { "value": [2], "status": "invalid" },
+  { "value": { "value": 2 }, "status": "invalid" }
+]
+
