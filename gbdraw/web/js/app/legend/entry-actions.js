@@ -5,6 +5,25 @@ import {
   parseTransformXY
 } from './utils.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import {
+  diffLegendIntents,
+  SPECIFIC_COLOR_FILE_OWNER
+} from '../specific-color-rules.js';
+
+const normalizedColor = (value) => String(value || '').trim().toLowerCase();
+
+const legendEntryColor = (entryGroup) => {
+  for (const path of entryGroup?.querySelectorAll?.('path') || []) {
+    const fill = path.getAttribute('fill');
+    if (fill && fill !== 'none' && !fill.startsWith('url(')) return normalizedColor(fill);
+  }
+  return '';
+};
+
+const findLegendEntryGroup = (targetGroup, caption) => (
+  Array.from(targetGroup?.querySelectorAll?.('g[data-legend-key]') || [])
+    .find((entry) => entry.getAttribute('data-legend-key') === caption) || null
+);
 
 export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) => {
   const {
@@ -28,7 +47,11 @@ export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) =
   const { updatePairwiseLegendPositions, reflowDualLegendLayout, compactLegendEntries, recenterCurrentLegendRoot } =
     layoutActions;
 
-  const addLegendEntry = async (caption, color) => {
+  const addLegendEntry = async (caption, color, options = {}) => {
+    const owner = String(options.owner || '').trim();
+    const conflictPolicy = options.conflictPolicy || 'suffix';
+    const shouldCommit = options.commit !== false;
+    const shouldReflow = options.reflow !== false;
     console.log(`addLegendEntry called with caption="${caption}", color="${color}"`);
     if (!svgContainer.value || !pyodideReady.value) {
       console.log(
@@ -54,30 +77,30 @@ export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) =
 
     const targetGroup = allTargetGroups[0];
 
-    const existingTexts = targetGroup.querySelectorAll('text');
     let finalCaption = caption.trim();
 
-    for (const t of existingTexts) {
-      const existingCaption = t.textContent?.trim();
-      if (existingCaption === finalCaption) {
-        const transform = t.getAttribute('transform');
-        if (transform) {
-          const match = transform.match(/translate\([^,]+,\s*([\d.]+)\)/);
-          if (match) {
-            const y = match[1];
-            const rects = targetGroup.querySelectorAll('path');
-            for (const r of rects) {
-              const rt = r.getAttribute('transform');
-              if (rt && rt.includes(`, ${y})`)) {
-                const existingColor = r.getAttribute('fill');
-                if (existingColor === color) {
-                  console.log(`addLegendEntry: same caption and color already exist, returning: ${finalCaption}`);
-                  return finalCaption;
-                }
-                break;
-              }
-            }
-          }
+    const keyedEntry = findLegendEntryGroup(targetGroup, finalCaption);
+    if (keyedEntry) {
+      if (legendEntryColor(keyedEntry) === normalizedColor(color)) return finalCaption;
+      if (conflictPolicy === 'error') {
+        throw new Error(`Legend entry "${finalCaption}" already exists with a different color.`);
+      }
+    } else {
+      const legacyText = Array.from(targetGroup.querySelectorAll('text'))
+        .find((text) => text.textContent?.trim() === finalCaption);
+      if (legacyText) {
+        const textPosition = parseTransformXY(legacyText.getAttribute('transform'));
+        const legacyPath = Array.from(targetGroup.querySelectorAll('path')).find((path) => {
+          const fill = path.getAttribute('fill');
+          if (!fill || fill === 'none' || fill.startsWith('url(')) return false;
+          const pathPosition = parseTransformXY(path.getAttribute('transform'));
+          return Math.abs(pathPosition.y - textPosition.y) < 2 && pathPosition.x < textPosition.x;
+        });
+        if (legacyPath && normalizedColor(legacyPath.getAttribute('fill')) === normalizedColor(color)) {
+          return finalCaption;
+        }
+        if (legacyPath && conflictPolicy === 'error') {
+          throw new Error(`Legend entry "${finalCaption}" already exists with a different color.`);
         }
       }
     }
@@ -85,7 +108,7 @@ export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) =
     const baseCaption = finalCaption.replace(/\s*\(\d+\)$/, '');
     let counter = 1;
     const existingCaptions = new Set();
-    existingTexts.forEach((t) => existingCaptions.add(t.textContent?.trim()));
+    targetGroup.querySelectorAll('text').forEach((t) => existingCaptions.add(t.textContent?.trim()));
 
     while (existingCaptions.has(finalCaption)) {
       finalCaption = `${baseCaption} (${counter})`;
@@ -145,11 +168,8 @@ export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) =
     textElements.forEach((el) => {
       const transform = el.getAttribute('transform');
       if (transform) {
-        const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-        if (match) {
-          const y = parseFloat(match[1]);
-          if (y > maxY) maxY = y;
-        }
+        const { y } = parseTransformXY(transform);
+        if (y > maxY) maxY = y;
       }
     });
 
@@ -160,11 +180,8 @@ export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) =
         if (fill && fill !== 'none' && !fill.startsWith('url(')) {
           const transform = el.getAttribute('transform');
           if (transform) {
-            const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-            if (match) {
-              const y = parseFloat(match[1]);
-              if (y > maxY) maxY = y;
-            }
+            const { y } = parseTransformXY(transform);
+            if (y > maxY) maxY = y;
           }
         }
       });
@@ -215,10 +232,7 @@ json.dumps({"width": width})
             if (hPairwiseLegend) {
               const pairwiseTransform = hPairwiseLegend.getAttribute('transform');
               if (pairwiseTransform) {
-                const match = pairwiseTransform.match(/translate\(\s*([\d.-]+)\s*,/);
-                if (match) {
-                  featureLegendMaxWidth = parseFloat(match[1]) - xMargin;
-                }
+                featureLegendMaxWidth = parseTransformXY(pairwiseTransform).x - xMargin;
               }
             }
           }
@@ -305,6 +319,7 @@ json.dumps({"width": width})
 
         const entryGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         entryGroup.setAttribute('data-legend-key', caption);
+        if (owner) entryGroup.setAttribute('data-legend-owner', owner);
 
         const rectDoc = parser.parseFromString(
           `<svg xmlns="http://www.w3.org/2000/svg">${result.rect}</svg>`,
@@ -327,24 +342,29 @@ json.dumps({"width": width})
         group.appendChild(entryGroup);
       }
 
-      const hasDualLegends =
-        !!legendGroup.querySelector('#legend_horizontal') && !!legendGroup.querySelector('#legend_vertical');
-      if (hasDualLegends) {
-        reflowDualLegendLayout(svg);
-      } else {
-        updatePairwiseLegendPositions(svg);
+      if (shouldReflow) {
+        const hasDualLegends =
+          !!legendGroup.querySelector('#legend_horizontal') && !!legendGroup.querySelector('#legend_vertical');
+        if (hasDualLegends) {
+          reflowDualLegendLayout(svg);
+        } else {
+          updatePairwiseLegendPositions(svg);
+        }
+        recenterCurrentLegendRoot(svg);
       }
-      recenterCurrentLegendRoot(svg);
 
-      skipCaptureBaseConfig.value = true;
-      const idx = selectedResultIndex.value;
-      if (idx >= 0 && results.value.length > idx) {
-        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+      if (shouldCommit) {
+        skipCaptureBaseConfig.value = true;
+        const idx = selectedResultIndex.value;
+        if (idx >= 0 && results.value.length > idx) {
+          results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+        }
       }
 
       return caption;
     } catch (e) {
       console.error('Failed to add legend entry:', e);
+      if (options.throwOnError) throw e;
       return false;
     }
   };
@@ -434,6 +454,114 @@ json.dumps({"width": width})
     }
 
     return removed;
+  };
+
+  const syncFileLegendEntries = async (intents, { previousFileIntents = [] } = {}) => {
+    if (!svgContainer.value || !pyodideReady.value) {
+      return { add: [], update: [], remove: [], unchanged: [] };
+    }
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return { add: [], update: [], remove: [], unchanged: [] };
+    const targetGroups = getAllFeatureLegendGroups(svg);
+    if (targetGroups.length === 0) return { add: [], update: [], remove: [], unchanged: [] };
+
+    const svgSnapshot = svg.cloneNode(true);
+    const resultIndex = selectedResultIndex.value;
+    const resultSnapshot = resultIndex >= 0 && results.value.length > resultIndex
+      ? { ...results.value[resultIndex] }
+      : null;
+    const editorSnapshot = legendEntries.value.map((entry) => ({ ...entry }));
+    const provenance = new Map(
+      previousFileIntents.map((entry) => [String(entry?.caption || '').trim(), normalizedColor(entry?.color)])
+    );
+
+    try {
+      const desiredByCaption = new Map(intents.map((intent) => [intent.caption, normalizedColor(intent.color)]));
+      targetGroups.forEach((group) => {
+        Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
+          const caption = entry.getAttribute('data-legend-key') || '';
+          if (
+            !entry.hasAttribute('data-legend-owner') &&
+            provenance.get(caption) === legendEntryColor(entry)
+          ) {
+            entry.setAttribute('data-legend-owner', SPECIFIC_COLOR_FILE_OWNER);
+          }
+        });
+      });
+
+      const primaryEntries = Array.from(targetGroups[0].querySelectorAll('g[data-legend-key]'));
+      const ownedEntries = primaryEntries
+        .filter((entry) => entry.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER)
+        .map((entry) => ({
+          caption: entry.getAttribute('data-legend-key') || '',
+          color: legendEntryColor(entry)
+        }));
+      const reusableEntries = primaryEntries
+        .filter((entry) => entry.getAttribute('data-legend-owner') !== SPECIFIC_COLOR_FILE_OWNER)
+        .map((entry) => ({
+          caption: entry.getAttribute('data-legend-key') || '',
+          color: legendEntryColor(entry)
+        }))
+        .filter((entry) => desiredByCaption.get(entry.caption) === entry.color);
+
+      for (const intent of intents) {
+        for (const group of targetGroups) {
+          const existing = findLegendEntryGroup(group, intent.caption);
+          if (!existing || existing.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER) continue;
+          if (legendEntryColor(existing) !== normalizedColor(intent.color)) {
+            throw new Error(`Legend entry "${intent.caption}" already exists with a different color.`);
+          }
+        }
+      }
+
+      const diff = diffLegendIntents([...ownedEntries, ...reusableEntries], intents);
+      for (const entry of diff.remove) {
+        targetGroups.forEach((group) => {
+          const target = findLegendEntryGroup(group, entry.caption);
+          if (target?.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER) target.remove();
+        });
+      }
+      for (const entry of diff.update) {
+        targetGroups.forEach((group) => {
+          const target = findLegendEntryGroup(group, entry.caption);
+          if (target?.getAttribute('data-legend-owner') !== SPECIFIC_COLOR_FILE_OWNER) return;
+          const path = Array.from(target.querySelectorAll('path')).find((candidate) => {
+            const fill = candidate.getAttribute('fill');
+            return fill && fill !== 'none' && !fill.startsWith('url(');
+          });
+          if (path) path.setAttribute('fill', entry.color);
+        });
+      }
+      for (const entry of diff.add) {
+        await addLegendEntry(entry.caption, entry.color, {
+          owner: SPECIFIC_COLOR_FILE_OWNER,
+          conflictPolicy: 'error',
+          commit: false,
+          reflow: false,
+          throwOnError: true
+        });
+      }
+
+      const legendGroup = svg.getElementById('legend');
+      const hasDualLegends =
+        !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
+      if (hasDualLegends) reflowDualLegendLayout(svg);
+      else updatePairwiseLegendPositions(svg);
+      recenterCurrentLegendRoot(svg);
+      skipCaptureBaseConfig.value = true;
+      if (resultIndex >= 0 && results.value.length > resultIndex) {
+        results.value[resultIndex] = { ...results.value[resultIndex], content: serializeCleanSvg(svg) };
+      }
+      extractLegendEntries();
+      return diff;
+    } catch (error) {
+      svg.replaceWith(svgSnapshot);
+      if (resultSnapshot && resultIndex >= 0 && results.value.length > resultIndex) {
+        results.value[resultIndex] = resultSnapshot;
+      }
+      legendEntries.value = editorSnapshot;
+      throw error;
+    }
   };
 
   const extractLegendEntries = () => {
@@ -706,6 +834,7 @@ json.dumps({"width": width})
     legendEntryExists,
     removeLegendEntry,
     restoreDeletedLegendEntries,
+    syncFileLegendEntries,
     updateLegendEntryCaption,
     updateLegendEntryColor,
     updateLegendEntryColorByCaption

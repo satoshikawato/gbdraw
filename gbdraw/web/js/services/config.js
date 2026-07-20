@@ -65,6 +65,13 @@ import {
 } from './session-request.js';
 import { downloadCompressedSession, readSessionText } from './session-file.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
+import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
+import {
+  projectArtifactState,
+  projectDocumentMetadata,
+  projectWebOnlyEditorMetadata,
+  validateSessionAuthorityInventory
+} from './session-authority.js';
 
 const { nextTick } = window.Vue;
 
@@ -908,29 +915,11 @@ const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
   return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
-const mergeStoredConfigWithCanonicalProjection = (projectedConfig, storedConfig) => {
-  if (!isPlainObject(storedConfig)) return projectedConfig;
-  return {
-    ...projectedConfig,
-    ...storedConfig,
-    form: {
-      ...(projectedConfig.form || {}),
-      ...(isPlainObject(storedConfig.form) ? storedConfig.form : {})
-    },
-    adv: {
-      ...(projectedConfig.adv || {}),
-      ...(isPlainObject(storedConfig.adv) ? storedConfig.adv : {})
-    },
-    annotationSets: projectedConfig.annotationSets
-  };
-};
-
 const preflightSessionImport = (rawData) => {
   const sourceSessionVersion = rawData.version;
-  const data = migrateSessionDataToCurrent(
-    normalizeSessionData(rawData),
-    sourceSessionVersion
-  );
+  const normalizedData = normalizeSessionData(rawData);
+  validateSessionAuthorityInventory(normalizedData, sourceSessionVersion);
+  const data = migrateSessionDataToCurrent(normalizedData, sourceSessionVersion);
   const canonicalProjection = sourceSessionVersion >= 31
     ? projectCanonicalSessionRequest({
         renderRequest: data.renderRequest,
@@ -938,11 +927,18 @@ const preflightSessionImport = (rawData) => {
         webFiles: data.webFiles,
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
-          : LINEAR_TRACK_SLOT_SCHEMA_VERSION
+          : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+        repairInvalidComparisonHeight: sourceSessionVersion >= 31 && sourceSessionVersion <= 33
       })
     : null;
   const restoredConfig = canonicalProjection
-    ? mergeStoredConfigWithCanonicalProjection(canonicalProjection.config, data.config)
+    ? {
+        ...canonicalProjection.config,
+        rules: applySpecificRuleProvenance(
+          canonicalProjection.config.rules,
+          data.config?.rules
+        )
+      }
     : data.config;
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
@@ -964,7 +960,21 @@ const preflightSessionImport = (rawData) => {
         : null
     });
   }
-  return { data, canonicalProjection, restoredConfig };
+  const projectionResult = canonicalProjection
+    ? {
+        documentMetadata: projectDocumentMetadata(data),
+        renderState: {
+          mode: canonicalProjection.mode,
+          inputType: canonicalProjection.inputType,
+          config: restoredConfig,
+          semanticFeatureState: canonicalProjection.semanticFeatureState
+        },
+        editorMetadata: projectWebOnlyEditorMetadata(data),
+        artifactState: projectArtifactState(data),
+        restoredFiles: canonicalProjection.files
+      }
+    : null;
+  return { data, canonicalProjection, restoredConfig, projectionResult };
 };
 
 const syncActiveCircularLayoutCache = () => {
@@ -1388,7 +1398,15 @@ export const applyConfigData = (data) => {
   const importedPalette = String(data.palette || '').trim();
   if (importedPalette) state.selectedPalette.value = importedPalette;
   if (hasColorEntries(data.colors)) {
-    state.currentColors.value = state.normalizePaletteColors(normalizeColorMap(data.colors));
+    if (data.colorsAreOverrides) {
+      const paletteColors = paletteColorsFromDefinitions(state.selectedPalette.value) || {};
+      state.currentColors.value = state.normalizePaletteColors({
+        ...paletteColors,
+        ...normalizeColorMap(data.colors)
+      });
+    } else {
+      state.currentColors.value = state.normalizePaletteColors(normalizeColorMap(data.colors));
+    }
   } else {
     const paletteColors = paletteColorsFromDefinitions(state.selectedPalette.value);
     if (paletteColors) state.currentColors.value = paletteColors;
@@ -1406,6 +1424,11 @@ export const applyConfigData = (data) => {
         fromFile: !!r.fromFile
       });
     });
+    state.fileLegendCaptions.value = new Set(
+      state.manualSpecificRules
+        .filter((rule) => rule.fromFile && rule.cap)
+        .map((rule) => rule.cap)
+    );
   }
   if (Object.prototype.hasOwnProperty.call(data, 'qualifierPriorityRules')) {
     replaceQualifierPriorityRules(data.qualifierPriorityRules);
@@ -2110,6 +2133,74 @@ const reconcileDepthTrackStateAfterSessionFiles = () => {
   );
 };
 
+const cloneLiveFileState = () => ({
+  files: {
+    ...state.files,
+    c_conservation_blasts: Array.isArray(state.files.c_conservation_blasts)
+      ? [...state.files.c_conservation_blasts]
+      : [],
+    c_conservation_fastas: Array.isArray(state.files.c_conservation_fastas)
+      ? [...state.files.c_conservation_fastas]
+      : [],
+    c_conservation_sequence_sources: Array.isArray(state.files.c_conservation_sequence_sources)
+      ? [...state.files.c_conservation_sequence_sources]
+      : []
+  },
+  linearSeqs: state.linearSeqs.map((seq) => ({
+    ...seq,
+    depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
+  })),
+  linearRecordRows: state.linearRecordRows.map((entry) => ({ ...entry })),
+  linearComparisons: state.linearComparisons.map((comparison) => ({ ...comparison }))
+});
+
+const restoreLiveFileState = (snapshot) => {
+  state.matchSequenceRegistry?.reset?.();
+  Object.keys(state.files).forEach((key) => {
+    state.files[key] = snapshot.files[key] ?? null;
+  });
+  state.linearSeqs.splice(0, state.linearSeqs.length, ...snapshot.linearSeqs);
+  state.linearRecordRows.splice(0, state.linearRecordRows.length, ...snapshot.linearRecordRows);
+  state.linearComparisons.splice(0, state.linearComparisons.length, ...snapshot.linearComparisons);
+};
+
+const captureSessionImportSnapshot = () => ({
+  config: cloneJsonData(buildConfigData()),
+  ui: cloneJsonData(buildUiStateData()),
+  files: cloneLiveFileState(),
+  results: serializeResults(),
+  features: buildFeatureStateData(),
+  editorState: buildEditorStateData(),
+  orthogroupState: buildOrthogroupStateData(),
+  runState: buildRunStateData(),
+  losatCache: new Map(state.losatCache.value),
+  losatDerivedCache: new Map(state.losatDerivedCache.value),
+  losatCacheInfo: cloneJsonData(state.losatCacheInfo.value),
+  errorLog: state.errorLog.value,
+  resultPanelTab: state.resultPanelTab.value
+});
+
+const restoreSessionImportSnapshot = async (snapshot) => {
+  state.semanticFileWatchersSuppressed.value = true;
+  resetSessionBaseline();
+  state.mode.value = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
+  await nextTick();
+  applyConfigData(snapshot.config);
+  applyUiStateData(snapshot.ui);
+  restoreLiveFileState(snapshot.files);
+  state.losatCache.value = new Map(snapshot.losatCache);
+  state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
+  state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
+  applyResultsData(snapshot.results, snapshot.ui);
+  applyFeatureStateData(snapshot.features);
+  applyOrthogroupStateData(snapshot.orthogroupState);
+  applyEditorStateData(snapshot.editorState);
+  applyRunStateData(snapshot.runState);
+  state.errorLog.value = snapshot.errorLog;
+  state.resultPanelTab.value = snapshot.resultPanelTab;
+  await nextTick();
+};
+
 const clearObject = (target) => {
   Object.keys(target).forEach((key) => {
     delete target[key];
@@ -2150,6 +2241,7 @@ const resetSessionBaseline = () => {
   clearObject(state.featureVisibilitySelectorCache);
   clearObject(state.featureStrokeOverrides);
   clearObject(state.labelTextFeatureOverrides);
+  state.canonicalLabelOverrideRows.value = [];
   clearObject(state.labelTextBulkOverrides);
   clearObject(state.labelTextFeatureOverrideSources);
   clearObject(state.labelVisibilityOverrides);
@@ -2376,6 +2468,7 @@ export const buildFeatureStateData = () => ({
   featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
   featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
   labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
+  labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
   labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
   labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides),
@@ -2398,6 +2491,9 @@ export const applyFeatureStateData = (features = {}) => {
   replacePlainObject(state.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
   replaceFeatureVisibilityState(features);
   replacePlainObject(state.labelTextFeatureOverrides, cloneStringMap(features.labelTextFeatureOverrides));
+  state.canonicalLabelOverrideRows.value = Array.isArray(features.labelOverrideRows)
+    ? cloneJsonData(features.labelOverrideRows)
+    : [];
   replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
   replacePlainObject(state.labelTextFeatureOverrideSources, cloneStringMap(features.labelTextFeatureOverrideSources));
   replacePlainObject(state.labelVisibilityOverrides, cloneJsonObject(features.labelVisibilityOverrides));
@@ -2693,6 +2789,7 @@ export const exportSession = async (titleOverride = null) => {
       featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
       featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
       labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
+      labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
       labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
       labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
       labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides),
@@ -2727,6 +2824,9 @@ export const importSession = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
 
+  let rollbackSnapshot = null;
+  let commitStarted = false;
+
   try {
     const text = await readSessionText(file);
     let data = JSON.parse(text, (key, value) => {
@@ -2744,13 +2844,22 @@ export const importSession = async (e, options = {}) => {
 
     const preflight = preflightSessionImport(data);
     data = preflight.data;
-    const { canonicalProjection, restoredConfig } = preflight;
+    const { canonicalProjection, restoredConfig, projectionResult } = preflight;
+    const canonicalSession = Boolean(projectionResult);
+    rollbackSnapshot = captureSessionImportSnapshot();
+    commitStarted = true;
+    state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
-    const ui = {
-      ...(data.ui || {}),
-      ...(canonicalProjection ? { mode: canonicalProjection.mode } : {})
-    };
-    state.sessionTitle.value = typeof data.title === 'string' ? data.title : '';
+    const ui = canonicalSession
+      ? {
+          ...projectionResult.editorMetadata.ui,
+          ...projectionResult.artifactState.ui,
+          mode: projectionResult.renderState.mode
+        }
+      : (data.ui || {});
+    state.sessionTitle.value = canonicalSession
+      ? projectionResult.documentMetadata.title
+      : (typeof data.title === 'string' ? data.title : '');
     if (ui.mode) state.mode.value = ui.mode;
     if (canonicalProjection) {
       if (canonicalProjection.mode === 'circular') {
@@ -2797,15 +2906,24 @@ export const importSession = async (e, options = {}) => {
       applyConfigData(restoredConfig);
     }
     restorePaletteStateFromSession(ui);
-    restoreSessionCircularLayoutCaches(ui);
-    restoreSessionPlotTitlePositions(ui);
+    if (canonicalSession) {
+      syncActiveModePlotTitlePosition();
+    } else {
+      restoreSessionCircularLayoutCaches(ui);
+      restoreSessionPlotTitlePositions(ui);
+    }
 
     const { collapsedLinearSeqs } = applyFiles(
-      canonicalProjection ? canonicalProjection.files : data.files
+      canonicalSession ? projectionResult.restoredFiles : data.files
     );
     reconcileDepthTrackStateAfterSessionFiles();
-    applyLosatCache(data.losatCache?.entries);
-    applyLosatDerivedCache(data.losatDerivedCache?.entries);
+    if (canonicalSession) {
+      applyLosatCache(projectionResult.artifactState.losatCache?.entries);
+      applyLosatDerivedCache(projectionResult.artifactState.losatDerivedCache?.entries);
+    } else {
+      applyLosatCache(data.losatCache?.entries);
+      applyLosatDerivedCache(data.losatDerivedCache?.entries);
+    }
     if (collapsedLinearSeqs) {
       state.losatCacheInfo.value = [];
     }
@@ -2813,21 +2931,23 @@ export const importSession = async (e, options = {}) => {
     state.skipCaptureBaseConfig.value = false;
     state.skipPositionReapply.value = false;
 
-    if (Array.isArray(data.results)) {
-      state.results.value = data.results.map((res, idx) => ({
-        name: res.name || `Result ${idx + 1}`,
-        content: res.content || ''
-      }));
-    } else {
-      state.results.value = [];
-    }
+    const importedResults = canonicalSession
+      ? projectionResult.artifactState.results
+      : data.results;
 
-    const features = data.features || {};
+    const features = canonicalSession
+      ? {
+          ...projectionResult.artifactState.features,
+          ...projectionResult.renderState.semanticFeatureState
+        }
+      : (data.features || {});
     applyFeatureStateData(features);
 
     applyOrthogroupStateData(
-      data.orthogroupState && typeof data.orthogroupState === 'object'
-        ? data.orthogroupState
+      canonicalSession
+        ? projectionResult.artifactState.orthogroupState
+        : data.orthogroupState && typeof data.orthogroupState === 'object'
+          ? data.orthogroupState
         : {
             groups: Array.isArray(data.orthogroups) ? data.orthogroups : [],
             selectedOrthogroupId: features.selectedOrthogroupId,
@@ -2840,33 +2960,12 @@ export const importSession = async (e, options = {}) => {
               features.orthogroupDescriptionOverrides ||
               data.config?.webEdits?.orthogroupDescriptionOverrides ||
               {}
-          }
+        }
     );
-    applyEditorStateData(data.editorState);
-
-    const resultCount = state.results.value.length;
-    if (resultCount > 0) {
-      const desiredIndex =
-        Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
-          ? ui.selectedResultIndex
-          : 0;
-      state.selectedResultIndex.value = Math.min(desiredIndex, resultCount - 1);
+    if (canonicalSession) {
+      applyEditorStateData(projectionResult.artifactState.editorState);
     } else {
-      state.selectedResultIndex.value = 0;
-    }
-
-    if (ui.canvasPadding) {
-      state.canvasPadding.top = ui.canvasPadding.top || 0;
-      state.canvasPadding.right = ui.canvasPadding.right || 0;
-      state.canvasPadding.bottom = ui.canvasPadding.bottom || 0;
-      state.canvasPadding.left = ui.canvasPadding.left || 0;
-    }
-    if (ui.canvasPan) {
-      state.canvasPan.x = ui.canvasPan.x || 0;
-      state.canvasPan.y = ui.canvasPan.y || 0;
-    }
-    if (typeof ui.zoom === 'number') {
-      state.zoom.value = ui.zoom;
+      applyEditorStateData(data.editorState);
     }
 
     if (state.mode.value === 'linear') {
@@ -2884,6 +2983,25 @@ export const importSession = async (e, options = {}) => {
       state.adv.plot_title_position = activeCircularLayout.plotTitlePosition;
       state.circularLegendPosition.value = activeCircularLayout.legend;
       state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
+    }
+
+    await nextTick();
+    state.semanticFileWatchersSuppressed.value = false;
+    applyResultsData(importedResults, ui);
+    await nextTick();
+
+    if (ui.canvasPadding) {
+      state.canvasPadding.top = ui.canvasPadding.top || 0;
+      state.canvasPadding.right = ui.canvasPadding.right || 0;
+      state.canvasPadding.bottom = ui.canvasPadding.bottom || 0;
+      state.canvasPadding.left = ui.canvasPadding.left || 0;
+    }
+    if (ui.canvasPan) {
+      state.canvasPan.x = ui.canvasPan.x || 0;
+      state.canvasPan.y = ui.canvasPan.y || 0;
+    }
+    if (typeof ui.zoom === 'number') {
+      state.zoom.value = ui.zoom;
     }
 
     try {
@@ -2904,10 +3022,18 @@ export const importSession = async (e, options = {}) => {
     return { status: 'ok', data };
   } catch (err) {
     console.error(err);
+    if (commitStarted && rollbackSnapshot) {
+      try {
+        await restoreSessionImportSnapshot(rollbackSnapshot);
+      } catch (rollbackError) {
+        console.error('Failed to roll back the interrupted session import.', rollbackError);
+      }
+    }
     const message = err?.message || 'Invalid JSON structure.';
     alert(`Failed to load session: ${message}`);
     return { status: 'error', error: err };
   } finally {
+    state.semanticFileWatchersSuppressed.value = false;
     e.target.value = '';
   }
 };

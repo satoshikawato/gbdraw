@@ -112,3 +112,16 @@ Every path embedded in a decoded request belongs to the active
 `materialize_session(...)` context. Callers must decode and render inside the
 `with` block; using the materialized session after exit raises
 `SessionResourceError`.
+
+## Web restoration amendment for versions 31–33
+
+The Web reader treats `renderRequest` and its referenced resources as the sole
+authority for render semantics. Stored `config`, `ui`, `features`,
+`editorState`, and `results` are projected only through explicit Web-metadata or
+artifact allowlists and cannot overwrite canonical settings. Canonical resource
+tables are decoded and parsed during side-effect-free preflight; hydration does
+not replay user-upload watchers.
+
+For Linear comparison height, versions 31–33 map an invalid historical value to
+Auto without a user warning. New Web, CLI, and Python config inputs continue to
+reject non-finite and non-positive values.

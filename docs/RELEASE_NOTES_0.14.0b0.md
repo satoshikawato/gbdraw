@@ -52,6 +52,27 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 
 ## Behavior corrections
 
+### Web session restore now follows canonical authority
+
+For session versions 31–33, the Web app now reconstructs render settings and
+semantic tables from `renderRequest` and its canonical resources. Stored GUI
+config, UI layout fields, feature edits, and prior SVG results no longer
+silently overwrite canonical render semantics; allowlisted navigation metadata
+and preview artifacts remain restorable. Session imports validate before commit,
+suppress upload-only watcher side effects during hydration, and restore the
+pre-import state if commit fails.
+
+Linear Pairwise Match Height now accepts only Auto or a positive finite number
+at Web save/run boundaries, the CLI boundary, and the Python canvas config
+boundary. Historical version 31–33 Web sessions containing an invalid value are
+repaired to Auto without a warning.
+
+Specific-color TSV import is now strict and transactional. Exact duplicate rules
+are deduplicated, caption/color conflicts reject the upload without partial
+changes, and file-owned SVG legend entries are reconciled by desired state.
+Repeated uploads no longer create numbered duplicate captions, while recolor,
+rename, and removal update only file-owned legend entries.
+
 ### Sparse depth tracks keep their logical series
 
 Repeated `--depth_track` groups and the corresponding Python depth-track matrices can now omit a file for an individual record without changing the series identity. Use `''`, `-`, `none`, or `null` as a CLI placeholder when supplying one value per record. A group that is empty for every record remains invalid.

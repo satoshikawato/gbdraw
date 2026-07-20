@@ -1198,6 +1198,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--comparisons_table cannot be combined with -b/--blast")
     if not math.isfinite(args.linear_record_gap) or args.linear_record_gap < 0:
         parser.error("--linear_record_gap must be a finite non-negative number")
+    if args.comparison_height is not None and (
+        not math.isfinite(args.comparison_height) or args.comparison_height <= 0
+    ):
+        parser.error("--comparison_height must be a positive finite number")
     if args.protein_blastp_mode != "none" and args.blast:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
     if args.protein_blastp_max_hits <= 0:

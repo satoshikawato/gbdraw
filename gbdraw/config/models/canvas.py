@@ -1,7 +1,22 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping
+
+from gbdraw.exceptions import ValidationError
+
+
+def _positive_finite_float(value: Any, *, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ValidationError(f"{field_name} must be a positive finite number")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{field_name} must be a positive finite number") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValidationError(f"{field_name} must be a positive finite number")
+    return parsed
 
 
 @dataclass(frozen=True)
@@ -126,7 +141,9 @@ class LinearCanvasConfig:
             vertical_offset=float(d["vertical_offset"]),
             horizontal_offset=float(d["horizontal_offset"]),
             vertical_padding=float(d["vertical_padding"]),
-            comparison_height=float(d["comparison_height"]),
+            comparison_height=_positive_finite_float(
+                d["comparison_height"], field_name="comparison_height"
+            ),
             canvas_padding=float(d["canvas_padding"]),
             definition_gap=max(0.0, float(d.get("definition_gap", 20))),
             default_gc_height=float(d["default_gc_height"]),

@@ -21,7 +21,10 @@ export const isInsideComparisonLegend = (el) =>
 
 export const parseTransformXY = (transform) => {
   if (!transform) return { x: 0, y: 0 };
-  const match = transform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+  const number = '([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)';
+  const match = String(transform).match(
+    new RegExp(`translate\\(\\s*${number}(?:\\s*,\\s*|\\s+)${number}\\s*\\)`)
+  );
   return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
 };
 

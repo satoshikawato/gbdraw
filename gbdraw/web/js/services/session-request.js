@@ -1,10 +1,24 @@
 import { buildDefaultColorOverrideTsv } from '../app/color-utils.js';
-import { serializeSpecificRules } from '../app/file-imports.js';
-import { buildLabelOverrideTsv } from '../app/feature-editor/label-override-table.js';
-import { serializeFeatureVisibilityRules } from '../app/feature-visibility.js';
+import {
+  parseColorTable,
+  parsePriorityRules,
+  parseSpecificRules,
+  parseWhitelistRules,
+  serializeSpecificRules
+} from '../app/file-imports.js';
+import {
+  buildLabelOverrideTsv,
+  parseLabelOverrideTsv,
+  serializeLabelOverrideRows
+} from '../app/feature-editor/label-override-table.js';
+import {
+  parseFeatureVisibilityRules,
+  serializeFeatureVisibilityRules
+} from '../app/feature-visibility.js';
 import {
   buildCircularTrackSlotSpec,
   CIRCULAR_TRACK_RENDERERS,
+  normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
 import {
@@ -22,6 +36,7 @@ import {
 } from '../app/depth-track-state.js';
 import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
+import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 2;
 
@@ -205,6 +220,10 @@ const buildRecords = ({ state, filesData, resources }) => {
 const buildConfigOverrides = (state) => {
   const { form, adv } = state;
   const circular = state.mode.value === 'circular';
+  const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
+  if (!circular && comparisonHeight.status === 'invalid') {
+    throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+  }
   return {
     block_stroke_width: optionalNumber(adv.block_stroke_width),
     block_stroke_color: adv.block_stroke_color || null,
@@ -261,7 +280,7 @@ const buildConfigOverrides = (state) => {
     resolve_overlaps: Boolean(adv.resolve_overlaps),
     allow_inner_labels: circular ? form.labels_mode === 'both' : null,
     label_blacklist: state.filterMode.value === 'Blacklist' ? state.manualBlacklist.value : null,
-    comparison_height: circular ? null : optionalNumber(adv.comparison_height),
+    comparison_height: circular || comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
     default_cds_height: circular ? null : optionalNumber(adv.feature_height),
     gc_height: circular ? null : optionalNumber(adv.gc_height),
     scale_style: circular ? null : form.scale_style,
@@ -345,9 +364,10 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
       visibilityOverrides: state.labelVisibilityOverrides
     }
   );
-  if (labelOverride.tsv) {
+  const labelOverrideTsv = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value) || labelOverride.tsv;
+  if (labelOverrideTsv) {
     diagramOptions.labelOverrideFile = fileRef(resources.addText(
-      'label-override-file', 'label-override-file', 'label-overrides.tsv', labelOverride.tsv
+      'label-override-file', 'label-override-file', 'label-overrides.tsv', labelOverrideTsv
     ));
   }
 };
@@ -621,6 +641,50 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   return file;
 };
 
+export const decodeCanonicalResourceText = (resources, resourceId) => {
+  const entry = resources?.[resourceId];
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    throw new Error(`Missing canonical resource: ${resourceId}`);
+  }
+  if (entry.encoding && entry.encoding !== 'base64') {
+    throw new Error(`Unsupported canonical resource encoding: ${entry.encoding}`);
+  }
+  if (typeof entry.data !== 'string') {
+    throw new Error(`Canonical resource ${resourceId} has no text payload.`);
+  }
+  let binary;
+  try {
+    binary = atob(entry.data);
+  } catch (error) {
+    throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
+  }
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+};
+
+const resourceTextFromRef = (resources, ref) => (
+  ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
+);
+
+const projectCanonicalCircularMeasure = (measure) => {
+  if (measure === null || measure === undefined) return null;
+  if (!measure || typeof measure !== 'object' || Array.isArray(measure)) return measure;
+  const value = Number(measure.value);
+  if (!Number.isFinite(value)) return measure;
+  const unit = String(measure.unit || '').trim().toLowerCase();
+  if (!unit || unit === 'factor') return String(value);
+  return `${value}${unit}`;
+};
+
+const projectCanonicalCircularSlot = (slot) => ({
+  ...slot,
+  width: projectCanonicalCircularMeasure(slot?.width),
+  radius: projectCanonicalCircularMeasure(slot?.radius),
+  spacing: projectCanonicalCircularMeasure(slot?.spacing),
+  inner_gap_px: projectCanonicalCircularMeasure(slot?.innerGapPx ?? slot?.inner_gap_px),
+  outer_gap_px: projectCanonicalCircularMeasure(slot?.outerGapPx ?? slot?.outer_gap_px)
+});
+
 const combineCircularGenbankResources = (resources, records) => {
   const resourceIds = [];
   const seen = new Set();
@@ -658,7 +722,8 @@ export const projectCanonicalSessionRequest = ({
   renderRequest,
   resources,
   webFiles = {},
-  linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION
+  linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+  repairInvalidComparisonHeight = false
 }) => {
   if (!renderRequest || ![1, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
@@ -764,20 +829,50 @@ export const projectCanonicalSessionRequest = ({
     });
   }
   const defaultColorsRef = options.colors?.defaultColorsFile || options.colors?.defaultColors;
+  let projectedDefaultColors = {};
   if (defaultColorsRef?.resourceId) {
     files.d_color = resourceAsLegacyFile(resources, defaultColorsRef.resourceId);
+    projectedDefaultColors = parseColorTable(
+      resourceTextFromRef(resources, defaultColorsRef)
+    ).colors;
   }
   const colorTableRef = options.colors?.colorTableFile || options.colors?.colorTable;
+  let projectedSpecificRules = [];
   if (colorTableRef?.resourceId) {
     files.t_color = resourceAsLegacyFile(resources, colorTableRef.resourceId);
+    projectedSpecificRules = parseSpecificRules(
+      resourceTextFromRef(resources, colorTableRef)
+    ).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
   }
+  let projectedWhitelist = [];
   if (options.labelWhitelistFile?.resourceId) {
     files.whitelist = resourceAsLegacyFile(resources, options.labelWhitelistFile.resourceId);
+    projectedWhitelist = parseWhitelistRules(
+      resourceTextFromRef(resources, options.labelWhitelistFile)
+    ).rules;
   }
   const qualifierPriorityRef = options.qualifierPriorityFile || options.qualifierPriorityTable;
+  let projectedPriorityRules = [];
   if (qualifierPriorityRef?.resourceId) {
     files.qualifier_priority = resourceAsLegacyFile(resources, qualifierPriorityRef.resourceId);
+    projectedPriorityRules = parsePriorityRules(
+      resourceTextFromRef(resources, qualifierPriorityRef)
+    ).rules;
   }
+  const projectedFeatureVisibilityRules = options.featureVisibilityTableFile?.resourceId
+    ? parseFeatureVisibilityRules(
+        resourceTextFromRef(resources, options.featureVisibilityTableFile)
+      ).rules
+    : [];
+  const projectedLabelOverrideRows = options.labelOverrideFile?.resourceId
+    ? parseLabelOverrideTsv(resourceTextFromRef(resources, options.labelOverrideFile)).map((row) => ({
+        recordId: row.recordId,
+        featureType: row.featureType,
+        qualifier: row.qualifier,
+        valueRegex: row.valueRegex,
+        labelText: row.labelText
+      }))
+    : [];
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationBlastFiles)) {
     files.c_conservation_blasts = options.conservationBlastFiles
       .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
@@ -789,13 +884,30 @@ export const projectCanonicalSessionRequest = ({
     ));
   }
   const overrides = options.configOverrides || {};
+  const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
+  if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
+    if (!repairInvalidComparisonHeight) {
+      throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+    }
+  }
   const tracks = options.tracks || {};
   const projectedCircularTrackSlots = renderRequest.mode === 'circular'
-    ? parseCircularTrackSlotSpecs(
-        tracks.circularTrackSlots,
-        options.dinucleotide || 'GC',
-        overrides.track_type || 'tuckin'
-      )
+    ? (Array.isArray(tracks.circularTrackSlots)
+        ? tracks.circularTrackSlots.map((slot, index) => (
+            slot && typeof slot === 'object' && !Array.isArray(slot)
+              ? normalizeCircularTrackSlot(
+                  projectCanonicalCircularSlot(slot),
+                  index,
+                  options.dinucleotide || 'GC',
+                  overrides.track_type || 'tuckin'
+                )
+              : parseCircularTrackSlotSpecs(
+                  [slot],
+                  options.dinucleotide || 'GC',
+                  overrides.track_type || 'tuckin'
+                )[0]
+          ))
+        : [])
     : [];
   const projectedLinearTrackSlots = renderRequest.mode === 'linear'
     ? migrateLinearTrackSlotsToCurrentSchema(
@@ -868,7 +980,13 @@ export const projectCanonicalSessionRequest = ({
     show_labels_linear: renderRequest.mode === 'linear' ? (overrides.show_labels || 'none') : 'none',
     track_type: overrides.track_type || 'tuckin',
     linear_track_layout: overrides.linear_track_layout || 'middle',
-    scale_style: overrides.scale_style || 'bar'
+    scale_style: overrides.scale_style || 'bar',
+    align_center: Boolean(overrides.align_center),
+    keep_definition_left_aligned: Boolean(overrides.keep_definition_left_aligned),
+    linear_ruler_on_axis: Boolean(overrides.linear_ruler_on_axis),
+    normalize_length: Boolean(overrides.normalize_length),
+    species: renderRequest.mode === 'circular' ? (options.species || '') : '',
+    strain: renderRequest.mode === 'circular' ? (options.strain || '') : ''
   };
   const adv = {
     features: options.selectedFeaturesSet || [],
@@ -889,13 +1007,48 @@ export const projectCanonicalSessionRequest = ({
       : null,
     plot_title_position: options.output?.plotTitlePosition || (renderRequest.mode === 'linear' ? 'bottom' : 'none'),
     plot_title_font_size: options.plotTitleFontSize ?? null,
+    def_font_size: renderRequest.mode === 'circular'
+      ? (overrides.circular_definition_font_size ?? null)
+      : (overrides.linear_definition_font_size ?? null),
+    label_font_size: overrides.label_font_size ?? null,
+    label_rotation: renderRequest.mode === 'linear' ? (overrides.label_rotation ?? null) : null,
+    block_stroke_width: overrides.block_stroke_width ?? null,
+    block_stroke_color: overrides.block_stroke_color ?? null,
+    line_stroke_width: overrides.line_stroke_width ?? null,
+    line_stroke_color: overrides.line_stroke_color ?? null,
+    axis_stroke_width: renderRequest.mode === 'circular'
+      ? (overrides.circular_axis_stroke_width ?? null)
+      : (overrides.linear_axis_stroke_width ?? null),
+    axis_stroke_color: renderRequest.mode === 'circular'
+      ? (overrides.circular_axis_stroke_color ?? null)
+      : (overrides.linear_axis_stroke_color ?? null),
+    legend_box_size: overrides.legend_box_size ?? null,
+    legend_font_size: overrides.legend_font_size ?? null,
     multi_record_size_mode: renderRequest.layout?.multiRecordSizeMode || 'auto',
     multi_record_min_radius_ratio: renderRequest.layout?.multiRecordMinRadiusRatio ?? 0.55,
     multi_record_column_gap_ratio: renderRequest.layout?.multiRecordColumnGapRatio ?? 0.10,
     multi_record_row_gap_ratio: renderRequest.layout?.multiRecordRowGapRatio ?? 0.05,
     center_reserved_radius: tracks.centerReservedRadius ?? null,
     resolve_overlaps: Boolean(overrides.resolve_overlaps),
+    comparison_height: renderRequest.mode === 'linear' && comparisonHeight.status === 'valid'
+      ? comparisonHeight.value
+      : null,
     feature_height: overrides.default_cds_height ?? null,
+    gc_height: overrides.gc_height ?? null,
+    track_axis_gap: overrides.linear_track_axis_gap ?? null,
+    linear_definition_line_styles: overrides.linear_definition_line_styles || {},
+    linear_show_replicon: Boolean(overrides.linear_definition_show_replicon),
+    linear_show_accession: overrides.linear_definition_show_accession !== false,
+    linear_show_length: overrides.linear_definition_show_length !== false,
+    keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
+    gc_content_mode: overrides.gc_content_mode || 'deviation',
+    gc_content_min_percent: overrides.gc_content_min_percent ?? 0,
+    gc_content_max_percent: overrides.gc_content_max_percent ?? 100,
+    gc_content_show_axis: overrides.gc_content_show_axis !== false,
+    gc_content_show_ticks: overrides.gc_content_show_ticks !== false,
+    gc_content_tick_interval: overrides.gc_content_large_tick_interval ?? null,
+    gc_content_small_tick_interval: overrides.gc_content_small_tick_interval ?? null,
+    gc_content_tick_font_size: overrides.gc_content_tick_font_size ?? null,
     depth_color: overrides.depth_color || '#4A90E2',
     depth_height: overrides.depth_height ?? null,
     depth_min: overrides.depth_min ?? null,
@@ -910,6 +1063,13 @@ export const projectCanonicalSessionRequest = ({
     depth_window_size: options.depthWindow ?? null,
     depth_step_size: options.depthStep ?? null,
     depth_tracks: projectedDepthTracks,
+    scale_stroke_color: overrides.scale_stroke_color ?? null,
+    ruler_label_color: overrides.scale_label_color ?? null,
+    scale_stroke_width: overrides.scale_stroke_width ?? null,
+    scale_font_size: overrides.ruler_label_font_size ?? overrides.scale_font_size ?? null,
+    scale_interval: overrides.scale_interval ?? null,
+    tick_label_font_size: overrides.tick_label_font_size ?? null,
+    pairwise_match_style: overrides.pairwise_match_style || options.pairwiseMatchStyle || 'ribbon',
     circular_track_slots_enabled: renderRequest.mode === 'circular' && Array.isArray(tracks.circularTrackSlots),
     circular_track_slots_schema_version: 4,
     circular_track_slots_axis_index: tracks.circularTrackAxisIndex ?? null,
@@ -946,8 +1106,25 @@ export const projectCanonicalSessionRequest = ({
     config: {
       form,
       adv,
+      colors: projectedDefaultColors,
+      colorsAreOverrides: true,
+      palette: options.colors?.defaultColorsPalette || 'default',
+      rules: projectedSpecificRules,
+      qualifierPriorityRules: projectedPriorityRules,
+      filterMode: projectedWhitelist.length > 0
+        ? 'Whitelist'
+        : (overrides.label_blacklist ? 'Blacklist' : 'None'),
+      whitelist: projectedWhitelist,
+      blacklistText: Array.isArray(overrides.label_blacklist)
+        ? overrides.label_blacklist.join(', ')
+        : String(overrides.label_blacklist || ''),
       linearRecordLayout: linearLayout,
       annotationSets: normalizeAnnotationSets(options.annotations?.sets)
+    },
+    semanticFeatureState: {
+      featureVisibilityManualRules: projectedFeatureVisibilityRules,
+      featureVisibilityOverrides: {},
+      labelOverrideRows: projectedLabelOverrideRows
     }
   };
 };

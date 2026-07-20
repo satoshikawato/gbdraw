@@ -357,6 +357,46 @@ assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
 assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
 
+state.paletteDefinitions.value = { default: { CDS: '#cccccc' } };
+state.currentColors.value = { CDS: '#112233' };
+state.manualSpecificRules.push(
+  { feat: 'CDS', qual: 'gene', val: '^alpha$', color: '#445566', cap: 'Alpha', fromFile: false },
+  { feat: 'CDS', qual: 'product', val: '^beta$', color: '#445566', cap: 'Alpha', fromFile: true }
+);
+state.filterMode.value = 'Whitelist';
+state.manualWhitelist.push({ feat: 'CDS', qual: 'gene', key: 'alpha' });
+state.manualPriorityRules.push({ feat: 'CDS', order: 'gene,product' });
+state.featureVisibilityRules.value = [{
+  id: 'visibility-1', source: 'manual', recordId: '*', featureType: 'CDS',
+  qualifier: 'gene', value: '^alpha$', action: 'off'
+}];
+state.labelTextFeatureOverrides.f1 = 'Renamed alpha';
+const semanticCanonical = buildCanonicalSessionRequest({ state, filesData });
+const semanticProjection = projectCanonicalSessionRequest(semanticCanonical);
+assert.deepEqual(semanticProjection.config.colors, { CDS: '#112233' });
+assert.equal(semanticProjection.config.colorsAreOverrides, true);
+assert.equal(semanticProjection.config.palette, 'default');
+assert.equal(semanticProjection.config.rules.length, 2);
+assert.equal(semanticProjection.config.rules.some((rule) => rule.fromFile), false);
+assert.deepEqual(semanticProjection.config.whitelist, [
+  { feat: 'CDS', qual: 'gene', key: 'alpha' }
+]);
+assert.deepEqual(semanticProjection.config.qualifierPriorityRules, [
+  { feat: 'CDS', order: 'gene,product' }
+]);
+assert.equal(semanticProjection.config.filterMode, 'Whitelist');
+assert.equal(semanticProjection.semanticFeatureState.featureVisibilityManualRules.length, 1);
+assert.equal(semanticProjection.semanticFeatureState.labelOverrideRows.length, 1);
+assert.equal(semanticProjection.semanticFeatureState.labelOverrideRows[0].labelText, 'Renamed alpha');
+state.paletteDefinitions.value = { default: {} };
+state.currentColors.value = {};
+state.manualSpecificRules.splice(0);
+state.filterMode.value = 'None';
+state.manualWhitelist.splice(0);
+state.manualPriorityRules.splice(0);
+state.featureVisibilityRules.value = [];
+delete state.labelTextFeatureOverrides.f1;
+
 const invalidCircularDepthIndex = structuredClone(canonical);
 invalidCircularDepthIndex.renderRequest.diagramOptions.tracks = {
   circularTrackSlots: ['depth:depth@track_index=1.5']
@@ -509,6 +549,7 @@ assert.match(combinedCircularGenbank, /WEBTWO/);
 
 state.mode.value = 'linear';
 state.lInputType.value = 'gb';
+state.adv.comparison_height = 42.5;
 const linearFilesData = {
   linearSeqs: [
     { uid: 'first', gb: genbank, region_record_id: '', region_start: null, region_end: null, region_reverse: false },
@@ -518,6 +559,7 @@ const linearFilesData = {
   linearComparisons: []
 };
 const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.equal(linearCanonical.renderRequest.diagramOptions.configOverrides.comparison_height, 42.5);
 assert.equal(linearCanonical.renderRequest.records[0].selector, null);
 assert.deepEqual(linearCanonical.renderRequest.records[1].selector, { kind: 'recordId', value: 'RecA' });
 assert.equal(linearCanonical.renderRequest.records[2].selector, null);
@@ -557,6 +599,7 @@ assert.equal(
 );
 
 const linearProjection = projectCanonicalSessionRequest(linearCanonical);
+assert.equal(linearProjection.config.adv.comparison_height, 42.5);
 assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.region_record_id),
   ['', 'RecA', '#2']
@@ -564,6 +607,30 @@ assert.deepEqual(
 assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
 assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
 assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
+
+state.adv.comparison_height = null;
+const autoHeightCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.equal(autoHeightCanonical.renderRequest.diagramOptions.configOverrides.comparison_height, null);
+assert.equal(projectCanonicalSessionRequest(autoHeightCanonical).config.adv.comparison_height, null);
+state.adv.comparison_height = -2;
+assert.throws(
+  () => buildCanonicalSessionRequest({ state, filesData: linearFilesData }),
+  /Pairwise Match Height must be Auto or a positive finite number/
+);
+const historicalInvalidHeight = structuredClone(linearCanonical);
+historicalInvalidHeight.renderRequest.diagramOptions.configOverrides.comparison_height = -2;
+assert.throws(
+  () => projectCanonicalSessionRequest(historicalInvalidHeight),
+  /Pairwise Match Height must be Auto or a positive finite number/
+);
+assert.equal(
+  projectCanonicalSessionRequest({
+    ...historicalInvalidHeight,
+    repairInvalidComparisonHeight: true
+  }).config.adv.comparison_height,
+  null
+);
+state.adv.comparison_height = 42.5;
 
 const depthA = {
   ...genbank,

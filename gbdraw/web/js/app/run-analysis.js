@@ -5,7 +5,10 @@ import {
   isDiagramGenerationCanceled,
   runDiagramGeneration
 } from '../services/diagram-generation.js';
-import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
+import {
+  buildLabelOverrideTsv,
+  serializeLabelOverrideRows
+} from './feature-editor/label-override-table.js';
 import {
   applyCircularSuppressControlsToSlots,
   applyCircularTrackOrderPlacements,
@@ -70,6 +73,7 @@ import {
   normalizeDefinitionLineStyleState
 } from './cli-args.js';
 import { downloadZipFile } from '../utils/zip.js';
+import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
 import { downloadTextFile } from '../services/text-download.js';
 import {
@@ -738,6 +742,7 @@ export const createRunAnalysis = ({
     clickedLabel,
     labelTextScopeDialog,
     labelTextFeatureOverrides,
+    canonicalLabelOverrideRows,
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
@@ -2052,11 +2057,12 @@ json.dumps({
         featureOverrideSources: featureOverrideSourcesSnapshot,
         visibilityOverrides: visibilityOverridesSnapshot
       });
+      const effectiveLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value) || labelOverride.tsv;
       if (labelOverride.skippedMissingSourceCount > 0) {
         labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
       }
-      if (labelOverride.tsv) {
-        stageTextFile('/web_label_table.tsv', labelOverride.tsv);
+      if (effectiveLabelOverrideTsv) {
+        stageTextFile('/web_label_table.tsv', effectiveLabelOverrideTsv);
         args.push('--label_table', '/web_label_table.tsv');
       }
       let featureVisibilityTablePath = null;
@@ -3455,7 +3461,13 @@ json.dumps({
 
         if (adv.feature_height) args.push('--feature_height', adv.feature_height);
         if (adv.gc_height) args.push('--gc_height', adv.gc_height);
-        if (adv.comparison_height) args.push('--comparison_height', adv.comparison_height);
+        const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
+        if (comparisonHeight.status === 'invalid') {
+          throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+        }
+        if (comparisonHeight.status === 'valid') {
+          args.push('--comparison_height', comparisonHeight.value);
+        }
 
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
         if (wantsRulerLabelFontOption) {

@@ -26,6 +26,7 @@ const generationCancelRequested = ref(false);
 const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
 const sessionTitle = ref('');
+const semanticFileWatchersSuppressed = ref(false);
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -70,6 +71,7 @@ const svgContent = computed(() => {
         'data-definition-line-kind',
         'data-gbdraw-feature-id',
         'data-legend-key',
+        'data-legend-owner',
         'data-label-key',
         'data-label-feature-id',
         'data-label-source-text',
@@ -731,6 +733,7 @@ const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, stro
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const labelTextFeatureOverrides = reactive({}); // { featureId: text }
+const canonicalLabelOverrideRows = ref([]);
 const labelTextBulkOverrides = reactive({}); // { sourceText: text }
 const labelTextFeatureOverrideSources = reactive({}); // { featureId: sourceText }
 const labelVisibilityOverrides = reactive({}); // { featureId: 'on' | 'off' }
@@ -1097,6 +1100,7 @@ export const state = {
   loadingStatus,
   errorLog,
   sessionTitle,
+  semanticFileWatchersSuppressed,
   results,
   selectedResultIndex,
   resultPanelTab,
@@ -1221,6 +1225,7 @@ export const state = {
   labelSearch,
   editableLabels,
   labelTextFeatureOverrides,
+  canonicalLabelOverrideRows,
   labelTextBulkOverrides,
   labelTextFeatureOverrideSources,
   labelVisibilityOverrides,
