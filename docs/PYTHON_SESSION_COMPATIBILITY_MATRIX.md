@@ -1,8 +1,8 @@
 # Python Session Compatibility Matrix
 
-- 調査日: 2026-07-15
-- 対象: session version 27～30、GUI-authored / CLI sidecar、Circular / Linear
-- 結論: version 27～30 は internal replay のみ。version 31 は canonical public typed conversion を提供
+- 調査日: 2026-07-15（最終更新: 2026-07-21）
+- 対象: session version 27～35、GUI-authored / CLI sidecar、Circular / Linear
+- 結論: version 27～30 は internal replay のみ。version 31～35 は canonical public typed conversion を提供
 - 関連 ADR: [`ADR_PYTHON_SESSION_API.md`](ADR_PYTHON_SESSION_API.md)
 
 ## 1. 判定基準
@@ -26,6 +26,11 @@
 | 28 | optional `editorState` とその Web normalization を追加 | Web は欠落時に default を補う。Python は editor state を typed input に変換しない |
 | 29 | optional `losatDerivedCache` を追加 | Web は保存・復元する。Python の public request model には cache owner がない |
 | 30 | feature visibility を manual rules と per-feature overrides に分離 | Web は legacy rules を分割する。Python は visibility edit state を typed input に変換しない |
+| 31 | CLI 非依存の typed `renderRequest` と canonical resource map を追加 | Python/Web とも canonical request を復元し、public typed bridge が受理する |
+| 32 | materialized annotation set、target、style、track binding を canonical request に追加 | version 31 を migrate し、annotation を typed request で保持する |
+| 33 | Linear custom-track geometry を schema 2 へ更新 | version 32 の feature-slot no-op 値を compatibility rule に従って migrate する |
+| 34 | feature underlay と canonical `renderRequest.schema == 3` を追加 | schema 1/2 の旧 request を visual replay を保つよう migrate する |
+| 35 | protein LOSATP cache identity と artifact 境界を更新 | protein raw schema 3、nucleotide raw schema 2、derived schema 2、identity manifest schema 1 を検証する |
 
 version 30 の導入後にも、`config.cliOptions` と `cliInvocation` からの
 `multiRecordPositions` 補完が version bump なしで追加されている。このため `version == 30`
@@ -48,14 +53,19 @@ bump が必要である。
 | 28 | GUI-partial / No typed | GUI-partial / No typed | CLI / No typed | CLI / No typed |
 | 29 | GUI-partial / No typed | GUI-partial / No typed | CLI / No typed | CLI / No typed |
 | 30 | GUI-partial / No typed | GUI-partial / No typed | CLI / No typed | CLI / No typed |
+| 31 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
+| 32 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
+| 33 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
+| 34 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
+| 35 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
 
-この表の CLI 判定は version から導いたものではなく、`cliInvocation` の payload が完全である
+この表のversion 27～30における CLI 判定は version から導いたものではなく、`cliInvocation` の payload が完全である
 場合の条件付き判定である。`cliInvocation` が欠落・不完全なら同じ version でも GUI-partial
 または明示 error になる。
 
 ## 4. capability matrix
 
-| Capability | GUI `config` / `files` fallback | CLI sidecar | Typed conversion blocker |
+| Capability | GUI `config` / `files` fallback | CLI sidecar | Legacy blocker / canonical status |
 |---|---|---|---|
 | GenBank | Circular/Linear とも materialize 可能 | binding により replay | typed record source と lifetime がない |
 | GFF3 + FASTA | Circular/Linear とも materialize 可能 | binding により replay | pair identity と lifetime がない |
@@ -69,10 +79,10 @@ bump が必要である。
 | conservation | Circular BLAST file の基本 subset を復元 | stored args で replay | FASTA-derived data、labels/colors/table の完全な復元がない |
 | custom circular/linear track slots | Python fallback は slot array を再現しない | stored args で replay | renderer-specific typed slot model がない |
 | nucleotide comparison | Linear GUI の基本 BLAST path/threshold subset を復元 | stored args で replay | table/dependency と comparison source の統一 model がない |
-| protein / orthogroup / collinearity | Linear GUI の主要 option subset を復元 | stored args と source session で replay | generated/precomputed input と cache metadata の owner がない |
+| protein / orthogroup / collinearity | Linear GUI の主要 option subset を復元 | stored args と source session で replay | version 31～35 は canonical comparison options/resources、version 35 は protein identity/cache artifact を保持 |
 | plot title / legend / common layout | 多くを復元 | stored args で replay | GUI-only の一部 advanced state は欠落する |
 | output formats / interactive metadata | GUI fallback は override がなければ SVG に固定 | args と `renderFormats` に保持 | saved result、format request、interactive policy の typed 分離がない |
-| `losatCache` / `losatDerivedCache` | CLI argument listだけでは表現されない | Linear internal owner が source session を直接参照 | cache schema、identity、optional lifetime が public contract にない |
+| `losatCache` / `losatDerivedCache` | CLI argument listだけでは表現されない | Linear owner が source session の artifact を参照 | version 35 は current cache、identity manifest、未検証 legacy artifact を別々に検証・復元 |
 | saved SVG `results` | artifact として保持するが replay input にはしない | sidecar に保存 | render request と previous result を区別する型がない |
 
 ## 5. 実証できた範囲と test gap
@@ -87,11 +97,16 @@ bump が必要である。
 - version 29 の smoke conversion は typed losslessness を証明しない。
 - version 30 の後発 field が version bump なしで追加されているため、current synthetic shape を
   version 27～29 に relabel する test は migration evidence として採用しない。
+- version 31～35 は canonical request の load/materialize/typed conversion と save round-trip を
+  focused session/API test で固定する。version 35 writer は `renderRequest.schema == 3` のみを出力する。
+- version 35 は protein raw schema 2 を current `losatCache` に入れず、
+  `legacyArtifacts.proteinRawCandidates` に隔離する。検証済み promotion だけが protein raw schema 3 と
+  derived schema 2 を作り、nucleotide raw entry は schema 2 のまま保持する。
 
-## 6. E0 decision
+## 6. E0 decision と現在の到達点
 
-1. request model の owner は `gbdraw.api.requests` とする。ただし E1～E5 完了までは
-   `gbdraw.api.__all__` から export しない。
+1. request model の owner は `gbdraw.api.requests` とする。version 31 gate の完了後は
+   public session/request symbols を `gbdraw.api` から export する。
 2. version 27～30 の `cliInvocation` replay は CLI/GUI の internal compatibility path として
    維持する。CLI argument string から public request を作ることは保証しない。
 3. GUI-only legacy session は current best-effort replay を維持するが、lossless public
@@ -99,14 +114,14 @@ bump が必要である。
 4. 新しい session schema は CLI 非依存の canonical typed render request payload を持つ。
    payload の mode、record inputs、options、comparisons、output policy を schema で検証する。
 5. canonical payload 追加時は session version を 31 に上げ、Python と Web の version、writer、
-   migration test を同じ change で更新する。
+   migration test を同じ change で更新する。その後も schema に意味のある変更は version 32～35 で同じ原則を守る。
 6. temporary materialization は context manager が所有し、typed request 内の path はその
    lifetime 外へ持ち出せない契約にする。
 7. public session symbol は version 31 canonical payload の load → materialize → request →
-   render → save round-trip が両 mode で通った release でのみ追加する。
+   render → save round-trip が両 mode で固定されたため公開されている。version 32～35 もこの typed boundary を維持する。
 
-したがって Workstream E の public bridge gate は閉じたままである。次に進める作業は、
-session replay の公開ではなく、session から独立した request model と version 31 canonical
-payload の schema 設計である。
+したがって Workstream E の public bridge gate は version 31 で開放済みである。
+current writer は version 35 と canonical request schema 3 を出力し、reader は version 27～35 を受理する。
+version 27～30 は引き続き internal replay のみで、public typed conversion の境界は version 31 のままである。
 
 [Validation plan](PYTHON_API_VALIDATION_PLAN.md) | [Follow-up plan](PYTHON_API_FOLLOWUP_PLAN.md) | [Python API](PYTHON_API.md)

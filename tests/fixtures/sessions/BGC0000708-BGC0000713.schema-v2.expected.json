@@ -1,0 +1,13 @@
+{
+  "sourceCommit": "c64ff8c3b42fc315975dc36cf1942f471c93e847",
+  "sourcePath": "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+  "sourceSha256": "3f10b998e7f257fa0458fb4310f9c5ae246d3e431b8f54755b16fe506f53dbdd",
+  "sessionVersion": 33,
+  "renderRequestSchema": 2,
+  "storedRawEntries": 34,
+  "totalPairs": 25,
+  "cacheHits": 25,
+  "cacheMisses": 0,
+  "uniqueJobs": 0,
+  "workerCalls": 0
+}

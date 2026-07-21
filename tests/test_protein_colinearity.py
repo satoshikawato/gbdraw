@@ -18,7 +18,11 @@ import gbdraw.api.diagram as api_diagram_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
+    PROTEIN_LOSAT_CACHE_SCHEMA,
     LosatpCacheManager,
+    build_losat_transport_id,
+    build_protein_losat_cache_key,
+    build_protein_losat_pair_identity,
     build_web_losat_cache_key,
     build_orthogroups_from_protein_hits,
     build_pairwise_protein_blastp_comparisons,
@@ -27,15 +31,19 @@ from gbdraw.analysis.protein_colinearity import (
     convert_pair_protein_hits_to_genomic_links,
     convert_protein_hits_to_genomic_links,
     extract_cds_proteins,
+    extract_protein_identity_manifest,
     extract_web_stable_cds_proteins,
     filter_protein_hits_by_thresholds,
     parse_losatp_outfmt6,
+    percent_encode_losat_transport_field,
     proteins_to_fasta,
+    promote_legacy_protein_raw_cache_entries,
     select_best_hits_per_query,
     select_reciprocal_best_hit_edges,
     select_reciprocal_best_hits,
     select_rbh_orthogroup_edges_from_directional_hits,
     select_top_hits_per_query,
+    validate_protein_raw_entry_references,
 )
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import DiagramOptions
@@ -46,6 +54,7 @@ from gbdraw.diagrams.linear.orthogroup_alignment import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.record_select import reverse_records
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
@@ -155,6 +164,182 @@ def _load_web_helper_namespace() -> dict[str, object]:
     namespace: dict[str, object] = {}
     exec(helper_source, namespace)
     return namespace
+
+
+@pytest.mark.linear
+def test_protein_identity_golden_json_hash_and_transport_encoding() -> None:
+    feature_id = protein_colinearity_module.canonical_feature_analysis_id(
+        feature_type="CDS",
+        location_operator="join",
+        location_parts=[(7438, 8458, 1)],
+        strand=1,
+        same_location_ordinal=1,
+    )
+
+    assert feature_id == "f_c038a3178fe7cfc89c61309ec0bdaf81e01cf84b1a647db670688c7f1eece649"
+    assert (
+        percent_encode_losat_transport_field("A z@|~%\n雪e\u0301")
+        == "A%20z%40%7C%7E%25%0A%E9%9B%AA%C3%A9"
+    )
+    transport_id = build_losat_transport_id(
+        record_source_id="BGC 1@source",
+        record_instance_id="row|1",
+        display_alias="蛋白~A\n",
+        feature_analysis_id=feature_id,
+    )
+    assert transport_id == (
+        "BGC%201%40source@row%7C1|%E8%9B%8B%E7%99%BD%7EA%0A~"
+        + feature_id
+    )
+    assert not any(character.isspace() for character in transport_id)
+
+
+@pytest.mark.linear
+def test_protein_manifest_separates_raw_and_derived_invalidation() -> None:
+    def make_record(*, protein_id: str, product: str) -> SeqRecord:
+        record = _record(
+            "record_a",
+            features=[
+                _cds(
+                    0,
+                    9,
+                    qualifiers={
+                        "translation": ["MKT*"],
+                        "protein_id": [protein_id],
+                        "product": [product],
+                    },
+                )
+            ],
+        )
+        record.annotations["upload_filename"] = "ignored.gb"
+        record.annotations["lastModified"] = 123
+        return record
+
+    baseline = extract_protein_identity_manifest(
+        [make_record(protein_id="protein-1", product="old product")],
+        record_instance_keys=("row-1",),
+    )
+    annotation_only = extract_protein_identity_manifest(
+        [make_record(protein_id="protein-1", product="new product")],
+        record_instance_keys=("row-1",),
+    )
+    alias_changed = extract_protein_identity_manifest(
+        [make_record(protein_id="renamed protein", product="old product")],
+        record_instance_keys=("row-1",),
+    )
+
+    baseline_protein = baseline.proteins_by_record[0][0]
+    assert baseline_protein.feature_analysis_id == annotation_only.proteins_by_record[0][0].feature_analysis_id
+    assert baseline.protein_set_hashes == annotation_only.protein_set_hashes
+    assert baseline.binding_hashes == annotation_only.binding_hashes
+    assert baseline.derived_mapping_hashes != annotation_only.derived_mapping_hashes
+    assert baseline_protein.feature_analysis_id == alias_changed.proteins_by_record[0][0].feature_analysis_id
+    assert baseline.protein_set_hashes == alias_changed.protein_set_hashes
+    assert baseline.binding_hashes != alias_changed.binding_hashes
+
+
+@pytest.mark.linear
+def test_protein_raw_identity_is_invariant_to_display_reverse_complement() -> None:
+    record = _record(
+        "record_a",
+        sequence="ATGAAATAG" * 4,
+        features=[_cds(3, 18, strand=1, qualifiers={"translation": ["MKT"]})],
+    )
+    record.annotations["gbdraw_coord_base"] = 1
+    record.annotations["gbdraw_coord_step"] = 1
+    reversed_record = reverse_records([record], True)[0]
+
+    source = extract_protein_identity_manifest(
+        [record],
+        record_instance_keys=("row",),
+    )
+    reversed_view = extract_protein_identity_manifest(
+        [reversed_record],
+        record_instance_keys=("row",),
+    )
+
+    assert (
+        source.proteins_by_record[0][0].feature_analysis_id
+        == reversed_view.proteins_by_record[0][0].feature_analysis_id
+    )
+    assert source.protein_set_hashes == reversed_view.protein_set_hashes
+    assert source.binding_hashes == reversed_view.binding_hashes
+
+
+@pytest.mark.linear
+def test_protein_manifest_compound_location_and_same_location_ordinals_are_stable() -> None:
+    location = CompoundLocation(
+        [FeatureLocation(0, 6, strand=1), FeatureLocation(12, 18, strand=1)],
+        operator="join",
+    )
+    features = [
+        SeqFeature(
+            location,
+            type="CDS",
+            qualifiers={"translation": [sequence], "protein_id": ["duplicate"]},
+        )
+        for sequence in ("MKK", "MQQ")
+    ]
+    first = extract_protein_identity_manifest(
+        [_record("compound", features=features)],
+        record_instance_keys=("row",),
+    )
+    reordered = extract_protein_identity_manifest(
+        [_record("compound", features=list(reversed(features)))],
+        record_instance_keys=("row",),
+    )
+
+    by_sequence = {protein.sequence: protein for protein in first.proteins_by_record[0]}
+    reordered_by_sequence = {
+        protein.sequence: protein for protein in reordered.proteins_by_record[0]
+    }
+    assert {protein.same_location_ordinal for protein in by_sequence.values()} == {1, 2}
+    assert all(protein.location_operator == "join" for protein in by_sequence.values())
+    assert all(protein.feature_hash_parts == ((0, 6, 1), (12, 18, 1)) for protein in by_sequence.values())
+    assert {
+        sequence: protein.feature_analysis_id for sequence, protein in by_sequence.items()
+    } == {
+        sequence: protein.feature_analysis_id
+        for sequence, protein in reordered_by_sequence.items()
+    }
+    assert first.protein_set_hashes == reordered.protein_set_hashes
+
+
+@pytest.mark.linear
+def test_identical_record_instances_share_content_but_not_transport_bindings() -> None:
+    feature = _cds(
+        0,
+        9,
+        qualifiers={"translation": ["MKT*"], "protein_id": ["same"]},
+    )
+    records = [
+        _record("accession", features=[feature]),
+        _record("accession", features=[feature]),
+    ]
+    extraction = extract_protein_identity_manifest(
+        records,
+        record_instance_keys=("row-1", "row-2"),
+    )
+
+    assert extraction.protein_set_hashes[0] == extraction.protein_set_hashes[1]
+    assert extraction.record_analysis_ids[0] == extraction.record_analysis_ids[1]
+    assert extraction.binding_hashes[0] != extraction.binding_hashes[1]
+    assert len(extraction.identity_manifest.protein_sets) == 1
+    assert len(extraction.identity_manifest.record_analyses) == 1
+    assert len(extraction.protein_map) == 2
+    assert extraction.proteins_by_record[0][0].protein_id != extraction.proteins_by_record[1][0].protein_id
+
+    forward = build_protein_losat_pair_identity(
+        extraction.identity_manifest,
+        query_record_instance_key="row-1",
+        subject_record_instance_key="row-2",
+    )
+    reverse = build_protein_losat_pair_identity(
+        extraction.identity_manifest,
+        query_record_instance_key="row-2",
+        subject_record_instance_key="row-1",
+    )
+    assert build_protein_losat_cache_key(forward, args=[]) != build_protein_losat_cache_key(reverse, args=[])
 
 
 @pytest.mark.linear
@@ -1081,34 +1266,38 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
     subject_fasta = proteins_to_fasta(extraction.proteins_by_record[1])
     query_id = extraction.proteins_by_record[0][0].protein_id
     subject_id = extraction.proteins_by_record[1][0].protein_id
-    cache_key, query_hash, subject_hash = build_web_losat_cache_key(
-        query_fasta=query_fasta,
-        subject_fasta=subject_fasta,
+    pair_identity = build_protein_losat_pair_identity(
+        extraction.identity_manifest,
+        query_record_instance_key="r_left",
+        subject_record_instance_key="r_right",
+    )
+    cache_key = build_protein_losat_cache_key(
+        pair_identity,
         args=["--max-hsps-per-subject", "1"],
     )
-    threaded_key, _, _ = build_web_losat_cache_key(
-        query_fasta=query_fasta,
-        subject_fasta=subject_fasta,
-        args=["--max-hsps-per-subject", "1"],
-        runtime_compatibility="serial-v1",
-        threads_per_job=32,
-    )
-    assert threaded_key == cache_key
     raw_text = (
         f"{query_id}\t{subject_id}\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n"
     )
     cache = LosatpCacheManager(
         [
             {
-                "schema": 2,
+                "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
                 "kind": "raw-losat",
+                "identityKind": "protein",
                 "key": cache_key,
                 "text": raw_text,
                 "program": "blastp",
-                "queryCanonicalHash": query_hash,
-                "subjectCanonicalHash": subject_hash,
+                "outfmt": "6",
+                "args": ["--max-hsps-per-subject", "1"],
+                "queryProteinSetHash": pair_identity.query_protein_set_hash,
+                "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
+                "queryBindingHash": pair_identity.query_binding_hash,
+                "subjectBindingHash": pair_identity.subject_binding_hash,
+                "queryRecordInstanceKey": pair_identity.query_record_instance_key,
+                "subjectRecordInstanceKey": pair_identity.subject_record_instance_key,
             }
-        ]
+        ],
+        identity_manifest=extraction.identity_manifest,
     )
 
     def fail_run(*_args, **_kwargs):
@@ -1128,10 +1317,27 @@ def test_pairwise_blastp_uses_web_losat_cache_without_external_run(
     assert entries[0]["key"] == cache_key
     assert entries[0]["display"] is True
     assert entries[0]["filename"] == "record_a.record_b.losatp.tsv"
+    assert validate_protein_raw_entry_references(
+        entries[0],
+        extraction.identity_manifest,
+    )
+    assert validate_protein_raw_entry_references(
+        {**entries[0], "text": ""},
+        extraction.identity_manifest,
+    )
+    assert not validate_protein_raw_entry_references(
+        {**entries[0], "text": raw_text.replace(subject_id, "outside-binding")},
+        extraction.identity_manifest,
+    )
+    with pytest.raises(ValidationError, match="IDs and sequences"):
+        cache._pair_identity_from_fasta(
+            query_fasta.replace("\nMK\n", "\nMA\n"),
+            subject_fasta,
+        )
 
 
 @pytest.mark.linear
-def test_pairwise_blastp_reuses_legacy_thread_sensitive_web_losat_cache(
+def test_pairwise_blastp_reuses_only_verified_legacy_web_losat_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [
@@ -1146,29 +1352,49 @@ def test_pairwise_blastp_reuses_legacy_thread_sensitive_web_losat_cache(
     subject_fasta = proteins_to_fasta(extraction.proteins_by_record[1])
     query_id = extraction.proteins_by_record[0][0].protein_id
     subject_id = extraction.proteins_by_record[1][0].protein_id
-    _, query_hash, subject_hash = build_web_losat_cache_key(
-        query_fasta=query_fasta,
-        subject_fasta=subject_fasta,
+    legacy_query = protein_colinearity_module._with_stable_web_protein_ids(
+        extraction.proteins_by_record[0],
+        "r_old_left",
+    )
+    legacy_subject = protein_colinearity_module._with_stable_web_protein_ids(
+        extraction.proteins_by_record[1],
+        "r_old_right",
+    )
+    legacy_query_fasta = proteins_to_fasta(legacy_query)
+    legacy_subject_fasta = proteins_to_fasta(legacy_subject)
+    legacy_key, query_hash, subject_hash = build_web_losat_cache_key(
+        query_fasta=legacy_query_fasta,
+        subject_fasta=legacy_subject_fasta,
         args=["--max-hsps-per-subject", "1"],
     )
-    legacy_key = "legacy-thread-sensitive-key"
     raw_text = (
-        f"{query_id}\t{subject_id}\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n"
+        f"{legacy_query[0].protein_id}\t{legacy_subject[0].protein_id}"
+        "\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n"
     )
-    cache = LosatpCacheManager(
-        [
-            {
-                "schema": 2,
-                "kind": "raw-losat",
-                "key": legacy_key,
-                "text": raw_text,
-                "program": "blastp",
-                "queryCanonicalHash": query_hash,
-                "subjectCanonicalHash": subject_hash,
-            }
-        ],
-        threads_per_job=32,
+    legacy_entry = {
+        "schema": 2,
+        "kind": "raw-losat",
+        "key": legacy_key,
+        "text": raw_text,
+        "program": "blastp",
+        "outfmt": "6",
+        "args": ["--max-hsps-per-subject", "1"],
+        "queryCanonicalHash": query_hash,
+        "subjectCanonicalHash": subject_hash,
+    }
+    promotion = promote_legacy_protein_raw_cache_entries(
+        [legacy_entry],
+        query_proteins=extraction.proteins_by_record[0],
+        subject_proteins=extraction.proteins_by_record[1],
+        query_fasta=query_fasta,
+        subject_fasta=subject_fasta,
+        identity_manifest=extraction.identity_manifest,
+        expected_args=["--max-hsps-per-subject", "1"],
     )
+    assert promotion.promotion is not None
+    assert legacy_query[0].protein_id not in promotion.promotion.rewritten_tsv
+    cache = LosatpCacheManager([legacy_entry], threads_per_job=32)
+    cache.set_protein_extraction(extraction)
 
     def fail_run(*_args, **_kwargs):
         raise AssertionError("LOSATP should not run on a legacy cache hit")
@@ -1186,9 +1412,103 @@ def test_pairwise_blastp_reuses_legacy_thread_sensitive_web_losat_cache(
     assert result.comparisons[0].iloc[0]["subject_protein_id"] == subject_id
     entries = cache.session_entries()
     assert entries[0]["key"] != legacy_key
+    assert entries[0]["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA
     assert entries[0]["display"] is True
     assert entries[0]["args"] == ["--max-hsps-per-subject", "1"]
     assert entries[0]["outfmt"] == "6"
+    assert cache.has_legacy_candidates is False
+
+
+@pytest.mark.linear
+def test_legacy_protein_cache_promotion_rejects_hash_args_and_ambiguous_empty_output() -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 9)]),
+        _record("record_b", features=[_cds(9, 18)]),
+    ]
+    extraction = extract_protein_identity_manifest(
+        records,
+        record_instance_keys=("left", "right"),
+    )
+    query_proteins, subject_proteins = extraction.proteins_by_record
+    query_fasta = proteins_to_fasta(query_proteins)
+    subject_fasta = proteins_to_fasta(subject_proteins)
+    legacy_query = protein_colinearity_module._with_stable_web_protein_ids(
+        query_proteins,
+        "legacy_left",
+    )
+    legacy_subject = protein_colinearity_module._with_stable_web_protein_ids(
+        subject_proteins,
+        "legacy_right",
+    )
+    _, query_hash, subject_hash = build_web_losat_cache_key(
+        query_fasta=proteins_to_fasta(legacy_query),
+        subject_fasta=proteins_to_fasta(legacy_subject),
+        args=[],
+    )
+    valid_text = (
+        f"{legacy_query[0].protein_id}\t{legacy_subject[0].protein_id}"
+        "\t90\t2\t0\t0\t1\t2\t1\t2\t1e-5\t20\n"
+    )
+    common = {
+        "schema": 2,
+        "kind": "raw-losat",
+        "program": "blastp",
+        "outfmt": "6",
+        "queryCanonicalHash": query_hash,
+        "subjectCanonicalHash": subject_hash,
+    }
+    candidates = [
+        {**common, "key": "wrong-args", "args": ["--different"], "text": valid_text},
+        {**common, "key": "wrong-hash", "args": [], "text": valid_text, "queryCanonicalHash": "0" * 64},
+        {
+            **common,
+            "key": "empty",
+            "args": [],
+            "text": "",
+            "queryCanonicalHash": "unproven-query",
+            "subjectCanonicalHash": "unproven-subject",
+        },
+    ]
+
+    scan = promote_legacy_protein_raw_cache_entries(
+        candidates,
+        query_proteins=query_proteins,
+        subject_proteins=subject_proteins,
+        query_fasta=query_fasta,
+        subject_fasta=subject_fasta,
+        identity_manifest=extraction.identity_manifest,
+        expected_args=[],
+    )
+
+    assert scan.promotion is None
+    assert len(scan.rejections) == 3
+    assert "args" in scan.rejections[0].reason
+    assert "hash" in scan.rejections[1].reason
+    assert "Empty" in scan.rejections[2].reason
+    cache = LosatpCacheManager(candidates, identity_manifest=extraction.identity_manifest)
+    assert cache.session_entries() == ()
+    assert len(cache.legacy_candidate_envelope()["entries"]) == 3
+
+    empty_with_evidence = promote_legacy_protein_raw_cache_entries(
+        [
+            {
+                **common,
+                "key": "token-evidence",
+                "args": ["--different"],
+                "text": valid_text,
+            },
+            {**common, "key": "verified-empty", "args": [], "text": ""},
+        ],
+        query_proteins=query_proteins,
+        subject_proteins=subject_proteins,
+        query_fasta=query_fasta,
+        subject_fasta=subject_fasta,
+        identity_manifest=extraction.identity_manifest,
+        expected_args=[],
+    )
+    assert empty_with_evidence.promotion is not None
+    assert empty_with_evidence.promotion.candidate_index == 1
+    assert empty_with_evidence.promotion.rewritten_tsv == ""
 
 
 @pytest.mark.linear
@@ -1251,13 +1571,15 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
     payload = json.loads(output_prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
     entries = payload["losatCache"]["entries"]
     assert len(entries) == 1
-    assert entries[0]["schema"] == 2
+    assert entries[0]["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA
     assert entries[0]["kind"] == "raw-losat"
+    assert entries[0]["identityKind"] == "protein"
     assert entries[0]["display"] is True
     assert entries[0]["filename"] == "record_a.record_b.losatp.tsv"
     assert entries[0]["text"].strip()
-    assert entries[0]["queryCanonicalHash"]
-    assert entries[0]["subjectCanonicalHash"]
+    assert entries[0]["queryProteinSetHash"].startswith("sha256:")
+    assert entries[0]["subjectProteinSetHash"].startswith("sha256:")
+    assert payload["proteinIdentityManifest"]["schema"] == 1
 
 
 @pytest.mark.linear
@@ -2219,8 +2541,29 @@ def test_web_extract_cds_protein_fasta_uses_coordinate_stable_ids(tmp_path: Path
 
     assert "error" not in result
     protein_id = next(iter(result["protein_map"]))
-    assert protein_id.startswith("p_record_a_region_0_9_1_")
+    assert protein_id.startswith("record_a@record_a_region|gene_a~f_")
     assert "gbd_r0001_cds000001" not in result["fasta"]
+    assert result["identity_manifest"]["schema"] == 1
+    assert result["protein_set_hash"].startswith("sha256:")
+    assert result["record_analysis_id"].startswith("sha256:")
+    assert result["binding_hash"].startswith("sha256:")
+    assert result["derived_mapping_hash"].startswith("sha256:")
+    boundary_key = json.loads(
+        str(
+            namespace["build_protein_losat_cache_key_json"](
+                json.dumps(result["identity_manifest"]),
+                "record_a_region",
+                "record_a_region",
+                json.dumps({"program": "blastp", "outfmt": "6", "args": []}),
+            )
+        )
+    )["key"]
+    expected_identity = build_protein_losat_pair_identity(
+        result["identity_manifest"],
+        query_record_instance_key="record_a_region",
+        subject_record_instance_key="record_a_region",
+    )
+    assert boundary_key == build_protein_losat_cache_key(expected_identity, args=[])
 
 
 @pytest.mark.linear

@@ -403,7 +403,7 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
   const rows = state.mode.value === 'linear'
     ? (filesData.linearSeqs || []).map((seq) => Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : []))
     : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount);
-  if (rows.every((row) => row.length === 0)) return;
+  if (!rows.some((row) => row.some(Boolean))) return;
   if (
     state.mode.value === 'circular' &&
     isRecordMajorDepthFileMatrix(filesData.c_depth) &&

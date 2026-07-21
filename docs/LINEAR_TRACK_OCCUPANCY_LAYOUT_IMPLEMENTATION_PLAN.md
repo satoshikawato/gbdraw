@@ -3,7 +3,7 @@
 - 作成日: 2026-07-19
 - 対象バージョン: `0.14.0b0` 以降
 - 設計スナップショット: branch `multi_records_per_line`, HEAD `9d0e386` の作業ツリー
-- 状態: Phase 0–6実装済み
+- 状態: Phase 0–7実装済み
 - 対象: Linear diagram の feature、GC content、GC skew、depth、annotation、comparison の縦方向配置
 
 ## 0. 実装状況（2026-07-19）
@@ -17,9 +17,16 @@
 | 4. Record/comparison/canvas | 実装済み | record spacing、comparison endpoint、minimum corridor、canvas extentをrecord planから解決する。 |
 | 5. Web/session migration | 実装済み | panel openとcustom enableを分離し、feature geometry schema v2、session version 33、v32 migration、canonical projection round-tripを実装した。legacy gallery sessionはv32 reader pathで検証する。 |
 | 6. Legacy removal/docs | 実装済み | legacy offset ownerとsilent lane fallbackを削除し、Tutorial、CLI Reference、FAQ、release notes、Web helpを更新した。browser wheelはpackaging/browser検証用に再生成し、cache-bustだけをdeploy workflowに残す。 |
+| 7. Constraint composition regression | 実装済み | X範囲付き`CollisionBand`とkind-pair policyで隣接rowの必要間隔を解き、body/comparison/definition制約を加算ではなく`max()`で合成する。comparisonは実際に境界を跨ぐ場合だけ有効で、single/multi-rowが同じsolverを使う。 |
 
 Default/Custom、single/multi-record、comparisonは同じrecord-local vertical planを使用する。
 欠損Depthはreserve bandだけを保持し、feature slotのheight/spacingはv2 contractで解決する。
+
+2026-07-21の回帰修正では、canvas enclosureとrow spacingの責務を再度分離した。
+左側definitionのようにplot bodyとXが交差しないbandは間隔を増やさない。一方、local headerのように
+Xが交差するdefinition/body pairはdefinition clearanceを要求する。comparison exclusionは
+body reserveに包含されるためcross-kindで再加算せず、activeなcomparison boundaryの
+comparison/comparison制約だけが`comparison_height`の最小corridorを保証する。
 
 ## 1. 結論
 

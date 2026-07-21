@@ -583,43 +583,29 @@ def _serialize_cds_protein(protein, record=None):
         "feature_hash_end": getattr(protein, "feature_hash_end", None),
         "feature_hash_strand": getattr(protein, "feature_hash_strand", None),
         "feature_hash_parts": [list(part) for part in (getattr(protein, "feature_hash_parts", ()) or ())],
+        "location_operator": getattr(protein, "location_operator", ""),
+        "source_feature_position": getattr(protein, "source_feature_position", None),
+        "same_location_ordinal": getattr(protein, "same_location_ordinal", None),
+        "feature_analysis_id": getattr(protein, "feature_analysis_id", None),
+        "display_alias": getattr(protein, "display_alias", None),
+        "transport_id": getattr(protein, "transport_id", None),
+        "aa_sha256": getattr(protein, "aa_sha256", None),
+        "record_instance_key": getattr(protein, "record_instance_key", None),
+        "record_analysis_id": getattr(protein, "record_analysis_id", None),
+        "protein_set_hash": getattr(protein, "protein_set_hash", None),
+        "binding_hash": getattr(protein, "binding_hash", None),
         "coord_base": coord_base,
         "coord_step": coord_step,
         "coord_length": len(record.seq) if record is not None else 0,
     }
 
-def _safe_web_protein_id_token(value):
-    import re
-
-    text = str(value or "").strip()
-    text = re.sub(r"[^A-Za-z0-9_.-]+", "_", text)
-    text = text.strip("._-")
-    return text or "record"
-
-def _with_stable_web_protein_ids(proteins, record_instance_key):
-    from dataclasses import replace
-    import hashlib
-
-    record_key = _safe_web_protein_id_token(record_instance_key)
-    remapped = []
-    used = set()
-    for protein in proteins:
-        strand = protein.strand if protein.strand in {-1, 1} else 0
-        aa_hash = hashlib.sha256(str(protein.sequence or "").encode()).hexdigest()[:12]
-        base_id = f"p_{record_key}_{int(protein.start)}_{int(protein.end)}_{strand}_{aa_hash}"
-        protein_id = base_id
-        suffix = 2
-        while protein_id in used:
-            protein_id = f"{base_id}_{suffix}"
-            suffix += 1
-        used.add(protein_id)
-        remapped.append(replace(protein, protein_id=protein_id))
-    return remapped
-
 def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None):
     """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
     try:
-        from gbdraw.analysis.protein_colinearity import extract_cds_proteins, proteins_to_fasta
+        from gbdraw.analysis.protein_colinearity import (
+            extract_protein_identity_manifest,
+            proteins_to_fasta,
+        )
         from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file
 
         record = _load_single_linear_record_for_proteins(
@@ -636,19 +622,23 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
                 read_feature_visibility_file(feature_visibility_table_path)
             )
         record_index_offset = int(record_index) if record_index is not None else 0
-        result = extract_cds_proteins(
+        stable_record_key = record_instance_key
+        if _is_blank_or_js_nullish(stable_record_key):
+            stable_record_key = f"record-{record_index_offset + 1}"
+        normalized_selector = _normalize_web_record_selector(record_selector) or None
+        normalized_region = None if _is_blank_or_js_nullish(region_spec) else str(region_spec)
+        result = extract_protein_identity_manifest(
             [record],
+            record_instance_keys=[str(stable_record_key)],
+            record_source_ids=[str(record.id)],
+            record_selectors=[normalized_selector],
+            regions=[normalized_region],
             record_index_offset=record_index_offset,
-            prefer_source_ids=False,
             feature_visibility_rules=feature_visibility_rules,
         )
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
         if not proteins:
             return json.dumps({"error": f"No CDS proteins found in {record.id}"})
-        stable_record_key = record_instance_key
-        if _is_blank_or_js_nullish(stable_record_key):
-            stable_record_key = f"r{record_index_offset + 1:04d}_{record.id}"
-        proteins = _with_stable_web_protein_ids(proteins, stable_record_key)
         protein_map = {
             protein.protein_id: _serialize_cds_protein(protein, record)
             for protein in proteins
@@ -659,6 +649,12 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             "record_length": len(record.seq),
             "protein_count": len(proteins),
             "protein_map": protein_map,
+            "identity_manifest": result.identity_manifest.to_dict(),
+            "protein_set_hash": result.protein_set_hashes[0],
+            "record_analysis_id": result.record_analysis_ids[0],
+            "record_instance_key": result.record_instance_keys[0],
+            "binding_hash": result.binding_hashes[0],
+            "derived_mapping_hash": result.derived_mapping_hashes[0],
         })
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
@@ -723,7 +719,7 @@ def _build_web_cds_protein_map(raw_map):
             "strand": strand,
             "label": str(data.get("label") or protein_id),
             "protein_length": int(data.get("protein_length") or 0),
-            "sequence": "",
+            "sequence": str(data.get("sequence") or ""),
             "source_protein_id": data.get("source_protein_id"),
             "feature_svg_id": data.get("feature_svg_id"),
         }
@@ -751,6 +747,28 @@ def _build_web_cds_protein_map(raw_map):
                     kwargs[optional_int_field] = int(raw_value)
         if "feature_hash_parts" in supported_fields:
             kwargs["feature_hash_parts"] = _normalize_web_feature_hash_parts(data.get("feature_hash_parts"))
+        for optional_int_field in ("source_feature_position", "same_location_ordinal"):
+            if optional_int_field in supported_fields:
+                raw_value = data.get(optional_int_field)
+                kwargs[optional_int_field] = (
+                    int(raw_value) if raw_value is not None and raw_value != "" else None
+                )
+        for optional_string_field in (
+            "location_operator",
+            "feature_analysis_id",
+            "display_alias",
+            "transport_id",
+            "aa_sha256",
+            "record_instance_key",
+            "record_analysis_id",
+            "protein_set_hash",
+            "binding_hash",
+        ):
+            if optional_string_field in supported_fields:
+                raw_value = data.get(optional_string_field)
+                kwargs[optional_string_field] = (
+                    str(raw_value) if raw_value is not None else None
+                )
         for tuple_field in ("db_xref", "parent_ids"):
             if tuple_field in supported_fields:
                 raw_values = data.get(tuple_field) or ()
@@ -760,6 +778,113 @@ def _build_web_cds_protein_map(raw_map):
                     kwargs[tuple_field] = (str(raw_values),) if str(raw_values).strip() else ()
         protein_map[str(protein_id)] = CdsProtein(**kwargs)
     return protein_map
+
+def _web_ordered_proteins_from_fasta(raw_map, fasta_text):
+    from Bio import SeqIO
+    from dataclasses import replace
+    from io import StringIO
+
+    protein_map = _build_web_cds_protein_map(raw_map)
+    records = list(SeqIO.parse(StringIO(str(fasta_text or "")), "fasta"))
+    record_ids = [str(record.id) for record in records]
+    if len(record_ids) != len(set(record_ids)):
+        raise ValueError("Protein FASTA contains duplicate transport IDs.")
+    if set(record_ids) != set(protein_map):
+        raise ValueError("Protein FASTA and protein map contain different transport IDs.")
+    return [
+        replace(protein_map[str(record.id)], sequence=str(record.seq))
+        for record in records
+    ]
+
+def promote_legacy_losatp_cache_candidates(
+    candidates_json,
+    query_fasta,
+    subject_fasta,
+    query_protein_map_json,
+    subject_protein_map_json,
+    identity_manifest_json,
+    expected_options_json,
+):
+    """Verify and copy one legacy schema-2 protein entry into schema 3."""
+    try:
+        from gbdraw.analysis.protein_colinearity import (
+            promote_legacy_protein_raw_cache_entries,
+        )
+
+        raw_candidates = json.loads(str(candidates_json))
+        query_map = json.loads(str(query_protein_map_json))
+        subject_map = json.loads(str(subject_protein_map_json))
+        manifest = json.loads(str(identity_manifest_json))
+        options = json.loads(str(expected_options_json))
+        candidate_indexes = []
+        entries = []
+        for relative_index, candidate in enumerate(raw_candidates if isinstance(raw_candidates, list) else []):
+            if not isinstance(candidate, dict) or not isinstance(candidate.get("entry"), dict):
+                continue
+            candidate_indexes.append(int(candidate.get("candidateIndex", relative_index)))
+            entries.append(candidate["entry"])
+
+        scan = promote_legacy_protein_raw_cache_entries(
+            entries,
+            query_proteins=_web_ordered_proteins_from_fasta(query_map, query_fasta),
+            subject_proteins=_web_ordered_proteins_from_fasta(subject_map, subject_fasta),
+            query_fasta=str(query_fasta),
+            subject_fasta=str(subject_fasta),
+            identity_manifest=manifest,
+            expected_args=options.get("args") or [],
+            expected_program=str(options.get("program") or "blastp"),
+            expected_outfmt=str(options.get("outfmt") or "6"),
+        )
+        rejections = [
+            {
+                "candidateIndex": candidate_indexes[rejection.candidate_index],
+                "reason": rejection.reason,
+            }
+            for rejection in scan.rejections
+        ]
+        if scan.promotion is None:
+            return json.dumps({"status": "no-match", "rejections": rejections})
+        promotion = scan.promotion
+        return json.dumps({
+            "status": "promoted",
+            "candidateIndex": candidate_indexes[promotion.candidate_index],
+            "entry": promotion.entry,
+            "text": promotion.rewritten_tsv,
+            "rejections": rejections,
+        })
+    except Exception:
+        return json.dumps({"status": "error", "error": traceback.format_exc()})
+
+def build_protein_losat_cache_key_json(
+    identity_manifest_json,
+    query_record_instance_key,
+    subject_record_instance_key,
+    expected_options_json,
+):
+    """Build the directional schema-3 key with the Python identity owner."""
+    try:
+        from gbdraw.analysis.protein_colinearity import (
+            build_protein_losat_cache_key,
+            build_protein_losat_pair_identity,
+        )
+
+        manifest = json.loads(str(identity_manifest_json))
+        options = json.loads(str(expected_options_json))
+        pair_identity = build_protein_losat_pair_identity(
+            manifest,
+            query_record_instance_key=str(query_record_instance_key),
+            subject_record_instance_key=str(subject_record_instance_key),
+        )
+        return json.dumps({
+            "key": build_protein_losat_cache_key(
+                pair_identity,
+                args=options.get("args") or [],
+                program=str(options.get("program") or "blastp"),
+                outfmt=str(options.get("outfmt") or "6"),
+            )
+        })
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
 
 def _build_display_web_cds_protein_map(raw_map, view_transform):
     normalized = _normalize_web_view_transform(view_transform)

@@ -86,6 +86,21 @@ import {
   normalizeLinearPlotTitlePosition
 } from './plot-title-position.js';
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
+import {
+  LOSAT_DERIVED_CACHE_SCHEMA,
+  NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+  PROTEIN_LOSAT_CACHE_SCHEMA,
+  classifyRawLosatCacheEntry,
+  emptyProteinIdentityManifest,
+  getCurrentRawLosatCacheEntry,
+  isCurrentRawLosatCacheEntry,
+  isLosatDerivedCacheEntry,
+  mergeProteinIdentityManifests,
+  normalizeLosatArgs,
+  sameLosatArgs,
+  transitionLegacyProteinCandidate,
+  validateProteinIdentityManifest
+} from './losat-cache.js';
 
 const hashText = async (text) => {
   if (globalThis.crypto?.subtle) {
@@ -108,30 +123,40 @@ const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
 const proteinExtractionCache = new WeakMap();
 const PROTEIN_EXTRACTION_CACHE_LIMIT = 16;
-const LOSAT_CACHE_SCHEMA = 2;
-const LOSAT_DERIVED_CACHE_SCHEMA = 1;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 
-const isRawLosatCacheEntry = (entry) =>
-  Boolean(entry) &&
-  entry.schema === LOSAT_CACHE_SCHEMA &&
-  entry.kind === 'raw-losat' &&
-  typeof entry.text === 'string';
-
-const normalizeLosatArgs = (args) => Array.isArray(args)
-  ? args.map((arg) => String(arg))
-  : [];
-
 const buildLosatCachePayload = ({
+  identityKind,
   flow,
   program,
   outfmt,
   args,
   queryCanonicalHash,
-  subjectCanonicalHash
+  subjectCanonicalHash,
+  queryProteinSetHash,
+  subjectProteinSetHash,
+  queryBindingHash,
+  subjectBindingHash,
+  queryRecordInstanceKey,
+  subjectRecordInstanceKey
 }) => {
+  if (identityKind === 'protein') {
+    return {
+      cacheSchema: PROTEIN_LOSAT_CACHE_SCHEMA,
+      identityKind: 'protein',
+      program: String(program || 'blastp'),
+      outfmt: String(outfmt || '6'),
+      args: normalizeLosatArgs(args),
+      queryProteinSetHash: String(queryProteinSetHash || ''),
+      subjectProteinSetHash: String(subjectProteinSetHash || ''),
+      queryBindingHash: String(queryBindingHash || ''),
+      subjectBindingHash: String(subjectBindingHash || ''),
+      queryRecordInstanceKey: String(queryRecordInstanceKey || ''),
+      subjectRecordInstanceKey: String(subjectRecordInstanceKey || '')
+    };
+  }
   const payload = {
-    cacheSchema: LOSAT_CACHE_SCHEMA,
+    cacheSchema: NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     program,
     outfmt: String(outfmt || '6'),
     args: normalizeLosatArgs(args),
@@ -142,16 +167,11 @@ const buildLosatCachePayload = ({
   return payload;
 };
 
-const sameLosatArgs = (left, right) => {
-  const a = normalizeLosatArgs(left);
-  const b = normalizeLosatArgs(right);
-  return a.length === b.length && a.every((value, index) => value === b[index]);
-};
-
-const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata) => {
+const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
   if (!cacheMap) return null;
-  const direct = cacheMap.get(cacheKey);
-  if (isRawLosatCacheEntry(direct)) return { key: cacheKey, entry: direct };
+  const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest);
+  if (direct) return direct;
+  if (metadata?.identityKind === 'protein') return null;
 
   const expectedProgram = String(metadata?.program || '');
   const expectedOutfmt = String(metadata?.outfmt || '6');
@@ -160,7 +180,7 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata) => {
   const expectedSubject = String(metadata?.subjectCanonicalHash || '');
 
   for (const [key, entry] of cacheMap.entries()) {
-    if (!isRawLosatCacheEntry(entry)) continue;
+    if (classifyRawLosatCacheEntry(entry) !== 'nucleotide-current') continue;
     if (String(entry.queryCanonicalHash || '') !== expectedQuery) continue;
     if (String(entry.subjectCanonicalHash || '') !== expectedSubject) continue;
     const entryProgram = String(entry.program || expectedProgram);
@@ -176,6 +196,9 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata) => {
 
 const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
   if (!cacheMap || !found?.entry) return found?.entry || null;
+  if (classifyRawLosatCacheEntry(found.entry) !== 'nucleotide-current') {
+    return found.entry;
+  }
   const promoted = {
     ...found.entry,
     program: metadata.program || found.entry.program || '',
@@ -189,15 +212,6 @@ const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
   cacheMap.set(cacheKey, promoted);
   return promoted;
 };
-
-const isLosatDerivedCacheEntry = (entry) =>
-  Boolean(entry) &&
-  entry.schema === LOSAT_DERIVED_CACHE_SCHEMA &&
-  entry.kind === 'derived-losatp-payload' &&
-  typeof entry.key === 'string' &&
-  entry.payload &&
-  typeof entry.payload === 'object' &&
-  !Array.isArray(entry.payload);
 
 const pruneLosatDerivedCache = (cacheMap) => {
   if (!cacheMap || typeof cacheMap.delete !== 'function') return;
@@ -661,7 +675,8 @@ export const createRunAnalysis = ({
   writeFileToFs,
   refreshFeatureOverrides,
   resetPreviewViewport,
-  validateAnnotationTargets = null
+  validateAnnotationTargets = null,
+  losatExecutor = runLosatPairsParallel
 }) => {
   const {
     pyodideReady,
@@ -715,6 +730,9 @@ export const createRunAnalysis = ({
     losatThreadingStatus,
     losatCache,
     losatDerivedCache,
+    proteinIdentityManifest,
+    legacyProteinRawCandidates,
+    legacyProteinDerivedEvidence,
     circularConservation,
     annotationSets,
     orthogroups,
@@ -758,6 +776,10 @@ export const createRunAnalysis = ({
   } = state;
   let linearLabelSupportCache = null;
   let featureShapeSupportCache = null;
+  const executeLosatJobs = (...args) => {
+    const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+    return (typeof override === 'function' ? override : losatExecutor)(...args);
+  };
   let circularMultiRecordCanvasSupportCache = null;
   let linearTrackSlotSupportCache = null;
   let pendingReflowRequestId = 0;
@@ -1542,7 +1564,7 @@ json.dumps({
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
-    if (!isRawLosatCacheEntry(cached)) return;
+    if (!isCurrentRawLosatCacheEntry(cached)) return;
     const defaultName = getLosatPairDefaultName(pairIndex);
     const filename = normalizeLosatFilename(
       customName,
@@ -1854,6 +1876,10 @@ json.dumps({
     const activeRunColors = isReflow ? appliedPaletteColors.value : currentColors.value;
     const manualRunStartedAt = isReflow ? null : getNow();
     const manualRunStartedAtIso = isReflow ? null : new Date().toISOString();
+    let structuredLosatTelemetry = null;
+    if (!isReflow) globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = null;
+    const legacyPromotionTransaction = [];
+    let legacyPromotionCommitted = false;
 
     if (isReflow) {
       labelReflowProcessing.value = true;
@@ -3037,7 +3063,7 @@ json.dumps({
                 const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
                 losatThreadingStatus.value = threadedStatus;
               }
-              const losatResults = await runLosatPairsParallel(losatJobs, {
+              const losatResults = await executeLosatJobs(losatJobs, {
                 concurrency: getLosatParallelWorkers(),
                 executionMode,
                 totalThreadBudget: getLosatTotalThreadBudget(),
@@ -3055,8 +3081,9 @@ json.dumps({
               losatResults.forEach((result) => {
                 const job = losatJobs.find((item) => item.cacheKey === result.cacheKey);
                 cacheMap.set(result.cacheKey, {
-                  schema: LOSAT_CACHE_SCHEMA,
+                  schema: NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
                   kind: 'raw-losat',
+                  identityKind: 'nucleotide',
                   text: result.text,
                   program: circularLosatProgram,
                   flow: 'circular-conservation',
@@ -3073,7 +3100,7 @@ json.dumps({
             const paths = [];
             for (const pair of losatPairs) {
               const cached = cacheMap.get(pair.cacheKey);
-              const blastText = isRawLosatCacheEntry(cached) ? cached.text : '';
+              const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
               const blastPath = `/conservation_blast_${pair.sourceIndex}.txt`;
               stageTextFile(blastPath, blastText, {
                 name: pair.filename,
@@ -3616,6 +3643,8 @@ json.dumps({
         const linearFileTextCache = new WeakMap();
         let extractFirstFasta = null;
         let extractProteinFasta = null;
+        let buildProteinLosatCacheKey = null;
+        let promoteLegacyProteinCache = null;
         let convertProteinBlast = null;
         let convertNucleotideBlast = null;
         if (useOrthogroupBlastp) {
@@ -3671,6 +3700,8 @@ json.dumps({
         if (useLosat) {
           if (useProteinBlastp) {
             extractProteinFasta = pyodide.globals.get('extract_cds_protein_fasta');
+            buildProteinLosatCacheKey = pyodide.globals.get('build_protein_losat_cache_key_json');
+            promoteLegacyProteinCache = pyodide.globals.get('promote_legacy_losatp_cache_candidates');
             convertProteinBlast = pyodide.globals.get('convert_losatp_blastp_pairs_to_genomic_payload');
           } else {
             extractFirstFasta = pyodide.globals.get('extract_first_fasta');
@@ -3683,24 +3714,18 @@ json.dumps({
         let proteinRecordInstanceKeys = [];
 
         const buildProteinRecordInstanceKeys = async () => {
-          const occurrences = new Map();
-          const keys = [];
-          for (let idx = 0; idx < linearSeqs.length; idx += 1) {
-            const sourceFile = lInputType.value === 'gb' ? linearSeqs[idx]?.gb : linearSeqs[idx]?.gff;
-            const pairedFastaFile = lInputType.value === 'gff' ? linearSeqs[idx]?.fasta : null;
-            const descriptor = {
-              inputFormat: lInputType.value,
-              primaryFile: getFileFingerprint(sourceFile),
-              pairedFastaFile: getFileFingerprint(pairedFastaFile),
-              recordSelector: recordSelectors[idx] ?? '',
-              canonicalRegionSpec: regionSpecs[idx]?.file || null
-            };
-            const base = (await hashText(JSON.stringify(descriptor))).slice(0, 16);
-            const occurrence = (occurrences.get(base) || 0) + 1;
-            occurrences.set(base, occurrence);
-            keys.push(occurrence > 1 ? `r_${base}_o${occurrence}` : `r_${base}`);
-          }
-          return keys;
+          const used = new Set();
+          return linearSeqs.map((sequence, index) => {
+            const base = String(sequence?.uid || `record-${index + 1}`).trim() || `record-${index + 1}`;
+            let key = base;
+            let suffix = 2;
+            while (used.has(key)) {
+              key = `${base}-${suffix}`;
+              suffix += 1;
+            }
+            used.add(key);
+            return key;
+          });
         };
 
         const getSeqEntry = async (idx) => {
@@ -3731,14 +3756,13 @@ json.dumps({
           const persistentCacheKey = useProteinBlastp
             ? JSON.stringify({
                 inputFormat: lInputType.value,
-                primaryFile: getFileFingerprint(sourceFile),
                 pairedFastaFile: getFileFingerprint(pairedFastaFile),
                 regionSpec,
                 recordSelector,
                 recordInstanceKey,
                 recordIndex: idx,
                 featureVisibility: featureVisibilityCacheKey,
-                proteinMapSchema: 2
+                proteinMapSchema: 3
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
           const usePersistentFastaCache = !useProteinBlastp;
@@ -3763,7 +3787,14 @@ json.dumps({
               );
               if (res.error) throw new Error(res.error);
               const fastaHash = await hashText(res.fasta || '');
-              const proteinCacheKey = await hashText(JSON.stringify({ extraction: persistentCacheKey, fastaHash }));
+              const proteinCacheKey = String(
+                res.derived_mapping_hash ||
+                await hashText(JSON.stringify({
+                  recordAnalysisId: res.record_analysis_id || '',
+                  bindingHash: res.binding_hash || '',
+                  proteinMap: res.protein_map || {}
+                }))
+              );
               entry = {
                 fasta: res.fasta,
                 recordId: res.record_id || `seq_${idx + 1}`,
@@ -3771,6 +3802,12 @@ json.dumps({
                 proteinMap: res.protein_map || {},
                 proteinCount: res.protein_count || 0,
                 proteinCacheKey,
+                proteinSetHash: String(res.protein_set_hash || ''),
+                recordAnalysisId: String(res.record_analysis_id || ''),
+                recordInstanceKey: String(res.record_instance_key || recordInstanceKey),
+                bindingHash: String(res.binding_hash || ''),
+                derivedMappingHash: proteinCacheKey,
+                identityManifest: res.identity_manifest || null,
                 sequenceKey: `protein:${fastaHash}`,
                 hash: fastaHash
               };
@@ -3850,9 +3887,26 @@ json.dumps({
         };
 
         const buildCacheMetadata = async (argsKey, queryIdx, subjectIdx) => {
+          if (useProteinBlastp) {
+            const queryEntry = await getSeqEntry(queryIdx);
+            const subjectEntry = await getSeqEntry(subjectIdx);
+            return {
+              identityKind: 'protein',
+              program: 'blastp',
+              outfmt: String(losat.outfmt || '6'),
+              args: argsKey,
+              queryProteinSetHash: queryEntry.proteinSetHash,
+              subjectProteinSetHash: subjectEntry.proteinSetHash,
+              queryBindingHash: queryEntry.bindingHash,
+              subjectBindingHash: subjectEntry.bindingHash,
+              queryRecordInstanceKey: queryEntry.recordInstanceKey,
+              subjectRecordInstanceKey: subjectEntry.recordInstanceKey
+            };
+          }
           const queryHash = await getSeqHash(queryIdx);
           const subjectHash = await getSeqHash(subjectIdx);
           return {
+            identityKind: 'nucleotide',
             program: losatProgram.value,
             outfmt: String(losat.outfmt || '6'),
             args: argsKey,
@@ -3862,7 +3916,113 @@ json.dumps({
         };
 
         const buildCacheKey = async (metadata) => {
+          if (metadata?.identityKind === 'protein') {
+            if (!buildProteinLosatCacheKey) {
+              throw new Error('Current gbdraw wheel does not provide the schema-3 protein cache key helper.');
+            }
+            const rawResult = buildProteinLosatCacheKey(
+              JSON.stringify(proteinIdentityManifest.value),
+              metadata.queryRecordInstanceKey,
+              metadata.subjectRecordInstanceKey,
+              JSON.stringify({
+                program: metadata.program,
+                outfmt: metadata.outfmt,
+                args: normalizeLosatArgs(metadata.args)
+              })
+            );
+            const result = JSON.parse(String(rawResult || '{}'));
+            if (result.error || !result.key) {
+              throw new Error(result.error || 'Protein cache key generation failed.');
+            }
+            return String(result.key);
+          }
           return hashText(JSON.stringify(buildLosatCachePayload(metadata)));
+        };
+
+        const tryPromoteLegacyProteinEntry = async ({
+          cacheKey,
+          metadata,
+          queryEntry,
+          subjectEntry
+        }) => {
+          if (
+            metadata?.identityKind !== 'protein' ||
+            !promoteLegacyProteinCache ||
+            !legacyProteinRawCandidates?.value
+          ) return null;
+          const envelope = legacyProteinRawCandidates.value;
+          const pending = (Array.isArray(envelope?.entries) ? envelope.entries : [])
+            .map((candidate, index) => ({ candidate, index }))
+            .filter(({ candidate }) => candidate?.state === 'pending' && candidate?.originalEntry)
+            .map(({ candidate, index }) => ({
+              candidateIndex: index,
+              entry: candidate.originalEntry
+            }));
+          if (pending.length === 0) return null;
+
+          const rawResult = promoteLegacyProteinCache(
+            JSON.stringify(pending),
+            String(queryEntry?.fasta || ''),
+            String(subjectEntry?.fasta || ''),
+            JSON.stringify(queryEntry?.proteinMap || {}),
+            JSON.stringify(subjectEntry?.proteinMap || {}),
+            JSON.stringify(proteinIdentityManifest.value),
+            JSON.stringify({
+              program: metadata.program,
+              outfmt: metadata.outfmt,
+              args: normalizeLosatArgs(metadata.args)
+            })
+          );
+          const result = JSON.parse(String(rawResult || '{}'));
+          if (result.status === 'error') {
+            throw new Error(result.error || 'Legacy protein cache migration failed.');
+          }
+          const candidateIndex = Number(result.candidateIndex);
+          if (
+            result.status !== 'promoted' ||
+            !Number.isInteger(candidateIndex) ||
+            candidateIndex < 0 ||
+            typeof result.text !== 'string' ||
+            !result.entry ||
+            typeof result.entry !== 'object'
+          ) return null;
+          if (String(result.entry.key || '') !== cacheKey) {
+            legacyProteinRawCandidates.value = transitionLegacyProteinCandidate(
+              envelope,
+              candidateIndex,
+              'rejected',
+              'Promoted legacy key does not match the current directional cache key.'
+            );
+            return null;
+          }
+
+          const promoted = {
+            ...result.entry,
+            text: result.text,
+            migratedFromSchema: 2
+          };
+          delete promoted.key;
+          delete promoted.filename;
+          delete promoted.display;
+          cacheMap.set(cacheKey, promoted);
+          const verified = getCurrentRawLosatCacheEntry(
+            cacheMap,
+            cacheKey,
+            metadata,
+            proteinIdentityManifest.value
+          );
+          if (!verified) {
+            cacheMap.delete(cacheKey);
+            legacyProteinRawCandidates.value = transitionLegacyProteinCandidate(
+              envelope,
+              candidateIndex,
+              'rejected',
+              'Rewritten legacy TSV does not resolve through the current protein manifest.'
+            );
+            return null;
+          }
+          legacyPromotionTransaction.push({ cacheMap, cacheKey, candidateIndex });
+          return verified;
         };
 
         const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) =>
@@ -3962,6 +4122,17 @@ json.dumps({
         }
         if (useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
+          const proteinEntries = [];
+          for (let index = 0; index < linearSeqs.length; index += 1) {
+            proteinEntries.push(await getSeqEntry(index));
+          }
+          const manifests = proteinEntries.map((entry) => entry.identityManifest);
+          if (manifests.some((manifest) => !validateProteinIdentityManifest(manifest))) {
+            throw new Error(
+              'Current gbdraw wheel does not provide protein identity manifest schema 1. Rebuild and redeploy the web wheel.'
+            );
+          }
+          proteinIdentityManifest.value = mergeProteinIdentityManifests(manifests);
         }
         regionSpecs.forEach((spec) => {
           if (spec?.cli) args.push('--region', spec.cli);
@@ -4038,7 +4209,21 @@ json.dumps({
             }
             sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
             sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
-            const cached = getRawLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
+            let cached = getRawLosatCacheEntry(
+              cacheMap,
+              cacheKey,
+              cacheMetadata,
+              proteinIdentityManifest.value
+            );
+            if (!cached && useProteinBlastp) {
+              cached = await tryPromoteLegacyProteinEntry({
+                cacheKey,
+                metadata: cacheMetadata,
+                queryEntry,
+                subjectEntry
+              });
+              throwIfGenerationCanceled();
+            }
             const hasCachedText = Boolean(cached);
             if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
             losatTiming.totalPairs += 1;
@@ -4075,7 +4260,8 @@ json.dumps({
                 queryCanonicalHash,
                 subjectCanonicalHash,
                 outfmt: losat.outfmt || '6',
-                extraArgs: losatArgs
+                extraArgs: losatArgs,
+                cacheMetadata
               });
             }
           }
@@ -4093,7 +4279,7 @@ json.dumps({
             throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
             const executionStartedAt = getNow();
-            const losatResults = await runLosatPairsParallel(losatJobs, {
+            const losatResults = await executeLosatJobs(losatJobs, {
               concurrency: getLosatParallelWorkers(),
               executionMode: losatExecutionMode,
               totalThreadBudget: losatRequestedTotalThreadBudget,
@@ -4112,16 +4298,35 @@ json.dumps({
             losatTiming.executionMs += getNow() - executionStartedAt;
             losatResults.forEach((result) => {
               const job = losatJobs.find((item) => item.cacheKey === result.cacheKey);
-              cacheMap.set(result.cacheKey, {
-                schema: LOSAT_CACHE_SCHEMA,
+              const cacheMetadata = job?.cacheMetadata || {};
+              const isProteinEntry = cacheMetadata.identityKind === 'protein';
+              const rawEntry = {
+                schema: isProteinEntry
+                  ? PROTEIN_LOSAT_CACHE_SCHEMA
+                  : NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
                 kind: 'raw-losat',
+                identityKind: isProteinEntry ? 'protein' : 'nucleotide',
                 text: result.text,
                 program: losatProgram.value,
                 outfmt: String(losat.outfmt || '6'),
                 args: job?.extraArgs || [],
-                queryCanonicalHash: job?.queryCanonicalHash || '',
-                subjectCanonicalHash: job?.subjectCanonicalHash || ''
-              });
+                ...(isProteinEntry
+                  ? {
+                      queryProteinSetHash: cacheMetadata.queryProteinSetHash,
+                      subjectProteinSetHash: cacheMetadata.subjectProteinSetHash,
+                      queryBindingHash: cacheMetadata.queryBindingHash,
+                      subjectBindingHash: cacheMetadata.subjectBindingHash,
+                      queryRecordInstanceKey: cacheMetadata.queryRecordInstanceKey,
+                      subjectRecordInstanceKey: cacheMetadata.subjectRecordInstanceKey,
+                      queryCanonicalHash: job?.queryCanonicalHash || '',
+                      subjectCanonicalHash: job?.subjectCanonicalHash || ''
+                    }
+                  : {
+                      queryCanonicalHash: job?.queryCanonicalHash || '',
+                      subjectCanonicalHash: job?.subjectCanonicalHash || ''
+                    })
+              };
+              cacheMap.set(result.cacheKey, rawEntry);
             });
           } else {
             setProcessingStatus('Using cached LOSAT results...');
@@ -4148,7 +4353,7 @@ json.dumps({
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
-              const losatText = isRawLosatCacheEntry(cached) ? cached.text : '';
+              const losatText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
               pairPayloads.push({
                 pairIndex: pair.pairIndex,
                 queryIndex: pair.queryIndex,
@@ -4274,7 +4479,7 @@ json.dumps({
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
-              const blastText = isRawLosatCacheEntry(cached) ? cached.text : '';
+              const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
               const converted = JSON.parse(
                 convertNucleotideBlast(
                   blastText,
@@ -4304,6 +4509,32 @@ json.dumps({
             }
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
+          if (legacyPromotionTransaction.length > 0) {
+            let nextEnvelope = legacyProteinRawCandidates.value;
+            legacyPromotionTransaction.forEach(({ candidateIndex }) => {
+              nextEnvelope = transitionLegacyProteinCandidate(
+                nextEnvelope,
+                candidateIndex,
+                'promoted'
+              );
+            });
+            legacyProteinRawCandidates.value = nextEnvelope;
+            if (!nextEnvelope.entries.some((candidate) => candidate.state === 'pending')) {
+              legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
+            }
+            legacyPromotionCommitted = true;
+          }
+          structuredLosatTelemetry = {
+            schema: 1,
+            totalPairs: losatTiming.totalPairs,
+            cacheHits: losatTiming.cacheHits,
+            cacheMisses: losatTiming.cacheMisses,
+            uniqueJobs: losatTiming.uniqueJobs,
+            workerCalls: losatTiming.uniqueJobs,
+            proteinDerivedPayloadCacheHits: losatTiming.proteinDerivedPayloadCacheHits,
+            proteinDerivedPayloadCacheMisses: losatTiming.proteinDerivedPayloadCacheMisses
+          };
+          globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonData(structuredLosatTelemetry);
           console.info(
             [
               `LOSAT timing: pairs=${losatTiming.totalPairs}`,
@@ -4378,6 +4609,12 @@ json.dumps({
         }
         if (extractProteinFasta) {
           extractProteinFasta.destroy();
+        }
+        if (buildProteinLosatCacheKey) {
+          buildProteinLosatCacheKey.destroy();
+        }
+        if (promoteLegacyProteinCache) {
+          promoteLegacyProteinCache.destroy();
         }
         if (convertProteinBlast) {
           convertProteinBlast.destroy();
@@ -4547,6 +4784,9 @@ json.dumps({
           resultCount: results.value.length,
           startedAtIso: manualRunStartedAtIso
         });
+        if (structuredLosatTelemetry) {
+          runInfo.losatTelemetry = cloneJsonData(structuredLosatTelemetry);
+        }
         lastRunInfo.value = runInfo;
         setLatestCliHelperFiles(runInfo, generatedCliFileMap, normalizedOutputPrefix || 'out');
         resultPanelTab.value = 'preview';
@@ -4623,6 +4863,11 @@ json.dumps({
       }
       return { status: 'ok' };
     } catch (e) {
+      if (!legacyPromotionCommitted) {
+        legacyPromotionTransaction.forEach(({ cacheMap, cacheKey }) => {
+          cacheMap.delete(cacheKey);
+        });
+      }
       if (isDiagramGenerationCanceled(e)) {
         if (isReflow) {
           labelReflowLastError.value = null;
@@ -4692,7 +4937,7 @@ json.dumps({
 
     const totalChars = losatCacheInfo.value.reduce((sum, entry) => {
       const cached = cacheMap.get(entry.key);
-      return sum + (isRawLosatCacheEntry(cached) ? cached.text.length : 0);
+      return sum + (isCurrentRawLosatCacheEntry(cached) ? cached.text.length : 0);
     }, 0);
 
     if (totalChars > 50 * 1024 * 1024) {
@@ -4705,7 +4950,7 @@ json.dumps({
     for (let idx = 0; idx < losatCacheInfo.value.length; idx += 1) {
       const entry = losatCacheInfo.value[idx];
       const cached = cacheMap.get(entry.key);
-      if (!isRawLosatCacheEntry(cached)) continue;
+      if (!isCurrentRawLosatCacheEntry(cached)) continue;
       const filename = entry.filename || `losat_pair_${idx + 1}.tsv`;
       downloadTextFile(filename || 'losat.tsv', cached.text, 'text/tab-separated-values');
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -4719,6 +4964,9 @@ json.dumps({
     if (losatDerivedCache.value) {
       losatDerivedCache.value.clear();
     }
+    proteinIdentityManifest.value = emptyProteinIdentityManifest();
+    legacyProteinRawCandidates.value = { schema: 1, entries: [] };
+    legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
     losatCacheInfo.value = [];
   };
 

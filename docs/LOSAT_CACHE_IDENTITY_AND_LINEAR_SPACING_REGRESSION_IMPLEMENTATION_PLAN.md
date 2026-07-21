@@ -5,7 +5,7 @@
 - 現行基準: session version 34、`renderRequest.schema == 3`、raw LOSAT cache schema 2、derived cache schema 1
 - 変更後: session version 35、`renderRequest.schema == 3`、raw protein LOSATP cache schema 3、derived cache schema 2
 - 非対象cache: nucleotide LOSAT は raw schema 2 を維持し、session内のschema 2/3混在を正式に扱う
-- 状態: 実装前レビュー
+- 状態: 実装済み、最終検証中
 - 関連設計: [`LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md`](LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md)、[`PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md`](PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md)
 
 ## 0. 結論
@@ -880,3 +880,49 @@ writerとnucleotide schema 2 writer/readerは維持する。rollback時もlegacy
 28. 全Gallery session、SVG、thumbnail、必要なtutorial mediaがreview済みcurrent出力と一致する。
 29. dedicated browser acceptanceがskipなしでrequired gateを通り、focused tests、non-slow suite、ruff、
     reference comparisonが成功する。
+
+## 13. Implementation progress handoff（2026-07-21）
+
+### 完了した実装
+
+- Python single ownerにstable feature/record/protein-set identity、readable transport ID、schema-1 manifest、
+  directional schema-3 protein raw keyを実装した。WebはPyodide helper経由で同じownerを使う。
+- session version 35、`renderRequest.schema == 3`、protein raw schema 3、nucleotide raw schema 2、
+  derived schema 2、manifest schema 1の境界をPython/Webに実装した。readerはversion 27～35を受理する。
+- legacy protein raw/derived artifactをcurrent cacheから隔離し、Save-before-Generateで保持される
+  schema-1 envelopeと、検証済みpairだけをcopy-on-writeでpromotionするpathを実装した。
+- X範囲付き`CollisionBand`、kind-pair policy、`required_axis_gap()`を実装し、single/multi-rowを
+  同じsolverへ統合した。body/comparison/definitionはeligible制約の`max()`で合成し、
+  comparisonのない境界にcorridorを予約しない。
+
+### 確認済みの範囲
+
+- protein identity/cache、legacy fixture、session codec/API、Linear vertical layout、Web pure cache/session の
+  focused testおよびJavaScript syntax checkで実装単位の動作を確認した。
+- 統合focused suiteは`190 passed, 1 skipped`で完了した。repository-wide test suiteではなく、
+  protein/session/API/refresh/Linear vertical layoutに限定した結果である。
+- 履歴上のBGC0000708–BGC0000713 schema-v2 sessionをgzip fixtureとして固定し、25 pairの
+  legacy candidateがPython側の検証対象になることを確認した。
+- 同BGC sessionのcanonical Python replayとstaged validatorは、version 35、protein raw schema 3が
+  25件、derived schema 2が1件、manifest schema 1、legacy candidateなし、旧`p_r_...`参照なしで通過した。
+- browser acceptance runner/spec/CI gateを追加し、fixture SHA/version/schema/count、test discovery、
+  runner syntaxを確認した。通常sandboxではlocal serverの`listen`が拒否されるため、browser実行には
+  sandbox escalationが必要である。
+
+### 未完了・未確認のgate
+
+- 実browserでのLoad → Save → Load → Generateと`25 hits / 0 misses / 0 jobs`のrequired acceptance。
+  escalated Node runは実在fixtureの1 testを開始し、Save-before-Generateで見つかった全null Depth行の
+  round-trip不具合を修正した後も同地点を通過したが、最終assertion完了前に時間制限で中断した。
+- current Gallery/test sessionのtransactional refresh、session/SVG/thumbnail差分のreview、必要なmediaの判定。
+- 意図したLinear Y/viewBox reference差分の更新と再比較、non-slow suite、repository-wide ruff、build。
+
+### 次回の実行順
+
+1. browser wheelはcurrent Python codeから準備済みである。sandbox escalation付きで
+   `python tests/run_losat_cache_browser_acceptance.py`を完走し、続けて
+   `python tests/run_losat_cache_browser_acceptance.py --python`でfallback adapterも確認する。
+2. `python tools/refresh_gallery_sessions.py --no-assets`でartifact差分を確認した後、
+   `python tools/refresh_gallery_sessions.py`でsessionとvisible assetをtransactionalに更新する。
+3. output comparisonで差分を確認し、意図したLinear referenceだけを公式コマンドで更新する。
+4. focused/full validationと最終diff reviewを完了するまで、Definition of Done全体を完了と扱わない。

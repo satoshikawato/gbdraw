@@ -250,7 +250,7 @@ def test_comparisons_table_resolves_relative_blast_path(tmp_path) -> None:
     assert table.path_dependencies[0].column == "blast"
 
 
-def test_schema_two_preserves_record_keys_layout_and_explicit_endpoints(tmp_path) -> None:
+def test_current_schema_preserves_record_keys_layout_and_explicit_endpoints(tmp_path) -> None:
     request = LinearDiagramRequest(
         records=tuple(
             RecordInput(
@@ -266,7 +266,7 @@ def test_schema_two_preserves_record_keys_layout_and_explicit_endpoints(tmp_path
         ),
     )
     encoded = encode_canonical_request(request)
-    assert encoded.payload["schema"] == 2
+    assert encoded.payload["schema"] == 3
     assert encoded.payload["records"][0]["recordKey"] == "stable-1"
     assert encoded.payload["comparisons"][0]["queryRecordIndex"] == 1
 

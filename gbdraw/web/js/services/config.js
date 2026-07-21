@@ -69,6 +69,17 @@ import { downloadCompressedSession, readSessionText } from './session-file.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
 import {
+  LOSAT_DERIVED_CACHE_SCHEMA,
+  classifyRawLosatCacheEntry,
+  createLegacyProteinCandidateEnvelope,
+  emptyProteinIdentityManifest,
+  isCurrentRawLosatCacheEntry,
+  isLosatDerivedCacheEntry,
+  normalizeLegacyProteinCandidateEnvelope,
+  serializableLegacyProteinCandidateEnvelope,
+  validateProteinIdentityManifest
+} from '../app/losat-cache.js';
+import {
   defaultFeatureRendering,
   normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
@@ -81,11 +92,9 @@ import {
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 34;
+const SESSION_VERSION = 35;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, 31, 32, 33, SESSION_VERSION]);
-const LOSAT_CACHE_SCHEMA = 2;
-const LOSAT_DERIVED_CACHE_SCHEMA = 1;
+const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, 31, 32, 33, 34, SESSION_VERSION]);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -113,20 +122,7 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS = [
   'reserve'
 ];
 
-const isRawLosatCacheEntry = (entry) =>
-  Boolean(entry) &&
-  entry.schema === LOSAT_CACHE_SCHEMA &&
-  entry.kind === 'raw-losat' &&
-  typeof entry.text === 'string';
-
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-const isLosatDerivedCacheEntry = (entry) =>
-  Boolean(entry) &&
-  entry.schema === LOSAT_DERIVED_CACHE_SCHEMA &&
-  entry.kind === 'derived-losatp-payload' &&
-  typeof entry.key === 'string' &&
-  isPlainObject(entry.payload);
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -1653,7 +1649,7 @@ const serializeFile = async (file) => {
     name: file.name || 'file',
     type: file.type || '',
     size: file.size || buffer.byteLength,
-    lastModified: file.lastModified || Date.now(),
+    lastModified: file.lastModified ?? Date.now(),
     data: bufferToBase64(buffer)
   };
 };
@@ -1676,7 +1672,7 @@ const serializeDepthFile = async (file) => {
         name: file.name || 'depth.tsv',
         type: file.type || 'text/tab-separated-values',
         size: file.size || text.length,
-        lastModified: file.lastModified || Date.now(),
+        lastModified: file.lastModified ?? Date.now(),
         encoding: DEPTH_FILE_ENCODING,
         data: encodedDepth
       };
@@ -1702,14 +1698,14 @@ const deserializeFile = (entry) => {
     const text = decodeDepthText(entry.data);
     return new File([text], entry.name || 'depth.tsv', {
       type: entry.type || 'text/tab-separated-values',
-      lastModified: entry.lastModified || Date.now()
+      lastModified: entry.lastModified ?? Date.now()
     });
   }
   if (typeof entry.data !== 'string') return null;
   const bytes = base64ToUint8(entry.data);
   return new File([bytes], entry.name || 'file', {
     type: entry.type || 'application/octet-stream',
-    lastModified: entry.lastModified || Date.now()
+    lastModified: entry.lastModified ?? Date.now()
   });
 };
 
@@ -1748,28 +1744,17 @@ const serializeLosatCache = () => {
   const entries = [];
   const seen = new Set();
 
-  const buildEntry = (key, cached, { filename = '', display = false } = {}) => {
-    const entry = {
-      schema: LOSAT_CACHE_SCHEMA,
-      kind: 'raw-losat',
-      key,
-      filename,
-      display,
-      text: cached.text,
-      program: cached.program || '',
-      queryCanonicalHash: cached.queryCanonicalHash || '',
-      subjectCanonicalHash: cached.subjectCanonicalHash || ''
-    };
-    if (cached.flow) entry.flow = cached.flow;
-    if (cached.outfmt) entry.outfmt = cached.outfmt;
-    if (Array.isArray(cached.args)) entry.args = cached.args.map((arg) => String(arg));
-    return entry;
-  };
+  const buildEntry = (key, cached, { filename = '', display = false } = {}) => ({
+    ...cloneJsonData(cached),
+    key: String(key),
+    filename: String(filename || ''),
+    display: Boolean(display)
+  });
 
   info.forEach((entry, idx) => {
     if (!entry || !entry.key) return;
     const cached = cacheMap.get(entry.key);
-    if (!isRawLosatCacheEntry(cached)) return;
+    if (!isCurrentRawLosatCacheEntry(cached)) return;
     entries.push(buildEntry(entry.key, cached, {
       filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
       display: entry.display !== false
@@ -1779,39 +1764,36 @@ const serializeLosatCache = () => {
 
   cacheMap.forEach((value, key) => {
     if (seen.has(key)) return;
-    if (!isRawLosatCacheEntry(value)) return;
+    if (!isCurrentRawLosatCacheEntry(value)) return;
     entries.push(buildEntry(key, value));
   });
 
   return entries;
 };
 
-const applyLosatCache = (entries) => {
+const applyLosatCache = (entries, legacyEnvelope = null) => {
   const map = new Map();
   const info = [];
+  const legacyEntries = [];
 
   if (Array.isArray(entries)) {
     entries.forEach((entry, idx) => {
+      const classification = classifyRawLosatCacheEntry(entry);
+      if (classification === 'protein-legacy') {
+        legacyEntries.push(entry);
+        return;
+      }
       if (
         !entry ||
-        entry.schema !== LOSAT_CACHE_SCHEMA ||
-        entry.kind !== 'raw-losat' ||
-        !entry.key ||
-        typeof entry.text !== 'string'
+        !isCurrentRawLosatCacheEntry(entry) ||
+        !entry.key
       ) {
         return;
       }
-      const restored = {
-        schema: LOSAT_CACHE_SCHEMA,
-        kind: 'raw-losat',
-        text: entry.text,
-        program: entry.program || '',
-        queryCanonicalHash: entry.queryCanonicalHash || '',
-        subjectCanonicalHash: entry.subjectCanonicalHash || ''
-      };
-      if (entry.flow) restored.flow = entry.flow;
-      if (entry.outfmt) restored.outfmt = entry.outfmt;
-      if (Array.isArray(entry.args)) restored.args = entry.args.map((arg) => String(arg));
+      const restored = cloneJsonData(entry);
+      delete restored.key;
+      delete restored.filename;
+      delete restored.display;
       map.set(entry.key, restored);
       if (entry.display === false) return;
       info.push({
@@ -1824,6 +1806,12 @@ const applyLosatCache = (entries) => {
 
   state.losatCache.value = map;
   state.losatCacheInfo.value = info;
+  const restoredEnvelope = normalizeLegacyProteinCandidateEnvelope(legacyEnvelope);
+  const importedEnvelope = createLegacyProteinCandidateEnvelope(legacyEntries);
+  state.legacyProteinRawCandidates.value = {
+    schema: 1,
+    entries: [...restoredEnvelope.entries, ...importedEnvelope.entries]
+  };
 };
 
 const pruneLosatDerivedCache = (map) => {
@@ -1848,19 +1836,38 @@ const serializeLosatDerivedCache = () => {
       mode: String(value?.mode || ''),
       payload: cloneJsonData(value?.payload)
     };
-    if (!isLosatDerivedCacheEntry(entry)) return;
+    if (!isLosatDerivedCacheEntry(entry, { allowLegacy: false })) return;
     entries.push(entry);
   });
 
   return entries.slice(-LOSAT_DERIVED_CACHE_LIMIT);
 };
 
-const applyLosatDerivedCache = (entries) => {
+const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
+  schema: 1,
+  entries: [
+    ...(
+      isPlainObject(value) && value.schema === 1 && Array.isArray(value.entries)
+        ? value.entries
+        : []
+    ),
+    ...fallbackEntries
+  ]
+    .filter((entry) => isLosatDerivedCacheEntry(entry) && entry.schema === 1)
+    .map((entry) => cloneJsonData(entry))
+});
+
+const applyLosatDerivedCache = (entries, legacyEvidence = null) => {
   const map = new Map();
+  const legacyEntries = [];
 
   if (Array.isArray(entries)) {
     entries.forEach((entry) => {
       if (!isLosatDerivedCacheEntry(entry)) return;
+      if (entry.schema === 1) {
+        legacyEntries.push(entry);
+        return;
+      }
       map.set(entry.key, {
         schema: LOSAT_DERIVED_CACHE_SCHEMA,
         kind: 'derived-losatp-payload',
@@ -1873,6 +1880,16 @@ const applyLosatDerivedCache = (entries) => {
 
   pruneLosatDerivedCache(map);
   state.losatDerivedCache.value = map;
+  state.legacyProteinDerivedEvidence.value = normalizeLegacyDerivedEvidence(
+    legacyEvidence,
+    legacyEntries
+  );
+};
+
+const applyProteinIdentityManifest = (manifest) => {
+  state.proteinIdentityManifest.value = validateProteinIdentityManifest(manifest)
+    ? cloneJsonData(manifest)
+    : emptyProteinIdentityManifest();
 };
 
 const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
@@ -2291,6 +2308,9 @@ const captureSessionImportSnapshot = () => ({
   runState: buildRunStateData(),
   losatCache: new Map(state.losatCache.value),
   losatDerivedCache: new Map(state.losatDerivedCache.value),
+  proteinIdentityManifest: cloneJsonData(state.proteinIdentityManifest.value),
+  legacyProteinRawCandidates: cloneJsonData(state.legacyProteinRawCandidates.value),
+  legacyProteinDerivedEvidence: cloneJsonData(state.legacyProteinDerivedEvidence.value),
   losatCacheInfo: cloneJsonData(state.losatCacheInfo.value),
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value
@@ -2306,6 +2326,9 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   restoreLiveFileState(snapshot.files);
   state.losatCache.value = new Map(snapshot.losatCache);
   state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
+  state.proteinIdentityManifest.value = cloneJsonData(snapshot.proteinIdentityManifest);
+  state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
+  state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
   state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
   applyResultsData(snapshot.results, snapshot.ui);
   applyFeatureStateData(snapshot.features);
@@ -2340,6 +2363,9 @@ const resetSessionBaseline = () => {
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
+  state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
+  state.legacyProteinRawCandidates.value = { schema: 1, entries: [] };
+  state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
   state.losatCacheInfo.value = [];
   state.orthogroups.value = [];
   state.featureOrthogroupIndex.value = new Map();
@@ -2865,6 +2891,12 @@ export const exportSession = async (titleOverride = null) => {
     : undefined;
   const serializedFiles = await serializeFiles();
   const canonical = buildCanonicalSessionRequest({ state, filesData: serializedFiles });
+  const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
+    state.legacyProteinRawCandidates.value
+  );
+  const legacyDerivedEvidence = normalizeLegacyDerivedEvidence(
+    state.legacyProteinDerivedEvidence.value
+  );
   const sessionData = {
     format: 'gbdraw-session',
     version: SESSION_VERSION,
@@ -2936,8 +2968,21 @@ export const exportSession = async (titleOverride = null) => {
     losatDerivedCache: {
       entries: serializeLosatDerivedCache()
     },
+    proteinIdentityManifest: validateProteinIdentityManifest(state.proteinIdentityManifest.value)
+      ? cloneJsonData(state.proteinIdentityManifest.value)
+      : emptyProteinIdentityManifest(),
     cliInvocation: exportableCliInvocation
   };
+
+  if (legacyRawCandidates.entries.length || legacyDerivedEvidence.entries.length) {
+    sessionData.legacyArtifacts = {};
+    if (legacyRawCandidates.entries.length) {
+      sessionData.legacyArtifacts.proteinRawCandidates = legacyRawCandidates;
+    }
+    if (legacyDerivedEvidence.entries.length) {
+      sessionData.legacyArtifacts.proteinDerivedEvidence = legacyDerivedEvidence;
+    }
+  }
 
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
     const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
@@ -3045,11 +3090,25 @@ export const importSession = async (e, options = {}) => {
     );
     reconcileDepthTrackStateAfterSessionFiles();
     if (canonicalSession) {
-      applyLosatCache(projectionResult.artifactState.losatCache?.entries);
-      applyLosatDerivedCache(projectionResult.artifactState.losatDerivedCache?.entries);
+      applyLosatCache(
+        projectionResult.artifactState.losatCache?.entries,
+        projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates
+      );
+      applyLosatDerivedCache(
+        projectionResult.artifactState.losatDerivedCache?.entries,
+        projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence
+      );
+      applyProteinIdentityManifest(projectionResult.artifactState.proteinIdentityManifest);
     } else {
-      applyLosatCache(data.losatCache?.entries);
-      applyLosatDerivedCache(data.losatDerivedCache?.entries);
+      applyLosatCache(
+        data.losatCache?.entries,
+        data.legacyArtifacts?.proteinRawCandidates
+      );
+      applyLosatDerivedCache(
+        data.losatDerivedCache?.entries,
+        data.legacyArtifacts?.proteinDerivedEvidence
+      );
+      applyProteinIdentityManifest(data.proteinIdentityManifest);
     }
     if (collapsedLinearSeqs) {
       state.losatCacheInfo.value = [];

@@ -68,6 +68,23 @@ const syntheticCliSession = {
   },
   resources: {
     'record-source': syntheticResource('genbank', 'cli.gb', 'LOCUS synthetic')
+  },
+  proteinIdentityManifest: {
+    schema: 1,
+    proteinSets: {},
+    recordAnalyses: {},
+    recordInstances: {}
+  },
+  legacyArtifacts: {
+    proteinRawCandidates: {
+      schema: 1,
+      entries: [{
+        state: 'pending',
+        originalEntry: { schema: 2, kind: 'raw-losat', program: 'blastp', text: '' },
+        rejectionReason: null
+      }]
+    },
+    proteinDerivedEvidence: { schema: 1, entries: [{ key: 'legacy-derived' }] }
   }
 };
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
@@ -80,6 +97,11 @@ assert.deepEqual(
   promotedSyntheticCli.renderRequest.diagramOptions.config,
   originalCliRequest.diagramOptions.config
 );
+assert.deepEqual(
+  promotedSyntheticCli.proteinIdentityManifest,
+  syntheticCliSession.proteinIdentityManifest
+);
+assert.deepEqual(promotedSyntheticCli.legacyArtifacts, syntheticCliSession.legacyArtifacts);
 assert.deepEqual(syntheticCliSession.renderRequest, originalCliRequest);
 
 const syntheticGuiSession = {

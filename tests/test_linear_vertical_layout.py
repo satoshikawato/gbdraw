@@ -5,8 +5,11 @@ from types import SimpleNamespace
 import pytest
 
 from gbdraw.layout.linear import (
+    CollisionBand,
     VerticalBand,
     measure_linear_feature_lanes,
+    required_axis_gap,
+    resolve_axis_gap,
     union_vertical_bands,
 )
 from gbdraw.canvas import LinearCanvasConfigurator
@@ -69,6 +72,195 @@ def test_union_vertical_bands_uses_explicit_empty_default() -> None:
     assert union_vertical_bands([], default=default) == default
     with pytest.raises(ValueError, match="at least one"):
         union_vertical_bands([])
+
+
+def _collision_band(
+    kind: str,
+    top_y: float,
+    bottom_y: float,
+    *,
+    x_start: float = 0.0,
+    x_end: float = 100.0,
+) -> CollisionBand:
+    return CollisionBand(kind, x_start, x_end, top_y, bottom_y)
+
+
+def test_required_axis_gap_uses_maximum_independent_constraint() -> None:
+    current = (
+        _collision_band("body", -10.0, 20.0),
+        _collision_band("comparison", -5.0, 5.0),
+        _collision_band("definition", -50.0, 50.0, x_start=-80.0, x_end=-10.0),
+    )
+    following = (
+        _collision_band("body", -15.0, 12.0),
+        _collision_band("comparison", -5.0, 5.0),
+        _collision_band("definition", -50.0, 50.0, x_start=-80.0, x_end=-10.0),
+    )
+
+    resolution = resolve_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=True,
+    )
+
+    assert resolution.axis_gap == pytest.approx(104.0)
+    assert resolution.clear_gap == pytest.approx(4.0)
+    assert resolution.current_band is not None
+    assert resolution.current_band.kind == "definition"
+    assert resolution.next_band is not None
+    assert resolution.next_band.kind == "definition"
+
+
+@pytest.mark.parametrize(
+    ("current", "following", "expected"),
+    [
+        (
+            (_collision_band("body", -10.0, 20.0),),
+            (_collision_band("body", -15.0, 12.0),),
+            43.0,
+        ),
+        (
+            (
+                _collision_band("body", -20.0, 20.0),
+                _collision_band("comparison", -5.0, 5.0),
+            ),
+            (
+                _collision_band("body", -20.0, 20.0),
+                _collision_band("comparison", -5.0, 5.0),
+            ),
+            70.0,
+        ),
+        (
+            (
+                _collision_band("body", -5.0, 5.0),
+                _collision_band(
+                    "definition", -30.0, -10.0, x_start=-80.0, x_end=-10.0
+                ),
+            ),
+            (
+                _collision_band("body", -5.0, 5.0),
+                _collision_band(
+                    "definition", -30.0, -10.0, x_start=-80.0, x_end=-10.0
+                ),
+            ),
+            24.0,
+        ),
+    ],
+)
+def test_required_axis_gap_allows_each_domain_to_dominate(
+    current: tuple[CollisionBand, ...],
+    following: tuple[CollisionBand, ...],
+    expected: float,
+) -> None:
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=True,
+    ) == pytest.approx(expected)
+
+
+def test_required_axis_gap_ignores_nonoverlapping_horizontal_domains() -> None:
+    current = (
+        _collision_band("body", -5.0, 5.0, x_start=0.0, x_end=100.0),
+        _collision_band("definition", -50.0, 50.0, x_start=-100.0, x_end=-10.0),
+    )
+    following = (
+        _collision_band("body", -5.0, 5.0, x_start=0.0, x_end=100.0),
+        _collision_band("definition", -50.0, 50.0, x_start=110.0, x_end=190.0),
+    )
+
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=False,
+    ) == pytest.approx(18.0)
+
+
+def test_required_axis_gap_applies_definition_body_policy_when_x_overlaps() -> None:
+    current = (_collision_band("body", -5.0, 10.0),)
+    following = (
+        _collision_band("body", -5.0, 5.0),
+        _collision_band("definition", -30.0, -10.0),
+    )
+
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=False,
+    ) == pytest.approx(44.0)
+
+
+def test_required_axis_gap_does_not_reserve_comparison_height_on_inactive_boundary() -> None:
+    current = (
+        _collision_band("body", -10.0, 10.0),
+        _collision_band("comparison", -5.0, 5.0),
+    )
+    following = (
+        _collision_band("body", -10.0, 10.0),
+        _collision_band("comparison", -5.0, 5.0),
+    )
+
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=False,
+    ) == pytest.approx(28.0)
+
+
+def test_required_axis_gap_uses_signed_off_axis_definition_edges() -> None:
+    current = (
+        _collision_band("body", -5.0, 5.0),
+        _collision_band(
+            "definition", -40.0, -20.0, x_start=-80.0, x_end=-10.0
+        ),
+    )
+    following = (
+        _collision_band("body", -5.0, 5.0),
+        _collision_band(
+            "definition", -40.0, -20.0, x_start=-80.0, x_end=-10.0
+        ),
+    )
+
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=False,
+    ) == pytest.approx(24.0)
+
+
+def test_required_axis_gap_rejects_comparison_outside_body_reserve() -> None:
+    current = (
+        _collision_band("body", -10.0, 10.0),
+        _collision_band("comparison", -12.0, 5.0),
+    )
+
+    with pytest.raises(ValueError, match="contained in a record body"):
+        required_axis_gap(
+            current,
+            (_collision_band("body", -10.0, 10.0),),
+            ordinary_row_gap=8.0,
+            comparison_height=60.0,
+            definition_clear_gap=4.0,
+            boundary_has_comparison=True,
+        )
 
 
 def test_measure_middle_separated_feature_lanes_uses_renderer_factors() -> None:

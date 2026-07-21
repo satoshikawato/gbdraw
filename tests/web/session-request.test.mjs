@@ -1012,6 +1012,14 @@ assert.throws(
 state.mode.value = 'linear';
 state.form.multi_record_canvas = false;
 state.circularRecordList.value = [];
+const nullOnlyDepthCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: {
+    ...linearFilesData,
+    linearSeqs: linearFilesData.linearSeqs.map((seq) => ({ ...seq, depth: [null] }))
+  }
+});
+assert.equal(nullOnlyDepthCanonical.renderRequest.diagramOptions.depthTrackFiles, undefined);
 state.adv.linear_track_slots_enabled = true;
 state.adv.linear_track_slots_axis_index = 1;
 state.adv.linear_track_slots = [

@@ -759,7 +759,9 @@ def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:
     assert "const losatDerivedCache = ref(new Map());" in state_js
     assert "losatDerivedCache:" in config_js
     assert "serializeLosatDerivedCache()" in config_js
-    assert "applyLosatDerivedCache(data.losatDerivedCache?.entries)" in config_js
+    assert "applyLosatDerivedCache(" in config_js
+    assert "proteinIdentityManifest" in config_js
+    assert "legacyArtifacts?.proteinRawCandidates" in config_js
     assert "kind: 'derived-losatp-payload'" in config_js
     assert "buildLosatDerivedPayloadCachePayload({" in run_analysis_js
     assert "getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey)" in run_analysis_js
@@ -2628,7 +2630,7 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linearSlotNeedsDepth" in run_source
     assert "validateImportedLinearTrackSlots" in config_source
     assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 2" in module_source
-    assert "const SESSION_VERSION = 33" in config_source
+    assert f"const SESSION_VERSION = {CURRENT_SESSION_VERSION}" in config_source
     assert "migrateImportedLinearTrackSlots" in config_source
     assert "createLinearTrackSlotEditor" in module_source
     assert "linearTrackStackEntries" in app_setup_source

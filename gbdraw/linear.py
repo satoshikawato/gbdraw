@@ -4,8 +4,6 @@
 
 import argparse
 import copy
-import hashlib
-import json
 import logging
 import math
 import re
@@ -138,14 +136,6 @@ def _add_argument_with_hidden_aliases(
     parser.add_argument(*hidden_aliases, **alias_kwargs)
 
 
-def _web_json_dumps(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-
-def _web_hash_text(text: str) -> str:
-    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
-
-
 def _web_safe_filename(name: object, fallback: str = "losat") -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or ""))
     cleaned = cleaned.strip("_")
@@ -264,13 +254,43 @@ def _linear_record_source_index(
     return -1
 
 
-def _source_session_losat_entries(source_session: Mapping[str, Any] | None) -> tuple[Mapping[str, object], ...]:
+def _source_session_losat_entries(
+    source_session: Mapping[str, Any] | None,
+) -> tuple[Mapping[str, object], ...]:
     if not isinstance(source_session, Mapping):
         return ()
+    collected: list[Mapping[str, object]] = []
     losat_cache = source_session.get("losatCache")
-    if not isinstance(losat_cache, Mapping):
+    if isinstance(losat_cache, Mapping):
+        entries = losat_cache.get("entries")
+        if isinstance(entries, list):
+            collected.extend(entry for entry in entries if isinstance(entry, Mapping))
+    legacy_artifacts = source_session.get("legacyArtifacts")
+    if isinstance(legacy_artifacts, Mapping):
+        envelope = legacy_artifacts.get("proteinRawCandidates")
+        candidates = envelope.get("entries") if isinstance(envelope, Mapping) else None
+        if isinstance(candidates, list):
+            collected.extend(
+                original
+                for candidate in candidates
+                if isinstance(candidate, Mapping)
+                and isinstance(
+                    original := candidate.get("originalEntry"), Mapping
+                )
+            )
+    return tuple(collected)
+
+
+def _source_session_legacy_protein_candidates(
+    source_session: Mapping[str, Any] | None,
+) -> tuple[Mapping[str, object], ...]:
+    if not isinstance(source_session, Mapping):
         return ()
-    entries = losat_cache.get("entries")
+    legacy_artifacts = source_session.get("legacyArtifacts")
+    if not isinstance(legacy_artifacts, Mapping):
+        return ()
+    envelope = legacy_artifacts.get("proteinRawCandidates")
+    entries = envelope.get("entries") if isinstance(envelope, Mapping) else None
     if not isinstance(entries, list):
         return ()
     return tuple(entry for entry in entries if isinstance(entry, Mapping))
@@ -304,104 +324,23 @@ def _source_session_runtime_compatibility(source_session: Mapping[str, Any] | No
     return "serial-v1" if execution_mode == "serial" else "threaded-compatible-v1"
 
 
-def _fingerprint_from_session_entry(entry: object) -> dict[str, object] | None:
-    if not isinstance(entry, Mapping):
-        return None
-    return {
-        "name": str(entry.get("name") or ""),
-        "size": int(entry.get("size") or 0),
-        "lastModified": int(entry.get("lastModified") or 0),
-    }
-
-
-def _fingerprint_from_path(path: object) -> dict[str, object] | None:
-    if path in (None, "", False):
-        return None
-    file_path = Path(str(path))
-    try:
-        stat = file_path.stat()
-    except OSError:
-        return {"name": file_path.name, "size": 0, "lastModified": 0}
-    return {
-        "name": file_path.name,
-        "size": int(stat.st_size),
-        "lastModified": int(stat.st_mtime * 1000),
-    }
-
-
-def _linear_session_seq_entry(
-    source_session: Mapping[str, Any] | None,
-    index: int,
-) -> Mapping[str, Any] | None:
-    if not isinstance(source_session, Mapping):
-        return None
-    files = source_session.get("files")
-    if not isinstance(files, Mapping):
-        return None
-    linear_seqs = files.get("linearSeqs")
-    if not isinstance(linear_seqs, list) or index >= len(linear_seqs):
-        return None
-    entry = linear_seqs[index]
-    return entry if isinstance(entry, Mapping) else None
-
-
-def _canonical_region_spec_from_session_seq(seq: Mapping[str, Any] | None) -> str | None:
-    if not isinstance(seq, Mapping):
-        return None
-    start = seq.get("region_start")
-    end = seq.get("region_end")
-    if start in (None, "") or end in (None, ""):
-        return None
-    try:
-        start_int = int(start)
-        end_int = int(end)
-    except (TypeError, ValueError):
-        return None
-    return f"{min(start_int, end_int)}-{max(start_int, end_int)}"
-
-
 def _record_instance_keys_for_web_losat(
-    args: argparse.Namespace,
     *,
     source_session: Mapping[str, Any] | None,
     record_count: int,
 ) -> tuple[str, ...]:
-    input_format = "gb" if args.gbk else "gff"
-    primary_paths = list(args.gbk or args.gff or [])
-    paired_fasta_paths = list(args.fasta or [])
-    record_selectors = list(args.record_id or [])
-    occurrences: dict[str, int] = {}
-    keys: list[str] = []
-    for index in range(record_count):
-        session_seq = _linear_session_seq_entry(source_session, index)
-        if session_seq is not None:
-            primary_entry = session_seq.get("gb") if input_format == "gb" else session_seq.get("gff")
-            paired_entry = session_seq.get("fasta") if input_format == "gff" else None
-            primary_fingerprint = _fingerprint_from_session_entry(primary_entry)
-            paired_fingerprint = _fingerprint_from_session_entry(paired_entry)
-            record_selector = str(session_seq.get("region_record_id") or "").strip()
-            canonical_region = _canonical_region_spec_from_session_seq(session_seq)
-        else:
-            primary_fingerprint = _fingerprint_from_path(
-                primary_paths[index] if index < len(primary_paths) else None
+    if isinstance(source_session, Mapping):
+        request = source_session.get("renderRequest")
+        records = request.get("records") if isinstance(request, Mapping) else None
+        if isinstance(records, list) and len(records) == record_count:
+            keys = tuple(
+                str(record.get("recordKey") or "").strip()
+                for record in records
+                if isinstance(record, Mapping)
             )
-            paired_fingerprint = _fingerprint_from_path(
-                paired_fasta_paths[index] if input_format == "gff" and index < len(paired_fasta_paths) else None
-            )
-            record_selector = str(record_selectors[index] if index < len(record_selectors) else "").strip()
-            canonical_region = None
-        descriptor = {
-            "inputFormat": input_format,
-            "primaryFile": primary_fingerprint,
-            "pairedFastaFile": paired_fingerprint,
-            "recordSelector": record_selector,
-            "canonicalRegionSpec": canonical_region,
-        }
-        base = _web_hash_text(_web_json_dumps(descriptor))[:16]
-        occurrence = occurrences.get(base, 0) + 1
-        occurrences[base] = occurrence
-        keys.append(f"r_{base}_o{occurrence}" if occurrence > 1 else f"r_{base}")
-    return tuple(keys)
+            if len(keys) == record_count and all(keys) and len(set(keys)) == record_count:
+                return keys
+    return tuple(f"record-{index + 1}" for index in range(record_count))
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -1822,6 +1761,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     losatp_cache: LosatpCacheManager | None = None
     losatp_cache_entries: tuple[dict[str, object], ...] | None = None
+    legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
+    protein_identity_manifest: Mapping[str, Any] | None = None
     protein_extraction = None
     losat_cache_filenames: tuple[str, ...] = ()
     if protein_blastp_mode != "none" and collect_losat_cache:
@@ -1835,7 +1776,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             runtime_compatibility=_source_session_runtime_compatibility(source_session),
         )
         record_instance_keys = _record_instance_keys_for_web_losat(
-            args,
             source_session=source_session,
             record_count=len(records),
         )
@@ -1844,6 +1784,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             record_instance_keys=record_instance_keys,
             feature_visibility_rules=feature_visibility_rules,
         )
+        if protein_extraction.identity_manifest is None:
+            raise ValidationError(
+                "Protein cache collection requires a protein identity manifest."
+            )
+        losatp_cache.set_protein_extraction(protein_extraction)
+        protein_identity_manifest = protein_extraction.identity_manifest.to_dict()
         losat_cache_filenames = _linear_losat_cache_filenames(records)
     collinearity_comparisons: list[DataFrame] | None = None
     collinearity_linear_comparisons: list[LinearComparison] | None = None
@@ -2019,6 +1965,17 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
 
     if losatp_cache is not None:
         losatp_cache_entries = losatp_cache.session_entries()
+        legacy_envelope = losatp_cache.legacy_candidate_envelope()
+        legacy_entries = legacy_envelope.get("entries")
+        legacy_protein_raw_candidates = (
+            tuple(
+                dict(entry)
+                for entry in legacy_entries
+                if isinstance(entry, Mapping)
+            )
+            if isinstance(legacy_entries, list)
+            else ()
+        )
 
     rendered_svg = make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name)
     track_slot_geometry_records = collect_track_slot_geometry_records(
@@ -2141,6 +2098,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             else None
         ),
         losat_cache_entries=losatp_cache_entries,
+        protein_identity_manifest=protein_identity_manifest,
+        legacy_protein_raw_candidates=legacy_protein_raw_candidates,
         linear_record_metadata=linear_record_metadata,
         run_metadata=build_track_slot_geometry_run_metadata(
             mode="linear",

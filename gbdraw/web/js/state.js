@@ -591,6 +591,14 @@ const losatThreadingStatus = ref({
 });
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());
+const proteinIdentityManifest = ref({
+  schema: 1,
+  proteinSets: {},
+  recordAnalyses: {},
+  recordInstances: {}
+});
+const legacyProteinRawCandidates = ref({ schema: 1, entries: [] });
+const legacyProteinDerivedEvidence = ref({ schema: 1, entries: [] });
 const orthogroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
@@ -1157,6 +1165,9 @@ export const state = {
   losatThreadingStatus,
   losatCache,
   losatDerivedCache,
+  proteinIdentityManifest,
+  legacyProteinRawCandidates,
+  legacyProteinDerivedEvidence,
   orthogroups,
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,

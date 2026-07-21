@@ -22,6 +22,8 @@ from tools.refresh_gallery_sessions import (
     _merge_refreshed_gallery_artifacts,
     _preserve_gallery_cli_invocation,
     _session_path,
+    _validate_gallery_session_inventory,
+    _validate_staged_gallery_session,
     _with_interactive_svg_format,
 )
 
@@ -69,6 +71,10 @@ def test_session_path_prefers_existing_compressed_gallery_session() -> None:
     path = _session_path("vibrio-harveyi-group-collinear")
 
     assert path.name == "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+
+
+def test_gallery_session_inventory_matches_files_and_examples() -> None:
+    _validate_gallery_session_inventory()
 
 
 def test_preserve_gallery_cli_invocation_keeps_original_render_args() -> None:
@@ -159,6 +165,7 @@ def test_preserve_gallery_cli_invocation_reports_missing_source_cli() -> None:
 
 def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() -> None:
     promoted = {
+        "version": 34,
         "renderRequest": {"diagramOptions": {"palette": "curated"}},
         "config": {"labels": "curated"},
         "resources": {
@@ -167,8 +174,11 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
         },
         "results": [{"content": "stale"}],
         "features": {"extractedFeatures": []},
+        "losatCache": {"entries": [{"schema": 2, "program": "blastp"}]},
+        "legacyArtifacts": {"proteinRawCandidates": {"schema": 1, "entries": ["old"]}},
     }
     refreshed = {
+        "version": 35,
         "renderRequest": {"diagramOptions": {"palette": "default"}},
         "config": {"labels": "lost"},
         "resources": {
@@ -178,6 +188,14 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
         "results": [{"content": "fresh"}],
         "features": {"extractedFeatures": [{"svg_id": "feature-1"}]},
         "orthogroupState": {"groups": [{"id": "og_1"}]},
+        "losatCache": {"entries": [{"schema": 3, "program": "blastp"}]},
+        "losatDerivedCache": {"entries": [{"schema": 2}]},
+        "proteinIdentityManifest": {
+            "schema": 1,
+            "proteinSets": {},
+            "recordAnalyses": {},
+            "recordInstances": {},
+        },
     }
 
     merged = _merge_refreshed_gallery_artifacts(promoted, refreshed)
@@ -190,6 +208,42 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
     assert merged["results"] == refreshed["results"]
     assert merged["features"] == refreshed["features"]
     assert merged["orthogroupState"] == refreshed["orthogroupState"]
+    assert merged["version"] == 35
+    assert merged["losatCache"] == refreshed["losatCache"]
+    assert merged["losatDerivedCache"] == refreshed["losatDerivedCache"]
+    assert merged["proteinIdentityManifest"] == refreshed["proteinIdentityManifest"]
+    assert "legacyArtifacts" not in merged
+
+
+def test_staged_gallery_validator_requires_current_artifact_schemas(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "synthetic.gbdraw-session.json"
+    session = {
+        "format": "gbdraw-session",
+        "version": 35,
+        "renderRequest": {"schema": 3, "mode": "linear"},
+        "resources": {},
+        "results": [{"name": "result", "content": "<svg></svg>"}],
+        "losatCache": {"entries": []},
+        "losatDerivedCache": {"entries": []},
+        "proteinIdentityManifest": {
+            "schema": 1,
+            "proteinSets": {},
+            "recordAnalyses": {},
+            "recordInstances": {},
+        },
+    }
+
+    _validate_staged_gallery_session(session_path, session)
+
+    stale_version = dict(session, version=34)
+    with pytest.raises(ValueError, match="expected 35"):
+        _validate_staged_gallery_session(session_path, stale_version)
+
+    stale_reference = dict(session, orthogroupState={"proteinId": "p_r_old"})
+    with pytest.raises(ValueError, match="legacy protein identifiers"):
+        _validate_staged_gallery_session(session_path, stale_reference)
 
 
 def test_gallery_session_refresh_does_not_partially_replace_on_failure(

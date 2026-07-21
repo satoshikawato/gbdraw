@@ -59,6 +59,16 @@ The most common causes are:
 
 See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
+## Why did gbdraw rerun LOSATP after I loaded a session?
+
+A current protein-search cache hit requires the same amino-acid sequences and protein membership, stable record/feature bindings, query/subject direction, program, and meaningful search arguments. Renaming an upload or session resource, changing its modification time, or saving and loading unchanged biological inputs does not invalidate the cache.
+
+Older schema-2 protein results are treated as untrusted migration candidates. gbdraw verifies their complete FASTA identity and protein mapping before promoting a schema-3 copy. If a candidate is incomplete, corrupt, or belongs to different inputs or settings, only that record pair is rerun. Nucleotide LOSAT cache entries continue to use schema 2 and are validated separately.
+
+## Why is there less empty space between Linear comparison rows?
+
+Automatic spacing now treats record bodies, comparison corridors, and definition text as separate X-aware constraints and uses the largest required clearance. A left-side definition block is not added to a plot-column comparison corridor when their horizontal ranges do not overlap, and `--comparison_height` is reserved only at boundaries crossed by a comparison. The value remains a minimum clear corridor; dense labels or tracks can still require more space.
+
 ## What if one record has no Depth TSV for a sample?
 
 Keep the record's position in the repeated `--depth_track` group with a quoted empty argument:

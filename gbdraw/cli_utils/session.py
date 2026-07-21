@@ -47,6 +47,10 @@ class DiagramRunResult:
     feature_metadata: tuple[Mapping[str, Any], ...] = ()
     orthogroup_metadata: tuple[Mapping[str, Any], ...] | None = None
     losat_cache_entries: tuple[Mapping[str, Any], ...] | None = None
+    losat_derived_cache_entries: tuple[Mapping[str, Any], ...] | None = None
+    protein_identity_manifest: Mapping[str, Any] | None = None
+    legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
+    legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] | None = None
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
     canonical_request: DiagramRequest | None = None
@@ -281,6 +285,10 @@ def save_session_sidecar_if_requested(
         embedded_files=session_files,
         generated_at=datetime.now(timezone.utc),
         losat_cache_entries=run_result.losat_cache_entries,
+        losat_derived_cache_entries=run_result.losat_derived_cache_entries,
+        protein_identity_manifest=run_result.protein_identity_manifest,
+        legacy_protein_raw_candidates=run_result.legacy_protein_raw_candidates,
+        legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
         canonical_request=run_result.canonical_request,
     )
     payload.pop("files", None)
@@ -346,7 +354,10 @@ def render_canonical_session_if_present(
             output_directory=output_directory,
             formats=format_override,
         )
-        rendered = _render_request(request)
+        rendered = _render_request(
+            request,
+            session_artifacts=document.to_dict(),
+        )
 
         if save_session or session_output:
             sidecar_path = (
@@ -367,6 +378,58 @@ def render_canonical_session_if_present(
                     "files",
                 }
             }
+            if rendered.protein_id_map:
+                from gbdraw.api.request_render import (
+                    rewrite_protein_artifact_references,
+                )
+
+                adjunct = rewrite_protein_artifact_references(
+                    adjunct,
+                    rendered.protein_id_map,
+                )
+            for artifact_key in (
+                "losatCache",
+                "losatDerivedCache",
+                "proteinIdentityManifest",
+                "legacyArtifacts",
+            ):
+                adjunct.pop(artifact_key, None)
+            adjunct["losatCache"] = {
+                "entries": [dict(entry) for entry in rendered.losat_cache_entries]
+            }
+            adjunct["losatDerivedCache"] = {
+                "entries": [
+                    dict(entry) for entry in rendered.losat_derived_cache_entries
+                ]
+            }
+            adjunct["proteinIdentityManifest"] = dict(
+                rendered.protein_identity_manifest
+                or {
+                    "schema": 1,
+                    "proteinSets": {},
+                    "recordAnalyses": {},
+                    "recordInstances": {},
+                }
+            )
+            legacy_artifacts: dict[str, Any] = {}
+            if rendered.legacy_protein_raw_candidates:
+                legacy_artifacts["proteinRawCandidates"] = {
+                    "schema": 1,
+                    "entries": [
+                        dict(entry)
+                        for entry in rendered.legacy_protein_raw_candidates
+                    ],
+                }
+            if rendered.legacy_protein_derived_evidence:
+                legacy_artifacts["proteinDerivedEvidence"] = {
+                    "schema": 1,
+                    "entries": [
+                        dict(entry)
+                        for entry in rendered.legacy_protein_derived_evidence
+                    ],
+                }
+            if legacy_artifacts:
+                adjunct["legacyArtifacts"] = legacy_artifacts
             svg_results = []
             for output in rendered.output_paths:
                 if output.suffix.lower() != ".svg" or not output.is_file():
@@ -409,12 +472,16 @@ def render_canonical_session_if_present(
     return True
 
 
-def _render_request(request):
+def _render_request(request, *, session_artifacts=None):
     """Import the request renderer lazily to keep CLI session imports lightweight."""
 
     from gbdraw.api.request_render import render_request
 
-    return render_request(request)
+    return (
+        render_request(request)
+        if session_artifacts is None
+        else render_request(request, session_artifacts=session_artifacts)
+    )
 
 
 def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 
+import pandas as pd
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
@@ -10,6 +11,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
     InMemoryRecordSource,
+    LinearComparison,
     LinearDiagramRequest,
     LinearMultiRecordOptions,
     RecordInput,
@@ -19,6 +21,7 @@ from gbdraw.api import (
 )
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.linear_multi_record import (
     LinearRecordMeasurement,
     RecordKey,
@@ -26,6 +29,7 @@ from gbdraw.layout.linear_multi_record import (
     resolve_record_row_positions,
     solve_linear_layout,
 )
+from gbdraw.layout.linear import CollisionBand
 
 
 def _records(*lengths: int) -> list[SeqRecord]:
@@ -33,6 +37,15 @@ def _records(*lengths: int) -> list[SeqRecord]:
     for record in records:
         record.annotations["molecule_type"] = "DNA"
     return records
+
+
+def _comparison(query: int, subject: int) -> LinearComparison:
+    row = ["q", "s", 90.0, 100, 0, 0, 10, 100, 20, 110, 1e-20, 200]
+    return LinearComparison(
+        query,
+        subject,
+        pd.DataFrame([row], columns=COMPARISON_COLUMNS),
+    )
 
 
 def test_shared_scale_and_fixed_gap_for_two_by_two_layout() -> None:
@@ -87,13 +100,18 @@ def test_layout_rejects_gap_that_consumes_available_width() -> None:
         )
 
 
-def test_comparison_anchor_can_overlay_reserved_record_header() -> None:
+def test_comparison_anchor_can_overlay_x_disjoint_record_header() -> None:
     measurements = (
         LinearRecordMeasurement(
             0,
             RecordKey("top"),
             100,
             bottom_extent=12,
+            comparison_bottom_extent=12,
+            collision_bands=(
+                CollisionBand("body", 0, 100, 0, 12),
+                CollisionBand("comparison", 0, 100, 0, 12),
+            ),
         ),
         LinearRecordMeasurement(
             1,
@@ -101,6 +119,11 @@ def test_comparison_anchor_can_overlay_reserved_record_header() -> None:
             100,
             top_extent=40,
             comparison_top_extent=18,
+            collision_bands=(
+                CollisionBand("body", 0, 100, -18, 0),
+                CollisionBand("comparison", 0, 100, -18, 0),
+                CollisionBand("definition", -100, -10, -40, -20),
+            ),
         ),
     )
     plan = solve_linear_layout(
@@ -112,10 +135,125 @@ def test_comparison_anchor_can_overlay_reserved_record_header() -> None:
     )
 
     bottom = plan.placement_for_index(1)
-    assert bottom.axis_y == pytest.approx(122)
-    assert bottom.comparison_top_y == pytest.approx(104)
+    assert bottom.axis_y == pytest.approx(100)
+    assert bottom.comparison_top_y == pytest.approx(82)
     assert plan.content_top == pytest.approx(50)
-    assert plan.content_bottom == pytest.approx(122)
+    assert plan.content_bottom == pytest.approx(100)
+    assert plan.row_gap_resolutions[0].axis_gap == pytest.approx(50)
+    assert plan.row_gap_resolutions[0].current_band.kind == "comparison"
+
+
+def test_multi_record_solver_reserves_comparison_only_on_active_boundary() -> None:
+    measurements = tuple(
+        LinearRecordMeasurement(
+            index,
+            RecordKey(f"record-{index}"),
+            100,
+            top_extent=10,
+            bottom_extent=10,
+            comparison_top_extent=5,
+            comparison_bottom_extent=5,
+            collision_bands=(
+                CollisionBand("body", 0, 100, -10, 10),
+                CollisionBand("comparison", 0, 100, -5, 5),
+            ),
+        )
+        for index in range(3)
+    )
+
+    plan = solve_linear_layout(
+        measurements,
+        (0, 1, 2),
+        available_width=100,
+        row_gap_px=8,
+        comparison_height=60,
+        comparison_record_indices_by_boundary={0: (0, 1)},
+    )
+
+    first, second = plan.row_gap_resolutions
+    assert first.axis_gap == pytest.approx(70)
+    assert first.current_band is not None
+    assert first.current_band.kind == "comparison"
+    assert second.axis_gap == pytest.approx(28)
+    assert second.current_band is not None
+    assert second.current_band.kind == "body"
+
+
+def test_single_record_rows_publish_boundary_constraints_and_fit_canvas() -> None:
+    canvas = assemble_linear_diagram_from_records(
+        _records(1000, 1000, 1000),
+        linear_comparisons=[_comparison(0, 1)],
+        legend="none",
+        config_overrides={
+            "show_labels": False,
+            "show_gc": False,
+            "show_skew": False,
+            "comparison_height": 200,
+        },
+    )
+
+    geometry = canvas._gbdraw_track_slot_geometry
+    first, second = geometry["axisGapConstraints"]
+    assert first["currentKind"] == "comparison"
+    assert first["nextKind"] == "comparison"
+    assert first["clearGapPx"] == pytest.approx(200)
+    assert second["currentKind"] != "comparison"
+    assert second["nextKind"] != "comparison"
+    assert second["clearGapPx"] != pytest.approx(200)
+
+    records = geometry["records"]
+    corridor = (
+        records[1]["comparisonExclusionBand"]["absoluteTopPx"]
+        - records[0]["comparisonExclusionBand"]["absoluteBottomPx"]
+    )
+    assert corridor == pytest.approx(200)
+    assert all(record["collisionBands"] for record in records)
+
+    viewbox_height = float(str(canvas.attribs["viewBox"]).split()[-1])
+    painted_bottom = max(
+        record["canvasBand"]["absoluteBottomPx"] for record in records
+    )
+    assert painted_bottom <= viewbox_height
+
+
+def test_multi_record_local_header_clears_previous_row_body() -> None:
+    records = _records(1000, 1000, 1000)
+    for index, record in enumerate(records):
+        record.annotations["gbdraw_record_label"] = (
+            f"Very long record header {index}"
+        )
+    canvas = assemble_linear_diagram_from_records(
+        records,
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=("#1@1", "#2@2", "#3@2"),
+        ),
+        legend="none",
+        config_overrides={
+            "show_labels": False,
+            "show_gc": False,
+            "show_skew": False,
+            "linear_definition_font_size": 80,
+        },
+    )
+
+    geometry = canvas._gbdraw_track_slot_geometry
+    constraint = geometry["axisGapConstraints"][0]
+    assert constraint["currentKind"] == "body"
+    assert constraint["nextKind"] == "definition"
+
+    top_record = geometry["records"][0]
+    lower_definition = next(
+        band
+        for band in geometry["records"][1]["collisionBands"]
+        if band["kind"] == "definition"
+    )
+    body_bottom = top_record["recordBodyBand"]["absoluteBottomPx"]
+    definition_top = (
+        geometry["records"][1]["axisYpx"] + lower_definition["topPx"]
+    )
+    assert definition_top - body_bottom == pytest.approx(
+        constraint["clearGapPx"]
+    )
 
 
 def test_comparison_extent_cannot_escape_reserved_record_extent() -> None:

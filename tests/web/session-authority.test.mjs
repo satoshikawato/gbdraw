@@ -23,7 +23,8 @@ const {
 
 assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
   'cliInvocation', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
-  'losatCache', 'losatDerivedCache', 'orthogroupState', 'renderRequest', 'resources',
+  'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'orthogroupState',
+  'proteinIdentityManifest', 'renderRequest', 'resources',
   'results', 'title', 'ui', 'version', 'webFiles'
 ].sort());
 
@@ -39,7 +40,10 @@ const session = {
     featureVisibilityManualRules: [{ action: 'off' }], labelTextFeatureOverrides: { f1: 'stored' }
   },
   editorState: { legend: { entries: [] } }, results: [{ name: 'preview', content: '<svg/>' }],
-  orthogroupState: {}, losatCache: {}, losatDerivedCache: {}, cliInvocation: null
+  orthogroupState: {}, losatCache: {}, losatDerivedCache: {},
+  proteinIdentityManifest: { schema: 1 },
+  legacyArtifacts: { proteinRawCandidates: { schema: 1, entries: [] } },
+  cliInvocation: null
 };
 validateSessionAuthorityInventory(session, 33);
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
@@ -51,6 +55,8 @@ assert.deepEqual(projectArtifactState(session).features, {
   extractedFeatures: [{ id: 'f1' }]
 });
 assert.deepEqual(projectArtifactState(session).ui, { generatedLegendPosition: 'right' });
+assert.deepEqual(projectArtifactState(session).proteinIdentityManifest, { schema: 1 });
+assert.deepEqual(projectArtifactState(session).legacyArtifacts, session.legacyArtifacts);
 assert.equal(projectDocumentMetadata(session).title, 'Canonical');
 assert.throws(
   () => validateSessionAuthorityInventory({ ...session, unknownField: true }, 33),

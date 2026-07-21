@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import os
 import shutil
 import subprocess
@@ -19,7 +20,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from gbdraw.session_io import load_session, session_mode, write_session_json  # noqa: E402
+from gbdraw.session_io import (  # noqa: E402
+    CURRENT_SESSION_VERSION,
+    PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    classify_raw_losat_cache_entry,
+    load_session,
+    session_mode,
+    validate_session,
+    write_session_json,
+)
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 
 
@@ -40,6 +49,30 @@ GALLERY_SESSION_FILES = (
     "majanivirus_orthogroup.gbdraw-session.json.gz",
     "lambda_basic_linear.gbdraw-session.json",
 )
+
+
+def _validate_gallery_session_inventory() -> None:
+    """Keep the physical, refresh-tool, and Gallery example inventories aligned."""
+
+    from tools.prepare_interactive_gallery_assets import EXAMPLES
+
+    configured = set(GALLERY_SESSION_FILES)
+    if len(configured) != len(GALLERY_SESSION_FILES):
+        raise ValueError("GALLERY_SESSION_FILES contains duplicate session names")
+    physical = {
+        path.name
+        for pattern in ("*.gbdraw-session.json", "*.gbdraw-session.json.gz")
+        for path in SESSION_ROOT.glob(pattern)
+    }
+    examples = {example.session_path.name for example in EXAMPLES}
+    if configured != physical or configured != examples:
+        raise ValueError(
+            "Gallery session inventory mismatch: "
+            f"missing-physical={sorted(configured - physical)}, "
+            f"unconfigured-physical={sorted(physical - configured)}, "
+            f"missing-examples={sorted(configured - examples)}, "
+            f"unconfigured-examples={sorted(examples - configured)}"
+        )
 
 
 def _gallery_mutation_targets(
@@ -209,9 +242,28 @@ def _merge_refreshed_gallery_artifacts(
     """Keep the promoted request authoritative while accepting fresh render artifacts."""
 
     merged = copy.deepcopy(dict(promoted_session))
-    for key in ("createdAt", "results", "features", "orthogroupState"):
+    for key in (
+        "version",
+        "createdAt",
+        "results",
+        "features",
+        "editorState",
+        "orthogroupState",
+        "losatCache",
+        "losatDerivedCache",
+        "proteinIdentityManifest",
+        "legacyArtifacts",
+    ):
         if key in refreshed_session:
             merged[key] = copy.deepcopy(refreshed_session[key])
+        elif key in {
+            "editorState",
+            "losatCache",
+            "losatDerivedCache",
+            "proteinIdentityManifest",
+            "legacyArtifacts",
+        }:
+            merged.pop(key, None)
 
     refreshed_resources = refreshed_session.get("resources")
     promoted_resources = promoted_session.get("resources")
@@ -239,12 +291,74 @@ def _validate_staged_gallery_session(
         _validate_session_interactive_orthogroups,
     )
 
+    validate_session(session)
+    if session.get("version") != CURRENT_SESSION_VERSION:
+        raise ValueError(
+            f"{session_path.name} has session version {session.get('version')}; "
+            f"expected {CURRENT_SESSION_VERSION}"
+        )
     request = session.get("renderRequest")
     if not isinstance(request, Mapping) or request.get("schema") != 3:
         raise ValueError(f"{session_path.name} has no canonical schema-3 render request")
     resources = session.get("resources")
     if not isinstance(resources, Mapping):
         raise ValueError(f"{session_path.name} has no canonical resources")
+
+    manifest = session.get("proteinIdentityManifest")
+    if (
+        not isinstance(manifest, Mapping)
+        or manifest.get("schema") != PROTEIN_IDENTITY_MANIFEST_SCHEMA
+    ):
+        raise ValueError(
+            f"{session_path.name} has no protein identity manifest schema 1"
+        )
+    raw_cache = session.get("losatCache")
+    raw_entries = raw_cache.get("entries", []) if isinstance(raw_cache, Mapping) else []
+    if not isinstance(raw_entries, list) or any(
+        classify_raw_losat_cache_entry(entry)
+        not in {"protein-current", "nucleotide-current"}
+        for entry in raw_entries
+    ):
+        raise ValueError(f"{session_path.name} contains a non-current raw LOSAT artifact")
+    derived_cache = session.get("losatDerivedCache")
+    derived_entries = (
+        derived_cache.get("entries", [])
+        if isinstance(derived_cache, Mapping)
+        else []
+    )
+    if not isinstance(derived_entries, list) or any(
+        not isinstance(entry, Mapping) or entry.get("schema") != 2
+        for entry in derived_entries
+    ):
+        raise ValueError(
+            f"{session_path.name} contains a non-current derived LOSATP artifact"
+        )
+    legacy_artifacts = session.get("legacyArtifacts")
+    candidates = (
+        legacy_artifacts.get("proteinRawCandidates")
+        if isinstance(legacy_artifacts, Mapping)
+        else None
+    )
+    if isinstance(candidates, Mapping) and candidates.get("entries"):
+        raise ValueError(
+            f"{session_path.name} retained legacy protein raw candidates after refresh"
+        )
+    protein_artifacts = {
+        key: session.get(key)
+        for key in (
+            "results",
+            "features",
+            "editorState",
+            "orthogroupState",
+            "losatCache",
+            "losatDerivedCache",
+            "proteinIdentityManifest",
+        )
+    }
+    if "p_r_" in json.dumps(protein_artifacts, ensure_ascii=False):
+        raise ValueError(
+            f"{session_path.name} contains unresolved legacy protein identifiers"
+        )
 
     def referenced_resource_ids(value: object):
         if isinstance(value, Mapping):
@@ -347,6 +461,8 @@ def _refresh_one_session(
 def refresh_gallery_sessions(
     session_names: tuple[str, ...] = GALLERY_SESSION_FILES,
 ) -> None:
+    if session_names == GALLERY_SESSION_FILES:
+        _validate_gallery_session_inventory()
     session_paths = [_session_path(session_name) for session_name in session_names]
     for session_path in session_paths:
         if not session_path.exists():
