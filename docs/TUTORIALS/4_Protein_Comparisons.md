@@ -129,6 +129,14 @@ Do not combine `-b/--blast` with `--protein_blastp_mode`. The CLI rejects that c
 
 For Python workflows with multi-record rows, use `LinearComparisonOptions(protein_mode="pairwise", pairs=((0, 2), (1, 3)))` to run only the declared record pairs. Pair indices are zero-based and must connect adjacent layout rows. Omitting `pairs` preserves adjacent-record behavior. See the [Python API linear example](../PYTHON_API.md#linear-diagrams-and-comparisons).
 
+## 7. When a saved protein search is reused
+
+Current sessions identify each CDS from its complete location, strand, and stable record binding. The LOSAT QUERY and SUBJECT fields remain readable—for example, they include the record source, record instance, and a percent-encoded protein alias—while the session's protein identity manifest provides the authoritative feature mapping.
+
+Changing an upload filename, file modification time, resource name, or saving and loading the same biological inputs does not invalidate a compatible protein-search result. Changing an amino-acid sequence, the selected protein set, a protein source identifier, or a search argument does. Query/subject direction is significant.
+
+Session version 35 keeps current protein raw results in cache schema 3. It continues to use schema 2 for nucleotide LOSAT results, so both schemas may appear in one valid session. An imported schema-2 protein result is kept separately as a legacy candidate. gbdraw reuses it only after verifying the complete FASTA content, program and arguments, and a one-to-one mapping to current proteins; successful promotion writes a schema-3 copy. A candidate that cannot be verified is ignored for that pair and LOSAT runs normally.
+
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Set feature colors and labels](./3_Advanced_Customization.md) | [Next: Use TSV manifests >](./5_Table_Driven_Inputs.md)
 

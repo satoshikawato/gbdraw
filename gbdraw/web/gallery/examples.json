@@ -17,7 +17,7 @@
     "featureSources": [
       "HmmtDNA.gbk"
     ],
-    "fileSizeLabel": "305 KB",
+    "fileSizeLabel": "448 KB",
     "command": "gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA_basic_circular -f interactive_svg --separate_strands --track_type middle --labels out --species '<i>Homo sapiens</i>'",
     "commandKind": "runnable",
     "commandNote": "Download HmmtDNA.gbk from the Files tab, then run this command in the same directory.",
@@ -46,7 +46,7 @@
     "featureSources": [
       "NC_001416.gb"
     ],
-    "fileSizeLabel": "364 KB",
+    "fileSizeLabel": "984 KB",
     "command": "gbdraw linear --gbk NC_001416.gb -o lambda_basic_linear -f interactive_svg --separate_strands --show_labels all --scale_style ruler --legend left",
     "commandKind": "runnable",
     "commandNote": "Download NC_001416.gb from the Files tab, then run this command in the same directory.",
@@ -75,7 +75,7 @@
     "featureSources": [
       "HmmtDNA.gbk"
     ],
-    "fileSizeLabel": "351 KB",
+    "fileSizeLabel": "493 KB",
     "command": "gbdraw circular -o HmmtDNA_ATskew --species '<i>Homo sapiens</i>' -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p ajisai --window 500 --step 50 --definition_font_size 28 --label_font_size 20 --track_type middle -l left --labels --qualifier_priority HmmtDNA_qualifier_priority.tsv --circular_track_axis_index 0 --circular_track_slot features:features@lane_direction=split --circular_track_slot gc_content:dinucleotide_content@w=0.1 --circular_track_slot gc_skew:dinucleotide_skew@w=0.1 --circular_track_slot 'a_skew_2:dinucleotide_skew@w=0.1,nt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew' --circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out --gbk HmmtDNA.gbk -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Download both HmmtDNA.gbk and HmmtDNA_qualifier_priority.tsv from Files before running the command.",
@@ -104,7 +104,7 @@
     "featureSources": [
       "NC_001879.gbk"
     ],
-    "fileSizeLabel": "650 KB",
+    "fileSizeLabel": "1.8 MB",
     "command": "gbdraw circular --gbk NC_001879.gbk --annotation_table nicotiana-tabacum-regions.tsv --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin -t chloroplast_specific_table.tsv --qualifier_priority qualifier_priority.tsv --block_stroke_width 1 --block_stroke_color black --axis_stroke_width 3 --line_stroke_width 2 --suppress_skew -p default --track_type tuckin --labels both --label_placement radial --outer_label_x_radius_offset 0.90 --outer_label_y_radius_offset 0.90 --inner_label_x_radius_offset 0.975 --inner_label_y_radius_offset 0.975 --species '<i>Nicotiana tabacum</i>' --definition_font_size 28 --legend upper_left --circular_track_slot 'features:features@side=overlay,lane_direction=split' --circular_track_slot 'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,show_labels=true,padding_px=1,overflow=compress,inner_gap_px=1,outer_gap_px=1' --circular_track_slot 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08' -o tobacco-chloroplast -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Download NC_001879.gbk and the three Gallery TSV files, then run the command in the same directory.",
@@ -134,7 +134,7 @@
     "featureSources": [
       "GCF_015097735.1_ASM1509773v1_genomic.gbff"
     ],
-    "fileSizeLabel": "18.9 MB",
+    "fileSizeLabel": "58.5 MB",
     "command": "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left --plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' --plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto --multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 --multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' --multi_record_position '#2@1' --multi_record_position '#3@2' --multi_record_position '#4@2' --multi_record_position '#5@2' --multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Download the pinned RefSeq assembly named in Files; no sequence search is required.",
@@ -169,7 +169,7 @@
       "AP027132.gb",
       "NZ_CP006932.gb"
     ],
-    "fileSizeLabel": "14.1 MB",
+    "fileSizeLabel": "37.0 MB",
     "command": "gbdraw linear --losatp_threads 32 --protein_blastp_mode collinear -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai --collinear_color_mode orientation_identity -o hepatoplasmataceae_collinear",
     "commandKind": "runnable",
     "commandNote": "Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
@@ -205,7 +205,7 @@
       "GCF_000196095.1_ASM19609v1_genomic.gbff",
       "GCF_000354175.2_ASM35417v2_genomic.gbff"
     ],
-    "fileSizeLabel": "38.7 MB",
+    "fileSizeLabel": "82.2 MB",
     "command": "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv --linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis --scale_interval 750000 --separate_strands --hide_accession --hide_length --definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' --definition_line_style 'subtitle:size=16' --keep_definition_left_aligned --protein_blastp_mode collinear --collinear_search_scope adjacent --protein_blastp_candidate_limit 5 --collinear_min_anchors 3 --collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 --collinear_color_mode orientation_identity --pairwise_match_style curve --losatp_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle --feature_shape tRNA=rectangle --feature_shape tmRNA=rectangle --feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle --feature_shape repeat_region=rectangle --block_stroke_width 0 --axis_stroke_width 2 --line_stroke_width 1 --legend bottom -o vibrio-harveyi-group-collinear -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
@@ -240,7 +240,7 @@
       "AP027132.gb",
       "NZ_CP006932.gb"
     ],
-    "fileSizeLabel": "16.4 MB",
+    "fileSizeLabel": "40.5 MB",
     "command": "gbdraw linear --protein_blastp_mode orthogroup --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai -o hepatoplasmataceae_orthogroup",
     "commandKind": "runnable",
     "commandNote": "Download the five accession-pinned GenBank inputs from Files. The CLI value remains orthogroup for compatibility.",
@@ -275,7 +275,7 @@
       "BGC0000712.gbk",
       "BGC0000713.gbk"
     ],
-    "fileSizeLabel": "956 KB",
+    "fileSizeLabel": "2.9 MB",
     "command": "gbdraw linear --protein_blastp_mode orthogroup -f interactive_svg --gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange -d BGC0000708-BGC0000713_default_colors.tsv -t BGC0000708-BGC0000713_specific_colors.tsv --qualifier_priority BGC0000708-BGC0000713_qualifier_priority.tsv --show_labels first --label_placement above_feature --label_rotation 45 --pairwise_match_style curve --scale_style ruler --plot_title 'Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.' --keep_definition_left_aligned --identity 30 --block_stroke_width 2 --block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 --legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 --ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold --definition_line_style subtitle:size=20 --definition_line_style 'accession:size=20,color=#7b7c7d' --definition_line_style 'length:size=20,color=#7b7c7d' -l bottom -o BGC0000708-BGC0000713",
     "commandKind": "runnable",
     "commandNote": "Files provides the five MIBiG records and all three repository-managed TSV files used by the command.",
@@ -314,7 +314,7 @@
       "MeenMJNV.gb",
       "MejoMJNV.gb"
     ],
-    "fileSizeLabel": "5.7 MB",
+    "fileSizeLabel": "15.7 MB",
     "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup",
     "commandKind": "runnable",
     "commandNote": "Download the nine accession-pinned records and both repository-managed color tables from Files.",
@@ -344,7 +344,7 @@
     "featureSources": [
       "AP027280.gb"
     ],
-    "fileSizeLabel": "3.9 MB",
+    "fileSizeLabel": "10.2 MB",
     "command": "gbdraw circular -o WSSV_genome_comparison --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p royal_gala --qualifier_priority WSSV_qualifier_priority.tsv --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 12 --legend_font_size 12 --suppress_gc --suppress_skew --track_type spreadout -l left --feature_width 10 --outer_label_x_radius_offset 1 --outer_label_y_radius_offset 1 --conservation_blast CN01.circular_conservation.losatn.tsv WSSV-TW.circular_conservation.losatn.tsv WSSV-CN.circular_conservation.losatn.tsv WSSV-TH.circular_conservation.losatn.tsv JP01A.circular_conservation.losatn.tsv JP01B.circular_conservation.losatn.tsv Pc2020.circular_conservation.losatn.tsv E1.circular_conservation.losatn.tsv 0722-1.circular_conservation.losatn.tsv CN03.circular_conservation.losatn.tsv CN04.circular_conservation.losatn.tsv WSSV-AU.circular_conservation.losatn.tsv EU129.circular_conservation.losatn.tsv GCF7.circular_conservation.losatn.tsv MES-753.circular_conservation.losatn.tsv Shantou2019.circular_conservation.losatn.tsv POMZ1.circular_conservation.losatn.tsv POMZ4.circular_conservation.losatn.tsv MG18PR-0187-N40S.circular_conservation.losatn.tsv Angostura2013.circular_conservation.losatn.tsv --conservation_reference subject --conservation_labels CN01 WSSV-TW WSSV-CN WSSV-TH JP01A JP01B Pc2020 E1 0722-1 CN03 CN04 WSSV-AU EU129 GCF7 MES-753 Shantou2019 POMZ1 POMZ4 MG18PR-0187-N40S Angostura2013 --conservation_colors '#6e91b7' '#f4a251' '#77b26f' '#e67577' '#8fc4c0' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb' '#6e91b7' '#f4a251' '#e67577' '#8fc4c0' '#bcb4ca' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb' --conservation_ring_width 5 --conservation_ring_gap 2 --bitscore 100 --evalue 1e-30 --identity 90 --alignment_length 100 --gbk AP027280.gb -f interactive_svg",
     "commandKind": "provenance",
     "commandNote": "This records the original prepared-input workflow and is not directly runnable from public downloads. Load the bundled session first; Shantou2019 has no recorded public accession.",

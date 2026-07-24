@@ -42,7 +42,7 @@ from ...core.sequence import check_feature_presence  # type: ignore[reportMissin
 from ...core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from ...exceptions import ValidationError
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
-from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
+from ...features.factory import create_feature_layers  # type: ignore[reportMissingImports]
 from ...labels.circular import (  # type: ignore[reportMissingImports]
     assign_leader_start_points,
     minimum_bbox_gap_px,
@@ -68,7 +68,10 @@ from ...annotations import (
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
     annotation_track_params_from_mapping,
+    feature_underlay_anchor_slot_id,
+    feature_underlay_slot_id,
     layout_annotation_track,
+    merge_feature_underlays,
     resolve_annotations,
     sync_annotation_legend_entries,
 )
@@ -123,6 +126,15 @@ SINGLE_LEGEND_CONTENT_GAP_MIN_PX = 12.0
 logger = logging.getLogger(__name__)
 
 
+def _annotation_marks_for_set(
+    bundle: ResolvedAnnotationBundle,
+    set_id: str,
+) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(item.mark for item in bundle.annotations if item.set_id == set_id)
+    )
+
+
 def _prepare_circular_annotation_tracks(
     gb_record: SeqRecord,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
@@ -151,15 +163,42 @@ def _prepare_circular_annotation_tracks(
             show_gc=bool(canvas_config.show_gc),
             show_skew=bool(canvas_config.show_skew),
         )
-        slots = [
-            CircularTrackSlot(
-                id=f"annotations_{index + 1}",
-                renderer="annotations",
-                side="outside",
-                params={"set_id": set_id},
-            )
-            for index, set_id in enumerate(set_ids)
-        ] + slots
+        auto_annotation_slots = []
+        for index, set_id in enumerate(set_ids):
+            marks = _annotation_marks_for_set(bundle, set_id)
+            lane_marks = tuple(mark for mark in marks if mark != "highlight")
+            if lane_marks:
+                auto_annotation_slots.append(
+                    CircularTrackSlot(
+                        id=f"annotations_{index + 1}",
+                        renderer="annotations",
+                        side="outside",
+                        params={"set_id": set_id, "marks": lane_marks},
+                    )
+                )
+            if "highlight" in marks:
+                highlight_slot_id = (
+                    f"annotations_{index + 1}_highlight"
+                    if lane_marks
+                    else f"annotations_{index + 1}"
+                )
+                auto_annotation_slots.append(
+                    CircularTrackSlot(
+                        id=highlight_slot_id,
+                        renderer="annotations",
+                        side="overlay",
+                        z=-1,
+                        params={
+                            "set_id": set_id,
+                            "marks": ("highlight",),
+                            "anchor_slot": "features",
+                            "layer": "underlay",
+                            "cover_anchor": True,
+                            "padding_px": 0.0,
+                        },
+                    )
+                )
+        slots = auto_annotation_slots + slots
     requested = {
         str(slot.params.get("set_id", "")).strip()
         for slot in slots
@@ -200,6 +239,60 @@ def _prepare_circular_annotation_tracks(
             else replace(slot, width=ScalarSpec(layout.required_extent_px, "px"))
         )
     return updated, bundle, layouts
+
+
+def _add_circular_feature_underlays(
+    gb_record: SeqRecord,
+    underlay_features: Sequence,
+    slots: list[CircularTrackSlot],
+    bundle: ResolvedAnnotationBundle,
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    record_index: int,
+    show_depth: bool,
+    depth_track_count: int,
+) -> tuple[
+    list[CircularTrackSlot],
+    ResolvedAnnotationBundle,
+    dict[str, ResolvedAnnotationTrack],
+]:
+    merged, set_id = merge_feature_underlays(
+        bundle,
+        [underlay_features],
+        [gb_record],
+        mode="circular",
+        record_indices=[record_index],
+    )
+    if set_id is None:
+        return slots, bundle, {}
+    anchor_id = feature_underlay_anchor_slot_id(slots)
+    anchor = next(slot for slot in slots if str(slot.id) == anchor_id)
+    slot_id = feature_underlay_slot_id(slots)
+    underlay_slot = CircularTrackSlot(
+        id=slot_id,
+        renderer="annotations",
+        side="overlay",
+        z=int(anchor.z) - 1,
+        params={
+            "set_id": set_id,
+            "marks": ("highlight",),
+            "anchor_slot": anchor_id,
+            "layer": "underlay",
+            "cover_anchor": True,
+            "padding_px": 0.0,
+            "show_labels": False,
+        },
+    )
+    updated, merged, layouts = _prepare_circular_annotation_tracks(
+        gb_record,
+        merged,
+        [underlay_slot, *slots],
+        canvas_config=canvas_config,
+        record_index=record_index,
+        show_depth=show_depth,
+        depth_track_count=depth_track_count,
+    )
+    return list(updated or []), merged, layouts
 
 
 def _circular_preset_for_layout(
@@ -2082,11 +2175,6 @@ def add_record_on_circular_canvas(
     setattr(canvas_config, "circular_feature_lane_direction", feature_lane_direction)
 
     show_external_labels = show_labels_base and show_features
-    core_track_overlap_relayout_enabled = (
-        show_features
-        and bool(cfg.canvas.resolve_overlaps)
-        and (not bool(cfg.canvas.strandedness))
-    )
     split_overlaps_by_strand = (
         bool(cfg.canvas.resolve_overlaps)
         and (not bool(cfg.canvas.strandedness))
@@ -2102,36 +2190,49 @@ def add_record_on_circular_canvas(
         )
     feature_width_override_requested = feature_track_ratio_factor_override is not None
 
-    precomputed_feature_dict: dict | None = None
-    should_precompute_feature_dict = show_features and (
-        show_external_labels
-        or feature_track_ratio_factor_override is not None
-        or core_track_overlap_relayout_enabled
-        or bool(feature_slot is not None)
+    compute_label_text = show_external_labels
+    label_filtering = (
+        preprocess_label_filtering(cfg.labels.filtering.as_dict())
+        if compute_label_text
+        else {}
     )
-    if should_precompute_feature_dict:
-        compute_label_text = show_external_labels
-        label_filtering = (
-            preprocess_label_filtering(cfg.labels.filtering.as_dict())
-            if compute_label_text
-            else {}
-        )
-        color_table, default_colors = preprocess_color_tables(
-            feature_config.color_table, feature_config.default_colors
-        )
-        precomputed_feature_dict, _ = create_feature_dict(
+    color_table, default_colors = preprocess_color_tables(
+        feature_config.color_table, feature_config.default_colors
+    )
+    feature_layers = create_feature_layers(
+        gb_record,
+        color_table,
+        feature_config.selected_features_set,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+        split_overlaps_by_strand=split_overlaps_by_strand,
+        feature_shapes=feature_config.feature_shapes,
+        feature_visibility_rules=feature_config.feature_visibility_rules,
+        compute_label_text=compute_label_text,
+    )
+    precomputed_feature_dict: dict = feature_layers.foreground_features
+    if feature_layers.underlay_features:
+        (
+            layout_slots,
+            resolved_annotations,
+            annotation_track_layouts,
+        ) = _add_circular_feature_underlays(
             gb_record,
-            color_table,
-            feature_config.selected_features_set,
-            default_colors,
-            cfg.canvas.strandedness,
-            cfg.canvas.resolve_overlaps,
-            label_filtering,
-            split_overlaps_by_strand=split_overlaps_by_strand,
-            directional_feature_types=feature_config.directional_feature_types,
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-            compute_label_text=compute_label_text,
+            feature_layers.underlay_features,
+            layout_slots,
+            resolved_annotations,
+            canvas_config=canvas_config,
+            record_index=annotation_record_index,
+            show_depth=show_depth_track,
+            depth_track_count=max(1, resolved_depth_track_count),
         )
+    setattr(
+        canvas_config,
+        "_feature_underlay_present",
+        bool(feature_layers.underlay_features),
+    )
 
     tick_label_annulus_for_legend_bounds: tuple[float, float] | None = None
     resolved_track_slots: list[CircularResolvedSlot] = []

@@ -23,6 +23,21 @@ and rendering components remain available from `gbdraw.api` for integrations.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
 
+## Stable LOSATP cache identity and session version 35
+
+- Python and Web writers now emit session version 35 with canonical `renderRequest` schema 3. Readers accept versions 27 through 35; public typed conversion remains available for canonical versions 31 through 35.
+- Protein LOSATP QUERY/SUBJECT tokens use stable record-instance and CDS feature identities with readable, percent-encoded aliases. Upload filenames, modification times, session resource names, and reopen time no longer determine protein cache identity.
+- Current protein raw cache entries use schema 3, derived comparison payloads use schema 2, and the protein identity manifest uses schema 1. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
+- Imported schema-2 protein entries are isolated in a schema-1 legacy candidate envelope. Save-before-Generate preserves the envelope. Generation promotes a candidate copy-on-write only after verifying the complete FASTA content, program and arguments, directional pair, transport IDs, and feature mapping; an unverifiable candidate becomes a pair-local miss.
+
+## Feature underlay rendering and session version 34
+
+- Feature rendering now accepts `arrow`, `rectangle`, or `underlay` through `--feature_shape`, Python `feature_shapes`, and the Web feature editor.
+- New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
+- Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
+- Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
+- Session version 34 and canonical request schema 3 record the new default. Older sessions and schema 1/2 requests with no repeat assignment migrate to `repeat_region=rectangle` so visual replay remains stable.
+
 ## Python/Web session version 33
 
 - Session version 33 updates Linear custom track geometry to schema v2. Feature
@@ -106,6 +121,13 @@ exclusion bands without an additional endpoint pad. `--comparison_height`
 remains a minimum corridor; record spacing expands around taller occupancy while
 keeping links outside the track stacks. Geometry metadata schema v2 reports
 record-specific paint, reserve, comparison-exclusion, and canvas bands.
+
+Row spacing now composes body, comparison, and definition constraints with an
+X-aware `CollisionBand` solver. It takes the maximum eligible clearance instead
+of adding independent reservations. Comparison clearance applies only at row
+boundaries crossed by a comparison, and non-overlapping left-column definitions
+do not enlarge the plot corridor. Single- and multi-record rows use the same
+constraint policy.
 
 In the web app, the Custom Track Slots caret controls only whether the editor is
 open. **Use custom stack** controls rendering, disabling and re-enabling it
@@ -220,12 +242,12 @@ New drawing code should prefer the top-level interface described above.
 
 ## Session API boundary
 
-The public session bridge accepts version 31, 32, and 33 canonical documents.
+The public session bridge accepts version 31 through 35 canonical documents.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-Versions 27 through 30 can be regenerated with `gbdraw circular --session` or
+Current writers emit version 35 and `renderRequest` schema 3. Versions 27 through 30 can be regenerated with `gbdraw circular --session` or
 `gbdraw linear --session`. Public typed conversion rejects them with
 `SessionVersionError` instead of reconstructing a request from `cliInvocation` or
 GUI state. The

@@ -349,13 +349,50 @@ const genbank = {
 const filesData = { c_gb: genbank, linearSeqs: [] };
 
 const canonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(canonical.renderRequest.schema, 2);
+assert.equal(canonical.renderRequest.schema, 3);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
 assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
+assert.equal(canonical.resources['record-1-genbank'].name, 'record-1-genbank-input.gb');
 assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
+assert.equal(canonical.webFiles.resourceOriginalNames['record-1-genbank'], 'input.gb');
+assert.equal(canonical.webFiles.circularInputOriginalName, 'input.gb');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
 assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
+assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
+assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
+assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
+assert.equal(canonical.renderRequest.diagramOptions.identity, 70);
+assert.equal(canonical.renderRequest.diagramOptions.alignmentLength, 0);
+
+state.adv.circular_track_slots_axis_index = 2;
+const circularSlotsDisabled = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(circularSlotsDisabled.renderRequest.diagramOptions.tracks.circularTrackSlots, null);
+assert.equal(circularSlotsDisabled.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, null);
+state.adv.circular_track_slots_axis_index = null;
+
+const legacyRepeatCanonical = structuredClone(canonical);
+legacyRepeatCanonical.renderRequest.schema = 2;
+legacyRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
+delete legacyRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
+assert.equal(
+  projectCanonicalSessionRequest(legacyRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'rectangle'
+);
+
+const currentRepeatCanonical = structuredClone(legacyRepeatCanonical);
+currentRepeatCanonical.renderRequest.schema = 3;
+assert.equal(
+  projectCanonicalSessionRequest(currentRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'underlay'
+);
+
+const explicitRepeatCanonical = structuredClone(currentRepeatCanonical);
+explicitRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region = 'underlay';
+assert.equal(
+  projectCanonicalSessionRequest(explicitRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'underlay'
+);
 
 state.paletteDefinitions.value = { default: { CDS: '#cccccc' } };
 state.currentColors.value = { CDS: '#112233' };
@@ -371,7 +408,16 @@ state.featureVisibilityRules.value = [{
   qualifier: 'gene', value: '^alpha$', action: 'off'
 }];
 state.labelTextFeatureOverrides.f1 = 'Renamed alpha';
-const semanticCanonical = buildCanonicalSessionRequest({ state, filesData });
+const semanticCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: {
+    ...filesData,
+    d_color: { name: 'original-default-colors.tsv' },
+    t_color: { name: 'original-specific-colors.tsv' },
+    whitelist: { name: 'original-whitelist.tsv' },
+    qualifier_priority: { name: 'original-priority.tsv' }
+  }
+});
 const semanticProjection = projectCanonicalSessionRequest(semanticCanonical);
 assert.deepEqual(semanticProjection.config.colors, { CDS: '#112233' });
 assert.equal(semanticProjection.config.colorsAreOverrides, true);
@@ -388,6 +434,20 @@ assert.equal(semanticProjection.config.filterMode, 'Whitelist');
 assert.equal(semanticProjection.semanticFeatureState.featureVisibilityManualRules.length, 1);
 assert.equal(semanticProjection.semanticFeatureState.labelOverrideRows.length, 1);
 assert.equal(semanticProjection.semanticFeatureState.labelOverrideRows[0].labelText, 'Renamed alpha');
+assert.deepEqual(
+  {
+    dColor: semanticProjection.files.d_color.name,
+    tColor: semanticProjection.files.t_color.name,
+    whitelist: semanticProjection.files.whitelist.name,
+    priority: semanticProjection.files.qualifier_priority.name
+  },
+  {
+    dColor: 'original-default-colors.tsv',
+    tColor: 'original-specific-colors.tsv',
+    whitelist: 'original-whitelist.tsv',
+    priority: 'original-priority.tsv'
+  }
+);
 state.paletteDefinitions.value = { default: {} };
 state.currentColors.value = {};
 state.manualSpecificRules.splice(0);
@@ -427,7 +487,11 @@ assert.throws(
 
 const blastTable = { ...genbank, name: 'hits.tsv', data: btoa('ref\tcmp\t99\t4\t0\t0\t1\t4\t4\t1\t1e-20\t50\n') };
 const comparisonFasta = { ...genbank, name: 'comparison.fna', data: btoa('>cmp\nAACCGG\n') };
+state.circularConservation.reference = 'subject';
+state.circularConservation.labels = 'Comparison';
 state.circularConservation.series = [{ label: 'Comparison', color: '#E15759' }];
+state.circularConservation.ring_width = 14;
+state.circularConservation.ring_gap = 3;
 const conservationCanonical = buildCanonicalSessionRequest({
   state,
   filesData: {
@@ -442,7 +506,30 @@ assert.equal(
   projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0].data,
   comparisonFasta.data
 );
+const conservationProjection = projectCanonicalSessionRequest(conservationCanonical);
+assert.equal(conservationProjection.config.circularConservation.enabled, true);
+assert.equal(conservationProjection.config.circularConservation.source, 'upload');
+assert.equal(conservationProjection.config.circularConservation.reference, 'subject');
+assert.equal(conservationProjection.config.circularConservation.labels, 'Comparison');
+assert.equal(conservationProjection.config.circularConservation.ring_width, 14);
+assert.equal(conservationProjection.config.circularConservation.ring_gap, 3);
+assert.deepEqual(
+  conservationProjection.config.circularConservation.series.map((entry) => ({
+    sourceIndex: entry.sourceIndex,
+    label: entry.label,
+    color: entry.color
+  })),
+  [{ sourceIndex: 0, label: 'Comparison', color: '#E15759' }]
+);
+assert.equal(
+  conservationProjection.config.circularConservation.series[0].fileName,
+  conservationProjection.files.c_conservation_blasts[0].name
+);
+state.circularConservation.reference = 'auto';
+state.circularConservation.labels = '';
 state.circularConservation.series = [];
+state.circularConservation.ring_width = null;
+state.circularConservation.ring_gap = null;
 
 state.annotationSets = [{
   id: 'review',
@@ -470,17 +557,42 @@ assert.equal(
 state.annotationSets = [];
 
 state.adv.circular_label_placement = 'radial';
+state.adv.outer_label_x_offset = 0.9;
+state.adv.outer_label_y_offset = 0.91;
+state.adv.inner_label_x_offset = 0.97;
+state.adv.inner_label_y_offset = 0.98;
 const radialCanonical = buildCanonicalSessionRequest({ state, filesData });
 assert.equal(radialCanonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'radial');
+assert.equal(radialCanonical.renderRequest.diagramOptions.configOverrides.outer_label_x_radius_offset, 0.9);
 
 const projection = projectCanonicalSessionRequest(canonical);
 assert.equal(projection.mode, 'circular');
 assert.equal(projection.inputType, 'gb');
 assert.equal(projection.files.c_gb.data, genbank.data);
+assert.equal(projection.files.c_gb.name, 'input.gb');
 assert.equal(projection.config.form.prefix, 'web-session');
 assert.equal(projection.config.adv.circular_label_placement, 'horizontal');
+assert.equal(projection.config.adv.evalue, '0.00001');
+assert.equal(projection.config.adv.min_bitscore, 50);
+assert.equal(projection.config.adv.identity, 70);
+assert.equal(projection.config.adv.alignment_length, 0);
+const repeatedResourcePrefix = structuredClone(canonical);
+repeatedResourcePrefix.resources['record-1-genbank'].name =
+  'record-1-genbank-record-1-genbank-original.gb';
+delete repeatedResourcePrefix.webFiles.resourceOriginalNames;
+delete repeatedResourcePrefix.webFiles.circularInputOriginalName;
+assert.equal(projectCanonicalSessionRequest(repeatedResourcePrefix).files.c_gb.name, 'original.gb');
 const radialProjection = projectCanonicalSessionRequest(radialCanonical);
 assert.equal(radialProjection.config.adv.circular_label_placement, 'radial');
+assert.deepEqual(
+  {
+    outerX: radialProjection.config.adv.outer_label_x_offset,
+    outerY: radialProjection.config.adv.outer_label_y_offset,
+    innerX: radialProjection.config.adv.inner_label_x_offset,
+    innerY: radialProjection.config.adv.inner_label_y_offset
+  },
+  { outerX: 0.9, outerY: 0.91, innerX: 0.97, innerY: 0.98 }
+);
 
 const customTrackProjection = projectCanonicalSessionRequest({
   renderRequest: {
@@ -550,15 +662,33 @@ assert.match(combinedCircularGenbank, /WEBTWO/);
 state.mode.value = 'linear';
 state.lInputType.value = 'gb';
 state.adv.comparison_height = 42.5;
+state.adv.linear_track_slots_axis_index = 2;
 const linearFilesData = {
   linearSeqs: [
-    { uid: 'first', gb: genbank, region_record_id: '', region_start: null, region_end: null, region_reverse: false },
-    { uid: 'second', gb: genbank, region_record_id: 'RecA', region_start: null, region_end: null, region_reverse: false },
-    { uid: 'third', gb: genbank, region_record_id: '#2', region_start: 10, region_end: 20, region_reverse: true }
+    {
+      uid: 'first', gb: genbank, losat_gencode: 11, losat_filename: 'first-to-second.losat.tsv',
+      region_record_id: '', region_start: null, region_end: null, region_reverse: false
+    },
+    {
+      uid: 'second', gb: genbank, losat_gencode: 4, losat_filename: 'second-to-third.losat.tsv',
+      region_record_id: 'RecA', region_start: null, region_end: null, region_reverse: false
+    },
+    {
+      uid: 'third', gb: genbank, losat_gencode: 1, losat_filename: '',
+      region_record_id: '#2', region_start: 10, region_end: 20, region_reverse: true
+    }
   ],
   linearComparisons: []
 };
 const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.deepEqual(linearCanonical.webFiles.linearRecordMetadata, [
+  { recordKey: 'first', losatGencode: 11, losatFilename: 'first-to-second.losat.tsv' },
+  { recordKey: 'second', losatGencode: 4, losatFilename: 'second-to-third.losat.tsv' },
+  { recordKey: 'third', losatGencode: 1, losatFilename: '' }
+]);
+assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots, null);
+assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, null);
+state.adv.linear_track_slots_axis_index = null;
 assert.equal(linearCanonical.renderRequest.diagramOptions.configOverrides.comparison_height, 42.5);
 assert.equal(linearCanonical.renderRequest.records[0].selector, null);
 assert.deepEqual(linearCanonical.renderRequest.records[1].selector, { kind: 'recordId', value: 'RecA' });
@@ -601,12 +731,157 @@ assert.equal(
 const linearProjection = projectCanonicalSessionRequest(linearCanonical);
 assert.equal(linearProjection.config.adv.comparison_height, 42.5);
 assert.deepEqual(
+  linearProjection.files.linearSeqs.map((seq) => seq.gb.name),
+  ['input.gb', 'input.gb', 'input.gb']
+);
+assert.deepEqual(
+  linearProjection.files.linearSeqs.map((seq) => seq.losat_gencode),
+  [11, 4, 1]
+);
+assert.deepEqual(
+  linearProjection.files.linearSeqs.map((seq) => seq.losat_filename),
+  ['first-to-second.losat.tsv', 'second-to-third.losat.tsv', '']
+);
+assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.region_record_id),
   ['', 'RecA', '#2']
 );
 assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
 assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
 assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
+
+const pythonConfigCanonical = structuredClone(linearCanonical);
+delete pythonConfigCanonical.renderRequest.diagramOptions.configOverrides;
+pythonConfigCanonical.renderRequest.diagramOptions.config = {
+  canvas: {
+    show_gc: true,
+    show_skew: true,
+    show_depth: false,
+    show_labels: 'orthogroup_top',
+    strandedness: true,
+    resolve_overlaps: true,
+    circular: { track_type: 'spreadout', allow_inner_labels: false },
+    linear: {
+      align_center: true,
+      keep_definition_left_aligned: true,
+      track_layout: 'above',
+      track_axis_gap: 7,
+      ruler_on_axis: true,
+      comparison_height: 31,
+      default_cds_height: { short: 23, long: 23 },
+      default_gc_height: 18,
+      depth_height: 12,
+      normalize_length: true
+    }
+  },
+  labels: {
+    rendering: 'auto',
+    font_size: { short: 13, long: 13, linear: { short: 15, long: 15 } },
+    spacing: { circular: 4, linear: 5 },
+    circular: { placement: 'radial' },
+    linear: { placement: 'strand', rotation: 30 },
+    filtering: { blacklist_keywords: ['hypothetical'] },
+    unified_adjustment: {
+      outer_labels: { x_radius_offset: 0.9, y_radius_offset: 0.91 },
+      inner_labels: { x_radius_offset: 0.97, y_radius_offset: 0.98 }
+    }
+  },
+  objects: {
+    features: {
+      block_stroke_color: '#111111', block_stroke_width: { short: 1, long: 1 },
+      line_stroke_color: '#222222', line_stroke_width: { short: 2, long: 2 }
+    },
+    axis: {
+      circular: { stroke_color: '#333333', stroke_width: { short: 3, long: 3 } },
+      linear: { stroke_color: '#444444', stroke_width: { short: 4, long: 4 } }
+    },
+    definition: {
+      linear: {
+        font_size: { short: 16, long: 16 },
+        show_replicon: true,
+        show_accession: false,
+        show_length: false,
+        line_styles: { name: { font_weight: 'bold', fill: '#112233' } }
+      },
+      circular: { font_size: 18, plot_title_font_size: 30 }
+    },
+    legends: { color_rect_size: { short: 17, long: 17 }, font_size: { short: 19, long: 19 } },
+    scale: {
+      style: 'bar',
+      font_size: { short: 21, long: 21 },
+      ruler_label_font_size: { short: 22, long: 22 }
+    },
+    blast_match: { style: 'curve' }
+  }
+};
+const pythonConfigProjection = projectCanonicalSessionRequest(pythonConfigCanonical);
+assert.equal(pythonConfigProjection.config.form.separate_strands, true);
+assert.equal(pythonConfigProjection.config.form.align_center, true);
+assert.equal(pythonConfigProjection.config.form.keep_definition_left_aligned, true);
+assert.equal(pythonConfigProjection.config.form.linear_track_layout, 'above');
+assert.equal(pythonConfigProjection.config.form.linear_ruler_on_axis, true);
+assert.equal(pythonConfigProjection.config.form.normalize_length, true);
+assert.equal(pythonConfigProjection.config.form.show_labels_linear, 'orthogroup_top');
+assert.equal(pythonConfigProjection.config.adv.comparison_height, 31);
+assert.equal(pythonConfigProjection.config.adv.track_axis_gap, 7);
+assert.equal(pythonConfigProjection.config.adv.linear_show_replicon, true);
+assert.equal(pythonConfigProjection.config.adv.linear_show_accession, false);
+assert.equal(pythonConfigProjection.config.adv.linear_show_length, false);
+assert.equal(pythonConfigProjection.config.adv.block_stroke_width, 1);
+assert.equal(pythonConfigProjection.config.adv.block_stroke_color, '#111111');
+assert.equal(pythonConfigProjection.config.adv.line_stroke_width, 2);
+assert.equal(pythonConfigProjection.config.adv.line_stroke_color, '#222222');
+assert.equal(pythonConfigProjection.config.adv.axis_stroke_width, 4);
+assert.equal(pythonConfigProjection.config.adv.axis_stroke_color, '#444444');
+assert.equal(pythonConfigProjection.config.adv.def_font_size, 16);
+assert.equal(pythonConfigProjection.config.adv.feature_height, 23);
+assert.equal(pythonConfigProjection.config.adv.label_font_size, 15);
+assert.equal(pythonConfigProjection.config.adv.legend_box_size, 17);
+assert.equal(pythonConfigProjection.config.adv.legend_font_size, 19);
+assert.equal(pythonConfigProjection.config.adv.scale_font_size, 21);
+assert.deepEqual(
+  pythonConfigProjection.config.adv.linear_definition_line_styles,
+  { name: { font_weight: 'bold', fill: '#112233' } }
+);
+assert.equal(pythonConfigProjection.config.adv.pairwise_match_style, 'curve');
+assert.equal(pythonConfigProjection.config.blacklistText, 'hypothetical');
+
+const rulerFontCanonical = structuredClone(pythonConfigCanonical);
+rulerFontCanonical.renderRequest.diagramOptions.config.objects.scale.style = 'ruler';
+assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.scale_font_size, 22);
+
+const pythonCircularConfigCanonical = structuredClone(canonical);
+delete pythonCircularConfigCanonical.renderRequest.diagramOptions.configOverrides;
+pythonCircularConfigCanonical.renderRequest.diagramOptions.config = structuredClone(
+  pythonConfigCanonical.renderRequest.diagramOptions.config
+);
+const pythonCircularConfigProjection = projectCanonicalSessionRequest(pythonCircularConfigCanonical);
+assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_width, 3);
+assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_color, '#333333');
+assert.equal(pythonCircularConfigProjection.config.adv.def_font_size, 18);
+assert.equal(pythonCircularConfigProjection.config.adv.plot_title_font_size, 30);
+assert.equal(pythonCircularConfigProjection.config.adv.label_font_size, 13);
+assert.equal(pythonCircularConfigProjection.config.adv.outer_label_x_offset, 0.9);
+assert.equal(pythonCircularConfigProjection.config.adv.outer_label_y_offset, 0.91);
+assert.equal(pythonCircularConfigProjection.config.adv.inner_label_x_offset, 0.97);
+assert.equal(pythonCircularConfigProjection.config.adv.inner_label_y_offset, 0.98);
+
+const emptyBlacklistCanonical = structuredClone(pythonConfigCanonical);
+emptyBlacklistCanonical.renderRequest.diagramOptions.config.labels.filtering.blacklist_keywords = [];
+const emptyBlacklistProjection = projectCanonicalSessionRequest(emptyBlacklistCanonical);
+assert.equal(emptyBlacklistProjection.config.filterMode, 'None');
+assert.equal(emptyBlacklistProjection.config.blacklistText, '');
+
+const explicitOverrideCanonical = structuredClone(pythonConfigCanonical);
+explicitOverrideCanonical.renderRequest.diagramOptions.configOverrides = {
+  strandedness: false,
+  align_center: false,
+  keep_definition_left_aligned: false
+};
+const explicitOverrideProjection = projectCanonicalSessionRequest(explicitOverrideCanonical);
+assert.equal(explicitOverrideProjection.config.form.separate_strands, false);
+assert.equal(explicitOverrideProjection.config.form.align_center, false);
+assert.equal(explicitOverrideProjection.config.form.keep_definition_left_aligned, false);
 
 state.adv.comparison_height = null;
 const autoHeightCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
@@ -737,6 +1012,14 @@ assert.throws(
 state.mode.value = 'linear';
 state.form.multi_record_canvas = false;
 state.circularRecordList.value = [];
+const nullOnlyDepthCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: {
+    ...linearFilesData,
+    linearSeqs: linearFilesData.linearSeqs.map((seq) => ({ ...seq, depth: [null] }))
+  }
+});
+assert.equal(nullOnlyDepthCanonical.renderRequest.diagramOptions.depthTrackFiles, undefined);
 state.adv.linear_track_slots_enabled = true;
 state.adv.linear_track_slots_axis_index = 1;
 state.adv.linear_track_slots = [
@@ -873,6 +1156,9 @@ if (projectSessionIndex >= 0) {
   const projectedSession = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
+    webFiles: session.webFiles,
+    legacyFiles: session.files,
+    fileBindings: session.cliInvocation?.fileBindings,
     linearTrackSlotSchemaVersion: Number(session.version) <= 32 ? 1 : 2
   });
   assert.ok(['circular', 'linear'].includes(projectedSession.mode));
@@ -880,6 +1166,47 @@ if (projectSessionIndex >= 0) {
     projectedSession.files.c_gb || projectedSession.files.linearSeqs.length > 0,
     'projected session must restore at least one input record'
   );
+  if (sessionPath.includes('hepatoplasmataceae_')) {
+    assert.deepEqual(
+      projectedSession.files.linearSeqs.map((sequence) => sequence.gb.name),
+      ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']
+    );
+    assert.equal(projectedSession.config.filterMode, 'None');
+  }
+  if (sessionPath.includes('majanivirus_orthogroup')) {
+    assert.equal(projectedSession.files.d_color.name, 'modified_default_colors.tsv');
+    assert.equal(projectedSession.files.t_color.name, 'majani_custom_color_table.tsv');
+    assert.equal(projectedSession.config.adv.def_font_size, 18);
+    assert.equal(projectedSession.config.adv.block_stroke_width, 1);
+    assert.equal(projectedSession.config.adv.line_stroke_width, 2);
+    assert.equal(projectedSession.config.adv.legend_box_size, 18);
+    assert.equal(projectedSession.config.adv.legend_font_size, 18);
+  }
+  if (sessionPath.includes('tobacco-chloroplast')) {
+    assert.equal(projectedSession.files.t_color.name, 'chloroplast_specific_table.tsv');
+    assert.equal(projectedSession.files.qualifier_priority.name, 'qualifier_priority.tsv');
+    assert.equal(projectedSession.config.adv.def_font_size, 28);
+    assert.equal(projectedSession.config.adv.block_stroke_width, 1);
+    assert.equal(projectedSession.config.adv.block_stroke_color, 'black');
+    assert.equal(projectedSession.config.adv.line_stroke_width, 2);
+    assert.equal(projectedSession.config.adv.axis_stroke_width, 3);
+    assert.equal(projectedSession.config.adv.outer_label_x_offset, 0.9);
+    assert.equal(projectedSession.config.adv.outer_label_y_offset, 0.9);
+    assert.equal(projectedSession.config.adv.inner_label_x_offset, 0.975);
+    assert.equal(projectedSession.config.adv.inner_label_y_offset, 0.975);
+  }
+  if (sessionPath.includes('vibrio-harveyi-group-collinear')) {
+    assert.equal(projectedSession.files.linearSeqs.length, 11);
+    assert.equal(
+      projectedSession.files.linearSeqs[0].gb.name,
+      'NZ_CP125875.1__GCF_030060435.1_ASM3006043v1_genomic.gbff'
+    );
+    assert.equal(projectedSession.config.adv.block_stroke_width, 0);
+    assert.equal(projectedSession.config.adv.line_stroke_width, 1);
+    assert.equal(projectedSession.config.adv.axis_stroke_width, 2);
+    assert.equal(projectedSession.config.adv.def_font_size, 16);
+    assert.equal(projectedSession.config.filterMode, 'None');
+  }
 }
 
 if (process.argv.includes('--print')) console.log(JSON.stringify(canonical));

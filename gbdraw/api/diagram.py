@@ -46,8 +46,10 @@ from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
     normalize_conservation_tracks_for_record,
 )
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+    LosatpCacheManager,
     OrthogroupMembershipMode,
     OrthogroupResult,
+    ProteinExtractionResult,
     ProteinBlastpMode,
     build_pairwise_protein_blastp_comparisons,
     build_rbh_orthogroup_protein_blastp_comparisons,
@@ -1794,6 +1796,8 @@ def assemble_linear_diagram_from_records(
     losatp_threads: int | None = None,
     protein_blastp_max_hits: int = 5,
     protein_blastp_candidate_limit: int | None = None,
+    losatp_cache: LosatpCacheManager | None = None,
+    protein_extraction: ProteinExtractionResult | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int = 5,
     collinear_max_paralog_links_per_orthogroup: int = 2,
@@ -2064,6 +2068,7 @@ def assemble_linear_diagram_from_records(
     resolved_protein_comparisons: list[DataFrame] | None = None
     resolved_linear_comparisons: list[LinearComparison] = list(linear_comparisons or ())
     resolved_orthogroups: OrthogroupResult | None = orthogroups
+    resolved_collinearity_result: CollinearityResult | None = None
     if protein_comparisons is not None:
         resolved_protein_comparisons = list(protein_comparisons)
     elif collinearity_blocks is not None:
@@ -2071,6 +2076,7 @@ def assemble_linear_diagram_from_records(
             collinearity_result = collinearity_blocks
         else:
             collinearity_result = CollinearityResult(blocks=tuple(collinearity_blocks))
+        resolved_collinearity_result = collinearity_result
         if collinearity_result.orthogroups is not None:
             resolved_orthogroups = collinearity_result.orthogroups
         resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
@@ -2082,6 +2088,17 @@ def assemble_linear_diagram_from_records(
         pair_inputs = normalized_protein_pairs
         if pair_inputs is not None:
             for query_index, subject_index in pair_inputs:
+                pair_extraction = (
+                    replace(
+                        protein_extraction,
+                        proteins_by_record=[
+                            protein_extraction.proteins_by_record[query_index],
+                            protein_extraction.proteins_by_record[subject_index],
+                        ],
+                    )
+                    if protein_extraction is not None
+                    else None
+                )
                 protein_blastp_result = build_pairwise_protein_blastp_comparisons(
                     (records[query_index], records[subject_index]),
                     losatp_bin=losatp_bin,
@@ -2093,6 +2110,8 @@ def assemble_linear_diagram_from_records(
                     bitscore=bitscore,
                     identity=identity,
                     alignment_length=alignment_length,
+                    losatp_cache=losatp_cache,
+                    protein_extraction=pair_extraction,
                     feature_visibility_rules=feature_visibility_rules,
                 )
                 resolved_linear_comparisons.append(
@@ -2114,6 +2133,8 @@ def assemble_linear_diagram_from_records(
                 bitscore=bitscore,
                 identity=identity,
                 alignment_length=alignment_length,
+                losatp_cache=losatp_cache,
+                protein_extraction=protein_extraction,
                 feature_visibility_rules=feature_visibility_rules,
             )
             resolved_protein_comparisons = protein_blastp_result.comparisons
@@ -2131,6 +2152,8 @@ def assemble_linear_diagram_from_records(
             bitscore=bitscore,
             identity=identity,
             alignment_length=alignment_length,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
         )
         resolved_protein_comparisons = protein_blastp_result.comparisons
@@ -2154,8 +2177,11 @@ def assemble_linear_diagram_from_records(
             edge_mode=normalized_collinearity_anchor_mode,
             search_scope=normalized_collinearity_search_scope,
             comparison_pairs=collinearity_comparison_pairs,
+            losatp_cache=losatp_cache,
+            protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
         )
+        resolved_collinearity_result = collinearity_result
         resolved_orthogroups = collinearity_result.orthogroups
         if collinearity_comparison_pairs is not None:
             pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
@@ -2311,6 +2337,17 @@ def assemble_linear_diagram_from_records(
     )
     try:
         setattr(canvas, "_gbdraw_orthogroups", resolved_orthogroups)
+        setattr(
+            canvas,
+            "_gbdraw_resolved_protein_comparisons",
+            tuple(resolved_protein_comparisons or ()),
+        )
+        setattr(
+            canvas,
+            "_gbdraw_resolved_linear_comparisons",
+            tuple(resolved_linear_comparisons),
+        )
+        setattr(canvas, "_gbdraw_collinearity_result", resolved_collinearity_result)
     except Exception:
         pass
     return canvas
@@ -3771,6 +3808,8 @@ def build_linear_diagram(
     *,
     options: DiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
+    losatp_cache: LosatpCacheManager | None = None,
+    protein_extraction: ProteinExtractionResult | None = None,
 ) -> Drawing:
     """Build a linear diagram using bundled DiagramOptions."""
 
@@ -3805,6 +3844,8 @@ def build_linear_diagram(
         losatp_threads=options.losatp_threads,
         protein_blastp_max_hits=options.protein_blastp_max_hits,
         protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,
+        losatp_cache=losatp_cache,
+        protein_extraction=protein_extraction,
         orthogroup_membership_mode=options.orthogroup_membership_mode,
         orthogroup_member_max_hits=options.orthogroup_member_max_hits,
         collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,

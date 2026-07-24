@@ -27,6 +27,7 @@ await copyModule('gbdraw/web/js/config.js', 'config.js');
 
 const {
   alignRecoveredFeatureIdsToRenderedSvg,
+  buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState,
   collectRenderedFeatureIdentitiesFromSvg,
   migrateFeatureOverrideState
@@ -79,6 +80,10 @@ const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir,
       const index = requests.length - 1;
       return {
         features: [{ id: `feature-${index}`, svg_id: `stable-${index}`, record_id: `record-${index}` }],
+        biological_features: [
+          { id: `feature-${index}`, svg_id: `stable-${index}`, record_id: `record-${index}` },
+          { id: `hidden-${index}`, svg_id: `hidden-stable-${index}`, record_id: `record-${index}` }
+        ],
         record_ids: [`record-${index}`],
         selector_safety_scope: []
       };
@@ -88,8 +93,13 @@ const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir,
   assert.deepEqual(requests.map((request) => request.fastaPath), ['/seq_0.fasta', '/seq_1.fasta']);
   assert.deepEqual(
     metadata.extractedFeatures.map((feature) => feature.svg_id),
-    ['stable-0_record_1', 'stable-1_record_2']
+    ['stable-0', 'stable-1']
   );
+  assert.deepEqual(
+    metadata.biologicalFeatures.map((feature) => feature.svg_id),
+    ['stable-0', 'hidden-stable-0', 'stable-1', 'hidden-stable-1']
+  );
+  assert.equal(requests.every((request) => request.includeBiologicalFeatures === true), true);
 }
 
 {
@@ -223,7 +233,9 @@ const svgWithFeature = ({
   });
   assert.equal(aligned.changedCount, 1);
   assert.equal(aligned.alignedCount, 1);
-  assert.equal(aligned.features[0].svg_id, 'rendered-a');
+  assert.equal(aligned.features[0].svg_id, 'stable-a');
+  assert.equal(aligned.features[0].rendered_svg_id, 'rendered-a');
+  assert.equal(aligned.features[0].renderedSvgId, 'rendered-a');
   assert.equal(aligned.features[0].stable_svg_id, 'stable-a');
   assert.notEqual(aligned.features[0], feature);
   assert.equal(aligned.svgIdMap['stable-a'], 'rendered-a');
@@ -241,12 +253,17 @@ const svgWithFeature = ({
       { id: 'feature-a', svg_id: 'stable-x', stable_svg_id: 'stable-x', fileIdx: 0 },
       { id: 'feature-b', svg_id: 'stable-x', stable_svg_id: 'stable-x', fileIdx: 1 }
     ],
-    renderedIdentities
+    renderedIdentities,
+    writeRenderedSvgIdToSvgId: true
   });
   assert.equal(aligned.ambiguousCount, 0);
   assert.equal(aligned.unresolvedCount, 0);
   assert.equal(aligned.features[0].svg_id, 'stable-x_record_1');
   assert.equal(aligned.features[1].svg_id, 'stable-x_record_2');
+  assert.equal(aligned.features[0].stable_svg_id, 'stable-x');
+  assert.equal(aligned.features[1].stable_svg_id, 'stable-x');
+  assert.equal(aligned.features[0].rendered_svg_id, 'stable-x_record_1');
+  assert.equal(aligned.features[1].rendered_svg_id, 'stable-x_record_2');
 }
 
 {
@@ -288,7 +305,9 @@ const svgWithFeature = ({
     renderedIdentities
   });
   assert.equal(aligned.exactCount, 1);
-  assert.equal(aligned.features[0], feature);
+  assert.notEqual(aligned.features[0], feature);
+  assert.equal(aligned.features[0].svg_id, 'rendered-a');
+  assert.equal(aligned.features[0].rendered_svg_id, 'rendered-a');
 }
 
 {
@@ -304,9 +323,11 @@ const svgWithFeature = ({
     features: [exact, changed],
     renderedIdentities
   });
-  assert.equal(aligned.features[0], exact);
+  assert.notEqual(aligned.features[0], exact);
+  assert.equal(aligned.features[0].rendered_svg_id, 'rendered-a');
   assert.notEqual(aligned.features[1], changed);
-  assert.equal(aligned.features[1].svg_id, 'rendered-b');
+  assert.equal(aligned.features[1].svg_id, 'stable-b');
+  assert.equal(aligned.features[1].rendered_svg_id, 'rendered-b');
 }
 
 {
@@ -337,6 +358,42 @@ const svgWithFeature = ({
   assert.deepEqual(migrated.editorState.featureStrokes.overrides, {
     'new-svg': { strokeColor: '#222222', strokeWidth: 2 }
   });
+}
+
+{
+  const visible = {
+    id: 'visible',
+    svg_id: 'rendered-a',
+    stable_svg_id: 'stable-a',
+    stable_feature_id: 'stable-a',
+    rendered_svg_id: 'rendered-a',
+    renderedSvgId: 'rendered-a',
+    nucleotide_sequence: 'AAAA'
+  };
+  const hidden = {
+    id: 'hidden',
+    svg_id: 'stable-hidden',
+    stable_svg_id: 'stable-hidden',
+    stable_feature_id: 'stable-hidden',
+    nucleotide_sequence: 'CCCC'
+  };
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear',
+      lInputType: 'gb',
+      selectedResultIndex: 0,
+      results: [{ content: svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a' }) }],
+      featureState: {
+        extractedFeatures: [visible, hidden],
+        biologicalFeatures: [visible, hidden]
+      },
+      editorState: {}
+    },
+    featureVisibilityTsv: ''
+  });
+  assert.equal(plan.status, 'aligned');
+  assert.deepEqual(plan.recoveredFeatureState.extractedFeatures.map((feature) => feature.id), ['visible']);
+  assert.deepEqual(plan.recoveredFeatureState.biologicalFeatures.map((feature) => feature.id), ['visible', 'hidden']);
 }
 
 console.log('session feature metadata tests passed');

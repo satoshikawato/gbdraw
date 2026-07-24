@@ -28,6 +28,7 @@ from gbdraw.session_io import (
     _read_session_text,
     _reject_duplicate_json_keys,
     materialize_embedded_file,
+    normalize_current_session_artifacts,
     safe_embedded_filename,
     validate_session,
     write_session_json,
@@ -318,7 +319,10 @@ def render_session(materialized: MaterializedSession) -> RequestRenderResult:
     from gbdraw.api.request_render import render_request
 
     try:
-        return render_request(session_to_request(materialized))
+        return render_request(
+            session_to_request(materialized),
+            session_artifacts=materialized.document.to_dict(),
+        )
     except SessionError:
         raise
     except Exception as exc:
@@ -372,6 +376,7 @@ def build_session_document(
     data.update(adjunct_data)
     if title is not None:
         data["title"] = str(title)
+    normalize_current_session_artifacts(data)
     return SessionDocument(data)
 
 

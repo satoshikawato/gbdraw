@@ -8,7 +8,6 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.features.colors import preprocess_color_tables
-from gbdraw.features.ids import make_linear_rendered_feature_id
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.interactive_svg import InteractiveSvgContext
@@ -36,10 +35,11 @@ def build_interactive_svg_context(
 ) -> InteractiveSvgContext:
     """Build rich popup metadata from rendered records.
 
-    ``linear_rendered_feature_ids`` must be true for linear diagrams because their
-    rendered feature IDs include a record-position component. Circular callers can
-    keep the default. Passing precompiled visibility rules is useful to CLI callers;
-    public callers normally pass ``feature_table``.
+    ``linear_rendered_feature_ids`` identifies the diagram mode, but feature
+    metadata remains keyed by stable biological IDs. The final SVG enricher maps
+    those IDs to record-specific rendered IDs after inspecting the actual DOM.
+    Passing precompiled visibility rules is useful to CLI callers; public callers
+    normally pass ``feature_table``.
     """
 
     if feature_table is not None and feature_visibility_rules is not None:
@@ -62,29 +62,22 @@ def build_interactive_svg_context(
         feature_visibility_rules=resolved_visibility_rules,
         specific_color_rules=specific_color_rules,
         linear_rendered_feature_ids=linear_rendered_feature_ids,
+        include_biological_features=True,
     )
     features = payload.get("features", [])
+    biological_features = payload.get("biological_features", [])
     orthogroup_payload: list[dict[str, object]] = []
     if orthogroups is not None:
-        record_count = len(record_list)
         orthogroup_payload = serialize_orthogroups_payload(
             orthogroups,
-            feature_id_mapper=(
-                lambda record_index, stable_feature_id: (
-                    make_linear_rendered_feature_id(
-                        record_index=record_index,
-                        stable_feature_id=stable_feature_id,
-                        record_count=record_count,
-                    )
-                    or stable_feature_id
-                )
-            )
-            if linear_rendered_feature_ids
-            else None,
             records=record_list,
         )
         if orthogroup_payload:
             features = enrich_features_with_orthogroups(features, orthogroup_payload)
+            biological_features = enrich_features_with_orthogroups(
+                biological_features,
+                orthogroup_payload,
+            )
 
     annotation_payload: list[dict[str, object]] = []
     if annotations is not None:
@@ -148,6 +141,7 @@ def build_interactive_svg_context(
 
     return InteractiveSvgContext(
         features=features,
+        biological_features=biological_features,
         orthogroups=orthogroup_payload,
         annotations=annotation_payload,
         sequence_sources=sequence_sources,

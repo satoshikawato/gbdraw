@@ -77,6 +77,7 @@ export const createFeatureSvgActions = ({
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     extractedFeatures,
+    biologicalFeatures,
     featuresBySvgId,
     featureColorOverrides,
     featureVisibilityOverrides,
@@ -111,6 +112,15 @@ export const createFeatureSvgActions = ({
         .map((entry) => entry.trim())
         .filter(Boolean)
     ));
+
+  const renderedFeatureSvgId = (feature) => String(
+    feature?.rendered_svg_id ||
+    feature?.renderedSvgId ||
+    feature?.rendered_feature_svg_id ||
+    feature?.renderedFeatureSvgId ||
+    feature?.svg_id ||
+    ''
+  ).trim();
 
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
@@ -258,7 +268,7 @@ export const createFeatureSvgActions = ({
     const indexed = new Map();
     const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
     for (const feat of features) {
-      const svgId = String(feat?.svg_id || '').trim();
+      const svgId = renderedFeatureSvgId(feat);
       if (!svgId || indexed.has(svgId)) continue;
       indexed.set(svgId, feat);
     }
@@ -336,7 +346,7 @@ export const createFeatureSvgActions = ({
     delegatedFeatureHandlers = null;
   };
 
-  const buildClickedFeaturePayload = (feat, featureElement = null) => {
+  const buildClickedFeaturePayload = (feat, featureElement = null, renderedSvgId = '') => {
     const defaultLabel = getFeatureCaption(feat);
     const existingOverride = featureColorOverrides[feat.id];
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
@@ -357,11 +367,14 @@ export const createFeatureSvgActions = ({
     const currentStrokeColor = featureElement?.getAttribute('stroke') || '#000000';
     const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width')) || 0.5;
 
-    const visibilityMode = normalizeVisibilityMode(featureVisibilityOverrides[feat.svg_id]);
+    const actualSvgId = String(renderedSvgId || renderedFeatureSvgId(feat)).trim();
+    const visibilityMode = normalizeVisibilityMode(featureVisibilityOverrides[actualSvgId]);
 
     return {
       id: feat.id,
-      svg_id: feat.svg_id,
+      svg_id: actualSvgId,
+      rendered_svg_id: actualSvgId,
+      stable_svg_id: feat.stable_svg_id || feat.stable_feature_id || feat.svg_id || '',
       label: defaultLabel,
       location: locationText,
       locationParts,
@@ -406,16 +419,20 @@ export const createFeatureSvgActions = ({
   };
 
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
-    if (!feat || !feat.svg_id) return null;
+    if (!feat) return null;
     if (!svgContainer.value) return null;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return null;
 
+    const renderedSvgId = renderedFeatureSvgId(feat);
+    if (!renderedSvgId) return null;
+    const featureElements = getFeatureElements(svg, renderedSvgId);
+    if (featureElements.length === 0) return null;
+
     hideHoverSummary();
     if (clickedPairwiseMatch) clickedPairwiseMatch.value = null;
-    const featureElements = getFeatureElements(svg, feat.svg_id);
-    const featureElement = getFeatureFillElements(svg, feat.svg_id)[0] || featureElements[0] || null;
-    clickedFeature.value = buildClickedFeaturePayload(feat, featureElement);
+    const featureElement = getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null;
+    clickedFeature.value = buildClickedFeaturePayload(feat, featureElement, renderedSvgId);
     if (featurePopupSize) {
       featurePopupSize.width = 0;
       featurePopupSize.height = 0;
@@ -512,7 +529,7 @@ export const createFeatureSvgActions = ({
 
     element.hidden = false;
     hoverSummaryState.visible = true;
-    hoverSummaryState.activeSvgId = String(feat.svg_id || '').trim();
+    hoverSummaryState.activeSvgId = renderedFeatureSvgId(feat);
     scheduleHoverSummaryPosition(eventLike);
     positionHoverSummary(eventLike);
   };
@@ -607,7 +624,7 @@ export const createFeatureSvgActions = ({
   }
 
   const applyInstantPreview = (feat, color) => {
-    const svgId = feat.svg_id;
+    const svgId = renderedFeatureSvgId(feat);
     if (!svgId) {
       console.log('No svg_id for feature', feat);
       return;
@@ -656,6 +673,9 @@ export const createFeatureSvgActions = ({
 
   const buildMatchPayload = (matchElement, featureLookup) => buildPairwiseMatchPayload(matchElement, {
     featureLookup,
+    sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
+      ? biologicalFeatures.value
+      : (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []),
     orthogroups: orthogroups?.value,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,

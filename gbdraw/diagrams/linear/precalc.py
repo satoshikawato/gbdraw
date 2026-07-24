@@ -19,7 +19,10 @@ from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
 from ...core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
-from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
+from ...features.factory import (  # type: ignore[reportMissingImports]
+    FeatureBuildResult,
+    create_feature_layers,
+)
 from ...features.objects import FeatureObject  # type: ignore[reportMissingImports]
 from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
@@ -108,14 +111,14 @@ def _precalculate_definition_widths(
     return max_definition_width
 
 
-def _precalculate_feature_dicts(
+def _precalculate_feature_layers(
     records: list[SeqRecord],
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
-) -> list[FeatureDict]:
+) -> list[FeatureBuildResult]:
     """Build feature objects once per record for the linear assembly pipeline."""
 
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
@@ -127,14 +130,14 @@ def _precalculate_feature_dicts(
     )
     label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
 
-    feature_dicts: list[FeatureDict] = []
+    feature_layers: list[FeatureBuildResult] = []
     for i, record in enumerate(records):
         compute_label_text = (
             show_labels_mode == "all"
             or (show_labels_mode == "first" and i == 0)
             or show_labels_mode == "orthogroup_top"
         )
-        feature_dict, _ = create_feature_dict(
+        result = create_feature_layers(
             record,
             color_table,
             feature_config.selected_features_set,
@@ -142,12 +145,35 @@ def _precalculate_feature_dicts(
             canvas_config.strandedness,
             canvas_config.resolve_overlaps,
             label_filtering if compute_label_text else {},
-            directional_feature_types=feature_config.directional_feature_types,
+            feature_shapes=feature_config.feature_shapes,
             feature_visibility_rules=feature_config.feature_visibility_rules,
             compute_label_text=compute_label_text,
         )
-        feature_dicts.append(feature_dict)
-    return feature_dicts
+        feature_layers.append(result)
+    return feature_layers
+
+
+def _precalculate_feature_dicts(
+    records: list[SeqRecord],
+    feature_config: FeatureDrawingConfigurator,
+    canvas_config: LinearCanvasConfigurator,
+    config_dict: dict,
+    cfg: GbdrawConfig | None = None,
+    orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
+) -> list[FeatureDict]:
+    """Compatibility view of the precomputed foreground feature layers."""
+
+    return [
+        result.foreground_features
+        for result in _precalculate_feature_layers(
+            records,
+            feature_config,
+            canvas_config,
+            config_dict,
+            cfg=cfg,
+            orthogroup_label_eligibility=orthogroup_label_eligibility,
+        )
+    ]
 
 
 def _precalculate_label_dimensions(
@@ -200,7 +226,7 @@ def _precalculate_label_dimensions(
         if precomputed_feature_dicts is not None:
             feature_dict = precomputed_feature_dicts[i]
         else:
-            feature_dict, _ = create_feature_dict(
+            feature_result = create_feature_layers(
                 record,
                 color_table,
                 feature_config.selected_features_set,
@@ -208,9 +234,10 @@ def _precalculate_label_dimensions(
                 canvas_config.strandedness,
                 canvas_config.resolve_overlaps,
                 label_filtering,
-                directional_feature_types=feature_config.directional_feature_types,
+                feature_shapes=feature_config.feature_shapes,
                 feature_visibility_rules=feature_config.feature_visibility_rules,
             )
+            feature_dict = feature_result.foreground_features
 
         record_length = len(record.seq)
         if sequence_widths is not None:
@@ -272,6 +299,7 @@ __all__ = [
     "_precalculate_definition_metrics",
     "_precalculate_definition_widths",
     "_precalculate_feature_dicts",
+    "_precalculate_feature_layers",
     "_precalculate_label_dimensions",
     "_resolve_linear_diagram_label_font_size",
 ]

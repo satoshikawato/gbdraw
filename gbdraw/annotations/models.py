@@ -193,7 +193,7 @@ class RegionAnnotation:
     id: str
     target: RegionTarget
     label: str = ""
-    mark: Literal["line", "bracket", "band"] = "bracket"
+    mark: Literal["line", "bracket", "band", "highlight"] = "bracket"
     lane: int | None = None
     style: RegionAnnotationStyle | None = None
     legend_label: str | None = None
@@ -205,8 +205,10 @@ class RegionAnnotation:
             raise ValidationError("Annotation id cannot be empty.")
         if not isinstance(self.target, (CoordinateSpan, FeatureSpan)):
             raise ValidationError("Annotation target must be CoordinateSpan or FeatureSpan.")
-        if self.mark not in {"line", "bracket", "band"}:
-            raise ValidationError("Annotation mark must be 'line', 'bracket', or 'band'.")
+        if self.mark not in {"line", "bracket", "band", "highlight"}:
+            raise ValidationError(
+                "Annotation mark must be 'line', 'bracket', 'band', or 'highlight'."
+            )
         if self.lane is not None:
             if isinstance(self.lane, bool) or int(self.lane) < 0:
                 raise ValidationError("Annotation lane must be a non-negative integer.")
@@ -264,6 +266,7 @@ class AnnotationOptions:
 @dataclass(frozen=True)
 class AnnotationTrackParams:
     set_id: str
+    marks: tuple[str, ...] | None = None
     lane_gap_px: float = 3.0
     padding_px: float = 2.0
     overflow: Literal["error", "compress", "clip"] = "error"
@@ -271,12 +274,28 @@ class AnnotationTrackParams:
     style_override: RegionAnnotationStyle | None = None
     anchor_slot: str | None = None
     layer: Literal["underlay", "foreground"] = "foreground"
+    cover_anchor: bool = False
 
     def __post_init__(self) -> None:
         set_id = str(self.set_id).strip()
         if not set_id:
             raise ValidationError("Annotation track set_id is required.")
         object.__setattr__(self, "set_id", set_id)
+        if self.marks is not None:
+            raw_marks = (
+                self.marks.replace(",", "|").split("|")
+                if isinstance(self.marks, str)
+                else self.marks
+            )
+            marks = tuple(dict.fromkeys(str(mark).strip().lower() for mark in raw_marks if str(mark).strip()))
+            unknown_marks = set(marks) - {"line", "bracket", "band", "highlight"}
+            if unknown_marks:
+                raise ValidationError(
+                    f"Unsupported annotation mark filter(s): {', '.join(sorted(unknown_marks))}."
+                )
+            if not marks:
+                raise ValidationError("Annotation track marks filter cannot be empty.")
+            object.__setattr__(self, "marks", marks)
         object.__setattr__(self, "lane_gap_px", _finite(self.lane_gap_px, "lane_gap_px", nonnegative=True))
         object.__setattr__(self, "padding_px", _finite(self.padding_px, "padding_px", nonnegative=True))
         if self.overflow not in {"error", "compress", "clip"}:
@@ -298,6 +317,7 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
     raw = {str(key).strip().lower(): value for key, value in dict(params or {}).items()}
     allowed = {
         "set_id",
+        "marks",
         "lane_gap_px",
         "padding_px",
         "overflow",
@@ -305,20 +325,23 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
         "style_override",
         "anchor_slot",
         "layer",
+        "cover_anchor",
     }
     unknown = set(raw) - allowed
     if unknown:
         raise ValidationError(
             f"Unknown annotation track parameter(s): {', '.join(sorted(unknown))}."
         )
-    show_labels_raw = raw.get("show_labels", True)
-    if isinstance(show_labels_raw, str):
-        normalized = show_labels_raw.strip().lower()
-        if normalized not in {"1", "0", "true", "false", "yes", "no", "on", "off"}:
-            raise ValidationError("show_labels must be true or false.")
-        show_labels = normalized in {"1", "true", "yes", "on"}
-    else:
-        show_labels = bool(show_labels_raw)
+    def parse_bool(raw_value: object, field_name: str) -> bool:
+        if isinstance(raw_value, str):
+            normalized = raw_value.strip().lower()
+            if normalized not in {"1", "0", "true", "false", "yes", "no", "on", "off"}:
+                raise ValidationError(f"{field_name} must be true or false.")
+            return normalized in {"1", "true", "yes", "on"}
+        return bool(raw_value)
+
+    show_labels = parse_bool(raw.get("show_labels", True), "show_labels")
+    cover_anchor = parse_bool(raw.get("cover_anchor", False), "cover_anchor")
     style_override = raw.get("style_override")
     if isinstance(style_override, Mapping):
         try:
@@ -327,6 +350,7 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
             raise ValidationError(f"Invalid annotation style_override: {exc}") from exc
     return AnnotationTrackParams(
         set_id=str(raw.get("set_id", "")),
+        marks=raw.get("marks"),  # type: ignore[arg-type]
         lane_gap_px=raw.get("lane_gap_px", 3.0),  # type: ignore[arg-type]
         padding_px=raw.get("padding_px", 2.0),  # type: ignore[arg-type]
         overflow=str(raw.get("overflow", "error")).strip().lower(),  # type: ignore[arg-type]
@@ -334,6 +358,7 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
         style_override=style_override,  # type: ignore[arg-type]
         anchor_slot=(None if raw.get("anchor_slot") is None else str(raw["anchor_slot"])),
         layer=str(raw.get("layer", "foreground")).strip().lower(),  # type: ignore[arg-type]
+        cover_anchor=cover_anchor,
     )
 
 

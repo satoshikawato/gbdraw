@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
+import { cp, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
-const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'cli-args.js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-cli-args-'));
-const modulePath = join(tempDir, 'cli-args.mjs');
-await writeFile(modulePath, await readFile(sourcePath, 'utf8'), 'utf8');
+await cp(join(repoRoot, 'gbdraw', 'web', 'js'), join(tempDir, 'js'), { recursive: true });
+await writeFile(join(tempDir, 'package.json'), '{"type":"module"}', 'utf8');
+const modulePath = join(tempDir, 'js', 'app', 'cli-args.js');
 
 const {
   DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
@@ -43,7 +43,7 @@ assert.deepEqual(
       repeat_region: 'rectangle'
     }
   ),
-  []
+  ['repeat_region=rectangle']
 );
 
 assert.deepEqual(
@@ -56,6 +56,29 @@ assert.deepEqual(
     }
   ),
   ['CDS=rectangle', 'repeat_region=arrow', 'custom_feature=arrow']
+);
+
+assert.deepEqual(
+  buildFeatureShapeAssignments(
+    ['CDS', 'repeat_region', 'custom_feature'],
+    {
+      CDS: 'arrow',
+      repeat_region: 'underlay',
+      custom_feature: 'underlay'
+    }
+  ),
+  ['repeat_region=underlay', 'custom_feature=underlay']
+);
+
+assert.throws(
+  () => buildFeatureShapeAssignments(['CDS'], { CDS: 'triangle' }),
+  /Unsupported feature rendering/
+);
+
+assert.deepEqual(
+  buildFeatureShapeAssignments(['CDS'], { CDS: 'arrow', repeat_region: 'underlay' }),
+  ['repeat_region=underlay'],
+  'rendering assignments survive removal so visibility/color rules can still reveal that type'
 );
 
 assert.deepEqual(createDefaultLinearDefinitionLineStyles(), {

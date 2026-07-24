@@ -2,7 +2,9 @@
 
 from .colors import preprocess_color_tables, get_color
 from .factory import (
+    FeatureBuildResult,
     create_feature_dict,
+    create_feature_layers,
     create_feature_object,
     create_gene_object,
     create_repeat_object,
@@ -22,11 +24,17 @@ from .coordinates import (
 )
 from .shapes import (
     DEFAULT_DIRECTIONAL_FEATURE_TYPES,
+    DEFAULT_FEATURE_RENDERINGS,
+    FEATURE_RENDERING_VALUES,
+    FeatureRendering,
+    default_feature_rendering,
     normalize_feature_shape,
     normalize_feature_shape_overrides,
     parse_feature_shape_assignment,
     parse_feature_shape_overrides,
     resolve_directional_feature_types,
+    resolve_feature_rendering,
+    resolve_underlay_feature_types,
 )
 from .visibility import (
     compile_feature_visibility_rules,
@@ -41,7 +49,9 @@ __all__ = [
     "get_color",
     "preprocess_color_tables",
     # factory
+    "FeatureBuildResult",
     "create_feature_dict",
+    "create_feature_layers",
     "create_feature_object",
     "create_gene_object",
     "create_repeat_object",
@@ -58,11 +68,17 @@ __all__ = [
     "get_strand",
     # shapes
     "DEFAULT_DIRECTIONAL_FEATURE_TYPES",
+    "DEFAULT_FEATURE_RENDERINGS",
+    "FEATURE_RENDERING_VALUES",
+    "FeatureRendering",
+    "default_feature_rendering",
     "normalize_feature_shape",
     "normalize_feature_shape_overrides",
     "parse_feature_shape_assignment",
     "parse_feature_shape_overrides",
     "resolve_directional_feature_types",
+    "resolve_feature_rendering",
+    "resolve_underlay_feature_types",
     # visibility
     "compile_feature_visibility_rules",
     "read_feature_visibility_file",
@@ -70,5 +86,3 @@ __all__ = [
     "should_include_feature_in_analysis",
     "should_render_feature",
 ]
-
-

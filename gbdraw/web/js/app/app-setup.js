@@ -1677,10 +1677,28 @@ export const createAppSetup = () => {
       .find((entry) => String(entry?.id || '').trim() === orthogroupId);
     if (!group) return null;
     const members = orthogroupActions.getEnrichedOrthogroupMembers(group);
-    const currentSvgId = String(cf?.svg_id || '').trim();
-    const currentRecordIndex = Number(cf?.orthogroupMember?.recordIndex);
+    const currentStableId = String(
+      cf?.feat?.stable_feature_id ||
+      cf?.feat?.stableFeatureId ||
+      cf?.feat?.stable_svg_id ||
+      cf?.feat?.stableFeatureSvgId ||
+      cf?.feat?.svg_id ||
+      ''
+    ).trim();
+    const currentRecordIndex = Number(
+      cf?.feat?.fileIdx ??
+      cf?.orthogroupMember?.recordIndex ??
+      cf?.feat?.recordIndex ??
+      cf?.feat?.record_idx
+    );
     const currentMember = members.find((member) => (
-      String(member?.featureSvgId || '').trim() === currentSvgId &&
+      String(
+        member?.stableFeatureSvgId ||
+        member?.stable_feature_svg_id ||
+        member?.featureSvgId ||
+        member?.feature_svg_id ||
+        ''
+      ).trim() === currentStableId &&
       (!Number.isInteger(currentRecordIndex) || Number(member?.recordIndex) === currentRecordIndex)
     )) || cf.orthogroupMember || null;
     const membersByRecord = orthogroupActions.groupOrthogroupMembersByRecord(members);
@@ -1873,7 +1891,7 @@ export const createAppSetup = () => {
     selectedPairwiseBlockOrthogroupId.value = String(group?.id || '').trim();
   };
   const openPairwiseFeatureRow = (row, event) => {
-    if (!row?.feature?.svg_id) return;
+    if (!row?.canOpen || !row?.feature) return;
     openFeatureEditorForFeature(row.feature, event);
   };
 

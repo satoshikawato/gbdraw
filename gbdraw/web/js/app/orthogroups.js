@@ -1,4 +1,8 @@
-import { getFeatureElements } from './feature-editor/svg-actions.js';
+import {
+  FEATURE_SELECTOR,
+  getFeatureElements,
+  getFeatureIdentity
+} from './feature-editor/svg-actions.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
 import {
   groupMetadataScopeLabel,
@@ -10,6 +14,43 @@ const { computed } = window.Vue;
 
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
+
+const normalizeRecordIndex = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const normalized = Number(value);
+  return Number.isInteger(normalized) && normalized >= 0 ? normalized : null;
+};
+
+const memberStableFeatureId = (member) => normalizeText(
+  member?.stableFeatureSvgId ||
+  member?.stable_feature_svg_id ||
+  member?.stableFeatureId ||
+  member?.stable_feature_id ||
+  member?.featureSvgId ||
+  member?.feature_svg_id
+);
+
+const featureStableFeatureId = (feature) => normalizeText(
+  feature?.stable_feature_id ||
+  feature?.stableFeatureId ||
+  feature?.stable_svg_id ||
+  feature?.stableFeatureSvgId ||
+  feature?.svg_id ||
+  feature?.svgId
+);
+
+const featureRecordIndex = (feature) => {
+  for (const value of [feature?.fileIdx, feature?.recordIndex, feature?.record_index, feature?.record_idx]) {
+    const recordIndex = normalizeRecordIndex(value);
+    if (recordIndex !== null) return recordIndex;
+  }
+  return null;
+};
+
+const memberRecordIndex = (member) => normalizeRecordIndex(member?.recordIndex ?? member?.record_index);
+const stableRecordKey = (recordIndex, stableId) => (
+  recordIndex !== null && stableId ? `${recordIndex}:${stableId}` : ''
+);
 
 const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
 
@@ -126,7 +167,7 @@ const getMemberSearchText = (member) => [
   member?.note,
   member?.recordId,
   member?.label,
-  member?.featureSvgId
+  memberStableFeatureId(member)
 ].map(normalizeLower).join(' ');
 
 const getCandidateSearchText = (candidate) => [
@@ -139,6 +180,55 @@ const setOriginalStroke = (el) => {
     el.setAttribute('data-og-original-stroke', el.getAttribute('stroke') || '');
     el.setAttribute('data-og-original-stroke-width', el.getAttribute('stroke-width') || '');
   }
+};
+
+const addRenderedId = (index, key, renderedId) => {
+  if (!key || !renderedId) return;
+  const values = index.get(key) || new Set();
+  values.add(renderedId);
+  index.set(key, values);
+};
+
+const buildRenderedFeatureIndex = (svg, features = []) => {
+  const byStableRecord = new Map();
+  const byStable = new Map();
+  Array.from(svg?.querySelectorAll?.(FEATURE_SELECTOR) || []).forEach((element) => {
+    const renderedId = normalizeText(getFeatureIdentity(element));
+    if (!renderedId) return;
+    const stableId = normalizeText(
+      element.getAttribute?.('data-gbdraw-stable-feature-id') || renderedId
+    );
+    const recordIndex = normalizeRecordIndex(
+      element.getAttribute?.('data-gbdraw-record-index')
+    );
+    addRenderedId(byStableRecord, stableRecordKey(recordIndex, stableId), renderedId);
+    addRenderedId(byStable, stableId, renderedId);
+  });
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const renderedId = normalizeText(
+      feature?.rendered_svg_id || feature?.renderedSvgId || feature?.svg_id
+    );
+    const stableId = featureStableFeatureId(feature);
+    const recordIndex = featureRecordIndex(feature);
+    if (!renderedId || !stableId || getFeatureElements(svg, renderedId).length === 0) return;
+    addRenderedId(byStableRecord, stableRecordKey(recordIndex, stableId), renderedId);
+    addRenderedId(byStable, stableId, renderedId);
+  });
+  return { byStableRecord, byStable };
+};
+
+const renderedFeatureIdForMember = (member, renderedIndex) => {
+  const stableId = memberStableFeatureId(member);
+  if (!stableId) return '';
+  const recordIndex = memberRecordIndex(member);
+  const recordMatches = recordIndex === null
+    ? null
+    : renderedIndex.byStableRecord.get(stableRecordKey(recordIndex, stableId));
+  if (recordIndex !== null) {
+    return recordMatches?.size === 1 ? recordMatches.values().next().value : '';
+  }
+  const stableMatches = renderedIndex.byStable.get(stableId);
+  return stableMatches?.size === 1 ? stableMatches.values().next().value : '';
 };
 
 export const createOrthogroupEditor = ({ state, runAnalysis }) => {
@@ -156,7 +246,8 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     showFeaturePanel,
     showLegendPanel,
     linearSeqs,
-    extractedFeatures
+    extractedFeatures,
+    biologicalFeatures
   } = state;
 
   const getOrthogroupById = (orthogroupId) => {
@@ -256,11 +347,18 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const featureSequenceLookup = computed(() => {
     const lookup = new Map();
-    const features = Array.isArray(extractedFeatures?.value) ? extractedFeatures.value : [];
+    const features = Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
+      ? biologicalFeatures.value
+      : (Array.isArray(extractedFeatures?.value) ? extractedFeatures.value : []);
+    const stableCounts = new Map();
     features.forEach((feature) => {
-      const svgId = normalizeText(feature?.svg_id || feature?.svgId);
-      if (!svgId) return;
-      const recordIndex = Number(feature?.fileIdx);
+      const stableId = featureStableFeatureId(feature);
+      if (stableId) stableCounts.set(stableId, (stableCounts.get(stableId) || 0) + 1);
+    });
+    features.forEach((feature) => {
+      const stableId = featureStableFeatureId(feature);
+      if (!stableId) return;
+      const recordIndex = featureRecordIndex(feature);
       const entry = {
         nucleotideSequence: firstSequenceText(feature?.nucleotideSequence, feature?.nucleotide_sequence),
         aminoAcidSequence: firstSequenceText(feature?.aminoAcidSequence, feature?.amino_acid_sequence),
@@ -270,20 +368,21 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
           : (Array.isArray(feature?.sequenceWarnings) ? feature.sequenceWarnings : [])
       };
       if (!entry.nucleotideSequence && !entry.aminoAcidSequence) return;
-      if (Number.isInteger(recordIndex)) lookup.set(`${recordIndex}:${svgId}`, entry);
-      if (!lookup.has(svgId)) lookup.set(svgId, entry);
+      const recordKey = stableRecordKey(recordIndex, stableId);
+      if (recordKey) lookup.set(recordKey, entry);
+      if ((stableCounts.get(stableId) || 0) === 1) lookup.set(stableId, entry);
     });
     return lookup;
   });
 
   const enrichOrthogroupMember = (member) => {
-    const featureSvgId = normalizeText(member?.featureSvgId);
-    if (!featureSvgId) return member;
-    const recordIndex = Number(member?.recordIndex);
+    const stableId = memberStableFeatureId(member);
+    if (!stableId) return member;
+    const recordIndex = memberRecordIndex(member);
     const lookup = featureSequenceLookup.value instanceof Map ? featureSequenceLookup.value : new Map();
     const sequenceEntry = (
-      Number.isInteger(recordIndex) ? lookup.get(`${recordIndex}:${featureSvgId}`) : null
-    ) || lookup.get(featureSvgId) || null;
+      recordIndex !== null ? lookup.get(stableRecordKey(recordIndex, stableId)) : null
+    ) || lookup.get(stableId) || null;
     if (!sequenceEntry) return member;
     return {
       ...member,
@@ -363,7 +462,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
   const orthogroupMemberSequenceFilename = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = normalizeText(group?.id || groupOrId) || 'orthogroup';
-    const memberId = normalizeText(member?.sourceProteinId || member?.proteinId || member?.featureSvgId || 'member');
+    const memberId = normalizeText(member?.sourceProteinId || member?.proteinId || memberStableFeatureId(member) || 'member');
     const stem = makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`);
     return `${stem}.${sequenceExtension(sequenceKind)}`;
   };
@@ -461,9 +560,10 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
     clearOrthogroupHighlight();
+    const renderedIndex = buildRenderedFeatureIndex(svg, extractedFeatures?.value);
     const featureIds = new Set(
       getGroupMembers(group)
-        .map((member) => normalizeText(member?.featureSvgId))
+        .map((member) => renderedFeatureIdForMember(member, renderedIndex))
         .filter(Boolean)
     );
     featureIds.forEach((featureId) => {

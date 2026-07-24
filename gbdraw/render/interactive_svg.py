@@ -25,7 +25,7 @@ INTERACTIVE_SCHEMA = "gbdraw-interactive-feature-popup-v2"
 
 _FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
 _FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
-_FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
+_FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_(\d+)$")
 _ASSET_IDS = {
     INTERACTIVE_METADATA_ID,
     INTERACTIVE_STYLE_ID,
@@ -54,6 +54,7 @@ class InteractiveSvgContext:
     current_colors: Mapping[str, str] = field(default_factory=dict)
     annotations: Sequence[Mapping[str, object]] = ()
     sequence_sources: Sequence[Mapping[str, object]] = ()
+    biological_features: Sequence[Mapping[str, object]] = ()
 
 
 @dataclass
@@ -116,6 +117,10 @@ def _feature_svg_id_candidates(feature: Mapping[str, object]) -> list[str]:
     candidates: list[str] = []
     seen: set[str] = set()
     for value in (
+        feature.get("rendered_feature_svg_id"),
+        feature.get("renderedFeatureSvgId"),
+        feature.get("rendered_svg_id"),
+        feature.get("renderedSvgId"),
         feature.get("svg_id"),
         feature.get("svgId"),
         feature.get("feature_svg_id"),
@@ -133,6 +138,42 @@ def _feature_svg_id_candidates(feature: Mapping[str, object]) -> list[str]:
                 seen.add(candidate)
                 candidates.append(candidate)
     return candidates
+
+
+def _feature_rendered_id(feature: Mapping[str, object]) -> str:
+    return _normalize_feature_id(
+        _first_text(
+            feature.get("rendered_feature_svg_id"),
+            feature.get("renderedFeatureSvgId"),
+            feature.get("rendered_svg_id"),
+            feature.get("renderedSvgId"),
+        )
+    )
+
+
+def _feature_stable_id(feature: Mapping[str, object]) -> str:
+    stable_id = _normalize_feature_id(
+        _first_text(
+            feature.get("stable_feature_id"),
+            feature.get("stable_svg_id"),
+            feature.get("stableFeatureSvgId"),
+            feature.get("stableFeatureId"),
+            feature.get("stableSvgId"),
+            feature.get("svg_id"),
+            feature.get("svgId"),
+        )
+    )
+    return _FEATURE_RECORD_SUFFIX_RE.sub("", stable_id)
+
+
+def _feature_record_index(feature: Mapping[str, object]) -> int | None:
+    return _int_or_none(
+        _first_text(
+            feature.get("record_idx"),
+            feature.get("record_index"),
+            feature.get("recordIndex"),
+        )
+    )
 
 
 def _is_feature_candidate(element: ET.Element) -> bool:
@@ -182,6 +223,59 @@ def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEn
             fill=str(element.get("fill") or "#94a3b8"),
         )
     return entries
+
+
+def _rendered_feature_id_index(
+    root: ET.Element,
+) -> dict[tuple[int | None, str], str]:
+    """Index only feature IDs that are present in the final SVG DOM."""
+
+    index: dict[tuple[int | None, str], str] = {}
+    ambiguous: set[tuple[int | None, str]] = set()
+
+    def add(key: tuple[int | None, str], rendered_id: str) -> None:
+        if key in ambiguous:
+            return
+        existing = index.get(key)
+        if existing is not None and existing != rendered_id:
+            index.pop(key, None)
+            ambiguous.add(key)
+            return
+        index[key] = rendered_id
+
+    for rendered_id, entry in _collect_rendered_features(root).items():
+        record_index = _int_or_none(entry.element.get("data-gbdraw-record-index"))
+        if record_index is None:
+            record_suffix = _FEATURE_RECORD_SUFFIX_RE.search(rendered_id)
+            if record_suffix is not None:
+                record_index = int(record_suffix.group(1)) - 1
+        stable_id = _normalize_feature_id(
+            entry.element.get("data-gbdraw-stable-feature-id")
+        ) or _FEATURE_RECORD_SUFFIX_RE.sub("", rendered_id)
+        candidates = {stable_id, rendered_id}
+        for candidate in candidates:
+            if not candidate:
+                continue
+            if record_index is not None:
+                add((record_index, candidate), rendered_id)
+            else:
+                add((None, candidate), rendered_id)
+    return index
+
+
+def _resolve_rendered_feature_id(
+    rendered_index: Mapping[tuple[int | None, str], str],
+    record_index: int | None,
+    stable_feature_id: str,
+) -> str:
+    if not stable_feature_id:
+        return ""
+    return _first_text(
+        rendered_index.get((record_index, stable_feature_id))
+        if record_index is not None
+        else "",
+        rendered_index.get((None, stable_feature_id)),
+    )
 
 
 def _first_text(*values: object) -> str:
@@ -500,14 +594,24 @@ def _feature_orthogroup_entry(feature: Mapping[str, object]) -> dict[str, object
     }
 
 
-def _normalize_orthogroup_member(member: object | None) -> dict[str, object] | None:
+def _normalize_orthogroup_member(
+    member: object | None,
+    *,
+    rendered_feature_svg_id: str = "",
+) -> dict[str, object] | None:
     if not isinstance(member, Mapping):
         return None
     record_index = _int_or_none(_first_text(member.get("recordIndex"), member.get("record_index")))
     feature_index = _number_or_none(_first_text(member.get("featureIndex"), member.get("feature_index")))
     start = _number_or_none(member.get("start"))
     end = _number_or_none(member.get("end"))
-    return {
+    stable_feature_svg_id = _first_text(
+        member.get("stableFeatureSvgId"),
+        member.get("stable_feature_svg_id"),
+        member.get("featureSvgId"),
+        member.get("feature_svg_id"),
+    )
+    payload = {
         "orthogroup_id": _first_text(member.get("orthogroupId"), member.get("orthogroup_id")),
         "protein_id": _first_text(member.get("proteinId"), member.get("protein_id")),
         "source_protein_id": _first_text(member.get("sourceProteinId"), member.get("source_protein_id")),
@@ -515,7 +619,8 @@ def _normalize_orthogroup_member(member: object | None) -> dict[str, object] | N
         "record_id": _first_text(member.get("recordId"), member.get("record_id")),
         "feature_index": feature_index,
         "label": _first_text(member.get("label")),
-        "feature_svg_id": _first_text(member.get("featureSvgId"), member.get("feature_svg_id")),
+        "feature_svg_id": stable_feature_svg_id,
+        "stable_feature_svg_id": stable_feature_svg_id,
         "start": start,
         "end": end,
         "strand": _strand_symbol(member.get("strand")),
@@ -527,6 +632,9 @@ def _normalize_orthogroup_member(member: object | None) -> dict[str, object] | N
         "product": _first_text(member.get("product")),
         "note": _first_text(member.get("note")),
     }
+    if rendered_feature_svg_id:
+        payload["rendered_feature_svg_id"] = rendered_feature_svg_id
+    return payload
 
 
 def _normalize_orthogroup_candidate(candidate: object | None) -> dict[str, object] | None:
@@ -552,23 +660,32 @@ def _normalize_orthogroup_candidate(candidate: object | None) -> dict[str, objec
 
 
 def _orthogroup_payloads(
-    features: Sequence[Mapping[str, object]],
+    root: ET.Element,
     context: InteractiveSvgContext,
 ) -> list[dict[str, object]]:
-    needed_ids = {
-        _first_text(feature.get("orthogroup_id"), feature.get("orthogroupId"))
-        for feature in features
-        if _first_text(feature.get("orthogroup_id"), feature.get("orthogroupId"))
-    }
-    if not needed_ids:
-        return []
+    rendered_index = _rendered_feature_id_index(root)
+
+    def resolve_member_feature_id(member: Mapping[str, object]) -> str:
+        record_index = _int_or_none(
+            _first_text(member.get("recordIndex"), member.get("record_index"))
+        )
+        stable_feature_id = _first_text(
+            member.get("stableFeatureSvgId"),
+            member.get("stable_feature_svg_id"),
+            member.get("featureSvgId"),
+            member.get("feature_svg_id"),
+        )
+        return _resolve_rendered_feature_id(
+            rendered_index,
+            record_index,
+            stable_feature_id,
+        )
+
     payloads: list[dict[str, object]] = []
     for group in context.orthogroups or []:
         if not isinstance(group, Mapping):
             continue
         group_id = _first_text(group.get("id"))
-        if group_id not in needed_ids:
-            continue
         raw_members = group.get("members")
         raw_member_list = (
             raw_members
@@ -578,8 +695,12 @@ def _orthogroup_payloads(
         members = [
             normalized
             for normalized in (
-                _normalize_orthogroup_member(member)
+                _normalize_orthogroup_member(
+                    member,
+                    rendered_feature_svg_id=resolve_member_feature_id(member),
+                )
                 for member in raw_member_list
+                if isinstance(member, Mapping)
             )
             if normalized is not None
         ]
@@ -685,17 +806,42 @@ def _feature_payloads(
     rendered = _collect_rendered_features(root)
     if not rendered:
         return []
+    rendered_index = _rendered_feature_id_index(root)
 
     payloads: list[dict[str, object]] = []
     seen: set[str] = set()
+    stable_ids_by_rendered_id: dict[str, str] = {}
     popup_mode: Literal["rich", "simple"] = (
         "simple" if context.popup_mode == "simple" else "rich"
     )
     for feature in context.features:
+        record_index = _feature_record_index(feature)
+        stable_feature_id = _feature_stable_id(feature)
+        rendered_feature_id = _feature_rendered_id(feature)
+        mapped_svg_id = _first_text(
+            _resolve_rendered_feature_id(
+                rendered_index,
+                record_index,
+                rendered_feature_id,
+            ),
+            _resolve_rendered_feature_id(
+                rendered_index,
+                record_index,
+                stable_feature_id,
+            ),
+        )
+        fallback_candidates = (
+            _feature_svg_id_candidates(feature)
+            if mapped_svg_id or record_index is None
+            else []
+        )
         svg_id = next(
             (
                 candidate
-                for candidate in _feature_svg_id_candidates(feature)
+                for candidate in (
+                    mapped_svg_id,
+                    *fallback_candidates,
+                )
                 if candidate in rendered and candidate not in seen
             ),
             "",
@@ -703,13 +849,16 @@ def _feature_payloads(
         if not svg_id or svg_id not in rendered or svg_id in seen:
             continue
         seen.add(svg_id)
+        if stable_feature_id:
+            stable_ids_by_rendered_id[svg_id] = stable_feature_id
         fallback_label = _get_feature_label(feature)
         display_label = fallback_label
         orthogroup_entry = _feature_orthogroup_entry(feature)
         orthogroup_member = _normalize_orthogroup_member(
             orthogroup_entry.get("orthogroupMember")
             if isinstance(orthogroup_entry, Mapping)
-            else None
+            else None,
+            rendered_feature_svg_id=svg_id,
         )
         qualifiers = _normalize_qualifier_map(feature.get("qualifiers"))
         amino_acid_sequence = _first_text(
@@ -722,6 +871,7 @@ def _feature_payloads(
         )
         payload = {
             "svg_id": svg_id,
+            "rendered_feature_svg_id": svg_id,
             "stable_svg_id": _first_text(
                 feature.get("stable_svg_id"),
                 feature.get("stableFeatureSvgId"),
@@ -798,6 +948,11 @@ def _feature_payloads(
             )
         payloads.append(dict(_compact_wire_value(payload) or {}))
 
+    for element in root.iter():
+        stable_feature_id = stable_ids_by_rendered_id.get(_element_feature_id(element))
+        if stable_feature_id:
+            element.set("data-gbdraw-stable-feature-id", stable_feature_id)
+
     for svg_id, entry in rendered.items():
         if svg_id in seen:
             continue
@@ -812,6 +967,40 @@ def _feature_payloads(
             continue
         element.set("data-gbdraw-interactive-feature", "true")
         _add_class_token(element, "gbdraw-interactive-feature")
+    return payloads
+
+
+def _biological_feature_payloads(
+    root: ET.Element,
+    context: InteractiveSvgContext,
+) -> list[dict[str, object]]:
+    rendered_index = _rendered_feature_id_index(root)
+    payloads: list[dict[str, object]] = []
+    for feature in context.biological_features:
+        if not isinstance(feature, Mapping):
+            continue
+        stable_feature_id = _feature_stable_id(feature)
+        record_index = _feature_record_index(feature)
+        payload = dict(feature)
+        for key in (
+            "rendered_svg_id",
+            "renderedSvgId",
+            "rendered_feature_svg_id",
+            "renderedFeatureSvgId",
+        ):
+            payload.pop(key, None)
+        if stable_feature_id:
+            payload["svg_id"] = stable_feature_id
+            payload["stable_svg_id"] = stable_feature_id
+            payload["stable_feature_id"] = stable_feature_id
+        rendered_feature_id = _resolve_rendered_feature_id(
+            rendered_index,
+            record_index,
+            stable_feature_id,
+        )
+        if rendered_feature_id:
+            payload["rendered_svg_id"] = rendered_feature_id
+        payloads.append(dict(_compact_wire_value(payload) or {}))
     return payloads
 
 
@@ -915,7 +1104,12 @@ def _orthogroup_lookup(
 
 
 def _member_feature_svg_id(member: Mapping[str, object]) -> str:
-    return _first_text(member.get("featureSvgId"), member.get("feature_svg_id"))
+    return _first_text(
+        member.get("renderedFeatureSvgId"),
+        member.get("rendered_feature_svg_id"),
+        member.get("featureSvgId"),
+        member.get("feature_svg_id"),
+    )
 
 
 def _feature_orthogroup_id(feature: Mapping[str, object] | None) -> str:
@@ -970,7 +1164,13 @@ def _feature_to_member(feature: Mapping[str, object] | None) -> dict[str, object
         ),
         "product": _first_text(member.get("product"), _feature_product(feature)),
         "note": _first_text(member.get("note"), feature.get("note")),
-        "featureSvgId": _first_text(member.get("featureSvgId"), member.get("feature_svg_id"), feature.get("svg_id")),
+        "featureSvgId": _first_text(
+            member.get("renderedFeatureSvgId"),
+            member.get("rendered_feature_svg_id"),
+            feature.get("svg_id"),
+            member.get("featureSvgId"),
+            member.get("feature_svg_id"),
+        ),
     }
 
 
@@ -2233,7 +2433,8 @@ def enrich_svg(
         _remove_class_token(element, "gbdraw-interactive-feature--match")
         _remove_class_token(element, "gbdraw-interactive-feature--active-match")
     features = _feature_payloads(root, context)
-    orthogroups = _orthogroup_payloads(features, context)
+    biological_features = _biological_feature_payloads(root, context)
+    orthogroups = _orthogroup_payloads(root, context)
     matches = _match_payloads(root, features, orthogroups)
     sequence_sources = _sequence_sources_for_matches(matches, context.sequence_sources)
     annotation_context = {
@@ -2278,6 +2479,7 @@ def enrich_svg(
                     "schema": INTERACTIVE_SCHEMA,
                     "popup_mode": popup_mode,
                     "features": features,
+                    "biological_features": biological_features,
                     "orthogroups": orthogroups,
                     "matches": matches,
                     "annotations": annotations,

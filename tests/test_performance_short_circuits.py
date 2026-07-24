@@ -134,17 +134,17 @@ def test_linear_feature_dict_is_built_once_per_record(
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     call_count = 0
-    real_create_feature_dict = linear_precalc_module.create_feature_dict
+    real_create_feature_layers = linear_precalc_module.create_feature_layers
 
-    def counting_create_feature_dict(*args, **kwargs):
+    def counting_create_feature_layers(*args, **kwargs):
         nonlocal call_count
         call_count += 1
-        return real_create_feature_dict(*args, **kwargs)
+        return real_create_feature_layers(*args, **kwargs)
 
     def unexpected_create_feature_dict(*_args, **_kwargs):
         raise AssertionError("Linear assembly should reuse precomputed feature dictionaries.")
 
-    monkeypatch.setattr(linear_precalc_module, "create_feature_dict", counting_create_feature_dict)
+    monkeypatch.setattr(linear_precalc_module, "create_feature_layers", counting_create_feature_layers)
     monkeypatch.setattr(linear_seq_record_module, "create_feature_dict", unexpected_create_feature_dict)
 
     assemble_linear_diagram_from_records(

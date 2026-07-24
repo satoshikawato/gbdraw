@@ -15,6 +15,8 @@ export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   orthogroupState: 'artifact',
   losatCache: 'artifact',
   losatDerivedCache: 'artifact',
+  proteinIdentityManifest: 'artifact',
+  legacyArtifacts: 'artifact',
   cliInvocation: 'provenance'
 });
 
@@ -77,7 +79,9 @@ export const projectArtifactState = (sessionData) => ({
   editorState: sessionData?.editorState || {},
   orthogroupState: sessionData?.orthogroupState || {},
   losatCache: sessionData?.losatCache || {},
-  losatDerivedCache: sessionData?.losatDerivedCache || {}
+  losatDerivedCache: sessionData?.losatDerivedCache || {},
+  proteinIdentityManifest: sessionData?.proteinIdentityManifest || {},
+  legacyArtifacts: sessionData?.legacyArtifacts || {}
 });
 
 export const projectDocumentMetadata = (sessionData) => ({

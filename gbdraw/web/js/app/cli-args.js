@@ -8,14 +8,10 @@ const CLI_DEFAULT_FEATURES = Object.freeze([
   'repeat_region'
 ]);
 
-const DEFAULT_DIRECTIONAL_FEATURE_TYPES = new Set([
-  'CDS',
-  'rRNA',
-  'tRNA',
-  'tmRNA',
-  'ncRNA',
-  'misc_RNA'
-]);
+import {
+  defaultFeatureRendering,
+  normalizeFeatureRenderingMap
+} from '../utils/feature-rendering.js';
 
 export const DEFINITION_LINE_STYLE_KINDS = Object.freeze(['name', 'subtitle', 'replicon', 'accession', 'length']);
 
@@ -39,10 +35,6 @@ const normalizeFeatureList = (features) => {
     .map((featureType) => String(featureType || '').trim())
     .filter(Boolean);
 };
-
-const normalizeFeatureShape = (value) => (
-  String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle'
-);
 
 const normalizeDefinitionLineFontSize = (value) => {
   if (value === null || value === undefined) return null;
@@ -105,10 +97,6 @@ export const buildDefinitionLineStyleAssignments = (source) => {
   return assignments;
 };
 
-const defaultFeatureShape = (featureType) => (
-  DEFAULT_DIRECTIONAL_FEATURE_TYPES.has(String(featureType || '').trim()) ? 'arrow' : 'rectangle'
-);
-
 const numericEquivalent = (left, right) => {
   const leftNumber = Number(left);
   const rightNumber = Number(right);
@@ -136,14 +124,23 @@ export const isCliDefaultFeatureList = (features) => {
     normalized.every((featureType, index) => featureType === CLI_DEFAULT_FEATURES[index]);
 };
 
-export const buildFeatureShapeAssignments = (features, featureShapes) => (
-  normalizeFeatureList(features)
+export const buildFeatureShapeAssignments = (features, featureShapes) => {
+  const normalizedShapes = normalizeFeatureRenderingMap(featureShapes || {});
+  const featureTypes = [
+    ...normalizeFeatureList(features),
+    ...Object.keys(normalizedShapes)
+  ].filter((featureType, index, values) => values.indexOf(featureType) === index);
+  return featureTypes
     .map((featureType) => {
-      const shape = normalizeFeatureShape(featureShapes?.[featureType]);
-      return shape === defaultFeatureShape(featureType) ? null : `${featureType}=${shape}`;
+      const shape = Object.prototype.hasOwnProperty.call(normalizedShapes, featureType)
+        ? normalizedShapes[featureType]
+        : defaultFeatureRendering(featureType);
+      return shape === 'underlay' || shape !== defaultFeatureRendering(featureType)
+        ? `${featureType}=${shape}`
+        : null;
     })
-    .filter(Boolean)
-);
+    .filter(Boolean);
+};
 
 export const buildBlastFilterArgs = (filters, defaults = DEFAULT_LINEAR_BLAST_FILTERS) => {
   const args = [];

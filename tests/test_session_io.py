@@ -1,22 +1,36 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 import gbdraw.circular as circular_cli_module
+from gbdraw.analysis.protein_colinearity import (
+    build_protein_losat_cache_key,
+    build_protein_losat_pair_identity,
+    extract_web_stable_cds_proteins,
+)
 from gbdraw.circular import circular_main
-from gbdraw.linear import _get_args as get_linear_args
+from gbdraw.linear import (
+    _get_args as get_linear_args,
+    _record_instance_keys_for_web_losat,
+    _source_session_legacy_protein_candidates,
+    _source_session_losat_entries,
+)
 from gbdraw.cli_utils.session import (
+    DiagramRunResult,
     collect_embedded_files_from_cli_args,
     make_rendered_svg,
     parse_session_pre_args,
     resolve_session_sidecar_path,
+    save_session_sidecar_if_requested,
     strip_session_output_args,
 )
 from gbdraw.exceptions import ValidationError
@@ -31,6 +45,10 @@ from gbdraw.api.requests import (
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
+    LOSAT_DERIVED_CACHE_SCHEMA,
+    NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    PROTEIN_LOSAT_CACHE_SCHEMA,
+    SESSION_LOSAT_CACHE_BYTE_LIMIT,
     SESSION_FORMAT,
     SUPPORTED_SESSION_VERSIONS,
     SessionBuildContext,
@@ -38,6 +56,9 @@ from gbdraw.session_io import (
     decode_depth_payload,
     load_session,
     materialize_embedded_file,
+    migrate_legacy_repeat_feature_shape_args,
+    prune_serialized_losat_artifacts,
+    serialized_losat_artifact_byte_length,
     session_to_cli_args,
     validate_session,
     write_session_json,
@@ -73,12 +94,380 @@ def _canonical_request(mode: str):
     return CircularDiagramRequest(records=(record_input,))
 
 
+def _protein_identity_manifest() -> dict:
+    records = []
+    for record_id, protein_id in (("A", "protein-a"), ("B", "protein-b")):
+        record = SeqRecord(
+            Seq("ATG"),
+            id=record_id,
+            annotations={"molecule_type": "DNA"},
+        )
+        record.features = [
+            SeqFeature(
+                FeatureLocation(0, 3, strand=1),
+                type="CDS",
+                qualifiers={"translation": ["M"], "protein_id": [protein_id]},
+            )
+        ]
+        records.append(record)
+    extraction = extract_web_stable_cds_proteins(
+        records,
+        record_instance_keys=("record-1", "record-2"),
+    )
+    assert extraction.identity_manifest is not None
+    return extraction.identity_manifest.to_dict()
+
+
+def _current_protein_cache_entry() -> dict:
+    manifest = _protein_identity_manifest()
+    feature_a = next(
+        iter(manifest["recordInstances"]["record-1"]["transportIds"])
+    )
+    feature_b = next(
+        iter(manifest["recordInstances"]["record-2"]["transportIds"])
+    )
+    query_transport = manifest["recordInstances"]["record-1"]["transportIds"][
+        feature_a
+    ]
+    subject_transport = manifest["recordInstances"]["record-2"]["transportIds"][
+        feature_b
+    ]
+    analysis_a = manifest["recordInstances"]["record-1"]["recordAnalysisId"]
+    analysis_b = manifest["recordInstances"]["record-2"]["recordAnalysisId"]
+    pair_identity = build_protein_losat_pair_identity(
+        manifest,
+        query_record_instance_key="record-1",
+        subject_record_instance_key="record-2",
+    )
+    return {
+        "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
+        "kind": "raw-losat",
+        "identityKind": "protein",
+        "key": build_protein_losat_cache_key(pair_identity, args=[]),
+        "text": (
+            f"{query_transport}\t{subject_transport}\t"
+            "100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
+        ),
+        "program": "blastp",
+        "outfmt": "6",
+        "args": [],
+        "queryProteinSetHash": manifest["recordAnalyses"][analysis_a][
+            "proteinSetHash"
+        ],
+        "subjectProteinSetHash": manifest["recordAnalyses"][analysis_b][
+            "proteinSetHash"
+        ],
+        "queryBindingHash": manifest["recordInstances"]["record-1"][
+            "bindingHash"
+        ],
+        "subjectBindingHash": manifest["recordInstances"]["record-2"][
+            "bindingHash"
+        ],
+        "queryRecordInstanceKey": "record-1",
+        "subjectRecordInstanceKey": "record-2",
+    }
+
+
+def _legacy_protein_cache_entry() -> dict:
+    return {
+        "schema": NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+        "kind": "raw-losat",
+        "key": "legacy-protein-key",
+        "text": "p_r_old\tp_r_other\n",
+        "program": "blastp",
+        "outfmt": "6",
+        "args": [],
+        "queryCanonicalHash": "old-query",
+        "subjectCanonicalHash": "old-subject",
+    }
+
+
+def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None:
+    output_prefix = tmp_path / "diagram"
+    rendered_svg = make_rendered_svg(str(output_prefix))
+    rendered_svg.svg_path.write_text("<svg></svg>", encoding="utf-8")
+    sidecar = tmp_path / "diagram.gbdraw-session.json"
+    run_result = DiagramRunResult(
+        mode="linear",
+        render_formats=("interactive_svg",),
+        outputs=(rendered_svg,),
+        feature_metadata=({"svg_id": "feature-1", "orthogroup_id": "og_1"},),
+        biological_feature_metadata=(
+            {
+                "svg_id": "feature-1",
+                "stable_feature_id": "feature-1",
+                "record_idx": 0,
+                "nucleotide_sequence": "ATGC",
+            },
+            {
+                "svg_id": "feature-2",
+                "stable_feature_id": "feature-2",
+                "record_idx": 1,
+                "nucleotide_sequence": "ATGA",
+            },
+        ),
+        orthogroup_metadata=(
+            {
+                "id": "og_1",
+                "member_count": 2,
+                "members": [
+                    {"featureSvgId": "feature-1", "proteinId": "protein-1"},
+                    {"featureSvgId": "feature-2", "proteinId": "protein-2"},
+                ],
+            },
+        ),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    saved = save_session_sidecar_if_requested(
+        save_session=True,
+        session_output=str(sidecar),
+        output_prefix=str(output_prefix),
+        run_result=run_result,
+        cmd_args=(),
+    )
+
+    assert saved == sidecar
+    payload = load_session(sidecar)
+    assert payload["features"]["extractedFeatures"][0]["orthogroup_id"] == "og_1"
+    assert [
+        feature["stable_feature_id"]
+        for feature in payload["features"]["biologicalFeatures"]
+    ] == ["feature-1", "feature-2"]
+    group = payload["orthogroupState"]["groups"][0]
+    assert group["id"] == "og_1"
+    assert [member["proteinId"] for member in group["members"]] == [
+        "protein-1",
+        "protein-2",
+    ]
+
+
 def test_current_session_version_matches_web_config() -> None:
     source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
     match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
     assert match is not None
-    assert CURRENT_SESSION_VERSION == 33
+    assert CURRENT_SESSION_VERSION == 35
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
+
+
+def test_v35_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        losat_cache_entries=(
+            _current_protein_cache_entry(),
+            {
+                "schema": NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+                "kind": "raw-losat",
+                "identityKind": "nucleotide",
+                "key": "nucleotide-key",
+                "text": "",
+                "program": "blastn",
+                "outfmt": "6",
+                "args": [],
+                "queryCanonicalHash": "query",
+                "subjectCanonicalHash": "subject",
+            },
+        ),
+        losat_derived_cache_entries=(
+            {
+                "schema": LOSAT_DERIVED_CACHE_SCHEMA,
+                "kind": "derived-losatp-payload",
+                "key": "derived-key",
+                "mode": "orthogroup",
+                "payload": {},
+            },
+        ),
+        protein_identity_manifest=_protein_identity_manifest(),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    validate_session(payload)
+    assert [entry["schema"] for entry in payload["losatCache"]["entries"]] == [
+        PROTEIN_LOSAT_CACHE_SCHEMA,
+        NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    ]
+    assert payload["losatDerivedCache"]["entries"][0]["schema"] == 2
+
+
+def test_current_cache_artifacts_are_pruned_by_serialized_byte_size() -> None:
+    raw_entries = [
+        {"key": "raw-first-visible", "display": True, "text": "a" * 40},
+        {"key": "raw-middle-visible", "display": True, "text": "b" * 40},
+        {"key": "raw-last-hidden", "display": False, "text": "c" * 40},
+    ]
+    derived_entries = [
+        {"key": "derived-first", "payload": "d" * 40},
+        {"key": "derived-last", "payload": "e" * 40},
+    ]
+    exact_budget = 28 + sum(
+        len(
+            json.dumps(
+                entry,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+        for entry in (raw_entries[2], derived_entries[1])
+    )
+
+    raw, derived = prune_serialized_losat_artifacts(
+        raw_entries,
+        derived_entries,
+        max_bytes=exact_budget,
+    )
+
+    assert [entry["key"] for entry in raw] == ["raw-last-hidden"]
+    assert [entry["key"] for entry in derived] == ["derived-last"]
+    assert serialized_losat_artifact_byte_length(raw, derived) == exact_budget
+    assert SESSION_LOSAT_CACHE_BYTE_LIMIT == 109_051_904
+
+
+def test_v35_rejects_legacy_protein_entry_in_current_cache() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+    payload["losatCache"]["entries"] = [_legacy_protein_cache_entry()]
+
+    with pytest.raises(ValidationError, match="legacyArtifacts.proteinRawCandidates"):
+        validate_session(payload)
+
+
+def test_v35_writer_quarantines_legacy_protein_and_derived_entries(
+    tmp_path: Path,
+) -> None:
+    legacy_raw = _legacy_protein_cache_entry()
+    legacy_derived = {
+        "schema": 1,
+        "kind": "derived-losatp-payload",
+        "key": "legacy-derived-key",
+        "mode": "orthogroup",
+        "payload": {"groups": []},
+    }
+    source = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="old",
+            render_formats=("svg",),
+        ),
+        svg_results=(("old", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 20),
+        canonical_request=_canonical_request("linear"),
+    )
+    source["version"] = 34
+    source["losatCache"] = {"entries": [legacy_raw]}
+    source["losatDerivedCache"] = {"entries": [legacy_derived]}
+    source.pop("proteinIdentityManifest")
+
+    promoted = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="new",
+            render_formats=("svg",),
+            source_session=source,
+        ),
+        svg_results=(("new", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    assert promoted["version"] == 35
+    assert promoted["losatCache"]["entries"] == []
+    assert promoted["losatDerivedCache"]["entries"] == []
+    assert promoted["legacyArtifacts"]["proteinRawCandidates"]["entries"] == [
+        {
+            "state": "pending",
+            "originalEntry": legacy_raw,
+            "rejectionReason": None,
+        }
+    ]
+    assert promoted["legacyArtifacts"]["proteinDerivedEvidence"]["entries"] == [
+        legacy_derived
+    ]
+    assert promoted["proteinIdentityManifest"] == {
+        "schema": 1,
+        "proteinSets": {},
+        "recordAnalyses": {},
+        "recordInstances": {},
+    }
+
+    session_path = tmp_path / "promoted.gbdraw-session.json.gz"
+    write_session_json(session_path, promoted)
+    assert load_session(session_path) == promoted
+
+
+def test_linear_protein_instance_keys_use_canonical_record_keys_not_file_metadata() -> None:
+    source = {
+        "renderRequest": {
+            "records": [
+                {"recordKey": "stable-left"},
+                {"recordKey": "stable-right"},
+            ]
+        },
+        "files": {
+            "linearSeqs": [
+                {"gb": {"name": "renamed-a.gb", "lastModified": 999}},
+                {"gb": {"name": "renamed-b.gb", "lastModified": 123}},
+            ]
+        },
+    }
+
+    assert _record_instance_keys_for_web_losat(
+        source_session=source,
+        record_count=2,
+    ) == ("stable-left", "stable-right")
+    assert _record_instance_keys_for_web_losat(
+        source_session=None,
+        record_count=2,
+    ) == ("record-1", "record-2")
+
+
+def test_linear_source_cache_restores_legacy_candidate_original_entries() -> None:
+    current = {
+        **_current_protein_cache_entry(),
+        "key": "current-protein-key",
+    }
+    legacy = _legacy_protein_cache_entry()
+    session = {
+        "losatCache": {"entries": [current]},
+        "legacyArtifacts": {
+            "proteinRawCandidates": {
+                "schema": 1,
+                "entries": [
+                    {
+                        "state": "pending",
+                        "originalEntry": legacy,
+                        "rejectionReason": None,
+                    }
+                ],
+            }
+        },
+    }
+
+    assert _source_session_losat_entries(session) == (current, legacy)
+    assert _source_session_legacy_protein_candidates(session) == (
+        {
+            "state": "pending",
+            "originalEntry": legacy,
+            "rejectionReason": None,
+        },
+    )
 
 
 def test_future_session_version_fails() -> None:
@@ -95,6 +484,48 @@ def test_session_version_27_remains_supported() -> None:
 
     validate_session(session)
     assert 27 in SUPPORTED_SESSION_VERSIONS
+
+
+def test_legacy_cli_repeat_shape_migration_is_selective_and_idempotent() -> None:
+    args = ["--gbk", "input.gb", "-f", "svg"]
+    migrated = migrate_legacy_repeat_feature_shape_args(args, session_version=30)
+    assert migrated == [
+        "--gbk",
+        "input.gb",
+        "--feature_shape",
+        "repeat_region=rectangle",
+        "-f",
+        "svg",
+    ]
+    assert migrate_legacy_repeat_feature_shape_args(
+        migrated, session_version=30
+    ) == migrated
+    assert migrate_legacy_repeat_feature_shape_args(
+        ["--features", "CDS,tRNA"], session_version=30
+    ) == ["--features", "CDS,tRNA"]
+    assert migrate_legacy_repeat_feature_shape_args(
+        ["--feature_shape", "repeat_region=underlay"], session_version=30
+    ) == ["--feature_shape", "repeat_region=underlay"]
+    assert migrate_legacy_repeat_feature_shape_args(args, session_version=31) == args
+
+
+def test_legacy_gui_config_migrates_repeat_to_rectangle_without_mutating_source(
+    tmp_path: Path,
+) -> None:
+    session = _minimal_session({"c_gb": _file_entry("input.gb", b"LOCUS       A\n")})
+    session["config"]["adv"]["features"] = ["CDS", "repeat_region"]
+
+    spec = session_to_cli_args(
+        session,
+        mode="circular",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assignment_index = spec.args.index("--feature_shape")
+    assert spec.args[assignment_index + 1] == "repeat_region=rectangle"
+    assert "feature_shapes" not in session["config"]["adv"]
 
 
 def test_canonical_session_version_32_remains_supported() -> None:

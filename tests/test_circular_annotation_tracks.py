@@ -105,6 +105,38 @@ def test_circular_origin_annotation_renders_two_safe_paths() -> None:
     assert svg.count("A ") >= 2
 
 
+def test_circular_highlight_automatically_renders_behind_features() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    annotation = RegionAnnotation(
+        "highlighted",
+        CoordinateSpan(None, 100, 300),
+        label="Highlighted region",
+        mark="highlight",
+    )
+    drawing = build_circular_diagram(
+        record,
+        options=DiagramOptions(
+            annotations=AnnotationOptions(
+                sets=(AnnotationSet("regions", (annotation,)),)
+            )
+        ),
+    )
+    svg = drawing.tostring()
+    slots = {
+        slot["slotId"]: slot
+        for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert slots["annotations_1"]["side"] == "overlay"
+    assert slots["annotations_1"]["radiusFactor"] == slots["features"]["radiusFactor"]
+    assert slots["annotations_1"]["widthPx"] == pytest.approx(
+        slots["features"]["widthPx"]
+    )
+    assert 'data-gbdraw-annotation-mark="highlight"' in svg
+    assert 'fill="#94a3b8"' in svg
+    assert svg.index('data-gbdraw-annotation-id="highlighted"') < svg.index('<g id="r1"')
+
+
 def test_circular_multi_record_annotations_bind_by_record_index() -> None:
     records = [
         SeqRecord(Seq("A" * 1000), id="duplicate", name="duplicate"),

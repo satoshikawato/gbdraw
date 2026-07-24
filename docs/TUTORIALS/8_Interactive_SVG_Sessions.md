@@ -129,6 +129,10 @@ Click **Load Session**, then choose the `.gbdraw-session.json` file to restore i
 
 The web app's **Save Session** action downloads a lossless gzip-compressed `.gbdraw-session.json.gz` file. **Load Session** accepts both this compressed form and the uncompressed `.gbdraw-session.json` files written by the CLI.
 
+Current Python and Web writers use session version 35 with canonical `renderRequest` schema 3. Readers accept versions 27 through 35; public typed conversion starts at version 31, while versions 27 through 30 remain CLI replay inputs.
+
+For Linear protein comparisons, version 35 stores stable protein identities in a schema-1 manifest, current protein raw cache entries as schema 3, and derived comparison payloads as schema 2. Nucleotide raw cache entries remain schema 2. Older protein cache entries are isolated as legacy candidates instead of being treated as current hits. Saving immediately after loading an older session preserves those candidates, even before **Generate Diagram**; generation promotes only candidates that can be verified against the restored proteins and search settings.
+
 ![Local gbdraw web app after loading a session, with the embedded GenBank input, circular settings, and saved result restored](./images/tutorial-8-loaded-session.png)
 
 [< Back to the guide index](./TUTORIALS.md)

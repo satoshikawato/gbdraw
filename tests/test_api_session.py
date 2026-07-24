@@ -118,6 +118,38 @@ def test_session_document_gzip_save_load(tmp_path: Path) -> None:
     assert document.mode == "circular"
 
 
+def test_current_document_quarantines_legacy_protein_cache_on_save(
+    tmp_path: Path,
+) -> None:
+    legacy_entry = {
+        "schema": 2,
+        "kind": "raw-losat",
+        "key": "legacy-key",
+        "text": "p_r_old\tp_r_other\n",
+        "program": "blastp",
+    }
+    session_path = tmp_path / "legacy-round-trip.gbdraw-session.json"
+
+    saved = save_session_document(
+        session_path,
+        LinearDiagramRequest(records=(_record(),)),
+        adjunct={"losatCache": {"entries": [legacy_entry]}},
+    )
+    reloaded = load_session_document(session_path)
+
+    assert saved.version == reloaded.version == CURRENT_SESSION_VERSION
+    assert reloaded.to_dict()["losatCache"]["entries"] == []
+    assert reloaded.to_dict()["legacyArtifacts"]["proteinRawCandidates"][
+        "entries"
+    ] == [
+        {
+            "state": "pending",
+            "originalEntry": legacy_entry,
+            "rejectionReason": None,
+        }
+    ]
+
+
 def test_legacy_session_has_no_public_typed_conversion(tmp_path: Path) -> None:
     document = load_session_document(
         {

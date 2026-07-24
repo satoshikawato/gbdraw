@@ -67,7 +67,9 @@ const state = {
 };
 const editor = createAnnotationEditor({ state });
 const created = editor.addAnnotationSet('review');
-editor.addCoordinateAnnotation(created, { start: 5, end: 8 });
+const addedCoordinate = editor.addCoordinateAnnotation(created, { start: 5, end: 8 });
+assert.equal(addedCoordinate.mark, 'highlight');
+assert.equal(created.defaultStyle.fill, '#94a3b8');
 created.annotations[0].target.record = { kind: 'recordIndex', index: 1 };
 editor.setAnnotationTargetKind(created.annotations[0], 'featureSpan');
 assert.deepEqual(created.annotations[0].target.record, { kind: 'recordIndex', index: 1 });

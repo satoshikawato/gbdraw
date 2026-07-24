@@ -37,8 +37,12 @@ import {
 import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
+import {
+  defaultFeatureRendering,
+  normalizeFeatureRenderingMap
+} from '../utils/feature-rendering.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 2;
+export const CANONICAL_REQUEST_SCHEMA = 3;
 
 const safePrefix = (value) => {
   const normalized = String(value || '').trim().replace(/[\\/]+/g, '_');
@@ -82,11 +86,28 @@ const textToBase64 = (text) => {
 const normalizeResourceName = (resourceId, name) => {
   const basename = String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop();
   const safe = basename.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '');
-  return `${resourceId}-${safe || 'resource.dat'}`;
+  const prefix = `${resourceId}-`;
+  let leaf = safe || 'resource.dat';
+  while (leaf.startsWith(prefix)) {
+    leaf = leaf.slice(prefix.length);
+  }
+  return `${prefix}${leaf || 'resource.dat'}`;
+};
+
+const normalizeOriginalResourceName = (name) => {
+  const basename = String(name || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .pop()
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim();
+  if (!basename || basename === '.' || basename === '..') return '';
+  return basename.slice(0, 1024);
 };
 
 const createResourceBuilder = () => {
   const resources = {};
+  const resourceOriginalNames = {};
 
   const addFile = (resourceId, kind, entry) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
@@ -102,6 +123,8 @@ const createResourceBuilder = () => {
       encoding: entry.encoding || 'base64',
       data: entry.data
     };
+    const originalName = normalizeOriginalResourceName(entry.name);
+    if (originalName) resourceOriginalNames[resourceId] = originalName;
     return resourceId;
   };
 
@@ -121,7 +144,7 @@ const createResourceBuilder = () => {
     return resourceId;
   };
 
-  return { resources, addFile, addText };
+  return { resources, resourceOriginalNames, addFile, addText };
 };
 
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
@@ -291,6 +314,10 @@ const buildConfigOverrides = (state) => {
     ruler_label_font_size: circular ? null : optionalNumber(adv.scale_font_size),
     scale_interval: optionalNumber(adv.scale_interval),
     tick_label_font_size: circular ? optionalNumber(adv.tick_label_font_size) : null,
+    outer_label_x_radius_offset: circular ? optionalNumber(adv.outer_label_x_offset) : null,
+    outer_label_y_radius_offset: circular ? optionalNumber(adv.outer_label_y_offset) : null,
+    inner_label_x_radius_offset: circular ? optionalNumber(adv.inner_label_x_offset) : null,
+    inner_label_y_radius_offset: circular ? optionalNumber(adv.inner_label_y_offset) : null,
     pairwise_match_style: circular ? null : adv.pairwise_match_style,
     legend_box_size: optionalNumber(adv.legend_box_size),
     legend_font_size: optionalNumber(adv.legend_font_size),
@@ -376,7 +403,7 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
   const rows = state.mode.value === 'linear'
     ? (filesData.linearSeqs || []).map((seq) => Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : []))
     : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount);
-  if (rows.every((row) => row.length === 0)) return;
+  if (!rows.some((row) => row.some(Boolean))) return;
   if (
     state.mode.value === 'circular' &&
     isRecordMajorDepthFileMatrix(filesData.c_depth) &&
@@ -414,14 +441,16 @@ const buildTracks = (state) => {
         state.adv.linear_track_slots,
         storedLinearAxisIndex
       )
-    : storedLinearAxisIndex;
+    : null;
   return {
     circularTrackSlots: circular && state.adv.circular_track_slots_enabled
       ? state.adv.circular_track_slots
           .filter((slot) => slot?.enabled !== false)
           .map((slot) => buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type))
       : null,
-    circularTrackAxisIndex: circular ? optionalNumber(state.adv.circular_track_slots_axis_index) : null,
+    circularTrackAxisIndex: circular && state.adv.circular_track_slots_enabled
+      ? optionalNumber(state.adv.circular_track_slots_axis_index)
+      : null,
     linearTrackSlots: !circular && state.adv.linear_track_slots_enabled
       ? state.adv.linear_track_slots
           .filter((slot) => slot?.enabled !== false)
@@ -558,7 +587,10 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
       plotTitlePosition: String(state.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
     },
     selectedFeaturesSet: Array.from(state.adv.features || []).map((value) => String(value)),
-    featureShapes: { ...(state.adv.feature_shapes || {}) },
+    featureShapes: {
+      repeat_region: defaultFeatureRendering('repeat_region'),
+      ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
+    },
     dinucleotide: String(state.adv.nt || 'GC').toUpperCase(),
     window: optionalPositiveInteger(state.adv.window_size),
     step: optionalPositiveInteger(state.adv.step_size),
@@ -614,6 +646,32 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
   addGeneratedTableResources(state, resources, diagramOptions);
   buildDepthResources({ state, filesData, resources, diagramOptions, recordCount: records.length });
 
+  [
+    ['colors-default-colors-file', filesData.d_color],
+    ['colors-color-table-file', filesData.t_color],
+    ['label-whitelist-file', filesData.whitelist],
+    ['qualifier-priority-file', filesData.qualifier_priority]
+  ].forEach(([resourceId, entry]) => {
+    if (!resources.resources[resourceId]) return;
+    const originalName = normalizeOriginalResourceName(entry?.name);
+    if (originalName) resources.resourceOriginalNames[resourceId] = originalName;
+  });
+
+  if (Object.keys(resources.resourceOriginalNames).length > 0) {
+    webFiles.resourceOriginalNames = { ...resources.resourceOriginalNames };
+  }
+  if (state.mode.value === 'circular' && state.cInputType.value === 'gb') {
+    const circularInputOriginalName = normalizeOriginalResourceName(filesData.c_gb?.name);
+    if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
+  }
+  if (state.mode.value === 'linear') {
+    webFiles.linearRecordMetadata = (filesData.linearSeqs || []).map((sequence, index) => ({
+      recordKey: String(records[index]?.recordKey || sequence?.uid || `record-${index + 1}`),
+      losatGencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
+      losatFilename: String(sequence?.losat_filename || '')
+    }));
+  }
+
   return {
     renderRequest: {
       schema: CANONICAL_REQUEST_SCHEMA,
@@ -632,6 +690,116 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
     resources: resources.resources,
     webFiles
   };
+};
+
+const recordSourceResourceId = (record, field) => {
+  const source = record?.source || {};
+  if (field === 'gb' && source.kind === 'genbank') return String(source.resourceId || '');
+  if (field === 'gff' && source.kind === 'gffFasta') return String(source.gffResourceId || '');
+  if (field === 'fasta' && source.kind === 'gffFasta') return String(source.fastaResourceId || '');
+  return '';
+};
+
+const referencedResourceId = (ref) => String(ref?.resourceId || '').trim();
+
+const addResourceOriginalNameHint = (target, resourceId, name) => {
+  const id = String(resourceId || '').trim();
+  const originalName = normalizeOriginalResourceName(name);
+  if (!id || !originalName || Object.prototype.hasOwnProperty.call(target, id)) return;
+  target[id] = originalName;
+};
+
+const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings }) => {
+  const hints = {};
+  const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
+  const options = renderRequest?.diagramOptions || {};
+  const files = legacyFiles && typeof legacyFiles === 'object' && !Array.isArray(legacyFiles)
+    ? legacyFiles
+    : {};
+  const namedOptionResources = {
+    d_color: referencedResourceId(options.colors?.defaultColorsFile || options.colors?.defaultColors),
+    t_color: referencedResourceId(options.colors?.colorTableFile || options.colors?.colorTable),
+    whitelist: referencedResourceId(options.labelWhitelistFile),
+    qualifier_priority: referencedResourceId(
+      options.qualifierPriorityFile || options.qualifierPriorityTable
+    )
+  };
+  Object.entries(namedOptionResources).forEach(([slot, resourceId]) => {
+    addResourceOriginalNameHint(hints, resourceId, files?.[slot]?.name);
+  });
+
+  if (renderRequest?.mode === 'linear') {
+    const sequences = Array.isArray(files.linearSeqs) ? files.linearSeqs : [];
+    records.forEach((record, index) => {
+      const sequence = sequences[index] || {};
+      ['gb', 'gff', 'fasta'].forEach((field) => {
+        addResourceOriginalNameHint(
+          hints,
+          recordSourceResourceId(record, field),
+          sequence?.[field]?.name
+        );
+      });
+    });
+  } else {
+    const record = records[0];
+    ['gb', 'gff', 'fasta'].forEach((field) => {
+      addResourceOriginalNameHint(
+        hints,
+        recordSourceResourceId(record, field),
+        files?.[`c_${field}`]?.name
+      );
+    });
+  }
+
+  (Array.isArray(fileBindings) ? fileBindings : []).forEach((binding) => {
+    const slot = String(binding?.slot || '');
+    const normalizedSlot = slot.replace(/^files\./, '');
+    if (Object.prototype.hasOwnProperty.call(namedOptionResources, normalizedSlot)) {
+      addResourceOriginalNameHint(
+        hints,
+        namedOptionResources[normalizedSlot],
+        binding?.name
+      );
+      return;
+    }
+    const linearMatch = slot.match(/^(?:files\.)?linearSeqs\[(\d+)\]\.(gb|gff|fasta)$/);
+    if (linearMatch) {
+      const record = records[Number(linearMatch[1])];
+      addResourceOriginalNameHint(
+        hints,
+        recordSourceResourceId(record, linearMatch[2]),
+        binding?.name
+      );
+      return;
+    }
+    const circularMatch = slot.match(/^(?:files\.)?c_(gb|gff|fasta)$/);
+    if (circularMatch) {
+      addResourceOriginalNameHint(
+        hints,
+        recordSourceResourceId(records[0], circularMatch[1]),
+        binding?.name
+      );
+    }
+  });
+
+  return hints;
+};
+
+const resourcesWithOriginalNames = (resources, originalNameHints) => {
+  const hints = originalNameHints && typeof originalNameHints === 'object' && !Array.isArray(originalNameHints)
+    ? originalNameHints
+    : {};
+  return Object.fromEntries(Object.entries(resources || {}).map(([resourceId, entry]) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [resourceId, entry];
+    const storedName = normalizeOriginalResourceName(entry.name);
+    const prefix = `${resourceId}-`;
+    let inferredName = storedName;
+    while (inferredName.startsWith(prefix) && inferredName.length > prefix.length) {
+      inferredName = inferredName.slice(prefix.length);
+    }
+    const originalName = normalizeOriginalResourceName(hints[resourceId]) || inferredName;
+    return [resourceId, originalName && originalName !== entry.name ? { ...entry, name: originalName } : entry];
+  }));
 };
 
 const resourceAsLegacyFile = (resources, resourceId) => {
@@ -666,6 +834,160 @@ const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
 
+const nestedConfigValue = (config, path) => {
+  let current = config;
+  for (const key of path.split('.')) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+    current = current[key];
+  }
+  return current;
+};
+
+const sharedLengthConfigValue = (config, path) => {
+  const value = nestedConfigValue(config, path);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  // The Web UI has one control for values that Python stores per genome length.
+  // Project them only when both variants encode the same explicit setting.
+  const shortValue = value.short;
+  const longValue = value.long;
+  if (shortValue === undefined || longValue === undefined) return undefined;
+  if (Object.is(shortValue, longValue)) return longValue;
+  const shortNumber = shortValue === null || String(shortValue).trim() === ''
+    ? Number.NaN
+    : Number(shortValue);
+  const longNumber = longValue === null || String(longValue).trim() === ''
+    ? Number.NaN
+    : Number(longValue);
+  return Number.isFinite(shortNumber) && shortNumber === longNumber ? longValue : undefined;
+};
+
+const projectFullConfigOverrides = (config, mode) => {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+  const paths = {
+    block_stroke_color: 'objects.features.block_stroke_color',
+    circular_axis_stroke_color: 'objects.axis.circular.stroke_color',
+    linear_axis_stroke_color: 'objects.axis.linear.stroke_color',
+    line_stroke_color: 'objects.features.line_stroke_color',
+    circular_definition_font_size: 'objects.definition.circular.font_size',
+    plot_title_font_size: 'objects.definition.circular.plot_title_font_size',
+    show_gc: 'canvas.show_gc',
+    show_skew: 'canvas.show_skew',
+    show_depth: 'canvas.show_depth',
+    show_labels: 'canvas.show_labels',
+    strandedness: 'canvas.strandedness',
+    resolve_overlaps: 'canvas.resolve_overlaps',
+    track_type: 'canvas.circular.track_type',
+    allow_inner_labels: 'canvas.circular.allow_inner_labels',
+    align_center: 'canvas.linear.align_center',
+    keep_definition_left_aligned: 'canvas.linear.keep_definition_left_aligned',
+    linear_track_layout: 'canvas.linear.track_layout',
+    linear_track_axis_gap: 'canvas.linear.track_axis_gap',
+    linear_ruler_on_axis: 'canvas.linear.ruler_on_axis',
+    comparison_height: 'canvas.linear.comparison_height',
+    gc_height: 'canvas.linear.default_gc_height',
+    depth_height: 'canvas.linear.depth_height',
+    normalize_length: 'canvas.linear.normalize_length',
+    label_rendering: 'labels.rendering',
+    circular_label_spacing: 'labels.spacing.circular',
+    circular_label_placement: 'labels.circular.placement',
+    linear_label_spacing: 'labels.spacing.linear',
+    label_placement: 'labels.linear.placement',
+    label_rotation: 'labels.linear.rotation',
+    label_blacklist: 'labels.filtering.blacklist_keywords',
+    linear_definition_line_styles: 'objects.definition.linear.line_styles',
+    linear_definition_show_replicon: 'objects.definition.linear.show_replicon',
+    linear_definition_show_accession: 'objects.definition.linear.show_accession',
+    linear_definition_show_length: 'objects.definition.linear.show_length',
+    gc_content_mode: 'objects.gc_content.mode',
+    gc_content_min_percent: 'objects.gc_content.min_percent',
+    gc_content_max_percent: 'objects.gc_content.max_percent',
+    gc_content_show_axis: 'objects.gc_content.show_axis',
+    gc_content_show_ticks: 'objects.gc_content.show_ticks',
+    gc_content_large_tick_interval: 'objects.gc_content.large_tick_interval',
+    gc_content_small_tick_interval: 'objects.gc_content.small_tick_interval',
+    gc_content_tick_font_size: 'objects.gc_content.tick_font_size',
+    depth_color: 'objects.depth.fill_color',
+    depth_min: 'objects.depth.min_depth',
+    depth_max: 'objects.depth.max_depth',
+    depth_normalize: 'objects.depth.normalize',
+    depth_show_axis: 'objects.depth.show_axis',
+    depth_show_ticks: 'objects.depth.show_ticks',
+    depth_large_tick_interval: 'objects.depth.large_tick_interval',
+    depth_small_tick_interval: 'objects.depth.small_tick_interval',
+    depth_tick_font_size: 'objects.depth.tick_font_size',
+    depth_share_axis: 'objects.depth.share_axis',
+    scale_style: 'objects.scale.style',
+    scale_stroke_color: 'objects.scale.stroke_color',
+    scale_label_color: 'objects.scale.label_color',
+    scale_stroke_width: 'objects.scale.stroke_width',
+    scale_interval: 'objects.scale.interval',
+    tick_label_font_size: 'objects.ticks.tick_labels.font_size',
+    outer_label_x_radius_offset: 'labels.unified_adjustment.outer_labels.x_radius_offset',
+    outer_label_y_radius_offset: 'labels.unified_adjustment.outer_labels.y_radius_offset',
+    inner_label_x_radius_offset: 'labels.unified_adjustment.inner_labels.x_radius_offset',
+    inner_label_y_radius_offset: 'labels.unified_adjustment.inner_labels.y_radius_offset',
+    pairwise_match_style: 'objects.blast_match.style'
+  };
+  const projected = Object.fromEntries(
+    Object.entries(paths)
+      .map(([name, path]) => [name, nestedConfigValue(config, path)])
+      .filter(([, value]) => value !== undefined)
+  );
+  const sharedLengthPaths = {
+    block_stroke_width: 'objects.features.block_stroke_width',
+    circular_axis_stroke_width: 'objects.axis.circular.stroke_width',
+    linear_axis_stroke_width: 'objects.axis.linear.stroke_width',
+    line_stroke_width: 'objects.features.line_stroke_width',
+    linear_definition_font_size: 'objects.definition.linear.font_size',
+    default_cds_height: 'canvas.linear.default_cds_height',
+    legend_box_size: 'objects.legends.color_rect_size',
+    legend_font_size: 'objects.legends.font_size',
+    scale_font_size: 'objects.scale.font_size',
+    ruler_label_font_size: 'objects.scale.ruler_label_font_size',
+    label_font_size: mode === 'linear' ? 'labels.font_size.linear' : 'labels.font_size'
+  };
+  Object.entries(sharedLengthPaths).forEach(([name, path]) => {
+    const value = sharedLengthConfigValue(config, path);
+    if (value !== undefined) projected[name] = value;
+  });
+  return projected;
+};
+
+const projectCircularConservationConfig = (options, files) => {
+  const sourceFiles = Array.isArray(files.c_conservation_blasts)
+    ? files.c_conservation_blasts
+    : [];
+  if (sourceFiles.length === 0) return undefined;
+  const labels = Array.isArray(options.conservationLabels)
+    ? options.conservationLabels.map((value) => String(value || '').trim())
+    : [];
+  const colors = Array.isArray(options.conservationColors)
+    ? options.conservationColors.map((value) => String(value || '').trim())
+    : [];
+  const series = sourceFiles.map((file, index) => {
+    const fileName = String(file?.name || `comparison-${index + 1}.tsv`);
+    const defaultLabel = fileName.replace(/\.[^.]+$/, '').trim() || `Comparison ${index + 1}`;
+    return {
+      fileName,
+      sourceIndex: index,
+      label: labels[index] || defaultLabel,
+      color: colors[index] || '',
+      losat_gencode: 1
+    };
+  });
+  return {
+    enabled: true,
+    source: 'upload',
+    losat_program: 'blastn',
+    subject_gencode: 1,
+    reference: String(options.conservationReference || 'auto'),
+    labels: series.map((entry) => entry.label).join(','),
+    series,
+    ring_width: optionalNumber(options.conservationRingWidth),
+    ring_gap: optionalNumber(options.conservationRingGap)
+  };
+};
+
 const projectCanonicalCircularMeasure = (measure) => {
   if (measure === null || measure === undefined) return null;
   if (!measure || typeof measure !== 'object' || Array.isArray(measure)) return measure;
@@ -685,7 +1007,7 @@ const projectCanonicalCircularSlot = (slot) => ({
   outer_gap_px: projectCanonicalCircularMeasure(slot?.outerGapPx ?? slot?.outer_gap_px)
 });
 
-const combineCircularGenbankResources = (resources, records) => {
+const combineCircularGenbankResources = (resources, records, originalName = '') => {
   const resourceIds = [];
   const seen = new Set();
   records.forEach((record) => {
@@ -709,7 +1031,7 @@ const combineCircularGenbankResources = (resources, records) => {
     })
     .join('');
   return {
-    name: 'canonical-circular-records.gb',
+    name: normalizeOriginalResourceName(originalName) || 'canonical-circular-records.gb',
     type: 'text/plain',
     size: binary.length,
     lastModified: Math.max(0, ...files.map((file) => Number(file.lastModified) || 0)),
@@ -720,12 +1042,14 @@ const combineCircularGenbankResources = (resources, records) => {
 
 export const projectCanonicalSessionRequest = ({
   renderRequest,
-  resources,
+  resources: canonicalResources,
   webFiles = {},
+  legacyFiles = null,
+  fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false
 }) => {
-  if (!renderRequest || ![1, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
+  if (!renderRequest || ![1, 2, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
   }
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
@@ -733,10 +1057,40 @@ export const projectCanonicalSessionRequest = ({
   }
   const records = Array.isArray(renderRequest.records) ? renderRequest.records : [];
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
+  const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
+    ? webFiles
+    : {};
+  const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
+  const resources = resourcesWithOriginalNames(canonicalResources, {
+    ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
+    ...(storedResourceOriginalNames && typeof storedResourceOriginalNames === 'object' &&
+      !Array.isArray(storedResourceOriginalNames) ? storedResourceOriginalNames : {})
+  });
+  const legacyCircularInputBinding = (Array.isArray(fileBindings) ? fileBindings : [])
+    .find((binding) => /^(?:files\.)?c_gb$/.test(String(binding?.slot || '')));
+  const circularInputOriginalName = normalizeOriginalResourceName(
+    webMetadata.circularInputOriginalName ||
+    legacyFiles?.c_gb?.name ||
+    legacyCircularInputBinding?.name ||
+    (records.length === 1 ? resources?.[records[0]?.source?.resourceId]?.name : '')
+  );
+  const savedLinearRecordMetadata = Array.isArray(webMetadata.linearRecordMetadata)
+    ? webMetadata.linearRecordMetadata
+    : [];
+  const savedLinearRecordMetadataByKey = new Map(
+    savedLinearRecordMetadata
+      .map((entry) => [String(entry?.recordKey || ''), entry])
+      .filter(([recordKey]) => recordKey)
+  );
+  const legacyLinearSequences = Array.isArray(legacyFiles?.linearSeqs)
+    ? legacyFiles.linearSeqs
+    : [];
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     const source = records[0]?.source || {};
-    if (source.kind === 'genbank') files.c_gb = combineCircularGenbankResources(resources, records);
+    if (source.kind === 'genbank') {
+      files.c_gb = combineCircularGenbankResources(resources, records, circularInputOriginalName);
+    }
     if (source.kind === 'gffFasta') {
       files.c_gff = resourceAsLegacyFile(resources, source.gffResourceId);
       files.c_fasta = resourceAsLegacyFile(resources, source.fastaResourceId);
@@ -746,6 +1100,8 @@ export const projectCanonicalSessionRequest = ({
       const source = record.source || {};
       const region = record.region || null;
       const selector = region?.selector || record.selector;
+      const savedMetadata = savedLinearRecordMetadataByKey.get(String(record.recordKey || '')) ||
+        savedLinearRecordMetadata[index] || legacyLinearSequences[index] || {};
       return {
         uid: String(record.recordKey || `canonical-seq-${index + 1}`),
         gb: source.kind === 'genbank' ? resourceAsLegacyFile(resources, source.resourceId) : null,
@@ -753,8 +1109,12 @@ export const projectCanonicalSessionRequest = ({
         fasta: source.kind === 'gffFasta' ? resourceAsLegacyFile(resources, source.fastaResourceId) : null,
         depth: null,
         blast: null,
-        losat_gencode: 1,
-        losat_filename: '',
+        losat_gencode: optionalPositiveInteger(
+          savedMetadata.losatGencode ?? savedMetadata.losat_gencode
+        ) || 1,
+        losat_filename: String(
+          savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
+        ),
         definition: record.presentation?.label || '',
         record_subtitle: record.presentation?.subtitle || '',
         region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),
@@ -878,12 +1238,15 @@ export const projectCanonicalSessionRequest = ({
       .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
       .filter(Boolean);
   }
-  if (renderRequest.mode === 'circular' && Array.isArray(webFiles.conservationSequenceSources)) {
-    files.c_conservation_sequence_sources = webFiles.conservationSequenceSources.map((resourceId) => (
+  if (renderRequest.mode === 'circular' && Array.isArray(webMetadata.conservationSequenceSources)) {
+    files.c_conservation_sequence_sources = webMetadata.conservationSequenceSources.map((resourceId) => (
       resourceId ? resourceAsLegacyFile(resources, resourceId) : null
     ));
   }
-  const overrides = options.configOverrides || {};
+  const overrides = {
+    ...projectFullConfigOverrides(options.config, renderRequest.mode),
+    ...(options.configOverrides || {})
+  };
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
   if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
     if (!repairInvalidComparisonHeight) {
@@ -988,9 +1351,24 @@ export const projectCanonicalSessionRequest = ({
     species: renderRequest.mode === 'circular' ? (options.species || '') : '',
     strain: renderRequest.mode === 'circular' ? (options.strain || '') : ''
   };
+  const projectedFeatureShapes = normalizeFeatureRenderingMap(options.featureShapes || {});
+  if (
+    !Object.prototype.hasOwnProperty.call(projectedFeatureShapes, 'repeat_region') &&
+    (
+      renderRequest.schema <= 2 ||
+      (
+        Array.isArray(options.selectedFeaturesSet) &&
+        options.selectedFeaturesSet.includes('repeat_region')
+      )
+    )
+  ) {
+    projectedFeatureShapes.repeat_region = renderRequest.schema <= 2
+      ? 'rectangle'
+      : defaultFeatureRendering('repeat_region');
+  }
   const adv = {
     features: options.selectedFeaturesSet || [],
-    feature_shapes: options.featureShapes || {},
+    feature_shapes: projectedFeatureShapes,
     nt: options.dinucleotide || 'GC',
     window_size: options.window ?? null,
     step_size: options.step ?? null,
@@ -1006,7 +1384,7 @@ export const projectCanonicalSessionRequest = ({
       ? (overrides.linear_label_spacing ?? null)
       : null,
     plot_title_position: options.output?.plotTitlePosition || (renderRequest.mode === 'linear' ? 'bottom' : 'none'),
-    plot_title_font_size: options.plotTitleFontSize ?? null,
+    plot_title_font_size: options.plotTitleFontSize ?? overrides.plot_title_font_size ?? null,
     def_font_size: renderRequest.mode === 'circular'
       ? (overrides.circular_definition_font_size ?? null)
       : (overrides.linear_definition_font_size ?? null),
@@ -1063,12 +1441,32 @@ export const projectCanonicalSessionRequest = ({
     depth_window_size: options.depthWindow ?? null,
     depth_step_size: options.depthStep ?? null,
     depth_tracks: projectedDepthTracks,
+    min_bitscore: options.bitscore ?? 50,
+    evalue: options.evalue === null || options.evalue === undefined
+      ? '1e-2'
+      : String(options.evalue),
+    identity: options.identity ?? 0,
+    alignment_length: options.alignmentLength ?? 0,
     scale_stroke_color: overrides.scale_stroke_color ?? null,
     ruler_label_color: overrides.scale_label_color ?? null,
     scale_stroke_width: overrides.scale_stroke_width ?? null,
-    scale_font_size: overrides.ruler_label_font_size ?? overrides.scale_font_size ?? null,
+    scale_font_size: form.scale_style === 'ruler'
+      ? (overrides.ruler_label_font_size ?? overrides.scale_font_size ?? null)
+      : (overrides.scale_font_size ?? overrides.ruler_label_font_size ?? null),
     scale_interval: overrides.scale_interval ?? null,
     tick_label_font_size: overrides.tick_label_font_size ?? null,
+    outer_label_x_offset: renderRequest.mode === 'circular'
+      ? (overrides.outer_label_x_radius_offset ?? null)
+      : null,
+    outer_label_y_offset: renderRequest.mode === 'circular'
+      ? (overrides.outer_label_y_radius_offset ?? null)
+      : null,
+    inner_label_x_offset: renderRequest.mode === 'circular'
+      ? (overrides.inner_label_x_radius_offset ?? null)
+      : null,
+    inner_label_y_offset: renderRequest.mode === 'circular'
+      ? (overrides.inner_label_y_radius_offset ?? null)
+      : null,
     pairwise_match_style: overrides.pairwise_match_style || options.pairwiseMatchStyle || 'ribbon',
     circular_track_slots_enabled: renderRequest.mode === 'circular' && Array.isArray(tracks.circularTrackSlots),
     circular_track_slots_schema_version: 4,
@@ -1099,6 +1497,9 @@ export const projectCanonicalSessionRequest = ({
         comparisons: (files.linearComparisons || []).map(({ file: _file, ...comparison }) => comparison)
       }
     : undefined;
+  const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
+    ? overrides.label_blacklist.join(', ')
+    : String(overrides.label_blacklist || '');
   return {
     mode: renderRequest.mode,
     inputType: records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb',
@@ -1113,13 +1514,14 @@ export const projectCanonicalSessionRequest = ({
       qualifierPriorityRules: projectedPriorityRules,
       filterMode: projectedWhitelist.length > 0
         ? 'Whitelist'
-        : (overrides.label_blacklist ? 'Blacklist' : 'None'),
+        : (projectedBlacklistText.trim() ? 'Blacklist' : 'None'),
       whitelist: projectedWhitelist,
-      blacklistText: Array.isArray(overrides.label_blacklist)
-        ? overrides.label_blacklist.join(', ')
-        : String(overrides.label_blacklist || ''),
+      blacklistText: projectedBlacklistText,
       linearRecordLayout: linearLayout,
-      annotationSets: normalizeAnnotationSets(options.annotations?.sets)
+      annotationSets: normalizeAnnotationSets(options.annotations?.sets),
+      circularConservation: renderRequest.mode === 'circular'
+        ? projectCircularConservationConfig(options, files)
+        : undefined
     },
     semanticFeatureState: {
       featureVisibilityManualRules: projectedFeatureVisibilityRules,

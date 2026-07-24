@@ -1,5 +1,14 @@
 const FEATURE_ID_KEY_EMPTY = '';
 
+export const DEFAULT_LABEL_QUALIFIER_PRIORITY = Object.freeze([
+  'product',
+  'gene',
+  'locus_tag',
+  'protein_id',
+  'old_locus_tag',
+  'note'
+]);
+
 export const SPECIFIC_COLOR_QUALIFIER_PRESETS = Object.freeze([
   'product',
   'gene',
@@ -160,6 +169,37 @@ export const normalizeFeatureSelectorMetadata = (feature, options = {}) => {
     qualifiers,
     hasSelectorMetadata
   };
+};
+
+export const resolveFeatureLabelSelector = (feature, label, options = {}) => {
+  const target = normalizeSelectorText(label).toLowerCase();
+  if (!target) return null;
+
+  const sourceQualifiers = normalizeQualifierMap(feature?.qualifiers);
+  const selectorQualifiers = normalizeQualifierMap(feature?.selector?.qualifiers);
+  const qualifiers = { ...sourceQualifiers, ...selectorQualifiers };
+  const requestedPriority = Array.isArray(options.priority) ? options.priority : [];
+  const qualifierOrder = [...new Set([
+    ...requestedPriority,
+    ...DEFAULT_LABEL_QUALIFIER_PRIORITY,
+    ...Object.keys(qualifiers)
+  ].map((qualifier) => normalizeSelectorText(qualifier).toLowerCase()).filter(Boolean))];
+
+  for (const qualifier of qualifierOrder) {
+    const values = Array.isArray(qualifiers[qualifier])
+      ? qualifiers[qualifier]
+      : [];
+    const matchedValue = values.find((value) => normalizeSelectorText(value).toLowerCase() === target);
+    if (matchedValue === undefined) continue;
+    const value = String(matchedValue);
+    return {
+      qualifier,
+      value,
+      pattern: exactRegexValue(value)
+    };
+  }
+
+  return null;
 };
 
 export const buildFeatureMetadataMap = (features, options = {}) => {

@@ -6,7 +6,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 from types import MappingProxyType
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Literal, Mapping, Sequence
+
+
+CollisionBandKind = Literal["body", "comparison", "definition"]
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,205 @@ class VerticalBand:
             self.top_y < other.bottom_y - tolerance
             and self.bottom_y > other.top_y + tolerance
         )
+
+
+@dataclass(frozen=True)
+class CollisionBand:
+    """One X-scoped vertical collision interval in record-axis coordinates."""
+
+    kind: CollisionBandKind
+    x_start: float
+    x_end: float
+    top_y: float
+    bottom_y: float
+
+    def __post_init__(self) -> None:
+        kind = str(self.kind).strip().lower()
+        if kind not in {"body", "comparison", "definition"}:
+            raise ValueError(
+                "collision band kind must be 'body', 'comparison', or 'definition'"
+            )
+        values = {
+            "x_start": float(self.x_start),
+            "x_end": float(self.x_end),
+            "top_y": float(self.top_y),
+            "bottom_y": float(self.bottom_y),
+        }
+        if any(not math.isfinite(value) for value in values.values()):
+            raise ValueError("collision band coordinates must be finite")
+        if values["x_start"] > values["x_end"]:
+            raise ValueError("collision band x_start must not exceed x_end")
+        if values["top_y"] > values["bottom_y"]:
+            raise ValueError("collision band top_y must not exceed bottom_y")
+        object.__setattr__(self, "kind", kind)
+        for name, value in values.items():
+            object.__setattr__(self, name, value)
+
+    @property
+    def width(self) -> float:
+        return self.x_end - self.x_start
+
+    @property
+    def vertical_band(self) -> VerticalBand:
+        return VerticalBand(self.top_y, self.bottom_y)
+
+    def translate(self, *, x: float = 0.0, y: float = 0.0) -> CollisionBand:
+        offset_x = float(x)
+        offset_y = float(y)
+        if not math.isfinite(offset_x) or not math.isfinite(offset_y):
+            raise ValueError("collision band translation must be finite")
+        return CollisionBand(
+            self.kind,
+            self.x_start + offset_x,
+            self.x_end + offset_x,
+            self.top_y + offset_y,
+            self.bottom_y + offset_y,
+        )
+
+
+@dataclass(frozen=True)
+class AxisGapResolution:
+    """The maximum eligible constraint selected for one adjacent-row boundary."""
+
+    axis_gap: float
+    clear_gap: float = 0.0
+    current_band: CollisionBand | None = None
+    next_band: CollisionBand | None = None
+
+
+def collision_x_intervals_overlap(
+    first: CollisionBand,
+    second: CollisionBand,
+    *,
+    epsilon: float = 1e-9,
+) -> bool:
+    """Return whether two X intervals overlap by a positive width."""
+
+    tolerance = max(0.0, float(epsilon))
+    return min(first.x_end, second.x_end) > max(first.x_start, second.x_start) + tolerance
+
+
+def _validated_clearance(value: float, *, name: str) -> float:
+    resolved = float(value)
+    if not math.isfinite(resolved) or resolved < 0.0:
+        raise ValueError(f"{name} must be a finite non-negative number")
+    return resolved
+
+
+def _collision_clear_gap(
+    current_kind: CollisionBandKind,
+    next_kind: CollisionBandKind,
+    *,
+    ordinary_row_gap: float,
+    comparison_height: float,
+    definition_clear_gap: float,
+    boundary_has_comparison: bool,
+) -> float | None:
+    pair = (current_kind, next_kind)
+    if pair == ("body", "body"):
+        return ordinary_row_gap
+    if pair == ("comparison", "comparison"):
+        return comparison_height if boundary_has_comparison else None
+    if pair in {
+        ("definition", "definition"),
+        ("definition", "body"),
+        ("body", "definition"),
+    }:
+        return definition_clear_gap
+    return None
+
+
+def _validate_comparison_band_containment(
+    bands: Sequence[CollisionBand],
+    *,
+    epsilon: float = 1e-9,
+) -> None:
+    body_bands = tuple(band for band in bands if band.kind == "body")
+    tolerance = max(0.0, float(epsilon))
+    for comparison in (band for band in bands if band.kind == "comparison"):
+        contained = any(
+            body.x_start <= comparison.x_start + tolerance
+            and body.x_end >= comparison.x_end - tolerance
+            and body.top_y <= comparison.top_y + tolerance
+            and body.bottom_y >= comparison.bottom_y - tolerance
+            for body in body_bands
+        )
+        if not contained:
+            raise ValueError(
+                "comparison collision bands must be contained in a record body band"
+            )
+
+
+def resolve_axis_gap(
+    current_bands: Sequence[CollisionBand],
+    next_bands: Sequence[CollisionBand],
+    *,
+    ordinary_row_gap: float,
+    comparison_height: float,
+    definition_clear_gap: float,
+    boundary_has_comparison: bool,
+) -> AxisGapResolution:
+    """Resolve the largest eligible X-aware clearance for two adjacent rows."""
+
+    ordinary_gap = _validated_clearance(ordinary_row_gap, name="ordinary_row_gap")
+    comparison_gap = _validated_clearance(comparison_height, name="comparison_height")
+    definition_gap = _validated_clearance(
+        definition_clear_gap,
+        name="definition_clear_gap",
+    )
+    current = tuple(current_bands)
+    following = tuple(next_bands)
+    _validate_comparison_band_containment(current)
+    _validate_comparison_band_containment(following)
+
+    selected = AxisGapResolution(axis_gap=0.0)
+    for current_band in current:
+        for next_band in following:
+            if not collision_x_intervals_overlap(current_band, next_band):
+                continue
+            clear_gap = _collision_clear_gap(
+                current_band.kind,
+                next_band.kind,
+                ordinary_row_gap=ordinary_gap,
+                comparison_height=comparison_gap,
+                definition_clear_gap=definition_gap,
+                boundary_has_comparison=bool(boundary_has_comparison),
+            )
+            if clear_gap is None:
+                continue
+            candidate = max(
+                0.0,
+                current_band.bottom_y - next_band.top_y + clear_gap,
+            )
+            if candidate > selected.axis_gap:
+                selected = AxisGapResolution(
+                    axis_gap=candidate,
+                    clear_gap=clear_gap,
+                    current_band=current_band,
+                    next_band=next_band,
+                )
+    return selected
+
+
+def required_axis_gap(
+    current_bands: Sequence[CollisionBand],
+    next_bands: Sequence[CollisionBand],
+    *,
+    ordinary_row_gap: float,
+    comparison_height: float,
+    definition_clear_gap: float,
+    boundary_has_comparison: bool,
+) -> float:
+    """Return the required axis separation for two adjacent record rows."""
+
+    return resolve_axis_gap(
+        current_bands,
+        next_bands,
+        ordinary_row_gap=ordinary_row_gap,
+        comparison_height=comparison_height,
+        definition_clear_gap=definition_clear_gap,
+        boundary_has_comparison=boundary_has_comparison,
+    ).axis_gap
 
 
 def union_vertical_bands(
@@ -284,6 +486,7 @@ def measure_linear_feature_lanes(
     track_layout: str = "middle",
     axis_gap: float | None = None,
     stroke_width: float = 0.0,
+    include_nominal_lanes: bool = False,
 ) -> LinearFeatureLaneGeometry:
     """Measure feature lanes using the same factors consumed by the renderer."""
 
@@ -295,9 +498,20 @@ def measure_linear_feature_lanes(
         else None
     )
     lanes_by_identity: dict[tuple[str, int], LinearFeatureLane] = {}
-    for feature in feature_dict.values():
-        track_id = int(getattr(feature, "feature_track_id", 0))
-        strand = str(getattr(feature, "strand", "undefined"))
+    lane_sources = [
+        (
+            str(getattr(feature, "strand", "undefined")),
+            int(getattr(feature, "feature_track_id", 0)),
+        )
+        for feature in feature_dict.values()
+    ]
+    if not lane_sources and include_nominal_lanes:
+        lane_sources = (
+            [("positive", 0), ("negative", -1)]
+            if separate_strands
+            else [("undefined", 0)]
+        )
+    for strand, track_id in lane_sources:
         strand_pool = strand if separate_strands else "shared"
         identity = (strand_pool, track_id)
         if identity in lanes_by_identity:
@@ -368,13 +582,19 @@ def measure_linear_label_band(
 
 
 __all__ = [
+    "AxisGapResolution",
+    "CollisionBand",
+    "CollisionBandKind",
     "LinearFeatureLane",
     "LinearFeatureLaneGeometry",
     "VerticalBand",
     "calculate_feature_position_factors_linear",
+    "collision_x_intervals_overlap",
     "measure_linear_feature_lanes",
     "measure_linear_label_band",
     "resolve_feature_axis_gap_linear",
+    "required_axis_gap",
+    "resolve_axis_gap",
     "union_vertical_bands",
 ]
 

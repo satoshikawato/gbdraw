@@ -826,6 +826,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   var features = Array.isArray(payload.features) ? payload.features : [];
+  var hasBiologicalFeatureCatalog = Array.isArray(payload.biological_features);
+  var biologicalFeatures = hasBiologicalFeatureCatalog ? payload.biological_features : features;
   var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
   var matches = Array.isArray(payload.matches) ? payload.matches : [];
   var sequenceSources = Array.isArray(payload.sequence_sources) ? payload.sequence_sources : [];
@@ -871,6 +873,70 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (svgId && !featuresById.has(svgId)) {
       featuresById.set(svgId, feature);
     }
+  });
+  function featureRecordIndex(feature) {
+    var candidates = [
+      feature && feature.record_idx,
+      feature && feature.recordIndex,
+      feature && feature.record_index,
+      feature && feature.fileIdx,
+      feature && feature.file_idx
+    ];
+    for (var index = 0; index < candidates.length; index += 1) {
+      if (candidates[index] === null || candidates[index] === undefined || candidates[index] === '') continue;
+      var recordIndex = Number(candidates[index]);
+      if (Number.isInteger(recordIndex)) return recordIndex;
+    }
+    return null;
+  }
+
+  function biologicalFeatureStableSvgId(feature) {
+    return String(feature && (
+      feature.stable_svg_id ||
+      feature.stableFeatureSvgId ||
+      feature.stable_feature_svg_id ||
+      feature.stable_feature_id ||
+      feature.svg_id
+    ) || '').trim();
+  }
+
+  function biologicalFeatureKey(recordIndex, stableSvgId) {
+    return String(recordIndex) + ':' + String(stableSvgId || '').trim();
+  }
+
+  var biologicalFeaturesByRecordAndId = new Map();
+  var biologicalFeaturesById = new Map();
+  var ambiguousBiologicalRecordIds = new Set();
+  var ambiguousBiologicalIds = new Set();
+  function addBiologicalFeatureLookup(map, ambiguous, key, feature) {
+    if (!key || ambiguous.has(key)) return;
+    var existing = map.get(key);
+    if (existing && existing !== feature) {
+      map.delete(key);
+      ambiguous.add(key);
+      return;
+    }
+    map.set(key, feature);
+  }
+  biologicalFeatures.forEach(function (feature) {
+    var recordIndex = featureRecordIndex(feature);
+    var ids = [
+      biologicalFeatureStableSvgId(feature),
+      String(feature && feature.svg_id || '').trim()
+    ].filter(function (id, index, values) {
+      return id && values.indexOf(id) === index;
+    });
+    ids.forEach(function (id) {
+      if (Number.isInteger(recordIndex)) {
+        addBiologicalFeatureLookup(
+          biologicalFeaturesByRecordAndId,
+          ambiguousBiologicalRecordIds,
+          biologicalFeatureKey(recordIndex, id),
+          feature
+        );
+      }
+      addBiologicalFeatureLookup(biologicalFeaturesById, ambiguousBiologicalIds, id, feature);
+    });
   });
   var orthogroupsById = new Map();
   orthogroups.forEach(function (group) {
@@ -3072,6 +3138,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function memberFeatureSvgId(memberOrRow) {
     return String(memberOrRow && (
+      memberOrRow.stableFeatureSvgId ||
+      memberOrRow.stable_feature_svg_id ||
       memberOrRow.featureSvgId ||
       memberOrRow.feature_svg_id ||
       memberOrRow.svgId ||
@@ -3079,9 +3147,49 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     ) || '').trim();
   }
 
+  function memberRenderedFeatureSvgId(memberOrRow) {
+    var explicit = String(memberOrRow && (
+      memberOrRow.renderedFeatureSvgId ||
+      memberOrRow.rendered_feature_svg_id
+    ) || '').trim();
+    if (explicit) return explicit;
+    if (!hasBiologicalFeatureCatalog) return memberFeatureSvgId(memberOrRow);
+    var feature = biologicalFeatureForMember(memberOrRow);
+    return String(feature && (feature.rendered_svg_id || feature.renderedSvgId) || '').trim();
+  }
+
+  function memberRecordIndex(memberOrRow) {
+    var value = memberOrRow && (
+      memberOrRow.recordIndex !== undefined ? memberOrRow.recordIndex :
+      memberOrRow.record_index !== undefined ? memberOrRow.record_index :
+      memberOrRow.record_idx
+    );
+    if (value === null || value === undefined || value === '') return null;
+    var recordIndex = Number(value);
+    return Number.isInteger(recordIndex) ? recordIndex : null;
+  }
+
+  function biologicalFeatureForMember(memberOrRow) {
+    var stableSvgId = memberFeatureSvgId(memberOrRow);
+    var recordIndex = memberRecordIndex(memberOrRow);
+    if (stableSvgId && Number.isInteger(recordIndex)) {
+      var recordFeature = biologicalFeaturesByRecordAndId.get(
+        biologicalFeatureKey(recordIndex, stableSvgId)
+      );
+      if (recordFeature) return recordFeature;
+    }
+    if (stableSvgId) {
+      var biologicalFeature = biologicalFeaturesById.get(stableSvgId);
+      if (biologicalFeature) return biologicalFeature;
+    }
+    return null;
+  }
+
   function featureForMember(memberOrRow) {
-    var svgId = memberFeatureSvgId(memberOrRow);
-    return svgId ? featuresById.get(svgId) || null : null;
+    var biologicalFeature = biologicalFeatureForMember(memberOrRow);
+    if (biologicalFeature) return biologicalFeature;
+    var renderedSvgId = memberRenderedFeatureSvgId(memberOrRow);
+    return renderedSvgId ? featuresById.get(renderedSvgId) || null : null;
   }
 
   function featureSequenceFilename(feature, sequenceKind) {
@@ -3089,6 +3197,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var id = firstDisplayText(
       label === 'aa' ? displayProteinId(feature, null, '') : '',
       feature && (feature.display_label || feature.displayLabel || feature.label),
+      biologicalFeatureStableSvgId(feature),
       feature && feature.svg_id,
       'feature'
     );
@@ -3107,8 +3216,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       : firstDisplayText(feature.nucleotide_sequence, feature.nucleotideSequence);
     if (!normalizeSequence(sequence)) return '';
     var id = label === 'aa'
-      ? displayProteinId(feature, null, feature.svg_id || 'protein')
-      : firstDisplayText(feature.record_id, feature.recordId, feature.svg_id || 'record') + ':' + locationText(feature);
+      ? displayProteinId(feature, null, biologicalFeatureStableSvgId(feature) || feature.svg_id || 'protein')
+      : firstDisplayText(
+        feature.record_id,
+        feature.recordId,
+        biologicalFeatureStableSvgId(feature),
+        feature.svg_id || 'record'
+      ) + ':' + locationText(feature);
     return formatFastaEntry(id, featureDescription(feature), sequence);
   }
 
@@ -3326,6 +3440,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       var feature = featureForMember(member);
       return {
         featureSvgId: memberFeatureSvgId(member),
+        stableFeatureSvgId: memberFeatureSvgId(member),
+        renderedFeatureSvgId: memberRenderedFeatureSvgId(member),
+        recordIndex: memberRecordIndex(member),
         orthogroupId: orthogroupId,
         displayName: displayName,
         record: firstDisplayText(member && (member.recordId || member.record_id), feature && (feature.record_id || feature.recordId)),
@@ -3494,10 +3611,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var members = Array.isArray(group.members) ? group.members : [];
     return getOrthogroupIds(featureSvgIds).map(function (svgId) {
       var member = members.find(function (candidate) {
-        return memberFeatureSvgId(candidate) === svgId;
+        return memberRenderedFeatureSvgId(candidate) === svgId ||
+          memberFeatureSvgId(candidate) === svgId;
       }) || null;
       return firstDisplayText(
-        displayProteinId(featuresById.get(svgId) || null, member, ''),
+        displayProteinId(featureForMember(member) || featuresById.get(svgId) || null, member, ''),
         member && member.label,
         svgId
       );
@@ -3773,6 +3891,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return (Array.isArray(rows) ? rows : []).map(function (row) {
       return {
         featureSvgId: String(row && (row.featureSvgId || row.feature_svg_id || row.svgId || row.svg_id) || '').trim(),
+        stableFeatureSvgId: String(row && (
+          row.stableFeatureSvgId ||
+          row.stable_feature_svg_id ||
+          row.featureSvgId ||
+          row.feature_svg_id ||
+          row.svgId ||
+          row.svg_id
+        ) || '').trim(),
+        renderedFeatureSvgId: String(row && (
+          row.renderedFeatureSvgId || row.rendered_feature_svg_id
+        ) || '').trim(),
+        recordIndex: memberRecordIndex(row),
         orthogroupId: String(row && (row.orthogroupId || row.orthogroup_id) || '').trim(),
         displayName: String(row && (row.displayName || row.display_name) || '').trim(),
         record: String(row && (row.record || row.record_id) || '').trim(),
@@ -3812,8 +3942,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function normalizeMatchFeatureRows(rows) {
     return (Array.isArray(rows) ? rows : []).map(function (row, index) {
-      var svgId = String(row && (row.svgId || row.svg_id) || '').trim();
-      var canOpen = Boolean(row && (row.canOpen || row.can_open)) || Boolean(svgId && featuresById.has(svgId));
+      var svgId = String(row && (
+        row.renderedFeatureSvgId ||
+        row.rendered_feature_svg_id ||
+        row.svgId ||
+        row.svg_id
+      ) || '').trim();
+      var canOpen = Boolean(svgId && featuresById.has(svgId));
       return {
         key: String(row && row.key || svgId || index),
         svgId: svgId,

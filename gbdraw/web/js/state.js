@@ -10,6 +10,7 @@ import { collectSpecificColorQualifierSuggestions } from './app/feature-selector
 import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
 import { createSequenceSourceRegistry } from './app/match-sequences.js';
+import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -70,6 +71,9 @@ const svgContent = computed(() => {
         'class',
         'data-definition-line-kind',
         'data-gbdraw-feature-id',
+        'data-gbdraw-stable-feature-id',
+        'data-gbdraw-feature-part',
+        'data-gbdraw-auto-feature-underlay',
         'data-legend-key',
         'data-legend-owner',
         'data-label-key',
@@ -359,10 +363,7 @@ const linearComparisons = reactive([]);
 const annotationSets = reactive([]);
 const selectedAnnotation = ref(null);
 
-const defaultDirectionalFeatureTypes = ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA'];
-
-export const createDefaultFeatureShapes = () =>
-  Object.fromEntries(defaultDirectionalFeatureTypes.map((featureType) => [featureType, 'arrow']));
+export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
 
 export const createDefaultForm = () => ({
   prefix: '',
@@ -590,6 +591,14 @@ const losatThreadingStatus = ref({
 });
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());
+const proteinIdentityManifest = ref({
+  schema: 1,
+  proteinSets: {},
+  recordAnalyses: {},
+  recordInstances: {}
+});
+const legacyProteinRawCandidates = ref({ schema: 1, entries: [] });
+const legacyProteinDerivedEvidence = ref({ schema: 1, entries: [] });
 const orthogroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
@@ -648,15 +657,26 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
+const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
 );
 const featureSelectorSafetyScope = ref([]); // Python selector scope before feature visibility filtering
+const renderedFeatureSvgId = (feature) => {
+  return String(
+    feature?.rendered_svg_id ||
+    feature?.renderedSvgId ||
+    feature?.rendered_feature_svg_id ||
+    feature?.renderedFeatureSvgId ||
+    feature?.svg_id ||
+    ''
+  ).trim();
+};
 const featuresBySvgId = computed(() => {
   const indexed = new Map();
   const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
   for (const feat of features) {
-    const svgId = String(feat?.svg_id || '').trim();
+    const svgId = renderedFeatureSvgId(feat);
     if (!svgId || indexed.has(svgId)) continue;
     indexed.set(svgId, feat);
   }
@@ -685,7 +705,7 @@ const selectedFeatures = computed(() => {
   const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
   const fallback = new Map();
   (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
-    const svgId = String(feature?.svg_id || '').trim();
+    const svgId = renderedFeatureSvgId(feature);
     if (svgId && !fallback.has(svgId)) fallback.set(svgId, feature);
   });
 
@@ -1145,6 +1165,9 @@ export const state = {
   losatThreadingStatus,
   losatCache,
   losatDerivedCache,
+  proteinIdentityManifest,
+  legacyProteinRawCandidates,
+  legacyProteinDerivedEvidence,
   orthogroups,
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,
@@ -1179,6 +1202,7 @@ export const state = {
   specificRulePresetLoading,
   downloadDpi,
   extractedFeatures,
+  biologicalFeatures,
   featureSelectorSafetyScope,
   featuresBySvgId,
   selectedFeatureIds,

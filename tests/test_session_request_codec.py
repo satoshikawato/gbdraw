@@ -47,6 +47,7 @@ from gbdraw.api.requests import (
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.features.shapes import resolve_feature_rendering
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     UNKNOWN_FIELD_POLICY,
@@ -494,10 +495,75 @@ def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize("schema", [1, 2])
+def test_legacy_canonical_schema_preserves_repeat_rectangle_default(
+    tmp_path: Path,
+    schema: int,
+) -> None:
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=DiagramOptions(selected_features_set=("repeat_region",)),
+        )
+    )
+    payload = copy.deepcopy(encoded.payload)
+    payload["schema"] = schema
+    if schema == 1:
+        for record_payload in payload["records"]:
+            record_payload.pop("recordKey", None)
+    payload["diagramOptions"].get("featureShapes", {}).pop("repeat_region", None)
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / f"schema-{schema}"),
+        output_directory=tmp_path / "output",
+    )
+
+    assert decoded.options.feature_shapes["repeat_region"] == "rectangle"
+
+
+def test_current_canonical_schema_uses_underlay_default_and_round_trips_override(
+    tmp_path: Path,
+) -> None:
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    default_encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=DiagramOptions(selected_features_set=("repeat_region",)),
+        )
+    )
+    default_decoded = decode_canonical_request(
+        default_encoded.payload,
+        resource_paths=_materialize_resources(default_encoded, tmp_path / "default"),
+        output_directory=tmp_path / "output-default",
+    )
+    assert resolve_feature_rendering(
+        "repeat_region", default_decoded.options.feature_shapes
+    ) == "underlay"
+
+    explicit_encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=DiagramOptions(
+                selected_features_set=("repeat_region",),
+                feature_shapes={"repeat_region": "underlay"},
+            ),
+        )
+    )
+    explicit_decoded = decode_canonical_request(
+        explicit_encoded.payload,
+        resource_paths=_materialize_resources(explicit_encoded, tmp_path / "explicit"),
+        output_directory=tmp_path / "output-explicit",
+    )
+    assert explicit_decoded.options.feature_shapes == {"repeat_region": "underlay"}
+    assert encode_canonical_request(explicit_decoded).payload == explicit_encoded.payload
+
+
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=3), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=4), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),
@@ -511,7 +577,7 @@ def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
         ),
     ],
 )
-def test_schema_one_rejects_unknown_or_invalid_structure(
+def test_current_schema_rejects_unknown_or_invalid_structure(
     tmp_path: Path,
     mutator,
     message: str,

@@ -162,6 +162,11 @@ export const collectRenderedFeatureIdsFromResults = (results) => {
 const collectExactMetadataFeatureIds = (features) => {
   const ids = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
+    addNormalizedId(ids, feature?.rendered_svg_id);
+    addNormalizedId(ids, feature?.renderedSvgId);
+    addNormalizedId(ids, feature?.rendered_feature_svg_id);
+    addNormalizedId(ids, feature?.renderedFeatureSvgId);
+    // Legacy sessions stored the rendered identity in svg_id.
     addNormalizedId(ids, feature?.svg_id);
   });
   return ids;
@@ -172,7 +177,17 @@ export const featureStableCandidate = (feature) =>
     feature?.stable_svg_id ||
     feature?.stableFeatureSvgId ||
     feature?.stable_feature_id ||
+    feature?.stableFeatureId ||
+    feature?.stable_feature_svg_id ||
     feature?.svg_id
+  );
+
+export const featureRenderedCandidate = (feature) =>
+  normalizeRenderedFeatureId(
+    feature?.rendered_svg_id ||
+    feature?.renderedSvgId ||
+    feature?.rendered_feature_svg_id ||
+    feature?.renderedFeatureSvgId
   );
 
 export const featureRecordIndexCandidate = (feature) => {
@@ -250,6 +265,41 @@ export const classifyFeatureMetadataState = ({
 
 const featureId = (feature) => normalizeKey(feature?.id);
 const featureSvgId = (feature) => normalizeRenderedFeatureId(feature?.svg_id);
+
+const withRenderedFeatureIdentity = (
+  feature,
+  identity,
+  stableId,
+  { writeRenderedSvgIdToSvgId = false } = {}
+) => {
+  const renderedId = normalizeRenderedFeatureId(identity?.renderedId);
+  if (!renderedId) return feature;
+  const resolvedStableId = normalizeRenderedFeatureId(stableId || identity?.stableId);
+  const updates = {
+    rendered_svg_id: renderedId,
+    renderedSvgId: renderedId
+  };
+  if (writeRenderedSvgIdToSvgId) updates.svg_id = renderedId;
+  if (resolvedStableId) {
+    updates.stable_svg_id = feature?.stable_svg_id || resolvedStableId;
+    updates.stable_feature_id = feature?.stable_feature_id || resolvedStableId;
+  }
+  const changed = Object.entries(updates).some(([key, value]) => feature?.[key] !== value);
+  return changed ? { ...feature, ...updates } : feature;
+};
+
+const withoutRenderedFeatureIdentity = (feature) => {
+  const renderedKeys = [
+    'rendered_svg_id',
+    'renderedSvgId',
+    'rendered_feature_svg_id',
+    'renderedFeatureSvgId'
+  ];
+  if (!renderedKeys.some((key) => Object.prototype.hasOwnProperty.call(feature || {}, key))) return feature;
+  const nextFeature = { ...feature };
+  renderedKeys.forEach((key) => delete nextFeature[key]);
+  return nextFeature;
+};
 
 const firstPresentValue = (...values) => {
   for (const value of values) {
@@ -343,7 +393,8 @@ const plainMapWithEntry = (target, fromKey, toKey) => {
 
 export const alignRecoveredFeatureIdsToRenderedSvg = ({
   features,
-  renderedIdentities
+  renderedIdentities,
+  writeRenderedSvgIdToSvgId = false
 }) => {
   const sourceFeatures = Array.isArray(features) ? features : [];
   const rendered = identityCollectionOrEmpty(renderedIdentities);
@@ -360,16 +411,36 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
 
   sourceFeatures.forEach((feature, index) => {
     const oldSvgId = featureSvgId(feature);
-    if (oldSvgId && rendered.renderedIds.has(oldSvgId)) {
+    const explicitRenderedId = featureRenderedCandidate(feature);
+    const exactRenderedId = (
+      explicitRenderedId && rendered.renderedIds.has(explicitRenderedId)
+        ? explicitRenderedId
+        : (oldSvgId && rendered.renderedIds.has(oldSvgId) ? oldSvgId : '')
+    );
+    if (exactRenderedId) {
+      const identity = rendered.byRenderedId.get(exactRenderedId) || {
+        renderedId: exactRenderedId,
+        stableId: featureStableCandidate(feature)
+      };
+      const nextFeature = withRenderedFeatureIdentity(
+        feature,
+        identity,
+        featureStableCandidate(feature),
+        { writeRenderedSvgIdToSvgId }
+      );
       exactCount += 1;
-      nextFeatures.push(feature);
+      if (writeRenderedSvgIdToSvgId) {
+        plainMapWithEntry(svgIdMap, oldSvgId, exactRenderedId);
+      }
+      if (nextFeature !== feature) changedCount += 1;
+      nextFeatures.push(nextFeature);
       resolutions.push({
         index,
         status: 'exact',
         fromSvgId: oldSvgId,
-        renderedId: oldSvgId,
+        renderedId: exactRenderedId,
         stableId: featureStableCandidate(feature),
-        method: 'svg_id'
+        method: explicitRenderedId === exactRenderedId ? 'rendered_svg_id' : 'legacy-svg_id'
       });
       return;
     }
@@ -396,17 +467,18 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
 
     if (match?.renderedId) {
       const oldId = featureId(feature);
-      const newFeature = {
-        ...feature,
-        svg_id: match.renderedId,
-        stable_svg_id: stableId || match.stableId
-      };
+      const newFeature = withRenderedFeatureIdentity(
+        feature,
+        match,
+        stableId || match.stableId,
+        { writeRenderedSvgIdToSvgId }
+      );
       nextFeatures.push(newFeature);
       plainMapWithEntry(svgIdMap, oldSvgId || stableId, match.renderedId);
       const newId = featureId(newFeature);
       if (oldId && newId && oldId !== newId) featureIdMap[oldId] = newId;
       alignedCount += 1;
-      changedCount += 1;
+      if (newFeature !== feature) changedCount += 1;
       resolutions.push({
         index,
         status: 'aligned',
@@ -429,7 +501,9 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
     );
     if (isAmbiguous) ambiguousCount += 1;
     else unresolvedCount += 1;
-    nextFeatures.push(feature);
+    const unresolvedFeature = withoutRenderedFeatureIdentity(feature);
+    if (unresolvedFeature !== feature) changedCount += 1;
+    nextFeatures.push(unresolvedFeature);
     resolutions.push({
       index,
       status: isAmbiguous ? 'ambiguous' : 'unresolved',
@@ -676,6 +750,9 @@ const recoverability = (snapshot = {}) => {
 const buildRecoveredFeatureState = (snapshot, payload) => ({
   ...(snapshot.featureState || {}),
   extractedFeatures: Array.isArray(payload.extractedFeatures) ? payload.extractedFeatures : [],
+  biologicalFeatures: Array.isArray(payload.biologicalFeatures)
+    ? payload.biologicalFeatures
+    : (Array.isArray(payload.extractedFeatures) ? payload.extractedFeatures : []),
   featureSelectorSafetyScope: Array.isArray(payload.featureSelectorSafetyScope)
     ? payload.featureSelectorSafetyScope
     : [],
@@ -691,24 +768,54 @@ const selectedRenderedIdentities = (snapshot, selectedResultIndex) => {
 };
 
 const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResultIndex }) => {
+  const renderedIdentities = selectedRenderedIdentities(snapshot, selectedResultIndex);
   const alignment = alignRecoveredFeatureIdsToRenderedSvg({
     features: featureState?.extractedFeatures || [],
-    renderedIdentities: selectedRenderedIdentities(snapshot, selectedResultIndex)
+    renderedIdentities,
+    writeRenderedSvgIdToSvgId: true
   });
+  const biologicalAlignment = alignRecoveredFeatureIdsToRenderedSvg({
+    features: featureState?.biologicalFeatures || featureState?.extractedFeatures || [],
+    renderedIdentities
+  });
+  const renderedFeatures = alignment.features
+    .filter((feature) => Boolean(featureRenderedCandidate(feature)));
   const alignedFeatureState = {
     ...(featureState || {}),
-    extractedFeatures: alignment.features
+    extractedFeatures: renderedFeatures,
+    biologicalFeatures: biologicalAlignment.features
   };
   const alignedValidation = classifyFeatureMetadataState({
     results: snapshot?.results,
     selectedResultIndex: snapshot?.selectedResultIndex,
     extractedFeatures: alignedFeatureState.extractedFeatures
   });
-  return { alignment, alignedFeatureState, alignedValidation };
+  return {
+    alignment,
+    biologicalAlignment,
+    alignedFeatureState,
+    alignedValidation,
+    featureStateChanged: (
+      alignment.changedCount > 0 ||
+      biologicalAlignment.changedCount > 0 ||
+      renderedFeatures.length !== (Array.isArray(featureState?.extractedFeatures)
+        ? featureState.extractedFeatures.length
+        : 0)
+    )
+  };
 };
 
 const isClickReadyValidation = (validation) =>
   validation?.state === 'ready' || validation?.state === 'not-needed';
+
+export const hasUsableBiologicalFeatureCatalog = (featureState) => {
+  const features = featureState?.biologicalFeatures;
+  if (!Array.isArray(features) || features.length === 0) return false;
+  return features.some((feature) => Boolean(
+    normalizeKey(feature?.nucleotide_sequence || feature?.nucleotideSequence) ||
+    normalizeKey(feature?.amino_acid_sequence || feature?.aminoAcidSequence)
+  ));
+};
 
 const hasMigrationEntries = (migration) =>
   Object.keys(migration?.featureIdMap || {}).length > 0 ||
@@ -725,8 +832,35 @@ export const buildSessionFeatureRecoveryPlan = async ({
     selectedResultIndex: snapshot?.selectedResultIndex,
     extractedFeatures: snapshot?.featureState?.extractedFeatures
   });
+  const biologicalCatalogReady = hasUsableBiologicalFeatureCatalog(snapshot?.featureState);
 
-  if (isClickReadyValidation(validation)) {
+  if (biologicalCatalogReady && isClickReadyValidation(validation) && validation.renderedCount > 0) {
+    const existingAlignment = alignFeatureStateToRenderedSvg({
+      snapshot,
+      featureState: snapshot?.featureState || {},
+      selectedResultIndex: validation.selectedResultIndex
+    });
+    if (existingAlignment.featureStateChanged) {
+      const migrated = migrateFeatureOverrideState({
+        featureState: existingAlignment.alignedFeatureState,
+        editorState: snapshot?.editorState,
+        migration: existingAlignment.alignment
+      });
+      return {
+        status: 'aligned',
+        reason: 'rendered-identities-indexed',
+        validation,
+        recoveredValidation: existingAlignment.alignedValidation,
+        alignment: existingAlignment.alignment,
+        recoveredFeatureState: migrated.featureState,
+        migratedEditorState: migrated.editorState,
+        warning: migrated.warnings[0] || null,
+        errors: []
+      };
+    }
+  }
+
+  if (biologicalCatalogReady && isClickReadyValidation(validation)) {
     return {
       status: 'ready',
       reason: validation.state,
@@ -741,7 +875,7 @@ export const buildSessionFeatureRecoveryPlan = async ({
       featureState: snapshot?.featureState || {},
       selectedResultIndex: validation.selectedResultIndex
     });
-    if (isClickReadyValidation(existingAlignment.alignedValidation)) {
+    if (biologicalCatalogReady && isClickReadyValidation(existingAlignment.alignedValidation)) {
       const migrated = migrateFeatureOverrideState({
         featureState: existingAlignment.alignedFeatureState,
         editorState: snapshot?.editorState,
@@ -763,6 +897,15 @@ export const buildSessionFeatureRecoveryPlan = async ({
 
   const recovery = recoverability(snapshot);
   if (!recovery.recoverable) {
+    if (isClickReadyValidation(validation)) {
+      return {
+        status: 'ready',
+        reason: 'biological-catalog-unavailable',
+        validation,
+        warning: recovery.warning,
+        errors: []
+      };
+    }
     return {
       status: 'unrecoverable',
       reason: recovery.reason,

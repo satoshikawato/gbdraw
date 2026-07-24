@@ -357,30 +357,76 @@ def test_web_cli_arg_helpers_omit_default_values() -> None:
     subprocess.run([node, "tests/web/cli-args.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
+def test_web_feature_rendering_contract() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/feature-shapes.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
+def test_web_feature_shape_support_probe_matches_cli_behavior() -> None:
+    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(
+        r"const getFeatureShapeOptionSupport = \(\) => \{.*?"
+        r"const raw = pyodide\.runPython\(`\n(?P<probe>.*?)\n      `\);",
+        source,
+        re.DOTALL,
+    )
+    assert match is not None
+    probe = match.group("probe").replace(
+        "\njson.dumps({", "\n_probe_result = json.dumps({", 1
+    )
+    namespace: dict[str, object] = {}
+    exec(probe, namespace)
+
+    assert json.loads(str(namespace["_probe_result"])) == {
+        "circular": True,
+        "linear": True,
+        "underlay": True,
+    }
+
+
 def test_web_canonical_session_request_codec() -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not available")
 
     subprocess.run([node, "tests/web/session-request.test.mjs"], check=True, cwd=REPO_ROOT)
-    subprocess.run(
-        [
-            node,
-            "tests/web/session-request.test.mjs",
-            "--project-session",
-            str(
-                GALLERY_ROOT
-                / "sessions"
-                / "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
-            ),
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-    )
+    for session_name in (
+        "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+        "majanivirus_orthogroup.gbdraw-session.json.gz",
+        "tobacco-chloroplast.gbdraw-session.json",
+        "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+    ):
+        subprocess.run(
+            [
+                node,
+                "tests/web/session-request.test.mjs",
+                "--project-session",
+                str(GALLERY_ROOT / "sessions" / session_name),
+            ],
+            check=True,
+            cwd=REPO_ROOT,
+        )
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(
         encoding="utf-8"
     )
     assert "files: serializedFiles" not in config_source
+
+
+def test_web_gallery_session_migration() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/gallery-session-migration.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
 
 
 def test_web_losat_settings_preserve_requested_thread_count() -> None:
@@ -477,7 +523,7 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     assert "featureVisibilityTsv: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTablePath || null" in worker_js
     assert "feature_visibility_table_path=None" in helper_js
-    assert "extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None)" in helper_js
+    assert "extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False)" in helper_js
     assert "feature_visibility_rules=feature_visibility_rules" in helper_js
     assert "if (mode === 'off')" in svg_actions_js
     assert "mode === 'off' || mode === 'suppress'" not in svg_actions_js
@@ -713,7 +759,9 @@ def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:
     assert "const losatDerivedCache = ref(new Map());" in state_js
     assert "losatDerivedCache:" in config_js
     assert "serializeLosatDerivedCache()" in config_js
-    assert "applyLosatDerivedCache(data.losatDerivedCache?.entries)" in config_js
+    assert "applyLosatDerivedCache(" in config_js
+    assert "proteinIdentityManifest" in config_js
+    assert "legacyArtifacts?.proteinRawCandidates" in config_js
     assert "kind: 'derived-losatp-payload'" in config_js
     assert "buildLosatDerivedPayloadCachePayload({" in run_analysis_js
     assert "getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey)" in run_analysis_js
@@ -761,6 +809,14 @@ def test_gallery_csp_allows_same_origin_tutorial_media() -> None:
 def test_open_source_notices_are_generated() -> None:
     subprocess.run(
         [sys.executable, "tools/generate_open_source_notices.py", "--check"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
+def test_open_source_notices_generator_does_not_require_runtime_dependencies() -> None:
+    subprocess.run(
+        [sys.executable, "-S", "tools/generate_open_source_notices.py", "--check"],
         cwd=REPO_ROOT,
         check=True,
     )
@@ -1014,6 +1070,61 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert any(feature.get("qualifiers") for feature in features)
             assert any(feature.get("location_parts") for feature in features)
             assert all(feature.get("nucleotide_sequence") for feature in features)
+            assigned_orthogroups = {
+                str(feature.get("orthogroup_id") or "")
+                for feature in features
+                if feature.get("orthogroup_id")
+            }
+            if assigned_orthogroups:
+                orthogroups = {
+                    str(group.get("id") or ""): group
+                    for group in payload.get("orthogroups", [])
+                }
+                assert assigned_orthogroups <= orthogroups.keys()
+                rendered_features_by_id = {
+                    str(feature["svg_id"]): feature for feature in features
+                }
+                biological_features = payload.get("biological_features") or features
+                biological_features_by_key = {
+                    (
+                        int(
+                            feature.get(
+                                "record_idx",
+                                feature.get("record_index", feature.get("recordIndex", -1)),
+                            )
+                        ),
+                        str(
+                            feature.get("stable_feature_id")
+                            or feature.get("stable_svg_id")
+                            or feature.get("svg_id")
+                            or ""
+                        ),
+                    ): feature
+                    for feature in biological_features
+                }
+                for orthogroup_id in assigned_orthogroups:
+                    members = orthogroups[orthogroup_id].get("members", [])
+                    assert members
+                    for member in members:
+                        stable_id = str(
+                            member.get("stable_feature_svg_id")
+                            or member.get("stableFeatureSvgId")
+                            or member.get("feature_svg_id")
+                            or member.get("featureSvgId")
+                            or ""
+                        )
+                        record_index = int(
+                            member.get("record_index", member.get("recordIndex", -1))
+                        )
+                        feature = biological_features_by_key[(record_index, stable_id)]
+                        assert feature.get("nucleotide_sequence")
+                        rendered_id = str(
+                            member.get("rendered_feature_svg_id")
+                            or member.get("renderedFeatureSvgId")
+                            or ""
+                        )
+                        if rendered_id:
+                            assert rendered_id in rendered_features_by_id
 
         assert thumbnail_header.startswith(b"RIFF")
         assert b"WEBP" in thumbnail_header
@@ -1139,9 +1250,17 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "nucleotide_sequence" in feature_metadata_source
     assert "amino_acid_sequence" in feature_metadata_source
     assert '"organism": organism' in feature_metadata_source
-    assert '"source_protein_id": _first_qualifier_value(feat.qualifiers, "protein_id")' in feature_metadata_source
+    assert re.search(
+        r'"source_protein_id":\s*_first_qualifier_value\(\s*'
+        r'feat\.qualifiers,\s*"protein_id"\s*\)',
+        feature_metadata_source,
+    )
     assert '"gene_id": _first_qualifier_value(feat.qualifiers, "gene_id")' in feature_metadata_source
-    assert '"old_locus_tag": _first_qualifier_value(feat.qualifiers, "old_locus_tag")' in feature_metadata_source
+    assert re.search(
+        r'"old_locus_tag":\s*_first_qualifier_value\(\s*'
+        r'feat\.qualifiers,\s*"old_locus_tag"\s*\)',
+        feature_metadata_source,
+    )
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
@@ -1205,14 +1324,19 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         session = load_session(session_path)
         features = session.get("features", {}).get("extractedFeatures", [])
         svg_text = "\n".join(result.get("content", "") for result in session.get("results", []))
-        rendered_feature_ids = {
-            re.sub(r"__part\d+$", "", match)
-            for match in re.findall(r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']", svg_text)
+        rendered_stable_feature_ids = {
+            match
+            for match in re.findall(
+                r"data-gbdraw-stable-feature-id=[\"']([^\"']+)[\"']",
+                svg_text,
+            )
         }
         feature_ids = {
             candidate
             for feature in features
             for candidate in (
+                str(feature.get("stable_feature_id") or ""),
+                str(feature.get("stable_svg_id") or ""),
                 str(feature.get("svg_id") or ""),
                 re.sub(r"_record_\d+$", "", str(feature.get("svg_id") or "")),
             )
@@ -1226,8 +1350,8 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         assert features, session_name
         assert session.get("results"), session_name
         assert "orthogroupState" in session, session_name
-        assert rendered_feature_ids, session_name
-        assert rendered_feature_ids <= feature_ids, session_name
+        assert rendered_stable_feature_ids, session_name
+        assert rendered_stable_feature_ids <= feature_ids, session_name
         if session_name in GALLERY_EDITOR_STATE_SESSION_FILES:
             assert session.get("editorState"), session_name
         if session_name in GALLERY_LOSAT_CACHE_SESSION_FILES:
@@ -1564,7 +1688,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         assert needle not in standalone_source
 
     assert "popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'" in export_source
-    assert "features: state.extractedFeatures.value" in export_source
+    assert "state.biologicalFeatures?.value" in export_source
+    assert "features: biologicalFeatures" in export_source
     assert "editableLabels: state.editableLabels.value" in export_source
     assert "orthogroups: state.orthogroups.value" in export_source
     assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
@@ -1903,6 +2028,44 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Subject'), `Hover subject row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
 
+        const hiddenMemberPayload = buildPairwiseMatchPayload(element, {{
+          featureLookup,
+          sourceFeatures: [{{
+            svg_id: 'fh',
+            stable_svg_id: 'fh',
+            record_idx: 2,
+            record_id: 'record_hidden',
+            start: 149,
+            end: 180,
+            strand: '+',
+            product: 'hidden product',
+            qualifiers: {{ protein_id: ['WP_HIDDEN.1'], translation: ['MHIDDEN'] }},
+            nucleotide_sequence: 'ATGCCCTAA',
+            amino_acid_sequence: 'MHIDDEN'
+          }}],
+          orthogroups: [{{
+            id: 'og_1',
+            name: 'rpoB',
+            member_count: 3,
+            record_coverage_count: 3,
+            members: [
+              {{ recordId: 'record_a', recordIndex: 0, featureSvgId: 'fq', sourceProteinId: 'WP_000001.1' }},
+              {{ recordId: 'record_b', recordIndex: 1, featureSvgId: 'fs', sourceProteinId: 'WP_000002.1' }},
+              {{
+                recordId: 'record_hidden', recordIndex: 2, featureSvgId: 'fh',
+                stableFeatureSvgId: 'fh', sourceProteinId: 'WP_HIDDEN.1',
+                start: 149, end: 180, strand: '+', product: 'hidden product'
+              }}
+            ]
+          }}]
+        }});
+        const hiddenRows = hiddenMemberPayload.sections[0].memberRows;
+        assert(hiddenRows.length === 3, JSON.stringify(hiddenRows));
+        const hiddenRow = hiddenRows.find((row) => row.proteinId === 'WP_HIDDEN.1');
+        assert(hiddenRow && hiddenRow.ntFasta.includes('ATGCCCTAA'), JSON.stringify(hiddenRow));
+        assert(hiddenRow && hiddenRow.aaFasta.includes('MHIDDEN'), JSON.stringify(hiddenRow));
+        assert(hiddenRow && hiddenRow.canOpen === false, JSON.stringify(hiddenRow));
+
         const fallbackPayload = buildPairwiseMatchPayload(element, {{
           featureLookup,
           orthogroups: []
@@ -2178,7 +2341,10 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     assert "gallery/media/**/*" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     assert "gallery/sessions/*.gbdraw-session.json.gz" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     remote_assets = json.loads((bundle_path / "gallery" / "remote-assets.json").read_text(encoding="utf-8"))
-    assert "gallery/examples/Vnig_TUMSAT-TG-2018.svg" not in remote_assets
+    assert (
+        remote_assets["gallery/examples/Vnig_TUMSAT-TG-2018.svg"]
+        == f"{remote_base}gallery/examples/Vnig_TUMSAT-TG-2018.svg"
+    )
     assert "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz" not in remote_assets
     assert (
         remote_assets[
@@ -2191,7 +2357,9 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
         == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
     )
     assert all("/main/" not in url for url in remote_assets.values())
-    assert (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
+    assert not (
+        bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg"
+    ).exists()
     assert not (
         bundle_path
         / "gallery"
@@ -2488,7 +2656,7 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linearSlotNeedsDepth" in run_source
     assert "validateImportedLinearTrackSlots" in config_source
     assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 2" in module_source
-    assert "const SESSION_VERSION = 33" in config_source
+    assert f"const SESSION_VERSION = {CURRENT_SESSION_VERSION}" in config_source
     assert "migrateImportedLinearTrackSlots" in config_source
     assert "createLinearTrackSlotEditor" in module_source
     assert "linearTrackStackEntries" in app_setup_source
@@ -4185,6 +4353,203 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
             "FastaA (4 bp)",
             "FastaB (6 bp)",
         ]
+        browser.close()
+
+
+@pytest.mark.slow
+def test_web_session_round_trip_preserves_losat_and_source_names(tmp_path: Path) -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    session_path = tmp_path / "losat-round-trip.gbdraw-session.json.gz"
+    historical_session_path = (
+        GALLERY_ROOT / "sessions" / "hepatoplasmataceae_collinear.gbdraw-session.json.gz"
+    )
+    historical_session = load_session(historical_session_path)
+    historical_losat = json.loads(json.dumps(historical_session["config"]["losat"]))
+    if historical_losat.get("parallelWorkers") is None:
+        historical_losat.pop("parallelWorkers", None)
+    custom_losat = {
+        "outfmt": "6",
+        "parallelWorkers": "3",
+        "executionMode": "threaded",
+        "totalThreadBudget": "12",
+        "threadsPerJob": "4",
+        "blastn": {"task": "dc-megablast"},
+        "blastp": {
+            "mode": "collinear",
+            "maxHits": 17,
+            "candidateLimit": None,
+            "orthogroupMembershipMode": "anchor_core_v1",
+            "orthogroupMemberMaxHits": 13,
+            "collinearMinAnchors": 4,
+            "collinearMaxGeneGap": 6,
+            "collinearMaxDiagonalDrift": 2,
+            "collinearMaxConflictsInMergeGap": 3,
+            "collinearMaxParalogLinksPerOrthogroup": 7,
+            "collinearColorMode": "orientation_identity",
+            "collinearUnitMode": "locus",
+            "collinearAnchorMode": "rbh",
+            "collinearSearchScope": "all",
+        },
+    }
+    genbank_template = """LOCUS       {record_id} 4 bp DNA linear UNK 01-JAN-1980
+DEFINITION  Session round-trip fixture.
+ACCESSION   {record_id}
+VERSION     {record_id}
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+"""
+
+    ensure_prepared_browser_wheel()
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__")
+        page.evaluate(
+            """({ losat, firstText, secondText }) => {
+                window.__gbdrawDialogMessages = [];
+                window.alert = (message) => window.__gbdrawDialogMessages.push(String(message || ''));
+                window.confirm = () => true;
+                const app = window.__GBDRAW_APP__;
+                app.mode = 'linear';
+                app.sessionTitle = 'LOSAT round trip';
+                app.blastSource = 'losat';
+                app.losatProgram = 'blastp';
+                Object.assign(app.losat, losat);
+                Object.assign(app.adv, {
+                    rich_feature_popup: false,
+                    feature_width_circular: 12,
+                    depth_width_circular: 0.15,
+                    gc_content_width_circular: 0.16,
+                    gc_content_radius_circular: 0.61,
+                    gc_skew_width_circular: 0.17,
+                    gc_skew_radius_circular: 0.49
+                });
+                app.setLinearSeqPrimaryFile(0, 'gb', new File([firstText], 'first-original.gbk'));
+                app.addLinearSeq();
+                app.setLinearSeqPrimaryFile(1, 'gb', new File([secondText], 'second-original.gbk'));
+                app.linearSeqs[0].losat_gencode = 11;
+                app.linearSeqs[0].losat_filename = 'first-vs-second.losat.tsv';
+                app.linearSeqs[1].losat_gencode = 4;
+            }""",
+            {
+                "losat": custom_losat,
+                "firstText": genbank_template.format(record_id="FIRST"),
+                "secondText": genbank_template.format(record_id="SECOND"),
+            },
+        )
+
+        with page.expect_download() as download_info:
+            page.get_by_role("button", name="Save Session", exact=True).click()
+        download_info.value.save_as(session_path)
+
+        page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                app.blastSource = 'files';
+                app.losatProgram = 'blastn';
+                app.losat.executionMode = 'serial';
+                app.losat.threadsPerJob = 'auto';
+            }"""
+        )
+        page.locator('input[type="file"][accept^=".json,"]').set_input_files(str(session_path))
+        page.wait_for_function(
+            """() => window.__gbdrawDialogMessages
+                .includes('Session loaded successfully!')""",
+            timeout=60_000,
+        )
+        restored = page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                return {
+                    blastSource: app.blastSource,
+                    losatProgram: app.losatProgram,
+                    losat: JSON.parse(JSON.stringify(app.losat)),
+                    webOnlyAdv: {
+                        richFeaturePopup: app.adv.rich_feature_popup,
+                        featureWidth: app.adv.feature_width_circular,
+                        depthWidth: app.adv.depth_width_circular,
+                        gcContentWidth: app.adv.gc_content_width_circular,
+                        gcContentRadius: app.adv.gc_content_radius_circular,
+                        gcSkewWidth: app.adv.gc_skew_width_circular,
+                        gcSkewRadius: app.adv.gc_skew_radius_circular
+                    },
+                    sequences: app.linearSeqs.map((sequence) => ({
+                        gbName: sequence.gb?.name || '',
+                        losatGencode: sequence.losat_gencode,
+                        losatFilename: sequence.losat_filename
+                    }))
+                };
+            }"""
+        )
+        assert restored == {
+            "blastSource": "losat",
+            "losatProgram": "blastp",
+            "losat": custom_losat,
+            "webOnlyAdv": {
+                "richFeaturePopup": False,
+                "featureWidth": 12,
+                "depthWidth": 0.15,
+                "gcContentWidth": 0.16,
+                "gcContentRadius": 0.61,
+                "gcSkewWidth": 0.17,
+                "gcSkewRadius": 0.49,
+            },
+            "sequences": [
+                {
+                    "gbName": "first-original.gbk",
+                    "losatGencode": 11,
+                    "losatFilename": "first-vs-second.losat.tsv",
+                },
+                {
+                    "gbName": "second-original.gbk",
+                    "losatGencode": 4,
+                    "losatFilename": "",
+                },
+            ],
+        }
+
+        page.evaluate("() => { window.__gbdrawDialogMessages = []; }")
+        page.locator('input[type="file"][accept^=".json,"]').set_input_files(
+            str(historical_session_path)
+        )
+        page.wait_for_function(
+            """() => window.__gbdrawDialogMessages
+                .includes('Session loaded successfully!') &&
+                window.__GBDRAW_APP__?.linearSeqs?.length === 5""",
+            timeout=60_000,
+        )
+        historical_restored = page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                return {
+                    blastSource: app.blastSource,
+                    losatProgram: app.losatProgram,
+                    losat: JSON.parse(JSON.stringify(app.losat)),
+                    genbankNames: app.linearSeqs.map((sequence) => sequence.gb?.name || '')
+                };
+            }"""
+        )
+        assert historical_restored == {
+            "blastSource": "losat",
+            "losatProgram": "blastp",
+            "losat": historical_losat,
+            "genbankNames": [
+                "AP027078.gb",
+                "AP027131.gb",
+                "AP027133.gb",
+                "AP027132.gb",
+                "NZ_CP006932.gb",
+            ],
+        }
         browser.close()
 
 

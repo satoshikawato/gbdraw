@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from Bio.SeqRecord import SeqRecord
@@ -11,7 +13,12 @@ from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
 from .coordinates import get_exon_and_intron_coordinates
-from .shapes import DEFAULT_DIRECTIONAL_FEATURE_TYPES
+from .shapes import (
+    DEFAULT_DIRECTIONAL_FEATURE_TYPES,
+    FeatureRendering,
+    default_feature_rendering,
+    normalize_feature_shape_overrides,
+)
 from .tracks import arrange_feature_tracks
 
 
@@ -133,7 +140,16 @@ def create_gene_object(
     return gene_object
 
 
-def create_feature_dict(
+@dataclass(frozen=True)
+class FeatureBuildResult:
+    """Visible features partitioned by their resolved rendering layer."""
+
+    foreground_features: dict[str, FeatureObject]
+    underlay_features: tuple[FeatureObject, ...]
+    used_color_rules: frozenset[tuple[str, str]]
+
+
+def _build_feature_layers(
     gb_record: SeqRecord,
     color_table,
     selected_features_set: List[str],
@@ -141,32 +157,18 @@ def create_feature_dict(
     separate_strands: bool,
     resolve_overlaps: bool,
     label_filtering,
+    rendering_resolver: Callable[[str], FeatureRendering],
     split_overlaps_by_strand: bool = False,
-    directional_feature_types: Optional[Set[str]] = None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
-) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
-    """
-    Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
-
-    NOTE: `color_table` / `default_colors` are expected to be preprocessed maps
-    produced by `gbdraw.features.colors.preprocess_color_tables`.
-
-    Returns:
-        Tuple of (feature_dict, used_color_rules) where used_color_rules is a set
-        of (caption, color) tuples for rules that actually matched features.
-    """
-    feature_dict: Dict[str, FeatureObject] = {}
+) -> FeatureBuildResult:
+    foreground_features: Dict[str, FeatureObject] = {}
+    underlay_features: list[FeatureObject] = []
     used_color_rules: Set[Tuple[str, str]] = set()
     locus_count: int = 0
     repeat_count: int = 0
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
-    directional_types = (
-        {str(feature_type) for feature_type in directional_feature_types}
-        if directional_feature_types is not None
-        else set(DEFAULT_DIRECTIONAL_FEATURE_TYPES)
-    )
 
     for feature in gb_record.features:
         if not should_render_feature(
@@ -182,7 +184,9 @@ def create_feature_dict(
         color, caption = get_color_with_info(feature, color_table, default_colors, record_id=gb_record.id)
         if caption:
             used_color_rules.add((caption, color))
-        is_directional = feature.type in directional_types
+        rendering = rendering_resolver(str(feature.type))
+        is_directional = rendering == "arrow"
+        include_label = compute_label_text and rendering != "underlay"
 
         if feature.type in {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA"}:
             locus_count += 1
@@ -196,9 +200,9 @@ def create_feature_dict(
                 label_filtering,
                 is_directional,
                 record_id=gb_record.id,
-                compute_label_text=compute_label_text,
+                compute_label_text=include_label,
             )
-            feature_dict[locus_id] = gene_object
+            feature_id, feature_object = locus_id, gene_object
         elif feature.type == "repeat_region":
             repeat_count += 1
             repeat_id: str = "crt_" + str(repeat_count).zfill(9)
@@ -211,9 +215,9 @@ def create_feature_dict(
                 label_filtering,
                 is_directional,
                 record_id=gb_record.id,
-                compute_label_text=compute_label_text,
+                compute_label_text=include_label,
             )
-            feature_dict[repeat_id] = repeat_object
+            feature_id, feature_object = repeat_id, repeat_object
         else:
             feature_count += 1
             feature_id: str = "feature_" + str(feature_count).zfill(9)
@@ -226,24 +230,109 @@ def create_feature_dict(
                 label_filtering,
                 is_directional,
                 record_id=gb_record.id,
-                compute_label_text=compute_label_text,
+                compute_label_text=include_label,
             )
-            feature_dict[feature_id] = feature_object
+        if rendering == "underlay":
+            underlay_features.append(feature_object)
+        else:
+            foreground_features[feature_id] = feature_object
 
-    feature_dict = arrange_feature_tracks(
-        feature_dict,
+    foreground_features = arrange_feature_tracks(
+        foreground_features,
         separate_strands,
         resolve_overlaps,
         split_overlaps_by_strand=split_overlaps_by_strand,
         genome_length=genome_length,
     )
-    return feature_dict, used_color_rules
+    return FeatureBuildResult(
+        foreground_features=foreground_features,
+        underlay_features=tuple(underlay_features),
+        used_color_rules=frozenset(used_color_rules),
+    )
+
+
+def create_feature_layers(
+    gb_record: SeqRecord,
+    color_table,
+    selected_features_set: List[str],
+    default_colors,
+    separate_strands: bool,
+    resolve_overlaps: bool,
+    label_filtering,
+    split_overlaps_by_strand: bool = False,
+    feature_shapes: Mapping[str, str] | None = None,
+    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    compute_label_text: bool = True,
+) -> FeatureBuildResult:
+    """Build visible features using the current three-value rendering contract."""
+
+    normalized_shapes = normalize_feature_shape_overrides(feature_shapes)
+    return _build_feature_layers(
+        gb_record,
+        color_table,
+        selected_features_set,
+        default_colors,
+        separate_strands,
+        resolve_overlaps,
+        label_filtering,
+        rendering_resolver=lambda feature_type: normalized_shapes.get(
+            feature_type,
+            default_feature_rendering(feature_type),
+        ),
+        split_overlaps_by_strand=split_overlaps_by_strand,
+        feature_visibility_rules=feature_visibility_rules,
+        compute_label_text=compute_label_text,
+    )
+
+
+def create_feature_dict(
+    gb_record: SeqRecord,
+    color_table,
+    selected_features_set: List[str],
+    default_colors,
+    separate_strands: bool,
+    resolve_overlaps: bool,
+    label_filtering,
+    split_overlaps_by_strand: bool = False,
+    directional_feature_types: Optional[Set[str]] = None,
+    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    compute_label_text: bool = True,
+) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
+    """Build the legacy foreground-only feature dictionary.
+
+    This compatibility entry point deliberately has no underlay input. All visible
+    features, including ``repeat_region``, remain foreground objects. Main diagram
+    assembly uses :func:`create_feature_layers` instead.
+    """
+
+    directional_types = (
+        {str(feature_type) for feature_type in directional_feature_types}
+        if directional_feature_types is not None
+        else set(DEFAULT_DIRECTIONAL_FEATURE_TYPES)
+    )
+    result = _build_feature_layers(
+        gb_record,
+        color_table,
+        selected_features_set,
+        default_colors,
+        separate_strands,
+        resolve_overlaps,
+        label_filtering,
+        rendering_resolver=lambda feature_type: (
+            "arrow" if feature_type in directional_types else "rectangle"
+        ),
+        split_overlaps_by_strand=split_overlaps_by_strand,
+        feature_visibility_rules=feature_visibility_rules,
+        compute_label_text=compute_label_text,
+    )
+    return result.foreground_features, set(result.used_color_rules)
 
 
 __all__ = [
+    "FeatureBuildResult",
     "create_feature_dict",
+    "create_feature_layers",
     "create_feature_object",
     "create_gene_object",
     "create_repeat_object",
 ]
-

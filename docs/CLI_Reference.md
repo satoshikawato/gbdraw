@@ -156,8 +156,8 @@ options:
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --feature_shape TYPE=SHAPE
-                        Feature shape override (repeatable): TYPE=SHAPE where
-                        SHAPE is arrow or rectangle.
+                        Feature rendering override (repeatable): TYPE=SHAPE
+                        where SHAPE is arrow, rectangle, or underlay.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -404,18 +404,34 @@ Circular BLAST similarity rings use one ring per `--conservation_blast` source a
 
 For `interactive_svg`, add one `--conservation_fasta` value per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
 
+## Feature rendering
+
+`--feature_shape TYPE=SHAPE` accepts three rendering policies and may be repeated:
+
+- `arrow` draws a strand-aware foreground glyph.
+- `rectangle` draws a non-directional foreground glyph.
+- `underlay` removes the feature from overlap lanes and feature labels, then highlights the full feature-track band behind foreground features.
+
+Fresh configurations render `CDS`, `rRNA`, `tRNA`, `tmRNA`, `ncRNA`, and `misc_RNA` as arrows, `repeat_region` as an underlay, and other feature types as rectangles. Restore the earlier repeat appearance with `--feature_shape repeat_region=rectangle`. Underlays keep the feature's resolved palette or specific-rule color and remain in the feature legend, interactive metadata, and protein-matching inputs.
+
+A rendering assignment does not make a feature visible. The selected feature list, specific color rules, and feature visibility table retain their existing precedence; `off` still hides the feature, while a matching `show` or specific color rule can reveal an otherwise unselected type and use its assigned rendering.
+
+Automatic feature underlays are derived at render time and are not annotation rows. A custom track stack must contain exactly one enabled `features` slot when a visible underlay exists; the underlay is anchored to that slot's actual ID. Manual annotation `highlight` rows remain independently editable and may intentionally overlap an automatic underlay.
+
 ## TSV manifest inputs
 
 ### Region annotations
 
-Both modes accept `--annotation_table PATH` (alias `--annotation-table`). The table requires `set_id`, `id`, and `mark`; `mark` is `line`, `bracket`, or `band`. Each row must provide exactly one target:
+Both modes accept `--annotation_table PATH` (alias `--annotation-table`). The table requires `set_id`, `id`, and `mark`; `mark` is `line`, `bracket`, `band`, or `highlight`. Each row must provide exactly one target:
 
 - coordinate: `start` and `end`, with optional `record`, `coordinate_space`, `wraps_origin`, and `out_of_bounds`;
 - feature: `feature_selector`, with optional `record`, `envelope`, and `circular_path`.
 
 Coordinates are 1-based and inclusive. Separate multiple feature selectors with semicolons. Optional display columns are `label`, `lane`, `legend_label`, `stroke`, `stroke_width`, `stroke_dasharray`, `line_cap`, `fill`, `fill_opacity`, `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`, `label_color`, `label_font_size`, `label_orientation`, `label_position`, and `label_offset`.
 
-Bind a set to a custom slot with `set_id=<set_id>`. When annotations are supplied without custom slots, one outside/above annotation slot is synthesized for each set while the normal default tracks remain present.
+Bind a set to a custom slot with `set_id=<set_id>`. Without custom slots, `highlight` marks are automatically drawn as an underlay behind the feature track. Other marks receive an outside/above annotation slot while the normal default tracks remain present. Mixed sets are split automatically between those placements.
+
+`lane` is the zero-based collision-avoidance row within an annotation track. Leave it blank for deterministic automatic packing. Use `0` for the first row, `1` for the second, and so on only when a fixed row is required. Highlights always cover the full feature band, so `lane` does not apply to them.
 
 The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
 
@@ -841,8 +857,8 @@ options:
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --feature_shape TYPE=SHAPE
-                        Feature shape override (repeatable): TYPE=SHAPE where
-                        SHAPE is arrow or rectangle.
+                        Feature rendering override (repeatable): TYPE=SHAPE
+                        where SHAPE is arrow, rectangle, or underlay.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
