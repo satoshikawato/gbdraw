@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +48,7 @@ from gbdraw.session_io import (
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
+    SESSION_LOSAT_CACHE_BYTE_LIMIT,
     SESSION_FORMAT,
     SUPPORTED_SESSION_VERSIONS,
     SessionBuildContext,
@@ -55,6 +57,8 @@ from gbdraw.session_io import (
     load_session,
     materialize_embedded_file,
     migrate_legacy_repeat_feature_shape_args,
+    prune_serialized_losat_artifacts,
+    serialized_losat_artifact_byte_length,
     session_to_cli_args,
     validate_session,
     write_session_json,
@@ -290,6 +294,39 @@ def test_v35_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
         NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     ]
     assert payload["losatDerivedCache"]["entries"][0]["schema"] == 2
+
+
+def test_current_cache_artifacts_are_pruned_by_serialized_byte_size() -> None:
+    raw_entries = [
+        {"key": "raw-first-visible", "display": True, "text": "a" * 40},
+        {"key": "raw-middle-visible", "display": True, "text": "b" * 40},
+        {"key": "raw-last-hidden", "display": False, "text": "c" * 40},
+    ]
+    derived_entries = [
+        {"key": "derived-first", "payload": "d" * 40},
+        {"key": "derived-last", "payload": "e" * 40},
+    ]
+    exact_budget = 28 + sum(
+        len(
+            json.dumps(
+                entry,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+        for entry in (raw_entries[2], derived_entries[1])
+    )
+
+    raw, derived = prune_serialized_losat_artifacts(
+        raw_entries,
+        derived_entries,
+        max_bytes=exact_budget,
+    )
+
+    assert [entry["key"] for entry in raw] == ["raw-last-hidden"]
+    assert [entry["key"] for entry in derived] == ["derived-last"]
+    assert serialized_losat_artifact_byte_length(raw, derived) == exact_budget
+    assert SESSION_LOSAT_CACHE_BYTE_LIMIT == 109_051_904
 
 
 def test_v35_rejects_legacy_protein_entry_in_current_cache() -> None:

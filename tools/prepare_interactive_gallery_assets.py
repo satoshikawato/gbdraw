@@ -779,10 +779,15 @@ def _read_or_create_source_svg(
     *,
     refresh_from_session: bool = False,
 ) -> str:
+    existing_source = (
+        example.source_svg_path.read_text(encoding="utf-8")
+        if example.source_svg_path.exists()
+        else None
+    )
     if refresh_from_session and example.sync_result_svg:
         source = _session_result_svg(session, example)
-    elif example.source_svg_path.exists():
-        source = example.source_svg_path.read_text(encoding="utf-8")
+    elif existing_source is not None:
+        source = existing_source
     else:
         source = _session_result_svg(session, example)
     migrated = _migrate_legacy_multipart_feature_ids(source, session)
@@ -790,7 +795,7 @@ def _read_or_create_source_svg(
         _validate_source_feature_ids(example, session, migrated)
     else:
         ET.fromstring(migrated)
-    if migrated != source or not example.source_svg_path.exists():
+    if migrated != existing_source:
         example.source_svg_path.write_text(migrated, encoding="utf-8")
     return migrated
 

@@ -23,8 +23,11 @@ if str(REPO_ROOT) not in sys.path:
 from gbdraw.session_io import (  # noqa: E402
     CURRENT_SESSION_VERSION,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    SESSION_LOSAT_CACHE_BYTE_LIMIT,
     classify_raw_losat_cache_entry,
     load_session,
+    normalize_current_session_artifacts,
+    serialized_losat_artifact_byte_length,
     session_mode,
     validate_session,
     write_session_json,
@@ -223,7 +226,6 @@ def _promote_gallery_session(
     subprocess.run(
         [
             node,
-            "--experimental-default-type=module",
             str(SESSION_PROMOTER),
             str(source_path),
             str(output_path),
@@ -333,6 +335,13 @@ def _validate_staged_gallery_session(
         raise ValueError(
             f"{session_path.name} contains a non-current derived LOSATP artifact"
         )
+    if (
+        serialized_losat_artifact_byte_length(raw_entries, derived_entries)
+        > SESSION_LOSAT_CACHE_BYTE_LIMIT
+    ):
+        raise ValueError(
+            f"{session_path.name} exceeds the serialized LOSAT cache budget"
+        )
     legacy_artifacts = session.get("legacyArtifacts")
     candidates = (
         legacy_artifacts.get("proteinRawCandidates")
@@ -408,6 +417,8 @@ def _refresh_one_session(
     destination_path: Path | None = None,
 ) -> None:
     session = load_session(session_path)
+    if session.get("version") == CURRENT_SESSION_VERSION:
+        normalize_current_session_artifacts(session)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
         raise RuntimeError(f"Could not determine gallery session mode: {session_path}")

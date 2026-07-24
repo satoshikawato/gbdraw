@@ -23,6 +23,208 @@ NODE_SPEC = REPO_ROOT / "tests" / "web" / "losat-cache-migration.playwright.spec
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "sessions"
 FIXTURE_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
 EXPECTED_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.expected.json"
+CURRENT_SESSION_VERSION = 35
+CURRENT_RENDER_REQUEST_SCHEMA = 3
+CURRENT_PROTEIN_RAW_SCHEMA = 3
+CURRENT_PROTEIN_DERIVED_SCHEMA = 2
+
+
+_LAYOUT_INSPECTION_SCRIPT = """async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const geometry = JSON.parse(JSON.stringify(state.trackSlotResolvedGeometry.value || null));
+  const svg = state.svgContainer.value?.querySelector('svg');
+  if (!geometry || !svg) {
+    return { error: 'Resolved Linear geometry or the preview SVG is unavailable.' };
+  }
+
+  const epsilon = 1e-6;
+  const records = (Array.isArray(geometry.records) ? geometry.records : [])
+    .slice()
+    .sort((left, right) => Number(left.recordIndex) - Number(right.recordIndex));
+  const directGroups = Array.from(svg.children).filter(
+    (element) => element.tagName?.toLowerCase() === 'g'
+  );
+  const comparisonGroups = directGroups
+    .filter((element) => (
+      element.hasAttribute('data-query-row') &&
+      element.hasAttribute('data-subject-row')
+    ))
+    .sort((left, right) => (
+      Number(left.getAttribute('data-query-row')) -
+      Number(right.getAttribute('data-query-row'))
+    ));
+  const activeBoundaries = new Set(comparisonGroups.map((element) => (
+    `${element.getAttribute('data-query-row')}:${element.getAttribute('data-subject-row')}`
+  )));
+
+  const xOverlaps = (left, right) => (
+    Math.min(Number(left.xEndPx), Number(right.xEndPx)) -
+    Math.max(Number(left.xStartPx), Number(right.xStartPx))
+  ) > epsilon;
+  const pairIsEligible = (left, right, boundaryActive) => (
+    (left.kind === 'body' && right.kind === 'body') ||
+    (boundaryActive && left.kind === 'comparison' && right.kind === 'comparison') ||
+    (left.kind === 'definition' && right.kind === 'definition') ||
+    (left.kind === 'definition' && right.kind === 'body') ||
+    (left.kind === 'body' && right.kind === 'definition')
+  );
+
+  const collisionChecks = [];
+  const axisGaps = [];
+  for (let boundary = 0; boundary < records.length - 1; boundary += 1) {
+    const nextRow = boundary + 1;
+    const current = records[boundary];
+    const following = records[nextRow];
+    const boundaryActive = activeBoundaries.has(`${boundary}:${nextRow}`);
+    axisGaps.push(Number(following?.axisYpx) - Number(current?.axisYpx));
+    for (const currentBand of current?.collisionBands || []) {
+      for (const nextBand of following?.collisionBands || []) {
+        if (
+          !xOverlaps(currentBand, nextBand) ||
+          !pairIsEligible(currentBand, nextBand, boundaryActive)
+        ) continue;
+        collisionChecks.push({
+          boundaryRow: boundary,
+          kindPair: `${currentBand.kind}:${nextBand.kind}`,
+          gapPx: Number(nextBand.absoluteTopPx) - Number(currentBand.absoluteBottomPx)
+        });
+      }
+    }
+  }
+
+  const indexedGroups = (pattern) => directGroups
+    .map((element) => {
+      const match = String(element.id || '').match(pattern);
+      return match ? { element, index: Number(match[1]) - 1 } : null;
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.index - right.index);
+  const recordGroups = indexedGroups(/_record_(\\d+)$/)
+    .filter(({ element }) => !String(element.id).includes('_definition_'));
+  const definitionGroups = indexedGroups(/_definition_record_(\\d+)$/);
+  const screenBox = (element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      id: String(element.id || ''),
+      left: Number(box.left),
+      right: Number(box.right),
+      top: Number(box.top),
+      bottom: Number(box.bottom)
+    };
+  };
+  const overlap = (left, right) => ({
+    overlapX: Math.min(left.right, right.right) - Math.max(left.left, right.left),
+    overlapY: Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top)
+  });
+  const domChecks = [];
+  const addDomCheck = (label, leftElement, rightElement) => {
+    if (!leftElement || !rightElement) {
+      domChecks.push({ label, missing: true });
+      return;
+    }
+    const left = screenBox(leftElement);
+    const right = screenBox(rightElement);
+    domChecks.push({ label, missing: false, ...overlap(left, right) });
+  };
+  for (let index = 0; index < records.length; index += 1) {
+    addDomCheck(
+      `definition-body:${index}`,
+      definitionGroups[index]?.element,
+      recordGroups[index]?.element
+    );
+    if (index >= records.length - 1) continue;
+    addDomCheck(
+      `body-body:${index}`,
+      recordGroups[index]?.element,
+      recordGroups[index + 1]?.element
+    );
+    addDomCheck(
+      `definition-definition:${index}`,
+      definitionGroups[index]?.element,
+      definitionGroups[index + 1]?.element
+    );
+    addDomCheck(
+      `comparison-upper-body:${index}`,
+      comparisonGroups[index],
+      recordGroups[index]?.element
+    );
+    addDomCheck(
+      `comparison-lower-body:${index}`,
+      comparisonGroups[index],
+      recordGroups[index + 1]?.element
+    );
+  }
+
+  return {
+    error: '',
+    schema: geometry.schema,
+    mode: geometry.mode,
+    recordCount: records.length,
+    comparisonCount: comparisonGroups.length,
+    recordGroupCount: recordGroups.length,
+    definitionGroupCount: definitionGroups.length,
+    axisGaps,
+    collisionChecks,
+    collisionDomains: Array.from(new Set(
+      collisionChecks.map((check) => check.kindPair)
+    )).sort(),
+    domChecks,
+    geometrySignature: JSON.stringify(geometry)
+  };
+}"""
+
+
+_SVG_GEOMETRY_PARITY_SCRIPT = """async (exportedSvg) => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const preview = state.svgContainer.value?.querySelector('svg');
+  const parsed = new DOMParser().parseFromString(String(exportedSvg || ''), 'image/svg+xml');
+  const exported = parsed.documentElement;
+  if (
+    !preview ||
+    !exported ||
+    exported.tagName?.toLowerCase() !== 'svg' ||
+    parsed.querySelector('parsererror')
+  ) {
+    return { error: 'The preview or exported SVG could not be parsed.' };
+  }
+  const geometryAttributes = [
+    'viewBox', 'width', 'height', 'data-horizontal-viewbox', 'data-vertical-viewbox',
+    'transform', 'd', 'points', 'x', 'y', 'x1', 'x2', 'y1', 'y2',
+    'cx', 'cy', 'r', 'rx', 'ry', 'dx', 'dy', 'font-family', 'font-size',
+    'font-weight', 'font-style', 'text-anchor', 'dominant-baseline',
+    'stroke-width', 'display', 'href', 'xlink:href'
+  ];
+  const signature = (root) => [root, ...root.querySelectorAll('*')].map((element) => {
+    const tag = element.tagName.toLowerCase();
+    const attributes = geometryAttributes
+      .filter((name) => element.hasAttribute(name))
+      .map((name) => [name, element.getAttribute(name)]);
+    const text = tag === 'text' || tag === 'tspan' ? element.textContent : '';
+    return [tag, String(element.id || ''), attributes, text];
+  });
+  const previewSignature = signature(preview);
+  const exportedSignature = signature(exported);
+  const length = Math.max(previewSignature.length, exportedSignature.length);
+  let mismatchIndex = -1;
+  for (let index = 0; index < length; index += 1) {
+    if (
+      JSON.stringify(previewSignature[index] ?? null) !==
+      JSON.stringify(exportedSignature[index] ?? null)
+    ) {
+      mismatchIndex = index;
+      break;
+    }
+  }
+  return {
+    error: '',
+    equal: mismatchIndex === -1,
+    previewElementCount: previewSignature.length,
+    exportedElementCount: exportedSignature.length,
+    mismatchIndex,
+    previewMismatch: mismatchIndex < 0 ? null : previewSignature[mismatchIndex],
+    exportedMismatch: mismatchIndex < 0 ? null : exportedSignature[mismatchIndex]
+  };
+}"""
 
 
 class AcceptanceChecks:
@@ -151,16 +353,79 @@ def _save_session(page: Any, checks: AcceptanceChecks) -> Path:
     return Path(path)
 
 
-def _assert_legacy_preserved(
-    session: dict[str, Any], expected: dict[str, Any], checks: AcceptanceChecks
+def _download_svg(page: Any, checks: AcceptanceChecks) -> Path:
+    with page.expect_download(timeout=120_000) as download_info:
+        page.evaluate("() => window.__GBDRAW_APP__.downloadSVG()")
+    path = download_info.value.path()
+    checks.require(bool(path), "SVG download has no local path.")
+    return Path(path)
+
+
+def _assert_current_session_boundary(
+    session: dict[str, Any],
+    checks: AcceptanceChecks,
+    *,
+    require_derived: bool,
 ) -> None:
-    entries = session.get("losatCache", {}).get("entries", [])
-    candidates = (
-        session.get("legacyArtifacts", {})
-        .get("proteinRawCandidates", {})
-        .get("entries", [])
+    raw_entries = session.get("losatCache", {}).get("entries", [])
+    derived_entries = session.get("losatDerivedCache", {}).get("entries", [])
+    checks.require(
+        session.get("format") == "gbdraw-session",
+        "Saved payload is not a gbdraw session.",
     )
+    checks.require(
+        session.get("version") == CURRENT_SESSION_VERSION,
+        f"Saved session is not version {CURRENT_SESSION_VERSION}.",
+    )
+    checks.require(
+        session.get("renderRequest", {}).get("schema")
+        == CURRENT_RENDER_REQUEST_SCHEMA,
+        f"Saved renderRequest is not schema {CURRENT_RENDER_REQUEST_SCHEMA}.",
+    )
+    checks.require(
+        all(
+            entry.get("identityKind") != "protein"
+            or entry.get("schema") == CURRENT_PROTEIN_RAW_SCHEMA
+            for entry in raw_entries
+        ),
+        "A legacy protein entry remains in the current raw cache.",
+    )
+    checks.require(
+        all(
+            entry.get("schema") == CURRENT_PROTEIN_DERIVED_SCHEMA
+            for entry in derived_entries
+        ),
+        "A legacy entry remains in the current derived cache.",
+    )
+    if require_derived:
+        checks.require(
+            bool(derived_entries),
+            "Generation did not persist a current derived cache entry.",
+        )
+
+
+def _assert_legacy_preserved(
+    session: dict[str, Any],
+    source_session: dict[str, Any],
+    expected: dict[str, Any],
+    checks: AcceptanceChecks,
+) -> None:
+    _assert_current_session_boundary(session, checks, require_derived=False)
+    entries = session.get("losatCache", {}).get("entries", [])
+    legacy_artifacts = session.get("legacyArtifacts", {})
+    raw_envelope = legacy_artifacts.get("proteinRawCandidates", {})
+    candidates = raw_envelope.get("entries", [])
+    derived_entries = session.get("losatDerivedCache", {}).get("entries", [])
+    derived_envelope = legacy_artifacts.get("proteinDerivedEvidence", {})
     checks.require(entries == [], "Legacy protein entries leaked into the current cache.")
+    checks.require(
+        derived_entries == [],
+        "Legacy derived entries leaked into the current derived cache.",
+    )
+    checks.require(
+        raw_envelope.get("schema") == 1,
+        "Legacy protein candidate envelope is not schema 1.",
+    )
     checks.require(
         len(candidates) == expected["storedRawEntries"],
         "Load -> Save lost legacy protein candidates.",
@@ -173,6 +438,17 @@ def _assert_legacy_preserved(
             for candidate in candidates
         ),
         "Saved legacy candidate envelope is not lossless schema 2.",
+    )
+    checks.require(
+        [candidate.get("originalEntry") for candidate in candidates]
+        == source_session.get("losatCache", {}).get("entries", []),
+        "Load -> Save changed a legacy raw candidate.",
+    )
+    checks.require(
+        derived_envelope.get("schema") == 1
+        and derived_envelope.get("entries", [])
+        == source_session.get("losatDerivedCache", {}).get("entries", []),
+        "Load -> Save changed the quarantined legacy derived evidence.",
     )
 
 
@@ -204,10 +480,22 @@ def _assert_renamed_resources(session: dict[str, Any], checks: AcceptanceChecks)
 
 
 def _assert_current_artifacts(
-    session: dict[str, Any], expected: dict[str, Any], checks: AcceptanceChecks
+    session: dict[str, Any],
+    source_session: dict[str, Any],
+    expected: dict[str, Any],
+    checks: AcceptanceChecks,
 ) -> None:
+    _assert_current_session_boundary(session, checks, require_derived=True)
     manifest = session.get("proteinIdentityManifest", {})
     entries = session.get("losatCache", {}).get("entries", [])
+    derived_entries = session.get("losatDerivedCache", {}).get("entries", [])
+    legacy_artifacts = session.get("legacyArtifacts", {})
+    legacy_candidates = (
+        legacy_artifacts.get("proteinRawCandidates", {}).get("entries", [])
+    )
+    legacy_derived = (
+        legacy_artifacts.get("proteinDerivedEvidence", {}).get("entries", [])
+    )
     checks.require(manifest.get("schema") == 1, "Protein identity manifest is not schema 1.")
     checks.require(
         len(entries) == expected["totalPairs"],
@@ -222,6 +510,33 @@ def _assert_current_artifacts(
             for entry in entries
         ),
         "The current protein cache contains a non-schema-3 entry.",
+    )
+    checks.require(
+        all(
+            entry.get("schema") == CURRENT_PROTEIN_DERIVED_SCHEMA
+            and entry.get("kind") == "derived-losatp-payload"
+            for entry in derived_entries
+        ),
+        "The current derived cache contains a non-schema-2 protein payload.",
+    )
+    checks.require(
+        len(legacy_candidates)
+        == expected["storedRawEntries"] - expected["totalPairs"],
+        "The saved session did not remove exactly the promoted legacy candidates.",
+    )
+    checks.require(
+        all(
+            candidate.get("state") == "pending"
+            and candidate.get("originalEntry")
+            in source_session.get("losatCache", {}).get("entries", [])
+            for candidate in legacy_candidates
+        ),
+        "A promoted or mutated legacy candidate remains in the saved envelope.",
+    )
+    checks.require(
+        legacy_derived
+        == source_session.get("losatDerivedCache", {}).get("entries", []),
+        "Pending-candidate derived evidence was not preserved losslessly.",
     )
 
     record_analyses = manifest.get("recordAnalyses", {})
@@ -269,6 +584,47 @@ def _assert_current_artifacts(
             resolved += 2
     checks.require(resolved > 0, "No QUERY/SUBJECT references were asserted.")
 
+    reference_keys = {
+        "query_protein_id",
+        "subject_protein_id",
+        "queryProteinId",
+        "subjectProteinId",
+        "proteinId",
+    }
+    reference_list_keys = {"proteinIds", "sharedProteinIds"}
+    derived_references: list[str] = []
+
+    def collect_references(value: object) -> None:
+        if isinstance(value, list):
+            for item in value:
+                collect_references(item)
+            return
+        if not isinstance(value, dict):
+            return
+        for key, item in value.items():
+            if key in reference_keys and isinstance(item, str):
+                derived_references.append(item)
+            elif key in reference_list_keys and isinstance(item, list):
+                derived_references.extend(
+                    reference for reference in item if isinstance(reference, str)
+                )
+            collect_references(item)
+
+    collect_references(derived_entries)
+    checks.require(
+        bool(derived_references),
+        "No derived protein references were asserted.",
+    )
+    unresolved = sorted(set(derived_references).difference(owners))
+    checks.require(
+        unresolved == [],
+        f"Derived protein references do not resolve through the manifest: {unresolved[:3]}",
+    )
+    checks.require(
+        "p_r_" not in json.dumps(derived_entries, ensure_ascii=False),
+        "A legacy metadata-derived protein ID remains in the derived cache.",
+    )
+
 
 def _generate(page: Any) -> dict[str, Any]:
     return page.evaluate(
@@ -304,6 +660,112 @@ def _assert_telemetry(
     checks.require(
         run.get("executorCalls") == expected["workerCalls"],
         "Counting LOSAT executor was called.",
+    )
+
+
+def _inspect_layout(page: Any) -> dict[str, Any]:
+    page.wait_for_function(
+        """() => {
+          const app = window.__GBDRAW_APP__;
+          return app?.svgContainer?.querySelector('svg')
+            ?.querySelectorAll('g[data-query-row][data-subject-row]').length === 4;
+        }""",
+        timeout=120_000,
+    )
+    return page.evaluate(_LAYOUT_INSPECTION_SCRIPT)
+
+
+def _assert_layout(
+    layout: dict[str, Any],
+    checks: AcceptanceChecks,
+) -> None:
+    checks.require(not layout.get("error"), f"Layout inspection failed: {layout}")
+    # Browser run metadata publishes collision bands in the schema-1 wrapper.
+    # The canvas-private schema-2 axisGapConstraints are covered by Python unit tests.
+    checks.require(
+        layout.get("schema") == 1 and layout.get("mode") == "linear",
+        "Published Linear run geometry is not schema 1: "
+        f"schema={layout.get('schema')!r}, mode={layout.get('mode')!r}.",
+    )
+    checks.require(layout.get("recordCount") == 5, "Expected five resolved BGC records.")
+    checks.require(
+        layout.get("comparisonCount") == 4,
+        "Expected four rendered BGC comparison corridors.",
+    )
+    checks.require(
+        layout.get("recordGroupCount") == 5,
+        "Expected five rendered BGC record bodies.",
+    )
+    checks.require(
+        layout.get("definitionGroupCount") == 5,
+        "Expected five rendered BGC definition groups.",
+    )
+
+    axis_gaps = layout.get("axisGaps", [])
+    checks.require(
+        len(axis_gaps) == 4 and all(float(gap) > 0 for gap in axis_gaps),
+        f"Resolved BGC record axes are not strictly separated: {axis_gaps}",
+    )
+
+    collision_checks = layout.get("collisionChecks", [])
+    checks.require(
+        bool(collision_checks),
+        "No eligible collision-domain pairs were inspected.",
+    )
+    collisions = [
+        check
+        for check in collision_checks
+        if float(check.get("gapPx", float("-inf"))) < -1e-6
+    ]
+    checks.require(
+        collisions == [],
+        f"Resolved collision bands overlap: {collisions[:3]}",
+    )
+    domains = set(layout.get("collisionDomains", []))
+    checks.require(
+        {"body:body", "comparison:comparison", "definition:definition"}
+        <= domains,
+        f"BGC collision coverage is incomplete: {sorted(domains)}",
+    )
+
+    dom_checks = layout.get("domChecks", [])
+    checks.require(bool(dom_checks), "No rendered SVG bbox pairs were inspected.")
+    dom_collisions = [
+        check
+        for check in dom_checks
+        if check.get("missing")
+        or (
+            float(check.get("overlapX", 0.0)) > 1e-6
+            and float(check.get("overlapY", 0.0)) > 1e-6
+        )
+    ]
+    checks.require(
+        dom_collisions == [],
+        f"Rendered definition/body/comparison bboxes overlap: {dom_collisions[:3]}",
+    )
+
+
+def _assert_svg_geometry_parity(
+    page: Any,
+    exported_path: Path,
+    checks: AcceptanceChecks,
+) -> None:
+    parity = page.evaluate(
+        _SVG_GEOMETRY_PARITY_SCRIPT,
+        exported_path.read_text(encoding="utf-8"),
+    )
+    checks.require(not parity.get("error"), f"SVG parity inspection failed: {parity}")
+    checks.require(
+        parity.get("previewElementCount", 0) > 0,
+        "Preview SVG geometry signature is empty.",
+    )
+    checks.require(
+        parity.get("previewElementCount") == parity.get("exportedElementCount"),
+        f"Preview/export SVG element counts differ: {parity}",
+    )
+    checks.require(
+        parity.get("equal") is True,
+        f"Preview/export SVG geometry differs: {parity}",
     )
 
 
@@ -381,7 +843,12 @@ def _run_python_adapter() -> int:
 
                 before_generate_path = _save_session(page, checks)
                 before_generate = _read_session(before_generate_path)
-                _assert_legacy_preserved(before_generate, expected, checks)
+                _assert_legacy_preserved(
+                    before_generate,
+                    fixture,
+                    expected,
+                    checks,
+                )
                 _assert_renamed_resources(before_generate, checks)
 
                 page.reload(wait_until="domcontentloaded")
@@ -391,10 +858,17 @@ def _run_python_adapter() -> int:
                     "() => window.__GBDRAW_APP__?.pyodideReady === true", timeout=240_000
                 )
                 _assert_telemetry(_generate(page), expected, checks)
+                first_layout = _inspect_layout(page)
+                _assert_layout(first_layout, checks)
+                _assert_svg_geometry_parity(
+                    page,
+                    _download_svg(page, checks),
+                    checks,
+                )
 
                 migrated_path = _save_session(page, checks)
                 migrated = _read_session(migrated_path)
-                _assert_current_artifacts(migrated, expected, checks)
+                _assert_current_artifacts(migrated, fixture, expected, checks)
                 _assert_renamed_resources(migrated, checks)
 
                 page.reload(wait_until="domcontentloaded")
@@ -404,6 +878,13 @@ def _run_python_adapter() -> int:
                     "() => window.__GBDRAW_APP__?.pyodideReady === true", timeout=240_000
                 )
                 _assert_telemetry(_generate(page), expected, checks)
+                second_layout = _inspect_layout(page)
+                _assert_layout(second_layout, checks)
+                checks.require(
+                    second_layout.get("geometrySignature")
+                    == first_layout.get("geometrySignature"),
+                    "Resolved BGC geometry changed after save/reload/regeneration.",
+                )
                 context.close()
             finally:
                 browser.close()

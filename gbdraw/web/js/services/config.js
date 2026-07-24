@@ -76,6 +76,7 @@ import {
   isCurrentRawLosatCacheEntry,
   isLosatDerivedCacheEntry,
   normalizeLegacyProteinCandidateEnvelope,
+  pruneSerializedLosatArtifacts,
   serializableLegacyProteinCandidateEnvelope,
   validateProteinIdentityManifest
 } from '../app/losat-cache.js';
@@ -2798,7 +2799,12 @@ const guardSessionFeatureMetadataForExport = async () => {
 };
 
 export const exportSession = async (titleOverride = null) => {
-  const losatEntries = serializeLosatCache();
+  const serializedLosatArtifacts = pruneSerializedLosatArtifacts({
+    rawEntries: serializeLosatCache(),
+    derivedEntries: serializeLosatDerivedCache()
+  });
+  const losatEntries = serializedLosatArtifacts.rawEntries;
+  const losatDerivedEntries = serializedLosatArtifacts.derivedEntries;
   const losatBytes = losatEntries.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
   const currentLegend = state.form.legend;
   const isLinear = state.mode.value === 'linear';
@@ -2966,7 +2972,7 @@ export const exportSession = async (titleOverride = null) => {
       entries: losatEntries
     },
     losatDerivedCache: {
-      entries: serializeLosatDerivedCache()
+      entries: losatDerivedEntries
     },
     proteinIdentityManifest: validateProteinIdentityManifest(state.proteinIdentityManifest.value)
       ? cloneJsonData(state.proteinIdentityManifest.value)

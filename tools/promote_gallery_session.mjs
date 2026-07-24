@@ -7,7 +7,7 @@ import { promoteGallerySessionToCanonicalV3 } from '../gbdraw/web/js/services/ga
 const [inputPath, outputPath] = process.argv.slice(2);
 if (!inputPath || !outputPath) {
   throw new Error(
-    'Usage: node --experimental-default-type=module tools/promote_gallery_session.mjs INPUT OUTPUT'
+    'Usage: node tools/promote_gallery_session.mjs INPUT OUTPUT'
   );
 }
 

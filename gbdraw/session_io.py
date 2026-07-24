@@ -40,6 +40,7 @@ LOSAT_DERIVED_CACHE_SCHEMA = 2
 LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1
 PROTEIN_IDENTITY_MANIFEST_SCHEMA = 1
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
+SESSION_LOSAT_CACHE_BYTE_LIMIT = 109_051_904
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -188,6 +189,79 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
     return "invalid"
 
 
+def _compact_json_byte_length(value: object) -> int:
+    return len(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+
+
+def serialized_losat_artifact_byte_length(
+    raw_entries: Sequence[Mapping[str, Any]],
+    derived_entries: Sequence[Mapping[str, Any]],
+) -> int:
+    """Return compact UTF-8 bytes for both cache entry envelopes."""
+
+    return (
+        28
+        + sum(_compact_json_byte_length(entry) for entry in raw_entries)
+        + sum(_compact_json_byte_length(entry) for entry in derived_entries)
+        + max(0, len(raw_entries) - 1)
+        + max(0, len(derived_entries) - 1)
+    )
+
+
+def prune_serialized_losat_artifacts(
+    raw_entries: Sequence[Mapping[str, Any]],
+    derived_entries: Sequence[Mapping[str, Any]],
+    *,
+    max_bytes: int = SESSION_LOSAT_CACHE_BYTE_LIMIT,
+) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]]]:
+    """Bound current raw/derived cache artifacts by compact UTF-8 JSON size."""
+
+    raw = list(raw_entries)
+    derived = list(derived_entries)
+    limit = max(28, int(max_bytes))
+    raw_sizes = [_compact_json_byte_length(entry) for entry in raw]
+    derived_sizes = [_compact_json_byte_length(entry) for entry in derived]
+    selected_raw: set[int] = set()
+    selected_derived: set[int] = set()
+    serialized_bytes = 28
+
+    def add_entry(index: int, sizes: list[int], selected: set[int]) -> bool:
+        nonlocal serialized_bytes
+        if index in selected:
+            return True
+        entry_bytes = sizes[index] + (1 if selected else 0)
+        if serialized_bytes + entry_bytes > limit:
+            return False
+        selected.add(index)
+        serialized_bytes += entry_bytes
+        return True
+
+    reserved_raw_index = len(raw) - 1
+    if reserved_raw_index >= 0:
+        add_entry(reserved_raw_index, raw_sizes, selected_raw)
+
+    for index in range(len(derived) - 1, -1, -1):
+        add_entry(index, derived_sizes, selected_derived)
+
+    for index in range(len(raw) - 1, -1, -1):
+        add_entry(index, raw_sizes, selected_raw)
+
+    return (
+        [entry for index, entry in enumerate(raw) if index in selected_raw],
+        [
+            entry
+            for index, entry in enumerate(derived)
+            if index in selected_derived
+        ],
+    )
+
+
 def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     """Validate version-35 cache, manifest, and legacy artifact boundaries."""
 
@@ -292,8 +366,6 @@ def normalize_current_session_artifacts(
             raise ValidationError(
                 f"Cannot write invalid LOSAT cache entry at index {index}."
             )
-    session["losatCache"] = {"entries": current_raw_entries}
-
     source_derived_entries = (
         list(losat_derived_cache_entries)
         if losat_derived_cache_entries is not None
@@ -312,6 +384,11 @@ def normalize_current_session_artifacts(
             raise ValidationError(
                 f"Cannot write invalid derived LOSATP cache entry at index {index}."
             )
+    current_raw_entries, current_derived_entries = prune_serialized_losat_artifacts(
+        current_raw_entries,
+        current_derived_entries,
+    )
+    session["losatCache"] = {"entries": current_raw_entries}
     session["losatDerivedCache"] = {"entries": current_derived_entries}
 
     source_manifest = (

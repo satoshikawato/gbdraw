@@ -4,12 +4,104 @@ export const LOSAT_DERIVED_CACHE_SCHEMA = 2;
 export const LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1;
 export const PROTEIN_IDENTITY_MANIFEST_SCHEMA = 1;
 export const LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1;
+export const SESSION_LOSAT_CACHE_BYTE_LIMIT = 109_051_904;
 
 const LEGACY_CANDIDATE_STATES = new Set(['pending', 'promoted', 'rejected']);
+const LOSAT_OUTFMT6_COLUMN_COUNT = 12;
+const EMPTY_CACHE_ENVELOPE_BYTE_LENGTH = 14;
 
 export const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
+
+const utf8ByteLength = (value) => {
+  const text = String(value ?? '');
+  let length = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const codePoint = text.charCodeAt(index);
+    if (codePoint < 0x80) {
+      length += 1;
+    } else if (codePoint < 0x800) {
+      length += 2;
+    } else if (
+      codePoint >= 0xd800 &&
+      codePoint <= 0xdbff &&
+      index + 1 < text.length &&
+      text.charCodeAt(index + 1) >= 0xdc00 &&
+      text.charCodeAt(index + 1) <= 0xdfff
+    ) {
+      length += 4;
+      index += 1;
+    } else {
+      length += 3;
+    }
+  }
+  return length;
+};
+
+const serializedJsonByteLength = (value) => {
+  const serialized = JSON.stringify(value);
+  return typeof serialized === 'string' ? utf8ByteLength(serialized) : 0;
+};
+
+export const serializedLosatArtifactByteLength = ({
+  rawEntries = [],
+  derivedEntries = []
+} = {}) => (
+  (2 * EMPTY_CACHE_ENVELOPE_BYTE_LENGTH) +
+  rawEntries.reduce((sum, entry) => sum + serializedJsonByteLength(entry), 0) +
+  derivedEntries.reduce((sum, entry) => sum + serializedJsonByteLength(entry), 0) +
+  Math.max(0, rawEntries.length - 1) +
+  Math.max(0, derivedEntries.length - 1)
+);
+
+export const pruneSerializedLosatArtifacts = ({
+  rawEntries = [],
+  derivedEntries = [],
+  maxBytes = SESSION_LOSAT_CACHE_BYTE_LIMIT
+} = {}) => {
+  const raw = Array.isArray(rawEntries) ? rawEntries : [];
+  const derived = Array.isArray(derivedEntries) ? derivedEntries : [];
+  const limit = Number.isFinite(Number(maxBytes))
+    ? Math.max(2 * EMPTY_CACHE_ENVELOPE_BYTE_LENGTH, Math.trunc(Number(maxBytes)))
+    : SESSION_LOSAT_CACHE_BYTE_LIMIT;
+  const rawSizes = raw.map((entry) => serializedJsonByteLength(entry));
+  const derivedSizes = derived.map((entry) => serializedJsonByteLength(entry));
+  const selectedRaw = new Set();
+  const selectedDerived = new Set();
+  let serializedBytes = 2 * EMPTY_CACHE_ENVELOPE_BYTE_LENGTH;
+
+  const addEntry = (index, sizes, selected) => {
+    if (selected.has(index)) return true;
+    const separatorBytes = selected.size > 0 ? 1 : 0;
+    const entryBytes = sizes[index] + separatorBytes;
+    if (serializedBytes + entryBytes > limit) return false;
+    selected.add(index);
+    serializedBytes += entryBytes;
+    return true;
+  };
+
+  // Reserve the last serialized raw result, then scan derived and remaining
+  // raw entries in reverse serialized order without changing output order.
+  const reservedRawIndex = raw.length - 1;
+  if (reservedRawIndex >= 0) {
+    addEntry(reservedRawIndex, rawSizes, selectedRaw);
+  }
+
+  for (let index = derived.length - 1; index >= 0; index -= 1) {
+    addEntry(index, derivedSizes, selectedDerived);
+  }
+
+  for (let index = raw.length - 1; index >= 0; index -= 1) {
+    addEntry(index, rawSizes, selectedRaw);
+  }
+
+  return {
+    rawEntries: raw.filter((_entry, index) => selectedRaw.has(index)),
+    derivedEntries: derived.filter((_entry, index) => selectedDerived.has(index)),
+    serializedBytes
+  };
+};
 
 const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
@@ -123,10 +215,30 @@ export const validateProteinIdentityManifest = (manifest) => {
     !isPlainObject(manifest.recordInstances)
   ) return false;
 
+  const proteinSetFeatureIds = new Map();
+  for (const [proteinSetHash, proteinSet] of Object.entries(manifest.proteinSets)) {
+    if (!proteinSetHash || !isPlainObject(proteinSet) || proteinSet.schema !== 1) return false;
+    if (!Array.isArray(proteinSet.proteins)) return false;
+    const featureIds = new Set();
+    for (const protein of proteinSet.proteins) {
+      const featureId = isPlainObject(protein) ? protein.featureAnalysisId : null;
+      if (
+        typeof featureId !== 'string' ||
+        !featureId.startsWith('f_') ||
+        featureIds.has(featureId)
+      ) return false;
+      featureIds.add(featureId);
+    }
+    proteinSetFeatureIds.set(proteinSetHash, featureIds);
+  }
+
   const allTransportIds = new Set();
   for (const analysis of Object.values(manifest.recordAnalyses)) {
     if (!isPlainObject(analysis) || analysis.schema !== 1) return false;
-    if (!Object.prototype.hasOwnProperty.call(manifest.proteinSets, analysis.proteinSetHash)) {
+    if (
+      typeof analysis.proteinSetHash !== 'string' ||
+      !proteinSetFeatureIds.has(analysis.proteinSetHash)
+    ) {
       return false;
     }
   }
@@ -137,9 +249,17 @@ export const validateProteinIdentityManifest = (manifest) => {
     }
     if (typeof instance.bindingHash !== 'string' || !instance.bindingHash) return false;
     if (!isPlainObject(instance.transportIds)) return false;
+    const analysis = manifest.recordAnalyses[instance.recordAnalysisId];
+    const expectedFeatureIds = proteinSetFeatureIds.get(analysis.proteinSetHash);
+    if (Object.keys(instance.transportIds).length !== expectedFeatureIds.size) return false;
     for (const [featureId, transportId] of Object.entries(instance.transportIds)) {
-      if (!String(featureId).startsWith('f_')) return false;
-      if (typeof transportId !== 'string' || !transportId || /\s/.test(transportId)) return false;
+      if (!expectedFeatureIds.has(featureId)) return false;
+      if (
+        typeof transportId !== 'string' ||
+        !transportId ||
+        /\s/.test(transportId) ||
+        !transportId.endsWith(`~${featureId}`)
+      ) return false;
       if (allTransportIds.has(transportId)) return false;
       allTransportIds.add(transportId);
     }
@@ -199,7 +319,11 @@ export const rawProteinTextMatchesBindings = (text, queryIds, subjectIds) => {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
     const columns = rawLine.split('\t');
-    if (columns.length < 2 || !queryIds.has(columns[0]) || !subjectIds.has(columns[1])) {
+    if (
+      columns.length !== LOSAT_OUTFMT6_COLUMN_COUNT ||
+      !queryIds.has(columns[0]) ||
+      !subjectIds.has(columns[1])
+    ) {
       return false;
     }
   }

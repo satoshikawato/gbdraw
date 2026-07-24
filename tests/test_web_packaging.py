@@ -523,7 +523,7 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     assert "featureVisibilityTsv: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTablePath || null" in worker_js
     assert "feature_visibility_table_path=None" in helper_js
-    assert "extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None)" in helper_js
+    assert "extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False)" in helper_js
     assert "feature_visibility_rules=feature_visibility_rules" in helper_js
     assert "if (mode === 'off')" in svg_actions_js
     assert "mode === 'off' || mode === 'suppress'" not in svg_actions_js
@@ -809,6 +809,14 @@ def test_gallery_csp_allows_same_origin_tutorial_media() -> None:
 def test_open_source_notices_are_generated() -> None:
     subprocess.run(
         [sys.executable, "tools/generate_open_source_notices.py", "--check"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
+def test_open_source_notices_generator_does_not_require_runtime_dependencies() -> None:
+    subprocess.run(
+        [sys.executable, "-S", "tools/generate_open_source_notices.py", "--check"],
         cwd=REPO_ROOT,
         check=True,
     )
@@ -1242,9 +1250,17 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "nucleotide_sequence" in feature_metadata_source
     assert "amino_acid_sequence" in feature_metadata_source
     assert '"organism": organism' in feature_metadata_source
-    assert '"source_protein_id": _first_qualifier_value(feat.qualifiers, "protein_id")' in feature_metadata_source
+    assert re.search(
+        r'"source_protein_id":\s*_first_qualifier_value\(\s*'
+        r'feat\.qualifiers,\s*"protein_id"\s*\)',
+        feature_metadata_source,
+    )
     assert '"gene_id": _first_qualifier_value(feat.qualifiers, "gene_id")' in feature_metadata_source
-    assert '"old_locus_tag": _first_qualifier_value(feat.qualifiers, "old_locus_tag")' in feature_metadata_source
+    assert re.search(
+        r'"old_locus_tag":\s*_first_qualifier_value\(\s*'
+        r'feat\.qualifiers,\s*"old_locus_tag"\s*\)',
+        feature_metadata_source,
+    )
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
@@ -1308,14 +1324,19 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         session = load_session(session_path)
         features = session.get("features", {}).get("extractedFeatures", [])
         svg_text = "\n".join(result.get("content", "") for result in session.get("results", []))
-        rendered_feature_ids = {
-            re.sub(r"__part\d+$", "", match)
-            for match in re.findall(r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']", svg_text)
+        rendered_stable_feature_ids = {
+            match
+            for match in re.findall(
+                r"data-gbdraw-stable-feature-id=[\"']([^\"']+)[\"']",
+                svg_text,
+            )
         }
         feature_ids = {
             candidate
             for feature in features
             for candidate in (
+                str(feature.get("stable_feature_id") or ""),
+                str(feature.get("stable_svg_id") or ""),
                 str(feature.get("svg_id") or ""),
                 re.sub(r"_record_\d+$", "", str(feature.get("svg_id") or "")),
             )
@@ -1329,8 +1350,8 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         assert features, session_name
         assert session.get("results"), session_name
         assert "orthogroupState" in session, session_name
-        assert rendered_feature_ids, session_name
-        assert rendered_feature_ids <= feature_ids, session_name
+        assert rendered_stable_feature_ids, session_name
+        assert rendered_stable_feature_ids <= feature_ids, session_name
         if session_name in GALLERY_EDITOR_STATE_SESSION_FILES:
             assert session.get("editorState"), session_name
         if session_name in GALLERY_LOSAT_CACHE_SESSION_FILES:
@@ -2320,7 +2341,10 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     assert "gallery/media/**/*" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     assert "gallery/sessions/*.gbdraw-session.json.gz" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     remote_assets = json.loads((bundle_path / "gallery" / "remote-assets.json").read_text(encoding="utf-8"))
-    assert "gallery/examples/Vnig_TUMSAT-TG-2018.svg" not in remote_assets
+    assert (
+        remote_assets["gallery/examples/Vnig_TUMSAT-TG-2018.svg"]
+        == f"{remote_base}gallery/examples/Vnig_TUMSAT-TG-2018.svg"
+    )
     assert "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz" not in remote_assets
     assert (
         remote_assets[
@@ -2333,7 +2357,9 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
         == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
     )
     assert all("/main/" not in url for url in remote_assets.values())
-    assert (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
+    assert not (
+        bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg"
+    ).exists()
     assert not (
         bundle_path
         / "gallery"

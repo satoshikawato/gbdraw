@@ -14,6 +14,7 @@ await writeFile(
 );
 
 const cache = await import(pathToFileURL(join(tempRoot, 'losat-cache.js')));
+assert.equal(cache.SESSION_LOSAT_CACHE_BYTE_LIMIT, 109_051_904);
 
 const manifest = {
   schema: 1,
@@ -86,6 +87,60 @@ assert.equal(cache.classifyRawLosatCacheEntry(nucleotideEntry), 'nucleotide-curr
 assert.equal(cache.classifyRawLosatCacheEntry(legacyProteinEntry), 'protein-legacy');
 assert.equal(cache.validateProteinIdentityManifest(manifest), true);
 assert.equal(cache.validateProteinRawEntryReferences(proteinEntry, manifest), true);
+const queryTransportIds = new Set(['A@record-1|protein-a~f_a']);
+const subjectTransportIds = new Set(['B@record-2|protein-b~f_b']);
+assert.equal(
+  cache.rawProteinTextMatchesBindings(proteinEntry.text, queryTransportIds, subjectTransportIds),
+  true
+);
+assert.equal(
+  cache.rawProteinTextMatchesBindings(
+    'A@record-1|protein-a~f_a\tB@record-2|protein-b~f_b\n',
+    queryTransportIds,
+    subjectTransportIds
+  ),
+  false,
+  'binding IDs alone are not a valid LOSAT outfmt 6 row'
+);
+assert.equal(
+  cache.rawProteinTextMatchesBindings(
+    `${proteinEntry.text.trimEnd()}\textra\n`,
+    queryTransportIds,
+    subjectTransportIds
+  ),
+  false,
+  'LOSAT outfmt 6 rows must not contain unexpected columns'
+);
+
+const manifestWithQueryTransportIds = (transportIds) => ({
+  ...manifest,
+  recordInstances: {
+    ...manifest.recordInstances,
+    'record-1': {
+      ...manifest.recordInstances['record-1'],
+      transportIds
+    }
+  }
+});
+const mismatchedBindingManifest = manifestWithQueryTransportIds({
+  f_missing: 'A@record-1|protein-a~f_missing'
+});
+assert.equal(
+  cache.validateProteinIdentityManifest(mismatchedBindingManifest),
+  false,
+  'a binding must reference exactly the features in its protein set'
+);
+assert.equal(
+  cache.validateProteinRawEntryReferences(proteinEntry, mismatchedBindingManifest),
+  false
+);
+assert.equal(
+  cache.validateProteinIdentityManifest(manifestWithQueryTransportIds({
+    f_a: 'A@record-1|protein-a~f_missing'
+  })),
+  false,
+  'a transport ID must identify the feature referenced by its binding key'
+);
 
 const rawMap = new Map([['protein-key', { ...proteinEntry, key: undefined }]]);
 assert.equal(
@@ -111,7 +166,7 @@ assert.equal(
 const invalidTextMap = new Map([['protein-key', {
   ...proteinEntry,
   key: undefined,
-  text: 'unknown\tB@record-2|protein-b~f_b\n'
+  text: 'unknown\tB@record-2|protein-b~f_b\t100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n'
 }]]);
 assert.equal(
   cache.getCurrentRawLosatCacheEntry(invalidTextMap, 'protein-key', {
@@ -159,4 +214,35 @@ assert.throws(
     }
   ]),
   /conflicting record instance/
+);
+
+const rawCacheEntries = [
+  { key: 'raw-first-visible', display: true, text: 'a'.repeat(40) },
+  { key: 'raw-middle-visible', display: true, text: 'b'.repeat(40) },
+  { key: 'raw-last-hidden', display: false, text: 'c'.repeat(40) }
+];
+const derivedCacheEntries = [
+  { key: 'derived-first', payload: 'd'.repeat(40) },
+  { key: 'derived-last', payload: 'e'.repeat(40) }
+];
+const exactBudget = cache.serializedLosatArtifactByteLength({
+  rawEntries: [rawCacheEntries[2]],
+  derivedEntries: [derivedCacheEntries[1]]
+});
+const prunedArtifacts = cache.pruneSerializedLosatArtifacts({
+  rawEntries: rawCacheEntries,
+  derivedEntries: derivedCacheEntries,
+  maxBytes: exactBudget
+});
+assert.deepEqual(
+  prunedArtifacts.rawEntries.map((entry) => entry.key),
+  ['raw-last-hidden']
+);
+assert.deepEqual(
+  prunedArtifacts.derivedEntries.map((entry) => entry.key),
+  ['derived-last']
+);
+assert.equal(
+  cache.serializedLosatArtifactByteLength(prunedArtifacts),
+  exactBudget
 );

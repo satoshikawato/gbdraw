@@ -169,7 +169,7 @@
       "AP027132.gb",
       "NZ_CP006932.gb"
     ],
-    "fileSizeLabel": "35.6 MB",
+    "fileSizeLabel": "37.0 MB",
     "command": "gbdraw linear --losatp_threads 32 --protein_blastp_mode collinear -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai --collinear_color_mode orientation_identity -o hepatoplasmataceae_collinear",
     "commandKind": "runnable",
     "commandNote": "Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
@@ -205,7 +205,7 @@
       "GCF_000196095.1_ASM19609v1_genomic.gbff",
       "GCF_000354175.2_ASM35417v2_genomic.gbff"
     ],
-    "fileSizeLabel": "75.0 MB",
+    "fileSizeLabel": "82.2 MB",
     "command": "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv --linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis --scale_interval 750000 --separate_strands --hide_accession --hide_length --definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' --definition_line_style 'subtitle:size=16' --keep_definition_left_aligned --protein_blastp_mode collinear --collinear_search_scope adjacent --protein_blastp_candidate_limit 5 --collinear_min_anchors 3 --collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 --collinear_color_mode orientation_identity --pairwise_match_style curve --losatp_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle --feature_shape tRNA=rectangle --feature_shape tmRNA=rectangle --feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle --feature_shape repeat_region=rectangle --block_stroke_width 0 --axis_stroke_width 2 --line_stroke_width 1 --legend bottom -o vibrio-harveyi-group-collinear -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
@@ -240,7 +240,7 @@
       "AP027132.gb",
       "NZ_CP006932.gb"
     ],
-    "fileSizeLabel": "38.9 MB",
+    "fileSizeLabel": "40.5 MB",
     "command": "gbdraw linear --protein_blastp_mode orthogroup --losatp_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --show_gc --show_skew --palette ajisai -o hepatoplasmataceae_orthogroup",
     "commandKind": "runnable",
     "commandNote": "Download the five accession-pinned GenBank inputs from Files. The CLI value remains orthogroup for compatibility.",
@@ -314,7 +314,7 @@
       "MeenMJNV.gb",
       "MejoMJNV.gb"
     ],
-    "fileSizeLabel": "15.1 MB",
+    "fileSizeLabel": "15.7 MB",
     "command": "gbdraw linear --separate_strands --losatp_threads 32 --protein_blastp_mode orthogroup --definition_font_size 18 --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 18 --legend_font_size 18 -d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center --bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg --pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 --record_label 'Marsupenaeus japonicus endogenous nimavirus' --record_label 'Melicertus latisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus A' --record_label 'Penaeus semisulcatus majanivirus' --record_label 'Penaeus monodon majanivirus B' --record_label 'Litopenaeus vannamei majanivirus' --record_label 'Trachysalambria curvirostris majanivirus' --record_label 'Metapenaeus ensis majanivirus' --record_label 'Metapenaeus joyneri majanivirus' --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb -o majanivirus_orthogroup",
     "commandKind": "runnable",
     "commandNote": "Download the nine accession-pinned records and both repository-managed color tables from Files.",

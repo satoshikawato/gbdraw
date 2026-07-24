@@ -1309,6 +1309,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=[
+            "features:features@r=0.5,w=10px",
             "ticks:ticks@r=0.94,side=outside,tick_label_layout=tick_only",
             "gc_content:dinucleotide_content@r=0.74,w=22px",
             "gc_skew:dinucleotide_skew@r=0.68,w=18px",

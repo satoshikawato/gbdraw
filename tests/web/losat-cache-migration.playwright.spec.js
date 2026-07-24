@@ -15,6 +15,10 @@ const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
+const CURRENT_SESSION_VERSION = 35;
+const CURRENT_RENDER_REQUEST_SCHEMA = 3;
+const CURRENT_PROTEIN_RAW_SCHEMA = 3;
+const CURRENT_PROTEIN_DERIVED_SCHEMA = 2;
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -31,6 +35,7 @@ const contentTypes = {
 
 let server;
 let baseUrl;
+let sourceSession;
 
 const expandedSessionBytes = (path) => {
   const bytes = readFileSync(path);
@@ -60,16 +65,53 @@ const saveSession = async (page) => {
   return path;
 };
 
-const assertLegacyCandidatesPreserved = (session) => {
-  const candidates = session.legacyArtifacts?.proteinRawCandidates?.entries;
+const downloadSvg = async (page) => {
+  const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
+  await page.evaluate(() => window.__GBDRAW_APP__.downloadSVG());
+  const download = await downloadPromise;
+  const path = await download.path();
+  expect(path).toBeTruthy();
+  return path;
+};
+
+const assertCurrentSessionBoundary = (session, { requireDerived = false } = {}) => {
+  const rawEntries = session.losatCache?.entries || [];
+  const derivedEntries = session.losatDerivedCache?.entries || [];
   expect(session.format).toBe('gbdraw-session');
+  expect(session.version).toBe(CURRENT_SESSION_VERSION);
+  expect(session.renderRequest?.schema).toBe(CURRENT_RENDER_REQUEST_SCHEMA);
+  expect(rawEntries.every((entry) => (
+    entry?.identityKind !== 'protein' ||
+    entry?.schema === CURRENT_PROTEIN_RAW_SCHEMA
+  ))).toBe(true);
+  expect(derivedEntries.every(
+    (entry) => entry?.schema === CURRENT_PROTEIN_DERIVED_SCHEMA
+  )).toBe(true);
+  if (requireDerived) {
+    expect(derivedEntries.length).toBeGreaterThan(0);
+  }
+};
+
+const assertLegacyCandidatesPreserved = (session) => {
+  assertCurrentSessionBoundary(session);
+  const rawEnvelope = session.legacyArtifacts?.proteinRawCandidates;
+  const candidates = rawEnvelope?.entries;
+  const derivedEnvelope = session.legacyArtifacts?.proteinDerivedEvidence;
   expect(session.losatCache?.entries || []).toHaveLength(0);
+  expect(session.losatDerivedCache?.entries || []).toHaveLength(0);
+  expect(rawEnvelope?.schema).toBe(1);
   expect(candidates).toHaveLength(expected.storedRawEntries);
   expect(candidates.every((candidate) => (
     candidate.state === 'pending' &&
     candidate.originalEntry?.schema === 2 &&
     candidate.originalEntry?.program === 'blastp'
   ))).toBe(true);
+  expect(candidates.map((candidate) => candidate.originalEntry))
+    .toEqual(sourceSession.losatCache?.entries || []);
+  expect(derivedEnvelope).toEqual({
+    schema: 1,
+    entries: sourceSession.losatDerivedCache?.entries || []
+  });
 };
 
 const assertRenamedZeroMtimeResources = (session) => {
@@ -89,8 +131,10 @@ const assertRenamedZeroMtimeResources = (session) => {
 };
 
 const assertCurrentProteinArtifacts = (session) => {
+  assertCurrentSessionBoundary(session, { requireDerived: true });
   const manifest = session.proteinIdentityManifest;
   const entries = session.losatCache?.entries || [];
+  const derivedEntries = session.losatDerivedCache?.entries || [];
   expect(manifest?.schema).toBe(1);
   expect(entries).toHaveLength(expected.totalPairs);
   expect(entries.every((entry) => (
@@ -99,6 +143,20 @@ const assertCurrentProteinArtifacts = (session) => {
     entry?.identityKind === 'protein' &&
     entry?.program === 'blastp'
   ))).toBe(true);
+  expect(derivedEntries.every((entry) => (
+    entry?.schema === CURRENT_PROTEIN_DERIVED_SCHEMA &&
+    entry?.kind === 'derived-losatp-payload'
+  ))).toBe(true);
+  const legacyCandidates = session.legacyArtifacts?.proteinRawCandidates?.entries || [];
+  expect(legacyCandidates).toHaveLength(expected.storedRawEntries - expected.totalPairs);
+  expect(legacyCandidates.every((candidate) => (
+    candidate.state === 'pending' &&
+    (sourceSession.losatCache?.entries || []).some(
+      (entry) => JSON.stringify(entry) === JSON.stringify(candidate.originalEntry)
+    )
+  ))).toBe(true);
+  expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || [])
+    .toEqual(sourceSession.losatDerivedCache?.entries || []);
 
   const transportOwners = new Map();
   for (const [instanceKey, instance] of Object.entries(manifest.recordInstances || {})) {
@@ -140,6 +198,35 @@ const assertCurrentProteinArtifacts = (session) => {
     }
   }
   expect(resolvedReferenceCount).toBeGreaterThan(0);
+
+  const scalarReferenceKeys = new Set([
+    'query_protein_id',
+    'subject_protein_id',
+    'queryProteinId',
+    'subjectProteinId',
+    'proteinId'
+  ]);
+  const listReferenceKeys = new Set(['proteinIds', 'sharedProteinIds']);
+  const derivedReferences = [];
+  const collectReferences = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(collectReferences);
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    for (const [key, item] of Object.entries(value)) {
+      if (scalarReferenceKeys.has(key) && typeof item === 'string') {
+        derivedReferences.push(item);
+      } else if (listReferenceKeys.has(key) && Array.isArray(item)) {
+        derivedReferences.push(...item.filter((reference) => typeof reference === 'string'));
+      }
+      collectReferences(item);
+    }
+  };
+  collectReferences(derivedEntries);
+  expect(derivedReferences.length).toBeGreaterThan(0);
+  expect(derivedReferences.filter((reference) => !transportOwners.has(reference))).toEqual([]);
+  expect(JSON.stringify(derivedEntries)).not.toContain('p_r_');
 };
 
 const generateWithTelemetry = async (page) => page.evaluate(async () => {
@@ -171,10 +258,251 @@ const assertExpectedTelemetry = (run) => {
   expect(run.executorCalls, diagnostics).toBe(expected.workerCalls);
 };
 
+const inspectLayout = async (page) => {
+  await page.waitForFunction(() => (
+    window.__GBDRAW_APP__?.svgContainer?.querySelector('svg')
+      ?.querySelectorAll('g[data-query-row][data-subject-row]').length === 4
+  ), null, { timeout: 120000 });
+  return page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const geometry = JSON.parse(JSON.stringify(state.trackSlotResolvedGeometry.value || null));
+    const svg = state.svgContainer.value?.querySelector('svg');
+    if (!geometry || !svg) {
+      return { error: 'Resolved Linear geometry or the preview SVG is unavailable.' };
+    }
+
+    const epsilon = 1e-6;
+    const records = (Array.isArray(geometry.records) ? geometry.records : [])
+      .slice()
+      .sort((left, right) => Number(left.recordIndex) - Number(right.recordIndex));
+    const directGroups = Array.from(svg.children).filter(
+      (element) => element.tagName?.toLowerCase() === 'g'
+    );
+    const comparisonGroups = directGroups
+      .filter((element) => (
+        element.hasAttribute('data-query-row') &&
+        element.hasAttribute('data-subject-row')
+      ))
+      .sort((left, right) => (
+        Number(left.getAttribute('data-query-row')) -
+        Number(right.getAttribute('data-query-row'))
+      ));
+    const activeBoundaries = new Set(comparisonGroups.map((element) => (
+      `${element.getAttribute('data-query-row')}:${element.getAttribute('data-subject-row')}`
+    )));
+
+    const xOverlaps = (left, right) => (
+      Math.min(Number(left.xEndPx), Number(right.xEndPx)) -
+      Math.max(Number(left.xStartPx), Number(right.xStartPx))
+    ) > epsilon;
+    const pairIsEligible = (left, right, boundaryActive) => (
+      (left.kind === 'body' && right.kind === 'body') ||
+      (boundaryActive && left.kind === 'comparison' && right.kind === 'comparison') ||
+      (left.kind === 'definition' && right.kind === 'definition') ||
+      (left.kind === 'definition' && right.kind === 'body') ||
+      (left.kind === 'body' && right.kind === 'definition')
+    );
+
+    const collisionChecks = [];
+    const axisGaps = [];
+    for (let boundary = 0; boundary < records.length - 1; boundary += 1) {
+      const nextRow = boundary + 1;
+      const current = records[boundary];
+      const following = records[nextRow];
+      const boundaryActive = activeBoundaries.has(`${boundary}:${nextRow}`);
+      axisGaps.push(Number(following?.axisYpx) - Number(current?.axisYpx));
+      for (const currentBand of current?.collisionBands || []) {
+        for (const nextBand of following?.collisionBands || []) {
+          if (
+            !xOverlaps(currentBand, nextBand) ||
+            !pairIsEligible(currentBand, nextBand, boundaryActive)
+          ) continue;
+          collisionChecks.push({
+            boundaryRow: boundary,
+            kindPair: `${currentBand.kind}:${nextBand.kind}`,
+            gapPx: Number(nextBand.absoluteTopPx) - Number(currentBand.absoluteBottomPx)
+          });
+        }
+      }
+    }
+
+    const indexedGroups = (pattern) => directGroups
+      .map((element) => {
+        const match = String(element.id || '').match(pattern);
+        return match ? { element, index: Number(match[1]) - 1 } : null;
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.index - right.index);
+    const recordGroups = indexedGroups(/_record_(\d+)$/)
+      .filter(({ element }) => !String(element.id).includes('_definition_'));
+    const definitionGroups = indexedGroups(/_definition_record_(\d+)$/);
+    const screenBox = (element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        id: String(element.id || ''),
+        left: Number(box.left),
+        right: Number(box.right),
+        top: Number(box.top),
+        bottom: Number(box.bottom)
+      };
+    };
+    const overlap = (left, right) => ({
+      overlapX: Math.min(left.right, right.right) - Math.max(left.left, right.left),
+      overlapY: Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top)
+    });
+    const domChecks = [];
+    const addDomCheck = (label, leftElement, rightElement) => {
+      if (!leftElement || !rightElement) {
+        domChecks.push({ label, missing: true });
+        return;
+      }
+      const left = screenBox(leftElement);
+      const right = screenBox(rightElement);
+      domChecks.push({ label, missing: false, ...overlap(left, right) });
+    };
+    for (let index = 0; index < records.length; index += 1) {
+      addDomCheck(
+        `definition-body:${index}`,
+        definitionGroups[index]?.element,
+        recordGroups[index]?.element
+      );
+      if (index >= records.length - 1) continue;
+      addDomCheck(
+        `body-body:${index}`,
+        recordGroups[index]?.element,
+        recordGroups[index + 1]?.element
+      );
+      addDomCheck(
+        `definition-definition:${index}`,
+        definitionGroups[index]?.element,
+        definitionGroups[index + 1]?.element
+      );
+      addDomCheck(
+        `comparison-upper-body:${index}`,
+        comparisonGroups[index],
+        recordGroups[index]?.element
+      );
+      addDomCheck(
+        `comparison-lower-body:${index}`,
+        comparisonGroups[index],
+        recordGroups[index + 1]?.element
+      );
+    }
+
+    return {
+      error: '',
+      schema: geometry.schema,
+      mode: geometry.mode,
+      recordCount: records.length,
+      comparisonCount: comparisonGroups.length,
+      recordGroupCount: recordGroups.length,
+      definitionGroupCount: definitionGroups.length,
+      axisGaps,
+      collisionChecks,
+      collisionDomains: Array.from(new Set(
+        collisionChecks.map((check) => check.kindPair)
+      )).sort(),
+      domChecks,
+      geometrySignature: JSON.stringify(geometry)
+    };
+  });
+};
+
+const assertLayout = (layout) => {
+  expect(layout.error || '').toBe('');
+  // Browser run metadata publishes collision bands in the schema-1 wrapper.
+  // The canvas-private schema-2 axisGapConstraints are covered by Python unit tests.
+  expect(layout.schema).toBe(1);
+  expect(layout.mode).toBe('linear');
+  expect(layout.recordCount).toBe(5);
+  expect(layout.comparisonCount).toBe(4);
+  expect(layout.recordGroupCount).toBe(5);
+  expect(layout.definitionGroupCount).toBe(5);
+  expect(layout.axisGaps).toHaveLength(4);
+  expect(layout.axisGaps.every((gap) => gap > 0)).toBe(true);
+
+  expect(layout.collisionChecks.length).toBeGreaterThan(0);
+  expect(layout.collisionChecks.filter((check) => check.gapPx < -1e-6)).toEqual([]);
+  expect(layout.collisionDomains).toEqual(expect.arrayContaining([
+    'body:body',
+    'comparison:comparison',
+    'definition:definition'
+  ]));
+
+  expect(layout.domChecks.length).toBeGreaterThan(0);
+  expect(layout.domChecks.filter((check) => (
+    check.missing ||
+    (check.overlapX > 1e-6 && check.overlapY > 1e-6)
+  ))).toEqual([]);
+};
+
+const assertSvgGeometryParity = async (page, exportedPath) => {
+  const exportedSvg = readFileSync(exportedPath, 'utf8');
+  const parity = await page.evaluate(async (svgText) => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const preview = state.svgContainer.value?.querySelector('svg');
+    const parsed = new DOMParser().parseFromString(String(svgText || ''), 'image/svg+xml');
+    const exported = parsed.documentElement;
+    if (
+      !preview ||
+      !exported ||
+      exported.tagName?.toLowerCase() !== 'svg' ||
+      parsed.querySelector('parsererror')
+    ) {
+      return { error: 'The preview or exported SVG could not be parsed.' };
+    }
+    const geometryAttributes = [
+      'viewBox', 'width', 'height', 'data-horizontal-viewbox', 'data-vertical-viewbox',
+      'transform', 'd', 'points', 'x', 'y', 'x1', 'x2', 'y1', 'y2',
+      'cx', 'cy', 'r', 'rx', 'ry', 'dx', 'dy', 'font-family', 'font-size',
+      'font-weight', 'font-style', 'text-anchor', 'dominant-baseline',
+      'stroke-width', 'display', 'href', 'xlink:href'
+    ];
+    const signature = (root) => [root, ...root.querySelectorAll('*')].map((element) => {
+      const tag = element.tagName.toLowerCase();
+      const attributes = geometryAttributes
+        .filter((name) => element.hasAttribute(name))
+        .map((name) => [name, element.getAttribute(name)]);
+      const text = tag === 'text' || tag === 'tspan' ? element.textContent : '';
+      return [tag, String(element.id || ''), attributes, text];
+    });
+    const previewSignature = signature(preview);
+    const exportedSignature = signature(exported);
+    const length = Math.max(previewSignature.length, exportedSignature.length);
+    let mismatchIndex = -1;
+    for (let index = 0; index < length; index += 1) {
+      if (
+        JSON.stringify(previewSignature[index] ?? null) !==
+        JSON.stringify(exportedSignature[index] ?? null)
+      ) {
+        mismatchIndex = index;
+        break;
+      }
+    }
+    return {
+      error: '',
+      equal: mismatchIndex === -1,
+      previewElementCount: previewSignature.length,
+      exportedElementCount: exportedSignature.length,
+      mismatchIndex,
+      previewMismatch: mismatchIndex < 0 ? null : previewSignature[mismatchIndex],
+      exportedMismatch: mismatchIndex < 0 ? null : exportedSignature[mismatchIndex]
+    };
+  }, exportedSvg);
+  expect(parity.error || '').toBe('');
+  expect(parity.previewElementCount).toBeGreaterThan(0);
+  expect(parity.previewElementCount).toBe(parity.exportedElementCount);
+  expect(parity, JSON.stringify(parity, null, 2)).toMatchObject({
+    equal: true,
+    mismatchIndex: -1
+  });
+};
+
 test.beforeAll(async () => {
   expect(existsSync(fixturePath)).toBe(true);
   const fixtureBytes = expandedSessionBytes(fixturePath);
   const fixture = JSON.parse(fixtureBytes.toString('utf8'));
+  sourceSession = fixture;
   expect(createHash('sha256').update(fixtureBytes).digest('hex')).toBe(expected.sourceSha256);
   expect(fixture.version).toBe(expected.sessionVersion);
   expect(fixture.renderRequest?.schema).toBe(expected.renderRequestSchema);
@@ -255,6 +583,9 @@ test('real schema-2 protein cache survives save/load and migrates without LOSAT 
     { timeout: 240000 }
   );
   assertExpectedTelemetry(await generateWithTelemetry(page));
+  const firstLayout = await inspectLayout(page);
+  assertLayout(firstLayout);
+  await assertSvgGeometryParity(page, await downloadSvg(page));
 
   const migratedPath = await saveSession(page);
   const migratedSession = readSession(migratedPath);
@@ -270,4 +601,7 @@ test('real schema-2 protein cache survives save/load and migrates without LOSAT 
     { timeout: 240000 }
   );
   assertExpectedTelemetry(await generateWithTelemetry(page));
+  const secondLayout = await inspectLayout(page);
+  assertLayout(secondLayout);
+  expect(secondLayout.geometrySignature).toBe(firstLayout.geometrySignature);
 });

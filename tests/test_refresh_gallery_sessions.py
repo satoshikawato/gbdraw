@@ -8,12 +8,21 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from gbdraw.features.ids import compute_feature_hash_from_parts
-from gbdraw.session_io import load_session
+from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
+    LOSAT_DERIVED_CACHE_SCHEMA,
+    NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    PROTEIN_LOSAT_CACHE_SCHEMA,
+    load_session,
+)
+import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
 from tools.prepare_interactive_gallery_assets import (
     EXAMPLES,
     _migrate_legacy_multipart_feature_ids,
     _session_interactive_context,
+    _session_result_svg,
     _validate_interactive_orthogroup_payload,
     _validate_source_feature_ids,
 )
@@ -67,6 +76,42 @@ def test_with_interactive_svg_format_replaces_existing_format() -> None:
     ]
 
 
+def test_gallery_session_promoter_runs_mjs_without_obsolete_esm_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    commands: list[list[str]] = []
+    source = tmp_path / "source.json"
+    output = tmp_path / "output.json"
+
+    monkeypatch.setattr(
+        refresh_gallery_sessions_module.shutil,
+        "which",
+        lambda executable: "/opt/node" if executable == "node" else None,
+    )
+    monkeypatch.setattr(
+        refresh_gallery_sessions_module.subprocess,
+        "run",
+        lambda command, **kwargs: commands.append(command),
+    )
+    monkeypatch.setattr(refresh_gallery_sessions_module, "load_session", lambda path: {})
+
+    refresh_gallery_sessions_module._promote_gallery_session(
+        source,
+        output,
+        env={},
+    )
+
+    assert commands == [
+        [
+            "/opt/node",
+            str(refresh_gallery_sessions_module.SESSION_PROMOTER),
+            str(source),
+            str(output),
+        ]
+    ]
+
+
 def test_session_path_prefers_existing_compressed_gallery_session() -> None:
     path = _session_path("vibrio-harveyi-group-collinear")
 
@@ -75,6 +120,55 @@ def test_session_path_prefers_existing_compressed_gallery_session() -> None:
 
 def test_gallery_session_inventory_matches_files_and_examples() -> None:
     _validate_gallery_session_inventory()
+
+
+def test_all_bundled_current_sessions_use_current_artifact_schemas() -> None:
+    repo_root = Path(__file__).parents[1]
+    paths = sorted(
+        (repo_root / "gbdraw" / "web" / "gallery" / "sessions").glob(
+            "*.gbdraw-session.json*"
+        )
+    )
+    paths.extend(
+        sorted(
+            (repo_root / "tests" / "test_inputs").glob("*.gbdraw-session.json*")
+        )
+    )
+
+    assert len(paths) == 13
+    for path in paths:
+        session = load_session(path)
+        assert session["version"] == CURRENT_SESSION_VERSION, path
+        assert session["renderRequest"]["schema"] == 3, path
+        assert (
+            session["proteinIdentityManifest"]["schema"]
+            == PROTEIN_IDENTITY_MANIFEST_SCHEMA
+        ), path
+        assert not (
+            session.get("legacyArtifacts", {})
+            .get("proteinRawCandidates", {})
+            .get("entries", [])
+        ), path
+        for entry in session.get("losatCache", {}).get("entries", []):
+            if entry.get("identityKind") == "protein":
+                assert entry["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA, path
+            else:
+                assert entry["schema"] == NUCLEOTIDE_LOSAT_CACHE_SCHEMA, path
+        assert all(
+            entry["schema"] == LOSAT_DERIVED_CACHE_SCHEMA
+            for entry in session.get("losatDerivedCache", {}).get("entries", [])
+        ), path
+
+
+def test_bundled_gallery_sources_match_current_session_results() -> None:
+    for example in EXAMPLES:
+        if not example.sync_result_svg:
+            continue
+        session = load_session(example.session_path)
+        assert (
+            example.source_svg_path.read_text(encoding="utf-8")
+            == _session_result_svg(session, example)
+        ), example.id
 
 
 def test_preserve_gallery_cli_invocation_keeps_original_render_args() -> None:
@@ -300,7 +394,9 @@ def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
     )
 
     assert "def _read_or_create_source_svg(" in source
-    assert "if example.source_svg_path.exists():" in source
+    assert "existing_source = (" in source
+    assert "elif existing_source is not None:" in source
+    assert "if migrated != existing_source:" in source
     assert "example.source_svg_path.write_text(migrated" in source
     assert "_validate_source_feature_ids(example, session, migrated)" in source
     assert "def _sync_session_result_svg(" in source
@@ -309,6 +405,37 @@ def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
     assert "_write_gallery_svg(example, session, source)" in source
     assert 'entry["tutorial"] = f"./tutorials/{example.id}.json"' in source
     assert 'entry["tutorialStatus"] = "ready"' in source
+
+
+def test_gallery_source_refresh_replaces_existing_svg_from_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(gallery_assets_module, "SOURCE_ROOT", tmp_path)
+    example = gallery_assets_module.GallerySessionExample(
+        id="refresh-source",
+        title="Refresh source",
+        tags=(),
+        description="",
+        workflow="",
+        input_summary="",
+        display_order=1,
+        command_kind="",
+        command_note="",
+        interactive_svg=False,
+    )
+    stale = '<svg xmlns="http://www.w3.org/2000/svg"><text>stale</text></svg>'
+    current = '<svg xmlns="http://www.w3.org/2000/svg"><text>current</text></svg>'
+    example.source_svg_path.write_text(stale, encoding="utf-8")
+
+    source = gallery_assets_module._read_or_create_source_svg(
+        example,
+        {"results": [{"content": current}]},
+        refresh_from_session=True,
+    )
+
+    assert source == current
+    assert example.source_svg_path.read_text(encoding="utf-8") == current
 
 
 def test_gallery_source_migrates_legacy_multipart_feature_ids() -> None:
