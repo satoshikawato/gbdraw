@@ -1296,7 +1296,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     if (value === null || value === undefined) return;
     var text = String(value).trim();
-    if (text) {
+    if (text && !isInternalProteinDisplayId(text)) {
     items.push({
       label: label,
       value: text,
@@ -1437,31 +1437,103 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return '';
   }
 
+  function isInternalProteinDisplayId(value) {
+    var text = String(value == null ? '' : value).trim();
+    return Boolean(
+      /^h_[a-z2-7]{26}$/i.test(text) ||
+      /^f_[0-9a-f]{64}$/i.test(text) ||
+      /^p_r_/.test(text) ||
+      /@[^|]+\|.+~f_[0-9a-f]{64}$/i.test(text) ||
+      /^(?:gbd_r\\d+_(?:cds\\d+|unit\\d+)|p_.+_\\d+_\\d+_-?\\d+_[0-9a-f]{12}(?:_\\d+)?)$/i.test(text)
+    );
+  }
+
+  function firstNonInternalDisplayText() {
+    for (var i = 0; i < arguments.length; i += 1) {
+      var value = arguments[i];
+      if (Array.isArray(value)) {
+        var nested = firstNonInternalDisplayText.apply(null, value);
+        if (nested) return nested;
+        continue;
+      }
+      var text = String(value == null ? '' : value).trim();
+      if (text && !isInternalProteinDisplayId(text)) return text;
+    }
+    return '';
+  }
+
+  function containsInternalProteinDisplayId(value) {
+    return String(value == null ? '' : value)
+      .split(/[\\s;,]+/)
+      .some(function (token) {
+        return isInternalProteinDisplayId(String(token || '').replace(/^>+/, ''));
+      });
+  }
+
+  function safeDelimitedDisplayIds(value) {
+    return String(value == null ? '' : value)
+      .split(';')
+      .map(function (entry) { return String(entry || '').trim(); })
+      .filter(function (entry) { return entry && !isInternalProteinDisplayId(entry); })
+      .join('; ');
+  }
+
+  function qualifierDisplayValue(feature, key) {
+    var normalizedKey = String(key || '').trim().toLowerCase();
+    var qualifiers = getFeatureQualifiers(feature);
+    if (!normalizedKey) return '';
+    if (Object.prototype.hasOwnProperty.call(qualifiers, normalizedKey)) {
+      return firstNonInternalDisplayText(normalizeArray(qualifiers[normalizedKey]));
+    }
+    var keys = Object.keys(qualifiers);
+    for (var i = 0; i < keys.length; i += 1) {
+      if (String(keys[i]).toLowerCase() === normalizedKey) {
+        return firstNonInternalDisplayText(normalizeArray(qualifiers[keys[i]]));
+      }
+    }
+    return '';
+  }
+
   function displayProteinId(feature, member, fallback) {
-    return firstDisplayText(
-      feature && (feature.source_protein_id || feature.sourceProteinId),
-      member && (member.sourceProteinId || member.source_protein_id),
-      firstQualifierValue(feature, 'protein_id'),
-      feature && (feature.locus_tag || feature.locusTag),
-      firstQualifierValue(feature, 'locus_tag'),
-      member && (member.locusTag || member.locus_tag),
-      feature && (feature.gene_id || feature.geneId),
-      firstQualifierValue(feature, 'gene_id'),
-      member && (member.geneId || member.gene_id),
-      feature && (feature.old_locus_tag || feature.oldLocusTag),
-      firstQualifierValue(feature, 'old_locus_tag'),
-      member && (member.oldLocusTag || member.old_locus_tag),
+    return firstNonInternalDisplayText(
+      feature && feature.displayProteinId,
+      feature && feature.display_protein_id,
+      member && member.displayProteinId,
+      member && member.display_protein_id,
+      feature && feature.sourceProteinId,
+      feature && feature.source_protein_id,
+      member && member.sourceProteinId,
+      member && member.source_protein_id,
+      qualifierDisplayValue(feature, 'protein_id'),
+      feature && feature.locusTag,
+      feature && feature.locus_tag,
+      qualifierDisplayValue(feature, 'locus_tag'),
+      member && member.locusTag,
+      member && member.locus_tag,
+      feature && feature.geneId,
+      feature && feature.gene_id,
+      qualifierDisplayValue(feature, 'gene_id'),
+      member && member.geneId,
+      member && member.gene_id,
+      feature && feature.oldLocusTag,
+      feature && feature.old_locus_tag,
+      qualifierDisplayValue(feature, 'old_locus_tag'),
+      member && member.oldLocusTag,
+      member && member.old_locus_tag,
       feature && feature.ID,
-      firstQualifierValue(feature, 'ID'),
+      qualifierDisplayValue(feature, 'ID'),
       feature && feature.Name,
-      firstQualifierValue(feature, 'Name'),
+      qualifierDisplayValue(feature, 'Name'),
       feature && feature.Parent,
-      firstQualifierValue(feature, 'Parent'),
+      qualifierDisplayValue(feature, 'Parent'),
       feature && feature.gene,
-      firstQualifierValue(feature, 'gene'),
+      qualifierDisplayValue(feature, 'gene'),
       member && member.gene,
-      feature && (feature.proteinId || feature.protein_id),
-      member && (member.proteinId || member.protein_id),
+      member && member.label,
+      feature && feature.proteinId,
+      feature && feature.protein_id,
+      member && member.proteinId,
+      member && member.protein_id,
       fallback
     );
   }
@@ -1487,7 +1559,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     appendSearchItems(items, 'Orthogroup name', group && (group.display_name || group.displayName || group.name));
     appendSearchItems(items, 'Orthogroup description', group && group.description);
     appendSearchItems(items, 'Protein ID', proteinId);
-    if (internalId && internalId !== proteinId) {
+    if (
+      internalId &&
+      internalId !== proteinId &&
+      !isInternalProteinDisplayId(internalId)
+    ) {
       appendSearchItems(items, 'Internal protein ID', internalId);
     }
     appendSearchItems(items, 'Orthogroup member', member && member.label);
@@ -3124,14 +3200,17 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function featureDescription(feature) {
-    return firstDisplayText(
+    return firstNonInternalDisplayText(
       feature && feature.product,
-      firstQualifierValue(feature, 'product'),
+      qualifierDisplayValue(feature, 'product'),
       feature && feature.gene,
-      firstQualifierValue(feature, 'gene'),
-      feature && (feature.locus_tag || feature.locusTag),
-      firstQualifierValue(feature, 'locus_tag'),
-      feature && (feature.display_label || feature.displayLabel || feature.label),
+      qualifierDisplayValue(feature, 'gene'),
+      feature && feature.locusTag,
+      feature && feature.locus_tag,
+      qualifierDisplayValue(feature, 'locus_tag'),
+      feature && feature.displayLabel,
+      feature && feature.display_label,
+      feature && feature.label,
       feature && feature.type
     );
   }
@@ -3194,9 +3273,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function featureSequenceFilename(feature, sequenceKind) {
     var label = sequenceKindLabel(sequenceKind);
-    var id = firstDisplayText(
+    var id = firstNonInternalDisplayText(
       label === 'aa' ? displayProteinId(feature, null, '') : '',
-      feature && (feature.display_label || feature.displayLabel || feature.label),
+      feature && feature.displayLabel,
+      feature && feature.display_label,
+      feature && feature.label,
       biologicalFeatureStableSvgId(feature),
       feature && feature.svg_id,
       'feature'
@@ -3210,13 +3291,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var existing = label === 'aa'
       ? firstDisplayText(feature.amino_acid_fasta, feature.aminoAcidFasta)
       : firstDisplayText(feature.nucleotide_fasta, feature.nucleotideFasta);
-    if (existing) return existing;
+    if (existing && !containsInternalProteinDisplayId(existing)) return existing;
     var sequence = label === 'aa'
       ? featureAminoAcidSequence(feature)
       : firstDisplayText(feature.nucleotide_sequence, feature.nucleotideSequence);
     if (!normalizeSequence(sequence)) return '';
+    var proteinFallback = firstNonInternalDisplayText(
+      biologicalFeatureStableSvgId(feature),
+      feature.svg_id,
+      'protein'
+    );
     var id = label === 'aa'
-      ? displayProteinId(feature, null, biologicalFeatureStableSvgId(feature) || feature.svg_id || 'protein')
+      ? displayProteinId(feature, null, proteinFallback)
       : firstDisplayText(
         feature.record_id,
         feature.recordId,
@@ -3233,10 +3319,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function memberSequenceFilename(memberOrRow, sequenceKind, orthogroupId) {
     var label = sequenceKindLabel(sequenceKind);
     var feature = featureForMember(memberOrRow);
-    var memberId = firstDisplayText(
-      memberOrRow && (memberOrRow.sourceProteinId || memberOrRow.source_protein_id),
-      memberOrRow && (memberOrRow.proteinId || memberOrRow.protein_id),
+    var memberId = firstNonInternalDisplayText(
+      memberOrRow && memberOrRow.sourceProteinId,
+      memberOrRow && memberOrRow.source_protein_id,
       feature && displayProteinId(feature, null, ''),
+      memberOrRow && displayProteinId(null, memberOrRow, ''),
       memberFeatureSvgId(memberOrRow),
       'member'
     );
@@ -3260,8 +3347,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function groupSequenceFilename(orthogroupId, displayName, sequenceKind) {
     var label = sequenceKindLabel(sequenceKind);
-    var id = firstDisplayText(orthogroupId, 'orthogroup');
-    var name = makeSafeFilename(firstDisplayText(displayName, id), id);
+    var id = firstNonInternalDisplayText(orthogroupId, 'orthogroup');
+    var name = makeSafeFilename(firstNonInternalDisplayText(displayName, id), id);
     return makeSafeFilename(id + '_' + name + '_' + label, 'orthogroup_' + label) + '.' + sequenceExtension(label);
   }
 
@@ -3345,7 +3432,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var searchDetail = getFeatureSearchDetail(feature);
     var rows = [
       ['Search match', searchDetail],
-      ['Label', feature.display_label || feature.label || ''],
+      ['Label', firstNonInternalDisplayText(feature.display_label, feature.label)],
       ['Record ID', feature.record_id || ''],
       ['Type', feature.type || ''],
       ['Location', locationText(feature)]
@@ -3361,7 +3448,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       ? feature.qualifiers
       : {};
     return Object.keys(qualifiers).sort().map(function (key) {
-      var values = normalizeArray(qualifiers[key]);
+      var values = normalizeArray(qualifiers[key]).filter(function (value) {
+        return !isInternalProteinDisplayId(value);
+      });
       return {
         key: key,
         values: values,
@@ -3507,7 +3596,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function renderSequenceBlock(title, sequence, fasta, sequenceKind, feature) {
     var text = String(sequenceKind ? featureFasta(feature, sequenceKind) : '');
-    if (!text) text = String(fasta || sequence || '');
+    if (!text) {
+      var fallbackText = String(fasta || sequence || '');
+      text = containsInternalProteinDisplayId(fallbackText) ? '' : fallbackText;
+    }
     if (!text) {
       return '<div class="gfi-block"><div class="gfi-block-title">' + escapeHtml(title) + '</div><div class="gfi-empty">No sequence available.</div></div>';
     }
@@ -3532,9 +3624,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function renderSimplePopup(feature) {
+    var title = firstNonInternalDisplayText(
+      feature.display_label,
+      feature.label,
+      displayProteinId(feature, null, ''),
+      feature.locus_tag,
+      feature.gene,
+      feature.type,
+      feature.svg_id,
+      'Feature'
+    );
     return '<div class="gfi gfi--simple">' +
       '<div class="gfi-header" data-drag-handle="true">' +
-      '<div><div class="gfi-title">' + escapeHtml(feature.display_label || feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div><div class="gfi-title">' + escapeHtml(title) + '</div>' +
       '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
       '<button type="button" class="gfi-close" data-close="true">x</button>' +
       '</div>' +
@@ -3560,9 +3662,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     function tabButton(id, label) {
       return '<button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '">' + label + '</button>';
     }
+    var title = firstNonInternalDisplayText(
+      feature.display_label,
+      feature.label,
+      displayProteinId(feature, null, ''),
+      feature.locus_tag,
+      feature.gene,
+      feature.type,
+      feature.svg_id,
+      'Feature'
+    );
     return '<div class="gfi">' +
       '<div class="gfi-header" data-drag-handle="true">' +
-      '<div><div class="gfi-title">' + escapeHtml(feature.display_label || feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div><div class="gfi-title">' + escapeHtml(title) + '</div>' +
       '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
       '<button type="button" class="gfi-close" data-close="true">x</button>' +
       '</div>' +
@@ -3584,16 +3696,35 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function materializedMatchFeatureRow(svgId, fallback) {
     var id = String(svgId || '').trim();
     var feature = featuresById.get(id) || {};
+    var proteinId = firstNonInternalDisplayText(
+      displayProteinId(feature, null, ''),
+      fallback && fallback.proteinId
+    );
+    var locusId = firstNonInternalDisplayText(
+      feature.locus_tag,
+      fallback && fallback.locusId
+    );
+    var displayName = firstNonInternalDisplayText(
+      featureDescription(feature),
+      fallback && fallback.displayName
+    );
     return {
       key: id || String(fallback && fallback.locusId || ''),
       svgId: id,
       canOpen: Boolean(id && featuresById.has(id)),
-      label: firstDisplayText(feature.display_label, feature.label, fallback && fallback.displayName, fallback && fallback.proteinId, id),
+      label: firstNonInternalDisplayText(
+        feature.display_label,
+        feature.label,
+        displayName,
+        proteinId,
+        id,
+        'Feature'
+      ),
       record: firstDisplayText(feature.record_id, fallback && fallback.recordId),
       location: firstDisplayText(feature.location, feature && locationText(feature), fallback && fallback.interval),
-      proteinId: firstDisplayText(displayProteinId(feature, null, ''), fallback && fallback.proteinId),
-      locusId: firstDisplayText(feature.locus_tag, fallback && fallback.locusId),
-      displayName: firstDisplayText(featureDescription(feature), fallback && fallback.displayName),
+      proteinId: proteinId,
+      locusId: locusId,
+      displayName: displayName,
       product: featureDescription(feature)
     };
   }
@@ -3614,7 +3745,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         return memberRenderedFeatureSvgId(candidate) === svgId ||
           memberFeatureSvgId(candidate) === svgId;
       }) || null;
-      return firstDisplayText(
+      return firstNonInternalDisplayText(
         displayProteinId(featureForMember(member) || featuresById.get(svgId) || null, member, ''),
         member && member.label,
         svgId
@@ -3879,8 +4010,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function normalizeMatchRows(rows) {
     return (Array.isArray(rows) ? rows : []).map(function (row) {
-      if (Array.isArray(row)) return [row[0], row[1]];
-      return [row && row.label, row && row.value];
+      var normalized = Array.isArray(row)
+        ? [row[0], row[1]]
+        : [row && row.label, row && row.value];
+      if (isInternalProteinDisplayId(normalized[1])) normalized[1] = '';
+      return normalized;
     }).filter(function (row) {
       return String(row[0] == null ? '' : row[0]).trim() &&
         String(row[1] == null ? '' : row[1]).trim();
@@ -3904,11 +4038,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         ) || '').trim(),
         recordIndex: memberRecordIndex(row),
         orthogroupId: String(row && (row.orthogroupId || row.orthogroup_id) || '').trim(),
-        displayName: String(row && (row.displayName || row.display_name) || '').trim(),
+        displayName: firstNonInternalDisplayText(
+          row && row.displayName,
+          row && row.display_name
+        ),
         record: String(row && (row.record || row.record_id) || '').trim(),
         coordinates: String(row && row.coordinates || '').trim(),
-        proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
-        productOrNote: String(row && (row.productOrNote || row.product_or_note) || '').trim()
+        proteinId: firstNonInternalDisplayText(
+          row && row.proteinId,
+          row && row.protein_id
+        ),
+        productOrNote: firstNonInternalDisplayText(
+          row && (row.productOrNote || row.product_or_note)
+        )
       };
     }).filter(function (row) {
       return row.record || row.coordinates || row.proteinId || row.productOrNote || row.featureSvgId;
@@ -3918,7 +4060,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function normalizeMatchBlockOrthogroups(groups) {
     return (Array.isArray(groups) ? groups : []).map(function (group) {
       var id = String(group && group.id || '').trim();
-      var displayName = String(group && (group.displayName || group.display_name) || '').trim();
+      var displayName = firstNonInternalDisplayText(
+        group && group.displayName,
+        group && group.display_name
+      );
       var memberRows = normalizeMatchMemberRows(group && (group.memberRows || group.member_rows)).map(function (row) {
         if (!row.orthogroupId) row.orthogroupId = id;
         if (!row.displayName) row.displayName = displayName;
@@ -3929,11 +4074,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         displayName: displayName,
         memberCount: String(group && (group.memberCount || group.member_count) || '').trim(),
         recordCoverage: String(group && (group.recordCoverage || group.record_coverage) || '').trim(),
-        queryMember: String(group && (group.queryMember || group.query_member) || '').trim(),
-        subjectMember: String(group && (group.subjectMember || group.subject_member) || '').trim(),
+        queryMember: safeDelimitedDisplayIds(
+          firstNonInternalDisplayText(group && group.queryMember, group && group.query_member)
+        ),
+        subjectMember: safeDelimitedDisplayIds(
+          firstNonInternalDisplayText(group && group.subjectMember, group && group.subject_member)
+        ),
         detailRows: normalizeMatchRows(group && (group.detailRows || group.detail_rows)),
         memberRows: memberRows,
-        member_copy_text: String(group && (group.member_copy_text || group.memberCopyText) || '').trim()
+        member_copy_text: containsInternalProteinDisplayId(
+          group && (group.member_copy_text || group.memberCopyText)
+        )
+          ? ''
+          : String(group && (group.member_copy_text || group.memberCopyText) || '').trim()
       };
     }).filter(function (group) {
       return group.id;
@@ -3953,17 +4106,29 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         key: String(row && row.key || svgId || index),
         svgId: svgId,
         canOpen: canOpen,
-        label: String(row && row.label || '').trim(),
+        label: firstNonInternalDisplayText(row && row.label),
         record: String(row && row.record || '').trim(),
         location: String(row && row.location || '').trim(),
-        proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
-        locusId: String(row && (row.locusId || row.locus_id) || '').trim(),
-        displayName: String(row && (row.displayName || row.display_name) || '').trim(),
-        product: String(row && row.product || '').trim(),
-        copyText: String(row && (row.copyText || row.copy_text) || '').trim()
+        proteinId: firstNonInternalDisplayText(
+          row && row.proteinId,
+          row && row.protein_id
+        ),
+        locusId: firstNonInternalDisplayText(
+          row && row.locusId,
+          row && row.locus_id
+        ),
+        displayName: firstNonInternalDisplayText(
+          row && row.displayName,
+          row && row.display_name
+        ),
+        product: firstNonInternalDisplayText(row && row.product),
+        copyText: containsInternalProteinDisplayId(row && (row.copyText || row.copy_text))
+          ? ''
+          : String(row && (row.copyText || row.copy_text) || '').trim()
       };
     }).filter(function (row) {
-      return row.svgId || row.label || row.record || row.location || row.product;
+      return row.svgId || row.label || row.record || row.location ||
+        row.proteinId || row.locusId || row.displayName || row.product;
     });
   }
 
@@ -3992,7 +4157,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       var copyText = row.copyText || [row.record, row.location, row.proteinId, row.locusId, row.displayName, row.product].join('\\t');
       var featureAttr = row.svgId ? ' data-match-feature-id="' + escapeHtml(row.svgId) + '"' : '';
       return '<tr class="gfi-match-feature-row' + (row.canOpen ? '' : ' is-disabled') + '"' + featureAttr + '>' +
-        '<td><div class="gfi-match-feature-main">' + escapeHtml(row.label || row.proteinId || row.svgId || 'Feature') + '</div>' +
+        '<td><div class="gfi-match-feature-main">' + escapeHtml(
+          firstNonInternalDisplayText(row.label, row.proteinId, row.svgId, 'Feature')
+        ) + '</div>' +
         (sub ? '<div class="gfi-match-feature-sub">' + escapeHtml(sub) + '</div>' : '') + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.location) + '</td>' +
@@ -4009,7 +4176,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (!rows.length) return '';
     var orthogroupId = String(section && (section.id || section.orthogroupId || section.orthogroup_id) || rows[0] && (rows[0].orthogroupId || rows[0].orthogroup_id) || '').trim();
     var displayName = String(section && (section.displayName || section.display_name || section.name) || rows[0] && (rows[0].displayName || rows[0].display_name) || '').trim();
-    var copyText = String(section && (section.member_copy_text || section.memberCopyText) || '').trim();
+    var sourceCopyText = String(
+      section && (section.member_copy_text || section.memberCopyText) || ''
+    ).trim();
+    var copyText = containsInternalProteinDisplayId(sourceCopyText) ? '' : sourceCopyText;
     if (!copyText) {
       copyText = ['Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'].concat(
         rows.map(function (row) {
@@ -4198,20 +4368,39 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function hoverTitle(feature) {
-    var primary = firstQualifierValue(feature, 'gene') ||
-      firstQualifierValue(feature, 'locus_tag') ||
-      firstQualifierValue(feature, 'product') ||
-      String(feature && (feature.display_label || feature.label || feature.svg_id) || '').trim();
+    var primary = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'gene'),
+      qualifierDisplayValue(feature, 'locus_tag'),
+      qualifierDisplayValue(feature, 'product'),
+      feature && feature.display_label,
+      feature && feature.label,
+      feature && feature.svg_id
+    );
     var type = String(feature && feature.type || 'Feature').trim() || 'Feature';
     return primary && primary !== type ? type + ': ' + primary : type;
   }
 
   function hoverRows(feature) {
-    var primary = String(feature && (feature.display_label || feature.label || '') || '').trim();
-    var product = firstQualifierValue(feature, 'product') || String(feature && feature.product || '').trim();
-    var gene = firstQualifierValue(feature, 'gene') || String(feature && feature.gene || '').trim();
-    var locus = firstQualifierValue(feature, 'locus_tag') || String(feature && feature.locus_tag || '').trim();
-    var note = firstQualifierValue(feature, 'note') || String(feature && feature.note || '').trim();
+    var primary = firstNonInternalDisplayText(
+      feature && feature.display_label,
+      feature && feature.label
+    );
+    var product = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'product'),
+      feature && feature.product
+    );
+    var gene = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'gene'),
+      feature && feature.gene
+    );
+    var locus = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'locus_tag'),
+      feature && feature.locus_tag
+    );
+    var note = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'note'),
+      feature && feature.note
+    );
     var rows = [];
     if (gene && gene !== primary) rows.push(['Gene', gene]);
     if (locus && locus !== primary) rows.push(['Locus', locus]);

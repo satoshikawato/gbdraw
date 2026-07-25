@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import copy
+import hashlib
 import json
 import re
 from datetime import datetime
@@ -13,9 +15,12 @@ from Bio.SeqRecord import SeqRecord
 
 import gbdraw.circular as circular_cli_module
 from gbdraw.analysis.protein_colinearity import (
+    build_losat_transport_id,
     build_protein_losat_cache_key,
     build_protein_losat_pair_identity,
     extract_web_stable_cds_proteins,
+    validate_protein_raw_entry_references,
+    validate_v35_protein_raw_entry_references,
 )
 from gbdraw.circular import circular_main
 from gbdraw.linear import (
@@ -35,6 +40,7 @@ from gbdraw.cli_utils.session import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import read_records_table
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.render.formats import ACCEPTED_FORMATS
 from gbdraw.api.requests import (
     CircularDiagramRequest,
@@ -48,21 +54,24 @@ from gbdraw.session_io import (
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
-    SESSION_LOSAT_CACHE_BYTE_LIMIT,
     SESSION_FORMAT,
     SUPPORTED_SESSION_VERSIONS,
+    V35_LOSAT_DERIVED_CACHE_SCHEMA,
+    V35_PROTEIN_CANDIDATE_SCHEMA,
+    V35_PROTEIN_LOSAT_CACHE_SCHEMA,
     SessionBuildContext,
+    _json_values_equal,
     build_session_json,
+    compact_session_feature_catalog,
     decode_depth_payload,
     load_session,
     materialize_embedded_file,
     migrate_legacy_repeat_feature_shape_args,
-    prune_serialized_losat_artifacts,
-    serialized_losat_artifact_byte_length,
     session_to_cli_args,
     validate_session,
     write_session_json,
 )
+from gbdraw.session import load_session_document
 
 
 def _file_entry(name: str, content: bytes) -> dict:
@@ -121,15 +130,15 @@ def _protein_identity_manifest() -> dict:
 def _current_protein_cache_entry() -> dict:
     manifest = _protein_identity_manifest()
     feature_a = next(
-        iter(manifest["recordInstances"]["record-1"]["transportIds"])
+        iter(manifest["recordInstances"]["record-1"]["runtimeIds"])
     )
     feature_b = next(
-        iter(manifest["recordInstances"]["record-2"]["transportIds"])
+        iter(manifest["recordInstances"]["record-2"]["runtimeIds"])
     )
-    query_transport = manifest["recordInstances"]["record-1"]["transportIds"][
+    query_transport = manifest["recordInstances"]["record-1"]["runtimeIds"][
         feature_a
     ]
-    subject_transport = manifest["recordInstances"]["record-2"]["transportIds"][
+    subject_transport = manifest["recordInstances"]["record-2"]["runtimeIds"][
         feature_b
     ]
     analysis_a = manifest["recordInstances"]["record-1"]["recordAnalysisId"]
@@ -143,6 +152,7 @@ def _current_protein_cache_entry() -> dict:
         "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
         "kind": "raw-losat",
         "identityKind": "protein",
+        "idEncoding": "runtime-handle-v1",
         "key": build_protein_losat_cache_key(pair_identity, args=[]),
         "text": (
             f"{query_transport}\t{subject_transport}\t"
@@ -157,15 +167,217 @@ def _current_protein_cache_entry() -> dict:
         "subjectProteinSetHash": manifest["recordAnalyses"][analysis_b][
             "proteinSetHash"
         ],
-        "queryBindingHash": manifest["recordInstances"]["record-1"][
-            "bindingHash"
+        "queryRuntimeBindingHash": manifest["recordInstances"]["record-1"][
+            "runtimeBindingHash"
         ],
-        "subjectBindingHash": manifest["recordInstances"]["record-2"][
-            "bindingHash"
+        "subjectRuntimeBindingHash": manifest["recordInstances"]["record-2"][
+            "runtimeBindingHash"
         ],
         "queryRecordInstanceKey": "record-1",
         "subjectRecordInstanceKey": "record-2",
     }
+
+
+def _current_derived_session(
+    manifest: dict,
+    derived_payload: dict,
+    *,
+    mode: str = "collinear",
+) -> dict:
+    return build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        losat_derived_cache_entries=(
+            {
+                "schema": LOSAT_DERIVED_CACHE_SCHEMA,
+                "kind": "derived-losatp-payload",
+                "idEncoding": "runtime-handle-v1",
+                "key": "derived-key",
+                "mode": mode,
+                "payload": derived_payload,
+            },
+        ),
+        protein_identity_manifest=manifest,
+        canonical_request=_canonical_request("linear"),
+    )
+
+
+def _zero_hit_derived_payload(
+    mode: str,
+    *,
+    include_identity: bool = True,
+) -> dict:
+    payload = {
+        "pairs": [
+            {
+                "pair_index": 0,
+                "query_index": 0,
+                "subject_index": 1,
+                "tsv": "",
+                "rows": [],
+                "hit_count": 0,
+            }
+        ],
+        "orthogroups": [],
+    }
+    if include_identity:
+        payload["identity"] = {
+            "cacheSchema": LOSAT_DERIVED_CACHE_SCHEMA,
+            "idEncoding": "runtime-handle-v1",
+            "converter": "convert_losatp_blastp_pairs_to_genomic_payload",
+            "mode": mode,
+            "rawCacheKeys": ["raw-key"],
+        }
+    if mode == "collinear":
+        payload.update(
+            {
+                "collinearGroups": [],
+                "collinearGroupScope": "adjacent_local",
+                "collinearityBlocks": [],
+            }
+        )
+    return payload
+
+
+def _identity_hash(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _v35_protein_artifacts() -> tuple[dict, dict]:
+    current_manifest = _protein_identity_manifest()
+    record_instances = {}
+    for instance_key, binding in current_manifest["recordInstances"].items():
+        analysis_id = binding["recordAnalysisId"]
+        record_source_id = current_manifest["recordAnalyses"][analysis_id][
+            "recordSourceId"
+        ]
+        transport_ids = {
+            feature_id: build_losat_transport_id(
+                record_source_id=record_source_id,
+                record_instance_id=instance_key,
+                display_alias=binding["featureMetadata"][feature_id][
+                    "displayAlias"
+                ],
+                feature_analysis_id=feature_id,
+            )
+            for feature_id in binding["runtimeIds"]
+        }
+        record_instances[instance_key] = {
+            "schema": 1,
+            "recordAnalysisId": analysis_id,
+            "bindingHash": _identity_hash(
+                {
+                    "recordInstanceKey": instance_key,
+                    "recordAnalysisId": analysis_id,
+                    "transportIds": transport_ids,
+                }
+            ),
+            "transportIds": transport_ids,
+        }
+    manifest = {
+        "schema": 1,
+        "proteinSets": current_manifest["proteinSets"],
+        "recordAnalyses": current_manifest["recordAnalyses"],
+        "recordInstances": record_instances,
+    }
+    query_binding = record_instances["record-1"]
+    subject_binding = record_instances["record-2"]
+    query_id = next(iter(query_binding["transportIds"].values()))
+    subject_id = next(iter(subject_binding["transportIds"].values()))
+    query_analysis = manifest["recordAnalyses"][query_binding["recordAnalysisId"]]
+    subject_analysis = manifest["recordAnalyses"][subject_binding["recordAnalysisId"]]
+    key_payload = {
+        "cacheSchema": V35_PROTEIN_LOSAT_CACHE_SCHEMA,
+        "identityKind": "protein",
+        "program": "blastp",
+        "outfmt": "6",
+        "args": [],
+        "queryProteinSetHash": query_analysis["proteinSetHash"],
+        "subjectProteinSetHash": subject_analysis["proteinSetHash"],
+        "queryBindingHash": query_binding["bindingHash"],
+        "subjectBindingHash": subject_binding["bindingHash"],
+        "queryRecordInstanceKey": "record-1",
+        "subjectRecordInstanceKey": "record-2",
+    }
+    entry = {
+        "schema": V35_PROTEIN_LOSAT_CACHE_SCHEMA,
+        "kind": "raw-losat",
+        "identityKind": "protein",
+        "key": hashlib.sha256(
+            json.dumps(
+                key_payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest(),
+        "text": (
+            f"{query_id}\t{subject_id}\t"
+            "100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
+        ),
+        "program": "blastp",
+        "outfmt": "6",
+        "args": [],
+        "queryProteinSetHash": query_analysis["proteinSetHash"],
+        "subjectProteinSetHash": subject_analysis["proteinSetHash"],
+        "queryBindingHash": query_binding["bindingHash"],
+        "subjectBindingHash": subject_binding["bindingHash"],
+        "queryRecordInstanceKey": "record-1",
+        "subjectRecordInstanceKey": "record-2",
+    }
+    return manifest, entry
+
+
+_LOSAT_OUTFMT6_NUMERIC_CASES = json.loads(
+    (
+        Path(__file__).parent
+        / "fixtures"
+        / "losat-outfmt6-numeric-contract.json"
+    ).read_text(encoding="utf-8")
+)
+
+
+def _protein_raw_entry_with_numeric_case(entry: dict, case: dict) -> dict:
+    columns = entry["text"].rstrip("\r\n").split("\t")
+    columns[COMPARISON_COLUMNS.index(case["column"])] = case["value"]
+    return {**entry, "text": "\t".join(columns) + "\n"}
+
+
+@pytest.mark.parametrize(
+    "case",
+    _LOSAT_OUTFMT6_NUMERIC_CASES,
+    ids=[case["name"] for case in _LOSAT_OUTFMT6_NUMERIC_CASES],
+)
+def test_protein_raw_numeric_contract_matches_for_current_and_v35(
+    case: dict,
+) -> None:
+    current_manifest = _protein_identity_manifest()
+    current_entry = _protein_raw_entry_with_numeric_case(
+        _current_protein_cache_entry(),
+        case,
+    )
+    source_manifest, v35_entry = _v35_protein_artifacts()
+    v35_entry = _protein_raw_entry_with_numeric_case(v35_entry, case)
+
+    assert (
+        validate_protein_raw_entry_references(current_entry, current_manifest)
+        is case["valid"]
+    )
+    assert (
+        validate_v35_protein_raw_entry_references(v35_entry, source_manifest)
+        is case["valid"]
+    )
 
 
 def _legacy_protein_cache_entry() -> dict:
@@ -246,11 +458,198 @@ def test_current_session_version_matches_web_config() -> None:
     source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
     match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
     assert match is not None
-    assert CURRENT_SESSION_VERSION == 35
+    assert CURRENT_SESSION_VERSION == 36
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
 
 
-def test_v35_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
+def test_current_session_feature_catalog_is_compact_and_lossless(
+    tmp_path: Path,
+) -> None:
+    long_note = ("😀" * 30) + ("x" * 30)
+    qualifiers = {
+        "protein_id": ["protein-1"],
+        "locus_tag": ["locus-1"],
+        "product": ["example protein"],
+        "translation": ["M"],
+        "note": [long_note],
+    }
+    biological = {
+        "id": "f0",
+        "svg_id": "f_stable",
+        "stable_svg_id": "f_stable",
+        "stable_feature_id": "f_stable",
+        "record_id": "record",
+        "record_idx": 0,
+        "feature_index": 0,
+        "organism": "Example",
+        "type": "CDS",
+        "start": 1,
+        "end": 3,
+        "strand": "+",
+        "protein_id": "protein-1",
+        "source_protein_id": "protein-1",
+        "locus_tag": "locus-1",
+        "gene_id": "",
+        "old_locus_tag": "",
+        "gene": "",
+        "product": "example protein",
+        "note": long_note[:50],
+        "qualifiers": qualifiers,
+        "selector": {
+            "qualifiers": copy.deepcopy(qualifiers),
+            "hash": "f_stable",
+            "location": "1..3",
+            "record_location": "record:1..3:+",
+        },
+        "location_parts": [{"start": 1, "end": 3, "strand": 1}],
+        "nucleotide_sequence": "ATG",
+        "amino_acid_sequence": "M",
+        "sequence_warnings": [],
+    }
+    extracted = copy.deepcopy(biological)
+    extracted.pop("feature_index")
+    extracted["rendered_feature_svg_id"] = "f_stable_record_1"
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 24),
+        canonical_request=_canonical_request("linear"),
+    )
+    payload["features"] = {
+        "extractedFeatures": [extracted],
+        "biologicalFeatures": [biological],
+        "selectedFeatureRecordIdx": 0,
+    }
+    expected_features = copy.deepcopy(payload["features"])
+    path = tmp_path / "compact-feature-catalog.gbdraw-session.json"
+
+    write_session_json(path, payload)
+
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert "extractedFeatures" not in on_disk["features"]
+    assert on_disk["features"]["featureCatalog"] == {
+        "schema": 1,
+        "encoding": "biological-authority-v1",
+        "profile": "rich-v1",
+        "extracted": [[0, "f0", "f_stable_record_1"]],
+    }
+    assert "stable_svg_id" not in on_disk["features"]["biologicalFeatures"][0]
+    loaded_features = load_session(path)["features"]
+    assert loaded_features == expected_features
+    assert load_session_document(path).to_dict()["features"] == expected_features
+
+    malformed_schema = copy.deepcopy(on_disk)
+    malformed_schema["features"]["featureCatalog"]["schema"] = True
+    path.write_text(
+        json.dumps(
+            malformed_schema,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match="Invalid compact session feature catalog"):
+        load_session(path)
+
+    null_catalog = copy.deepcopy(on_disk)
+    null_catalog["features"]["featureCatalog"] = None
+    path.write_text(
+        json.dumps(null_catalog, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match="Invalid compact session feature catalog"):
+        load_session(path)
+    with pytest.raises(ValidationError, match="Invalid compact session feature catalog"):
+        write_session_json(tmp_path / "rejected-session.json", null_catalog)
+
+    malformed_qualifier = copy.deepcopy(on_disk)
+    malformed_qualifier["features"]["biologicalFeatures"][0]["qualifiers"][
+        "protein_id"
+    ] = [None]
+    path.write_text(
+        json.dumps(
+            malformed_qualifier,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match="feature qualifiers must contain string arrays",
+    ):
+        load_session(path)
+
+    duplicate_reference = copy.deepcopy(on_disk)
+    duplicate_reference["features"]["featureCatalog"]["extracted"].append(
+        copy.deepcopy(
+            duplicate_reference["features"]["featureCatalog"]["extracted"][0]
+        )
+    )
+    path.write_text(
+        json.dumps(
+            duplicate_reference,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match="Invalid compact extracted-feature reference",
+    ):
+        load_session(path)
+
+    on_disk["features"]["featureCatalog"]["extracted"][0][0] = 99
+    path.write_text(
+        json.dumps(on_disk, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match="Invalid compact extracted-feature reference",
+    ):
+        load_session(path)
+
+
+def test_feature_catalog_compaction_falls_back_for_partial_metadata() -> None:
+    biological = {
+        "id": "f0",
+        "svg_id": "f_stable",
+        "record_idx": 0,
+        "feature_index": 0,
+        "qualifiers": {},
+        "selector": {},
+    }
+    extracted = copy.deepcopy(biological)
+    extracted.pop("feature_index")
+    session = {
+        "version": CURRENT_SESSION_VERSION,
+        "features": {
+            "extractedFeatures": [extracted],
+            "biologicalFeatures": [biological],
+        },
+    }
+
+    compact = compact_session_feature_catalog(session)
+
+    assert compact is session
+    assert "featureCatalog" not in compact["features"]
+
+
+def test_feature_catalog_equality_preserves_json_scalar_types() -> None:
+    assert not _json_values_equal(
+        {"custom_payload": [1]},
+        {"custom_payload": [True]},
+    )
+
+
+def test_v36_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
     payload = build_session_json(
         SessionBuildContext(
             mode="linear",
@@ -279,6 +678,7 @@ def test_v35_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
             {
                 "schema": LOSAT_DERIVED_CACHE_SCHEMA,
                 "kind": "derived-losatp-payload",
+                "idEncoding": "runtime-handle-v1",
                 "key": "derived-key",
                 "mode": "orthogroup",
                 "payload": {},
@@ -293,43 +693,282 @@ def test_v35_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
         PROTEIN_LOSAT_CACHE_SCHEMA,
         NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     ]
-    assert payload["losatDerivedCache"]["entries"][0]["schema"] == 2
+    assert payload["losatDerivedCache"]["entries"][0]["schema"] == 3
 
 
-def test_current_cache_artifacts_are_pruned_by_serialized_byte_size() -> None:
-    raw_entries = [
-        {"key": "raw-first-visible", "display": True, "text": "a" * 40},
-        {"key": "raw-middle-visible", "display": True, "text": "b" * 40},
-        {"key": "raw-last-hidden", "display": False, "text": "c" * 40},
-    ]
-    derived_entries = [
-        {"key": "derived-first", "payload": "d" * 40},
-        {"key": "derived-last", "payload": "e" * 40},
-    ]
-    exact_budget = 28 + sum(
-        len(
-            json.dumps(
-                entry,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
+@pytest.mark.parametrize(
+    ("mode", "include_identity"),
+    (
+        ("orthogroup", True),
+        ("collinear", True),
+        ("collinear", False),
+    ),
+)
+def test_v36_accepts_strict_zero_hit_derived_results(
+    mode: str,
+    include_identity: bool,
+) -> None:
+    manifest = _protein_identity_manifest()
+
+    payload = _current_derived_session(
+        manifest,
+        _zero_hit_derived_payload(
+            mode,
+            include_identity=include_identity,
+        ),
+        mode=mode,
+    )
+
+    validate_session(payload)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    (
+        lambda payload: payload.update({"note": "arbitrary"}),
+        lambda payload: payload["pairs"][0].update({"rows": [{}]}),
+        lambda payload: payload["pairs"][0].update({"tsv": "unexpected"}),
+        lambda payload: payload["pairs"][0].update({"hit_count": 1}),
+        lambda payload: payload["pairs"][0].update({"pair_index": "0"}),
+        lambda payload: payload["pairs"][0].pop("subject_index"),
+        lambda payload: payload.update({"pairs": []}),
+        lambda payload: payload.update({"orthogroups": [{}]}),
+        lambda payload: payload.update({"collinearGroups": [{}]}),
+        lambda payload: payload.update({"collinearityBlocks": [{}]}),
+        lambda payload: payload.update({"collinearGroupScope": "invalid"}),
+        lambda payload: payload.update({"identity": None}),
+        lambda payload: payload["identity"].update({"rawCacheKeys": [None]}),
+        lambda payload: payload["identity"].update({"mode": "orthogroup"}),
+    ),
+    ids=(
+        "arbitrary-field",
+        "nonempty-rows",
+        "nonempty-tsv",
+        "nonzero-hit-count",
+        "noninteger-pair-index",
+        "partial-record-indices",
+        "missing-pair-results",
+        "nonempty-orthogroups",
+        "nonempty-collinear-groups",
+        "nonempty-collinearity-blocks",
+        "invalid-collinear-scope",
+        "null-identity",
+        "invalid-raw-cache-binding",
+        "identity-mode-mismatch",
+    ),
+)
+def test_v36_rejects_near_miss_zero_hit_derived_results(mutate) -> None:
+    manifest = _protein_identity_manifest()
+    derived_payload = _zero_hit_derived_payload("collinear")
+    mutate(derived_payload)
+
+    with pytest.raises(ValidationError, match="unresolved protein references"):
+        _current_derived_session(
+            manifest,
+            derived_payload,
+            mode="collinear",
         )
-        for entry in (raw_entries[2], derived_entries[1])
+
+
+def test_v36_derived_cache_accepts_compound_collinear_runtime_references() -> None:
+    manifest = _protein_identity_manifest()
+    runtime_handles = [
+        runtime_handle
+        for binding in manifest["recordInstances"].values()
+        for runtime_handle in binding["runtimeIds"].values()
+    ]
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        losat_derived_cache_entries=(
+            {
+                "schema": LOSAT_DERIVED_CACHE_SCHEMA,
+                "kind": "derived-losatp-payload",
+                "idEncoding": "runtime-handle-v1",
+                "key": "collinear-derived-key",
+                "mode": "collinear",
+                "payload": {
+                    "pairs": [
+                        {
+                            "rows": [
+                                {
+                                    "query_protein_id": ";".join(runtime_handles),
+                                    "subject_protein_id": runtime_handles[-1],
+                                    "supportingEdges": [
+                                        f"{runtime_handles[0]}->"
+                                        f"{runtime_handles[-1]}:rbh"
+                                    ],
+                                    "edgeIds": [
+                                        f"og_1:0:{runtime_handles[0]}->"
+                                        f"1:{runtime_handles[-1]}:coortholog"
+                                    ],
+                                    "description": (
+                                        "The p_r_ prefix is documentation, not an ID."
+                                    ),
+                                }
+                            ]
+                        }
+                    ]
+                },
+            },
+        ),
+        protein_identity_manifest=manifest,
+        canonical_request=_canonical_request("linear"),
     )
 
-    raw, derived = prune_serialized_losat_artifacts(
-        raw_entries,
-        derived_entries,
-        max_bytes=exact_budget,
+    validate_session(payload)
+    payload["losatDerivedCache"]["entries"][0]["payload"]["pairs"][0]["rows"][0][
+        "query_protein_id"
+    ] += ";h_aaaaaaaaaaaaaaaaaaaaaaaaaa"
+    with pytest.raises(ValidationError, match="unresolved protein references"):
+        validate_session(payload)
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    (
+        "queryUnitId",
+        "subjectUnitId",
+        "query_unit_id",
+        "subject_unit_id",
+    ),
+)
+def test_v36_derived_cache_validates_runtime_handles_in_unit_ids(
+    field_name: str,
+) -> None:
+    manifest = _protein_identity_manifest()
+    runtime_handles = [
+        runtime_handle
+        for binding in manifest["recordInstances"].values()
+        for runtime_handle in binding["runtimeIds"].values()
+    ]
+    valid = _current_derived_session(
+        manifest,
+        {
+            "proteinId": runtime_handles[0],
+            field_name: ";".join(runtime_handles),
+        },
+    )
+    validate_session(valid)
+
+    with pytest.raises(ValidationError, match="unresolved protein references"):
+        _current_derived_session(
+            manifest,
+            {
+                "proteinId": runtime_handles[0],
+                field_name: (
+                    f"{runtime_handles[0]};h_aaaaaaaaaaaaaaaaaaaaaaaaaa"
+                ),
+            },
+        )
+
+
+def test_v36_derived_cache_allows_non_protein_collinearity_unit_ids() -> None:
+    manifest = _protein_identity_manifest()
+    runtime_handle = next(
+        iter(manifest["recordInstances"]["record-1"]["runtimeIds"].values())
     )
 
-    assert [entry["key"] for entry in raw] == ["raw-last-hidden"]
-    assert [entry["key"] for entry in derived] == ["derived-last"]
-    assert serialized_losat_artifact_byte_length(raw, derived) == exact_budget
-    assert SESSION_LOSAT_CACHE_BYTE_LIMIT == 109_051_904
+    payload = _current_derived_session(
+        manifest,
+        {
+            "proteinId": runtime_handle,
+            "query_unit_id": "gbd_r0001_unit000001",
+            "subject_unit_id": "gbd_r0002_unit000002",
+        },
+    )
+
+    validate_session(payload)
 
 
-def test_v35_rejects_legacy_protein_entry_in_current_cache() -> None:
+@pytest.mark.parametrize("field_name", ["supportingEdges", "edgeIds"])
+def test_v36_derived_cache_rejects_unresolved_compound_edge_references(
+    field_name: str,
+) -> None:
+    manifest = _protein_identity_manifest()
+    runtime_handles = [
+        runtime_handle
+        for binding in manifest["recordInstances"].values()
+        for runtime_handle in binding["runtimeIds"].values()
+    ]
+    unknown = "h_aaaaaaaaaaaaaaaaaaaaaaaaaa"
+    edge_reference = (
+        f"{runtime_handles[0]}->{unknown}:rbh"
+        if field_name == "supportingEdges"
+        else f"og_1:0:{runtime_handles[0]}->1:{unknown}:rbh"
+    )
+
+    with pytest.raises(ValidationError, match="unresolved protein references"):
+        _current_derived_session(
+            manifest,
+            {
+                "proteinId": runtime_handles[0],
+                field_name: [edge_reference],
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("supportingEdges", 7),
+        ("supporting_edges", [7]),
+        ("edgeIds", {"edge": "invalid"}),
+        ("edge_ids", [None]),
+    ],
+)
+def test_v36_derived_cache_rejects_non_string_compound_edge_references(
+    field_name: str,
+    invalid_value: object,
+) -> None:
+    manifest = _protein_identity_manifest()
+    runtime_handle = next(
+        iter(manifest["recordInstances"]["record-1"]["runtimeIds"].values())
+    )
+
+    with pytest.raises(ValidationError, match="unresolved protein references"):
+        _current_derived_session(
+            manifest,
+            {
+                "proteinId": runtime_handle,
+                field_name: invalid_value,
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "legacy_reference",
+    [
+        "p_r_old_0_9_1_deadbeefdead",
+        f"record@instance|alias~f_{'a' * 64}",
+        f"f_{'b' * 64}",
+    ],
+)
+def test_v36_derived_cache_rejects_embedded_legacy_references(
+    legacy_reference: str,
+) -> None:
+    manifest = _protein_identity_manifest()
+    runtime_handle = next(
+        iter(manifest["recordInstances"]["record-1"]["runtimeIds"].values())
+    )
+
+    with pytest.raises(ValidationError, match="unresolved protein references"):
+        _current_derived_session(
+            manifest,
+            {
+                "proteinId": runtime_handle,
+                "description": f"retained evidence: {legacy_reference}",
+            },
+        )
+
+
+def test_v36_rejects_legacy_protein_entry_in_current_cache() -> None:
     payload = build_session_json(
         SessionBuildContext(
             mode="linear",
@@ -343,11 +982,11 @@ def test_v35_rejects_legacy_protein_entry_in_current_cache() -> None:
     )
     payload["losatCache"]["entries"] = [_legacy_protein_cache_entry()]
 
-    with pytest.raises(ValidationError, match="legacyArtifacts.proteinRawCandidates"):
+    with pytest.raises(ValidationError, match="matching legacyArtifacts"):
         validate_session(payload)
 
 
-def test_v35_writer_quarantines_legacy_protein_and_derived_entries(
+def test_v36_writer_quarantines_v27_to_v34_protein_artifacts(
     tmp_path: Path,
 ) -> None:
     legacy_raw = _legacy_protein_cache_entry()
@@ -387,7 +1026,7 @@ def test_v35_writer_quarantines_legacy_protein_and_derived_entries(
         canonical_request=_canonical_request("linear"),
     )
 
-    assert promoted["version"] == 35
+    assert promoted["version"] == 36
     assert promoted["losatCache"]["entries"] == []
     assert promoted["losatDerivedCache"]["entries"] == []
     assert promoted["legacyArtifacts"]["proteinRawCandidates"]["entries"] == [
@@ -401,7 +1040,7 @@ def test_v35_writer_quarantines_legacy_protein_and_derived_entries(
         legacy_derived
     ]
     assert promoted["proteinIdentityManifest"] == {
-        "schema": 1,
+        "schema": 2,
         "proteinSets": {},
         "recordAnalyses": {},
         "recordInstances": {},
@@ -410,6 +1049,195 @@ def test_v35_writer_quarantines_legacy_protein_and_derived_entries(
     session_path = tmp_path / "promoted.gbdraw-session.json.gz"
     write_session_json(session_path, promoted)
     assert load_session(session_path) == promoted
+
+
+def test_v35_artifacts_survive_load_save_load_before_generate(
+    tmp_path: Path,
+) -> None:
+    source_manifest, v35_raw = _v35_protein_artifacts()
+    v35_derived = {
+        "schema": V35_LOSAT_DERIVED_CACHE_SCHEMA,
+        "kind": "derived-losatp-payload",
+        "key": "v35-derived-key",
+        "mode": "orthogroup",
+        "payload": {"groups": []},
+    }
+    source = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="old",
+            render_formats=("svg",),
+        ),
+        svg_results=(("old", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 20),
+        canonical_request=_canonical_request("linear"),
+    )
+    source["version"] = 35
+    source["losatCache"] = {"entries": [v35_raw]}
+    source["losatDerivedCache"] = {"entries": [v35_derived]}
+    source["proteinIdentityManifest"] = source_manifest
+    validate_session(source)
+
+    first = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="first",
+            render_formats=("svg",),
+            source_session=source,
+        ),
+        svg_results=(("first", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    expected_v35_envelope = {
+        "schema": 1,
+        "sourceManifest": source_manifest,
+        "entries": [
+            {
+                "state": "pending",
+                "originalEntry": v35_raw,
+                "rejectionReason": None,
+            }
+        ],
+    }
+    assert first["version"] == 36
+    assert first["losatCache"]["entries"] == []
+    assert first["losatDerivedCache"]["entries"] == []
+    assert first["proteinIdentityManifest"]["schema"] == 2
+    assert (
+        first["legacyArtifacts"]["proteinRawV35Candidates"]
+        == expected_v35_envelope
+    )
+    assert first["legacyArtifacts"]["proteinDerivedV35Evidence"] == {
+        "schema": 1,
+        "entries": [v35_derived],
+    }
+
+    first_path = tmp_path / "first.gbdraw-session.json.gz"
+    write_session_json(first_path, first)
+    loaded_first = load_session(first_path)
+    second = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="second",
+            render_formats=("svg",),
+            source_session=loaded_first,
+        ),
+        svg_results=(("second", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 22),
+        canonical_request=_canonical_request("linear"),
+    )
+    second_path = tmp_path / "second.gbdraw-session.json.gz"
+    write_session_json(second_path, second)
+    loaded_second = load_session(second_path)
+
+    assert (
+        loaded_second["legacyArtifacts"]["proteinRawV35Candidates"]
+        == expected_v35_envelope
+    )
+    assert loaded_second["legacyArtifacts"]["proteinDerivedV35Evidence"] == {
+        "schema": 1,
+        "entries": [v35_derived],
+    }
+
+
+def test_v35_manifest_survives_load_save_load_without_raw_candidates(
+    tmp_path: Path,
+) -> None:
+    source_manifest, _v35_raw = _v35_protein_artifacts()
+    source = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="old",
+            render_formats=("svg",),
+        ),
+        svg_results=(("old", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 20),
+        canonical_request=_canonical_request("linear"),
+    )
+    source["version"] = 35
+    source["losatCache"] = {"entries": []}
+    source["proteinIdentityManifest"] = source_manifest
+    validate_session(source)
+
+    first = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="first",
+            render_formats=("svg",),
+            source_session=source,
+        ),
+        svg_results=(("first", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+    expected_envelope = {
+        "schema": V35_PROTEIN_CANDIDATE_SCHEMA,
+        "sourceManifest": source_manifest,
+        "entries": [],
+    }
+    assert (
+        first["legacyArtifacts"]["proteinRawV35Candidates"]
+        == expected_envelope
+    )
+
+    session_path = tmp_path / "manifest-only.gbdraw-session.json.gz"
+    write_session_json(session_path, first)
+    loaded = load_session(session_path)
+    second = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="second",
+            render_formats=("svg",),
+            source_session=loaded,
+        ),
+        svg_results=(("second", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 22),
+        canonical_request=_canonical_request("linear"),
+    )
+    assert (
+        second["legacyArtifacts"]["proteinRawV35Candidates"]
+        == expected_envelope
+    )
+
+
+def test_v36_rejects_v35_artifacts_in_current_cache_maps() -> None:
+    source_manifest, v35_raw = _v35_protein_artifacts()
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+    payload["losatCache"]["entries"] = [v35_raw]
+    payload["proteinIdentityManifest"] = source_manifest
+    with pytest.raises(ValidationError, match="cannot store legacy protein"):
+        validate_session(payload)
+
+    payload["losatCache"]["entries"] = []
+    payload["losatDerivedCache"]["entries"] = [
+        {
+            "schema": V35_LOSAT_DERIVED_CACHE_SCHEMA,
+            "kind": "derived-losatp-payload",
+            "key": "v35-derived-key",
+            "mode": "orthogroup",
+            "payload": {},
+        }
+    ]
+    with pytest.raises(ValidationError, match="Invalid current derived"):
+        validate_session(payload)
 
 
 def test_linear_protein_instance_keys_use_canonical_record_keys_not_file_metadata() -> None:

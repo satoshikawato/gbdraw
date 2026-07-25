@@ -10,6 +10,9 @@ from pathlib import Path
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sessions"
 SESSION_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
+V35_SESSION_PATH = (
+    FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v3.gbdraw-session.json.gz"
+)
 EXPECTED_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.expected.json"
 
 
@@ -32,5 +35,26 @@ def test_real_legacy_losat_fixture_matches_its_historical_oracle() -> None:
     record_count = len(session["renderRequest"]["records"])
     assert session["config"]["losat"]["blastp"]["mode"] == "orthogroup"
     assert record_count * record_count == expected["totalPairs"] == 25
+    assert expected["cacheHits"] == 25
+    assert expected["cacheMisses"] == expected["uniqueJobs"] == expected["workerCalls"] == 0
+
+
+def test_real_v35_losat_fixture_matches_the_shared_browser_oracle() -> None:
+    expected = json.loads(EXPECTED_PATH.read_text(encoding="utf-8"))["v35"]
+    source_bytes = gzip.decompress(V35_SESSION_PATH.read_bytes())
+    session = json.loads(source_bytes)
+
+    assert hashlib.sha256(source_bytes).hexdigest() == expected["sourceSha256"]
+    assert expected["sourcePath"].endswith(V35_SESSION_PATH.name)
+    assert session["version"] == expected["sessionVersion"] == 35
+    assert session["renderRequest"]["schema"] == expected["renderRequestSchema"] == 3
+    assert session["proteinIdentityManifest"]["schema"] == 1
+
+    entries = session["losatCache"]["entries"]
+    assert len(entries) == expected["storedRawEntries"] == expected["totalPairs"] == 25
+    assert all(entry["schema"] == expected["rawSchema"] == 3 for entry in entries)
+    assert all(entry["kind"] == "raw-losat" for entry in entries)
+    assert all(entry["identityKind"] == "protein" for entry in entries)
+    assert all(entry["program"] == "blastp" for entry in entries)
     assert expected["cacheHits"] == 25
     assert expected["cacheMisses"] == expected["uniqueJobs"] == expected["workerCalls"] == 0

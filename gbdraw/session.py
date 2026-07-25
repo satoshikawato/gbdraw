@@ -27,6 +27,7 @@ from gbdraw.session_io import (
     SESSION_FORMAT,
     _read_session_text,
     _reject_duplicate_json_keys,
+    expand_session_feature_catalog,
     materialize_embedded_file,
     normalize_current_session_artifacts,
     safe_embedded_filename,
@@ -80,7 +81,7 @@ class SessionDocument:
     source_path: Path | None = None
 
     def __post_init__(self) -> None:
-        cloned = copy.deepcopy(dict(self._data))
+        cloned = expand_session_feature_catalog(copy.deepcopy(dict(self._data)))
         _validate_document(cloned)
         object.__setattr__(self, "_data", cloned)
         if self.source_path is not None:

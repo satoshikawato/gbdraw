@@ -8,10 +8,12 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import threading
+import traceback
 from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,11 +24,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 NODE_SPEC = REPO_ROOT / "tests" / "web" / "losat-cache-migration.playwright.spec.js"
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "sessions"
 FIXTURE_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
+V35_FIXTURE_PATH = (
+    FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v3.gbdraw-session.json.gz"
+)
 EXPECTED_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.expected.json"
-CURRENT_SESSION_VERSION = 35
+CURRENT_SESSION_VERSION = 36
 CURRENT_RENDER_REQUEST_SCHEMA = 3
-CURRENT_PROTEIN_RAW_SCHEMA = 3
-CURRENT_PROTEIN_DERIVED_SCHEMA = 2
+CURRENT_PROTEIN_RAW_SCHEMA = 4
+CURRENT_PROTEIN_DERIVED_SCHEMA = 3
 
 
 _LAYOUT_INSPECTION_SCRIPT = """async () => {
@@ -288,6 +293,8 @@ def _load_expected() -> dict[str, Any]:
         "cacheMisses",
         "uniqueJobs",
         "workerCalls",
+        "v35",
+        "downloads",
     }
     missing = sorted(required.difference(value))
     if missing:
@@ -361,6 +368,200 @@ def _download_svg(page: Any, checks: AcceptanceChecks) -> Path:
     return Path(path)
 
 
+def _download_losat_pair(
+    page: Any,
+    pair_index: int,
+    checks: AcceptanceChecks,
+) -> Path:
+    with page.expect_download(timeout=120_000) as download_info:
+        page.evaluate(
+            "async (index) => window.__GBDRAW_APP__.downloadLosatPair(index)",
+            pair_index,
+        )
+    path = download_info.value.path()
+    checks.require(bool(path), "Pair LOSAT download has no local path.")
+    return Path(path)
+
+
+def _download_all_losat_pairs(
+    page: Any,
+    expected_count: int,
+    checks: AcceptanceChecks,
+) -> list[Path]:
+    downloads: list[Any] = []
+    complete = threading.Event()
+
+    def capture(download: Any) -> None:
+        downloads.append(download)
+        if len(downloads) >= expected_count:
+            complete.set()
+
+    page.on("download", capture)
+    try:
+        page.evaluate("async () => window.__GBDRAW_APP__.downloadLosatCache()")
+        complete.wait(timeout=30)
+        checks.require(
+            len(downloads) == expected_count,
+            f"Bulk LOSAT export downloaded {len(downloads)} files; "
+            f"expected {expected_count}.",
+        )
+        paths = [download.path() for download in downloads]
+        checks.require(
+            all(paths),
+            "A bulk LOSAT download has no local path.",
+        )
+        return [Path(path) for path in paths]
+    finally:
+        page.remove_listener("download", capture)
+
+
+def _losat_data_rows(text: str) -> list[list[str]]:
+    return [
+        line.split("\t")
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _assert_hydrated_download(
+    text: str,
+    expected: dict[str, Any],
+    checks: AcceptanceChecks,
+) -> None:
+    rows = _losat_data_rows(text)
+    checks.require(bool(rows), "Hydrated LOSAT download contains no data rows.")
+    checks.require(
+        all(len(columns) == 12 for columns in rows),
+        "Hydrated LOSAT download contains a non-12-column row.",
+    )
+    for pattern in expected["downloads"]["forbiddenPatterns"]:
+        checks.require(
+            re.search(pattern, text, flags=re.IGNORECASE) is None,
+            f"Hydrated LOSAT download leaked internal ID pattern {pattern!r}.",
+        )
+    alias_pattern = re.compile(r"^[A-Za-z0-9._%~-]+$")
+    checks.require(
+        all(
+            alias_pattern.fullmatch(columns[0])
+            and alias_pattern.fullmatch(columns[1])
+            for columns in rows
+        ),
+        "Hydrated LOSAT QUERY/SUBJECT is not a normal export alias.",
+    )
+
+
+def _assert_hydrated_downloads(
+    page: Any,
+    expected: dict[str, Any],
+    checks: AcceptanceChecks,
+) -> None:
+    pair_path = _download_losat_pair(
+        page,
+        int(expected["downloads"]["pairIndex"]),
+        checks,
+    )
+    pair_text = pair_path.read_text(encoding="utf-8")
+    _assert_hydrated_download(pair_text, expected, checks)
+    checks.require(
+        _losat_data_rows(pair_text)[0][:2]
+        == expected["downloads"]["firstDataIds"],
+        "Pair download did not expose the expected ordinary aliases.",
+    )
+
+    bulk_paths = _download_all_losat_pairs(
+        page,
+        int(expected["downloads"]["bulkEntryCount"]),
+        checks,
+    )
+    for path in bulk_paths:
+        _assert_hydrated_download(path.read_text(encoding="utf-8"), expected, checks)
+
+
+def _assert_hydrated_utf8_prompt_boundary(
+    page: Any,
+    expected: dict[str, Any],
+    checks: AcceptanceChecks,
+) -> None:
+    probe = page.evaluate(
+        """async () => {
+          const {
+            LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES,
+            confirmHydratedLosatExport,
+            totalHydratedLosatExportBytes
+          } = await import('/gbdraw/web/js/app/run-analysis.js');
+          const hydrated = { text: '界界' };
+          const utf8Bytes = totalHydratedLosatExportBytes([hydrated]);
+          let prompts = 0;
+          const accepted = confirmHydratedLosatExport(
+            utf8Bytes,
+            () => {
+              prompts += 1;
+              return true;
+            },
+            5
+          );
+          return {
+            threshold: LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES,
+            codeUnits: hydrated.text.length,
+            utf8Bytes,
+            prompts,
+            accepted
+          };
+        }"""
+    )
+    checks.require(
+        probe
+        == {
+            "threshold": expected["downloads"]["hydratedPromptThresholdBytes"],
+            "codeUnits": 2,
+            "utf8Bytes": 6,
+            "prompts": 1,
+            "accepted": True,
+        },
+        f"Hydrated UTF-8 prompt boundary is incorrect: {probe}",
+    )
+
+
+def _install_user_uploaded_tsv(
+    page: Any,
+    expected: dict[str, Any],
+) -> list[int]:
+    return page.evaluate(
+        """async ({ filename, text }) => {
+          const bytes = new TextEncoder().encode(text);
+          const app = window.__GBDRAW_APP__;
+          app.blastSource = 'upload';
+          app.losatProgram = 'blastn';
+          app.linearSeqs[0].blast = new File(
+            [bytes],
+            filename,
+            { type: 'text/tab-separated-values', lastModified: 0 }
+          );
+          return Array.from(
+            new Uint8Array(await app.linearSeqs[0].blast.arrayBuffer())
+          );
+        }""",
+        {
+            "filename": expected["downloads"]["userUploadedFilename"],
+            "text": expected["downloads"]["userUploadedTsv"],
+        },
+    )
+
+
+def _read_first_uploaded_tsv(page: Any) -> dict[str, Any]:
+    return page.evaluate(
+        """async () => {
+          const file = window.__GBDRAW_APP__.linearSeqs[0].blast;
+          return {
+            name: file?.name || '',
+            bytes: file
+              ? Array.from(new Uint8Array(await file.arrayBuffer()))
+              : []
+          };
+        }"""
+    )
+
+
 def _assert_current_session_boundary(
     session: dict[str, Any],
     checks: AcceptanceChecks,
@@ -393,6 +594,7 @@ def _assert_current_session_boundary(
     checks.require(
         all(
             entry.get("schema") == CURRENT_PROTEIN_DERIVED_SCHEMA
+            and entry.get("idEncoding") == "runtime-handle-v1"
             for entry in derived_entries
         ),
         "A legacy entry remains in the current derived cache.",
@@ -452,6 +654,71 @@ def _assert_legacy_preserved(
     )
 
 
+def _assert_v35_preserved(
+    session: dict[str, Any],
+    source_session: dict[str, Any],
+    expected: dict[str, Any],
+    checks: AcceptanceChecks,
+) -> None:
+    _assert_current_session_boundary(session, checks, require_derived=False)
+    raw_envelope = (
+        session.get("legacyArtifacts", {})
+        .get("proteinRawV35Candidates", {})
+    )
+    candidates = raw_envelope.get("entries", [])
+    derived_envelope = (
+        session.get("legacyArtifacts", {})
+        .get("proteinDerivedV35Evidence", {})
+    )
+    checks.require(
+        session.get("losatCache", {}).get("entries", []) == [],
+        "A v35 protein entry leaked into the current cache.",
+    )
+    checks.require(
+        session.get("losatDerivedCache", {}).get("entries", []) == [],
+        "A v35 derived entry leaked into the current derived cache.",
+    )
+    checks.require(
+        raw_envelope.get("schema") == 1,
+        "The v35 candidate envelope is not schema 1.",
+    )
+    checks.require(
+        raw_envelope.get("sourceManifest")
+        == source_session.get("proteinIdentityManifest"),
+        "Load -> Save changed or lost the v35 source manifest.",
+    )
+    checks.require(
+        len(candidates) == expected["storedRawEntries"],
+        "Load -> Save lost a v35 raw candidate.",
+    )
+    checks.require(
+        all(
+            candidate.get("state") == "pending"
+            and candidate.get("originalEntry", {}).get("schema")
+            == expected["rawSchema"]
+            and candidate.get("originalEntry", {}).get("program") == "blastp"
+            for candidate in candidates
+        ),
+        "The saved v35 candidate envelope is not lossless.",
+    )
+    checks.require(
+        [candidate.get("originalEntry") for candidate in candidates]
+        == source_session.get("losatCache", {}).get("entries", []),
+        "Load -> Save changed a v35 raw candidate.",
+    )
+    checks.require(
+        derived_envelope
+        == {
+            "schema": 1,
+            "entries": source_session.get("losatDerivedCache", {}).get(
+                "entries",
+                [],
+            ),
+        },
+        "Load -> Save changed the quarantined v35 derived evidence.",
+    )
+
+
 def _assert_renamed_resources(session: dict[str, Any], checks: AcceptanceChecks) -> None:
     resources = [
         value
@@ -479,65 +746,120 @@ def _assert_renamed_resources(session: dict[str, Any], checks: AcceptanceChecks)
     )
 
 
+def _raw_tail_signature(text: object) -> str:
+    rows: list[str] = []
+    for line in str(text or "").split("\n"):
+        body = line[:-1] if line.endswith("\r") else line
+        ending = "\r" if line.endswith("\r") else ""
+        if not body.strip() or body.lstrip().startswith("#"):
+            rows.append(line)
+            continue
+        rows.append("\t".join(body.split("\t")[2:]) + ending)
+    return "\n".join(rows)
+
+
 def _assert_current_artifacts(
     session: dict[str, Any],
     source_session: dict[str, Any],
     expected: dict[str, Any],
     checks: AcceptanceChecks,
+    *,
+    migration_kind: str = "schema2",
 ) -> None:
     _assert_current_session_boundary(session, checks, require_derived=True)
     manifest = session.get("proteinIdentityManifest", {})
     entries = session.get("losatCache", {}).get("entries", [])
     derived_entries = session.get("losatDerivedCache", {}).get("entries", [])
     legacy_artifacts = session.get("legacyArtifacts", {})
-    legacy_candidates = (
-        legacy_artifacts.get("proteinRawCandidates", {}).get("entries", [])
-    )
-    legacy_derived = (
-        legacy_artifacts.get("proteinDerivedEvidence", {}).get("entries", [])
-    )
-    checks.require(manifest.get("schema") == 1, "Protein identity manifest is not schema 1.")
+    checks.require(manifest.get("schema") == 2, "Protein identity manifest is not schema 2.")
     checks.require(
         len(entries) == expected["totalPairs"],
         "The migrated current cache does not contain every expected pair.",
     )
     checks.require(
         all(
-            entry.get("schema") == 3
+            entry.get("schema") == 4
             and entry.get("kind") == "raw-losat"
             and entry.get("identityKind") == "protein"
+            and entry.get("idEncoding") == "runtime-handle-v1"
             and entry.get("program") == "blastp"
             for entry in entries
         ),
-        "The current protein cache contains a non-schema-3 entry.",
+        "The current protein cache contains a non-schema-4 entry.",
     )
     checks.require(
         all(
             entry.get("schema") == CURRENT_PROTEIN_DERIVED_SCHEMA
             and entry.get("kind") == "derived-losatp-payload"
+            and entry.get("idEncoding") == "runtime-handle-v1"
             for entry in derived_entries
         ),
-        "The current derived cache contains a non-schema-2 protein payload.",
+        "The current derived cache contains a non-schema-3 protein payload.",
     )
-    checks.require(
-        len(legacy_candidates)
-        == expected["storedRawEntries"] - expected["totalPairs"],
-        "The saved session did not remove exactly the promoted legacy candidates.",
-    )
-    checks.require(
-        all(
-            candidate.get("state") == "pending"
-            and candidate.get("originalEntry")
-            in source_session.get("losatCache", {}).get("entries", [])
-            for candidate in legacy_candidates
-        ),
-        "A promoted or mutated legacy candidate remains in the saved envelope.",
-    )
-    checks.require(
-        legacy_derived
-        == source_session.get("losatDerivedCache", {}).get("entries", []),
-        "Pending-candidate derived evidence was not preserved losslessly.",
-    )
+    if migration_kind == "schema2":
+        legacy_candidates = (
+            legacy_artifacts.get("proteinRawCandidates", {}).get("entries", [])
+        )
+        legacy_derived = (
+            legacy_artifacts.get("proteinDerivedEvidence", {}).get("entries", [])
+        )
+        checks.require(
+            len(legacy_candidates)
+            == expected["storedRawEntries"] - expected["totalPairs"],
+            "The saved session did not remove exactly the promoted legacy candidates.",
+        )
+        checks.require(
+            all(
+                candidate.get("state") == "pending"
+                and candidate.get("originalEntry")
+                in source_session.get("losatCache", {}).get("entries", [])
+                for candidate in legacy_candidates
+            ),
+            "A promoted or mutated legacy candidate remains in the saved envelope.",
+        )
+        checks.require(
+            legacy_derived
+            == source_session.get("losatDerivedCache", {}).get("entries", []),
+            "Pending-candidate derived evidence was not preserved losslessly.",
+        )
+    else:
+        v35_envelope = legacy_artifacts.get("proteinRawV35Candidates", {})
+        checks.require(
+            v35_envelope.get("entries", []) == []
+            and v35_envelope.get("sourceManifest") is None,
+            "Promoted v35 raw candidates or their source manifest remain.",
+        )
+        checks.require(
+            legacy_artifacts.get("proteinDerivedV35Evidence", {}).get(
+                "entries",
+                [],
+            )
+            == [],
+            "Promoted v35 derived evidence remains.",
+        )
+        source_by_pair = {
+            (
+                entry.get("queryRecordInstanceKey"),
+                entry.get("subjectRecordInstanceKey"),
+            ): entry
+            for entry in source_session.get("losatCache", {}).get("entries", [])
+        }
+        for entry in entries:
+            source_entry = source_by_pair.get(
+                (
+                    entry.get("queryRecordInstanceKey"),
+                    entry.get("subjectRecordInstanceKey"),
+                )
+            )
+            checks.require(
+                source_entry is not None,
+                "A promoted v35 pair does not resolve to its source entry.",
+            )
+            checks.require(
+                _raw_tail_signature(entry.get("text"))
+                == _raw_tail_signature(source_entry.get("text")),
+                "v35 promotion changed row order or columns 3-12.",
+            )
 
     record_analyses = manifest.get("recordAnalyses", {})
     instances = manifest.get("recordInstances", {})
@@ -547,12 +869,24 @@ def _assert_current_artifacts(
             instance.get("recordAnalysisId") in record_analyses,
             f"Missing record analysis for {instance_key}.",
         )
-        for feature_id, transport_id in instance.get("transportIds", {}).items():
+        checks.require(
+            bool(instance.get("runtimeBindingHash"))
+            and bool(instance.get("displayBindingHash")),
+            f"Missing compact binding hashes for {instance_key}.",
+        )
+        checks.require(
+            set(instance.get("runtimeIds", {}))
+            == set(instance.get("featureMetadata", {})),
+            f"Runtime and display maps differ for {instance_key}.",
+        )
+        for feature_id, runtime_handle in instance.get("runtimeIds", {}).items():
             checks.require(feature_id.startswith("f_"), "Manifest feature ID is not stable.")
-            checks.require(not transport_id.startswith("p_r_"), "Legacy p_r_ transport ID remains.")
-            checks.require(not any(char.isspace() for char in transport_id), "Whitespace in transport ID.")
-            checks.require(transport_id not in owners, "Transport ID is not globally unique.")
-            owners[transport_id] = (instance_key, feature_id)
+            checks.require(
+                re.fullmatch(r"h_[a-z2-7]{26}", runtime_handle) is not None,
+                "Runtime handle has the wrong encoding.",
+            )
+            checks.require(runtime_handle not in owners, "Runtime handle is not globally unique.")
+            owners[runtime_handle] = (instance_key, feature_id)
 
     resolved = 0
     for entry in entries:
@@ -561,15 +895,15 @@ def _assert_current_artifacts(
         query = instances.get(query_key, {})
         subject = instances.get(subject_key, {})
         checks.require(
-            query.get("bindingHash") == entry.get("queryBindingHash"),
+            query.get("runtimeBindingHash") == entry.get("queryRuntimeBindingHash"),
             "Query binding hash does not resolve through the manifest.",
         )
         checks.require(
-            subject.get("bindingHash") == entry.get("subjectBindingHash"),
+            subject.get("runtimeBindingHash") == entry.get("subjectRuntimeBindingHash"),
             "Subject binding hash does not resolve through the manifest.",
         )
-        query_ids = set(query.get("transportIds", {}).values())
-        subject_ids = set(subject.get("transportIds", {}).values())
+        query_ids = set(query.get("runtimeIds", {}).values())
+        subject_ids = set(subject.get("runtimeIds", {}).values())
         for raw_line in entry.get("text", "").splitlines():
             if not raw_line.strip() or raw_line.lstrip().startswith("#"):
                 continue
@@ -624,6 +958,14 @@ def _assert_current_artifacts(
         "p_r_" not in json.dumps(derived_entries, ensure_ascii=False),
         "A legacy metadata-derived protein ID remains in the derived cache.",
     )
+    checks.require(
+        re.search(
+            r"@.+\|.+~f_[0-9a-f]{64}",
+            json.dumps(derived_entries, ensure_ascii=False),
+        )
+        is None,
+        "A version-35 readable transport ID remains in the derived cache.",
+    )
 
 
 def _generate(page: Any) -> dict[str, Any]:
@@ -641,6 +983,143 @@ def _generate(page: Any) -> dict[str, Any]:
               window.__GBDRAW_LAST_LOSAT_TELEMETRY__ || null,
             executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0)
           };
+        }"""
+    )
+
+
+def _migration_ui_snapshot(page: Any) -> dict[str, Any]:
+    return page.evaluate(
+        """async () => {
+          const { state } = await import('/gbdraw/web/js/state.js');
+          return JSON.parse(JSON.stringify({
+            orthogroups: state.orthogroups.value,
+            selectedOrthogroupAlignmentFeature:
+              state.selectedOrthogroupAlignmentFeature.value,
+            selectedOrthogroupId: state.selectedOrthogroupId.value,
+            extractedFeatures: state.extractedFeatures.value,
+            biologicalFeatures: state.biologicalFeatures.value
+          }));
+        }"""
+    )
+
+
+def _cancel_during_render(page: Any) -> dict[str, Any]:
+    return page.evaluate(
+        """async () => {
+          const app = window.__GBDRAW_APP__;
+          const { state } = await import('/gbdraw/web/js/state.js');
+          const before = {
+            proteinIdentityManifest: state.proteinIdentityManifest.value,
+            legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
+            legacyProteinRawV35Candidates:
+              state.legacyProteinRawV35Candidates.value,
+            legacyProteinDerivedEvidence:
+              state.legacyProteinDerivedEvidence.value,
+            legacyProteinDerivedV35Evidence:
+              state.legacyProteinDerivedV35Evidence.value,
+            losatCache: Array.from(state.losatCache.value.entries()),
+            losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
+            losatCacheInfo: state.losatCacheInfo.value
+          };
+          let sawRendering = false;
+          let cancelInvoked = false;
+          const cancelPoll = setInterval(() => {
+            if (
+              sawRendering ||
+              String(app.processingStatus || '') !== 'Rendering SVG...'
+            ) return;
+            sawRendering = true;
+            app.cancelGeneration();
+            cancelInvoked = true;
+          }, 0);
+          try {
+            const result = await app.runAnalysis();
+            const sameMapEntries = (entries, current) => (
+              entries.length === current.size &&
+              entries.every(([key, value]) => current.get(key) === value)
+            );
+            return {
+              result,
+              sawRendering,
+              cancelInvoked,
+              errorSummary: String(app.errorLog?.summary || ''),
+              executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
+              authorityRestored: (
+                state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
+                state.legacyProteinRawCandidates.value ===
+                  before.legacyProteinRawCandidates &&
+                state.legacyProteinRawV35Candidates.value ===
+                  before.legacyProteinRawV35Candidates &&
+                state.legacyProteinDerivedEvidence.value ===
+                  before.legacyProteinDerivedEvidence &&
+                state.legacyProteinDerivedV35Evidence.value ===
+                  before.legacyProteinDerivedV35Evidence &&
+                sameMapEntries(before.losatCache, state.losatCache.value) &&
+                sameMapEntries(
+                  before.losatDerivedCache,
+                  state.losatDerivedCache.value
+                ) &&
+                state.losatCacheInfo.value === before.losatCacheInfo
+              )
+            };
+          } finally {
+            clearInterval(cancelPoll);
+          }
+        }"""
+    )
+
+
+def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
+    return page.evaluate(
+        """async () => {
+          const app = window.__GBDRAW_APP__;
+          const { state } = await import('/gbdraw/web/js/state.js');
+          const before = {
+            proteinIdentityManifest: state.proteinIdentityManifest.value,
+            legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
+            legacyProteinRawV35Candidates:
+              state.legacyProteinRawV35Candidates.value,
+            legacyProteinDerivedEvidence:
+              state.legacyProteinDerivedEvidence.value,
+            legacyProteinDerivedV35Evidence:
+              state.legacyProteinDerivedV35Evidence.value,
+            losatCache: Array.from(state.losatCache.value.entries()),
+            losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
+            losatCacheInfo: state.losatCacheInfo.value
+          };
+          const previousLegendFontSize = app.adv.legend_font_size;
+          app.adv.legend_font_size = 'not-a-number';
+          try {
+            const result = await app.runAnalysis();
+            const sameMapEntries = (entries, current) => (
+              entries.length === current.size &&
+              entries.every(([key, value]) => current.get(key) === value)
+            );
+            return {
+              result,
+              errorSummary: String(app.errorLog?.summary || ''),
+              executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
+              authorityRestored: (
+                state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
+                state.legacyProteinRawCandidates.value ===
+                  before.legacyProteinRawCandidates &&
+                state.legacyProteinRawV35Candidates.value ===
+                  before.legacyProteinRawV35Candidates &&
+                state.legacyProteinDerivedEvidence.value ===
+                  before.legacyProteinDerivedEvidence &&
+                state.legacyProteinDerivedV35Evidence.value ===
+                  before.legacyProteinDerivedV35Evidence &&
+                sameMapEntries(before.losatCache, state.losatCache.value) &&
+                sameMapEntries(
+                  before.losatDerivedCache,
+                  state.losatDerivedCache.value
+                ) &&
+                state.losatCacheInfo.value === before.losatCacheInfo
+              )
+            };
+          } finally {
+            app.adv.legend_font_size = previousLegendFontSize;
+          }
         }"""
     )
 
@@ -778,8 +1257,11 @@ def _run_python_adapter() -> int:
 
     checks = AcceptanceChecks()
     expected = _load_expected()
+    v35_expected = expected["v35"]
     fixture_bytes = gzip.decompress(FIXTURE_PATH.read_bytes())
     fixture = json.loads(fixture_bytes.decode("utf-8"))
+    v35_fixture_bytes = gzip.decompress(V35_FIXTURE_PATH.read_bytes())
+    v35_fixture = json.loads(v35_fixture_bytes.decode("utf-8"))
     checks.require(
         hashlib.sha256(fixture_bytes).hexdigest() == expected.get("sourceSha256"),
         "Legacy fixture SHA-256 does not match its acceptance oracle.",
@@ -797,6 +1279,29 @@ def _run_python_adapter() -> int:
         == expected["storedRawEntries"],
         "Legacy fixture raw-entry count does not match its acceptance oracle.",
     )
+    checks.require(
+        hashlib.sha256(v35_fixture_bytes).hexdigest()
+        == v35_expected.get("sourceSha256"),
+        "v35 fixture SHA-256 does not match its acceptance oracle.",
+    )
+    checks.require(
+        v35_fixture.get("version") == v35_expected.get("sessionVersion"),
+        "v35 fixture session version does not match its acceptance oracle.",
+    )
+    checks.require(
+        v35_fixture.get("renderRequest", {}).get("schema")
+        == v35_expected.get("renderRequestSchema"),
+        "v35 fixture renderRequest schema does not match its acceptance oracle.",
+    )
+    v35_raw_entries = v35_fixture.get("losatCache", {}).get("entries", [])
+    checks.require(
+        len(v35_raw_entries) == v35_expected["storedRawEntries"]
+        and all(
+            entry.get("schema") == v35_expected["rawSchema"]
+            for entry in v35_raw_entries
+        ),
+        "v35 fixture raw entries do not match its acceptance oracle.",
+    )
     print("Running LOSAT cache browser acceptance with Python Playwright.", flush=True)
     try:
         with _serve_repo() as base_url, sync_playwright() as playwright:
@@ -804,6 +1309,24 @@ def _run_python_adapter() -> int:
             try:
                 context = browser.new_context(accept_downloads=True)
                 page = context.new_page()
+                page.on(
+                    "pageerror",
+                    lambda error: print(
+                        f"Browser page error: {error}",
+                        file=sys.stderr,
+                    ),
+                )
+                page.on(
+                    "console",
+                    lambda message: (
+                        print(
+                            f"Browser console error: {message.text}",
+                            file=sys.stderr,
+                        )
+                        if message.type == "error"
+                        else None
+                    ),
+                )
                 page.set_default_timeout(120_000)
                 page.add_init_script(
                     """window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ = 0;
@@ -865,6 +1388,8 @@ def _run_python_adapter() -> int:
                     _download_svg(page, checks),
                     checks,
                 )
+                _assert_hydrated_downloads(page, expected, checks)
+                _assert_hydrated_utf8_prompt_boundary(page, expected, checks)
 
                 migrated_path = _save_session(page, checks)
                 migrated = _read_session(migrated_path)
@@ -885,11 +1410,100 @@ def _run_python_adapter() -> int:
                     == first_layout.get("geometrySignature"),
                     "Resolved BGC geometry changed after save/reload/regeneration.",
                 )
+
+                page.reload(wait_until="domcontentloaded")
+                page.wait_for_function("() => window.__GBDRAW_APP__")
+                _import_session(page, V35_FIXTURE_PATH, checks)
+
+                v35_before_generate_path = _save_session(page, checks)
+                v35_before_generate = _read_session(v35_before_generate_path)
+                _assert_v35_preserved(
+                    v35_before_generate,
+                    v35_fixture,
+                    v35_expected,
+                    checks,
+                )
+
+                page.reload(wait_until="domcontentloaded")
+                page.wait_for_function("() => window.__GBDRAW_APP__")
+                _import_session(page, v35_before_generate_path, checks)
+                page.wait_for_function(
+                    "() => window.__GBDRAW_APP__?.pyodideReady === true",
+                    timeout=240_000,
+                )
+                v35_ui_before_cancel = _migration_ui_snapshot(page)
+                canceled_v35_run = _cancel_during_render(page)
+                checks.require(
+                    canceled_v35_run.get("sawRendering")
+                    and canceled_v35_run.get("cancelInvoked")
+                    and canceled_v35_run.get("authorityRestored")
+                    and canceled_v35_run.get("result") == {"status": "canceled"},
+                    f"v35 render cancellation did not interrupt an active render: "
+                    f"{canceled_v35_run}",
+                )
+                checks.require(
+                    not canceled_v35_run.get("errorSummary"),
+                    f"v35 render cancellation surfaced an error: {canceled_v35_run}",
+                )
+                checks.require(
+                    _migration_ui_snapshot(page) == v35_ui_before_cancel,
+                    "v35 UI references changed after the canceled migration.",
+                )
+                v35_ui_before_render_error = _migration_ui_snapshot(page)
+                failed_v35_run = _fail_renderer_after_migration(page)
+                checks.require(
+                    failed_v35_run.get("result") == {"status": "error"}
+                    and failed_v35_run.get("authorityRestored")
+                    and bool(failed_v35_run.get("errorSummary"))
+                    and failed_v35_run.get("executorCalls") == 0,
+                    f"v35 renderer failure did not roll migration back: "
+                    f"{failed_v35_run}",
+                )
+                checks.require(
+                    _migration_ui_snapshot(page) == v35_ui_before_render_error,
+                    "v35 UI references changed after the failed render.",
+                )
+                _assert_telemetry(
+                    _generate(page),
+                    v35_expected,
+                    checks,
+                )
+
+                v35_migrated_path = _save_session(page, checks)
+                v35_migrated = _read_session(v35_migrated_path)
+                _assert_current_artifacts(
+                    v35_migrated,
+                    v35_fixture,
+                    v35_expected,
+                    checks,
+                    migration_kind="v35",
+                )
+
+                page.reload(wait_until="domcontentloaded")
+                page.wait_for_function("() => window.__GBDRAW_APP__")
+                _import_session(page, v35_migrated_path, checks)
+                expected_upload_bytes = _install_user_uploaded_tsv(page, expected)
+                uploaded_session_path = _save_session(page, checks)
+                page.reload(wait_until="domcontentloaded")
+                page.wait_for_function("() => window.__GBDRAW_APP__")
+                _import_session(page, uploaded_session_path, checks)
+                restored_upload = _read_first_uploaded_tsv(page)
+                checks.require(
+                    restored_upload
+                    == {
+                        "name": expected["downloads"]["userUploadedFilename"],
+                        "bytes": expected_upload_bytes,
+                    },
+                    "User-uploaded TSV bytes changed across save/reload.",
+                )
                 context.close()
             finally:
                 browser.close()
     except Exception as error:
-        print(f"Python Playwright acceptance failed: {error}", file=sys.stderr)
+        print(
+            f"Python Playwright acceptance failed: {error}\n{traceback.format_exc()}",
+            file=sys.stderr,
+        )
         return 1
 
     if checks.count == 0:
@@ -908,7 +1522,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    for required in (NODE_SPEC, FIXTURE_PATH, EXPECTED_PATH):
+    for required in (NODE_SPEC, FIXTURE_PATH, V35_FIXTURE_PATH, EXPECTED_PATH):
         if not required.is_file():
             print(f"Required acceptance input is missing: {required}", file=sys.stderr)
             return 2

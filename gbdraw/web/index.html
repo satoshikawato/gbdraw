@@ -4235,9 +4235,9 @@
                             </div>
                             <div v-if="clickedOrthogroupDetail.currentMember" class="text-xs text-slate-600 mb-3">
                                 <div class="text-[10px] text-slate-400 mb-1">Current member</div>
-                                <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.label || clickedFeature.label }}</div>
+                                <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.product || clickedOrthogroupDetail.currentMember.note || clickedOrthogroupDetail.currentMember.displayProteinId || 'Member' }}</div>
                                 <div class="font-mono text-[10px] text-slate-500 break-all">
-                                    {{ clickedOrthogroupDetail.currentMember.sourceProteinId || clickedFeature.sourceProteinId || clickedOrthogroupDetail.currentMember.proteinId || clickedFeature.proteinId }}
+                                    {{ clickedOrthogroupDetail.currentMember.displayProteinId || '' }}
                                 </div>
                                 <div class="text-[10px] text-slate-500">
                                     {{ clickedOrthogroupDetail.currentMember.recordId || '' }}
@@ -4267,7 +4267,7 @@
                                                     {{ Number(member.start) + 1 }}..{{ member.end }}
                                                     <span v-if="member.strand">({{ member.strand }})</span>
                                                 </td>
-                                                <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.sourceProteinId || member.proteinId }}</td>
+                                                <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.displayProteinId || '' }}</td>
                                                 <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
                                                 <td class="px-2 py-1 whitespace-nowrap">
                                                     <div class="grid grid-cols-2 gap-1 w-24">
@@ -5593,7 +5593,7 @@
                                                         {{ Number(member.start) + 1 }}..{{ member.end }}
                                                         <span v-if="member.strand">({{ member.strand }})</span>
                                                     </td>
-                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.sourceProteinId || member.proteinId }}</td>
+                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.displayProteinId || '' }}</td>
                                                     <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
                                                     <td class="px-2 py-1 whitespace-nowrap">
                                                         <div class="grid grid-cols-2 gap-1 w-24">

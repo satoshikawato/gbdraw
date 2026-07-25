@@ -588,11 +588,14 @@ def _serialize_cds_protein(protein, record=None):
         "same_location_ordinal": getattr(protein, "same_location_ordinal", None),
         "feature_analysis_id": getattr(protein, "feature_analysis_id", None),
         "display_alias": getattr(protein, "display_alias", None),
+        "runtime_handle": getattr(protein, "runtime_handle", None),
         "transport_id": getattr(protein, "transport_id", None),
         "aa_sha256": getattr(protein, "aa_sha256", None),
         "record_instance_key": getattr(protein, "record_instance_key", None),
         "record_analysis_id": getattr(protein, "record_analysis_id", None),
         "protein_set_hash": getattr(protein, "protein_set_hash", None),
+        "runtime_binding_hash": getattr(protein, "runtime_binding_hash", None),
+        "display_binding_hash": getattr(protein, "display_binding_hash", None),
         "binding_hash": getattr(protein, "binding_hash", None),
         "coord_base": coord_base,
         "coord_step": coord_step,
@@ -653,7 +656,9 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             "protein_set_hash": result.protein_set_hashes[0],
             "record_analysis_id": result.record_analysis_ids[0],
             "record_instance_key": result.record_instance_keys[0],
-            "binding_hash": result.binding_hashes[0],
+            "runtime_binding_hash": result.runtime_binding_hashes[0],
+            "display_binding_hash": result.display_binding_hashes[0],
+            "binding_hash": result.runtime_binding_hashes[0],
             "derived_mapping_hash": result.derived_mapping_hashes[0],
         })
     except Exception:
@@ -757,11 +762,14 @@ def _build_web_cds_protein_map(raw_map):
             "location_operator",
             "feature_analysis_id",
             "display_alias",
+            "runtime_handle",
             "transport_id",
             "aa_sha256",
             "record_instance_key",
             "record_analysis_id",
             "protein_set_hash",
+            "runtime_binding_hash",
+            "display_binding_hash",
             "binding_hash",
         ):
             if optional_string_field in supported_fields:
@@ -845,12 +853,134 @@ def promote_legacy_losatp_cache_candidates(
         if scan.promotion is None:
             return json.dumps({"status": "no-match", "rejections": rejections})
         promotion = scan.promotion
+        protein_id_map = {}
+        old_rows = [
+            line.split("\t")
+            for line in str(entries[promotion.candidate_index].get("text") or "").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        new_rows = [
+            line.split("\t")
+            for line in promotion.rewritten_tsv.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        for old_row, new_row in zip(old_rows, new_rows):
+            if len(old_row) < 2 or len(new_row) < 2:
+                continue
+            protein_id_map[old_row[0]] = new_row[0]
+            protein_id_map[old_row[1]] = new_row[1]
         return json.dumps({
             "status": "promoted",
             "candidateIndex": candidate_indexes[promotion.candidate_index],
             "entry": promotion.entry,
             "text": promotion.rewritten_tsv,
+            "proteinIdMap": protein_id_map,
             "rejections": rejections,
+        })
+    except Exception:
+        return json.dumps({"status": "error", "error": traceback.format_exc()})
+
+def promote_v35_losatp_cache_candidates(
+    candidates_json,
+    source_manifest_json,
+    identity_manifest_json,
+    query_record_instance_key,
+    subject_record_instance_key,
+    expected_options_json,
+):
+    """Verify and copy one version-35 schema-3 entry into schema 4."""
+    try:
+        from gbdraw.analysis.protein_colinearity import (
+            promote_v35_protein_raw_cache_entries,
+        )
+
+        raw_candidates = json.loads(str(candidates_json))
+        source_manifest = json.loads(str(source_manifest_json))
+        manifest = json.loads(str(identity_manifest_json))
+        options = json.loads(str(expected_options_json))
+        candidate_indexes = []
+        entries = []
+        for relative_index, candidate in enumerate(raw_candidates if isinstance(raw_candidates, list) else []):
+            if not isinstance(candidate, dict) or not isinstance(candidate.get("entry"), dict):
+                continue
+            candidate_indexes.append(int(candidate.get("candidateIndex", relative_index)))
+            entries.append(candidate["entry"])
+
+        scan = promote_v35_protein_raw_cache_entries(
+            entries,
+            source_manifest=source_manifest,
+            identity_manifest=manifest,
+            query_record_instance_key=str(query_record_instance_key),
+            subject_record_instance_key=str(subject_record_instance_key),
+            expected_args=options.get("args") or [],
+            expected_program=str(options.get("program") or "blastp"),
+            expected_outfmt=str(options.get("outfmt") or "6"),
+        )
+        rejections = [
+            {
+                "candidateIndex": candidate_indexes[rejection.candidate_index],
+                "reason": rejection.reason,
+            }
+            for rejection in scan.rejections
+        ]
+        if scan.promotion is None:
+            return json.dumps({"status": "no-match", "rejections": rejections})
+        promotion = scan.promotion
+        return json.dumps({
+            "status": "promoted",
+            "candidateIndex": candidate_indexes[promotion.candidate_index],
+            "entry": promotion.entry,
+            "text": promotion.rewritten_tsv,
+            "proteinIdMap": promotion.protein_id_map,
+            "rejections": rejections,
+        })
+    except Exception:
+        return json.dumps({"status": "error", "error": traceback.format_exc()})
+
+def resolve_legacy_protein_reference_map_json(
+    protein_records_json,
+    identity_manifest_json,
+    reference_ids_json,
+):
+    """Resolve legacy Web p_r_ artifact references through current identity."""
+    try:
+        from gbdraw.analysis.protein_colinearity import (
+            build_legacy_protein_reference_map,
+            validate_protein_identity_manifest,
+        )
+
+        raw_records = json.loads(str(protein_records_json))
+        if not isinstance(raw_records, list):
+            raise ValueError("Protein records must be a JSON array.")
+        manifest = validate_protein_identity_manifest(
+            json.loads(str(identity_manifest_json))
+        )
+        reference_ids = json.loads(str(reference_ids_json))
+        if not isinstance(reference_ids, list):
+            raise ValueError("Legacy protein references must be a JSON array.")
+        protein_maps = []
+        for raw_record in raw_records:
+            if not isinstance(raw_record, dict):
+                raise ValueError("Protein record payloads must be JSON objects.")
+            proteins = _web_ordered_proteins_from_fasta(
+                raw_record.get("proteinMap") or {},
+                raw_record.get("fasta") or "",
+            )
+            protein_maps.append({
+                protein.protein_id: protein
+                for protein in proteins
+            })
+        extraction = _build_web_protein_extraction(
+            protein_maps,
+            identity_manifest=manifest,
+        )
+        protein_id_map = build_legacy_protein_reference_map(
+            extraction,
+            [str(reference) for reference in reference_ids],
+        )
+        return json.dumps({
+            "status": "resolved",
+            "proteinIdMap": protein_id_map,
         })
     except Exception:
         return json.dumps({"status": "error", "error": traceback.format_exc()})
@@ -886,6 +1016,22 @@ def build_protein_losat_cache_key_json(
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
+def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
+    """Hydrate one internal schema-4 protein TSV for user download."""
+    try:
+        from gbdraw.analysis.protein_colinearity import hydrate_protein_losat_tsv
+
+        entry = json.loads(str(entry_json))
+        manifest = json.loads(str(identity_manifest_json))
+        text = hydrate_protein_losat_tsv(entry, manifest)
+        return json.dumps({
+            "status": "ok",
+            "text": text,
+            "utf8Bytes": len(text.encode("utf-8")),
+        })
+    except Exception:
+        return json.dumps({"status": "error", "error": traceback.format_exc()})
+
 def _build_display_web_cds_protein_map(raw_map, view_transform):
     normalized = _normalize_web_view_transform(view_transform)
     if not normalized["reverse"]:
@@ -916,7 +1062,7 @@ def _build_display_web_cds_protein_map(raw_map, view_transform):
         display_map[str(protein_id)] = display_data
     return _build_web_cds_protein_map(display_map)
 
-def _build_web_protein_extraction(protein_maps):
+def _build_web_protein_extraction(protein_maps, identity_manifest=None):
     from gbdraw.analysis.protein_colinearity import ProteinExtractionResult
 
     combined = {}
@@ -930,7 +1076,11 @@ def _build_web_protein_extraction(protein_maps):
         proteins_by_record[int(protein.record_index)].append(protein)
     for record_proteins in proteins_by_record:
         record_proteins.sort(key=lambda protein: (int(protein.start), int(protein.end), int(protein.feature_index), str(protein.protein_id)))
-    return ProteinExtractionResult(proteins_by_record=proteins_by_record, protein_map=combined)
+    return ProteinExtractionResult(
+        proteins_by_record=proteins_by_record,
+        protein_map=combined,
+        identity_manifest=identity_manifest,
+    )
 
 def _clean_json_scalar(value):
     try:

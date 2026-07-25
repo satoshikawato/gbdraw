@@ -27,6 +27,8 @@ from tools.prepare_interactive_gallery_assets import (
     _validate_source_feature_ids,
 )
 from tools.refresh_gallery_sessions import (
+    VIBRIO_EXPECTED_RAW_PAIRS,
+    VIBRIO_RAW_ENTRY_COUNT,
     _gallery_file_transaction,
     _merge_refreshed_gallery_artifacts,
     _preserve_gallery_cli_invocation,
@@ -116,6 +118,27 @@ def test_session_path_prefers_existing_compressed_gallery_session() -> None:
     path = _session_path("vibrio-harveyi-group-collinear")
 
     assert path.name == "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+
+
+def test_vibrio_gallery_session_retains_complete_compact_cache() -> None:
+    path = _session_path("vibrio-harveyi-group-collinear")
+    session = load_session(path)
+
+    _validate_staged_gallery_session(path, session, artifact_path=path)
+
+    protein_entries = [
+        entry
+        for entry in session["losatCache"]["entries"]
+        if entry.get("schema") == PROTEIN_LOSAT_CACHE_SCHEMA
+    ]
+    assert len(protein_entries) == VIBRIO_RAW_ENTRY_COUNT
+    assert {
+        (
+            entry["queryRecordInstanceKey"],
+            entry["subjectRecordInstanceKey"],
+        )
+        for entry in protein_entries
+    } == VIBRIO_EXPECTED_RAW_PAIRS
 
 
 def test_gallery_session_inventory_matches_files_and_examples() -> None:
@@ -272,7 +295,7 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
         "legacyArtifacts": {"proteinRawCandidates": {"schema": 1, "entries": ["old"]}},
     }
     refreshed = {
-        "version": 35,
+        "version": 36,
         "renderRequest": {"diagramOptions": {"palette": "default"}},
         "config": {"labels": "lost"},
         "resources": {
@@ -282,10 +305,10 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
         "results": [{"content": "fresh"}],
         "features": {"extractedFeatures": [{"svg_id": "feature-1"}]},
         "orthogroupState": {"groups": [{"id": "og_1"}]},
-        "losatCache": {"entries": [{"schema": 3, "program": "blastp"}]},
-        "losatDerivedCache": {"entries": [{"schema": 2}]},
+        "losatCache": {"entries": [{"schema": 4, "program": "blastp"}]},
+        "losatDerivedCache": {"entries": [{"schema": 3}]},
         "proteinIdentityManifest": {
-            "schema": 1,
+            "schema": 2,
             "proteinSets": {},
             "recordAnalyses": {},
             "recordInstances": {},
@@ -302,7 +325,7 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
     assert merged["results"] == refreshed["results"]
     assert merged["features"] == refreshed["features"]
     assert merged["orthogroupState"] == refreshed["orthogroupState"]
-    assert merged["version"] == 35
+    assert merged["version"] == 36
     assert merged["losatCache"] == refreshed["losatCache"]
     assert merged["losatDerivedCache"] == refreshed["losatDerivedCache"]
     assert merged["proteinIdentityManifest"] == refreshed["proteinIdentityManifest"]
@@ -315,14 +338,14 @@ def test_staged_gallery_validator_requires_current_artifact_schemas(
     session_path = tmp_path / "synthetic.gbdraw-session.json"
     session = {
         "format": "gbdraw-session",
-        "version": 35,
+        "version": 36,
         "renderRequest": {"schema": 3, "mode": "linear"},
         "resources": {},
         "results": [{"name": "result", "content": "<svg></svg>"}],
         "losatCache": {"entries": []},
         "losatDerivedCache": {"entries": []},
         "proteinIdentityManifest": {
-            "schema": 1,
+            "schema": 2,
             "proteinSets": {},
             "recordAnalyses": {},
             "recordInstances": {},
@@ -332,7 +355,7 @@ def test_staged_gallery_validator_requires_current_artifact_schemas(
     _validate_staged_gallery_session(session_path, session)
 
     stale_version = dict(session, version=34)
-    with pytest.raises(ValueError, match="expected 35"):
+    with pytest.raises(ValueError, match="expected 36"):
         _validate_staged_gallery_session(session_path, stale_version)
 
     stale_reference = dict(session, orthogroupState={"proteinId": "p_r_old"})
@@ -376,7 +399,7 @@ def test_gallery_session_refresh_does_not_partially_replace_on_failure(
     monkeypatch.setattr(
         refresh_gallery_sessions_module,
         "_validate_staged_gallery_session",
-        lambda *_args: None,
+        lambda *_args, **_kwargs: None,
     )
 
     with pytest.raises(RuntimeError, match="synthetic render failure"):

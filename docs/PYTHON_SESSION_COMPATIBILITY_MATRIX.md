@@ -1,8 +1,8 @@
 # Python Session Compatibility Matrix
 
-- 調査日: 2026-07-15（最終更新: 2026-07-21）
-- 対象: session version 27～35、GUI-authored / CLI sidecar、Circular / Linear
-- 結論: version 27～30 は internal replay のみ。version 31～35 は canonical public typed conversion を提供
+- 調査日: 2026-07-15（最終更新: 2026-07-25）
+- 対象: session version 27～36、GUI-authored / CLI sidecar、Circular / Linear
+- 結論: version 27～30 は internal replay のみ。version 31～36 は canonical public typed conversion を提供
 - 関連 ADR: [`ADR_PYTHON_SESSION_API.md`](ADR_PYTHON_SESSION_API.md)
 
 ## 1. 判定基準
@@ -30,7 +30,8 @@
 | 32 | materialized annotation set、target、style、track binding を canonical request に追加 | version 31 を migrate し、annotation を typed request で保持する |
 | 33 | Linear custom-track geometry を schema 2 へ更新 | version 32 の feature-slot no-op 値を compatibility rule に従って migrate する |
 | 34 | feature underlay と canonical `renderRequest.schema == 3` を追加 | schema 1/2 の旧 request を visual replay を保つよう migrate する |
-| 35 | protein LOSATP cache identity と artifact 境界を更新 | protein raw schema 3、nucleotide raw schema 2、derived schema 2、identity manifest schema 1 を検証する |
+| 35 | readable long transport ID による protein LOSATP cache identity と artifact 境界を導入 | migration source として protein raw schema 3、nucleotide raw schema 2、derived schema 2、identity manifest schema 1 を検証する |
+| 36 | compact session-global runtime handle と runtime/display binding の分離を導入 | current writer は protein raw schema 4、derived schema 3、identity manifest schema 2 を出力する。nucleotide raw schema 2 は変更しない |
 
 version 30 の導入後にも、`config.cliOptions` と `cliInvocation` からの
 `multiRecordPositions` 補完が version bump なしで追加されている。このため `version == 30`
@@ -58,6 +59,7 @@ bump が必要である。
 | 33 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
 | 34 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
 | 35 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
+| 36 | Canonical / Typed | Canonical / Typed | Canonical / Typed | Canonical / Typed |
 
 この表のversion 27～30における CLI 判定は version から導いたものではなく、`cliInvocation` の payload が完全である
 場合の条件付き判定である。`cliInvocation` が欠落・不完全なら同じ version でも GUI-partial
@@ -79,10 +81,10 @@ bump が必要である。
 | conservation | Circular BLAST file の基本 subset を復元 | stored args で replay | FASTA-derived data、labels/colors/table の完全な復元がない |
 | custom circular/linear track slots | Python fallback は slot array を再現しない | stored args で replay | renderer-specific typed slot model がない |
 | nucleotide comparison | Linear GUI の基本 BLAST path/threshold subset を復元 | stored args で replay | table/dependency と comparison source の統一 model がない |
-| protein / orthogroup / collinearity | Linear GUI の主要 option subset を復元 | stored args と source session で replay | version 31～35 は canonical comparison options/resources、version 35 は protein identity/cache artifact を保持 |
+| protein / orthogroup / collinearity | Linear GUI の主要 option subset を復元 | stored args と source session で replay | version 31～36 は canonical comparison options/resources、version 36 は compact runtime handle と current protein identity/cache artifact を保持 |
 | plot title / legend / common layout | 多くを復元 | stored args で replay | GUI-only の一部 advanced state は欠落する |
 | output formats / interactive metadata | GUI fallback は override がなければ SVG に固定 | args と `renderFormats` に保持 | saved result、format request、interactive policy の typed 分離がない |
-| `losatCache` / `losatDerivedCache` | CLI argument listだけでは表現されない | Linear owner が source session の artifact を参照 | version 35 は current cache、identity manifest、未検証 legacy artifact を別々に検証・復元 |
+| `losatCache` / `losatDerivedCache` | CLI argument listだけでは表現されない | Linear owner が source session の artifact を参照 | version 36 は raw schema 4、derived schema 3、manifest schema 2 を current artifact として検証し、version 35 の raw schema 3 / manifest schema 1 と version 27～34 の raw schema 2 を migration artifact として隔離する |
 | saved SVG `results` | artifact として保持するが replay input にはしない | sidecar に保存 | render request と previous result を区別する型がない |
 
 ## 5. 実証できた範囲と test gap
@@ -97,11 +99,21 @@ bump が必要である。
 - version 29 の smoke conversion は typed losslessness を証明しない。
 - version 30 の後発 field が version bump なしで追加されているため、current synthetic shape を
   version 27～29 に relabel する test は migration evidence として採用しない。
-- version 31～35 は canonical request の load/materialize/typed conversion と save round-trip を
-  focused session/API test で固定する。version 35 writer は `renderRequest.schema == 3` のみを出力する。
-- version 35 は protein raw schema 2 を current `losatCache` に入れず、
-  `legacyArtifacts.proteinRawCandidates` に隔離する。検証済み promotion だけが protein raw schema 3 と
-  derived schema 2 を作り、nucleotide raw entry は schema 2 のまま保持する。
+- version 31～36 は canonical request の load/materialize/typed conversion と save round-trip を
+  focused session/API test で固定する。version 36 writer は `renderRequest.schema == 3` のみを出力する。
+- version 35 は protein raw schema 3、derived schema 2、identity manifest schema 1 を
+  migration history として維持する。version 36 reader は検証済み raw entry と source manifest を
+  `legacyArtifacts.proteinRawV35Candidates` に lossless に隔離し、Generate 時に current manifest
+  schema 2 の `h_[a-z2-7]{26}` runtime handle へ解決して raw schema 4 を copy-on-success で作る。
+  derived schema 2 は current hit にせず、raw migration 後に derived schema 3 を再構築する。
+- version 27～34 の protein raw schema 2 は引き続き
+  `legacyArtifacts.proteinRawCandidates` に隔離する。完全な FASTA、program、arguments、direction、
+  feature mapping を検証できた candidate だけを raw schema 4 へ昇格する。nucleotide raw entry は
+  schema 2 のまま保持する。
+- version 36 の generated protein FASTA、raw QUERY/SUBJECT、protein map、derived reference は
+  compact runtime handle を使う。完全な feature analysis identity と display metadata は manifest
+  schema 2 が一度だけ保持する。**Save Raw LOSAT TSV** は manifest で QUERY/SUBJECT を readable
+  alias へ hydrate し、内部 handle を current session の外へ出さない。
 
 ## 6. E0 decision と現在の到達点
 
@@ -114,14 +126,14 @@ bump が必要である。
 4. 新しい session schema は CLI 非依存の canonical typed render request payload を持つ。
    payload の mode、record inputs、options、comparisons、output policy を schema で検証する。
 5. canonical payload 追加時は session version を 31 に上げ、Python と Web の version、writer、
-   migration test を同じ change で更新する。その後も schema に意味のある変更は version 32～35 で同じ原則を守る。
+   migration test を同じ change で更新する。その後も schema に意味のある変更は version 32～36 で同じ原則を守る。
 6. temporary materialization は context manager が所有し、typed request 内の path はその
    lifetime 外へ持ち出せない契約にする。
 7. public session symbol は version 31 canonical payload の load → materialize → request →
-   render → save round-trip が両 mode で固定されたため公開されている。version 32～35 もこの typed boundary を維持する。
+   render → save round-trip が両 mode で固定されたため公開されている。version 32～36 もこの typed boundary を維持する。
 
 したがって Workstream E の public bridge gate は version 31 で開放済みである。
-current writer は version 35 と canonical request schema 3 を出力し、reader は version 27～35 を受理する。
+current writer は version 36 と canonical request schema 3 を出力し、reader は version 27～36 を受理する。
 version 27～30 は引き続き internal replay のみで、public typed conversion の境界は version 31 のままである。
 
 [Validation plan](PYTHON_API_VALIDATION_PLAN.md) | [Follow-up plan](PYTHON_API_FOLLOWUP_PLAN.md) | [Python API](PYTHON_API.md)

@@ -825,14 +825,18 @@ const uniqueStandaloneMetadataValues = (value) => {
   return values;
 };
 
-const standaloneGeneratedProteinIdPattern = /^(?:gbd_r\d+_cds\d+|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$/i;
+const standaloneGeneratedProteinIdPattern =
+  /^(?:h_[a-z2-7]{26}|f_[0-9a-f]{64}|gbd_r\d+_cds\d+|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$/i;
+const standaloneV35ProteinIdPattern = /@[^|]+\|.+~f_[0-9a-f]{64}$/i;
 const standaloneGeneratedUnitIdPattern = /^gbd_r\d+_unit\d+$/i;
 
 const isStandaloneInternalDisplayId = (value) => {
   const text = firstStandaloneText(value);
   return Boolean(text && (
     standaloneGeneratedProteinIdPattern.test(text) ||
-    standaloneGeneratedUnitIdPattern.test(text)
+    standaloneV35ProteinIdPattern.test(text) ||
+    standaloneGeneratedUnitIdPattern.test(text) ||
+    /^p_r_/i.test(text)
   ));
 };
 
@@ -842,42 +846,81 @@ const addUniqueStandaloneDisplayText = (values, value) => {
   values.push(text);
 };
 
-const resolveStandaloneDisplayProteinId = (feature, member = null, fallback = '') => firstStandaloneText(
-  feature?.sourceProteinId,
-  feature?.source_protein_id,
-  member?.sourceProteinId,
-  member?.source_protein_id,
-  firstQualifierValue(feature, 'protein_id'),
-  feature?.locusTag,
-  feature?.locus_tag,
-  firstQualifierValue(feature, 'locus_tag'),
-  member?.locusTag,
-  member?.locus_tag,
-  feature?.geneId,
-  feature?.gene_id,
-  firstQualifierValue(feature, 'gene_id'),
-  member?.geneId,
-  member?.gene_id,
-  feature?.oldLocusTag,
-  feature?.old_locus_tag,
-  firstQualifierValue(feature, 'old_locus_tag'),
-  member?.oldLocusTag,
-  member?.old_locus_tag,
-  feature?.ID,
-  firstQualifierValue(feature, 'ID'),
-  feature?.Name,
-  firstQualifierValue(feature, 'Name'),
-  feature?.Parent,
-  firstQualifierValue(feature, 'Parent'),
-  feature?.gene,
-  firstQualifierValue(feature, 'gene'),
-  member?.gene,
-  feature?.proteinId,
-  feature?.protein_id,
-  member?.proteinId,
-  member?.protein_id,
-  fallback
-);
+const firstStandaloneNonInternalDisplayText = (...values) => {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const nested = firstStandaloneNonInternalDisplayText(...value);
+      if (nested) return nested;
+      continue;
+    }
+    const text = firstStandaloneText(value);
+    if (text && !isStandaloneInternalDisplayId(text)) return text;
+  }
+  return '';
+};
+
+const getStandaloneQualifierDisplayValue = (feature, key) => {
+  const normalizedKey = String(key || '').trim().toLowerCase();
+  const qualifiers = feature?.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
+    ? feature.qualifiers
+    : {};
+  if (!normalizedKey) return '';
+  if (Object.prototype.hasOwnProperty.call(qualifiers, normalizedKey)) {
+    return firstStandaloneNonInternalDisplayText(
+      normalizeStringArray(qualifiers[normalizedKey])
+    );
+  }
+  const matchingKey = Object.keys(qualifiers).find(
+    (candidate) => candidate.toLowerCase() === normalizedKey
+  );
+  return matchingKey
+    ? firstStandaloneNonInternalDisplayText(normalizeStringArray(qualifiers[matchingKey]))
+    : '';
+};
+
+const resolveStandaloneDisplayProteinId = (feature, member = null, fallback = '') => {
+  return firstStandaloneNonInternalDisplayText(
+    feature?.displayProteinId,
+    feature?.display_protein_id,
+    member?.displayProteinId,
+    member?.display_protein_id,
+    feature?.sourceProteinId,
+    feature?.source_protein_id,
+    member?.sourceProteinId,
+    member?.source_protein_id,
+    getStandaloneQualifierDisplayValue(feature, 'protein_id'),
+    feature?.locusTag,
+    feature?.locus_tag,
+    getStandaloneQualifierDisplayValue(feature, 'locus_tag'),
+    member?.locusTag,
+    member?.locus_tag,
+    feature?.geneId,
+    feature?.gene_id,
+    getStandaloneQualifierDisplayValue(feature, 'gene_id'),
+    member?.geneId,
+    member?.gene_id,
+    feature?.oldLocusTag,
+    feature?.old_locus_tag,
+    getStandaloneQualifierDisplayValue(feature, 'old_locus_tag'),
+    member?.oldLocusTag,
+    member?.old_locus_tag,
+    feature?.ID,
+    getStandaloneQualifierDisplayValue(feature, 'ID'),
+    feature?.Name,
+    getStandaloneQualifierDisplayValue(feature, 'Name'),
+    feature?.Parent,
+    getStandaloneQualifierDisplayValue(feature, 'Parent'),
+    feature?.gene,
+    getStandaloneQualifierDisplayValue(feature, 'gene'),
+    member?.gene,
+    member?.label,
+    feature?.proteinId,
+    feature?.protein_id,
+    member?.proteinId,
+    member?.protein_id,
+    fallback
+  );
+};
 
 const addStandaloneMatchRow = (rows, label, value) => {
   const text = String(value === null || value === undefined ? '' : value).trim();
@@ -1018,7 +1061,7 @@ const standaloneFeatureOrthogroupId = (feature) => firstStandaloneText(
   feature?.orthogroupMember?.orthogroup_id
 );
 
-const standaloneFeatureProduct = (feature) => firstStandaloneText(
+const standaloneFeatureProduct = (feature) => firstStandaloneNonInternalDisplayText(
   feature?.product,
   feature?.orthogroup_member?.product,
   feature?.orthogroupMember?.product,
@@ -1135,14 +1178,6 @@ const resolveStandaloneFeatureSectionProteinIds = ({
   return values.join('; ');
 };
 
-const firstStandaloneNonInternalDisplayText = (...values) => {
-  for (const value of values) {
-    const text = firstStandaloneText(value);
-    if (text && !isStandaloneInternalDisplayId(text)) return text;
-  }
-  return '';
-};
-
 const standaloneFeatureLocationText = (feature) => {
   const direct = firstStandaloneText(feature?.location);
   if (direct && direct !== '..') return direct;
@@ -1150,26 +1185,26 @@ const standaloneFeatureLocationText = (feature) => {
   return built && built !== '..' ? built : '';
 };
 
-const standaloneFeatureRowLocusId = (feature, fallbackLocusId) => firstStandaloneText(
+const standaloneFeatureRowLocusId = (feature, fallbackLocusId) => firstStandaloneNonInternalDisplayText(
   feature?.locusTag,
   feature?.locus_tag,
-  firstQualifierValue(feature, 'locus_tag'),
+  getStandaloneQualifierDisplayValue(feature, 'locus_tag'),
   feature?.geneId,
   feature?.gene_id,
-  firstQualifierValue(feature, 'gene_id'),
+  getStandaloneQualifierDisplayValue(feature, 'gene_id'),
   fallbackLocusId
 );
 
-const standaloneFeatureRowDisplayName = (feature, fallbackDisplayName) => firstStandaloneText(
+const standaloneFeatureRowDisplayName = (feature, fallbackDisplayName) => firstStandaloneNonInternalDisplayText(
   fallbackDisplayName,
   feature?.displayLabel,
   feature?.display_label,
   feature?.label,
   feature?.gene,
-  firstQualifierValue(feature, 'gene'),
+  getStandaloneQualifierDisplayValue(feature, 'gene'),
   feature?.locus_tag,
   feature?.locusTag,
-  firstQualifierValue(feature, 'locus_tag'),
+  getStandaloneQualifierDisplayValue(feature, 'locus_tag'),
   standaloneFeatureProduct(feature)
 );
 
@@ -1203,8 +1238,7 @@ const buildStandaloneFeatureListRows = ({
     const displayProteinId = firstStandaloneText(
       isStandaloneInternalDisplayId(resolvedProteinId) ? '' : resolvedProteinId,
       fallbackProteinId,
-      resolvedProteinId,
-      proteinIds[index]
+      isStandaloneInternalDisplayId(proteinIds[index]) ? '' : proteinIds[index]
     );
     const rowRecord = firstStandaloneText(feature?.record_id, feature?.recordId, member?.recordId, member?.record_id, recordId);
     const rowLocation = firstStandaloneText(
@@ -1215,7 +1249,14 @@ const buildStandaloneFeatureListRows = ({
     const rowLocusId = standaloneFeatureRowLocusId(feature, locusIds[index]);
     const rowDisplayName = standaloneFeatureRowDisplayName(feature, displayNames[index]);
     const product = standaloneFeatureProduct(feature);
-    const label = firstStandaloneText(displayProteinId, rowDisplayName, rowLocusId, product, svgId, `Feature ${index + 1}`);
+    const label = firstStandaloneNonInternalDisplayText(
+      displayProteinId,
+      rowDisplayName,
+      rowLocusId,
+      product,
+      svgId,
+      `Feature ${index + 1}`
+    );
     const copyText = [
       rowRecord,
       rowLocation,

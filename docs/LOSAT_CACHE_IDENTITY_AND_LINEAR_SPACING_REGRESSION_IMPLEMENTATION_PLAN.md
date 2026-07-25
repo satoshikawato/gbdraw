@@ -1,12 +1,20 @@
-# LOSAT Cache Identity and Linear Spacing Regression Implementation Plan
+# LOSAT Runtime Handle Cache Identity and Linear Spacing Regression Implementation Plan
 
 - 作成日: 2026-07-21
-- 対象: Web Linear の LOSATP cache identity、session schema v2 読み込み、Linear record spacing
-- 現行基準: session version 34、`renderRequest.schema == 3`、raw LOSAT cache schema 2、derived cache schema 1
-- 変更後: session version 35、`renderRequest.schema == 3`、raw protein LOSATP cache schema 3、derived cache schema 2
-- 非対象cache: nucleotide LOSAT は raw schema 2 を維持し、session内のschema 2/3混在を正式に扱う
-- 状態: 実装済み、最終検証中
+- 更新日: 2026-07-25
+- 対象: Web/CLI Linear の LOSATP cache identity、session version 27–35 読み込み、Linear record spacing
+- 現行基準: session version 36、`renderRequest.schema == 3`、raw protein LOSATP cache schema 4、
+  derived cache schema 3、protein identity manifest schema 2
+- 非対象cache: nucleotide LOSAT は raw schema 2 を維持し、session内のprotein raw 4 /
+  nucleotide raw 2混在を正式に扱う
+- 状態: compact runtime handle設計への更新、実装、最終検証完了
 - 関連設計: [`LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md`](LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md)、[`PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md`](PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md)
+- 移行設計: [`LOSAT_COMPACT_RUNTIME_HANDLE_MIGRATION_IMPLEMENTATION_PLAN.md`](LOSAT_COMPACT_RUNTIME_HANDLE_MIGRATION_IMPLEMENTATION_PLAN.md)
+
+本書の旧version 35設計にあった「readable long transport IDを内部raw TSVへ反復保存する」方針は
+廃止する。version 35 / raw schema 3 / derived schema 2 / manifest schema 1は移行入力と履歴として
+のみ扱い、current artifactのcontractはversion 36 / raw 4 / derived 3 / manifest 2とする。
+Linear spacingのcollision-domain設計はこの更新では変更しない。
 
 ## 0. 結論
 
@@ -17,8 +25,10 @@
      record hash に依存している。
    - schema v2 session の復元で `File` metadata が変わると、配列が同じでも FASTA header と
      FASTA 全文 hash が変わり、保存済み raw cache を再利用できない。
-   - QUERY/SUBJECT は実レコードと実 feature を示す安定 ID に変更し、cache fingerprint と
-     user-visible ID と runtime transport ID の責務を分離する。
+   - version 35の長いreadable transport IDはmetadata依存を解消したが、raw/derived payloadへ
+     64桁feature hashを反復し、実データではsession size gateを超えた。
+   - `featureAnalysisId`をmanifest authority、短い`runtimeHandle`をFASTA/raw/derivedの内部参照、
+     `exportId`をdownload時にhydrationするuser-visible IDとして分離する。
 2. **Workstream B — Linear spacing**
    - definition、record body、comparison exclusion の独立した占有制約を `canvas_band` へ union
      した後、さらに `comparison_height` を加えている。
@@ -34,14 +44,16 @@
 - `Auto 60 px` を小さくして過剰 spacing を隠す。
 - hash 検証を省略して schema v2 cache を無条件に再利用する。
 - `lastModified` だけを固定し、metadata 依存の cache identity を残す。
+- size上限を満たすためにvalidなraw/derived entryをpruneする。
+- 内部runtime handleを未解決のままユーザー向けTSVへ出力する。
 - 旧レイアウトを長期 flag として併存させる。
 
 ## 1. 再現結果と固定する baseline
 
-対象は、履歴上の実在する BGC0000708–BGC0000713 schema v2 session とする。現行 schema 3
-session を schema 2 と書き換えただけの synthetic fixture は、migration の証拠にしない。
+対象は、履歴上の実在する BGC0000708–BGC0000713 schema v2 session とする。version 35の
+schema-3 sessionをschema 2と書き換えただけのsynthetic fixtureは、migrationの証拠にしない。
 
-| 観測項目 | 保存済み schema v2 | 現行コードで Load → Generate | 修正後の条件 |
+| 観測項目 | 保存済み schema v2 | 旧コードで Load → Generate | 修正後の条件 |
 |---|---:|---:|---:|
 | LOSATP comparison pair | 25 | 25 | 25 |
 | raw cache hit | — | 0 | 25 |
@@ -53,6 +65,9 @@ session を schema 2 と書き換えただけの synthetic fixture は、migrati
 
 105 px 自体は font metric や表示設定に依存するため、修正後の magic number にはしない。
 受入判定は band から計算した式、非衝突、非 clipping で行う。
+
+compact identityのsize regressionは、59 raw entryを持つVibrio Gallery sessionを追加baselineとする。
+entryを欠落させず、gzip `< 100,000,000 bytes`、expanded JSON `< 536,870,912 bytes`をhard gateとする。
 
 ## 2. 根因
 
@@ -68,13 +83,25 @@ File {name, size, lastModified}
   -> raw LOSAT cache key
 ```
 
-`p_r_...` は cache key そのものではなく、LOSAT に渡す内部 protein ID である。実際の
+`p_r_...` は cache key そのものではなく、LOSAT に渡す旧内部 protein ID である。実際の
 `protein_id`、`locus_tag`、`featureSvgId`、location は別の `protein_map` にしか存在しない。
 raw TSV だけでは、この内部 ID を実 feature へ戻せない。
 
 schema v2 promotion/materialization は埋め込み resource から `File` を再構築する。元 metadata を
 完全には保存できず、特に `lastModified: 0` を `entry.lastModified || Date.now()` で現在時刻へ
 置換する path もある。このため biological content が同じでも `recordInstanceKey` が変わる。
+
+version 35では、安定したfeature identityを次のreadable transport IDへ含めることでこのmissを
+解消した。
+
+```text
+<record-source-id>@<record-instance-id>|<display-alias>~<feature-analysis-id>
+```
+
+しかし、この長いIDをraw TSVの全hit行とderived payloadへ反復したため、Vibrio sessionでは
+QUERY/SUBJECT列だけで約136 MBとなった。version 36では長いIDをcurrent artifactへ保存せず、
+manifest schema 2で一度だけ保持するmachine/display metadataを短いsession-global handleから
+参照する。
 
 ### 2.2 Linear row spacing
 
@@ -113,12 +140,15 @@ BGC case では definition が各 canvas extent を支配するため、概ね�
 | Record instance identity | 同じrecordを複数配置した時のsession内一意性 | 永続canonical record key。File metadataには依存しない |
 | Feature analysis identity | 一つの CDS feature をrecord内で一意に示すmachine key | feature type、全 location parts、strand、必要時の永続同位置ordinal |
 | Source/display identity | 人が読める feature 名。machine identityには使わない | `protein_id`、`locus_tag`、GFF `ID`、location label |
-| LOSAT transport ID | FASTA/LOSAT が受理する一意 token | escaped display identity、record-instance identity、feature analysis ID |
-| Raw cache fingerprint | LOSAT 実行結果の再利用可否 | ordered protein-set identity、transport mapを含むstable record-instance binding、program、意味のある LOSAT args |
-| Derived cache fingerprint | genomic link/orthogroup/描画 payload の再利用可否 | raw key、feature mapping、view transform、filter/converter settings |
+| Runtime handle | FASTA、内部raw TSV、`protein_map`、derived payloadの短い参照 | record-instance identity、feature analysis identity |
+| Export ID | `Save Raw LOSAT TSV`で人に見せるID | display alias、同一record instance内のduplicate ordinal |
+| Runtime binding hash | Raw LOSAT実行結果のbinding identity | protein-set identity、record-instance identity、runtime-handle map |
+| Display binding hash | export/UI/derived metadataのinvalidation | record/display metadata、export mapping |
+| Raw cache fingerprint | LOSAT 実行結果の再利用可否 | ordered protein-set identity、runtime binding、program、outfmt、意味のある LOSAT args |
+| Derived cache fingerprint | genomic link/orthogroup/描画 payload の再利用可否 | raw key、runtime/display mapping、view transform、filter/converter settings |
 | UI pair identity | editor と SVG の comparison 行を結ぶ | canonical record key と pair direction |
 
-次を biological identity、transport ID、raw cache fingerprint に含めない。
+次を biological identity、runtime handle、runtime binding hash、raw cache fingerprint に含めない。
 
 - upload filename
 - resource filename/resource ID
@@ -128,10 +158,10 @@ BGC case では definition が各 canvas extent を支配するため、概ね�
 - temporary Pyodide path
 - 永続化されない現在の配列 index だけから作る token
 
-### 3.2 QUERY/SUBJECT ID contract
+### 3.2 Runtime handle と QUERY/SUBJECT contract
 
-新規 LOSATP job の QUERY/SUBJECT は、machine identity、display alias、transport encoding を次の
-三段階で作る。qualifierが一意かどうかによってmachine identityの作り方を変えない。
+新規LOSATP jobの内部QUERY/SUBJECTは、machine identityとdisplay identityを混ぜず、次の二段階で
+作る。qualifierが一意かどうかによってmachine identityの作り方を変えない。
 
 1. `featureAnalysisId` は次のcanonical JSONのSHA-256を`f_<64 lowercase hex>`で表したものとする。
 
@@ -151,57 +181,63 @@ BGC case では definition が各 canvas extent を支配するため、概ね�
    type/location operator/location parts/strandを持つfeature群を、正規化した
    source ID、完全AA digest、永続化するsource feature positionの順でsortして割り当てる。ordinalは
    manifestへ保存し、現在の配列indexだけから再計算しない。
-2. `displayAlias` は、空でない `protein_id`、`locus_tag`、GFF `ID`、
-   `CDS:<full-location-parts>:<strand>` の順で最初の値を選ぶ。重複していても選択規則を変えず、
-   一意性は`featureAnalysisId`が保証する。
-3. transport ID は次の固定grammarで作る。
+2. `runtimeHandle`は次のdomain-separated payloadからPythonのpure functionだけで作る。
 
-   ```text
-   <record-source-id>@<record-instance-id>|<display-alias>~<feature-analysis-id>
+   ```json
+   {
+     "featureAnalysisId": "f_...",
+     "recordInstanceKey": "record-1"
+   }
    ```
 
-   各text fieldはUnicode NFCへ正規化したUTF-8 byte列とし、`[A-Za-z0-9._-]`以外を大文字16進の
-   `%HH`でpercent-encodeする。したがって区切り文字`@`、`|`、`~`、`%`、空白、control characterは
-   field内で必ずescapeされる。lossyな置換や切り詰めは行わず、生成tokenがLOSATの非空白ID制約を
-   満たすことをvalidatorで確認する。このgrammarとcanonical JSONはPythonのpure functionを唯一の
-   ownerとし、WebはPyodide helper経由で同じ実装を呼ぶ。golden fixtureは仕様の代用ではなく、
-   Python/Web境界でのserialization driftを検出するために使う。
+   key辞書順・空白なしのUTF-8 canonical JSONへ
+   `b"gbdraw-runtime-handle-v1\0"`を前置してSHA-256を計算し、先頭16 bytesをRFC 4648 Base32の
+   lowercase、paddingなしで表し、`h_`を付ける。
+
+   ```text
+   h_[a-z2-7]{26}
+   ```
 
 同じaccession/record IDを複数ロードした場合は、File metadataではなくsessionに保存されたcanonical
-record keyを`record-instance-id`として使う。欠損・重複の解決にupload timestampや永続化されない
-配列indexを使わない。
+record keyを使うためhandleはinstanceごとに異なる。同じinstance/featureからは常に同じhandleを作り、
+alias、product、gene、note、filename、mtimeでは変えない。manifest validatorは全record instanceを
+通じた重複をfail closedにし、衝突時の非決定的suffixを作らない。
 
-例:
+内部raw TSVの第1・第2列、LOSATP FASTA header、combined `protein_map`、derived payload内の
+protein referenceはruntime handleへ統一する。完全なfeature identityとdisplay metadataのauthorityは
+manifest schema 2とし、raw/derivedの各hit/member/edgeへ反復保存しない。
 
-```text
-BGC0000708@record-1|CAG38695.1~f_2f...
-BGC0000708@record-1|CDS%3A7438-8458%3A%2B~f_91...
-```
+`Save Raw LOSAT TSV`ではdownload直前にmanifest resolver/hydratorを通し、第1・第2列だけを
+`exportId`へ置換する。`exportId`は空でない`protein_id`、`locus_tag`、GFF `ID`、完全location
+fallbackの順で選ぶ。同一record instance内でaliasが重複する場合だけfeature analysis ID順の
+`~1`、`~2`を付ける。aliasはUnicode NFC化後にpercent encodeする。
 
-raw TSV の QUERY/SUBJECT だけでrecord instanceと人が読めるsource identityを判別できることを
-必須にする。完全なlocation、元の未escape値、`featureSvgId`、AA digestのauthorityはmanifestとし、
-transport IDへ同じ情報を重複保存しない。combined `protein_map` のkeyは全recordを通じて一意で
-なければならず、全transport IDをmanifestから一意なfeatureへ解決できなければならない。
+hydratorは非comment行の厳密な12列、row順、3～12列、数値表現、改行を保存する。一件でも
+unknown/wrong-binding/重複解決handleがあればdownload全体を失敗させ、内部handleをfallback出力
+しない。50 MiB確認は内部cache文字数ではなくhydration後のUTF-8 byte数で判定する。ユーザーが
+Pairwise Comparisonsへ投入したTSVは変更しない。
 
 ### 3.3 Raw cache と derived cache の invalidation
 
-| 変更 | Raw LOSAT | Derived payload |
-|---|---|---|
-| filename / `lastModified` / resource rename のみ | reuse | reuse |
-| save → load で同じ biological input | reuse | reuse |
-| record の表示順・定義文・subtitle | reuse | rebuild if indices/presentation are embedded |
-| display reverse-complement のみ | reuse | rebuild for view transform |
-| product/gene/note だけの変更 | reuse | rebuild |
-| `protein_id` / `locus_tag` / GFF `ID` の変更 | miss because transport binding changes | rebuild |
-| selector/region/visibility により protein set が変化 | miss | rebuild |
-| feature analysis identity または AA 配列が変化 | miss | rebuild |
-| genetic code により翻訳結果が変化 | miss | rebuild |
-| LOSAT program/outfmt/search args が変化 | miss | rebuild |
-| post-filter/orthogroup/collinearity option だけの変更 | reuse | miss |
-| query/subject direction が変化 | direction-aware lookup | rebuild |
+| 変更 | Runtime handle | Raw LOSAT | Derived payload | Export ID |
+|---|---|---|---|---|
+| filename / `lastModified` / resource rename | same | reuse | reuse | same |
+| save → loadで同じbiological input | same | reuse | reuse | same |
+| `protein_id` / `locus_tag` / GFF `ID`のみ | same | reuse | display metadataを含む時rebuild | change |
+| product/gene/noteのみ | same | reuse | embedded時rebuild | usually same |
+| record sourceの表示labelのみ | same | reuse | embedded時rebuild | UI/filenameのみchange |
+| display reverse-complementのみ | same | reuse | view transformをrebuild | same |
+| AA配列変更 | feature IDがsameの場合あり | protein-set hashでmiss | miss | same/updated |
+| selector/region/visibilityによるmembership変更 | affected handles/set change | miss | miss | change |
+| feature location/strand/ordinal変更 | change | miss | miss | change |
+| record instance key変更 | change | miss | miss | duplicate scopeを再計算 |
+| LOSAT program/outfmt/search args変更 | same | miss | miss | same |
+| post-filter/orthogroup/collinearity optionのみ | same | reuse | miss | same |
+| query/subject direction変更 | same handles | separately cachedでなければdirectional miss | miss | columns reverse |
 
 raw reuse は「設定名が同じ」ではなく、canonical protein set と search semantics が同じことから
-判断する。false hit より明示的な miss を優先する。
+判断する。display binding hashをraw keyへ含めず、runtime binding hashとdisplay binding hashを
+分離する。false hit より明示的な miss を優先する。
 
 ### 3.4 Linear collision domain
 
@@ -266,7 +302,7 @@ axis_gap = max(
 
 ## 4. Target cache/session architecture
 
-### 4.1 Protein set、record analysis、record-instance binding
+### 4.1 Protein set、record analysis、runtime/display binding
 
 protein content、record固有のanalysis context、session内の配置instanceを別objectとして保存する。
 `proteinSets`はcontent-addressed objectであり、record ID/accessionを所有しない。
@@ -305,9 +341,18 @@ protein content、record固有のanalysis context、session内の配置instance�
   },
   "recordInstances": {
     "record-1": {
+      "schema": 2,
       "recordAnalysisId": "sha256:...",
-      "transportIds": {
-        "f_2f...": "BGC0000708@record-1|CAG38695.1~f_2f..."
+      "runtimeBindingHash": "sha256:...",
+      "displayBindingHash": "sha256:...",
+      "runtimeIds": {
+        "f_2f...": "h_..."
+      },
+      "featureMetadata": {
+        "f_2f...": {
+          "displayAlias": "CAG38695.1",
+          "featureSvgId": "fed46a3a6"
+        }
       }
     }
   }
@@ -319,78 +364,83 @@ AA SHA-256から作る。`recordAnalysisId`はrecord source identity、selector/
 `proteinSetHash`のcanonical JSONから作る。いずれもFASTA description、File metadata、record
 instance key、JSON object insertion orderに依存させない。
 
-protein-set manifest はpairごとに複製せずhashでdeduplicateする。同じprotein setを持つ異なる
+protein-set manifestはpairごとに複製せずhashでdeduplicateする。同じprotein setを持つ異なる
 record analysisも同じcontent objectを参照でき、record固有情報を上書きしない。同じrecordを二回
-配置した場合は、一つのrecord analysisへ二つのrecord-instance bindingを作る。binding hashは
-canonical `recordInstanceKey`、`recordAnalysisId`、全`transportIds` mapから作る。raw entryとraw cache keyはquery/subjectの
-protein-set hashに加えてこのbinding hashを含み、保存TSV内のtransport IDがそのbindingと一致する
-ことを検証する。初回実装では別record instance間でraw TSVを共有しない。これによりcombined
-`protein_map`のtransport IDを全recordで一意に保ち、別rowのIDを誤利用しない。
+配置した場合は、一つのrecord analysisへ二つのrecord-instance bindingを作る。
+
+runtime binding hashはcanonical `recordInstanceKey`、protein-set hash、全`runtimeIds` mapから作り、
+record source label、display alias、feature display metadataを含めない。display binding hashは
+`recordAnalysisId`、record source/display metadata、export mappingを別にcanonicalizeする。raw keyは
+query/subjectのprotein-set hashとruntime binding hashを含み、保存TSV内の全handleがそのbindingに
+属することを検証する。derived keyはraw keyに加えてruntime/display mappingを含む。これにより
+aliasだけの変更でLOSATを再実行せず、UI/export metadataは必要に応じて再構築できる。
 
 ### 4.2 Schema version
 
 変更後の version owner は次のようにする。
 
-| Owner | Current | New | 方針 |
+| Owner | v35 / migration input | v36 / current | 方針 |
 |---|---:|---:|---|
-| Session envelope | 34 | 35 | Python/Web writer を同時更新 |
+| Session envelope | 35 | 36 | Python/Web writerを同時更新 |
 | Canonical `renderRequest` | 3 | 3 | render request semantics は変更しない |
-| Raw protein LOSATP cache | 2 | 3 | protein manifest と protein-set hash を導入 |
+| Raw protein LOSATP cache | 3 | 4 | compact runtime handleを使用 |
 | Raw nucleotide LOSAT cache | 2 | 2 | 現行contractを維持し、protein entryと混在可能にする |
-| Derived LOSATP cache | 1 | 2 | mapping/view/converter fingerprint を分離 |
-| Protein identity manifest | — | 1 | protein set、record analysis、record-instance bindingを分離して永続化 |
-| Legacy protein cache candidate envelope | — | 1 | 旧sessionからimportした未検証schema 2 entryだけを隔離して保持 |
+| Derived LOSATP cache | 2 | 3 | protein referenceをruntime handleへ統一 |
+| Protein identity manifest | 1 | 2 | runtime/display bindingを分離 |
+| v27–34 protein raw candidate envelope | 1 | 1 | schema-2 verified lazy migrationを維持 |
+| v35 protein raw candidate envelope | — | 1 | schema-3＋manifest-1をlosslessに隔離 |
 
-current writer はversion 35のみを書く。protein LOSATP writerはschema 3だけを書き、nucleotide
-LOSAT writerはschema 2を維持する。readerはversion 27–34の既存対応を維持し、protein schema 2
-raw cacheを`legacyArtifacts.proteinRawCandidates`へ移してlazy migrationの候補として保持する。
-v35 writerはschema 2 entryをcurrent `losatCache`へ書かないが、未検証candidateはlegacy envelope
-schema 1としてlosslessにround-tripする。entryの`program`/`flow`/identity kindでschema ownerを
-判別し、unknown/newer schemaを推測で読み替えない。
+current writerはversion 36だけを書く。protein LOSATP writerはschema 4、derived writerはschema 3、
+manifest writerはschema 2だけを書き、nucleotide LOSAT writerはschema 2を維持する。readerは
+version 27–34のprotein raw schema 2を`legacyArtifacts.proteinRawCandidates`へ、version 35の
+protein raw schema 3＋manifest schema 1を`legacyArtifacts.proteinRawV35Candidates`へ隔離する。
+どちらもGenerate前のSave → Loadでlosslessにround-tripする。current `losatCache`へ旧protein
+schemaを混在させず、unknown/newer schemaを推測で読み替えない。
 
 ### 4.3 全 session file の更新
 
-同梱 current session は一部だけでなく全件を version 35 へ再生成する。
+同梱current sessionは一部だけでなく全件をversion 36へ再生成する。
 
 | Scope | 件数 | 更新方法 |
 |---|---:|---|
 | `gbdraw/web/gallery/sessions/*.gbdraw-session.json[.gz]` | 11 | `tools/refresh_gallery_sessions.py` の canonical path |
 | `tests/test_inputs/*.gbdraw-session.json` | 2 | 各 fixture の canonical save/generator path |
-| 固定 legacy migration fixture | 1 | schema v2 のまま保持し、current inventory から除外 |
+| 固定 legacy migration fixture | 2 | schema v2 / version 35のまま保持し、current inventoryから除外 |
 
 更新後は次を満たす。
 
-- Gallery と通常の test input session はすべて `version == CURRENT_SESSION_VERSION == 35`。
+- Gallery と通常の test input session はすべて `version == CURRENT_SESSION_VERSION == 36`。
 - Linear session は現行の spacing、track slot、definition、comparison 設定を欠落なく保持する。
-- LOSATP sessionはprotein raw schema 3、derived schema 2、manifest schema 1を保持する。
-- canonical pathで再生成したcurrent sessionは`legacyArtifacts.proteinRawCandidates`を持たない。
+- LOSATP sessionはprotein raw schema 4、derived schema 3、manifest schema 2を保持する。
+- canonical pathで再生成したcurrent sessionは旧protein raw/derived candidateを持たない。
 - nucleotide LOSAT/BLAST cacheはraw schema 2を維持し、protein manifest migrationの対象にしない。
 - `.json` と `.json.gz` は同じ validator を通す。
 - file list の重複定義と実ファイルの差を inventory test で検出する。
+- Vibrio sessionは59 raw entryを欠落なく保持し、gzip/expanded hard gateを満たす。
 
 layout 変更も生成 SVG に影響するため、最終更新は session JSON だけで終えない。review 済みの
 session から Gallery source SVG、example SVG、thumbnail、`examples.json` を公式 tool で更新する。
 チュートリアル screenshot は実際に旧 spacing が写っているものだけを、Gallery media skill の
 手順で再撮影する。
 
-外部ユーザーが保有する旧sessionは一括更新できないため、version 35 readerのverified lazy
-migrationで開く。repository内の旧session envelope/render schemaとprotein raw schema 2は
-migration fixture以外に残さない。current v35 session内のnucleotide raw schema 2はこの制約の
-例外とする。外部旧sessionをGenerate前にv35として再保存した場合だけ、schema 2 entryはcurrent
-cacheではなく明示的なlegacy candidate envelope内に残ることを許可する。
+外部ユーザーが保有する旧sessionは一括更新できないため、version 36 readerのverified lazy
+migrationで開く。repository内の旧session envelope、protein raw schema 2/3、derived schema 1/2、
+manifest schema 1は専用migration fixture以外に残さない。current v36 session内のnucleotide raw
+schema 2はこの制約の例外とする。外部旧sessionをGenerate前に再保存した場合だけ、旧artifactが
+current cacheではなく明示的なlegacy candidate envelope内に残ることを許可する。
 
-## 5. Schema 2 protein raw cache の verified lazy migration
+## 5. Legacy protein artifact の verified lazy migration
 
 import 時点では Pyodide protein extraction が完了していないため、ID変換は import 中ではなく、
-最初の Generate で protein manifest を作った後に行う。schema 2 entryをcurrent cache mapへ混在
-させず、`legacyArtifacts.proteinRawCandidates`のread-only candidateとして隔離する。
+最初のGenerateでmanifest schema 2を作った後に行う。version 27–34のschema-2 entryとversion 35の
+schema-3 entryをcurrent cache mapへ混在させず、それぞれ専用のread-only candidateとして隔離する。
 
 candidateは次の小さい状態機械で扱う。
 
 | State | 意味 | Save時の扱い |
 |---|---|---|
 | `pending` | 未検証。Generate前または検証待ち | original entryをlegacy envelopeへlosslessに保存 |
-| `promoted` | schema 3 copyの作成とvalidationが完了 | schema 3 entryを保存し、legacy candidateは次snapshotから除去 |
+| `promoted` | schema 4 copyの作成とvalidationが完了 | schema 4 entryを保存し、legacy candidateは次snapshotから除去 |
 | `rejected` | 現在のinputでは検証不能または不一致 | 理由とoriginal entryをlegacy envelopeへ保存し、current cache hitには使わない |
 
 ```json
@@ -410,26 +460,38 @@ candidateは次の小さい状態機械で扱う。
 }
 ```
 
-Load直後にGenerateせずSaveしても、`pending` candidateを失ってはならない。SaveのためだけにPyodide
-抽出を起動せず、Saveを禁止もしない。current `losatCache`のvalidator/serializerはschema 3 protein
-entryとschema 2 nucleotide entryだけを扱い、legacy schema 2 proteinの解釈はmigration moduleだけが
-所有する。
+Load直後にGenerateせずSaveしても`pending` candidateと、version 35ではsource manifest-1/derived
+evidenceを失ってはならない。SaveのためだけにPyodide抽出を起動せず、Saveを禁止もしない。current
+validator/serializerはschema-4 protein raw、schema-3 derived、manifest-2、schema-2 nucleotide raw
+だけを扱い、旧protein artifactの解釈はmigration moduleだけが所有する。
 
-1. schema 2 entry を import 時に破棄せず、`pending` legacy candidate として保持する。
-2. 現在の record から schema 1 protein manifest を抽出する。
-3. legacy QUERY/SUBJECT の `record token + start/end/strand/aa12` を解析する。
-4. `losatDerivedCache` / `orthogroupState` に保存された `recordIndex`、`sourceProteinId`、
-   `featureSvgId`、location を補助 evidence として使う。
-5. 現在の feature と legacy ID が一対一対応することを確認する。
-6. legacy record token を使って旧 FASTA header を再構成し、保存済み
-   `queryCanonicalHash` / `subjectCanonicalHash` と完全一致することを確認する。
-7. program、outfmt、direction、search args も一致した entry だけ、TSV 第1・第2列を新transport ID
-   へ変換する。
-8. schema 3 key、protein-set hash、manifest reference で新 entry をcopy-on-writeで作る。
-9. derived schema 1 は blind reuse せず破棄し、再利用した raw TSV と現在の manifest から
-   derived schema 2 を再構築する。
-10. schema 3 entryとderived schema 2のvalidationが成功した後だけcandidateを`promoted`にする。
-11. 全検証が終わるまで旧 entry を削除・上書きしない。失敗時は`rejected`として理由を保持する。
+### 5.1 Version 27–34 / protein raw schema 2
+
+1. schema-2 entryをimport時に破棄せず、`proteinRawCandidates`へ保持する。
+2. 現在のrecordからmanifest-2とruntime handle mapを抽出する。
+3. legacy `p_r_` QUERY/SUBJECTのrecord token、location、strand、AA digestを解析する。
+4. derived/orthogroup metadataのrecord index、source ID、feature SVG ID、locationを補助evidenceに使う。
+5. legacy IDと現在のfeatureが一対一対応し、旧FASTA hash、AA digest、program、outfmt、args、
+   directionが一致することを確認する。
+6. TSV第1・第2列だけをmanifest-2のruntime handleへ変換し、row順と第3～12列を保持する。
+7. schema-4 keyを再計算し、copy-on-successでcurrent cacheへ昇格する。
+8. derived schema 1はdirect hitにせず、promoted rawとcurrent manifestからderived schema 3を再構築する。
+
+### 5.2 Version 35 / raw schema 3 / manifest schema 1
+
+1. version 35 validatorでmanifest-1、schema-3 key/binding、TSV全行を検証し、
+   `proteinRawV35Candidates`へsource manifestとともにlosslessに隔離する。
+2. 旧long transport IDをmanifest-1から`featureAnalysisId`へ逆引きする。
+3. current manifest-2の`runtimeIds`へ置換する。
+4. protein set、AA digest、record instance、direction、program、outfmt、argsを再検証する。
+5. row順と第3～12列をbyte-equivalentに保ってschema 4 keyを再計算する。
+6. alias/display metadataだけが変わっていてもruntime identityが一致すれば昇格を許可する。
+7. derived schema 2はdirect hitにせず、raw schema 4からderived schema 3を再構築する。
+8. orthogroup state、editor override、selectionはartifact inventory resolverでruntime handleへ移す。
+
+両経路ともschema-4 rawとderived schema 3のvalidationに成功した後だけcandidateを除去する。全検証が
+終わるまで旧entryを削除・上書きしない。genericな文字列置換やschema relabelでcurrent artifactを
+作らない。
 
 次の場合は、その pair だけ cache miss として LOSAT を再実行し、理由を UI/console に残す。
 
@@ -443,9 +505,10 @@ entryとschema 2 nucleotide entryだけを扱い、legacy schema 2 proteinの解
 BGC schema v2 fixture は保存済み derived/orthogroup metadata が十分であり、25 pair 全件を migration
 できることを acceptance test にする。全 legacy session の無条件 hit は保証しない。
 
-別のv35 readerで`pending`または`rejected` candidateを再読込できること、Load → Save → Load →
-Generateでも元のcandidateと25/25 reuseを維持することをsession contractに含める。repository内で
-canonical生成するcurrent sessionにはlegacy candidateを残さない。
+version 36 readerで`pending`または`rejected` candidateを再読込できること、Load → Save → Load →
+Generateでも元のcandidateと25/25 reuseを維持することをsession contractに含める。version 35
+schema-3 sessionもLOSAT worker 0件でschema 4へ移行する。repository内でcanonical生成するcurrent
+sessionにはlegacy candidateを残さない。
 
 `lastModified: 0` は有効値として `??` または明示判定で復元し、`Date.now()` に置換しない。ただし
 この修正は migration の補助であり、新 cache identity 自体は `lastModified` 非依存とする。
@@ -458,7 +521,9 @@ canonical生成するcurrent sessionにはlegacy candidateを残さない。
 - fixture metadata/testで `source commit=c64ff8c`、`session.version=33`、
   `renderRequest.schema=2`、protein raw schema 2、derived schema 1を固定する。
 - 保存raw entryは34件、対象Generate pairは25件であることを別々にassertする。
-- current schema 3 を schema 2 と relabel する既存 test と区別する。
+- version 35 fixtureはraw schema 3、derived schema 2、manifest schema 1、保存entry数を固定し、
+  current inventoryから除外する。
+- version 35 raw schema 3をschema 2とrelabelするsynthetic testと区別する。
 - Load → Generate の LOSAT timing を固定する。
   - `totalPairs=25`
   - `cacheHits=0`
@@ -471,7 +536,7 @@ canonical生成するcurrent sessionにはlegacy candidateを残さない。
 
 - Python の CDS extraction を identity の single owner にする。
 - Web helper 内に複製された `p_r_<metadata hash>...` 生成を削除する。
-- canonical location、同位置ordinal、feature analysis ID、display alias、percent encodingを一つの
+- canonical location、同位置ordinal、feature analysis ID、runtime handle、export ID mappingを一つの
   pure Python moduleで実装する。source qualifierの重複有無でmachine IDの分岐を作らない。
 - `ProteinSet`をrecord非依存のcontent objectにし、`RecordAnalysis`と`RecordInstanceBinding`へ
   record固有情報とsession配置情報を分離する。
@@ -479,51 +544,61 @@ canonical生成するcurrent sessionにはlegacy candidateを残さない。
   Webのper-record extractionとCLIのbatch extractionでuniqueness scopeを変えない。
 - Webは既存row `uid` / canonical `renderRequest.records[].recordKey`、Pythonは既存
   `gbdraw_record_key` / canonical record keyを再利用し、別のrandom ID体系を追加しない。
-- identical recordを複数配置したfixtureでtransport IDは別、protein-set hashは同じ、raw cache
+- identical recordを複数配置したfixtureでruntime handleは別、protein-set hashは同じ、raw cache
   keyはbindingごとに別になることを確認する。
 - 異なるrecord analysisが同じprotein setを持つfixtureで、一つの`ProteinSet`を共有しつつ
   `recordAnalysisId`とbindingを上書きしないことを確認する。
-- Python ownerの出力をWebがbyte-identicalにserializeするgolden testを追加する。Webに第二の
-  ID/hash実装を作らない。
-- reserved delimiter、空白、control character、Unicode、duplicate qualifier、compound location、
-  同位置featureを含むproperty/golden testを追加する。
+- runtime binding hashからdisplay metadataを除き、display binding hashを別ownerにする。
+- Python ownerのfeature/record/protein-set identity、runtime/display binding、runtime handle、
+  raw key、manifest、hydration出力をWebがbyte-identicalにserializeするgolden testを追加する。
+  Webに第二のidentity/raw-key実装を作らない。derived keyはsurface-localとし、両surfaceで同じ
+  意味のinvalidation inputsをすべて含める。
+- 128-bit handle golden vector、duplicate handle rejection、Unicode/NFC、duplicate alias、
+  compound location、同位置featureを含むproperty/golden testを追加する。
 - filename、mtime、resource name を変えても manifest と protein-set hash が変わらないことを確認する。
 
 ### Phase A2: Raw/derived cache schema と lazy migration
 
 - cache key construction/lookup/promotion を `run-analysis.js` から focused module へ移す。
-- protein raw schema 3、nucleotide raw schema 2、derived schema 2のdiscriminated validator、
-  serializer、pruningを実装する。
-- protein schema 2はdual-readし、proteinの新規書き込みはschema 3に限定する。nucleotideの
+- protein raw schema 4、nucleotide raw schema 2、derived schema 3、manifest schema 2の
+  discriminated validatorとserializerを実装する。size対策のentry pruningは実装しない。
+- protein schema 2/3はmigration candidateとしてdual-readし、新規書き込みはschema 4に限定する。
+  nucleotideの
   新規書き込みはschema 2を維持する。
-- legacy protein schema 2 entryはcurrent cache mapへ入れず、legacy candidate envelope
-  `pending/promoted/rejected`の状態機械で管理する。
-- schema 3 raw keyにquery/subjectのstable binding hashを含め、cache hit時にTSV内の全transport IDが
-  現在のbindingに属することを検証する。
+- legacy protein schema 2 entryとv35 schema-3 entryはcurrent cache mapへ入れず、別のlegacy
+  candidate envelopeで`pending/promoted/rejected`を管理する。
+- schema 4 raw keyにquery/subjectのruntime binding hashを含め、cache hit時にTSV内の全handleが
+  指定bindingに属することを検証する。display binding hashはraw keyへ含めない。
+- LOSAT FASTA、raw text、combined `protein_map`、converter input、derived protein referenceを
+  runtime handleへ統一する。
+- derived schema 3 keyにraw key、runtime/display mapping、view/filter/converter settingを含める。
 - `(query, subject)` はdirectional keyとし、初回実装ではreverse pairをdirect hit扱いしない。
   将来swap reuseを行う場合もTSV列swapと全metadata検証を別contractにする。
 - verified migration を pure mapping/validation と runtime orchestration に分ける。
 - Load → Save → LoadをGenerate前に行っても`pending` candidateがlosslessに残ることを固定する。
-- promotionはcopy-on-writeとし、schema 3 rawとschema 2 derivedのvalidation完了後だけlegacy
+- promotionはcopy-on-writeとし、schema 4 rawとschema 3 derivedのvalidation完了後だけlegacy
   candidateを除去する。
 - migration failure は pair-local miss にし、cache 全体を破棄しない。
 - blastn、tblastx、circular conservation の schema 2 path を regression test で維持する。
 
-### Phase A3: Version 35 codec/reader と TSV export
+### Phase A3: Version 36 codec/reader と TSV export hydration
 
-- Python/Webにversion 35 codec/validator/reader testを追加するが、current writer constantはまだ
+- Python/Webにversion 36 codec/validator/reader testを追加するが、current writer constantはまだ
   切り替えない。
-- protein set、record analysis、record-instance binding、legacy candidate envelopeをsession artifact
-  としてserialize/restore/reset/snapshotする。
-- v35 current cacheへprotein schema 2を書かず、import由来の未検証entryだけをlegacy envelopeで
+- protein set、record analysis、runtime/display binding、v27–34/v35 legacy candidate envelopeを
+  session artifactとしてserialize/restore/reset/snapshotする。
+- v36 current cacheへprotein schema 2/3を書かず、import由来の旧entryだけをlegacy envelopeで
   round-tripすることをvalidatorで分離する。
-- `Save Raw LOSAT TSV` の QUERY/SUBJECT が normative encodingに従うreadable transport IDになることを確認する。
-- manifest から全 ID を実 feature へ100%解決できることを検証する。
+- `Save Raw LOSAT TSV`のpair/bulk downloadをPython hydratorへ通し、QUERY/SUBJECTを通常aliasへ
+  置換する。一意aliasへrecord/hash suffixを付けず、duplicate時だけ決定的ordinalを付ける。
+- hydratorが12列、row順、第3～12列、comments、empty result、改行を保持し、unknown/wrong-binding
+  handleでfail closedになることを確認する。
+- manifestから全runtime handleを実featureへ100%解決できることを検証する。
 - derived payload、orthogroup member/edge/path、selection、editor override、feature/result metadataの
-  全protein referenceを新IDへ解決するinventory/rewriteを追加する。
+  全protein referenceをruntime handleへ解決するinventory/rewriteを追加する。
 - orthogroupのname/description overrideとselected alignment featureは、旧ID文字列ではなく
   resolved feature identityにより意味を保持する。
-- version 27–34 read、version 35 save/load、gzip round-trip を固定する。
+- version 27–35 read、version 36 save/load、gzip round-tripを固定する。
 - compatibility matrix と release note に cache artifact の境界を記録する。
 
 ### Phase B1: Pure vertical clearance solver
@@ -554,44 +629,48 @@ canonical生成するcurrent sessionにはlegacy candidateを残さない。
 
 1. Workstream A/B の focused tests を通す。
 2. browser wheel を current Python code から準備する。
-3. Python/Webのcurrent writer constantを同じchangeで35へ一度だけ切り替える。
+3. Python/Webのcurrent writer constantを同じchangeで36へ一度だけ切り替える。
 4. Gallery refresh mergeを更新し、refreshed側のversionとLOSAT artifactsを採用できるようにする。
-5. 全11 Gallery session と全2 current test input session を version 35 へ更新する。
+5. 全11 Gallery session と全2 current test input session を version 36 へ更新する。
 6. legacy fixtureはcurrent writer/refresh toolへ一度も通さない。
-7. session diff で version、render schema、cache schema、manifest、設定値を review する。
+7. session diffでversion、render schema、raw-4/derived-3/manifest-2、legacy absence、設定値をreviewする。
 8. Gallery source/example SVG の Y geometry diff を review する。
 9. review 後に thumbnail と必要な tutorial media だけ更新する。
 10. dedicated browser acceptance runnerでLoad → Save → Load → Generateと、Generate → Save → Reload →
     Generateを確認する。
-11. browser acceptanceをrequired gateとして通し、skipを成功扱いしない。
-12. non-slow suite、ruff、reference comparison を通す。
+11. Vibrio sessionの59 raw entryとgzip/expanded size hard gateを確認し、entry pruningがないことを
+    inventoryで固定する。
+12. browser acceptanceをrequired gateとして通し、skipを成功扱いしない。
+13. non-slow suite、ruff、reference comparisonを通す。
 
 ## 7. ファイル別の変更計画
 
 ### 7.1 LOSAT identity/cache
 
 - `gbdraw/analysis/protein_colinearity.py`
-  - canonical feature analysis ID、display alias、transport encoding、protein set、record analysis、
-    manifest/hashのsingle owner。
-  - schema 2 ID remap と Python/CLI raw cache schema 3。
+  - canonical feature analysis ID、runtime handle、export ID hydration、protein set、record analysis、
+    runtime/display binding、manifest/hashのsingle owner。
+  - schema-2/3 ID remapとPython/CLI raw cache schema 4。
 - `gbdraw/web/js/app/python-helpers.js`
-  - metadata hash ID の複製を削除し、Python owner を呼ぶだけにする。
+  - metadata hash IDの複製を削除し、Python ownerのextraction/migration/hydrationを呼ぶ。
 - `gbdraw/web/js/app/run-analysis.js`
   - File fingerprint 由来の protein identity を廃止する。
-  - schema 3 lookup、lazy migration、current manifestをorchestrationする。
+  - schema 4 lookup、v27–34/v35 lazy migration、manifest-2をorchestrationする。
+  - FASTA、raw、converter、derived/UI referenceをruntime handleへ統一する。
   - LOSAT executionを小さいexecutor interface経由にし、acceptance testでworker callをcountできるようにする。
 - `gbdraw/web/js/app/losat-cache.js`（新規、pure function のみ）
-  - protein schema 3 / nucleotide schema 2のdiscriminated cache payload、validator、lookup、
-    promotion、legacy candidate状態機械、copy-on-write mapping。
+  - protein schema 4 / nucleotide schema 2 / derived schema 3 / manifest schema 2の
+    discriminated payload、validator、lookup、promotion、legacy candidate状態機械、copy-on-write mapping。
   - 現行の共有`LOSAT_CACHE_SCHEMA`をprotein/nucleotideの別ownerへ分け、program/flowだけに依存する
     暗黙判定を散在させない。
 - `gbdraw/web/js/services/config.js`
-  - raw/derived/manifest/legacy candidate envelope serialization、dual-read、session version 35。
+  - raw/derived/manifest/v27–34/v35 legacy candidate envelope serialization、dual-read、
+    session version 36。
   - `lastModified: 0` を保持する。
 - `gbdraw/web/js/services/session-authority.js`
   - `legacyArtifacts`をartifact authorityとして宣言し、canonical request promotionから分離する。
 - `gbdraw/web/js/state.js`、`gbdraw/web/js/app/app-setup.js`、reset owner
-  - protein set、record analysis、record-instance binding、legacy candidateをcache stateとして
+  - protein set、record analysis、runtime/display binding、legacy candidateをcache stateとして
     初期化・snapshot・resetする。
 - `gbdraw/web/js/services/gallery-session-migration.js`
   - render schema 2→3 promotion 中に legacy cache/evidence を落とさない。
@@ -599,7 +678,10 @@ canonical生成するcurrent sessionにはlegacy candidateを残さない。
 - `gbdraw/web/js/services/session-request.js`
   - canonical resource metadata を deterministic に materialize する。
 - `gbdraw/linear.py`、`gbdraw/session_io.py`、必要に応じて `gbdraw/session.py`
-  - CLI/Web の cache schema、manifest、session versionを一致させ、統合gateでversion 35へ切り替える。
+  - CLI/Webのcache schema、manifest、session versionを一致させ、統合gateでversion 36へ切り替える。
+- raw TSV download owner
+  - pair/bulk download直前にPython hydratorを使い、hydrate後byte数で50 MiB確認を判定する。
+  - user-uploaded TSVにはこの変換を適用しない。
 
 ### 7.2 Linear layout
 
@@ -620,18 +702,20 @@ canonical生成するcurrent sessionにはlegacy candidateを残さない。
   - 全Gallery session inventoryとtransactional refreshを使用する。
   - `_merge_refreshed_gallery_artifacts()` はpromoted側のcanonical `renderRequest` / resource authorityを
     維持しつつ、refreshed側の`version`、`losatCache`、`losatDerivedCache`、新manifest/artifactを採用する。
-  - staged validatorでversion 35、protein raw schema 3、derived schema 2、manifest schema 1を確認し、
+  - staged validatorでversion 36、protein raw schema 4、derived schema 3、manifest schema 2を確認し、
     旧artifactへ戻ったsessionをcommit前に拒否する。
   - 旧orthogroup/editor overrideはfeature analysis identityで新artifactへ再適用する。
+  - Vibrioの59 raw entry、gzip/expanded hard gateを確認し、size対策のsilent pruningを拒否する。
 - `gbdraw/web/gallery/sessions/`
-  - 11 session を version 35 へ再生成する。
+  - 11 sessionをversion 36へ再生成する。
 - `tests/test_inputs/`
-  - 2 current session fixture を version 35 へ再生成する。
+  - 2 current session fixtureをversion 36へ再生成する。
 - `tests/fixtures/sessions/`（新規候補）
   - 最小化した実在 schema v2 migration fixture を current inventory と分離して保持する。
   - fixtureと同じ場所にexpected metrics JSONを置き、Node/Python adapter共通のacceptance oracleにする。
 - `tests/web/losat-cache.test.mjs`（新規）
-  - pure cache validator、legacy状態遷移、manifest reference、Save-before-Generate payloadを検証する。
+  - pure cache validator、v27–34/v35 legacy状態遷移、manifest-2 reference、
+    Save-before-Generate payload、export hydration境界を検証する。
 - `tests/web/losat-cache-migration.playwright.spec.js`（新規）
   - 実在fixture、counting LOSAT executor、structured telemetryを使うbrowser acceptance本体。
 - `tests/run_losat_cache_browser_acceptance.py`（新規）
@@ -640,12 +724,12 @@ canonical生成するcurrent sessionにはlegacy candidateを残さない。
 - `.github/workflows/test.yml`のbrowser test job
   - 上記runnerをrequired gateとして実行し、Chromiumとbrowser wheelを明示的に準備する。
 - `docs/PYTHON_SESSION_COMPATIBILITY_MATRIX.md`
-  - version 35、raw/derived/manifest schema、legacy policy を追記する。
+  - version 36、raw-4/derived-3/manifest-2、v35 legacy policyを追記する。
 - `docs/LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md`
   - 実装後、constraint composition regression の修正結果を記録する。
 - `docs/TUTORIALS/4_Protein_Comparisons.md`、`docs/TUTORIALS/7_Linear_Layout.md`、
   `docs/TUTORIALS/8_Interactive_SVG_Sessions.md`、`docs/FAQ.md`、release notes
-  - user-visible ID、cache reuse、Auto spacing の説明が必要な箇所だけ更新する。
+  - runtime handleを露出せず、hydrated export ID、cache reuse、Auto spacingの説明が必要な箇所だけ更新する。
 - Gallery source/example SVG、thumbnail、tutorial media
   - reviewed geometry change に限定して公式生成 path で更新する。
 
@@ -653,45 +737,52 @@ canonical生成するcurrent sessionにはlegacy candidateを残さない。
 
 ### 8.1 LOSAT pure/Python tests
 
-- source `protein_id` をdisplay aliasに採用するが、machine feature IDには使わない。
-- missing/duplicate `protein_id`でも同じcanonical feature ID規則を使い、display aliasの重複は
-  feature analysis ID suffixで一意化する。
-- reserved delimiter、空白、control character、Unicodeをpercent-encodeし、transport tokenに
-  非空白文字だけが残る。
+- 128-bit runtime handleのgolden vectorと`h_[a-z2-7]{26}` grammar。
+- source `protein_id`をdisplay aliasに採用するが、machine feature ID/runtime handleには使わない。
+- missing/duplicate `protein_id`でも同じcanonical feature ID規則を使い、duplicate export aliasだけ
+  feature analysis ID順の短いordinalで一意化する。
+- Unicode/NFC、reserved delimiter、空白、control characterを含むaliasをexport時にpercent-encodeする。
 - 同位置featureの永続ordinal、compound location、0-based/end-exclusive座標規則を固定する。
-- 同じrecord source IDを複数配置してもcombined protein mapが衝突しない。
-- record-local feature ID uniquenessとrecord-instance prefixがWeb/CLIで一致する。
+- 同じrecord source IDを複数配置してもsession-global handleとcombined protein mapが衝突しない。
+- manifest validatorがruntimeIdsの完全coverageとglobal uniquenessをfail closedで検証する。
 - 同じprotein setでも別record-instance bindingのraw cache entryをdirect hitにしない。
 - 異なるrecord analysisが同じprotein setを共有してもrecord固有metadataを上書きしない。
 - compound location、同一 AA の別 feature、GFF3+FASTA を扱う。
 - filename/mtime/resource rename で ID/protein-set hash が不変。
-- `protein_id` / `locus_tag` / GFF `ID`の変更でfeature analysis IDとprotein-set hashは不変だが、
-  transport bindingとraw keyが変わる。
+- `protein_id` / `locus_tag` / GFF `ID`の変更でfeature analysis ID、runtime handle、runtime binding、
+  raw keyは不変だが、display bindingとexport IDが変わる。
 - AA、visible CDS、genetic code、search args の変更で raw miss。
 - product/gene/note、view reverse、filter option の変更で raw hit + derived miss。
-- schema 2 TSV の全 query/subject を schema 3 ID に変換する。
-- ambiguous/missing/corrupt legacy mapping を拒否する。
+- schema 2の`p_r_` TSVとschema 3のlong-ID TSVをschema 4 runtime handleへ変換する。
+- 12列TSVの第1・第2列だけをexport IDへhydrateし、row順、第3～12列、comments、empty result、
+  末尾改行を保持する。
+- unknown/wrong-binding handle、ambiguous/missing/corrupt legacy mappingを拒否する。
 - query/subject reverse pairをdirect cache hitにしない。
-- Python ownerのmanifest/hashとCLI/Web boundary serializationがgolden fixtureで一致する。
+- Python ownerのmanifest/hash/hydrationとCLI/Web boundary serializationがgolden fixtureで一致する。
 
 ### 8.2 Web unit/session tests
 
-- protein schema 3 raw entry、nucleotide schema 2 raw entry、legacy candidate envelope schema 1、
-  schema 1/2 derived entryのdiscriminated validator。
-- protein set/record analysis/record-instance bindingのdeduplication、round-trip、size/pruning。
+- protein schema 4 raw entry、nucleotide schema 2 raw entry、v27–34/v35 legacy candidate envelope
+  schema 1、derived schema 3、manifest schema 2のdiscriminated validator。
+- protein set/record analysis/runtime・display bindingのdeduplication、round-trip、size inventory。
 - mixed protein/nucleotide cache を誤分類しない。
 - schema 2→3 render promotion が legacy cache/evidence を保持する。
 - Load → Save → LoadをGenerate前に行っても`pending` candidateがbyte-identicalに残り、current
-  `losatCache`へprotein schema 2が混入しない。
+  `losatCache`へprotein schema 2/3が混入しない。
 - migration成功時だけ`pending`から`promoted`へ進み、失敗時は理由付き`rejected`を保持する。
 - `lastModified: 0` が save/load 後も 0。
-- version 27–34 reader と version 35 writer。
-- current session inventory は legacy fixture を除き全件 version 35。
+- version 27–35 readerとversion 36 writer。
+- v35 manifest-1＋raw-3をlossless quarantineし、Generate時にworker call 0件でraw-4へ昇格する。
+- current session inventoryはlegacy fixtureを除き全件version 36。
 - Gallery session file list と refresh tool/test inventory が一致する。
 - Gallery refresh後のversion/cache/manifestがrefreshed artifact側から採用され、旧schemaへ戻らない。
-- current v35 protein artifacts内に未解決の旧`p_r_...`参照がない。
+- current v36 raw/derived内に旧long transport ID、`p_r_...`、full feature hashの反復参照がない。
+- raw/derived内の全handleがmanifest-2へ解決し、wrong-binding referenceを拒否する。
 - derived、orthogroup member/edge/path、selection、editor overrideの全protein IDがmanifest/bindingへ
   一意に解決し、名前・説明・選択の意味が保持される。
+- pair/bulk downloadにruntime handleが残らず、hydrate後byte数でsize confirmationを判定する。
+- user-uploaded comparison TSVはbyte-for-byte変更しない。
+- Vibrio sessionが59 raw entryを保持してgzip/expanded hard gateを満たす。
 
 ### 8.3 Layout unit/integration tests
 
@@ -729,11 +820,15 @@ LOSAT worker calls=0
 さらに次を確認する。
 
 - filename/mtime だけを変えても 0 job。
+- alias/display metadataだけを変えてもrawは0 jobで、downloadは新しいdisplay aliasを使う。
 - 一つの AA/protein set を変えると影響する pair だけ job が走る。
 - Load → Save → Load → Generateでもlegacy candidateを失わず0 job。
 - Generate → Save → Reload → Generateを二回行っても0 job。
-- QUERY/SUBJECT は `p_r_<metadata-hash>...` ではなく readable stable ID。
-- 全 QUERY/SUBJECT が manifest から一意な feature へ戻る。
+- v34 schema-2とv35 schema-3の両fixtureがraw schema 4へ0 jobで移行する。
+- current internal QUERY/SUBJECTはruntime handleで、manifest-2から一意なfeature/bindingへ戻る。
+- current raw textに`@...|...~f_<64hex>`と`p_r_...`が残らない。
+- pair/bulk downloadのQUERY/SUBJECTは通常aliasで、`h_...`、`p_r_...`、64桁feature hashを出さない。
+- duplicate aliasだけが決定的ordinalを持ち、未解決handleはdownload全体をfailさせる。
 - derived/orthogroup/editor/result内の全protein referenceが同じmanifest/bindingへ解決する。
 - orthogroup名・説明overrideと選択中featureがsave/load後も同じ対象を指す。
 - BGC layout の axis gap は band の `max()` 式と一致する。
@@ -788,20 +883,23 @@ python tools/refresh_gallery_sessions.py
 ## 9. Rollout order
 
 1. Phase 0 fixture と failing tests を review する。
-2. Workstream A1/A2を実装し、protein set、record analysis、binding、transport IDのcontractを成立させる。
+2. Workstream A1/A2を実装し、protein set、record analysis、runtime/display binding、
+   runtime handleのcontractを成立させる。
 3. schema v2 BGC fixtureのLoad → Save → Load → Generateと25/25 verified reuseを成立させる。
 4. Workstream B1/B2 を実装し、single/multi-row の constraint solver を統一する。
-5. Python/Web session version を 35 へ一度だけ切り替える。
-6. Gallery merge toolを新artifact authorityに対応させる。
-7. 全 current session を一括再生成し、legacy fixture だけを旧session/protein形式で残す。
-8. SVG/reference/Gallery visual diff を review する。
-9. docs、release notes、必要な media を更新する。
-10. full verification後にmetadata-dependent ID generator、legacy current-cache write path、旧spacing式を削除する。
+5. version 35 schema-3/manifest-1 fixtureの0-job migrationとexport hydrationを成立させる。
+6. Python/Web session versionを36へ一度だけ切り替える。
+7. Gallery merge toolをraw-4/derived-3/manifest-2 authorityとsize inventoryに対応させる。
+8. Vibrioの59 raw entryを保持したcompact sessionでsize hard gateと0-job reuseを確認する。
+9. 全current sessionを一括再生成し、legacy fixtureだけを旧session/protein形式で残す。
+10. SVG/reference/Gallery visual diffをreviewする。
+11. docs、release notes、必要なmediaを更新する。
+12. full verification後にmetadata-dependent ID generator、legacy current-cache write path、旧spacing式を削除する。
 
-protein schema 2 reader/migratorはversion 35 releaseでは残す。protein schema 2 entryをcurrent cacheへ
-書くwriterとmetadata-dependent ID generatorは残さない。import由来candidateのlossless legacy envelope
-writerとnucleotide schema 2 writer/readerは維持する。rollback時もlegacy protein schema 2 entryを
-破壊しないよう、lazy migrationはcopy-on-successとする。
+protein schema 2/3 reader/migratorはversion 36 releaseで残す。protein schema 2/3 entryをcurrent
+cacheへ書くwriterとmetadata-dependent ID generatorは残さない。import由来candidateのlossless
+legacy envelope writerとnucleotide schema 2 writer/readerは維持する。rollback時もlegacy protein
+artifactを破壊しないよう、lazy migrationはcopy-on-successとする。
 
 ## 10. Risks and mitigations
 
@@ -810,12 +908,18 @@ writerとnucleotide schema 2 writer/readerは維持する。rollback時もlegacy
 | legacy cache の false hit | full FASTA hash、AA digest、program/args、一対一 mapping をすべて検証する |
 | 同じprotein setを持つ異なるrecordのmetadata上書き | `ProteinSet`からrecord固有情報を外し、record analysis/bindingで参照する |
 | missing/duplicate source ID | source IDをdisplay aliasだけに使い、canonical feature analysis IDで一意化する |
-| transport IDのescape衝突 | normative NFC/UTF-8 percent encodingとreserved-character/property test |
+| 128-bit handleのdigest collision | manifest全体でglobal uniquenessを検証し、重複をfail closedにする |
+| runtime handleがUIへ露出 | user-visible境界をinventory化し、manifest resolver/hydratorを必須にする |
+| export IDのescape/重複衝突 | normative NFC/UTF-8 percent encodingと決定的duplicate ordinalをtestする |
 | Generate前の再保存でlegacy cacheを失う | current cacheと分離したlegacy candidate envelopeをlosslessにround-tripする |
-| manifest による session 肥大化 | protein setをhashでdeduplicateし、instance bindingは1 rowにつき1件、pair entryはreferenceのみ保持 |
+| v35 raw schema 3をcurrent hitと誤認 | version-36 validatorとraw-4 discriminatorで専用candidateへ隔離する |
+| manifestによるsession肥大化 | protein setをhashでdeduplicateし、instance bindingは1 rowにつき1件、pair entryは短いhandleだけを反復する |
 | empty legacy result を誤って再利用 | record token を証明できなければ pair-local miss |
-| Web/Python ID drift | Pythonをsingle ownerにし、Web boundary serializationのbyte-identical golden test |
-| derived payload に古い record index が残る | schema 1をblind reuseせずcurrent manifestからschema 2を再構築 |
+| Web/Python identity drift | feature/manifest/runtime/raw identityはPython single ownerとWeb boundaryのbyte-identical golden testで固定し、surface-local derived keyは同等のinvalidation inputsをtestする |
+| alias変更で不要なLOSAT再実行 | runtime binding hashとdisplay binding hashを分離する |
+| derived payloadに旧long IDが残る | recursive inventoryとmanifest resolutionでderived schema 3を検証する |
+| downloadが内部handleのまま | fail-closed hydratorとpair/bulk browser download assertion |
+| compact化してもsize gateを超える | raw/derived reference inventoryを測定し、entryをpruneせず59件を固定する |
 | layout を詰め過ぎてtrack collisionが戻る | body/comparison/definition の独立 non-overlap test |
 | canvas clipping | spacingとは別にtranslated canvas bandsからviewBoxを計算 |
 | multi-recordだけ別式が残る | single/multiで同じ pure clearance helperを使用 |
@@ -832,6 +936,9 @@ writerとnucleotide schema 2 writer/readerは維持する。rollback時もlegacy
 - 全ファイル形式を横断する普遍的 biological deduplication system を作らない。
 - record-instance間のraw TSV neutralization/rebinding最適化を初回実装に含めない。
 - nucleotide LOSAT cache を protein manifest へ無理に統合しない。
+- runtime handleを外部database IDまたはuser-visible IDとして扱わない。
+- user-uploaded TSVを正規化・renameしない。
+- size対策としてvalidなcache entryをpruneしない。
 - canonical `renderRequest` schema 3 全体を再設計しない。
 - Circular layout を同時に変更しない。
 - 汎用2D collision solver、DOM bbox反復solver、scene graphを導入しない。
@@ -846,83 +953,100 @@ writerとnucleotide schema 2 writer/readerは維持する。rollback時もlegacy
 2. 検証不能または破損した legacy pair は誤利用せず、その pair だけ再実行する。
 3. feature analysis IDはtype、全location parts、strand、永続同位置ordinalから一意に決まり、source
    qualifierの一意性に依存しない。
-4. new QUERY/SUBJECTは規範的percent encodingに従うreadable transport IDで、全件をmanifestから
-   一意に実record/featureへ解決できる。
-5. 同じsource recordを複数配置してもtransport IDとcombined protein mapが衝突せず、別bindingの
+4. new FASTA、raw schema 4、derived schema 3のprotein referenceはsession-global runtime handleを使う。
+5. runtime handleはalias、filename、mtime、record/display metadataに依存せず、manifest validatorが
+   全件を一意なrecord instance/featureへ解決する。
+6. 同じsource recordを複数配置してもruntime handleとcombined protein mapが衝突せず、別bindingの
    raw TSVをdirect hitとして誤利用しない。
-6. 異なるrecord analysisが同じprotein setを共有してもrecord固有metadataとbindingを上書きしない。
-7. filename、mtime、resource rename、save/loadだけではraw cache keyが変わらない。
-8. AA、protein membership、意味のあるLOSAT argsの変更では該当cacheが確実にmissする。
-9. source/display qualifierの変更はfeature analysis IDを変えないが、transport bindingを変えて
-   raw missとderived rebuildになる。
-10. reverse query/subject pairを未検証のdirect hitとして再利用しない。
-11. raw cacheとderived cacheのinvalidation boundaryがunit testで固定される。
-12. Pythonのsingle ownerがID/manifest/hashを生成し、CLIとWeb boundaryがbyte-identicalにserializeする。
-13. current schema 3 artifact内の全protein referenceがmanifest/bindingへ解決し、旧`p_r_...`参照が
-    残らない。import由来の未検証entryだけはlegacy envelope内に隔離される。
-14. Load → Save → LoadをGenerate前に行ってもlegacy candidateがlosslessに残り、current cacheへ
-    protein schema 2 entryが混入しない。
-15. orthogroup名・説明overrideと選択状態がID移行後も同じfeatureを指す。
-16. axis gapはXが交差するeligible body/comparison/definition kind pairの必要間隔の`max()`であり、
+7. 異なるrecord analysisが同じprotein setを共有してもrecord固有metadataとbindingを上書きしない。
+8. raw schema 4の全QUERY/SUBJECTが指定query/subject runtime bindingに属する。
+9. filename、mtime、resource rename、save/load、alias/display metadataだけではraw cache keyが
+   変わらない。display変更はexport IDと必要なderived metadataだけを更新する。
+10. AA、protein membership、feature identity、record instance、意味のあるLOSAT argsの変更では
+    該当raw cacheが確実にmissする。
+11. reverse query/subject pairを未検証のdirect hitとして再利用しない。
+12. raw cacheとderived cacheのinvalidation boundaryがunit testで固定される。
+13. `Save Raw LOSAT TSV`は通常aliasを出力し、duplicate時だけ決定的ordinalを付ける。
+14. download TSVは12列、row順、第3～12列、comments、empty result、改行を保持し、未解決handleを
+    ユーザーへ出力しない。
+15. pair/bulk downloadに`h_...`、`p_r_...`、64桁feature hashが残らず、user-uploaded TSVを変更しない。
+16. Pythonのsingle ownerがfeature/record/protein-set identity、runtime/display binding、
+    runtime handle、raw key、manifest、hydrationを生成し、CLIとWeb boundaryがbyte-identicalに
+    serializeする。surface-localなderived keyは同じ意味のinvalidation inputsをすべて含む。
+17. current raw/derived artifact内の全protein referenceがmanifest-2へ解決し、old readable long
+    transport ID、`p_r_...`、full feature hashの反復参照が残らない。
+18. Load → Save → LoadをGenerate前に行ってもv27–34/v35 legacy candidateがlosslessに残り、
+    current cacheへprotein schema 2/3 entryが混入しない。
+19. version 35 schema-3/manifest-1 sessionがLOSAT worker 0件でraw schema 4へ移行する。
+20. orthogroup名・説明override、selection、editor stateがID移行後も同じfeatureを指す。
+21. axis gapはXが交差するeligible body/comparison/definition kind pairの必要間隔の`max()`であり、
     二重加算しない。
-17. `comparison_height=60`はexclusion edge間の最小clear corridorとして保証される。
-18. comparisonのないrow境界は`comparison_height`を予約しない。
-19. Xが交差しないdefinition/body pairはspacingを増やさず、Xが交差するlocal header/body pairは
+22. `comparison_height=60`はexclusion edge間の最小clear corridorとして保証される。
+23. comparisonのないrow境界は`comparison_height`を予約しない。
+24. Xが交差しないdefinition/body pairはspacingを増やさず、Xが交差するlocal header/body pairは
     definition clear gapを満たす。
-20. definition、non-overlay body、comparisonが各collision domainで交差しない。
-21. off-axis definitionを非負extentの和で過大評価しない。
-22. canvasが全painted contentを含み、clipしない。
-23. single/multi-row、default/custom、ribbon/curve、sparse depthの回帰testが通る。
-24. Python/Webのcurrent session versionは35で一致し、通常の同梱session全13件がversion 35になる。
-25. repository内の旧session envelope/render schemaとprotein raw schema 2は専用migration fixtureだけに残る。
-26. current sessionではprotein raw schema 3とnucleotide raw schema 2の混在を正しく検証できる。
-27. Gallery refresh後もversion/cache/manifestが旧値へ戻らない。
-28. 全Gallery session、SVG、thumbnail、必要なtutorial mediaがreview済みcurrent出力と一致する。
-29. dedicated browser acceptanceがskipなしでrequired gateを通り、focused tests、non-slow suite、ruff、
+25. definition、non-overlay body、comparisonが各collision domainで交差しない。
+26. off-axis definitionを非負extentの和で過大評価しない。
+27. canvasが全painted contentを含み、clipしない。
+28. single/multi-row、default/custom、ribbon/curve、sparse depthの回帰testが通る。
+29. Python/Webのcurrent session versionは36で一致し、通常の同梱session全13件がversion 36になる。
+30. repository内の旧session envelope、protein raw schema 2/3、derived schema 1/2、manifest schema 1は
+    専用migration fixtureだけに残る。
+31. current sessionではprotein raw schema 4とnucleotide raw schema 2の混在を正しく検証できる。
+32. Vibrio sessionが全59 raw entryを保持し、gzip `< 100,000,000 bytes`、expanded JSON
+    `< 536,870,912 bytes`を満たす。size対策のsilent pruningを行わない。
+33. Gallery refresh後もversion/cache/manifestが旧値へ戻らず、identity migrationだけでSVG geometryを
+    変更しない。全Gallery session、SVG、thumbnail、必要なtutorial mediaがreview済みcurrent出力と
+    一致する。
+34. dedicated browser acceptanceがskipなしでrequired gateを通り、focused tests、non-slow suite、ruff、
     reference comparisonが成功する。
 
-## 13. Implementation progress handoff（2026-07-21）
+## 13. Final implementation and verification results（2026-07-25）
 
 ### 完了した実装
 
-- Python single ownerにstable feature/record/protein-set identity、readable transport ID、schema-1 manifest、
-  directional schema-3 protein raw keyを実装した。WebはPyodide helper経由で同じownerを使う。
-- session version 35、`renderRequest.schema == 3`、protein raw schema 3、nucleotide raw schema 2、
-  derived schema 2、manifest schema 1の境界をPython/Webに実装した。readerはversion 27～35を受理する。
-- legacy protein raw/derived artifactをcurrent cacheから隔離し、Save-before-Generateで保持される
-  schema-1 envelopeと、検証済みpairだけをcopy-on-writeでpromotionするpathを実装した。
+- Python single ownerにstable feature/record/protein-set identity、128-bit runtime handle、
+  runtime/display binding hash、manifest schema 2、export ID map/TSV hydrator、directional raw schema 4
+  keyを実装した。WebはPyodide helper経由で同じownerを使う。
+- session version 36、`renderRequest.schema == 3`、protein raw schema 4、nucleotide raw schema 2、
+  derived schema 3、manifest schema 2の境界をPython/Webに実装した。readerはversion 27～35を
+  migration inputとして受理する。
+- v27–34の`p_r_` raw artifactとv35 raw schema 3 / manifest schema 1 / derived schema 2をcurrent
+  cacheから隔離し、Save-before-Generateでlosslessに保持して、検証済みpairだけをcopy-on-successで
+  runtime handleへpromotionするpathを実装した。
+- LOSATP FASTA、raw text、combined `protein_map`、derived referenceをruntime handleへ統一し、
+  pair/bulk downloadをmanifestからのexport hydrationへ切り替えた。
+- orthogroup、selection、editor/result metadataの旧long IDと`p_r_` referenceをcurrent runtime
+  handleへ解決するartifact inventory/rewriteを実装した。
 - X範囲付き`CollisionBand`、kind-pair policy、`required_axis_gap()`を実装し、single/multi-rowを
   同じsolverへ統合した。body/comparison/definitionはeligible制約の`max()`で合成し、
   comparisonのない境界にcorridorを予約しない。
 
-### 確認済みの範囲
+### 最終検証結果
 
-- protein identity/cache、legacy fixture、session codec/API、Linear vertical layout、Web pure cache/session の
-  focused testおよびJavaScript syntax checkで実装単位の動作を確認した。
-- 統合focused suiteは`190 passed, 1 skipped`で完了した。repository-wide test suiteではなく、
-  protein/session/API/refresh/Linear vertical layoutに限定した結果である。
-- 履歴上のBGC0000708–BGC0000713 schema-v2 sessionをgzip fixtureとして固定し、25 pairの
-  legacy candidateがPython側の検証対象になることを確認した。
-- 同BGC sessionのcanonical Python replayとstaged validatorは、version 35、protein raw schema 3が
-  25件、derived schema 2が1件、manifest schema 1、legacy candidateなし、旧`p_r_...`参照なしで通過した。
-- browser acceptance runner/spec/CI gateを追加し、fixture SHA/version/schema/count、test discovery、
-  runner syntaxを確認した。通常sandboxではlocal serverの`listen`が拒否されるため、browser実行には
-  sandbox escalationが必要である。
+- 履歴上のBGC0000708–BGC0000713 schema-v2 sessionとv35 schema-3/manifest-1 sessionをgzip
+  fixtureとして固定した。実browserのLoad → Save → Load → Generateで、25 pairが
+  `25 hits / 0 misses / 0 jobs`のままcurrent schemaへpromotionされ、pair/bulk downloadが内部IDを
+  出力しないことを確認した。
+- browser acceptanceはPython Playwright＋Chromiumで45,094 assertionsを通過した。cancel、
+  renderer error、rollback後の再Generateも含め、migration stateとcacheが成功時だけcommitされる。
+  Nodeの`@playwright/test`がない環境だったため、repository guidanceどおりPython adapterを
+  required browser gateとして使用した。
+- 全11 Gallery sessionをtransactional refreshし、version 36、protein raw 4、derived 3、
+  manifest 2へ統一した。source/result/thumbnailを同期し、generated SVG IDを正規化した
+  visible geometry比較で全11例が一致した。
+- Vibrio artifactは59 directional raw entryのexact setとderived coverage 59/59を保持し、
+  Generate相当のcache lookupは59 hits、LOSAT worker 0 jobsだった。最終サイズはgzip
+  88,887,768 bytes、expanded JSON 377,965,278 bytesで、hard gateとoperational targetを
+  ともに満たした。
+- current derived validatorはstrict zero-hit payloadを許可しつつ、unknown runtime reference、
+  compound referenceのunknown component、malformed payloadをPython/Web双方で拒否する。
+  derived keyはsurface-localだが、LOSAT mode、raw key、全collinearity parameterを含む同等の
+  invalidation boundaryをfocused testsで固定した。
+- Linear layoutとidentity migrationのreference output comparisonは16件すべて通過した。
+- Web packaging/focused integrationは100 passed、6 skipped、post-refresh Gallery gateは3 passed、
+  full non-slow suiteは1,789 passed、19 skipped、10 deselectedだった。
+- `ruff check gbdraw/`は成功し、current browser wheelの準備後、isolated buildで
+  `gbdraw-0.14.0b0.tar.gz`と`gbdraw-0.14.0b0-py3-none-any.whl`を正常生成した。
 
-### 未完了・未確認のgate
-
-- 実browserでのLoad → Save → Load → Generateと`25 hits / 0 misses / 0 jobs`のrequired acceptance。
-  escalated Node runは実在fixtureの1 testを開始し、Save-before-Generateで見つかった全null Depth行の
-  round-trip不具合を修正した後も同地点を通過したが、最終assertion完了前に時間制限で中断した。
-- current Gallery/test sessionのtransactional refresh、session/SVG/thumbnail差分のreview、必要なmediaの判定。
-- 意図したLinear Y/viewBox reference差分の更新と再比較、non-slow suite、repository-wide ruff、build。
-
-### 次回の実行順
-
-1. browser wheelはcurrent Python codeから準備済みである。sandbox escalation付きで
-   `python tests/run_losat_cache_browser_acceptance.py`を完走し、続けて
-   `python tests/run_losat_cache_browser_acceptance.py --python`でfallback adapterも確認する。
-2. `python tools/refresh_gallery_sessions.py --no-assets`でartifact差分を確認した後、
-   `python tools/refresh_gallery_sessions.py`でsessionとvisible assetをtransactionalに更新する。
-3. output comparisonで差分を確認し、意図したLinear referenceだけを公式コマンドで更新する。
-4. focused/full validationと最終diff reviewを完了するまで、Definition of Done全体を完了と扱わない。
+以上により、§12のDefinition of Doneをすべて完了とする。

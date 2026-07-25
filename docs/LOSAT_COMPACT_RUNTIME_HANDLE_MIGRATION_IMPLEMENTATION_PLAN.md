@@ -3,7 +3,8 @@
 ## 0. 文書の位置づけ
 
 - 作成日: 2026-07-24
-- 状態: **次セッション向け実装計画（実装未着手）**
+- 最終更新: 2026-07-25
+- 状態: **実装・gallery更新・最終回帰検証完了**
 - 対象:
   - Web/CLI の protein LOSATP FASTA ID
   - raw LOSAT cache
@@ -17,8 +18,9 @@
 本書は、上記既存計画のうち「readable transport IDをraw TSVの全hit行へ保存する」方針を
 置き換える。linear spacing側の設計・実装は変更しない。
 
-次セッションでは、容量上限でcache entryを間引く対症療法ではなく、machine identity、
-runtime reference、user-visible IDを分離する本書の方針を実装する。
+容量上限でcache entryを間引く対症療法ではなく、machine identity、runtime reference、
+user-visible IDを分離する本書の方針を実装した。本書の要件・設計履歴は維持し、
+実装状況と検証結果を§8および§15へ追記する。
 
 ## 1. 結論
 
@@ -550,6 +552,23 @@ cache pruningでtestを通さない。全cacheを保持したcompact representat
 特に「raw TSV自体がreadable long IDを持つ」を
 「内部rawはruntime handle、ユーザーexportはreadable ID」へ置き換える。
 
+### 実装状況（2026-07-25）
+
+| Workstream | 状態 | 実装結果 |
+|---|---|---|
+| Phase 0 | 完了 | pruning prototypeを採用せず、全cache保持を前提に移行した |
+| Phase A | 完了 | Python ownerのruntime handle、manifest-2、raw-4、hydrator、v35 rewriteを実装した |
+| Phase B | 完了 | WebのFASTA/raw/derived/download経路をruntime handleとPython hydratorへ接続した |
+| Phase C | 完了 | session 36、v35 quarantine、v27–35 promotion、CLI/API伝播を実装した |
+| Phase D | 完了 | compound referenceを含むderived/UI artifact inventoryとresolverを更新した |
+| Phase E | 完了 | 全galleryをtransactional refreshし、Vibrioの全59 pair保持・size・0-job reuse、visible geometry、source/result同期を確認した |
+| Phase F | 完了 | compatibility matrix、FAQ、tutorial、release note、既存計画を最終contractへ更新した |
+
+runtime handle化後もVibrioのexpanded sizeを運用目標内へ収めるため、重複していたfeature authorityを
+可逆な`featureCatalog`（`biological-authority-v1`）として保存するcodecもPython/Webへ実装した。
+これは任意のsession JSONを圧縮する汎用dictionary codecではなく、既知のbiological feature
+authorityと参照の重複だけを対象にし、load時には従来のin-memory構造へ復元する。
+
 ## 9. Test plan
 
 ### 9.1 Python unit
@@ -708,7 +727,9 @@ fallbackを実行し、skipを成功扱いしない。
 19. orthogroup override、selection、editor stateが同じfeatureを指し続ける。
 20. Vibrio sessionが全59 raw entryを保持してsize hard gateを通る。
 21. identity migrationだけではSVG geometryが変わらない。
-22. Pythonがhandle/hash/hydrationのsingle ownerで、Web境界とのgolden testが通る。
+22. Pythonがfeature analysis ID、protein set/record analysis、runtime/display binding、
+    runtime handle、raw key、manifest、hydrationのsingle ownerで、Web境界とのgolden testが通る。
+    derived keyはsurface-localだが、同じ意味のinvalidation inputsをすべて含む。
 23. session 36、raw 4、derived 3、manifest 2をPython/Webで同時に書く。
 24. full non-slow tests、browser acceptance、ruff、isolated buildが通る。
 
@@ -736,24 +757,96 @@ fallbackを実行し、skipを成功扱いしない。
 | downloadが内部tokenのまま | fail-closed hydratorとbrowser download assertion |
 | short ID化だけでsize不足 | derived参照も同じhandleへ統一し、Vibrio hard gateで確認 |
 | size gateのためcacheを欠落 | 59 raw entry countをacceptanceに固定 |
-| Python/Web hash drift | Python single owner＋byte-identical golden fixture |
+| Python/Web identity drift | feature/manifest/runtime/raw identityはPython single owner＋byte-identical golden fixtureで固定し、surface-local derived keyは同等のinvalidation inputsをtestする |
 | broad CRLF diffに実差分が埋もれる | `git diff --ignore-space-at-eol`でreview |
 
-## 15. 次セッション開始時の注意
+## 15. 実装・検証結果
 
-- 現在のVibrio sessionは、compact handleへ未移行のためgzip約134.5 MBのままである。
-- 中断された104 MiB pruning prototypeはsessionをまだ再生成していない。
+### 15.1 実装済みcontract
+
+- `featureAnalysisId`を完全なSHA-256 authorityとして維持した。
+- `h_[a-z2-7]{26}`の128-bit deterministic runtime handleをPython ownerとして実装した。
+- FASTA、protein map、raw schema 4、derived schema 3のprotein referenceをruntime handleへ統一した。
+- manifest schema 2でruntime/display binding、runtime ID、display metadataを分離した。
+- `Save Raw LOSAT TSV`のpair/bulk downloadをfail-closed hydratorへ接続し、内部handleを通常aliasへ
+  export時だけ復元するようにした。
+- session version 36 writer/reader、v35 schema-3＋manifest-1のlossless quarantine、
+  v27–35 candidateのcopy-on-success promotionを実装した。
+- Python/Web双方へ同じcurrent schema boundaryを実装し、CLI/APIのsession経路にも伝播した。
+- Python single ownerの範囲をfeature/record/protein-set identity、runtime/display binding、
+  runtime handle、raw key、manifest、hydrationに固定した。PythonとWebのderived keyは保存先ごとの
+  surface-local keyであり、byte-identicalとはせず、同じ意味の全invalidation inputsを含むことを
+  それぞれのtestで固定した。
+- current artifactからold readable transport IDおよびlegacy `p_r_` referenceを排除するvalidatorと
+  migrationを追加した。
+- gallery refresh toolは全sessionをstaging後に置換するtransactional flowとし、Vibrioのpair数・
+  compressed size・expanded sizeをhard gateとして検証する。
+
+### 15.2 Vibrio size・cache reuseの実測
+
+全11 gallery sessionのtransactional refreshを完了し、最終Vibrio artifactで次を確認した。
+
+| 項目 | 検証結果 |
+|---|---:|
+| expected directional raw pair set | 59 |
+| observed raw entries / exact pair set | 59 / expected setと完全一致 |
+| gzip session | 88,887,768 bytes |
+| expanded session JSON | 377,965,278 bytes |
+| derived raw key coverage | 59 / 59 |
+| directional cache reuse check | 59 pairsすべてhit |
+| LOSAT worker jobs | 0 |
+| visible SVG element signatures | 25,801 / 25,801 |
+| source SVG / session result | byte-identical |
+
+0-job checkではLOSAT workerを呼ぶと即座に失敗するように差し替えた上で、59 directional pair
+すべてのcache runnerを実行した。したがって、entry数だけでなくGenerate相当のlookup経路でも
+全pairが再利用され、silent pruningや暗黙の再検索がないことを確認済みである。
+
+最終artifactはhard gate（gzip `< 100,000,000`、expanded `< 536,870,912`）とoperational
+target（gzip `<= 90,000,000`、expanded `<= 500,000,000`）の両方を満たした。
+
+### 15.3 最終検証の状態
+
+最終source stateに対する全gateを完了した。
+
+| Gate | 最終結果 |
+|---|---|
+| gallery transactional refresh | 全11 sessionをstaging後に一括置換し、source/result/thumbnail同期を完了 |
+| post-refresh gallery gate | 3 passed（59 pair完全性、全current schema、source/session result一致） |
+| visible geometry review | 全11例でgenerated gradient/clipPath IDを正規化後のtag・attribute・textが完全一致 |
+| browser migration acceptance | Python Playwright＋Chromium、45,094 assertions passed、required gateのskipなし |
+| Web packaging/focused integration | 100 passed、6 skipped |
+| reference output comparison | 16 passed |
+| full non-slow suite | 1,789 passed、19 skipped、10 deselected |
+| lint | `ruff check gbdraw/` passed |
+| browser wheel | current sourceから`gbdraw-0.14.0b0-py3-none-any.whl`を準備 |
+| isolated build | `gbdraw-0.14.0b0.tar.gz`と`gbdraw-0.14.0b0-py3-none-any.whl`を正常生成 |
+
+browser acceptanceではv27–34/v35のLoad → Save → Load → Generate、pair/bulk download
+hydration、25 pairの0-job reuse、cancelおよびrenderer error時のatomic rollback、その直後の
+Generateでも0 executor callsであることを実browserで確認した。Nodeの`@playwright/test`は
+環境に存在しなかったため、repository guidanceどおりPython Playwright adapterをrequired browser
+gateとして実行した。
+
+以上により、Acceptance criteria §12の24項目をすべて完了とする。
+
+## 16. 着手前スナップショット（履歴）
+
+以下は2026-07-24時点の着手条件であり、現在状態ではない。実装判断の履歴として残す。
+
+- 当時のVibrio sessionはcompact handleへ未移行で、gzip約134.5 MBだった。
+- 中断された104 MiB pruning prototypeはsessionを再生成していなかった。
 - untrackedの空staging directory
   `gbdraw/web/gallery/sessions/.gbdraw-gallery-refresh-238xk35_/`
-  が残っている可能性がある。空であることを確認してから`rmdir`する。
-- worktreeには本件以外の意図した修正もあるため、広範なcheckout/resetを行わない。
+  が残っている可能性があり、空であることを確認してから`rmdir`する想定だった。
+- worktreeには本件以外の意図した修正もあったため、広範なcheckout/resetを行わない方針とした。
 - `tests/reference_outputs/`は通常testでは更新せず、geometry changeをreviewした場合だけ
-  専用update commandを使う。
+  専用update commandを使う方針とした。
 
-次セッションの最初の成果物は、production codeではなく次の三つのfailing testにする。
+着手時に設計境界を固定する最初の成果物として、次の三つのfailing testを定めた。
 
 1. alias変更でもraw keyが同じになるidentity test
 2. internal raw handleを通常aliasへhydrateするTSV test
 3. v35 schema-3を0 jobでschema-4へ昇格するsession/browser test
 
-この三つが設計境界を固定してからproduction実装へ進む。
+これらのcontract testを追加してからproduction実装へ進めた。

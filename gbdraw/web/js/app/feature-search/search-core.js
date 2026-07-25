@@ -1,4 +1,8 @@
-import { resolveDisplayProteinId, resolveInternalProteinId } from '../feature-utils.js';
+import {
+  isInternalProteinDisplayId,
+  resolveDisplayProteinId,
+  resolveInternalProteinId
+} from '../feature-utils.js';
 
 export const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
   'qualifier-key',
@@ -170,7 +174,7 @@ const appendSearchItems = (items, label, value, options = {}) => {
   }
   if (value === null || value === undefined) return;
   const text = String(value).trim();
-  if (!text) return;
+  if (!text || isInternalProteinDisplayId(text)) return;
   items.push({
     label,
     value: text,
@@ -298,7 +302,11 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   appendSearchItems(items, 'Orthogroup name', group?.display_name || group?.displayName || group?.name);
   appendSearchItems(items, 'Orthogroup description', group?.description);
   appendSearchItems(items, 'Protein ID', proteinId);
-  if (internalId && internalId !== proteinId) {
+  if (
+    internalId &&
+    internalId !== proteinId &&
+    !isInternalProteinDisplayId(internalId)
+  ) {
     appendSearchItems(items, 'Internal protein ID', internalId);
   }
   appendSearchItems(items, 'Orthogroup member', member?.label);

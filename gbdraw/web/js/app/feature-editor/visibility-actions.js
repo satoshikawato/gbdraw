@@ -13,6 +13,10 @@ import {
   setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
 } from '../feature-visibility.js';
+import {
+  isInternalProteinDisplayId,
+  resolveDisplayProteinId
+} from '../feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
 
 export const createFeatureVisibilityActions = ({ state, featureSvgActions, previewRuntime = null }) => {
@@ -97,7 +101,11 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     return {
       id: svgId,
       svg_id: svgId,
-      label: firstText(member?.product, member?.proteinId, member?.sourceProteinId, svgId),
+      label: firstText(
+        member?.product,
+        resolveDisplayProteinId(null, member, svgId),
+        svgId
+      ),
       type: 'CDS',
       product: firstText(member?.product),
       protein_id: firstText(member?.proteinId, member?.sourceProteinId)
@@ -176,13 +184,14 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
         value: product
       });
     }
-    const proteinId = firstText(
-      feat?.proteinId,
-      feat?.protein_id,
+    const proteinIdCandidate = firstText(
       feat?.sourceProteinId,
       feat?.source_protein_id,
-      getQualifierValue(feat, 'protein_id')
+      getQualifierValue(feat, 'protein_id'),
+      feat?.proteinId,
+      feat?.protein_id
     );
+    const proteinId = isInternalProteinDisplayId(proteinIdCandidate) ? '' : proteinIdCandidate;
     if (featureType && proteinId) {
       scopes.push({
         id: 'protein_id',

@@ -1,4 +1,7 @@
-import { resolveDisplayProteinId } from './feature-utils.js';
+import {
+  isInternalProteinDisplayId,
+  resolveDisplayProteinId
+} from './feature-utils.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
 import { buildMatchSequenceBundle } from './match-sequences.js';
 import {
@@ -62,6 +65,7 @@ const generatedUnitIdPattern = /^gbd_r\d+_unit\d+$/i;
 const isInternalDisplayId = (value) => {
   const text = normalizeText(value);
   return Boolean(text && (
+    isInternalProteinDisplayId(text) ||
     generatedProteinIdPattern.test(text) ||
     generatedUnitIdPattern.test(text)
   ));
@@ -411,6 +415,11 @@ const normalizeMemberStrand = (strand) => {
 
 const buildMemberFeaturePayload = (member, feature, nucleotideSequence, aminoAcidSequence) => {
   const sourceFeature = feature && typeof feature === 'object' ? feature : {};
+  const displayProteinId = resolveDisplayProteinId(
+    sourceFeature,
+    member,
+    memberLocationText(member)
+  );
   return {
     ...sourceFeature,
     record_id: sourceFeature.record_id || sourceFeature.recordId || member?.recordId || member?.record_id,
@@ -418,7 +427,7 @@ const buildMemberFeaturePayload = (member, feature, nucleotideSequence, aminoAci
     end: sourceFeature.end ?? member?.end,
     strand: sourceFeature.strand || normalizeMemberStrand(member?.strand),
     source_protein_id: sourceFeature.source_protein_id || sourceFeature.sourceProteinId || member?.sourceProteinId || member?.source_protein_id,
-    protein_id: sourceFeature.protein_id || sourceFeature.proteinId || member?.proteinId || member?.protein_id,
+    protein_id: displayProteinId,
     product: sourceFeature.product || member?.product,
     note: sourceFeature.note || member?.note,
     gene: sourceFeature.gene || member?.gene,
@@ -447,10 +456,7 @@ const orthogroupSequenceFilename = (orthogroupId, displayName, sequenceKind) => 
 const orthogroupMemberSequenceFilename = (member, orthogroupId, sequenceKind) => {
   const id = normalizeText(orthogroupId) || 'orthogroup';
   const memberId = firstText(
-    member?.sourceProteinId,
-    member?.source_protein_id,
-    member?.proteinId,
-    member?.protein_id,
+    resolveDisplayProteinId(null, member, ''),
     memberFeatureSvgId(member),
     'member'
   );
@@ -594,8 +600,7 @@ const buildFeatureListRows = ({
     const displayProteinId = firstText(
       isInternalDisplayId(resolvedProteinId) ? '' : resolvedProteinId,
       fallbackProteinId,
-      resolvedProteinId,
-      proteinIds[index]
+      isInternalDisplayId(proteinIds[index]) ? '' : proteinIds[index]
     );
     const rowRecord = firstText(feature?.record_id, feature?.recordId, member?.recordId, member?.record_id, recordId);
     const rowLocation = firstText(

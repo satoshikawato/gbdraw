@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import copy
+import gzip
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -22,12 +24,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from gbdraw.session_io import (  # noqa: E402
     CURRENT_SESSION_VERSION,
+    LOSAT_DERIVED_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
-    SESSION_LOSAT_CACHE_BYTE_LIMIT,
     classify_raw_losat_cache_entry,
     load_session,
     normalize_current_session_artifacts,
-    serialized_losat_artifact_byte_length,
     session_mode,
     validate_session,
     write_session_json,
@@ -38,6 +39,51 @@ from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
 SESSION_ROOT = GALLERY_ROOT / "sessions"
 SESSION_PROMOTER = REPO_ROOT / "tools" / "promote_gallery_session.mjs"
+VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+VIBRIO_RAW_ENTRY_COUNT = 59
+VIBRIO_GZIP_HARD_LIMIT = 100_000_000
+VIBRIO_EXPANDED_HARD_LIMIT = 536_870_912
+
+
+def _directed_cross_pairs(
+    left: tuple[str, ...],
+    right: tuple[str, ...],
+) -> set[tuple[str, str]]:
+    return {
+        pair
+        for query in left
+        for subject in right
+        for pair in ((query, subject), (subject, query))
+    }
+
+
+_VIBRIO_RECORD_KEYS = tuple(f"record-{index}" for index in range(1, 12))
+_VIBRIO_ROW_GROUPS = (
+    _VIBRIO_RECORD_KEYS[0:3],
+    _VIBRIO_RECORD_KEYS[3:5],
+    _VIBRIO_RECORD_KEYS[5:7],
+    _VIBRIO_RECORD_KEYS[7:9],
+    _VIBRIO_RECORD_KEYS[9:11],
+)
+VIBRIO_EXPECTED_RAW_PAIRS = frozenset(
+    {(record_key, record_key) for record_key in _VIBRIO_RECORD_KEYS}
+    | {
+        pair
+        for index in range(len(_VIBRIO_RECORD_KEYS) - 1)
+        for pair in (
+            (_VIBRIO_RECORD_KEYS[index], _VIBRIO_RECORD_KEYS[index + 1]),
+            (_VIBRIO_RECORD_KEYS[index + 1], _VIBRIO_RECORD_KEYS[index]),
+        )
+    }
+    | {
+        pair
+        for index in range(len(_VIBRIO_ROW_GROUPS) - 1)
+        for pair in _directed_cross_pairs(
+            _VIBRIO_ROW_GROUPS[index],
+            _VIBRIO_ROW_GROUPS[index + 1],
+        )
+    }
+)
 
 GALLERY_SESSION_FILES = (
     "BGC0000708-BGC0000713.gbdraw-session.json",
@@ -213,6 +259,11 @@ def _promote_gallery_session(
     *,
     env: Mapping[str, str],
 ) -> None:
+    if source_path.is_file():
+        source_session = load_session(source_path)
+        if source_session.get("renderRequest", {}).get("schema") == 3:
+            write_session_json(output_path, source_session)
+            return
     node = shutil.which("node")
     if node is None:
         raise RuntimeError(
@@ -287,6 +338,8 @@ def _merge_refreshed_gallery_artifacts(
 def _validate_staged_gallery_session(
     session_path: Path,
     session: dict[str, Any],
+    *,
+    artifact_path: Path | None = None,
 ) -> None:
     from tools.prepare_interactive_gallery_assets import (
         EXAMPLES,
@@ -312,7 +365,8 @@ def _validate_staged_gallery_session(
         or manifest.get("schema") != PROTEIN_IDENTITY_MANIFEST_SCHEMA
     ):
         raise ValueError(
-            f"{session_path.name} has no protein identity manifest schema 1"
+            f"{session_path.name} has no protein identity manifest schema "
+            f"{PROTEIN_IDENTITY_MANIFEST_SCHEMA}"
         )
     raw_cache = session.get("losatCache")
     raw_entries = raw_cache.get("entries", []) if isinstance(raw_cache, Mapping) else []
@@ -322,6 +376,48 @@ def _validate_staged_gallery_session(
         for entry in raw_entries
     ):
         raise ValueError(f"{session_path.name} contains a non-current raw LOSAT artifact")
+    if session_path.name == VIBRIO_SESSION_NAME:
+        if artifact_path is None:
+            raise ValueError("Vibrio size validation requires the staged session path")
+        protein_entries = [
+            entry
+            for entry in raw_entries
+            if classify_raw_losat_cache_entry(entry) == "protein-current"
+        ]
+        actual_pairs = {
+            (
+                str(entry.get("queryRecordInstanceKey") or ""),
+                str(entry.get("subjectRecordInstanceKey") or ""),
+            )
+            for entry in protein_entries
+        }
+        if (
+            len(protein_entries) != VIBRIO_RAW_ENTRY_COUNT
+            or actual_pairs != VIBRIO_EXPECTED_RAW_PAIRS
+        ):
+            raise ValueError(
+                f"{session_path.name} must retain the exact "
+                f"{VIBRIO_RAW_ENTRY_COUNT}-pair protein cache"
+            )
+        compressed_bytes = artifact_path.stat().st_size
+        with artifact_path.open("rb") as session_file:
+            is_gzip = session_file.read(2) == b"\x1f\x8b"
+        opener = gzip.open if is_gzip else Path.open
+        with opener(artifact_path, "rb") as session_file:
+            expanded_bytes = sum(
+                len(chunk)
+                for chunk in iter(lambda: session_file.read(1024 * 1024), b"")
+            )
+        if compressed_bytes >= VIBRIO_GZIP_HARD_LIMIT:
+            raise ValueError(
+                f"{session_path.name} gzip size {compressed_bytes} exceeds "
+                f"the {VIBRIO_GZIP_HARD_LIMIT}-byte hard limit"
+            )
+        if expanded_bytes >= VIBRIO_EXPANDED_HARD_LIMIT:
+            raise ValueError(
+                f"{session_path.name} expanded size {expanded_bytes} exceeds "
+                f"the {VIBRIO_EXPANDED_HARD_LIMIT}-byte hard limit"
+            )
     derived_cache = session.get("losatDerivedCache")
     derived_entries = (
         derived_cache.get("entries", [])
@@ -329,18 +425,13 @@ def _validate_staged_gallery_session(
         else []
     )
     if not isinstance(derived_entries, list) or any(
-        not isinstance(entry, Mapping) or entry.get("schema") != 2
+        not isinstance(entry, Mapping)
+        or entry.get("schema") != LOSAT_DERIVED_CACHE_SCHEMA
+        or entry.get("idEncoding") != "runtime-handle-v1"
         for entry in derived_entries
     ):
         raise ValueError(
             f"{session_path.name} contains a non-current derived LOSATP artifact"
-        )
-    if (
-        serialized_losat_artifact_byte_length(raw_entries, derived_entries)
-        > SESSION_LOSAT_CACHE_BYTE_LIMIT
-    ):
-        raise ValueError(
-            f"{session_path.name} exceeds the serialized LOSAT cache budget"
         )
     legacy_artifacts = session.get("legacyArtifacts")
     candidates = (
@@ -351,6 +442,16 @@ def _validate_staged_gallery_session(
     if isinstance(candidates, Mapping) and candidates.get("entries"):
         raise ValueError(
             f"{session_path.name} retained legacy protein raw candidates after refresh"
+        )
+    v35_candidates = (
+        legacy_artifacts.get("proteinRawV35Candidates")
+        if isinstance(legacy_artifacts, Mapping)
+        else None
+    )
+    if isinstance(v35_candidates, Mapping) and v35_candidates.get("entries"):
+        raise ValueError(
+            f"{session_path.name} retained version-35 protein raw candidates "
+            "after refresh"
         )
     protein_artifacts = {
         key: session.get(key)
@@ -367,6 +468,16 @@ def _validate_staged_gallery_session(
     if "p_r_" in json.dumps(protein_artifacts, ensure_ascii=False):
         raise ValueError(
             f"{session_path.name} contains unresolved legacy protein identifiers"
+        )
+    serialized_protein_artifacts = json.dumps(
+        protein_artifacts, ensure_ascii=False
+    )
+    if re.search(
+        r"@.+\|.+~f_[0-9a-f]{64}",
+        serialized_protein_artifacts,
+    ):
+        raise ValueError(
+            f"{session_path.name} contains version-35 protein transport identifiers"
         )
 
     def referenced_resource_ids(value: object):
@@ -494,7 +605,11 @@ def refresh_gallery_sessions(
             staged_path = staging_root / session_path.name
             _refresh_one_session(session_path, destination_path=staged_path)
             staged_session = load_session(staged_path)
-            _validate_staged_gallery_session(session_path, staged_session)
+            _validate_staged_gallery_session(
+                session_path,
+                staged_session,
+                artifact_path=staged_path,
+            )
             staged_paths.append((session_path, staged_path))
 
         for session_path, staged_path in staged_paths:

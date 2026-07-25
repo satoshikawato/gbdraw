@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
+import base64
 import hashlib
 from importlib import resources
 from io import StringIO
@@ -44,11 +45,13 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_LOSATP_BIN = "losat"
 _BUNDLED_LOSATP_DIR = "bin"
-PROTEIN_IDENTITY_MANIFEST_SCHEMA = 1
-PROTEIN_LOSAT_CACHE_SCHEMA = 3
+PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
+LEGACY_PROTEIN_IDENTITY_MANIFEST_SCHEMA = 1
+PROTEIN_LOSAT_CACHE_SCHEMA = 4
+V35_PROTEIN_LOSAT_CACHE_SCHEMA = 3
 LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA = 2
 LEGACY_PROTEIN_RAW_CANDIDATE_SCHEMA = 1
-# Backwards-compatible import name. Protein raw-cache writers now emit schema 3.
+# Backwards-compatible import name. Protein raw-cache writers now emit schema 4.
 LOSAT_CACHE_SCHEMA = PROTEIN_LOSAT_CACHE_SCHEMA
 
 _VALID_PROTEIN_RE = re.compile(r"^[A-Z]+$")
@@ -58,7 +61,24 @@ _VALID_LOSAT_TRANSPORT_ID_RE = re.compile(
     rf"^{_TRANSPORT_FIELD_PATTERN}@{_TRANSPORT_FIELD_PATTERN}"
     rf"\|{_TRANSPORT_FIELD_PATTERN}~f_[0-9a-f]{{64}}$"
 )
+_VALID_RUNTIME_HANDLE_RE = re.compile(r"^h_[a-z2-7]{26}$")
+_RUNTIME_HANDLE_SEARCH_RE = re.compile(r"(?<![a-z2-7_])h_[a-z2-7]{26}(?![a-z2-7])")
 _NUMERIC_COMPARISON_COLUMNS = COMPARISON_COLUMNS[2:]
+_INTEGER_COMPARISON_COLUMNS = frozenset(
+    {
+        "alignment_length",
+        "mismatches",
+        "gap_opens",
+        "qstart",
+        "qend",
+        "sstart",
+        "send",
+    }
+)
+_STRICT_DECIMAL_INTEGER_RE = re.compile(r"^[+-]?[0-9]+$")
+_STRICT_DECIMAL_NUMBER_RE = re.compile(
+    r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"
+)
 LOSATP_METADATA_COLUMNS = (
     "query_protein_id",
     "subject_protein_id",
@@ -176,17 +196,20 @@ class CdsProtein:
     same_location_ordinal: int | None = None
     feature_analysis_id: str | None = None
     display_alias: str | None = None
+    runtime_handle: str | None = None
     transport_id: str | None = None
     aa_sha256: str | None = None
     record_instance_key: str | None = None
     record_analysis_id: str | None = None
     protein_set_hash: str | None = None
+    runtime_binding_hash: str | None = None
+    display_binding_hash: str | None = None
     binding_hash: str | None = None
 
 
 @dataclass(frozen=True)
 class ProteinIdentityManifest:
-    """Schema-1 authority for protein sets, analyses, and row bindings."""
+    """Schema-2 authority for protein sets, analyses, and runtime bindings."""
 
     protein_sets: dict[str, dict[str, object]]
     record_analyses: dict[str, dict[str, object]]
@@ -220,8 +243,8 @@ class ProteinLosatPairIdentity:
 
     query_protein_set_hash: str
     subject_protein_set_hash: str
-    query_binding_hash: str
-    subject_binding_hash: str
+    query_runtime_binding_hash: str
+    subject_runtime_binding_hash: str
     query_record_instance_key: str
     subject_record_instance_key: str
 
@@ -235,21 +258,34 @@ class ProteinLosatPairIdentity:
         return {
             "cacheSchema": PROTEIN_LOSAT_CACHE_SCHEMA,
             "identityKind": "protein",
+            "idEncoding": "runtime-handle-v1",
             "program": str(program),
             "outfmt": str(outfmt),
             "args": [str(arg) for arg in args],
             "queryProteinSetHash": self.query_protein_set_hash,
             "subjectProteinSetHash": self.subject_protein_set_hash,
-            "queryBindingHash": self.query_binding_hash,
-            "subjectBindingHash": self.subject_binding_hash,
+            "queryRuntimeBindingHash": self.query_runtime_binding_hash,
+            "subjectRuntimeBindingHash": self.subject_runtime_binding_hash,
             "queryRecordInstanceKey": self.query_record_instance_key,
             "subjectRecordInstanceKey": self.subject_record_instance_key,
         }
 
+    @property
+    def query_binding_hash(self) -> str:
+        """Compatibility alias for callers migrating from raw schema 3."""
+
+        return self.query_runtime_binding_hash
+
+    @property
+    def subject_binding_hash(self) -> str:
+        """Compatibility alias for callers migrating from raw schema 3."""
+
+        return self.subject_runtime_binding_hash
+
 
 @dataclass(frozen=True)
 class LegacyProteinRawCachePromotion:
-    """A verified, copy-on-write schema-2 to schema-3 promotion."""
+    """A verified, copy-on-write schema-2 to schema-4 promotion."""
 
     candidate_index: int
     entry: dict[str, object]
@@ -275,6 +311,24 @@ class LegacyProteinRawCachePromotionScan:
 
 
 @dataclass(frozen=True)
+class V35ProteinRawCachePromotion:
+    """A verified, copy-on-write schema-3 to schema-4 promotion."""
+
+    candidate_index: int
+    entry: dict[str, object]
+    rewritten_tsv: str
+    protein_id_map: dict[str, str]
+
+
+@dataclass(frozen=True)
+class V35ProteinRawCachePromotionScan:
+    """Version-35 promotion result plus pair-local rejection diagnostics."""
+
+    promotion: V35ProteinRawCachePromotion | None
+    rejections: tuple[LegacyProteinRawCacheRejection, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProteinExtractionResult:
     """CDS protein extraction output grouped for pairwise LOSATP runs."""
 
@@ -284,6 +338,8 @@ class ProteinExtractionResult:
     record_instance_keys: tuple[str, ...] = ()
     protein_set_hashes: tuple[str, ...] = ()
     record_analysis_ids: tuple[str, ...] = ()
+    runtime_binding_hashes: tuple[str, ...] = ()
+    display_binding_hashes: tuple[str, ...] = ()
     binding_hashes: tuple[str, ...] = ()
     derived_mapping_hashes: tuple[str, ...] = ()
 
@@ -631,6 +687,35 @@ def percent_encode_losat_transport_field(value: object) -> str:
     return "".join(encoded)
 
 
+def build_protein_runtime_handle(
+    *,
+    feature_analysis_id: str,
+    record_instance_key: object,
+) -> str:
+    """Build the deterministic session-global runtime handle for one CDS."""
+
+    feature_id = str(feature_analysis_id)
+    instance_key = _normalize_identity_text(record_instance_key).strip()
+    if not re.fullmatch(r"f_[0-9a-f]{64}", feature_id):
+        raise ValidationError(
+            "feature_analysis_id must be f_ followed by 64 lowercase hex digits."
+        )
+    if not instance_key:
+        raise ValidationError("record_instance_key must be non-empty.")
+    payload = canonical_protein_identity_json(
+        {
+            "featureAnalysisId": feature_id,
+            "recordInstanceKey": instance_key,
+        }
+    ).encode("utf-8")
+    digest = hashlib.sha256(b"gbdraw-runtime-handle-v1\0" + payload).digest()[:16]
+    token = base64.b32encode(digest).decode("ascii").lower().rstrip("=")
+    handle = f"h_{token}"
+    if not _VALID_RUNTIME_HANDLE_RE.fullmatch(handle):  # pragma: no cover
+        raise ValidationError("Generated protein runtime handle is invalid.")
+    return handle
+
+
 def canonical_feature_analysis_id(
     *,
     feature_type: str,
@@ -725,12 +810,15 @@ def _manifest_dict(value: ProteinIdentityManifest | Mapping[str, object]) -> Map
     return value.to_dict() if isinstance(value, ProteinIdentityManifest) else value
 
 
-def validate_protein_identity_manifest(
+def validate_legacy_protein_identity_manifest(
     value: Mapping[str, object],
 ) -> ProteinIdentityManifest:
-    """Validate and materialize a schema-1 protein identity manifest."""
+    """Validate and materialize the version-35 schema-1 manifest."""
 
-    if not isinstance(value, Mapping) or value.get("schema") != PROTEIN_IDENTITY_MANIFEST_SCHEMA:
+    if (
+        not isinstance(value, Mapping)
+        or value.get("schema") != LEGACY_PROTEIN_IDENTITY_MANIFEST_SCHEMA
+    ):
         raise ValidationError("Protein identity manifest must use schema 1.")
     raw_sets = value.get("proteinSets")
     raw_analyses = value.get("recordAnalyses")
@@ -868,6 +956,191 @@ def validate_protein_identity_manifest(
         protein_sets=protein_sets,
         record_analyses=record_analyses,
         record_instances=record_instances,
+        schema=LEGACY_PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    )
+
+
+def _runtime_binding_payload(
+    *,
+    protein_set_hash: str,
+    record_instance_key: str,
+    runtime_ids: Mapping[str, str],
+) -> dict[str, object]:
+    return {
+        "encoding": "runtime-handle-v1",
+        "proteinSetHash": str(protein_set_hash),
+        "recordInstanceKey": str(record_instance_key),
+        "runtimeIds": dict(runtime_ids),
+    }
+
+
+def _display_binding_payload(
+    *,
+    record_analysis_id: str,
+    record_source_id: str,
+    record_instance_key: str,
+    feature_metadata: Mapping[str, object],
+) -> dict[str, object]:
+    return {
+        "recordAnalysisId": str(record_analysis_id),
+        "recordSourceId": str(record_source_id),
+        "recordInstanceKey": str(record_instance_key),
+        "featureMetadata": dict(feature_metadata),
+    }
+
+
+def _expected_export_ordinals(
+    feature_metadata: Mapping[str, Mapping[str, object]],
+) -> dict[str, int | None]:
+    feature_ids_by_alias: dict[str, list[str]] = {}
+    for feature_id, metadata in feature_metadata.items():
+        alias = _normalize_identity_text(metadata.get("displayAlias")).strip()
+        if not alias:
+            raise ValidationError("Protein feature metadata requires a display alias.")
+        feature_ids_by_alias.setdefault(alias, []).append(str(feature_id))
+    expected: dict[str, int | None] = {}
+    for feature_ids in feature_ids_by_alias.values():
+        ordered = sorted(feature_ids)
+        for ordinal, feature_id in enumerate(ordered, start=1):
+            expected[feature_id] = ordinal if len(ordered) > 1 else None
+    return expected
+
+
+def validate_protein_identity_manifest(
+    value: Mapping[str, object],
+) -> ProteinIdentityManifest:
+    """Validate and materialize a schema-2 compact protein manifest."""
+
+    if not isinstance(value, Mapping) or value.get("schema") != PROTEIN_IDENTITY_MANIFEST_SCHEMA:
+        raise ValidationError("Protein identity manifest must use schema 2.")
+    raw_sets = value.get("proteinSets")
+    raw_analyses = value.get("recordAnalyses")
+    raw_instances = value.get("recordInstances")
+    if (
+        not isinstance(raw_sets, Mapping)
+        or not isinstance(raw_analyses, Mapping)
+        or not isinstance(raw_instances, Mapping)
+    ):
+        raise ValidationError("Protein identity manifest maps are missing or invalid.")
+
+    shared = validate_legacy_protein_identity_manifest(
+        {
+            "schema": LEGACY_PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+            "proteinSets": raw_sets,
+            "recordAnalyses": raw_analyses,
+            "recordInstances": {},
+        }
+    )
+    protein_sets = shared.protein_sets
+    record_analyses = shared.record_analyses
+
+    record_instances: dict[str, dict[str, object]] = {}
+    all_runtime_handles: set[str] = set()
+    for key, raw_binding in raw_instances.items():
+        instance_key = str(key)
+        if not instance_key or not isinstance(raw_binding, Mapping) or raw_binding.get("schema") != 2:
+            raise ValidationError("Record instance bindings must be non-empty schema-2 objects.")
+        analysis_id = str(raw_binding.get("recordAnalysisId") or "")
+        runtime_binding_hash = str(raw_binding.get("runtimeBindingHash") or "")
+        display_binding_hash = str(raw_binding.get("displayBindingHash") or "")
+        runtime_ids = raw_binding.get("runtimeIds")
+        feature_metadata = raw_binding.get("featureMetadata")
+        if analysis_id not in record_analyses:
+            raise ValidationError(
+                f"Record instance {instance_key!r} has an invalid analysis reference."
+            )
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", runtime_binding_hash):
+            raise ValidationError(
+                f"Record instance {instance_key!r} has an invalid runtime binding hash."
+            )
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", display_binding_hash):
+            raise ValidationError(
+                f"Record instance {instance_key!r} has an invalid display binding hash."
+            )
+        if not isinstance(runtime_ids, Mapping) or not isinstance(feature_metadata, Mapping):
+            raise ValidationError(
+                f"Record instance {instance_key!r} has invalid runtime or metadata maps."
+            )
+
+        protein_set_hash = str(record_analyses[analysis_id]["proteinSetHash"])
+        expected_feature_ids = {
+            str(protein["featureAnalysisId"])
+            for protein in protein_sets[protein_set_hash]["proteins"]  # type: ignore[index]
+        }
+        normalized_runtime_ids: dict[str, str] = {}
+        for feature_id, runtime_handle in runtime_ids.items():
+            feature_key = str(feature_id)
+            handle = str(runtime_handle)
+            if feature_key not in expected_feature_ids:
+                raise ValidationError("Runtime map contains an unknown feature analysis ID.")
+            if (
+                not _VALID_RUNTIME_HANDLE_RE.fullmatch(handle)
+                or handle
+                != build_protein_runtime_handle(
+                    feature_analysis_id=feature_key,
+                    record_instance_key=instance_key,
+                )
+                or handle in all_runtime_handles
+            ):
+                raise ValidationError(
+                    "Runtime handles must be deterministic and globally unique."
+                )
+            normalized_runtime_ids[feature_key] = handle
+            all_runtime_handles.add(handle)
+        if set(normalized_runtime_ids) != expected_feature_ids:
+            raise ValidationError(
+                f"Record instance {instance_key!r} runtime map does not match its protein set."
+            )
+
+        normalized_metadata: dict[str, dict[str, object]] = {}
+        for feature_id, metadata in feature_metadata.items():
+            feature_key = str(feature_id)
+            if feature_key not in expected_feature_ids or not isinstance(metadata, Mapping):
+                raise ValidationError(
+                    f"Record instance {instance_key!r} contains invalid feature metadata."
+                )
+            normalized_metadata[feature_key] = dict(metadata)
+        if set(normalized_metadata) != expected_feature_ids:
+            raise ValidationError(
+                f"Record instance {instance_key!r} metadata does not match its protein set."
+            )
+        expected_ordinals = _expected_export_ordinals(normalized_metadata)
+        for feature_id, expected_ordinal in expected_ordinals.items():
+            actual = normalized_metadata[feature_id].get("exportOrdinal")
+            if actual != expected_ordinal:
+                raise ValidationError(
+                    f"Record instance {instance_key!r} has a non-canonical export ordinal."
+                )
+
+        runtime_payload = _runtime_binding_payload(
+            protein_set_hash=protein_set_hash,
+            record_instance_key=instance_key,
+            runtime_ids=normalized_runtime_ids,
+        )
+        if _identity_sha256(runtime_payload) != runtime_binding_hash:
+            raise ValidationError(
+                f"Record instance {instance_key!r} runtime binding hash does not match."
+            )
+        display_payload = _display_binding_payload(
+            record_analysis_id=analysis_id,
+            record_source_id=str(record_analyses[analysis_id]["recordSourceId"]),
+            record_instance_key=instance_key,
+            feature_metadata=normalized_metadata,
+        )
+        if _identity_sha256(display_payload) != display_binding_hash:
+            raise ValidationError(
+                f"Record instance {instance_key!r} display binding hash does not match."
+            )
+
+        normalized_binding = dict(raw_binding)
+        normalized_binding["runtimeIds"] = dict(sorted(normalized_runtime_ids.items()))
+        normalized_binding["featureMetadata"] = dict(sorted(normalized_metadata.items()))
+        record_instances[instance_key] = normalized_binding
+
+    return ProteinIdentityManifest(
+        protein_sets=protein_sets,
+        record_analyses=record_analyses,
+        record_instances=record_instances,
     )
 
 
@@ -957,21 +1230,15 @@ def _protein_location_identity_key(protein: CdsProtein) -> tuple[object, ...]:
 
 
 def _same_location_sort_key(protein: CdsProtein) -> tuple[object, ...]:
-    source_identity = next(
-        (
-            _normalize_identity_text(value).strip()
-            for value in (protein.source_protein_id, protein.locus_tag, protein.gff_id)
-            if _normalize_identity_text(value).strip()
-        ),
-        "",
-    )
     aa_sha256 = hashlib.sha256(protein.sequence.encode("utf-8")).hexdigest()
+    # Display qualifiers are intentionally excluded; source position only breaks
+    # ties between otherwise identical same-location protein sequences.
     source_position = (
         int(protein.source_feature_position)
         if protein.source_feature_position is not None
         else int(protein.feature_index)
     )
-    return source_identity, aa_sha256, source_position
+    return aa_sha256, source_position
 
 
 def _protein_identity_core(protein: CdsProtein) -> dict[str, object]:
@@ -986,9 +1253,14 @@ def _protein_identity_core(protein: CdsProtein) -> dict[str, object]:
     }
 
 
-def _protein_binding_metadata(protein: CdsProtein) -> dict[str, object]:
+def _protein_binding_metadata(
+    protein: CdsProtein,
+    *,
+    export_ordinal: int | None,
+) -> dict[str, object]:
     return {
         "displayAlias": protein.display_alias,
+        "exportOrdinal": export_ordinal,
         "sourceFeaturePosition": protein.source_feature_position,
         "sourceProteinId": protein.source_protein_id,
         "locusTag": protein.locus_tag,
@@ -1065,7 +1337,8 @@ def extract_protein_identity_manifest(
     protein_map: dict[str, CdsProtein] = {}
     protein_set_hashes: list[str] = []
     record_analysis_ids: list[str] = []
-    binding_hashes: list[str] = []
+    runtime_binding_hashes: list[str] = []
+    display_binding_hashes: list[str] = []
     derived_mapping_hashes: list[str] = []
 
     for record_index, base_proteins in enumerate(base.proteins_by_record):
@@ -1150,64 +1423,93 @@ def extract_protein_identity_manifest(
         record_analyses.setdefault(record_analysis_id, record_analysis)
 
         instance_key = instance_keys[record_index]
-        transport_ids: dict[str, str] = {}
+        runtime_ids: dict[str, str] = {}
         for protein in sorted(
             identified,
             key=lambda item: str(item.feature_analysis_id),
         ):
             feature_id = str(protein.feature_analysis_id)
-            transport_ids[feature_id] = build_losat_transport_id(
-                record_source_id=record_source_id,
-                record_instance_id=instance_key,
-                display_alias=protein.display_alias,
+            runtime_ids[feature_id] = build_protein_runtime_handle(
                 feature_analysis_id=feature_id,
+                record_instance_key=instance_key,
             )
-        binding_payload = {
-            "recordInstanceKey": instance_key,
-            "recordAnalysisId": record_analysis_id,
-            "transportIds": transport_ids,
+
+        feature_ids_by_alias: dict[str, list[str]] = {}
+        for protein in identified:
+            feature_ids_by_alias.setdefault(
+                _normalize_identity_text(protein.display_alias).strip(),
+                [],
+            ).append(str(protein.feature_analysis_id))
+        export_ordinals: dict[str, int | None] = {}
+        for feature_ids in feature_ids_by_alias.values():
+            ordered_feature_ids = sorted(feature_ids)
+            for ordinal, feature_id in enumerate(ordered_feature_ids, start=1):
+                export_ordinals[feature_id] = (
+                    ordinal if len(ordered_feature_ids) > 1 else None
+                )
+
+        feature_metadata = {
+            str(protein.feature_analysis_id): _protein_binding_metadata(
+                protein,
+                export_ordinal=export_ordinals[str(protein.feature_analysis_id)],
+            )
+            for protein in identified
         }
-        binding_hash = _identity_sha256(binding_payload)
+        feature_metadata = dict(sorted(feature_metadata.items()))
+        runtime_binding_hash = _identity_sha256(
+            _runtime_binding_payload(
+                protein_set_hash=protein_set_hash,
+                record_instance_key=instance_key,
+                runtime_ids=runtime_ids,
+            )
+        )
+        display_binding_hash = _identity_sha256(
+            _display_binding_payload(
+                record_analysis_id=record_analysis_id,
+                record_source_id=record_source_id,
+                record_instance_key=instance_key,
+                feature_metadata=feature_metadata,
+            )
+        )
 
         bound: list[CdsProtein] = []
-        feature_metadata: dict[str, object] = {}
         for protein in identified:
             feature_id = str(protein.feature_analysis_id)
-            transport_id = transport_ids[feature_id]
+            runtime_handle = runtime_ids[feature_id]
             bound_protein = replace(
                 protein,
-                protein_id=transport_id,
-                transport_id=transport_id,
+                protein_id=runtime_handle,
+                runtime_handle=runtime_handle,
+                transport_id=runtime_handle,
                 record_instance_key=instance_key,
                 record_analysis_id=record_analysis_id,
                 protein_set_hash=protein_set_hash,
-                binding_hash=binding_hash,
+                runtime_binding_hash=runtime_binding_hash,
+                display_binding_hash=display_binding_hash,
+                binding_hash=runtime_binding_hash,
             )
-            if transport_id in protein_map:
-                raise ValidationError(f"Duplicate LOSAT transport ID {transport_id!r}.")
+            if runtime_handle in protein_map:
+                raise ValidationError(
+                    f"Duplicate protein runtime handle {runtime_handle!r}."
+                )
             bound.append(bound_protein)
-            protein_map[transport_id] = bound_protein
-            feature_metadata[feature_id] = _protein_binding_metadata(bound_protein)
-        feature_metadata = dict(sorted(feature_metadata.items()))
+            protein_map[runtime_handle] = bound_protein
 
         binding = {
-            "schema": 1,
+            "schema": 2,
             "recordAnalysisId": record_analysis_id,
-            "bindingHash": binding_hash,
-            "transportIds": transport_ids,
+            "runtimeBindingHash": runtime_binding_hash,
+            "displayBindingHash": display_binding_hash,
+            "runtimeIds": runtime_ids,
             "featureMetadata": feature_metadata,
         }
         record_instances[instance_key] = binding
-        derived_mapping_hash = _identity_sha256(
-            {
-                "bindingHash": binding_hash,
-                "featureMetadata": feature_metadata,
-            }
-        )
+        derived_mapping_hash = display_binding_hash
         proteins_by_record.append(bound)
         protein_set_hashes.append(protein_set_hash)
         record_analysis_ids.append(record_analysis_id)
-        binding_hashes.append(binding_hash)
+        runtime_binding_hashes.append(runtime_binding_hash)
+        display_binding_hashes.append(display_binding_hash)
         derived_mapping_hashes.append(derived_mapping_hash)
 
     manifest = validate_protein_identity_manifest(
@@ -1225,7 +1527,9 @@ def extract_protein_identity_manifest(
         record_instance_keys=tuple(instance_keys),
         protein_set_hashes=tuple(protein_set_hashes),
         record_analysis_ids=tuple(record_analysis_ids),
-        binding_hashes=tuple(binding_hashes),
+        runtime_binding_hashes=tuple(runtime_binding_hashes),
+        display_binding_hashes=tuple(display_binding_hashes),
+        binding_hashes=tuple(runtime_binding_hashes),
         derived_mapping_hashes=tuple(derived_mapping_hashes),
     )
 
@@ -1277,15 +1581,19 @@ def build_protein_losat_pair_identity(
         binding = authority.binding_for(instance_key)
         analysis_id = str(binding["recordAnalysisId"])
         analysis = authority.record_analyses[analysis_id]
-        return str(analysis["proteinSetHash"]), str(binding["bindingHash"])
+        return str(analysis["proteinSetHash"]), str(binding["runtimeBindingHash"])
 
-    query_set_hash, query_binding_hash = resolve(str(query_record_instance_key))
-    subject_set_hash, subject_binding_hash = resolve(str(subject_record_instance_key))
+    query_set_hash, query_runtime_binding_hash = resolve(
+        str(query_record_instance_key)
+    )
+    subject_set_hash, subject_runtime_binding_hash = resolve(
+        str(subject_record_instance_key)
+    )
     return ProteinLosatPairIdentity(
         query_protein_set_hash=query_set_hash,
         subject_protein_set_hash=subject_set_hash,
-        query_binding_hash=query_binding_hash,
-        subject_binding_hash=subject_binding_hash,
+        query_runtime_binding_hash=query_runtime_binding_hash,
+        subject_runtime_binding_hash=subject_runtime_binding_hash,
         query_record_instance_key=str(query_record_instance_key),
         subject_record_instance_key=str(subject_record_instance_key),
     )
@@ -1298,7 +1606,7 @@ def build_protein_losat_cache_key(
     program: str = "blastp",
     outfmt: str = "6",
 ) -> str:
-    """Return the Web-compatible directional schema-3 protein raw key."""
+    """Return the Web-compatible directional schema-4 protein raw key."""
 
     return _hash_text_sha256(
         _web_json_dumps(
@@ -1354,15 +1662,15 @@ def _parse_losat_fasta_sequences(fasta_text: str) -> dict[str, str]:
     return normalized
 
 
-def _binding_transport_ids(
+def _binding_runtime_ids(
     manifest: ProteinIdentityManifest,
     record_instance_key: str,
 ) -> set[str]:
     binding = manifest.binding_for(record_instance_key)
-    transport_ids = binding.get("transportIds")
-    if not isinstance(transport_ids, Mapping):
-        raise ValidationError("Protein record binding has no transport IDs.")
-    return {str(value) for value in transport_ids.values()}
+    runtime_ids = binding.get("runtimeIds")
+    if not isinstance(runtime_ids, Mapping):
+        raise ValidationError("Protein record binding has no runtime handles.")
+    return {str(value) for value in runtime_ids.values()}
 
 
 def _fasta_record_instance_key(
@@ -1373,7 +1681,7 @@ def _fasta_record_instance_key(
     fasta_ids = set(fasta_sequences)
     matches: list[str] = []
     for instance_key, binding in manifest.record_instances.items():
-        if fasta_ids != _binding_transport_ids(manifest, instance_key):
+        if fasta_ids != _binding_runtime_ids(manifest, instance_key):
             continue
         analysis = manifest.record_analyses[str(binding["recordAnalysisId"])]
         protein_set = manifest.protein_sets[str(analysis["proteinSetHash"])]
@@ -1381,13 +1689,13 @@ def _fasta_record_instance_key(
             str(protein["featureAnalysisId"]): str(protein["aaSha256"])
             for protein in protein_set["proteins"]  # type: ignore[index]
         }
-        transport_ids = binding["transportIds"]
-        if not isinstance(transport_ids, Mapping):
+        runtime_ids = binding["runtimeIds"]
+        if not isinstance(runtime_ids, Mapping):
             continue
         if all(
-            hashlib.sha256(fasta_sequences[str(transport_id)].encode("utf-8")).hexdigest()
+            hashlib.sha256(fasta_sequences[str(runtime_handle)].encode("utf-8")).hexdigest()
             == aa_by_feature_id[str(feature_id)]
-            for feature_id, transport_id in transport_ids.items()
+            for feature_id, runtime_handle in runtime_ids.items()
         ):
             matches.append(instance_key)
     if len(matches) != 1:
@@ -1423,7 +1731,7 @@ def raw_protein_tsv_matches_bindings(
 
 
 def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> bool:
-    """Discriminate a current schema-3 protein raw entry."""
+    """Discriminate a current schema-4 protein raw entry."""
 
     if not isinstance(entry, Mapping):
         return False
@@ -1431,8 +1739,8 @@ def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> bool:
         "key",
         "queryProteinSetHash",
         "subjectProteinSetHash",
-        "queryBindingHash",
-        "subjectBindingHash",
+        "queryRuntimeBindingHash",
+        "subjectRuntimeBindingHash",
         "queryRecordInstanceKey",
         "subjectRecordInstanceKey",
     )
@@ -1440,6 +1748,7 @@ def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> bool:
         entry.get("schema") == PROTEIN_LOSAT_CACHE_SCHEMA
         and entry.get("kind") == "raw-losat"
         and entry.get("identityKind") == "protein"
+        and entry.get("idEncoding") == "runtime-handle-v1"
         and str(entry.get("program") or "").lower() == "blastp"
         and isinstance(entry.get("text"), str)
         and all(isinstance(entry.get(key), str) and bool(entry.get(key)) for key in required_text)
@@ -1459,11 +1768,111 @@ def is_legacy_protein_losat_cache_entry(entry: Mapping[str, object] | object) ->
     )
 
 
+def is_v35_protein_losat_cache_entry(
+    entry: Mapping[str, object] | object,
+) -> bool:
+    """Discriminate a version-35 schema-3 protein raw entry."""
+
+    if not isinstance(entry, Mapping):
+        return False
+    required_text = (
+        "key",
+        "queryProteinSetHash",
+        "subjectProteinSetHash",
+        "queryBindingHash",
+        "subjectBindingHash",
+        "queryRecordInstanceKey",
+        "subjectRecordInstanceKey",
+    )
+    return (
+        entry.get("schema") == V35_PROTEIN_LOSAT_CACHE_SCHEMA
+        and entry.get("kind") == "raw-losat"
+        and entry.get("identityKind") == "protein"
+        and str(entry.get("program") or "").lower() == "blastp"
+        and isinstance(entry.get("text"), str)
+        and all(
+            isinstance(entry.get(key), str) and bool(entry.get(key))
+            for key in required_text
+        )
+    )
+
+
+def _v35_protein_losat_cache_key(entry: Mapping[str, object]) -> str:
+    payload = {
+        "cacheSchema": V35_PROTEIN_LOSAT_CACHE_SCHEMA,
+        "identityKind": "protein",
+        "program": str(entry.get("program") or "blastp"),
+        "outfmt": str(entry.get("outfmt") or "6"),
+        "args": [str(arg) for arg in entry.get("args") or ()],
+        "queryProteinSetHash": str(entry.get("queryProteinSetHash") or ""),
+        "subjectProteinSetHash": str(entry.get("subjectProteinSetHash") or ""),
+        "queryBindingHash": str(entry.get("queryBindingHash") or ""),
+        "subjectBindingHash": str(entry.get("subjectBindingHash") or ""),
+        "queryRecordInstanceKey": str(entry.get("queryRecordInstanceKey") or ""),
+        "subjectRecordInstanceKey": str(entry.get("subjectRecordInstanceKey") or ""),
+    }
+    return _hash_text_sha256(_web_json_dumps(payload))
+
+
+def _legacy_binding_transport_ids(
+    manifest: ProteinIdentityManifest,
+    record_instance_key: str,
+) -> set[str]:
+    binding = manifest.binding_for(record_instance_key)
+    transport_ids = binding.get("transportIds")
+    if not isinstance(transport_ids, Mapping):
+        raise ValidationError("Legacy protein record binding has no transport IDs.")
+    return {str(value) for value in transport_ids.values()}
+
+
+def validate_v35_protein_raw_entry_references(
+    entry: Mapping[str, object] | object,
+    manifest: Mapping[str, object],
+) -> bool:
+    """Validate a version-35 schema-3 entry against its schema-1 manifest."""
+
+    if not is_v35_protein_losat_cache_entry(entry):
+        return False
+    try:
+        authority = validate_legacy_protein_identity_manifest(manifest)
+        query_key = str(entry["queryRecordInstanceKey"])  # type: ignore[index]
+        subject_key = str(entry["subjectRecordInstanceKey"])  # type: ignore[index]
+        query_binding = authority.binding_for(query_key)
+        subject_binding = authority.binding_for(subject_key)
+        query_analysis = authority.record_analyses[
+            str(query_binding["recordAnalysisId"])
+        ]
+        subject_analysis = authority.record_analyses[
+            str(subject_binding["recordAnalysisId"])
+        ]
+        if (
+            str(entry["queryProteinSetHash"])  # type: ignore[index]
+            != str(query_analysis["proteinSetHash"])
+            or str(entry["subjectProteinSetHash"])  # type: ignore[index]
+            != str(subject_analysis["proteinSetHash"])
+            or str(entry["queryBindingHash"])  # type: ignore[index]
+            != str(query_binding["bindingHash"])
+            or str(entry["subjectBindingHash"])  # type: ignore[index]
+            != str(subject_binding["bindingHash"])
+            or not isinstance(entry.get("args"), list)  # type: ignore[union-attr]
+            or str(entry.get("key") or "")  # type: ignore[union-attr]
+            != _v35_protein_losat_cache_key(entry)  # type: ignore[arg-type]
+        ):
+            return False
+        return raw_protein_tsv_matches_bindings(
+            str(entry.get("text") or ""),  # type: ignore[union-attr]
+            query_ids=_legacy_binding_transport_ids(authority, query_key),
+            subject_ids=_legacy_binding_transport_ids(authority, subject_key),
+        )
+    except (KeyError, TypeError, ValueError, ValidationError):
+        return False
+
+
 def validate_protein_raw_entry_references(
     entry: Mapping[str, object] | object,
     manifest: ProteinIdentityManifest | Mapping[str, object],
 ) -> bool:
-    """Validate a schema-3 key, manifest references, and directional TSV IDs."""
+    """Validate a schema-4 key, manifest references, and directional TSV IDs."""
 
     if not is_protein_losat_cache_entry(entry):
         return False
@@ -1481,8 +1890,10 @@ def validate_protein_raw_entry_references(
         if (
             str(entry["queryProteinSetHash"]) != pair_identity.query_protein_set_hash  # type: ignore[index]
             or str(entry["subjectProteinSetHash"]) != pair_identity.subject_protein_set_hash  # type: ignore[index]
-            or str(entry["queryBindingHash"]) != pair_identity.query_binding_hash  # type: ignore[index]
-            or str(entry["subjectBindingHash"]) != pair_identity.subject_binding_hash  # type: ignore[index]
+            or str(entry["queryRuntimeBindingHash"])  # type: ignore[index]
+            != pair_identity.query_runtime_binding_hash
+            or str(entry["subjectRuntimeBindingHash"])  # type: ignore[index]
+            != pair_identity.subject_runtime_binding_hash
         ):
             return False
         args = entry.get("args")
@@ -1498,17 +1909,104 @@ def validate_protein_raw_entry_references(
             return False
         return raw_protein_tsv_matches_bindings(
             str(entry.get("text") or ""),
-            query_ids=_binding_transport_ids(
+            query_ids=_binding_runtime_ids(
                 authority,
                 pair_identity.query_record_instance_key,
             ),
-            subject_ids=_binding_transport_ids(
+            subject_ids=_binding_runtime_ids(
                 authority,
                 pair_identity.subject_record_instance_key,
             ),
         )
     except (KeyError, TypeError, ValueError, ValidationError):
         return False
+
+
+def build_protein_export_id_map(
+    manifest: ProteinIdentityManifest | Mapping[str, object],
+    record_instance_key: str,
+) -> dict[str, str]:
+    """Resolve runtime handles to deterministic user-visible export IDs."""
+
+    authority = (
+        manifest
+        if isinstance(manifest, ProteinIdentityManifest)
+        else validate_protein_identity_manifest(manifest)
+    )
+    binding = authority.binding_for(str(record_instance_key))
+    runtime_ids = binding.get("runtimeIds")
+    feature_metadata = binding.get("featureMetadata")
+    if not isinstance(runtime_ids, Mapping) or not isinstance(feature_metadata, Mapping):
+        raise ValidationError("Protein record binding cannot resolve export IDs.")
+
+    result: dict[str, str] = {}
+    for feature_id, runtime_handle in runtime_ids.items():
+        metadata = feature_metadata.get(feature_id)
+        if not isinstance(metadata, Mapping):
+            raise ValidationError("Protein export metadata is incomplete.")
+        alias = _normalize_identity_text(metadata.get("displayAlias")).strip()
+        if not alias:
+            raise ValidationError("Protein export alias is empty.")
+        export_id = percent_encode_losat_transport_field(alias)
+        ordinal = metadata.get("exportOrdinal")
+        if ordinal is not None:
+            if isinstance(ordinal, bool) or not isinstance(ordinal, int) or ordinal <= 0:
+                raise ValidationError("Protein export ordinal is invalid.")
+            export_id = f"{export_id}~{ordinal}"
+        handle = str(runtime_handle)
+        if handle in result:
+            raise ValidationError("Protein runtime handle has multiple export IDs.")
+        result[handle] = export_id
+    if len(set(result.values())) != len(result):
+        raise ValidationError("Protein export IDs are not unique within the record instance.")
+    return result
+
+
+def hydrate_protein_losat_tsv(
+    entry: Mapping[str, object],
+    manifest: ProteinIdentityManifest | Mapping[str, object],
+) -> str:
+    """Replace only QUERY/SUBJECT runtime handles for a raw TSV download."""
+
+    authority = (
+        manifest
+        if isinstance(manifest, ProteinIdentityManifest)
+        else validate_protein_identity_manifest(manifest)
+    )
+    if not validate_protein_raw_entry_references(entry, authority):
+        raise ValidationError(
+            "Protein raw LOSAT entry does not resolve through the current manifest."
+        )
+    query_ids = build_protein_export_id_map(
+        authority,
+        str(entry["queryRecordInstanceKey"]),
+    )
+    subject_ids = build_protein_export_id_map(
+        authority,
+        str(entry["subjectRecordInstanceKey"]),
+    )
+    hydrated: list[str] = []
+    for raw_line in str(entry.get("text") or "").splitlines(keepends=True):
+        body = raw_line.rstrip("\r\n")
+        ending = raw_line[len(body) :]
+        if not body.strip() or body.lstrip().startswith("#"):
+            hydrated.append(raw_line)
+            continue
+        columns = body.split("\t")
+        if len(columns) != len(COMPARISON_COLUMNS):
+            raise ValidationError("Protein LOSAT TSV must contain exactly 12 columns.")
+        try:
+            columns[0] = query_ids[columns[0]]
+            columns[1] = subject_ids[columns[1]]
+        except KeyError as exc:
+            raise ValidationError(
+                "Protein LOSAT TSV contains an unresolved or wrong-binding runtime handle."
+            ) from exc
+        hydrated.append("\t".join(columns) + ending)
+    result = "".join(hydrated)
+    if _RUNTIME_HANDLE_SEARCH_RE.search(result):
+        raise ValidationError("Protein LOSAT export still contains an internal runtime handle.")
+    return result
 
 
 def make_legacy_protein_raw_candidate(
@@ -1630,6 +2128,175 @@ def _legacy_fasta_and_id_map(
     return proteins_to_fasta(legacy), mapping
 
 
+def _legacy_reverse_record_lengths(
+    proteins: Sequence[CdsProtein],
+    references: set[str],
+) -> set[int]:
+    """Infer lengths that make references exact reverse-complement spans."""
+
+    lengths: set[int] = set()
+    for reference in references:
+        match = _LEGACY_WEB_PROTEIN_ID_RE.fullmatch(reference)
+        if match is None:  # Already validated by the caller.
+            continue
+        reference_start = int(match.group("start"))
+        reference_end = int(match.group("end"))
+        reference_strand = int(match.group("strand"))
+        reference_aa_sha12 = match.group("aa_sha12")
+        for protein in proteins:
+            protein_start = (
+                int(protein.feature_hash_start)
+                if protein.feature_hash_start is not None
+                else int(protein.start)
+            )
+            protein_end = (
+                int(protein.feature_hash_end)
+                if protein.feature_hash_end is not None
+                else int(protein.end)
+            )
+            identity_strand = (
+                protein.feature_hash_strand
+                if protein.feature_hash_strand is not None
+                else protein.strand
+            )
+            protein_strand = identity_strand if identity_strand in {-1, 1} else 0
+            reversed_strand = -protein_strand if protein_strand else 0
+            if (
+                reference_aa_sha12
+                != hashlib.sha256(protein.sequence.encode("utf-8")).hexdigest()[:12]
+                or reference_end - reference_start != protein_end - protein_start
+                or reference_strand != reversed_strand
+            ):
+                continue
+            length_from_start = reference_start + protein_end
+            length_from_end = reference_end + protein_start
+            if (
+                length_from_start == length_from_end
+                and length_from_start >= max(reference_end, protein_end)
+            ):
+                lengths.add(length_from_start)
+    return lengths
+
+
+def _legacy_reverse_id_map(
+    proteins: Sequence[CdsProtein],
+    record_token: str,
+    record_length: int,
+) -> dict[str, str]:
+    """Reconstruct IDs emitted for a legacy reverse-complemented record."""
+
+    reversed_proteins: list[CdsProtein] = []
+    for protein in reversed(proteins):
+        protein_start = (
+            int(protein.feature_hash_start)
+            if protein.feature_hash_start is not None
+            else int(protein.start)
+        )
+        protein_end = (
+            int(protein.feature_hash_end)
+            if protein.feature_hash_end is not None
+            else int(protein.end)
+        )
+        start = int(record_length) - protein_end
+        end = int(record_length) - protein_start
+        if start < 0 or end <= start:
+            return {}
+        identity_strand = (
+            protein.feature_hash_strand
+            if protein.feature_hash_strand is not None
+            else protein.strand
+        )
+        protein_strand = identity_strand if identity_strand in {-1, 1} else 0
+        reversed_proteins.append(
+            replace(
+                protein,
+                start=start,
+                end=end,
+                strand=-protein_strand if protein_strand else None,
+                feature_hash_start=start,
+                feature_hash_end=end,
+                feature_hash_strand=-protein_strand if protein_strand else None,
+            )
+        )
+    _, mapping = _legacy_fasta_and_id_map(reversed_proteins, record_token)
+    return mapping
+
+
+def build_legacy_protein_reference_map(
+    extraction: ProteinExtractionResult,
+    reference_ids: Sequence[str],
+) -> dict[str, str]:
+    """Resolve legacy ``p_r_`` artifact IDs through current protein identity."""
+
+    if extraction.identity_manifest is None:
+        raise ValidationError(
+            "Legacy protein reference migration requires an identity manifest."
+        )
+    references_by_token: dict[str, set[str]] = {}
+    for raw_reference in reference_ids:
+        reference = str(raw_reference)
+        match = _LEGACY_WEB_PROTEIN_ID_RE.fullmatch(reference)
+        if match is None:
+            raise ValidationError(
+                f"Unrecognized legacy protein reference {reference!r}."
+            )
+        references_by_token.setdefault(
+            match.group("record_token"), set()
+        ).add(reference)
+
+    resolved: dict[str, str] = {}
+    for record_token, references in references_by_token.items():
+        candidate_maps: list[dict[str, str]] = []
+        candidate_signatures: set[tuple[tuple[str, str], ...]] = set()
+        for proteins in extraction.proteins_by_record:
+            _, direct_map = _legacy_fasta_and_id_map(proteins, record_token)
+            unresolved = references.difference(direct_map)
+            combined_maps = [direct_map] if not unresolved else []
+            for record_length in _legacy_reverse_record_lengths(
+                proteins,
+                unresolved,
+            ):
+                reverse_map = _legacy_reverse_id_map(
+                    proteins,
+                    record_token,
+                    record_length,
+                )
+                if any(
+                    reference in direct_map
+                    and direct_map[reference] != runtime_handle
+                    for reference, runtime_handle in reverse_map.items()
+                ):
+                    continue
+                combined_maps.append({**direct_map, **reverse_map})
+            for candidate_map in combined_maps:
+                if not references.issubset(candidate_map):
+                    continue
+                projected_map = {
+                    reference: candidate_map[reference]
+                    for reference in references
+                }
+                signature = tuple(sorted(projected_map.items()))
+                if signature in candidate_signatures:
+                    continue
+                candidate_signatures.add(signature)
+                candidate_maps.append(projected_map)
+        if len(candidate_maps) != 1:
+            raise ValidationError(
+                f"Legacy protein record token {record_token!r} resolves to "
+                f"{len(candidate_maps)} current record instances."
+            )
+        candidate_map = candidate_maps[0]
+        for reference in references:
+            runtime_handle = candidate_map[reference]
+            previous = resolved.get(reference)
+            if previous is not None and previous != runtime_handle:
+                raise ValidationError(
+                    f"Legacy protein reference {reference!r} is ambiguous."
+                )
+            resolved[reference] = runtime_handle
+    return resolved
+
+
 def _rewrite_legacy_protein_tsv(
     text: str,
     query_id_map: Mapping[str, str],
@@ -1673,7 +2340,7 @@ def promote_legacy_protein_raw_cache_entries(
     expected_program: str = "blastp",
     expected_outfmt: str = "6",
 ) -> LegacyProteinRawCachePromotionScan:
-    """Find and verify a legacy pair, then return a schema-3 copy.
+    """Find and verify a legacy pair, then return a schema-4 copy.
 
     No input object is mutated. A failed candidate contributes a pair-local
     rejection diagnostic and never enters the current cache.
@@ -1752,8 +2419,8 @@ def promote_legacy_protein_raw_cache_entries(
                 query_id_map,
                 subject_id_map,
             )
-            query_ids = _binding_transport_ids(manifest, query_instance_key)
-            subject_ids = _binding_transport_ids(manifest, subject_instance_key)
+            query_ids = _binding_runtime_ids(manifest, query_instance_key)
+            subject_ids = _binding_runtime_ids(manifest, subject_instance_key)
             if not raw_protein_tsv_matches_bindings(
                 rewritten_tsv,
                 query_ids=query_ids,
@@ -1771,6 +2438,7 @@ def promote_legacy_protein_raw_cache_entries(
                 "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
                 "kind": "raw-losat",
                 "identityKind": "protein",
+                "idEncoding": "runtime-handle-v1",
                 "key": cache_key,
                 "filename": str(entry.get("filename") or ""),
                 "display": bool(entry.get("display")) if "display" in entry else False,
@@ -1780,13 +2448,13 @@ def promote_legacy_protein_raw_cache_entries(
                 "args": list(expected_arg_tuple),
                 "queryProteinSetHash": pair_identity.query_protein_set_hash,
                 "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
-                "queryBindingHash": pair_identity.query_binding_hash,
-                "subjectBindingHash": pair_identity.subject_binding_hash,
+                "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
+                "subjectRuntimeBindingHash": pair_identity.subject_runtime_binding_hash,
                 "queryRecordInstanceKey": pair_identity.query_record_instance_key,
                 "subjectRecordInstanceKey": pair_identity.subject_record_instance_key,
             }
             if not is_protein_losat_cache_entry(promoted):
-                raise ValidationError("Promoted schema-3 entry failed validation.")
+                raise ValidationError("Promoted schema-4 entry failed validation.")
             return LegacyProteinRawCachePromotionScan(
                 promotion=LegacyProteinRawCachePromotion(
                     candidate_index=candidate_index,
@@ -1811,8 +2479,185 @@ def promote_legacy_protein_raw_cache_entries(
     )
 
 
+def promote_v35_protein_raw_cache_entries(
+    entries: Sequence[Mapping[str, object]],
+    *,
+    source_manifest: Mapping[str, object],
+    identity_manifest: ProteinIdentityManifest | Mapping[str, object],
+    query_record_instance_key: str,
+    subject_record_instance_key: str,
+    expected_args: Sequence[str],
+    expected_program: str = "blastp",
+    expected_outfmt: str = "6",
+) -> V35ProteinRawCachePromotionScan:
+    """Verify and rewrite one version-35 raw pair into compact schema 4."""
+
+    legacy_authority = validate_legacy_protein_identity_manifest(source_manifest)
+    current_authority = (
+        identity_manifest
+        if isinstance(identity_manifest, ProteinIdentityManifest)
+        else validate_protein_identity_manifest(identity_manifest)
+    )
+    query_key = str(query_record_instance_key)
+    subject_key = str(subject_record_instance_key)
+    current_pair = build_protein_losat_pair_identity(
+        current_authority,
+        query_record_instance_key=query_key,
+        subject_record_instance_key=subject_key,
+    )
+    expected_arg_tuple = tuple(str(arg) for arg in expected_args)
+    rejections: list[LegacyProteinRawCacheRejection] = []
+
+    for candidate_index, candidate in enumerate(entries):
+        entry = _legacy_original_entry(candidate)
+        try:
+            if not is_v35_protein_losat_cache_entry(entry):
+                raise ValidationError(
+                    "Candidate is not a version-35 schema-3 protein raw entry."
+                )
+            if not validate_v35_protein_raw_entry_references(entry, source_manifest):
+                raise ValidationError(
+                    "Version-35 protein raw entry failed its source-manifest validation."
+                )
+            if (
+                str(entry.get("queryRecordInstanceKey") or "") != query_key
+                or str(entry.get("subjectRecordInstanceKey") or "") != subject_key
+            ):
+                raise ValidationError(
+                    "Version-35 candidate belongs to a different directional pair."
+                )
+            if str(entry.get("program") or "").lower() != str(expected_program).lower():
+                raise ValidationError("Version-35 program does not match.")
+            if str(entry.get("outfmt") or "") != str(expected_outfmt):
+                raise ValidationError("Version-35 outfmt does not match.")
+            raw_args = entry.get("args")
+            if (
+                not isinstance(raw_args, list)
+                or tuple(str(arg) for arg in raw_args) != expected_arg_tuple
+            ):
+                raise ValidationError("Version-35 search args do not match.")
+            if (
+                str(entry.get("queryProteinSetHash") or "")
+                != current_pair.query_protein_set_hash
+                or str(entry.get("subjectProteinSetHash") or "")
+                != current_pair.subject_protein_set_hash
+            ):
+                raise ValidationError(
+                    "Version-35 protein sets do not match the current extraction."
+                )
+
+            old_query_binding = legacy_authority.binding_for(query_key)
+            old_subject_binding = legacy_authority.binding_for(subject_key)
+            new_query_binding = current_authority.binding_for(query_key)
+            new_subject_binding = current_authority.binding_for(subject_key)
+            old_query_ids = old_query_binding.get("transportIds")
+            old_subject_ids = old_subject_binding.get("transportIds")
+            new_query_ids = new_query_binding.get("runtimeIds")
+            new_subject_ids = new_subject_binding.get("runtimeIds")
+            if not all(
+                isinstance(mapping, Mapping)
+                for mapping in (
+                    old_query_ids,
+                    old_subject_ids,
+                    new_query_ids,
+                    new_subject_ids,
+                )
+            ):
+                raise ValidationError("Version-35/current identity maps are incomplete.")
+            assert isinstance(old_query_ids, Mapping)
+            assert isinstance(old_subject_ids, Mapping)
+            assert isinstance(new_query_ids, Mapping)
+            assert isinstance(new_subject_ids, Mapping)
+            if (
+                set(old_query_ids) != set(new_query_ids)
+                or set(old_subject_ids) != set(new_subject_ids)
+            ):
+                raise ValidationError(
+                    "Version-35/current feature memberships do not match."
+                )
+            query_id_map = {
+                str(old_query_ids[feature_id]): str(new_query_ids[feature_id])
+                for feature_id in old_query_ids
+            }
+            subject_id_map = {
+                str(old_subject_ids[feature_id]): str(new_subject_ids[feature_id])
+                for feature_id in old_subject_ids
+            }
+            protein_id_map = dict(query_id_map)
+            for old_id, new_id in subject_id_map.items():
+                previous = protein_id_map.get(old_id)
+                if previous is not None and previous != new_id:
+                    raise ValidationError(
+                        "Version-35 protein ID resolves to multiple runtime handles."
+                    )
+                protein_id_map[old_id] = new_id
+            rewritten_tsv = _rewrite_legacy_protein_tsv(
+                str(entry.get("text") or ""),
+                query_id_map,
+                subject_id_map,
+            )
+            cache_key = build_protein_losat_cache_key(
+                current_pair,
+                args=expected_arg_tuple,
+                program=expected_program,
+                outfmt=expected_outfmt,
+            )
+            promoted: dict[str, object] = {
+                "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
+                "kind": "raw-losat",
+                "identityKind": "protein",
+                "idEncoding": "runtime-handle-v1",
+                "key": cache_key,
+                "filename": str(entry.get("filename") or ""),
+                "display": bool(entry.get("display"))
+                if "display" in entry
+                else False,
+                "text": rewritten_tsv,
+                "program": str(expected_program),
+                "outfmt": str(expected_outfmt),
+                "args": list(expected_arg_tuple),
+                "queryProteinSetHash": current_pair.query_protein_set_hash,
+                "subjectProteinSetHash": current_pair.subject_protein_set_hash,
+                "queryRuntimeBindingHash": (
+                    current_pair.query_runtime_binding_hash
+                ),
+                "subjectRuntimeBindingHash": (
+                    current_pair.subject_runtime_binding_hash
+                ),
+                "queryRecordInstanceKey": query_key,
+                "subjectRecordInstanceKey": subject_key,
+            }
+            if not validate_protein_raw_entry_references(
+                promoted,
+                current_authority,
+            ):
+                raise ValidationError(
+                    "Promoted version-35 schema-4 entry failed validation."
+                )
+            return V35ProteinRawCachePromotionScan(
+                promotion=V35ProteinRawCachePromotion(
+                    candidate_index=candidate_index,
+                    entry=promoted,
+                    rewritten_tsv=rewritten_tsv,
+                    protein_id_map=protein_id_map,
+                ),
+                rejections=tuple(rejections),
+            )
+        except (ParseError, ValidationError) as exc:
+            rejections.append(
+                LegacyProteinRawCacheRejection(
+                    candidate_index=candidate_index,
+                    reason=str(exc),
+                )
+            )
+    return V35ProteinRawCachePromotionScan(
+        promotion=None,
+        rejections=tuple(rejections),
+    )
+
+
 class LosatpCacheManager:
-    """Validated schema-3 protein raw-cache lookup and collection."""
+    """Validated schema-4 protein raw-cache lookup and collection."""
 
     def __init__(
         self,
@@ -1851,6 +2696,7 @@ class LosatpCacheManager:
                 "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
                 "kind": "raw-losat",
                 "identityKind": "protein",
+                "idEncoding": "runtime-handle-v1",
                 "key": key,
                 "filename": str(entry.get("filename") or ""),
                 "display": bool(entry.get("display")) if "display" in entry else False,
@@ -1860,8 +2706,12 @@ class LosatpCacheManager:
                 "args": [str(arg) for arg in entry.get("args") or ()],
                 "queryProteinSetHash": str(entry.get("queryProteinSetHash") or ""),
                 "subjectProteinSetHash": str(entry.get("subjectProteinSetHash") or ""),
-                "queryBindingHash": str(entry.get("queryBindingHash") or ""),
-                "subjectBindingHash": str(entry.get("subjectBindingHash") or ""),
+                "queryRuntimeBindingHash": str(
+                    entry.get("queryRuntimeBindingHash") or ""
+                ),
+                "subjectRuntimeBindingHash": str(
+                    entry.get("subjectRuntimeBindingHash") or ""
+                ),
                 "queryRecordInstanceKey": str(entry.get("queryRecordInstanceKey") or ""),
                 "subjectRecordInstanceKey": str(entry.get("subjectRecordInstanceKey") or ""),
             }
@@ -1947,7 +2797,9 @@ class LosatpCacheManager:
 
     def add_promoted_entry(self, entry: Mapping[str, object]) -> None:
         if not is_protein_losat_cache_entry(entry):
-            raise ValidationError("Only current schema-3 protein entries can be promoted into the cache.")
+            raise ValidationError(
+                "Only current schema-4 protein entries can be promoted into the cache."
+            )
         if self.identity_manifest is None or not validate_protein_raw_entry_references(
             entry,
             self.identity_manifest,
@@ -1963,7 +2815,7 @@ class LosatpCacheManager:
     ) -> ProteinLosatPairIdentity:
         if self.identity_manifest is None:
             raise ValidationError(
-                "Protein raw cache schema 3 requires a protein identity manifest."
+                "Protein raw cache schema 4 requires a protein identity manifest."
             )
         query_instance_key = _fasta_record_instance_key(query_fasta, self.identity_manifest)
         subject_instance_key = _fasta_record_instance_key(subject_fasta, self.identity_manifest)
@@ -1989,8 +2841,8 @@ class LosatpCacheManager:
         for payload_key, entry_key in (
             ("queryProteinSetHash", "queryProteinSetHash"),
             ("subjectProteinSetHash", "subjectProteinSetHash"),
-            ("queryBindingHash", "queryBindingHash"),
-            ("subjectBindingHash", "subjectBindingHash"),
+            ("queryRuntimeBindingHash", "queryRuntimeBindingHash"),
+            ("subjectRuntimeBindingHash", "subjectRuntimeBindingHash"),
             ("queryRecordInstanceKey", "queryRecordInstanceKey"),
             ("subjectRecordInstanceKey", "subjectRecordInstanceKey"),
         ):
@@ -2002,11 +2854,11 @@ class LosatpCacheManager:
             return None
         if tuple(str(arg) for arg in cached.get("args") or ()) != tuple(str(arg) for arg in args):
             return None
-        query_ids = _binding_transport_ids(
+        query_ids = _binding_runtime_ids(
             self.identity_manifest,
             pair_identity.query_record_instance_key,
         )
-        subject_ids = _binding_transport_ids(
+        subject_ids = _binding_runtime_ids(
             self.identity_manifest,
             pair_identity.subject_record_instance_key,
         )
@@ -2092,6 +2944,7 @@ class LosatpCacheManager:
                 "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
                 "kind": "raw-losat",
                 "identityKind": "protein",
+                "idEncoding": "runtime-handle-v1",
                 "key": cache_key,
                 "filename": filename if display else "",
                 "display": bool(display),
@@ -2101,18 +2954,18 @@ class LosatpCacheManager:
                 "args": [str(arg) for arg in args],
                 "queryProteinSetHash": pair_identity.query_protein_set_hash,
                 "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
-                "queryBindingHash": pair_identity.query_binding_hash,
-                "subjectBindingHash": pair_identity.subject_binding_hash,
+                "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
+                "subjectRuntimeBindingHash": pair_identity.subject_runtime_binding_hash,
                 "queryRecordInstanceKey": pair_identity.query_record_instance_key,
                 "subjectRecordInstanceKey": pair_identity.subject_record_instance_key,
             }
             if not raw_protein_tsv_matches_bindings(
                 str(entry["text"]),
-                query_ids=_binding_transport_ids(
+                query_ids=_binding_runtime_ids(
                     self.identity_manifest,  # type: ignore[arg-type]
                     pair_identity.query_record_instance_key,
                 ),
-                subject_ids=_binding_transport_ids(
+                subject_ids=_binding_runtime_ids(
                     self.identity_manifest,  # type: ignore[arg-type]
                     pair_identity.subject_record_instance_key,
                 ),
@@ -2577,9 +3430,30 @@ def _coerce_outfmt6_numeric_columns(df: DataFrame) -> DataFrame:
     coerced = df.copy()
     for column in _NUMERIC_COMPARISON_COLUMNS:
         coerced[column] = pd.to_numeric(coerced[column], errors="coerce")
-    if coerced[list(_NUMERIC_COMPARISON_COLUMNS)].isna().any(axis=None):
+    numeric = coerced[list(_NUMERIC_COMPARISON_COLUMNS)]
+    try:
+        all_finite = all(
+            math.isfinite(float(value)) for value in numeric.to_numpy().flat
+        )
+    except (TypeError, ValueError, OverflowError):
+        all_finite = False
+    if numeric.isna().any(axis=None) or not all_finite:
         raise ParseError("LOSATP blastp output contains non-numeric outfmt 6 fields.")
     return coerced
+
+
+def _is_strict_outfmt6_numeric_field(column: str, value: str) -> bool:
+    pattern = (
+        _STRICT_DECIMAL_INTEGER_RE
+        if column in _INTEGER_COMPARISON_COLUMNS
+        else _STRICT_DECIMAL_NUMBER_RE
+    )
+    if pattern.fullmatch(value) is None:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except ValueError:  # pragma: no cover - the grammar excludes float parse failures
+        return False
 
 
 def parse_losatp_outfmt6(text: str) -> DataFrame:
@@ -2592,6 +3466,17 @@ def parse_losatp_outfmt6(text: str) -> DataFrame:
     ]
     if not data_lines:
         return pd.DataFrame(columns=COMPARISON_COLUMNS)
+    for line in data_lines:
+        columns = line.split("\t")
+        if len(columns) != len(COMPARISON_COLUMNS):
+            raise ParseError("LOSATP blastp output does not match outfmt 6 columns.")
+        if any(
+            not _is_strict_outfmt6_numeric_field(column, columns[index])
+            for index, column in enumerate(COMPARISON_COLUMNS[2:], start=2)
+        ):
+            raise ParseError(
+                "LOSATP blastp output contains non-numeric outfmt 6 fields."
+            )
 
     try:
         df = pd.read_csv(
@@ -7834,6 +8719,7 @@ def build_protein_colinearity_comparisons(
 __all__ = [
     "CdsProtein",
     "LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA",
+    "LEGACY_PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "LEGACY_PROTEIN_RAW_CANDIDATE_SCHEMA",
     "LOSAT_CACHE_SCHEMA",
     "LOSATP_COMPARISON_COLUMNS",
@@ -7864,12 +8750,18 @@ __all__ = [
     "ProteinExtractionResult",
     "ProteinIdentityManifest",
     "ProteinLosatPairIdentity",
+    "V35ProteinRawCachePromotion",
+    "V35ProteinRawCachePromotionScan",
+    "V35_PROTEIN_LOSAT_CACHE_SCHEMA",
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
     "build_pair_evidence_index",
     "build_losat_transport_id",
+    "build_legacy_protein_reference_map",
+    "build_protein_export_id_map",
     "build_protein_losat_cache_key",
     "build_protein_losat_pair_identity",
+    "build_protein_runtime_handle",
     "build_web_losat_cache_key",
     "build_orthogroups_from_protein_hits",
     "build_pairwise_protein_blastp_comparisons",
@@ -7884,6 +8776,7 @@ __all__ = [
     "extract_protein_identity_manifest",
     "extract_web_stable_cds_proteins",
     "filter_protein_hits_by_thresholds",
+    "hydrate_protein_losat_tsv",
     "expand_orthogroup_membership_from_evidence",
     "normalize_orthogroup_membership_mode",
     "normalize_protein_blastp_mode",
@@ -7892,6 +8785,7 @@ __all__ = [
     "percent_encode_losat_transport_field",
     "proteins_to_fasta",
     "promote_legacy_protein_raw_cache_entries",
+    "promote_v35_protein_raw_cache_entries",
     "raw_protein_tsv_matches_bindings",
     "run_losatp_blastp",
     "select_protein_display_alias",
@@ -7902,8 +8796,11 @@ __all__ = [
     "select_top_hits_per_query",
     "is_legacy_protein_losat_cache_entry",
     "is_protein_losat_cache_entry",
+    "is_v35_protein_losat_cache_entry",
     "make_legacy_protein_raw_candidate",
     "validate_legacy_protein_raw_candidate_envelope",
+    "validate_legacy_protein_identity_manifest",
     "validate_protein_identity_manifest",
     "validate_protein_raw_entry_references",
+    "validate_v35_protein_raw_entry_references",
 ]

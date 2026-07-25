@@ -9,5 +9,35 @@
   "cacheHits": 25,
   "cacheMisses": 0,
   "uniqueJobs": 0,
-  "workerCalls": 0
+  "workerCalls": 0,
+  "v35": {
+    "sourcePath": "tests/fixtures/sessions/BGC0000708-BGC0000713.schema-v3.gbdraw-session.json.gz",
+    "sourceSha256": "cb0b5a3ca1cfa398785f180f2f8429ff4fcd0b47c1cc4fd3ff61626560dd91f0",
+    "sessionVersion": 35,
+    "renderRequestSchema": 3,
+    "rawSchema": 3,
+    "storedRawEntries": 25,
+    "totalPairs": 25,
+    "cacheHits": 25,
+    "cacheMisses": 0,
+    "uniqueJobs": 0,
+    "workerCalls": 0
+  },
+  "downloads": {
+    "pairIndex": 0,
+    "bulkEntryCount": 4,
+    "firstDataIds": [
+      "CAG38690.1",
+      "CAF33319.1"
+    ],
+    "forbiddenPatterns": [
+      "h_[a-z2-7]{26}",
+      "p_r_",
+      "f_[0-9a-f]{64}",
+      "@[^\\t\\r\\n|]+\\|[^\\t\\r\\n]+~f_[0-9a-f]{64}"
+    ],
+    "hydratedPromptThresholdBytes": 52428800,
+    "userUploadedTsv": "# café/遺伝子\r\nquery α\tsubject β\t99.0\t10\t0\t0\t1\t10\t1\t10\t1e-5\t42\r\n",
+    "userUploadedFilename": "user-uploaded-identity.tsv"
+  }
 }

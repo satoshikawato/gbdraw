@@ -219,6 +219,23 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(duplicateQuery.featureRows[0].subLabel === 'HPAVJP_0240', JSON.stringify(duplicateQuery.featureRows[0]));
         assert(!duplicateQuery.featureRows[0].subLabel.includes(' / HPAVJP_0240'), JSON.stringify(duplicateQuery.featureRows[0]));
 
+        const runtimeOnlyHandle = 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa';
+        const runtimeOnlyAttrs = new Map(Object.entries({{
+          'data-gbdraw-pairwise-match-id': 'comparison3_match5',
+          'data-match-kind': 'pairwise',
+          'data-query-record-id': 'record_runtime',
+          'data-qstart': '1',
+          'data-qend': '30',
+          'data-query-protein-id': runtimeOnlyHandle
+        }}));
+        const runtimeOnlyPayload = buildPairwiseMatchPayload({{
+          style: {{}},
+          getAttribute: (name) => runtimeOnlyAttrs.get(name) || ''
+        }}, {{ featureLookup: new Map() }});
+        const runtimeOnlyQuery = runtimeOnlyPayload.sections.find((section) => section.title === 'Query');
+        assert(runtimeOnlyQuery, JSON.stringify(runtimeOnlyPayload.sections));
+        assert(!JSON.stringify(runtimeOnlyQuery).includes(runtimeOnlyHandle), JSON.stringify(runtimeOnlyQuery));
+
         const blockOgSection = payload.sections.find((section) => section.title === 'Orthogroups covered');
         assert(rowValue(blockOgSection, 'Number of orthogroups covered') === '2', JSON.stringify(blockOgSection.rows));
         assert(payload.blockOrthogroupCount === 2, JSON.stringify(payload));

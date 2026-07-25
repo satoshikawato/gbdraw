@@ -29,18 +29,23 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 35
+CURRENT_SESSION_VERSION = 36
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 34, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 34, 35, CURRENT_SESSION_VERSION}
 )
-PROTEIN_LOSAT_CACHE_SCHEMA = 3
+PROTEIN_LOSAT_CACHE_SCHEMA = 4
+V35_PROTEIN_LOSAT_CACHE_SCHEMA = 3
 NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
-LOSAT_DERIVED_CACHE_SCHEMA = 2
+LOSAT_DERIVED_CACHE_SCHEMA = 3
+V35_LOSAT_DERIVED_CACHE_SCHEMA = 2
 LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1
-PROTEIN_IDENTITY_MANIFEST_SCHEMA = 1
+PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
+V35_PROTEIN_IDENTITY_MANIFEST_SCHEMA = 1
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
-SESSION_LOSAT_CACHE_BYTE_LIMIT = 109_051_904
+V35_PROTEIN_CANDIDATE_SCHEMA = 1
+FEATURE_CATALOG_SCHEMA = 1
+FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -48,6 +53,71 @@ JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _SLOT_PART_RE = re.compile(r"([^\[\]]+)|\[(\d+)\]")
+_RUNTIME_HANDLE_RE = re.compile(r"h_[a-z2-7]{26}")
+_FEATURE_ANALYSIS_ID_RE = re.compile(
+    r"(?<![A-Za-z0-9_])f_[0-9a-f]{64}(?![A-Za-z0-9_])"
+)
+_LEGACY_PROTEIN_REFERENCE_RE = re.compile(
+    r"(?<![A-Za-z0-9._%+-])"
+    r"p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}"
+    r"(?:_[2-9][0-9]*)?"
+    r"(?![A-Za-z0-9._%+-])"
+)
+_LONG_PROTEIN_TRANSPORT_ID_RE = re.compile(
+    r"(?<![A-Za-z0-9._%-])"
+    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+@"
+    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+\|"
+    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+~f_[0-9a-f]{64}"
+    r"(?![A-Za-z0-9._%-])"
+)
+_DERIVED_SCALAR_PROTEIN_REFERENCE_KEYS = frozenset(
+    {
+        "proteinId",
+        "queryProteinId",
+        "subjectProteinId",
+        "protein_id",
+        "query_protein_id",
+        "subject_protein_id",
+    }
+)
+_DERIVED_UNIT_PROTEIN_REFERENCE_KEYS = frozenset(
+    {
+        "queryUnitId",
+        "subjectUnitId",
+        "query_unit_id",
+        "subject_unit_id",
+    }
+)
+_DERIVED_ARRAY_PROTEIN_REFERENCE_KEYS = frozenset(
+    {
+        "proteinIds",
+        "sharedProteinIds",
+        "protein_ids",
+        "shared_protein_ids",
+    }
+)
+_DERIVED_COMPOUND_EDGE_REFERENCE_KEYS = frozenset(
+    {
+        "supportingEdge",
+        "supportingEdges",
+        "supporting_edge",
+        "supporting_edges",
+        "edgeId",
+        "edgeIds",
+        "edge_id",
+        "edge_ids",
+    }
+)
+_COMPOUND_SUPPORTING_EDGE_RE = re.compile(
+    rf"^(?P<query>{_RUNTIME_HANDLE_RE.pattern})->"
+    rf"(?P<subject>{_RUNTIME_HANDLE_RE.pattern}):"
+    r"[A-Za-z][A-Za-z0-9._-]*$"
+)
+_COMPOUND_PATH_EDGE_RE = re.compile(
+    rf"^[^:\s]+:\d+:(?P<query>{_RUNTIME_HANDLE_RE.pattern})->"
+    rf"\d+:(?P<subject>{_RUNTIME_HANDLE_RE.pattern}):"
+    r"[A-Za-z][A-Za-z0-9._-]*$"
+)
 
 
 @dataclass(frozen=True)
@@ -78,6 +148,385 @@ class SessionBuildContext:
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
 
 
+def _feature_catalog_key(feature: Mapping[str, Any]) -> tuple[int, str] | None:
+    record_index = feature.get("record_idx")
+    stable_id = (
+        feature.get("stable_svg_id")
+        or feature.get("stable_feature_id")
+        or feature.get("svg_id")
+    )
+    if (
+        not isinstance(record_index, int)
+        or isinstance(record_index, bool)
+        or not isinstance(stable_id, str)
+        or not stable_id
+    ):
+        return None
+    return record_index, stable_id
+
+
+def _json_values_equal(left: Any, right: Any) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, Mapping):
+        return (
+            left.keys() == right.keys()
+            and all(_json_values_equal(left[key], right[key]) for key in left)
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _json_values_equal(left_value, right_value)
+            for left_value, right_value in zip(left, right, strict=True)
+        )
+    return bool(left == right)
+
+
+def _first_feature_qualifier(
+    qualifiers: Mapping[str, Any],
+    key: str,
+) -> str:
+    values = qualifiers.get(key)
+    if not isinstance(values, list):
+        return ""
+    return next((value for value in values if value != ""), "")
+
+
+def _feature_qualifiers_are_strings(value: Any) -> bool:
+    return isinstance(value, Mapping) and all(
+        isinstance(key, str)
+        and isinstance(items, list)
+        and all(isinstance(item, str) for item in items)
+        for key, items in value.items()
+    )
+
+
+def _expand_compact_biological_feature(
+    feature: Mapping[str, Any],
+    *,
+    index: int,
+    profile: str,
+) -> dict[str, Any]:
+    expanded = copy.deepcopy(dict(feature))
+    qualifiers = expanded.get("qualifiers")
+    selector = expanded.get("selector")
+    if not isinstance(qualifiers, Mapping) or not isinstance(selector, Mapping):
+        raise ValidationError(
+            "Compact session biological features require qualifier and selector objects."
+        )
+    selector_qualifiers = selector.get("qualifiers")
+    if not _feature_qualifiers_are_strings(qualifiers) or (
+        "qualifiers" in selector
+        and not _feature_qualifiers_are_strings(selector_qualifiers)
+    ):
+        raise ValidationError(
+            "Compact session feature qualifiers must contain string arrays."
+        )
+    normalized_qualifiers = dict(qualifiers)
+    normalized_selector = dict(selector)
+    svg_id = expanded.get("svg_id")
+    if not isinstance(svg_id, str) or not svg_id:
+        raise ValidationError("Compact session biological features require svg_id.")
+
+    expanded.setdefault("id", f"f{index}")
+    expanded.setdefault("stable_svg_id", svg_id)
+    expanded.setdefault("stable_feature_id", svg_id)
+    for field in (
+        "protein_id",
+        "locus_tag",
+        "gene_id",
+        "old_locus_tag",
+        "gene",
+        "product",
+    ):
+        expanded.setdefault(
+            field,
+            _first_feature_qualifier(normalized_qualifiers, field),
+        )
+    expanded.setdefault("source_protein_id", expanded.get("protein_id", ""))
+    expanded.setdefault(
+        "note",
+        _first_feature_qualifier(normalized_qualifiers, "note")[:50],
+    )
+    expanded.setdefault("sequence_warnings", [])
+    normalized_selector.setdefault(
+        "qualifiers",
+        copy.deepcopy(normalized_qualifiers),
+    )
+    normalized_selector.setdefault("hash", svg_id)
+    expanded["selector"] = normalized_selector
+
+    if profile == "rich-v1":
+        translation = _first_feature_qualifier(
+            normalized_qualifiers,
+            "translation",
+        )
+        expanded.setdefault("amino_acid_sequence", translation)
+        if not isinstance(expanded.get("nucleotide_sequence"), str):
+            raise ValidationError(
+                "Compact rich biological features require nucleotide sequences."
+            )
+    elif profile != "sanitized-v1":
+        raise ValidationError(
+            f"Unsupported compact feature catalog profile: {profile!r}."
+        )
+    return expanded
+
+
+def _compact_biological_feature(
+    feature: Mapping[str, Any],
+    *,
+    index: int,
+    profile: str,
+) -> dict[str, Any] | None:
+    compact = copy.deepcopy(dict(feature))
+    qualifiers = compact.get("qualifiers")
+    selector = compact.get("selector")
+    if not isinstance(qualifiers, Mapping) or not isinstance(selector, Mapping):
+        return None
+    selector_qualifiers = selector.get("qualifiers")
+    if not _feature_qualifiers_are_strings(qualifiers) or (
+        "qualifiers" in selector
+        and not _feature_qualifiers_are_strings(selector_qualifiers)
+    ):
+        return None
+    svg_id = compact.get("svg_id")
+    if not isinstance(svg_id, str) or not svg_id:
+        return None
+
+    if compact.get("id") == f"f{index}":
+        compact.pop("id")
+    if compact.get("stable_svg_id") == svg_id:
+        compact.pop("stable_svg_id")
+    if compact.get("stable_feature_id") == svg_id:
+        compact.pop("stable_feature_id")
+    if (
+        "source_protein_id" in compact
+        and compact.get("source_protein_id") == compact.get("protein_id")
+    ):
+        compact.pop("source_protein_id")
+    if compact.get("sequence_warnings") == []:
+        compact.pop("sequence_warnings")
+
+    compact_selector = dict(selector)
+    if _json_values_equal(compact_selector.get("qualifiers"), qualifiers):
+        compact_selector.pop("qualifiers")
+    if compact_selector.get("hash") == svg_id:
+        compact_selector.pop("hash")
+    compact["selector"] = compact_selector
+
+    for field in (
+        "protein_id",
+        "locus_tag",
+        "gene_id",
+        "old_locus_tag",
+        "gene",
+        "product",
+    ):
+        if compact.get(field) == _first_feature_qualifier(qualifiers, field):
+            compact.pop(field)
+    if compact.get("note") == _first_feature_qualifier(qualifiers, "note")[:50]:
+        compact.pop("note")
+    if (
+        profile == "rich-v1"
+        and compact.get("amino_acid_sequence")
+        == _first_feature_qualifier(qualifiers, "translation")
+    ):
+        compact.pop("amino_acid_sequence")
+
+    try:
+        expanded = _expand_compact_biological_feature(
+            compact,
+            index=index,
+            profile=profile,
+        )
+    except ValidationError:
+        return None
+    return compact if _json_values_equal(expanded, dict(feature)) else None
+
+
+def _compact_feature_catalog(features: Mapping[str, Any]) -> Mapping[str, Any]:
+    if "featureCatalog" in features:
+        return features
+    extracted = features.get("extractedFeatures")
+    biological = features.get("biologicalFeatures")
+    if (
+        not isinstance(extracted, list)
+        or not extracted
+        or not isinstance(biological, list)
+        or not biological
+        or not all(isinstance(feature, Mapping) for feature in (*extracted, *biological))
+    ):
+        return features
+
+    has_rich_sequences = [
+        "nucleotide_sequence" in feature and "amino_acid_sequence" in feature
+        for feature in biological
+    ]
+    if all(has_rich_sequences):
+        profile = "rich-v1"
+    elif not any(
+        "nucleotide_sequence" in feature or "amino_acid_sequence" in feature
+        for feature in biological
+    ):
+        profile = "sanitized-v1"
+    else:
+        return features
+
+    biological_indexes: dict[tuple[int, str], int] = {}
+    for index, feature in enumerate(biological):
+        key = _feature_catalog_key(feature)
+        if key is None or key in biological_indexes:
+            return features
+        biological_indexes[key] = index
+
+    compact_biological: list[dict[str, Any]] = []
+    for index, feature in enumerate(biological):
+        compact = _compact_biological_feature(
+            feature,
+            index=index,
+            profile=profile,
+        )
+        if compact is None:
+            return features
+        compact_biological.append(compact)
+
+    references: list[list[Any]] = []
+    referenced_biological_indexes: set[int] = set()
+    for feature in extracted:
+        key = _feature_catalog_key(feature)
+        biological_index = biological_indexes.get(key) if key is not None else None
+        feature_id = feature.get("id")
+        if biological_index is None or not isinstance(feature_id, str):
+            return features
+        if biological_index in referenced_biological_indexes:
+            return features
+        referenced_biological_indexes.add(biological_index)
+        projected = copy.deepcopy(dict(biological[biological_index]))
+        projected.pop("feature_index", None)
+        projected["id"] = feature_id
+        rendered_id = feature.get("rendered_feature_svg_id")
+        reference: list[Any] = [biological_index, feature_id]
+        if isinstance(rendered_id, str):
+            projected["rendered_feature_svg_id"] = rendered_id
+            reference.append(rendered_id)
+        if not _json_values_equal(projected, dict(feature)):
+            return features
+        references.append(reference)
+
+    compact_features = dict(features)
+    compact_features.pop("extractedFeatures", None)
+    compact_features["biologicalFeatures"] = compact_biological
+    compact_features["featureCatalog"] = {
+        "schema": FEATURE_CATALOG_SCHEMA,
+        "encoding": FEATURE_CATALOG_ENCODING,
+        "profile": profile,
+        "extracted": references,
+    }
+    return compact_features
+
+
+def compact_session_feature_catalog(
+    session: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Return a disk projection that removes duplicated feature catalog data."""
+
+    if session.get("version") != CURRENT_SESSION_VERSION:
+        return session
+    features = session.get("features")
+    if not isinstance(features, Mapping):
+        return session
+    compact_features = _compact_feature_catalog(features)
+    if compact_features is features:
+        return session
+    compact_session = dict(session)
+    compact_session["features"] = compact_features
+    return compact_session
+
+
+def expand_session_feature_catalog(
+    session: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Expand a compact on-disk feature catalog to the stable in-memory shape."""
+
+    expanded_session = dict(session)
+    features = expanded_session.get("features")
+    if not isinstance(features, Mapping):
+        return expanded_session
+    if "featureCatalog" not in features:
+        return expanded_session
+    catalog = features.get("featureCatalog")
+    if (
+        not isinstance(catalog, Mapping)
+        or type(catalog.get("schema")) is not int
+        or catalog.get("schema") != FEATURE_CATALOG_SCHEMA
+        or catalog.get("encoding") != FEATURE_CATALOG_ENCODING
+        or catalog.get("profile") not in {"rich-v1", "sanitized-v1"}
+        or not isinstance(catalog.get("extracted"), list)
+        or "extractedFeatures" in features
+    ):
+        raise ValidationError("Invalid compact session feature catalog.")
+    biological = features.get("biologicalFeatures")
+    if not isinstance(biological, list) or not all(
+        isinstance(feature, Mapping) for feature in biological
+    ):
+        raise ValidationError(
+            "Compact session feature catalog requires biologicalFeatures."
+        )
+
+    references = catalog["extracted"]
+    if len(references) > len(biological):
+        raise ValidationError("Invalid compact extracted-feature reference.")
+    validated_references: list[tuple[int, str, str | None]] = []
+    referenced_biological_indexes: set[int] = set()
+    for reference in references:
+        if (
+            not isinstance(reference, list)
+            or len(reference) not in {2, 3}
+            or not isinstance(reference[0], int)
+            or isinstance(reference[0], bool)
+            or not 0 <= reference[0] < len(biological)
+            or not isinstance(reference[1], str)
+            or (len(reference) == 3 and not isinstance(reference[2], str))
+        ):
+            raise ValidationError("Invalid compact extracted-feature reference.")
+        biological_index = reference[0]
+        if biological_index in referenced_biological_indexes:
+            raise ValidationError("Invalid compact extracted-feature reference.")
+        referenced_biological_indexes.add(biological_index)
+        validated_references.append(
+            (
+                biological_index,
+                reference[1],
+                reference[2] if len(reference) == 3 else None,
+            )
+        )
+
+    profile = str(catalog["profile"])
+    expanded_biological = [
+        _expand_compact_biological_feature(
+            feature,
+            index=index,
+            profile=profile,
+        )
+        for index, feature in enumerate(biological)
+    ]
+    expanded_extracted: list[dict[str, Any]] = []
+    for biological_index, feature_id, rendered_id in validated_references:
+        projected = copy.deepcopy(expanded_biological[biological_index])
+        projected.pop("feature_index", None)
+        projected["id"] = feature_id
+        if rendered_id is not None:
+            projected["rendered_feature_svg_id"] = rendered_id
+        expanded_extracted.append(projected)
+
+    expanded_features = dict(features)
+    expanded_features.pop("featureCatalog", None)
+    expanded_features["biologicalFeatures"] = expanded_biological
+    expanded_features["extractedFeatures"] = expanded_extracted
+    expanded_session["features"] = expanded_features
+    return expanded_session
+
+
 def load_session(path: str | Path) -> dict[str, Any]:
     """Load and validate a plain or gzip-compressed gbdraw GUI session JSON file."""
 
@@ -93,6 +542,7 @@ def load_session(path: str | Path) -> dict[str, Any]:
         raise ValidationError(f"Could not read session file: {session_path}") from exc
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
+    payload = expand_session_feature_catalog(payload)
     validate_session(payload)
     return payload
 
@@ -144,7 +594,9 @@ def validate_session(session: Mapping[str, Any]) -> None:
         files = session.get("files")
         if files is None or not isinstance(files, Mapping):
             raise ValidationError("Session files are required for CLI regeneration.")
-    if version == CURRENT_SESSION_VERSION:
+    if version == 35:
+        validate_v35_session_artifacts(session)
+    elif version == CURRENT_SESSION_VERSION:
         validate_current_session_artifacts(session)
 
 
@@ -174,10 +626,13 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
     from .analysis.protein_colinearity import (
         is_legacy_protein_losat_cache_entry,
         is_protein_losat_cache_entry,
+        is_v35_protein_losat_cache_entry,
     )
 
     if is_protein_losat_cache_entry(entry):
         return "protein-current"
+    if is_v35_protein_losat_cache_entry(entry):
+        return "protein-v35"
     if is_legacy_protein_losat_cache_entry(entry):
         return "protein-legacy"
     if (
@@ -189,91 +644,92 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
     return "invalid"
 
 
-def _compact_json_byte_length(value: object) -> int:
-    return len(
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    )
-
-
-def serialized_losat_artifact_byte_length(
-    raw_entries: Sequence[Mapping[str, Any]],
-    derived_entries: Sequence[Mapping[str, Any]],
-) -> int:
-    """Return compact UTF-8 bytes for both cache entry envelopes."""
-
-    return (
-        28
-        + sum(_compact_json_byte_length(entry) for entry in raw_entries)
-        + sum(_compact_json_byte_length(entry) for entry in derived_entries)
-        + max(0, len(raw_entries) - 1)
-        + max(0, len(derived_entries) - 1)
-    )
-
-
-def prune_serialized_losat_artifacts(
-    raw_entries: Sequence[Mapping[str, Any]],
-    derived_entries: Sequence[Mapping[str, Any]],
-    *,
-    max_bytes: int = SESSION_LOSAT_CACHE_BYTE_LIMIT,
-) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]]]:
-    """Bound current raw/derived cache artifacts by compact UTF-8 JSON size."""
-
-    raw = list(raw_entries)
-    derived = list(derived_entries)
-    limit = max(28, int(max_bytes))
-    raw_sizes = [_compact_json_byte_length(entry) for entry in raw]
-    derived_sizes = [_compact_json_byte_length(entry) for entry in derived]
-    selected_raw: set[int] = set()
-    selected_derived: set[int] = set()
-    serialized_bytes = 28
-
-    def add_entry(index: int, sizes: list[int], selected: set[int]) -> bool:
-        nonlocal serialized_bytes
-        if index in selected:
-            return True
-        entry_bytes = sizes[index] + (1 if selected else 0)
-        if serialized_bytes + entry_bytes > limit:
-            return False
-        selected.add(index)
-        serialized_bytes += entry_bytes
-        return True
-
-    reserved_raw_index = len(raw) - 1
-    if reserved_raw_index >= 0:
-        add_entry(reserved_raw_index, raw_sizes, selected_raw)
-
-    for index in range(len(derived) - 1, -1, -1):
-        add_entry(index, derived_sizes, selected_derived)
-
-    for index in range(len(raw) - 1, -1, -1):
-        add_entry(index, raw_sizes, selected_raw)
-
-    return (
-        [entry for index, entry in enumerate(raw) if index in selected_raw],
-        [
-            entry
-            for index, entry in enumerate(derived)
-            if index in selected_derived
-        ],
-    )
-
-
-def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
-    """Validate version-35 cache, manifest, and legacy artifact boundaries."""
+def validate_v35_session_artifacts(session: Mapping[str, Any]) -> None:
+    """Validate version-35 artifacts before lossless quarantine."""
 
     cache_entries = _artifact_entries(session, "losatCache")
     protein_entries: list[Mapping[str, Any]] = []
     seen_cache_keys: set[str] = set()
     for index, entry in enumerate(cache_entries):
         classification = classify_raw_losat_cache_entry(entry)
-        if classification == "protein-legacy":
+        if classification not in {"protein-v35", "nucleotide-current"}:
             raise ValidationError(
-                "Session version 35 cannot store schema-2 protein entries in losatCache; "
-                "use legacyArtifacts.proteinRawCandidates."
+                "Session version 35 contains an invalid raw LOSAT cache entry at "
+                f"losatCache.entries[{index}]."
+            )
+        assert isinstance(entry, Mapping)
+        key = entry.get("key")
+        if not isinstance(key, str) or not key:
+            raise ValidationError(
+                f"LOSAT cache entry at losatCache.entries[{index}] requires a key."
+            )
+        if key in seen_cache_keys:
+            raise ValidationError(f"Duplicate LOSAT cache key: {key!r}.")
+        seen_cache_keys.add(key)
+        if classification == "protein-v35":
+            protein_entries.append(entry)
+
+    derived_entries = _artifact_entries(session, "losatDerivedCache")
+    seen_derived_keys: set[str] = set()
+    for index, entry in enumerate(derived_entries):
+        if not _is_derived_cache_entry(
+            entry, schema=V35_LOSAT_DERIVED_CACHE_SCHEMA
+        ):
+            raise ValidationError(
+                "Invalid version-35 derived LOSATP cache entry at "
+                f"losatDerivedCache.entries[{index}]."
+            )
+        assert isinstance(entry, Mapping)
+        key = str(entry["key"])
+        if key in seen_derived_keys:
+            raise ValidationError(f"Duplicate derived LOSATP cache key: {key!r}.")
+        seen_derived_keys.add(key)
+
+    manifest = session.get("proteinIdentityManifest")
+    if manifest is not None and not _is_valid_v35_protein_identity_manifest(manifest):
+        raise ValidationError("Invalid proteinIdentityManifest schema-1 artifact.")
+    if protein_entries and manifest is None:
+        raise ValidationError(
+            "Version-35 protein LOSATP cache entries require proteinIdentityManifest."
+        )
+    if protein_entries:
+        assert isinstance(manifest, Mapping)
+        from .analysis.protein_colinearity import (
+            validate_v35_protein_raw_entry_references,
+        )
+
+        for index, entry in enumerate(protein_entries):
+            if not validate_v35_protein_raw_entry_references(entry, manifest):
+                raise ValidationError(
+                    "Version-35 protein LOSATP cache entry does not resolve through "
+                    f"its manifest: losatCache.entries[{index}]."
+                )
+
+    legacy_artifacts = session.get("legacyArtifacts")
+    if legacy_artifacts is None:
+        return
+    if not isinstance(legacy_artifacts, Mapping):
+        raise ValidationError("Session legacyArtifacts must be an object when present.")
+    candidates = legacy_artifacts.get("proteinRawCandidates")
+    if candidates is not None:
+        _validate_legacy_protein_candidate_envelope(candidates)
+    derived_evidence = legacy_artifacts.get("proteinDerivedEvidence")
+    if derived_evidence is not None:
+        _validate_legacy_derived_evidence(derived_evidence)
+
+
+def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
+    """Validate version-36 cache, manifest, and legacy artifact boundaries."""
+
+    cache_entries = _artifact_entries(session, "losatCache")
+    protein_entries: list[Mapping[str, Any]] = []
+    seen_cache_keys: set[str] = set()
+    for index, entry in enumerate(cache_entries):
+        classification = classify_raw_losat_cache_entry(entry)
+        if classification in {"protein-legacy", "protein-v35"}:
+            raise ValidationError(
+                "Session version 36 cannot store legacy protein entries in losatCache; "
+                "use the matching legacyArtifacts candidate envelope."
             )
         if classification == "invalid":
             raise ValidationError(
@@ -294,7 +750,7 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     derived_entries = _artifact_entries(session, "losatDerivedCache")
     seen_derived_keys: set[str] = set()
     for index, entry in enumerate(derived_entries):
-        if not _is_derived_cache_entry(entry, schema=LOSAT_DERIVED_CACHE_SCHEMA):
+        if not _is_current_derived_cache_entry(entry):
             raise ValidationError(
                 "Invalid current derived LOSATP cache entry at "
                 f"losatDerivedCache.entries[{index}]."
@@ -307,7 +763,7 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
 
     manifest = session.get("proteinIdentityManifest")
     if manifest is not None and not _is_valid_protein_identity_manifest(manifest):
-        raise ValidationError("Invalid proteinIdentityManifest schema-1 artifact.")
+        raise ValidationError("Invalid proteinIdentityManifest schema-2 artifact.")
     if protein_entries and manifest is None:
         raise ValidationError(
             "Current protein LOSATP cache entries require proteinIdentityManifest."
@@ -320,6 +776,13 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
                     "Protein LOSATP cache entry does not resolve through the manifest: "
                     f"losatCache.entries[{index}]."
                 )
+    if derived_entries:
+        if manifest is None or not _derived_entries_match_manifest(
+            derived_entries, manifest
+        ):
+            raise ValidationError(
+                "Current derived LOSATP cache contains unresolved protein references."
+            )
 
     legacy_artifacts = session.get("legacyArtifacts")
     if legacy_artifacts is None:
@@ -329,9 +792,15 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     candidates = legacy_artifacts.get("proteinRawCandidates")
     if candidates is not None:
         _validate_legacy_protein_candidate_envelope(candidates)
+    v35_candidates = legacy_artifacts.get("proteinRawV35Candidates")
+    if v35_candidates is not None:
+        _validate_v35_protein_candidate_envelope(v35_candidates)
     derived_evidence = legacy_artifacts.get("proteinDerivedEvidence")
     if derived_evidence is not None:
         _validate_legacy_derived_evidence(derived_evidence)
+    v35_derived_evidence = legacy_artifacts.get("proteinDerivedV35Evidence")
+    if v35_derived_evidence is not None:
+        _validate_v35_derived_evidence(v35_derived_evidence)
 
 
 def normalize_current_session_artifacts(
@@ -341,13 +810,31 @@ def normalize_current_session_artifacts(
     losat_derived_cache_entries: Sequence[Mapping[str, Any]] | None = None,
     protein_identity_manifest: Mapping[str, Any] | None = None,
     legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] | None = None,
+    legacy_protein_raw_v35_candidates: Mapping[str, Any] | None = None,
     legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
+    legacy_protein_derived_v35_evidence: Sequence[Mapping[str, Any]] | None = None,
 ) -> None:
     """Normalize artifacts in-place for a current session writer.
 
-    Legacy protein raw entries and derived schema-1 evidence are kept outside
-    the current cache maps so a save-before-generate round trip is lossless.
+    Legacy protein artifacts are kept outside the current cache maps so a
+    save-before-generate round trip is lossless.
     """
+
+    source_manifest = (
+        protein_identity_manifest
+        if protein_identity_manifest is not None
+        else session.get("proteinIdentityManifest")
+    )
+    source_v35_manifest: Mapping[str, Any] | None = None
+    if source_manifest is None:
+        current_manifest = empty_protein_identity_manifest()
+    elif _is_valid_protein_identity_manifest(source_manifest):
+        current_manifest = _json_clone(source_manifest)
+    elif _is_valid_v35_protein_identity_manifest(source_manifest):
+        source_v35_manifest = source_manifest
+        current_manifest = empty_protein_identity_manifest()
+    else:
+        raise ValidationError("Cannot write an invalid proteinIdentityManifest.")
 
     source_raw_entries = (
         list(losat_cache_entries)
@@ -356,10 +843,13 @@ def normalize_current_session_artifacts(
     )
     current_raw_entries: list[dict[str, Any]] = []
     imported_legacy_entries: list[dict[str, Any]] = []
+    imported_v35_entries: list[dict[str, Any]] = []
     for index, entry in enumerate(source_raw_entries):
         classification = classify_raw_losat_cache_entry(entry)
         if classification in {"protein-current", "nucleotide-current"}:
             current_raw_entries.append(_json_clone(entry))
+        elif classification == "protein-v35":
+            imported_v35_entries.append(_json_clone(entry))
         elif classification == "protein-legacy":
             imported_legacy_entries.append(_json_clone(entry))
         else:
@@ -373,9 +863,14 @@ def normalize_current_session_artifacts(
     )
     current_derived_entries: list[dict[str, Any]] = []
     imported_derived_evidence: list[dict[str, Any]] = []
+    imported_v35_derived_evidence: list[dict[str, Any]] = []
     for index, entry in enumerate(source_derived_entries):
-        if _is_derived_cache_entry(entry, schema=LOSAT_DERIVED_CACHE_SCHEMA):
+        if _is_current_derived_cache_entry(entry):
             current_derived_entries.append(_json_clone(entry))
+        elif _is_derived_cache_entry(
+            entry, schema=V35_LOSAT_DERIVED_CACHE_SCHEMA
+        ):
+            imported_v35_derived_evidence.append(_json_clone(entry))
         elif _is_derived_cache_entry(
             entry, schema=LEGACY_LOSAT_DERIVED_CACHE_SCHEMA
         ):
@@ -384,24 +879,9 @@ def normalize_current_session_artifacts(
             raise ValidationError(
                 f"Cannot write invalid derived LOSATP cache entry at index {index}."
             )
-    current_raw_entries, current_derived_entries = prune_serialized_losat_artifacts(
-        current_raw_entries,
-        current_derived_entries,
-    )
     session["losatCache"] = {"entries": current_raw_entries}
     session["losatDerivedCache"] = {"entries": current_derived_entries}
-
-    source_manifest = (
-        protein_identity_manifest
-        if protein_identity_manifest is not None
-        else session.get("proteinIdentityManifest")
-    )
-    if source_manifest is None:
-        session["proteinIdentityManifest"] = empty_protein_identity_manifest()
-    elif _is_valid_protein_identity_manifest(source_manifest):
-        session["proteinIdentityManifest"] = _json_clone(source_manifest)
-    else:
-        raise ValidationError("Cannot write an invalid proteinIdentityManifest.")
+    session["proteinIdentityManifest"] = current_manifest
 
     existing_legacy = session.get("legacyArtifacts")
     normalized_legacy = (
@@ -430,6 +910,53 @@ def normalize_current_session_artifacts(
     else:
         normalized_legacy.pop("proteinRawCandidates", None)
 
+    existing_v35_candidates = normalized_legacy.get("proteinRawV35Candidates")
+    if legacy_protein_raw_v35_candidates is not None:
+        v35_source_manifest, v35_candidate_entries = _v35_candidate_parts(
+            legacy_protein_raw_v35_candidates
+        )
+    elif existing_v35_candidates is not None:
+        v35_source_manifest, v35_candidate_entries = _v35_candidate_parts(
+            existing_v35_candidates
+        )
+    else:
+        v35_source_manifest, v35_candidate_entries = None, []
+    if source_v35_manifest is not None:
+        if (
+            v35_source_manifest is not None
+            and v35_source_manifest != source_v35_manifest
+        ):
+            raise ValidationError(
+                "Version-35 protein candidates cannot combine different source manifests."
+            )
+        v35_source_manifest = source_v35_manifest
+    if imported_v35_entries:
+        if v35_source_manifest is None:
+            raise ValidationError(
+                "Version-35 protein raw entries require their schema-1 source manifest."
+            )
+        v35_candidate_entries.extend(
+            {
+                "state": "pending",
+                "originalEntry": entry,
+                "rejectionReason": None,
+            }
+            for entry in imported_v35_entries
+        )
+    serializable_v35_candidates = _normalize_v35_candidate_entries(
+        v35_candidate_entries,
+        source_manifest=v35_source_manifest,
+    )
+    if v35_source_manifest is not None:
+        assert v35_source_manifest is not None
+        normalized_legacy["proteinRawV35Candidates"] = {
+            "schema": V35_PROTEIN_CANDIDATE_SCHEMA,
+            "sourceManifest": _json_clone(v35_source_manifest),
+            "entries": serializable_v35_candidates,
+        }
+    else:
+        normalized_legacy.pop("proteinRawV35Candidates", None)
+
     existing_evidence = normalized_legacy.get("proteinDerivedEvidence")
     evidence_entries = (
         list(legacy_protein_derived_evidence)
@@ -445,6 +972,22 @@ def normalize_current_session_artifacts(
         }
     else:
         normalized_legacy.pop("proteinDerivedEvidence", None)
+
+    existing_v35_evidence = normalized_legacy.get("proteinDerivedV35Evidence")
+    v35_evidence_entries = (
+        list(legacy_protein_derived_v35_evidence)
+        if legacy_protein_derived_v35_evidence is not None
+        else _v35_derived_entries(existing_v35_evidence)
+    )
+    v35_evidence_entries.extend(imported_v35_derived_evidence)
+    normalized_v35_evidence = _normalize_v35_derived_entries(v35_evidence_entries)
+    if normalized_v35_evidence:
+        normalized_legacy["proteinDerivedV35Evidence"] = {
+            "schema": 1,
+            "entries": normalized_v35_evidence,
+        }
+    else:
+        normalized_legacy.pop("proteinDerivedV35Evidence", None)
 
     if normalized_legacy:
         session["legacyArtifacts"] = normalized_legacy
@@ -476,6 +1019,14 @@ def _is_derived_cache_entry(entry: object, *, schema: int) -> bool:
     )
 
 
+def _is_current_derived_cache_entry(entry: object) -> bool:
+    return (
+        _is_derived_cache_entry(entry, schema=LOSAT_DERIVED_CACHE_SCHEMA)
+        and isinstance(entry, Mapping)
+        and entry.get("idEncoding") == "runtime-handle-v1"
+    )
+
+
 def _is_valid_protein_identity_manifest(manifest: object) -> bool:
     if not isinstance(manifest, Mapping):
         return False
@@ -489,6 +1040,248 @@ def _is_valid_protein_identity_manifest(manifest: object) -> bool:
         validate_protein_identity_manifest(manifest)
     except (ImportError, ValidationError, TypeError, ValueError):
         return False
+    return True
+
+
+def _is_valid_v35_protein_identity_manifest(manifest: object) -> bool:
+    if not isinstance(manifest, Mapping):
+        return False
+    try:
+        from .analysis.protein_colinearity import (
+            validate_legacy_protein_identity_manifest,
+        )
+
+        validate_legacy_protein_identity_manifest(manifest)
+    except (ImportError, ValidationError, TypeError, ValueError):
+        return False
+    return True
+
+
+def _is_nonnegative_integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _is_strict_empty_derived_result(entry: Mapping[str, Any]) -> bool:
+    mode = entry.get("mode")
+    if mode not in {"orthogroup", "collinear"}:
+        return False
+    payload = entry.get("payload")
+    if not isinstance(payload, Mapping):
+        return False
+
+    allowed_keys = {"identity", "pairs", "orthogroups"}
+    if mode == "collinear":
+        allowed_keys.update(
+            {
+                "collinearGroups",
+                "collinearGroupScope",
+                "collinearityBlocks",
+            }
+        )
+    if not set(payload).issubset(allowed_keys):
+        return False
+
+    if "identity" in payload:
+        identity = payload["identity"]
+        if (
+            not isinstance(identity, Mapping)
+            or identity.get("cacheSchema") != LOSAT_DERIVED_CACHE_SCHEMA
+            or identity.get("idEncoding") != "runtime-handle-v1"
+            or identity.get("mode") != mode
+        ):
+            return False
+        raw_cache_keys = identity.get("rawCacheKeys")
+        if not isinstance(raw_cache_keys, list) or not all(
+            isinstance(key, str) and bool(key) for key in raw_cache_keys
+        ):
+            return False
+
+    pairs = payload.get("pairs")
+    orthogroups = payload.get("orthogroups")
+    if not isinstance(pairs, list) or not pairs or orthogroups != []:
+        return False
+    pair_indices: set[int] = set()
+    for pair in pairs:
+        if not isinstance(pair, Mapping) or set(pair).difference(
+            {
+                "pair_index",
+                "query_index",
+                "subject_index",
+                "tsv",
+                "rows",
+                "hit_count",
+            }
+        ):
+            return False
+        pair_index = pair.get("pair_index")
+        if (
+            not _is_nonnegative_integer(pair_index)
+            or pair_index in pair_indices
+            or pair.get("tsv") != ""
+            or pair.get("rows") != []
+            or not _is_nonnegative_integer(pair.get("hit_count"))
+            or pair.get("hit_count") != 0
+        ):
+            return False
+        pair_indices.add(pair_index)
+        has_query_index = "query_index" in pair
+        has_subject_index = "subject_index" in pair
+        if has_query_index != has_subject_index:
+            return False
+        if has_query_index and (
+            not _is_nonnegative_integer(pair.get("query_index"))
+            or not _is_nonnegative_integer(pair.get("subject_index"))
+        ):
+            return False
+
+    if mode == "collinear":
+        for collection_key in ("collinearGroups", "collinearityBlocks"):
+            if collection_key in payload and payload[collection_key] != []:
+                return False
+        if (
+            "collinearGroupScope" in payload
+            and payload["collinearGroupScope"]
+            not in {"adjacent_local", "global_collinear"}
+        ):
+            return False
+    return True
+
+
+def _derived_entries_match_manifest(
+    entries: Sequence[Mapping[str, Any]],
+    manifest: Mapping[str, Any],
+) -> bool:
+    try:
+        from .analysis.protein_colinearity import (
+            validate_protein_identity_manifest,
+        )
+
+        authority = validate_protein_identity_manifest(manifest)
+    except (ImportError, ValidationError, TypeError, ValueError):
+        return False
+
+    runtime_handles = {
+        str(handle)
+        for binding in authority.record_instances.values()
+        for handle in (
+            binding.get("runtimeIds", {}).values()
+            if isinstance(binding.get("runtimeIds"), Mapping)
+            else ()
+        )
+    }
+
+    def forbidden_reference(value: str) -> bool:
+        return (
+            _LEGACY_PROTEIN_REFERENCE_RE.search(value) is not None
+            or _LONG_PROTEIN_TRANSPORT_ID_RE.search(value) is not None
+            or _FEATURE_ANALYSIS_ID_RE.search(value) is not None
+        )
+
+    def compound_edge_references(value: str) -> tuple[str, str] | None:
+        match = _COMPOUND_SUPPORTING_EDGE_RE.fullmatch(
+            value
+        ) or _COMPOUND_PATH_EDGE_RE.fullmatch(value)
+        if match is None:
+            return None
+        return match.group("query"), match.group("subject")
+
+    def visit(value: object, owner_key: str = "") -> tuple[bool, bool]:
+        if (
+            owner_key in _DERIVED_COMPOUND_EDGE_REFERENCE_KEYS
+            and not isinstance(value, (str, list))
+        ):
+            return False, False
+        if isinstance(value, str):
+            if forbidden_reference(value):
+                return False, False
+            if owner_key in _DERIVED_COMPOUND_EDGE_REFERENCE_KEYS:
+                references = compound_edge_references(value)
+                return (
+                    references is not None
+                    and all(reference in runtime_handles for reference in references),
+                    references is not None,
+                )
+            if owner_key in _DERIVED_SCALAR_PROTEIN_REFERENCE_KEYS and value:
+                references = [reference.strip() for reference in value.split(";")]
+                return (
+                    bool(references)
+                    and all(references)
+                    and all(reference in runtime_handles for reference in references),
+                    True,
+                )
+            if owner_key in _DERIVED_UNIT_PROTEIN_REFERENCE_KEYS and value:
+                references = [reference.strip() for reference in value.split(";")]
+                runtime_references = [
+                    reference
+                    for reference in references
+                    if reference.startswith("h_")
+                ]
+                if not runtime_references:
+                    return True, False
+                return (
+                    all(references)
+                    and all(
+                        _RUNTIME_HANDLE_RE.fullmatch(reference) is not None
+                        and reference in runtime_handles
+                        for reference in runtime_references
+                    ),
+                    True,
+                )
+            return True, False
+        if isinstance(value, list):
+            if owner_key in _DERIVED_COMPOUND_EDGE_REFERENCE_KEYS:
+                saw_reference = False
+                for item in value:
+                    if not isinstance(item, str):
+                        return False, False
+                    valid, saw_item = visit(item, owner_key)
+                    if not valid:
+                        return False, False
+                    saw_reference = saw_reference or saw_item
+                return True, saw_reference
+            if owner_key in _DERIVED_ARRAY_PROTEIN_REFERENCE_KEYS:
+                if not all(
+                    isinstance(item, str) and item in runtime_handles
+                    for item in value
+                ):
+                    return False, False
+                return True, bool(value)
+            saw_reference = False
+            for item in value:
+                valid, saw_item = visit(item)
+                if not valid:
+                    return False, False
+                saw_reference = saw_reference or saw_item
+            return True, saw_reference
+        if isinstance(value, Mapping):
+            saw_reference = False
+            for raw_key, item in value.items():
+                key = str(raw_key)
+                if forbidden_reference(key):
+                    return False, False
+                if _RUNTIME_HANDLE_RE.fullmatch(key):
+                    if key not in runtime_handles:
+                        return False, False
+                    saw_reference = True
+                valid, saw_item = visit(item, key)
+                if not valid:
+                    return False, False
+                saw_reference = saw_reference or saw_item
+            return True, saw_reference
+        return True, False
+
+    for entry in entries:
+        if not _is_current_derived_cache_entry(entry):
+            return False
+        payload = entry.get("payload")
+        assert isinstance(payload, Mapping)
+        valid, saw_reference = visit(payload)
+        if not valid or (
+            payload
+            and not saw_reference
+            and not _is_strict_empty_derived_result(entry)
+        ):
+            return False
     return True
 
 
@@ -531,6 +1324,50 @@ def _validate_legacy_protein_candidate_envelope(envelope: object) -> None:
             )
 
 
+def _validate_v35_protein_candidate_envelope(envelope: object) -> None:
+    if (
+        not isinstance(envelope, Mapping)
+        or envelope.get("schema") != V35_PROTEIN_CANDIDATE_SCHEMA
+        or not _is_valid_v35_protein_identity_manifest(
+            envelope.get("sourceManifest")
+        )
+    ):
+        raise ValidationError("Invalid version-35 protein raw candidate envelope.")
+    entries = envelope.get("entries")
+    if not isinstance(entries, list):
+        raise ValidationError(
+            "Version-35 protein raw candidate entries must be an array."
+        )
+    source_manifest = envelope["sourceManifest"]
+    assert isinstance(source_manifest, Mapping)
+    from .analysis.protein_colinearity import (
+        validate_v35_protein_raw_entry_references,
+    )
+
+    for index, candidate in enumerate(entries):
+        original_entry = (
+            candidate.get("originalEntry")
+            if isinstance(candidate, Mapping)
+            else None
+        )
+        if (
+            not isinstance(candidate, Mapping)
+            or candidate.get("state") not in {"pending", "promoted", "rejected"}
+            or classify_raw_losat_cache_entry(original_entry) != "protein-v35"
+            or not isinstance(original_entry, Mapping)
+            or not validate_v35_protein_raw_entry_references(
+                original_entry, source_manifest
+            )
+            or (
+                candidate.get("rejectionReason") is not None
+                and not isinstance(candidate.get("rejectionReason"), str)
+            )
+        ):
+            raise ValidationError(
+                f"Invalid version-35 protein raw candidate at entries[{index}]."
+            )
+
+
 def _validate_legacy_derived_evidence(envelope: object) -> None:
     if not isinstance(envelope, Mapping) or envelope.get(
         "schema"
@@ -542,6 +1379,20 @@ def _validate_legacy_derived_evidence(envelope: object) -> None:
         for entry in entries
     ):
         raise ValidationError("Invalid legacy protein derived evidence entries.")
+
+
+def _validate_v35_derived_evidence(envelope: object) -> None:
+    if (
+        not isinstance(envelope, Mapping)
+        or envelope.get("schema") != 1
+    ):
+        raise ValidationError("Invalid version-35 protein derived evidence envelope.")
+    entries = envelope.get("entries")
+    if not isinstance(entries, list) or not all(
+        _is_derived_cache_entry(entry, schema=V35_LOSAT_DERIVED_CACHE_SCHEMA)
+        for entry in entries
+    ):
+        raise ValidationError("Invalid version-35 protein derived evidence entries.")
 
 
 def _legacy_candidate_entries(envelope: object) -> list[Mapping[str, Any]]:
@@ -576,6 +1427,51 @@ def _normalize_legacy_candidate_entries(
     return normalized
 
 
+def _v35_candidate_parts(
+    envelope: object,
+) -> tuple[Mapping[str, Any] | None, list[Mapping[str, Any]]]:
+    if envelope is None:
+        return None, []
+    _validate_v35_protein_candidate_envelope(envelope)
+    assert isinstance(envelope, Mapping)
+    source_manifest = envelope["sourceManifest"]
+    entries = envelope["entries"]
+    assert isinstance(source_manifest, Mapping)
+    assert isinstance(entries, list)
+    return source_manifest, list(entries)
+
+
+def _normalize_v35_candidate_entries(
+    entries: Sequence[Mapping[str, Any]],
+    *,
+    source_manifest: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    if entries and source_manifest is None:
+        raise ValidationError(
+            "Version-35 protein raw candidates require their source manifest."
+        )
+    for candidate in entries:
+        if not isinstance(candidate, Mapping) or candidate.get("state") == "promoted":
+            continue
+        probe = {
+            "schema": V35_PROTEIN_CANDIDATE_SCHEMA,
+            "sourceManifest": source_manifest,
+            "entries": [candidate],
+        }
+        _validate_v35_protein_candidate_envelope(probe)
+        clone = _json_clone(candidate)
+        fingerprint = json.dumps(
+            clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        normalized.append(clone)
+    return normalized
+
+
 def _legacy_derived_entries(envelope: object) -> list[Mapping[str, Any]]:
     if envelope is None:
         return []
@@ -595,6 +1491,37 @@ def _normalize_legacy_derived_entries(
         ):
             raise ValidationError(
                 f"Invalid legacy derived LOSATP evidence at index {index}."
+            )
+        clone = _json_clone(entry)
+        fingerprint = json.dumps(
+            clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        normalized.append(clone)
+    return normalized
+
+
+def _v35_derived_entries(envelope: object) -> list[Mapping[str, Any]]:
+    if envelope is None:
+        return []
+    _validate_v35_derived_evidence(envelope)
+    assert isinstance(envelope, Mapping)
+    return list(envelope["entries"])
+
+
+def _normalize_v35_derived_entries(
+    entries: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(entries):
+        if not _is_derived_cache_entry(
+            entry, schema=V35_LOSAT_DERIVED_CACHE_SCHEMA
+        ):
+            raise ValidationError(
+                f"Invalid version-35 derived LOSATP evidence at index {index}."
             )
         clone = _json_clone(entry)
         fingerprint = json.dumps(
@@ -870,7 +1797,9 @@ def build_session_json(
     losat_derived_cache_entries: Sequence[Mapping[str, Any]] | None = None,
     protein_identity_manifest: Mapping[str, Any] | None = None,
     legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] | None = None,
+    legacy_protein_raw_v35_candidates: Mapping[str, Any] | None = None,
     legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
+    legacy_protein_derived_v35_evidence: Sequence[Mapping[str, Any]] | None = None,
     canonical_request: DiagramRequest | None = None,
 ) -> dict[str, Any]:
     """Build a GUI-loadable session JSON payload from a CLI run."""
@@ -949,7 +1878,9 @@ def build_session_json(
         losat_derived_cache_entries=losat_derived_cache_entries,
         protein_identity_manifest=protein_identity_manifest,
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
+        legacy_protein_raw_v35_candidates=legacy_protein_raw_v35_candidates,
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
+        legacy_protein_derived_v35_evidence=legacy_protein_derived_v35_evidence,
     )
     validate_session(payload)
     return payload
@@ -958,8 +1889,10 @@ def build_session_json(
 def write_session_json(path: str | Path, payload: Mapping[str, Any]) -> None:
     """Write plain or ``.gz`` session JSON with an atomic replacement."""
 
-    if payload.get("version") == CURRENT_SESSION_VERSION:
-        validate_session(payload)
+    expanded_payload = expand_session_feature_catalog(payload)
+    if expanded_payload.get("version") == CURRENT_SESSION_VERSION:
+        validate_session(expanded_payload)
+    serialized_payload = compact_session_feature_catalog(expanded_payload)
 
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -971,19 +1904,23 @@ def write_session_json(path: str | Path, payload: Mapping[str, Any]) -> None:
                     filename="",
                     mode="wb",
                     fileobj=raw_file,
-                    compresslevel=6,
+                    compresslevel=9,
                     mtime=0,
                 ) as compressed_file:
                     with io.TextIOWrapper(compressed_file, encoding="utf-8") as text_file:
                         json.dump(
-                            payload,
+                            serialized_payload,
                             text_file,
                             ensure_ascii=False,
                             separators=(",", ":"),
                         )
         else:
             temp_path.write_text(
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                json.dumps(
+                    serialized_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
                 encoding="utf-8",
             )
         temp_path.replace(output_path)
@@ -3083,6 +4020,8 @@ __all__ = [
     "CANONICAL_SESSION_MIN_VERSION",
     "DEPTH_FILE_ENCODING",
     "DEPTH_FILE_SCHEMA",
+    "FEATURE_CATALOG_ENCODING",
+    "FEATURE_CATALOG_SCHEMA",
     "LEGACY_LOSAT_DERIVED_CACHE_SCHEMA",
     "LEGACY_PROTEIN_CANDIDATE_SCHEMA",
     "LOSAT_DERIVED_CACHE_SCHEMA",
@@ -3091,14 +4030,20 @@ __all__ = [
     "PROTEIN_LOSAT_CACHE_SCHEMA",
     "SESSION_FORMAT",
     "SUPPORTED_SESSION_VERSIONS",
+    "V35_LOSAT_DERIVED_CACHE_SCHEMA",
+    "V35_PROTEIN_CANDIDATE_SCHEMA",
+    "V35_PROTEIN_IDENTITY_MANIFEST_SCHEMA",
+    "V35_PROTEIN_LOSAT_CACHE_SCHEMA",
     "SessionBuildContext",
     "SessionFileBinding",
     "SessionRunSpec",
     "build_session_json",
     "classify_raw_losat_cache_entry",
+    "compact_session_feature_catalog",
     "decode_depth_payload",
     "encode_depth_text",
     "empty_protein_identity_manifest",
+    "expand_session_feature_catalog",
     "get_session_slot",
     "load_session",
     "materialize_embedded_file",
@@ -3110,5 +4055,6 @@ __all__ = [
     "session_to_cli_args",
     "validate_session",
     "validate_current_session_artifacts",
+    "validate_v35_session_artifacts",
     "write_session_json",
 ]

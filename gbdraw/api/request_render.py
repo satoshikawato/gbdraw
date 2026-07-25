@@ -14,16 +14,24 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
+from gbdraw.analysis.collinearity import (
+    CollinearityParameters,
+    LosslessCollinearityParameters,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.analysis.protein_colinearity import (
+    build_legacy_protein_reference_map,
     LosatpCacheManager,
     ProteinExtractionResult,
     extract_web_stable_cds_proteins,
     is_legacy_protein_losat_cache_entry,
     is_protein_losat_cache_entry,
+    is_v35_protein_losat_cache_entry,
     make_legacy_protein_raw_candidate,
     promote_legacy_protein_raw_cache_entries,
+    promote_v35_protein_raw_cache_entries,
     proteins_to_fasta,
+    validate_legacy_protein_identity_manifest,
     validate_protein_raw_entry_references,
 )
 from gbdraw.features.visibility import (
@@ -70,7 +78,9 @@ class PreparedDiagramRequest:
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] = ()
+    legacy_protein_raw_v35_candidates: Mapping[str, Any] | None = None
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] = ()
+    legacy_protein_derived_v35_evidence: tuple[Mapping[str, Any], ...] = ()
     protein_id_map: Mapping[str, str] | None = None
     warnings: tuple[str, ...] = ()
 
@@ -89,7 +99,9 @@ class RequestRenderResult:
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] = ()
+    legacy_protein_raw_v35_candidates: Mapping[str, Any] | None = None
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] = ()
+    legacy_protein_derived_v35_evidence: tuple[Mapping[str, Any], ...] = ()
     protein_id_map: Mapping[str, str] | None = None
     warnings: tuple[str, ...] = ()
 
@@ -102,6 +114,8 @@ class _PreparedLinearArtifacts:
     nucleotide_entries: tuple[Mapping[str, Any], ...]
     passthrough_derived_entries: tuple[Mapping[str, Any], ...]
     legacy_candidates: tuple[Mapping[str, Any], ...]
+    v35_candidates: Mapping[str, Any] | None
+    v35_derived_evidence: tuple[Mapping[str, Any], ...]
     protein_id_map: Mapping[str, str]
     source_mode: str
     warnings: tuple[str, ...]
@@ -111,6 +125,12 @@ _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
     r"p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}"
     r"(?:_[2-9][0-9]*)?"
 )
+_V35_PROTEIN_REFERENCE_RE = re.compile(
+    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+@"
+    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+\|"
+    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+~f_[0-9a-f]{64}"
+)
+_FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
 
 
 def _mode(request: DiagramRequest) -> Literal["circular", "linear"]:
@@ -276,7 +296,7 @@ def _linear_layout_with_record_placements(
 
 def _empty_protein_identity_manifest() -> dict[str, Any]:
     return {
-        "schema": 1,
+        "schema": 2,
         "proteinSets": {},
         "recordAnalyses": {},
         "recordInstances": {},
@@ -357,6 +377,102 @@ def _legacy_candidate_entries(
         seen.add(fingerprint)
         result.append(candidate)
     return tuple(result)
+
+
+def _v35_candidate_envelope(
+    artifacts: Mapping[str, Any] | None,
+    direct_v35_entries: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any] | None:
+    existing: Mapping[str, Any] | None = None
+    source_manifest: Mapping[str, Any] | None = None
+    candidates: list[Mapping[str, Any]] = []
+    if artifacts is not None:
+        legacy_artifacts = artifacts.get("legacyArtifacts")
+        envelope = (
+            legacy_artifacts.get("proteinRawV35Candidates")
+            if isinstance(legacy_artifacts, Mapping)
+            else None
+        )
+        if envelope is not None:
+            if (
+                not isinstance(envelope, Mapping)
+                or envelope.get("schema") != 1
+                or not isinstance(envelope.get("sourceManifest"), Mapping)
+                or not isinstance(envelope.get("entries"), list)
+            ):
+                raise ValidationError(
+                    "legacyArtifacts.proteinRawV35Candidates is invalid."
+                )
+            existing = envelope
+            source_manifest = envelope["sourceManifest"]
+            candidates.extend(
+                candidate
+                for candidate in envelope["entries"]
+                if isinstance(candidate, Mapping)
+            )
+
+    if direct_v35_entries:
+        direct_manifest = (
+            artifacts.get("proteinIdentityManifest")
+            if artifacts is not None
+            else None
+        )
+        if not isinstance(direct_manifest, Mapping):
+            raise ValidationError(
+                "Version-35 protein raw entries require their source manifest."
+            )
+        validate_legacy_protein_identity_manifest(direct_manifest)
+        if source_manifest is not None and source_manifest != direct_manifest:
+            raise ValidationError(
+                "Version-35 protein candidates use different source manifests."
+            )
+        source_manifest = direct_manifest
+        candidates.extend(
+            {
+                "state": "pending",
+                "originalEntry": copy.deepcopy(dict(entry)),
+                "rejectionReason": None,
+            }
+            for entry in direct_v35_entries
+        )
+
+    if source_manifest is None:
+        if not candidates:
+            return None
+        raise ValidationError(
+            "Version-35 protein candidates require their source manifest."
+        )
+    validate_legacy_protein_identity_manifest(source_manifest)
+    result: list[Mapping[str, Any]] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        original = candidate.get("originalEntry")
+        state = candidate.get("state")
+        if (
+            state not in {"pending", "promoted", "rejected"}
+            or not isinstance(original, Mapping)
+            or not is_v35_protein_losat_cache_entry(original)
+        ):
+            raise ValidationError(
+                "Version-35 protein candidate has an invalid original entry."
+            )
+        fingerprint = json.dumps(
+            original,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        result.append(copy.deepcopy(dict(candidate)))
+    if not result and existing is None:
+        return None
+    return {
+        "schema": 1,
+        "sourceManifest": copy.deepcopy(dict(source_manifest)),
+        "entries": result,
+    }
 
 
 def _merge_promoted_tsv_id_map(
@@ -465,13 +581,109 @@ def _promote_legacy_candidates(
     return tuple(promoted_entries), tuple(unresolved_candidates), id_map
 
 
-def _rewrite_protein_reference_string(value: str, id_map: Mapping[str, str]) -> str:
-    if "p_r_" not in value:
-        return value
-    return _LEGACY_PROTEIN_REFERENCE_RE.sub(
-        lambda match: id_map.get(match.group(0), match.group(0)),
-        value,
+def _promote_v35_candidates(
+    envelope: Mapping[str, Any] | None,
+    extraction: ProteinExtractionResult,
+) -> tuple[
+    tuple[Mapping[str, Any], ...],
+    Mapping[str, Any] | None,
+    Mapping[str, str],
+]:
+    if envelope is None:
+        return (), None, {}
+    source_manifest = envelope.get("sourceManifest")
+    raw_candidates = envelope.get("entries")
+    if not isinstance(source_manifest, Mapping) or not isinstance(
+        raw_candidates, list
+    ):
+        raise ValidationError("Version-35 protein candidate envelope is invalid.")
+    validate_legacy_protein_identity_manifest(source_manifest)
+    manifest = extraction.identity_manifest
+    if manifest is None:
+        raise ValidationError("Protein cache promotion requires an identity manifest.")
+
+    promoted_entries: list[Mapping[str, Any]] = []
+    unresolved_candidates: list[Mapping[str, Any]] = []
+    id_map: dict[str, str] = {}
+    for candidate in raw_candidates:
+        if not isinstance(candidate, Mapping):
+            raise ValidationError("Version-35 protein candidate must be an object.")
+        original = candidate.get("originalEntry")
+        if not isinstance(original, Mapping):
+            raise ValidationError("Version-35 protein candidate has no original entry.")
+        raw_args = original.get("args")
+        expected_args = (
+            tuple(str(arg) for arg in raw_args)
+            if isinstance(raw_args, list)
+            else ()
+        )
+        scan = promote_v35_protein_raw_cache_entries(
+            (candidate,),
+            source_manifest=source_manifest,
+            identity_manifest=manifest,
+            query_record_instance_key=str(
+                original.get("queryRecordInstanceKey") or ""
+            ),
+            subject_record_instance_key=str(
+                original.get("subjectRecordInstanceKey") or ""
+            ),
+            expected_args=expected_args,
+            expected_program=str(original.get("program") or "blastp"),
+            expected_outfmt=str(original.get("outfmt") or "6"),
+        )
+        promotion = scan.promotion
+        if promotion is None:
+            reason = (
+                scan.rejections[-1].reason
+                if scan.rejections
+                else "Version-35 protein cache validation failed."
+            )
+            unresolved_candidates.append(
+                {
+                    "state": "rejected",
+                    "originalEntry": copy.deepcopy(dict(original)),
+                    "rejectionReason": reason,
+                }
+            )
+            continue
+        if not validate_protein_raw_entry_references(promotion.entry, manifest):
+            raise ValidationError("Promoted protein raw entry failed manifest validation.")
+        promoted_entries.append(promotion.entry)
+        for old_id, runtime_handle in promotion.protein_id_map.items():
+            previous = id_map.get(old_id)
+            if previous is not None and previous != runtime_handle:
+                raise ValidationError(
+                    f"Protein ID {old_id!r} resolves to multiple runtime handles."
+                )
+            id_map[old_id] = runtime_handle
+
+    unresolved_envelope = (
+        {
+            "schema": 1,
+            "sourceManifest": copy.deepcopy(dict(source_manifest)),
+            "entries": unresolved_candidates,
+        }
+        if unresolved_candidates
+        else None
     )
+    return tuple(promoted_entries), unresolved_envelope, id_map
+
+
+def _rewrite_protein_reference_string(value: str, id_map: Mapping[str, str]) -> str:
+    if value in id_map:
+        return str(id_map[value])
+    rewritten = value
+    if "p_r_" in rewritten:
+        rewritten = _LEGACY_PROTEIN_REFERENCE_RE.sub(
+            lambda match: id_map.get(match.group(0), match.group(0)),
+            rewritten,
+        )
+    if "~f_" in rewritten:
+        rewritten = _V35_PROTEIN_REFERENCE_RE.sub(
+            lambda match: id_map.get(match.group(0), match.group(0)),
+            rewritten,
+        )
+    return rewritten
 
 
 def rewrite_protein_artifact_references(
@@ -504,11 +716,18 @@ def rewrite_protein_artifact_references(
             },
         )
     if isinstance(value, Mapping):
-        return {
-            rewrite_protein_artifact_references(key, id_map):
-            rewrite_protein_artifact_references(item, id_map)
-            for key, item in value.items()
-        }
+        rewritten_mapping: dict[Any, Any] = {}
+        for key, item in value.items():
+            rewritten_key = rewrite_protein_artifact_references(key, id_map)
+            if rewritten_key in rewritten_mapping:
+                raise ValidationError(
+                    f"Protein reference migration produced duplicate key "
+                    f"{rewritten_key!r}."
+                )
+            rewritten_mapping[rewritten_key] = rewrite_protein_artifact_references(
+                item, id_map
+            )
+        return rewritten_mapping
     if isinstance(value, tuple):
         return tuple(rewrite_protein_artifact_references(item, id_map) for item in value)
     if isinstance(value, list):
@@ -524,7 +743,11 @@ def rewrite_protein_artifact_references(
 
 def _contains_legacy_protein_reference(value: Any) -> bool:
     if isinstance(value, str):
-        return _LEGACY_PROTEIN_REFERENCE_RE.search(value) is not None
+        return (
+            _LEGACY_PROTEIN_REFERENCE_RE.search(value) is not None
+            or _V35_PROTEIN_REFERENCE_RE.search(value) is not None
+            or _FEATURE_ANALYSIS_REFERENCE_RE.fullmatch(value) is not None
+        )
     if isinstance(value, DataFrame):
         return any(
             _contains_legacy_protein_reference(item)
@@ -544,6 +767,95 @@ def _contains_legacy_protein_reference(value: Any) -> bool:
     if isinstance(value, (tuple, list, set, frozenset)):
         return any(_contains_legacy_protein_reference(item) for item in value)
     return False
+
+
+def _legacy_protein_reference_ids(value: Any) -> set[str]:
+    references: set[str] = set()
+    if isinstance(value, str):
+        references.update(
+            match.group(0)
+            for match in _LEGACY_PROTEIN_REFERENCE_RE.finditer(value)
+        )
+        references.update(
+            match.group(0)
+            for match in _V35_PROTEIN_REFERENCE_RE.finditer(value)
+        )
+    elif isinstance(value, DataFrame):
+        for item in value.to_numpy().ravel():
+            references.update(_legacy_protein_reference_ids(item))
+    elif is_dataclass(value) and not isinstance(value, type):
+        for field in fields(value):
+            references.update(
+                _legacy_protein_reference_ids(getattr(value, field.name))
+            )
+    elif isinstance(value, Mapping):
+        for key, item in value.items():
+            references.update(_legacy_protein_reference_ids(key))
+            references.update(_legacy_protein_reference_ids(item))
+    elif isinstance(value, (tuple, list, set, frozenset)):
+        for item in value:
+            references.update(_legacy_protein_reference_ids(item))
+    return references
+
+
+def _build_v35_protein_reference_map(
+    source_manifest: Mapping[str, Any],
+    extraction: ProteinExtractionResult,
+) -> dict[str, str]:
+    """Resolve every version-35 transport ID through current manifest authority."""
+
+    source_authority = validate_legacy_protein_identity_manifest(source_manifest)
+    current_authority = extraction.identity_manifest
+    if current_authority is None:
+        raise ValidationError(
+            "Version-35 protein reference migration requires an identity manifest."
+        )
+
+    reference_map: dict[str, str] = {}
+    for instance_key, source_instance in source_authority.record_instances.items():
+        current_instance = current_authority.record_instances.get(instance_key)
+        if current_instance is None:
+            raise ValidationError(
+                f"Current protein manifest is missing record instance {instance_key!r}."
+            )
+        source_analysis = source_authority.record_analyses.get(
+            str(source_instance.get("recordAnalysisId") or "")
+        )
+        current_analysis = current_authority.record_analyses.get(
+            str(current_instance.get("recordAnalysisId") or "")
+        )
+        if (
+            source_analysis is None
+            or current_analysis is None
+            or source_analysis.get("proteinSetHash")
+            != current_analysis.get("proteinSetHash")
+        ):
+            raise ValidationError(
+                f"Protein set changed for record instance {instance_key!r}."
+            )
+        source_ids = source_instance.get("transportIds")
+        current_ids = current_instance.get("runtimeIds")
+        if not isinstance(source_ids, Mapping) or not isinstance(
+            current_ids, Mapping
+        ):
+            raise ValidationError(
+                f"Protein identity map is incomplete for record instance "
+                f"{instance_key!r}."
+            )
+        if set(source_ids) != set(current_ids):
+            raise ValidationError(
+                f"Protein membership changed for record instance {instance_key!r}."
+            )
+        for feature_id, source_id in source_ids.items():
+            old_id = str(source_id)
+            runtime_handle = str(current_ids[feature_id])
+            previous = reference_map.get(old_id)
+            if previous is not None and previous != runtime_handle:
+                raise ValidationError(
+                    f"Version-35 protein reference {old_id!r} resolves ambiguously."
+                )
+            reference_map[old_id] = runtime_handle
+    return reference_map
 
 
 def _rewrite_linear_request_protein_references(
@@ -609,6 +921,9 @@ def _prepare_linear_artifacts(
     current_protein = tuple(
         entry for entry in raw_entries if is_protein_losat_cache_entry(entry)
     )
+    direct_v35 = tuple(
+        entry for entry in raw_entries if is_v35_protein_losat_cache_entry(entry)
+    )
     direct_legacy = tuple(
         entry for entry in raw_entries if is_legacy_protein_losat_cache_entry(entry)
     )
@@ -618,8 +933,11 @@ def _prepare_linear_artifacts(
         if _is_nucleotide_losat_entry(entry)
     )
     candidates = _legacy_candidate_entries(artifacts, direct_legacy)
+    v35_candidates = _v35_candidate_envelope(artifacts, direct_v35)
+    v35_derived_evidence = _v35_derived_evidence_entries(artifacts)
     needs_protein_identity = bool(
         current_protein
+        or v35_candidates
         or candidates
         or request.options.protein_blastp_mode != "none"
         or request.options.protein_comparisons is not None
@@ -629,8 +947,9 @@ def _prepare_linear_artifacts(
     passthrough_derived = tuple(
         copy.deepcopy(dict(entry))
         for entry in _artifact_entries(artifacts, "losatDerivedCache")
-        if entry.get("schema") == 2
+        if entry.get("schema") == 3
         and entry.get("kind") == "derived-losatp-payload"
+        and entry.get("idEncoding") == "runtime-handle-v1"
     )
     if not needs_protein_identity:
         return _PreparedLinearArtifacts(
@@ -640,6 +959,8 @@ def _prepare_linear_artifacts(
             nucleotide_entries=nucleotide_entries,
             passthrough_derived_entries=passthrough_derived,
             legacy_candidates=(),
+            v35_candidates=v35_candidates,
+            v35_derived_evidence=v35_derived_evidence,
             protein_id_map={},
             source_mode="none",
             warnings=(),
@@ -668,14 +989,86 @@ def _prepare_linear_artifacts(
     manifest = extraction.identity_manifest
     if manifest is None:
         raise ValidationError("Protein extraction did not produce an identity manifest.")
-    promoted, unresolved, id_map = _promote_legacy_candidates(candidates, extraction)
+    promoted_v35, unresolved_v35, v35_id_map = _promote_v35_candidates(
+        v35_candidates, extraction
+    )
+    promoted, unresolved, legacy_id_map = _promote_legacy_candidates(
+        candidates, extraction
+    )
+    id_map = dict(v35_id_map)
+    for old_id, runtime_handle in legacy_id_map.items():
+        previous = id_map.get(old_id)
+        if previous is not None and previous != runtime_handle:
+            raise ValidationError(
+                f"Protein ID {old_id!r} resolves to multiple runtime handles."
+            )
+        id_map[old_id] = runtime_handle
+    artifact_reference_ids: set[str] = set()
+    for value in (
+        request.options.linear_comparisons,
+        request.options.protein_comparisons,
+        request.options.orthogroups,
+        request.options.collinearity_blocks,
+    ):
+        artifact_reference_ids.update(_legacy_protein_reference_ids(value))
+    legacy_artifact_reference_ids = sorted(
+        reference
+        for reference in artifact_reference_ids
+        if _LEGACY_PROTEIN_REFERENCE_RE.fullmatch(reference)
+    )
+    if legacy_artifact_reference_ids:
+        artifact_id_map = build_legacy_protein_reference_map(
+            extraction,
+            legacy_artifact_reference_ids,
+        )
+        for old_id, runtime_handle in artifact_id_map.items():
+            previous = id_map.get(old_id)
+            if previous is not None and previous != runtime_handle:
+                raise ValidationError(
+                    f"Protein ID {old_id!r} resolves to multiple runtime handles."
+                )
+            id_map[old_id] = runtime_handle
+    v35_artifact_reference_ids = {
+        reference
+        for reference in artifact_reference_ids
+        if _V35_PROTEIN_REFERENCE_RE.fullmatch(reference)
+    }
+    if v35_artifact_reference_ids:
+        source_manifest = (
+            v35_candidates.get("sourceManifest")
+            if isinstance(v35_candidates, Mapping)
+            else None
+        )
+        if not isinstance(source_manifest, Mapping):
+            raise ValidationError(
+                "Version-35 protein artifact references require their source manifest."
+            )
+        artifact_id_map = _build_v35_protein_reference_map(
+            source_manifest,
+            extraction,
+        )
+        unresolved_references = v35_artifact_reference_ids.difference(
+            artifact_id_map
+        )
+        if unresolved_references:
+            raise ValidationError(
+                "Version-35 protein artifact references are outside the verified "
+                "source manifest."
+            )
+        for old_id, runtime_handle in artifact_id_map.items():
+            previous = id_map.get(old_id)
+            if previous is not None and previous != runtime_handle:
+                raise ValidationError(
+                    f"Protein ID {old_id!r} resolves to multiple runtime handles."
+                )
+            id_map[old_id] = runtime_handle
     reusable_current = tuple(
         entry
         for entry in current_protein
         if validate_protein_raw_entry_references(entry, manifest)
     )
     cache = LosatpCacheManager(
-        (*reusable_current, *promoted),
+        (*reusable_current, *promoted_v35, *promoted),
         identity_manifest=manifest,
         threads_per_job=request.options.losatp_threads or "auto",
     )
@@ -685,11 +1078,16 @@ def _prepare_linear_artifacts(
     # are stale cache history, not candidates for the rendered request.
     if request.options.protein_comparisons is not None and promoted:
         unresolved = ()
-    warnings = (
-        (
+    warning_items: list[str] = []
+    if unresolved:
+        warning_items.append(
             f"{len(unresolved)} legacy protein raw cache candidate(s) could not be promoted."
-        ),
-    ) if unresolved else ()
+        )
+    if unresolved_v35 is not None:
+        warning_items.append(
+            f"{len(unresolved_v35['entries'])} version-35 protein raw cache "
+            "candidate(s) could not be promoted."
+        )
     return _PreparedLinearArtifacts(
         request=rewritten_request,
         cache=cache,
@@ -697,9 +1095,11 @@ def _prepare_linear_artifacts(
         nucleotide_entries=nucleotide_entries,
         passthrough_derived_entries=(),
         legacy_candidates=unresolved,
+        v35_candidates=unresolved_v35,
+        v35_derived_evidence=v35_derived_evidence,
         protein_id_map=id_map,
         source_mode=_source_protein_mode(request, artifacts),
-        warnings=warnings,
+        warnings=tuple(warning_items),
     )
 
 
@@ -776,6 +1176,72 @@ def _resolved_protein_pair_payloads(
     return result
 
 
+def _collinearity_parameter_identity(
+    params: CollinearityParameters | LosslessCollinearityParameters | None,
+) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+    resolved = params or LosslessCollinearityParameters()
+    if isinstance(resolved, LosslessCollinearityParameters):
+        snapshot = {
+            "model": "lossless",
+            "parameters": {
+                "minAnchors": int(resolved.min_anchors),
+                "maxUnitGap": int(resolved.max_unit_gap),
+                "maxDiagonalDrift": int(resolved.max_diagonal_drift),
+                "maxConflicts": int(resolved.max_conflicts),
+                "mergeOrientation": str(resolved.merge_orientation),
+            },
+        }
+        effective = {
+            "minAnchors": int(resolved.min_anchors),
+            "maxGeneGap": int(resolved.max_unit_gap),
+            "maxDiagonalDrift": int(resolved.max_diagonal_drift),
+            "maxConflictsInMergeGap": int(resolved.max_conflicts),
+            "mergeOrientation": str(resolved.merge_orientation),
+        }
+        return snapshot, effective
+
+    snapshot = {
+        "model": "legacy",
+        "parameters": {
+            "minAnchors": int(resolved.min_anchors),
+            "maxGeneGap": int(resolved.max_gene_gap),
+            "blockMergeGap": int(resolved.block_merge_gap),
+            "singletonMergeGap": int(resolved.singleton_merge_gap),
+            "maxDiagonalDrift": int(resolved.max_diagonal_drift),
+            "maxConflictsInMergeGap": int(
+                resolved.max_conflicts_in_merge_gap
+            ),
+            "maxParalogLinksPerOrthogroup": int(
+                resolved.max_paralog_links_per_orthogroup
+            ),
+            "gapPenalty": float(resolved.gap_penalty),
+            "nearbyDuplicateWindow": int(resolved.nearby_duplicate_window),
+            "scoreMode": str(resolved.score_mode),
+            "constantAnchorScore": float(resolved.constant_anchor_score),
+            "minBlockScore": (
+                None
+                if resolved.min_block_score is None
+                else float(resolved.min_block_score)
+            ),
+            "blockEvalue": (
+                None
+                if resolved.block_evalue is None
+                else float(resolved.block_evalue)
+            ),
+        },
+    }
+    effective = {
+        "minAnchors": int(resolved.min_anchors),
+        "maxGeneGap": int(resolved.max_gene_gap),
+        "maxDiagonalDrift": int(resolved.max_diagonal_drift),
+        "maxConflictsInMergeGap": int(
+            resolved.max_conflicts_in_merge_gap
+        ),
+        "mergeOrientation": "either",
+    }
+    return snapshot, effective
+
+
 def _build_current_derived_entries(
     drawing: Drawing,
     request: LinearDiagramRequest,
@@ -808,10 +1274,28 @@ def _build_current_derived_entries(
     protein_raw_entries = [
         entry for entry in raw_entries if is_protein_losat_cache_entry(entry)
     ]
+    raw_cache_keys = sorted(
+        {
+            str(entry.get("key") or "")
+            for entry in protein_raw_entries
+            if str(entry.get("key") or "")
+        }
+    )
+    parameter_identity, effective_collinearity_params = (
+        _collinearity_parameter_identity(
+            request.options.collinearity_params
+        )
+    )
     identity = {
-        "cacheSchema": 2,
+        "cacheSchema": 3,
+        "idEncoding": "runtime-handle-v1",
         "converter": "convert_losatp_blastp_pairs_to_genomic_payload",
         "mode": mode,
+        # Orthogroup and collinearity inference can consume self, reverse, and
+        # hidden non-adjacent comparisons that are not represented by the
+        # displayed pair payloads below.  Bind the derived key to every raw
+        # schema-4 entry available to that inference run.
+        "rawCacheKeys": raw_cache_keys,
         "maxHits": int(request.options.protein_blastp_max_hits),
         "thresholds": {
             "bitscore": str(request.options.bitscore),
@@ -824,6 +1308,7 @@ def _build_current_derived_entries(
             "memberMaxHits": int(request.options.orthogroup_member_max_hits),
         },
         "collinear": {
+            **effective_collinearity_params,
             "unitMode": str(request.options.collinearity_unit_mode),
             "colorMode": str(request.options.collinearity_color_mode),
             "anchorMode": str(request.options.collinearity_anchor_mode),
@@ -831,13 +1316,23 @@ def _build_current_derived_entries(
             "maxParalogLinksPerOrthogroup": int(
                 request.options.collinear_max_paralog_links_per_orthogroup
             ),
+            "parameterIdentity": parameter_identity,
         },
         "records": [
             {
                 "recordIndex": index,
                 "recordInstanceKey": instance_key,
-                "bindingHash": str(
-                    record_instances.get(instance_key, {}).get("bindingHash") or ""
+                "runtimeBindingHash": str(
+                    record_instances.get(instance_key, {}).get(
+                        "runtimeBindingHash"
+                    )
+                    or ""
+                ),
+                "displayBindingHash": str(
+                    record_instances.get(instance_key, {}).get(
+                        "displayBindingHash"
+                    )
+                    or ""
                 ),
                 "viewTransform": {
                     "length": len(records[index].seq),
@@ -879,8 +1374,9 @@ def _build_current_derived_entries(
         ).encode("utf-8")
     ).hexdigest()
     entry: Mapping[str, Any] = {
-        "schema": 2,
+        "schema": 3,
         "kind": "derived-losatp-payload",
+        "idEncoding": "runtime-handle-v1",
         "key": key,
         "mode": mode,
         "payload": {
@@ -920,6 +1416,51 @@ def _legacy_derived_evidence_entries(
     )
 
 
+def _v35_derived_evidence_entries(
+    artifacts: Mapping[str, Any] | None,
+) -> tuple[Mapping[str, Any], ...]:
+    if artifacts is None:
+        return ()
+    entries: list[Mapping[str, Any]] = [
+        copy.deepcopy(dict(entry))
+        for entry in _artifact_entries(artifacts, "losatDerivedCache")
+        if entry.get("schema") == 2
+        and entry.get("kind") == "derived-losatp-payload"
+    ]
+    legacy = artifacts.get("legacyArtifacts")
+    envelope = (
+        legacy.get("proteinDerivedV35Evidence")
+        if isinstance(legacy, Mapping)
+        else None
+    )
+    if envelope is not None:
+        if not isinstance(envelope, Mapping) or not isinstance(
+            envelope.get("entries"), list
+        ):
+            raise ValidationError(
+                "legacyArtifacts.proteinDerivedV35Evidence must use an entries array."
+            )
+        entries.extend(
+            copy.deepcopy(dict(entry))
+            for entry in envelope["entries"]
+            if isinstance(entry, Mapping)
+        )
+    result: list[Mapping[str, Any]] = []
+    seen: set[str] = set()
+    for entry in entries:
+        fingerprint = json.dumps(
+            entry,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        result.append(entry)
+    return tuple(result)
+
+
 def build_request_diagram(
     request: DiagramRequest,
     *,
@@ -932,7 +1473,9 @@ def build_request_diagram(
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_candidates: tuple[Mapping[str, Any], ...] = ()
-    legacy_derived_evidence: tuple[Mapping[str, Any], ...] = ()
+    v35_candidates: Mapping[str, Any] | None = None
+    legacy_derived_evidence = _legacy_derived_evidence_entries(session_artifacts)
+    v35_derived_evidence = _v35_derived_evidence_entries(session_artifacts)
     protein_id_map: Mapping[str, str] = {}
     warnings: tuple[str, ...] = ()
     if isinstance(request, CircularDiagramRequest):
@@ -963,24 +1506,31 @@ def build_request_diagram(
                 session_artifacts,
                 direct_legacy,
             )
+            direct_v35 = tuple(
+                entry
+                for entry in raw_entries
+                if is_v35_protein_losat_cache_entry(entry)
+            )
+            v35_candidates = _v35_candidate_envelope(
+                session_artifacts,
+                direct_v35,
+            )
             losat_derived_cache_entries = tuple(
                 copy.deepcopy(dict(entry))
                 for entry in _artifact_entries(
                     session_artifacts,
                     "losatDerivedCache",
                 )
-                if entry.get("schema") == 2
+                if entry.get("schema") == 3
                 and entry.get("kind") == "derived-losatp-payload"
+                and entry.get("idEncoding") == "runtime-handle-v1"
             )
             source_manifest = session_artifacts.get("proteinIdentityManifest")
             protein_identity_manifest = (
                 copy.deepcopy(dict(source_manifest))
                 if isinstance(source_manifest, Mapping)
-                and source_manifest.get("schema") == 1
+                and source_manifest.get("schema") == 2
                 else _empty_protein_identity_manifest()
-            )
-            legacy_derived_evidence = _legacy_derived_evidence_entries(
-                session_artifacts
             )
     elif isinstance(request, LinearDiagramRequest):
         artifacts = _prepare_linear_artifacts(request, records, session_artifacts)
@@ -1016,6 +1566,9 @@ def build_request_diagram(
             artifacts,
             losat_cache_entries,
         )
+        if losat_derived_cache_entries:
+            legacy_derived_evidence = ()
+            v35_derived_evidence = ()
         protein_identity_manifest = (
             artifacts.extraction.identity_manifest.to_dict()
             if artifacts.extraction is not None
@@ -1027,6 +1580,7 @@ def build_request_diagram(
             )
         )
         legacy_candidates = artifacts.legacy_candidates
+        v35_candidates = artifacts.v35_candidates
         protein_id_map = artifacts.protein_id_map
         warnings = artifacts.warnings
     else:  # pragma: no cover - normalize_request_records rejects this first.
@@ -1040,7 +1594,9 @@ def build_request_diagram(
         losat_derived_cache_entries=losat_derived_cache_entries,
         protein_identity_manifest=protein_identity_manifest,
         legacy_protein_raw_candidates=legacy_candidates,
+        legacy_protein_raw_v35_candidates=v35_candidates,
         legacy_protein_derived_evidence=legacy_derived_evidence,
+        legacy_protein_derived_v35_evidence=v35_derived_evidence,
         protein_id_map=protein_id_map,
         warnings=warnings,
     )
@@ -1137,7 +1693,13 @@ def render_request(
         losat_derived_cache_entries=prepared.losat_derived_cache_entries,
         protein_identity_manifest=prepared.protein_identity_manifest,
         legacy_protein_raw_candidates=prepared.legacy_protein_raw_candidates,
+        legacy_protein_raw_v35_candidates=(
+            prepared.legacy_protein_raw_v35_candidates
+        ),
         legacy_protein_derived_evidence=prepared.legacy_protein_derived_evidence,
+        legacy_protein_derived_v35_evidence=(
+            prepared.legacy_protein_derived_v35_evidence
+        ),
         protein_id_map=prepared.protein_id_map,
         warnings=prepared.warnings,
     )

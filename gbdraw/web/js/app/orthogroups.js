@@ -8,6 +8,10 @@ import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
+import {
+  isInternalProteinDisplayId,
+  resolveDisplayProteinId
+} from './feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
 
 const { computed } = window.Vue;
@@ -132,14 +136,19 @@ const buildMemberFeaturePayload = (member) => {
   const sourceFeature = member?.sequenceFeature && typeof member.sequenceFeature === 'object'
     ? member.sequenceFeature
     : {};
+  const displayProteinId = resolveDisplayProteinId(
+    sourceFeature,
+    member,
+    memberLocationText(member)
+  );
   return {
     ...sourceFeature,
     record_id: sourceFeature.record_id || sourceFeature.recordId || member?.recordId || member?.record_id,
     start: sourceFeature.start ?? member?.start,
     end: sourceFeature.end ?? member?.end,
     strand: sourceFeature.strand || normalizeMemberStrand(member?.strand),
-    source_protein_id: sourceFeature.source_protein_id || sourceFeature.sourceProteinId || member?.sourceProteinId || member?.source_protein_id,
-    protein_id: sourceFeature.protein_id || sourceFeature.proteinId || member?.proteinId || member?.protein_id,
+    source_protein_id: displayProteinId,
+    protein_id: displayProteinId,
     product: sourceFeature.product || member?.product,
     note: sourceFeature.note || member?.note,
     gene: sourceFeature.gene || member?.gene,
@@ -160,6 +169,7 @@ const memberFastaText = (member, sequenceKind, orthogroupId = '') => {
 };
 
 const getMemberSearchText = (member) => [
+  member?.displayProteinId,
   member?.proteinId,
   member?.sourceProteinId,
   member?.gene,
@@ -168,7 +178,10 @@ const getMemberSearchText = (member) => [
   member?.recordId,
   member?.label,
   memberStableFeatureId(member)
-].map(normalizeLower).join(' ');
+]
+  .filter((value) => !isInternalProteinDisplayId(value))
+  .map(normalizeLower)
+  .join(' ');
 
 const getCandidateSearchText = (candidate) => [
   candidate?.text,
@@ -377,15 +390,32 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const enrichOrthogroupMember = (member) => {
     const stableId = memberStableFeatureId(member);
-    if (!stableId) return member;
+    const memberSequenceFeature = member?.sequenceFeature || null;
+    if (!stableId) {
+      return {
+        ...member,
+        displayProteinId: resolveDisplayProteinId(
+          memberSequenceFeature,
+          member,
+          memberLocationText(member)
+        )
+      };
+    }
     const recordIndex = memberRecordIndex(member);
     const lookup = featureSequenceLookup.value instanceof Map ? featureSequenceLookup.value : new Map();
     const sequenceEntry = (
       recordIndex !== null ? lookup.get(stableRecordKey(recordIndex, stableId)) : null
     ) || lookup.get(stableId) || null;
-    if (!sequenceEntry) return member;
+    const sequenceFeature = sequenceEntry?.sequenceFeature || memberSequenceFeature;
+    const resolvedDisplayProteinId = resolveDisplayProteinId(
+      sequenceFeature,
+      member,
+      memberLocationText(member)
+    );
+    if (!sequenceEntry) return { ...member, displayProteinId: resolvedDisplayProteinId };
     return {
       ...member,
+      displayProteinId: resolvedDisplayProteinId,
       nucleotideSequence: firstSequenceText(member?.nucleotideSequence, member?.nucleotide_sequence, sequenceEntry.nucleotideSequence),
       aminoAcidSequence: firstSequenceText(member?.aminoAcidSequence, member?.amino_acid_sequence, sequenceEntry.aminoAcidSequence),
       sequenceFeature: member?.sequenceFeature || sequenceEntry.sequenceFeature,
@@ -462,7 +492,16 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
   const orthogroupMemberSequenceFilename = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = normalizeText(group?.id || groupOrId) || 'orthogroup';
-    const memberId = normalizeText(member?.sourceProteinId || member?.proteinId || memberStableFeatureId(member) || 'member');
+    const stableId = memberStableFeatureId(member);
+    const memberId = normalizeText(
+      resolveDisplayProteinId(
+        member?.sequenceFeature,
+        member,
+        memberLocationText(member)
+      ) ||
+      (isInternalProteinDisplayId(stableId) ? '' : stableId) ||
+      'member'
+    );
     const stem = makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`);
     return `${stem}.${sequenceExtension(sequenceKind)}`;
   };

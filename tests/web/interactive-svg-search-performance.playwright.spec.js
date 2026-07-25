@@ -173,6 +173,8 @@ source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
 <path data-gbdraw-pairwise-match-id="m1" data-match-kind="pairwise" data-orthogroup-id="og1"
  data-query-record-id="rec1" data-subject-record-id="rec2" data-qstart="1" data-qend="9"
  data-sstart="10" data-send="18" data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
+ data-query-protein-id="h_aaaaaaaaaaaaaaaaaaaaaaaaaa"
+ data-subject-protein-id="f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
  data-identity="99.1" data-alignment-length="9" fill="#94a3b8" d="M 20 20 L 30 20 L 30 50 L 20 50 Z" />
 <path data-gbdraw-pairwise-match-id="m2" data-match-kind="collinear" data-orthogroup-id="og1"
  data-collinearity-block-id="block1" data-collinearity-block-kind="syntenic"
@@ -182,17 +184,44 @@ source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
  data-identity="95.0" data-alignment-length="9" fill="#64748b" d="M 40 20 L 50 20 L 50 50 L 40 50 Z" />
 </svg>'''
 features = [
- {"svg_id": "fq", "record_id": "rec1", "type": "CDS", "start": 0, "end": 9, "orthogroup_id": "og1", "qualifiers": {"product": ["Protein A"], "protein_id": ["P1"]}},
- {"svg_id": "fs", "record_id": "rec2", "type": "CDS", "start": 9, "end": 18, "orthogroup_id": "og1", "qualifiers": {"product": ["Protein B"], "protein_id": ["P2"]}},
+ {"svg_id": "fq", "record_id": "rec1", "type": "CDS", "start": 0, "end": 9, "orthogroup_id": "og1",
+  "proteinId": "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "displayProteinId": "f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "sourceProteinId": "record@instance|alias~f_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "locus_tag": "WP_QUERY_LOCUS.1",
+  "qualifiers": {"product": ["Protein A"], "protein_id": ["h_aaaaaaaaaaaaaaaaaaaaaaaaaa", "WP_QUERY.1"], "translation": ["MPEPTIDE"]},
+  "nucleotide_sequence": "ATGAAATAA", "amino_acid_sequence": "MPEPTIDE"},
+ {"svg_id": "fs", "record_id": "rec2", "type": "CDS", "start": 9, "end": 18, "orthogroup_id": "og1",
+  "proteinId": "h_dddddddddddddddddddddddddd",
+  "sourceProteinId": "f_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "locus_tag": "WP_SUBJECT.1",
+  "qualifiers": {"product": ["Protein B"], "protein_id": ["h_dddddddddddddddddddddddddd"], "translation": ["MSUBJECT"]},
+  "nucleotide_sequence": "ATGCCCTAA", "amino_acid_sequence": "MSUBJECT"},
 ]
 orthogroups = [{"id": "og1", "name": "Family", "member_count": 2, "record_coverage_count": 2, "members": [
- {"featureSvgId": "fq", "recordId": "rec1", "sourceProteinId": "P1", "product": "Protein A"},
- {"featureSvgId": "fs", "recordId": "rec2", "sourceProteinId": "P2", "product": "Protein B"},
+ {"featureSvgId": "fq", "recordId": "rec1", "proteinId": "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "displayProteinId": "f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "sourceProteinId": "record@instance|alias~f_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "label": "h_aaaaaaaaaaaaaaaaaaaaaaaaaa", "locusTag": "WP_MEMBER_QUERY.1", "product": "Protein A"},
+ {"featureSvgId": "fs", "recordId": "rec2", "proteinId": "h_dddddddddddddddddddddddddd",
+  "sourceProteinId": "f_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "label": "h_dddddddddddddddddddddddddd", "locusTag": "WP_SUBJECT.1", "product": "Protein B"},
 ]}]
 with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     handle.write(enrich_svg(source, InteractiveSvgContext(features=features, orthogroups=orthogroups)))
 `;
   execFileSync('python', ['-c', generator, svgPath], { cwd: process.cwd(), stdio: 'inherit' });
+  await page.addInitScript(() => {
+    window.__copiedText = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value) => {
+          window.__copiedText = String(value);
+        }
+      }
+    });
+  });
   await page.goto(pathToFileURL(svgPath).href);
   await page.locator('[data-gbdraw-pairwise-match-id="m1"]').click();
   await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
@@ -212,6 +241,24 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   await expect(page.locator('.gfi-content')).toContainText('99.1');
   await expect(page.locator('.gfi-content')).toContainText('Protein A');
   await expect(page.locator('.gfi-content')).toContainText('Protein B');
+  await expect(page.locator('.gfi-content')).toContainText('WP_QUERY.1');
+  await expect(page.locator('.gfi-content')).toContainText('WP_SUBJECT.1');
+  const popupText = await page.locator('.gfi-content').innerText();
+  expect(popupText).not.toMatch(/h_[a-z2-7]{26}/i);
+  expect(popupText).not.toMatch(/f_[0-9a-f]{64}/i);
+  expect(popupText).not.toContain('record@instance|alias~');
+  await page.locator('.gfi-match-feature-table').first().getByRole('button', { name: 'Copy' }).click();
+  const copiedText = await page.evaluate(() => window.__copiedText);
+  expect(copiedText).toContain('WP_QUERY.1');
+  expect(copiedText).not.toMatch(/h_[a-z2-7]{26}/i);
+  expect(copiedText).not.toMatch(/f_[0-9a-f]{64}/i);
+  const queryMemberRow = page.locator('.gfi-og-members-table tbody tr').filter({ hasText: 'WP_QUERY.1' });
+  const downloadPromise = page.waitForEvent('download');
+  await queryMemberRow.getByRole('button', { name: 'DL aa' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toContain('WP_QUERY.1');
+  expect(download.suggestedFilename()).not.toMatch(/h_[a-z2-7]{26}/i);
+  expect(download.suggestedFilename()).not.toMatch(/f_[0-9a-f]{64}/i);
   await page.locator('[data-close]').click();
   await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
     .not.toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
@@ -491,23 +538,36 @@ test('standalone orthogroup FASTA retains non-rendered biological members', asyn
         {
           svg_id: 'stable-visible_record_1', stable_svg_id: 'stable-visible', fileIdx: 0,
           record_id: 'rec-visible', type: 'CDS', start: 0, end: 9, strand: '+',
+          label: 'h_ffffffffffffffffffffffffff',
           product: 'Visible protein', orthogroup_id: 'og-hidden',
+          proteinId: 'h_ffffffffffffffffffffffffff',
+          displayProteinId: 'f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          sourceProteinId: 'visible@instance|alias~f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
           orthogroup_member: {
             featureSvgId: 'stable-visible', stableFeatureSvgId: 'stable-visible',
             recordIndex: 0, recordId: 'rec-visible', product: 'Visible protein'
           },
-          qualifiers: { protein_id: ['VP_1'], translation: ['MVISIBLE'] },
+          qualifiers: {
+            protein_id: ['h_ffffffffffffffffffffffffff', 'VP_1'],
+            translation: ['MVISIBLE']
+          },
           nucleotide_sequence: 'ATGAAATAA', amino_acid_sequence: 'MVISIBLE'
         },
         {
           svg_id: 'stable-hidden_record_2', stable_svg_id: 'stable-hidden', fileIdx: 1,
           record_id: 'rec-hidden', type: 'CDS', start: 9, end: 18, strand: '+',
           product: 'Hidden protein', orthogroup_id: 'og-hidden',
+          proteinId: 'h_gggggggggggggggggggggggggg',
+          displayProteinId: 'f_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+          sourceProteinId: 'hidden@instance|alias~f_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
           orthogroup_member: {
             featureSvgId: 'stable-hidden', stableFeatureSvgId: 'stable-hidden',
             recordIndex: 1, recordId: 'rec-hidden', product: 'Hidden protein'
           },
-          qualifiers: { protein_id: ['HP_1'], translation: ['MHIDDEN'] },
+          qualifiers: {
+            protein_id: ['h_gggggggggggggggggggggggggg', 'HP_1'],
+            translation: ['MHIDDEN']
+          },
           nucleotide_sequence: 'ATGCCCTAA', amino_acid_sequence: 'MHIDDEN'
         },
         {
@@ -520,17 +580,30 @@ test('standalone orthogroup FASTA retains non-rendered biological members', asyn
         members: [
           {
             featureSvgId: 'stable-visible', stableFeatureSvgId: 'stable-visible',
-            recordIndex: 0, recordId: 'rec-visible', sourceProteinId: 'VP_1',
+            recordIndex: 0, recordId: 'rec-visible',
+            proteinId: 'h_ffffffffffffffffffffffffff',
+            displayProteinId: 'f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            sourceProteinId: 'visible@instance|alias~f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            label: 'h_ffffffffffffffffffffffffff', locusTag: 'VP_1',
             start: 0, end: 9, strand: '+', product: 'Visible protein'
           },
           {
             featureSvgId: 'stable-hidden', stableFeatureSvgId: 'stable-hidden',
-            recordIndex: 1, recordId: 'rec-hidden', sourceProteinId: 'HP_1',
+            recordIndex: 1, recordId: 'rec-hidden',
+            proteinId: 'h_gggggggggggggggggggggggggg',
+            displayProteinId: 'f_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+            sourceProteinId: 'hidden@instance|alias~f_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+            label: 'h_gggggggggggggggggggggggggg', locusTag: 'HP_1',
             start: 9, end: 18, strand: '+', product: 'Hidden protein'
           }
         ]
       }]
     });
+    const metadata = svg.querySelector('#gbdraw-interactive-feature-metadata');
+    const payload = JSON.parse(metadata.textContent);
+    const visibleFeature = payload.features.find((feature) => feature.svg_id === 'rendered-visible');
+    visibleFeature.amino_acid_fasta = '>h_ffffffffffffffffffffffffff\\nMVISIBLE';
+    metadata.textContent = JSON.stringify(payload);
     return new XMLSerializer().serializeToString(svg);
   }, { origin: moduleOrigin });
 
@@ -559,11 +632,40 @@ test('standalone orthogroup FASTA retains non-rendered biological members', asyn
   expect(payload.orthogroups[0].members[1].rendered_feature_svg_id).toBeUndefined();
 
   await page.locator('[data-gbdraw-feature-id="rendered-visible"]').click();
+  const popupTitle = await page.locator('.gfi-title').innerText();
+  expect(popupTitle).toContain('VP_1');
+  expect(popupTitle).not.toMatch(/h_[a-z2-7]{26}/i);
+  expect(popupTitle).not.toMatch(/f_[0-9a-f]{64}/i);
   const memberBlock = page.locator('.gfi-block').filter({ hasText: 'Orthogroup members' }).last();
   await expect(memberBlock.locator('tbody tr')).toHaveCount(2);
+  const memberText = await memberBlock.innerText();
+  expect(memberText).toContain('VP_1');
+  expect(memberText).toContain('HP_1');
+  expect(memberText).not.toMatch(/h_[a-z2-7]{26}/i);
+  expect(memberText).not.toMatch(/f_[0-9a-f]{64}/i);
+  expect(memberText).not.toContain('@instance|alias~');
   await memberBlock.locator('.gfi-block-actions').getByRole('button', { name: 'Copy nt (2)' }).click();
   await expect.poll(() => page.evaluate(() => window.__copiedText)).toContain('rec-hidden');
   expect(await page.evaluate(() => window.__copiedText)).toContain('ATGCCCTAA');
+  await memberBlock.locator('.gfi-block-actions').getByRole('button', { name: 'Copy aa (2)' }).click();
+  await expect.poll(() => page.evaluate(() => window.__copiedText)).toContain('>VP_1');
+  const copiedAminoAcids = await page.evaluate(() => window.__copiedText);
+  expect(copiedAminoAcids).toContain('>HP_1');
+  expect(copiedAminoAcids).not.toMatch(/h_[a-z2-7]{26}/i);
+  expect(copiedAminoAcids).not.toMatch(/f_[0-9a-f]{64}/i);
+  expect(copiedAminoAcids).not.toContain('@instance|alias~');
+  await page.getByRole('button', { name: 'Sequence' }).click();
+  const aminoAcidBlock = page.locator('.gfi-block').filter({ hasText: 'Amino acid' }).last();
+  await aminoAcidBlock.getByRole('button', { name: 'Copy' }).click();
+  await expect.poll(() => page.evaluate(() => window.__copiedText)).toContain('>VP_1');
+  const copiedFeatureAminoAcid = await page.evaluate(() => window.__copiedText);
+  expect(copiedFeatureAminoAcid).not.toMatch(/h_[a-z2-7]{26}/i);
+  const featureDownloadPromise = page.waitForEvent('download');
+  await aminoAcidBlock.getByRole('button', { name: 'DL aa' }).click();
+  const featureDownload = await featureDownloadPromise;
+  expect(featureDownload.suggestedFilename()).toContain('VP_1');
+  expect(featureDownload.suggestedFilename()).not.toMatch(/h_[a-z2-7]{26}/i);
+  expect(featureDownload.suggestedFilename()).not.toMatch(/f_[0-9a-f]{64}/i);
 
   await page.locator('[data-close]').click();
   await page.locator('[data-gbdraw-match-id="og-match"]').hover();

@@ -11,14 +11,19 @@ const fixturePath = join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz'
 );
+const v35FixturePath = join(
+  fixtureDir,
+  'BGC0000708-BGC0000713.schema-v3.gbdraw-session.json.gz'
+);
 const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const CURRENT_SESSION_VERSION = 35;
+const v35Expected = expected.v35;
+const CURRENT_SESSION_VERSION = 36;
 const CURRENT_RENDER_REQUEST_SCHEMA = 3;
-const CURRENT_PROTEIN_RAW_SCHEMA = 3;
-const CURRENT_PROTEIN_DERIVED_SCHEMA = 2;
+const CURRENT_PROTEIN_RAW_SCHEMA = 4;
+const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -36,6 +41,7 @@ const contentTypes = {
 let server;
 let baseUrl;
 let sourceSession;
+let v35SourceSession;
 
 const expandedSessionBytes = (path) => {
   const bytes = readFileSync(path);
@@ -74,6 +80,136 @@ const downloadSvg = async (page) => {
   return path;
 };
 
+const downloadLosatPair = async (page, pairIndex) => {
+  const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
+  await page.evaluate(
+    async (index) => window.__GBDRAW_APP__.downloadLosatPair(index),
+    pairIndex
+  );
+  const download = await downloadPromise;
+  const path = await download.path();
+  expect(path).toBeTruthy();
+  return path;
+};
+
+const downloadAllLosatPairs = async (page, expectedCount) => {
+  const downloads = [];
+  const capture = (download) => downloads.push(download);
+  page.on('download', capture);
+  try {
+    await page.evaluate(async () => window.__GBDRAW_APP__.downloadLosatCache());
+    await expect.poll(
+      () => downloads.length,
+      { timeout: 120000 }
+    ).toBe(expectedCount);
+    const paths = await Promise.all(downloads.map((download) => download.path()));
+    expect(paths.every(Boolean)).toBe(true);
+    return paths;
+  } finally {
+    page.off('download', capture);
+  }
+};
+
+const dataRows = (text) => String(text || '')
+  .split(/\r?\n/)
+  .filter((line) => line.trim() && !line.trimStart().startsWith('#'))
+  .map((line) => line.split('\t'));
+
+const assertHydratedDownload = (text) => {
+  const rows = dataRows(text);
+  expect(rows.length).toBeGreaterThan(0);
+  expect(rows.every((columns) => columns.length === 12)).toBe(true);
+  for (const pattern of expected.downloads.forbiddenPatterns) {
+    expect(text).not.toMatch(new RegExp(pattern, 'i'));
+  }
+  for (const columns of rows) {
+    expect(columns[0]).toMatch(/^[A-Za-z0-9._%~-]+$/);
+    expect(columns[1]).toMatch(/^[A-Za-z0-9._%~-]+$/);
+  }
+};
+
+const assertHydratedDownloads = async (page) => {
+  const pairText = readFileSync(
+    await downloadLosatPair(page, expected.downloads.pairIndex),
+    'utf8'
+  );
+  assertHydratedDownload(pairText);
+  expect(dataRows(pairText)[0].slice(0, 2)).toEqual(expected.downloads.firstDataIds);
+
+  const bulkPaths = await downloadAllLosatPairs(
+    page,
+    expected.downloads.bulkEntryCount
+  );
+  expect(bulkPaths).toHaveLength(expected.downloads.bulkEntryCount);
+  for (const path of bulkPaths) {
+    assertHydratedDownload(readFileSync(path, 'utf8'));
+  }
+};
+
+const assertHydratedUtf8PromptBoundary = async (page) => {
+  const probe = await page.evaluate(async () => {
+    const {
+      LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES,
+      confirmHydratedLosatExport,
+      totalHydratedLosatExportBytes
+    } = await import('/gbdraw/web/js/app/run-analysis.js');
+    const hydrated = { text: '界界' };
+    const utf8Bytes = totalHydratedLosatExportBytes([hydrated]);
+    let prompts = 0;
+    const accepted = confirmHydratedLosatExport(
+      utf8Bytes,
+      () => {
+        prompts += 1;
+        return true;
+      },
+      5
+    );
+    return {
+      threshold: LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES,
+      codeUnits: hydrated.text.length,
+      utf8Bytes,
+      prompts,
+      accepted
+    };
+  });
+  expect(probe).toEqual({
+    threshold: expected.downloads.hydratedPromptThresholdBytes,
+    codeUnits: 2,
+    utf8Bytes: 6,
+    prompts: 1,
+    accepted: true
+  });
+};
+
+const installUserUploadedTsv = async (page) => page.evaluate(
+  async ({ filename, text }) => {
+    const bytes = new TextEncoder().encode(text);
+    const app = window.__GBDRAW_APP__;
+    app.blastSource = 'upload';
+    app.losatProgram = 'blastn';
+    app.linearSeqs[0].blast = new File(
+      [bytes],
+      filename,
+      { type: 'text/tab-separated-values', lastModified: 0 }
+    );
+    return Array.from(
+      new Uint8Array(await app.linearSeqs[0].blast.arrayBuffer())
+    );
+  },
+  {
+    filename: expected.downloads.userUploadedFilename,
+    text: expected.downloads.userUploadedTsv
+  }
+);
+
+const readFirstUploadedTsv = async (page) => page.evaluate(async () => {
+  const file = window.__GBDRAW_APP__.linearSeqs[0].blast;
+  return {
+    name: file?.name || '',
+    bytes: file ? Array.from(new Uint8Array(await file.arrayBuffer())) : []
+  };
+});
+
 const assertCurrentSessionBoundary = (session, { requireDerived = false } = {}) => {
   const rawEntries = session.losatCache?.entries || [];
   const derivedEntries = session.losatDerivedCache?.entries || [];
@@ -85,7 +221,10 @@ const assertCurrentSessionBoundary = (session, { requireDerived = false } = {}) 
     entry?.schema === CURRENT_PROTEIN_RAW_SCHEMA
   ))).toBe(true);
   expect(derivedEntries.every(
-    (entry) => entry?.schema === CURRENT_PROTEIN_DERIVED_SCHEMA
+    (entry) => (
+      entry?.schema === CURRENT_PROTEIN_DERIVED_SCHEMA &&
+      entry?.idEncoding === 'runtime-handle-v1'
+    )
   )).toBe(true);
   if (requireDerived) {
     expect(derivedEntries.length).toBeGreaterThan(0);
@@ -114,6 +253,29 @@ const assertLegacyCandidatesPreserved = (session) => {
   });
 };
 
+const assertV35CandidatesPreserved = (session, v35SourceSession) => {
+  assertCurrentSessionBoundary(session);
+  const rawEnvelope = session.legacyArtifacts?.proteinRawV35Candidates;
+  const candidates = rawEnvelope?.entries || [];
+  const derivedEnvelope = session.legacyArtifacts?.proteinDerivedV35Evidence;
+  expect(session.losatCache?.entries || []).toHaveLength(0);
+  expect(session.losatDerivedCache?.entries || []).toHaveLength(0);
+  expect(rawEnvelope?.schema).toBe(1);
+  expect(rawEnvelope?.sourceManifest).toEqual(v35SourceSession.proteinIdentityManifest);
+  expect(candidates).toHaveLength(v35Expected.storedRawEntries);
+  expect(candidates.every((candidate) => (
+    candidate.state === 'pending' &&
+    candidate.originalEntry?.schema === v35Expected.rawSchema &&
+    candidate.originalEntry?.program === 'blastp'
+  ))).toBe(true);
+  expect(candidates.map((candidate) => candidate.originalEntry))
+    .toEqual(v35SourceSession.losatCache?.entries || []);
+  expect(derivedEnvelope).toEqual({
+    schema: 1,
+    entries: v35SourceSession.losatDerivedCache?.entries || []
+  });
+};
+
 const assertRenamedZeroMtimeResources = (session) => {
   const genbankResources = Object.values(session.resources || {})
     .filter((resource) => resource?.kind === 'genbank');
@@ -130,45 +292,87 @@ const assertRenamedZeroMtimeResources = (session) => {
   ));
 };
 
-const assertCurrentProteinArtifacts = (session) => {
+const rawTailSignature = (text) => String(text || '')
+  .split('\n')
+  .map((line) => {
+    const body = line.endsWith('\r') ? line.slice(0, -1) : line;
+    const ending = line.endsWith('\r') ? '\r' : '';
+    if (!body.trim() || body.trimStart().startsWith('#')) return line;
+    return `${body.split('\t').slice(2).join('\t')}${ending}`;
+  })
+  .join('\n');
+
+const assertCurrentProteinArtifacts = (
+  session,
+  {
+    migrationExpected = expected,
+    migrationSource = sourceSession,
+    migrationKind = 'schema2'
+  } = {}
+) => {
   assertCurrentSessionBoundary(session, { requireDerived: true });
   const manifest = session.proteinIdentityManifest;
   const entries = session.losatCache?.entries || [];
   const derivedEntries = session.losatDerivedCache?.entries || [];
-  expect(manifest?.schema).toBe(1);
-  expect(entries).toHaveLength(expected.totalPairs);
+  expect(manifest?.schema).toBe(2);
+  expect(entries).toHaveLength(migrationExpected.totalPairs);
   expect(entries.every((entry) => (
-    entry?.schema === 3 &&
+    entry?.schema === 4 &&
     entry?.kind === 'raw-losat' &&
     entry?.identityKind === 'protein' &&
+    entry?.idEncoding === 'runtime-handle-v1' &&
     entry?.program === 'blastp'
   ))).toBe(true);
   expect(derivedEntries.every((entry) => (
     entry?.schema === CURRENT_PROTEIN_DERIVED_SCHEMA &&
-    entry?.kind === 'derived-losatp-payload'
+    entry?.kind === 'derived-losatp-payload' &&
+    entry?.idEncoding === 'runtime-handle-v1'
   ))).toBe(true);
-  const legacyCandidates = session.legacyArtifacts?.proteinRawCandidates?.entries || [];
-  expect(legacyCandidates).toHaveLength(expected.storedRawEntries - expected.totalPairs);
-  expect(legacyCandidates.every((candidate) => (
-    candidate.state === 'pending' &&
-    (sourceSession.losatCache?.entries || []).some(
-      (entry) => JSON.stringify(entry) === JSON.stringify(candidate.originalEntry)
-    )
-  ))).toBe(true);
-  expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || [])
-    .toEqual(sourceSession.losatDerivedCache?.entries || []);
+  if (migrationKind === 'schema2') {
+    const legacyCandidates = session.legacyArtifacts?.proteinRawCandidates?.entries || [];
+    expect(legacyCandidates)
+      .toHaveLength(migrationExpected.storedRawEntries - migrationExpected.totalPairs);
+    expect(legacyCandidates.every((candidate) => (
+      candidate.state === 'pending' &&
+      (migrationSource.losatCache?.entries || []).some(
+        (entry) => JSON.stringify(entry) === JSON.stringify(candidate.originalEntry)
+      )
+    ))).toBe(true);
+    expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || [])
+      .toEqual(migrationSource.losatDerivedCache?.entries || []);
+  } else {
+    expect(session.legacyArtifacts?.proteinRawV35Candidates?.entries || []).toEqual([]);
+    expect(
+      session.legacyArtifacts?.proteinRawV35Candidates?.sourceManifest ?? null
+    ).toBeNull();
+    expect(session.legacyArtifacts?.proteinDerivedV35Evidence?.entries || []).toEqual([]);
+    const sourceByPair = new Map(
+      (migrationSource.losatCache?.entries || []).map((entry) => [
+        `${entry.queryRecordInstanceKey}\0${entry.subjectRecordInstanceKey}`,
+        entry
+      ])
+    );
+    for (const entry of entries) {
+      const source = sourceByPair.get(
+        `${entry.queryRecordInstanceKey}\0${entry.subjectRecordInstanceKey}`
+      );
+      expect(source).toBeTruthy();
+      expect(rawTailSignature(entry.text)).toBe(rawTailSignature(source.text));
+    }
+  }
 
-  const transportOwners = new Map();
+  const runtimeOwners = new Map();
   for (const [instanceKey, instance] of Object.entries(manifest.recordInstances || {})) {
     expect(manifest.recordAnalyses?.[instance.recordAnalysisId]).toBeTruthy();
-    expect(instance.bindingHash).toBeTruthy();
-    for (const [featureId, transportId] of Object.entries(instance.transportIds || {})) {
+    expect(instance.runtimeBindingHash).toBeTruthy();
+    expect(instance.displayBindingHash).toBeTruthy();
+    expect(Object.keys(instance.runtimeIds || {}).sort())
+      .toEqual(Object.keys(instance.featureMetadata || {}).sort());
+    for (const [featureId, runtimeHandle] of Object.entries(instance.runtimeIds || {})) {
       expect(featureId).toMatch(/^f_/);
-      expect(transportId).not.toMatch(/^p_r_/);
-      expect(transportId).toMatch(/@.+\|.+~f_/);
-      expect(transportId).not.toMatch(/\s/);
-      expect(transportOwners.has(transportId)).toBe(false);
-      transportOwners.set(transportId, { instanceKey, featureId });
+      expect(runtimeHandle).toMatch(/^h_[a-z2-7]{26}$/);
+      expect(runtimeOwners.has(runtimeHandle)).toBe(false);
+      runtimeOwners.set(runtimeHandle, { instanceKey, featureId });
     }
   }
 
@@ -176,24 +380,24 @@ const assertCurrentProteinArtifacts = (session) => {
   for (const entry of entries) {
     const query = manifest.recordInstances?.[entry.queryRecordInstanceKey];
     const subject = manifest.recordInstances?.[entry.subjectRecordInstanceKey];
-    expect(query?.bindingHash).toBe(entry.queryBindingHash);
-    expect(subject?.bindingHash).toBe(entry.subjectBindingHash);
+    expect(query?.runtimeBindingHash).toBe(entry.queryRuntimeBindingHash);
+    expect(subject?.runtimeBindingHash).toBe(entry.subjectRuntimeBindingHash);
     expect(manifest.recordAnalyses?.[query.recordAnalysisId]?.proteinSetHash)
       .toBe(entry.queryProteinSetHash);
     expect(manifest.recordAnalyses?.[subject.recordAnalysisId]?.proteinSetHash)
       .toBe(entry.subjectProteinSetHash);
-    const queryIds = new Set(Object.values(query.transportIds || {}));
-    const subjectIds = new Set(Object.values(subject.transportIds || {}));
+    const queryIds = new Set(Object.values(query.runtimeIds || {}));
+    const subjectIds = new Set(Object.values(subject.runtimeIds || {}));
     for (const rawLine of String(entry.text || '').split(/\r?\n/)) {
       const line = rawLine.trim();
       if (!line || line.startsWith('#')) continue;
       const [queryId, subjectId] = rawLine.split('\t');
-      expect(queryId).not.toMatch(/^p_r_/);
-      expect(subjectId).not.toMatch(/^p_r_/);
+      expect(queryId).toMatch(/^h_[a-z2-7]{26}$/);
+      expect(subjectId).toMatch(/^h_[a-z2-7]{26}$/);
       expect(queryIds.has(queryId)).toBe(true);
       expect(subjectIds.has(subjectId)).toBe(true);
-      expect(transportOwners.get(queryId)?.instanceKey).toBe(entry.queryRecordInstanceKey);
-      expect(transportOwners.get(subjectId)?.instanceKey).toBe(entry.subjectRecordInstanceKey);
+      expect(runtimeOwners.get(queryId)?.instanceKey).toBe(entry.queryRecordInstanceKey);
+      expect(runtimeOwners.get(subjectId)?.instanceKey).toBe(entry.subjectRecordInstanceKey);
       resolvedReferenceCount += 2;
     }
   }
@@ -225,8 +429,9 @@ const assertCurrentProteinArtifacts = (session) => {
   };
   collectReferences(derivedEntries);
   expect(derivedReferences.length).toBeGreaterThan(0);
-  expect(derivedReferences.filter((reference) => !transportOwners.has(reference))).toEqual([]);
+  expect(derivedReferences.filter((reference) => !runtimeOwners.has(reference))).toEqual([]);
   expect(JSON.stringify(derivedEntries)).not.toContain('p_r_');
+  expect(JSON.stringify(derivedEntries)).not.toMatch(/@.+\|.+~f_[0-9a-f]{64}/);
 };
 
 const generateWithTelemetry = async (page) => page.evaluate(async () => {
@@ -243,19 +448,129 @@ const generateWithTelemetry = async (page) => page.evaluate(async () => {
   };
 });
 
-const assertExpectedTelemetry = (run) => {
+const migrationUiSnapshot = async (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return JSON.parse(JSON.stringify({
+    orthogroups: state.orthogroups.value,
+    selectedOrthogroupAlignmentFeature: state.selectedOrthogroupAlignmentFeature.value,
+    selectedOrthogroupId: state.selectedOrthogroupId.value,
+    extractedFeatures: state.extractedFeatures.value,
+    biologicalFeatures: state.biologicalFeatures.value
+  }));
+});
+
+const cancelDuringRender = async (page) => page.evaluate(async () => {
+  const app = window.__GBDRAW_APP__;
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const before = {
+    proteinIdentityManifest: state.proteinIdentityManifest.value,
+    legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
+    legacyProteinRawV35Candidates: state.legacyProteinRawV35Candidates.value,
+    legacyProteinDerivedEvidence: state.legacyProteinDerivedEvidence.value,
+    legacyProteinDerivedV35Evidence: state.legacyProteinDerivedV35Evidence.value,
+    losatCache: Array.from(state.losatCache.value.entries()),
+    losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
+    losatCacheInfo: state.losatCacheInfo.value
+  };
+  let sawRendering = false;
+  let cancelInvoked = false;
+  const cancelPoll = setInterval(() => {
+    if (
+      sawRendering ||
+      String(app.processingStatus || '') !== 'Rendering SVG...'
+    ) return;
+    sawRendering = true;
+    app.cancelGeneration();
+    cancelInvoked = true;
+  }, 0);
+  try {
+    const result = await app.runAnalysis();
+    const sameMapEntries = (entries, current) => (
+      entries.length === current.size &&
+      entries.every(([key, value]) => current.get(key) === value)
+    );
+    return {
+      result,
+      sawRendering,
+      cancelInvoked,
+      errorSummary: String(app.errorLog?.summary || ''),
+      executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
+      authorityRestored: (
+        state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
+        state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates &&
+        state.legacyProteinRawV35Candidates.value ===
+          before.legacyProteinRawV35Candidates &&
+        state.legacyProteinDerivedEvidence.value ===
+          before.legacyProteinDerivedEvidence &&
+        state.legacyProteinDerivedV35Evidence.value ===
+          before.legacyProteinDerivedV35Evidence &&
+        sameMapEntries(before.losatCache, state.losatCache.value) &&
+        sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value) &&
+        state.losatCacheInfo.value === before.losatCacheInfo
+      )
+    };
+  } finally {
+    clearInterval(cancelPoll);
+  }
+});
+
+const failRendererAfterMigration = async (page) => page.evaluate(async () => {
+  const app = window.__GBDRAW_APP__;
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const before = {
+    proteinIdentityManifest: state.proteinIdentityManifest.value,
+    legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
+    legacyProteinRawV35Candidates: state.legacyProteinRawV35Candidates.value,
+    legacyProteinDerivedEvidence: state.legacyProteinDerivedEvidence.value,
+    legacyProteinDerivedV35Evidence: state.legacyProteinDerivedV35Evidence.value,
+    losatCache: Array.from(state.losatCache.value.entries()),
+    losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
+    losatCacheInfo: state.losatCacheInfo.value
+  };
+  const previousLegendFontSize = app.adv.legend_font_size;
+  app.adv.legend_font_size = 'not-a-number';
+  try {
+    const result = await app.runAnalysis();
+    const sameMapEntries = (entries, current) => (
+      entries.length === current.size &&
+      entries.every(([key, value]) => current.get(key) === value)
+    );
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
+      authorityRestored: (
+        state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
+        state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates &&
+        state.legacyProteinRawV35Candidates.value ===
+          before.legacyProteinRawV35Candidates &&
+        state.legacyProteinDerivedEvidence.value ===
+          before.legacyProteinDerivedEvidence &&
+        state.legacyProteinDerivedV35Evidence.value ===
+          before.legacyProteinDerivedV35Evidence &&
+        sameMapEntries(before.losatCache, state.losatCache.value) &&
+        sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value) &&
+        state.losatCacheInfo.value === before.losatCacheInfo
+      )
+    };
+  } finally {
+    app.adv.legend_font_size = previousLegendFontSize;
+  }
+});
+
+const assertExpectedTelemetry = (run, migrationExpected = expected) => {
   const diagnostics = `Generation diagnostics:\n${JSON.stringify(run, null, 2)}`;
   expect(run.result, diagnostics).toEqual({ status: 'ok' });
   expect(run.errorSummary, diagnostics).toBe('');
   expect(run.errorDetails, diagnostics).toEqual([]);
   expect(run.telemetry, diagnostics).toMatchObject({
-    totalPairs: expected.totalPairs,
-    cacheHits: expected.cacheHits,
-    cacheMisses: expected.cacheMisses,
-    uniqueJobs: expected.uniqueJobs,
-    workerCalls: expected.workerCalls
+    totalPairs: migrationExpected.totalPairs,
+    cacheHits: migrationExpected.cacheHits,
+    cacheMisses: migrationExpected.cacheMisses,
+    uniqueJobs: migrationExpected.uniqueJobs,
+    workerCalls: migrationExpected.workerCalls
   });
-  expect(run.executorCalls, diagnostics).toBe(expected.workerCalls);
+  expect(run.executorCalls, diagnostics).toBe(migrationExpected.workerCalls);
 };
 
 const inspectLayout = async (page) => {
@@ -500,6 +815,7 @@ const assertSvgGeometryParity = async (page, exportedPath) => {
 
 test.beforeAll(async () => {
   expect(existsSync(fixturePath)).toBe(true);
+  expect(existsSync(v35FixturePath)).toBe(true);
   const fixtureBytes = expandedSessionBytes(fixturePath);
   const fixture = JSON.parse(fixtureBytes.toString('utf8'));
   sourceSession = fixture;
@@ -507,6 +823,16 @@ test.beforeAll(async () => {
   expect(fixture.version).toBe(expected.sessionVersion);
   expect(fixture.renderRequest?.schema).toBe(expected.renderRequestSchema);
   expect(fixture.losatCache?.entries).toHaveLength(expected.storedRawEntries);
+  const v35FixtureBytes = expandedSessionBytes(v35FixturePath);
+  v35SourceSession = JSON.parse(v35FixtureBytes.toString('utf8'));
+  expect(createHash('sha256').update(v35FixtureBytes).digest('hex'))
+    .toBe(v35Expected.sourceSha256);
+  expect(v35SourceSession.version).toBe(v35Expected.sessionVersion);
+  expect(v35SourceSession.renderRequest?.schema).toBe(v35Expected.renderRequestSchema);
+  expect(v35SourceSession.losatCache?.entries).toHaveLength(v35Expected.storedRawEntries);
+  expect(v35SourceSession.losatCache.entries.every(
+    (entry) => entry.schema === v35Expected.rawSchema
+  )).toBe(true);
   await new Promise((resolveServer, rejectServer) => {
     server = createServer((request, response) => {
       const url = new URL(request.url || '/', 'http://127.0.0.1');
@@ -535,8 +861,8 @@ test.afterAll(async () => {
   await new Promise((resolveClose) => server.close(resolveClose));
 });
 
-test('real schema-2 protein cache survives save/load and migrates without LOSAT work', async ({ page }) => {
-  test.setTimeout(600000);
+test('legacy protein caches migrate, export readable TSV, and preserve uploads', async ({ page }) => {
+  test.setTimeout(900000);
   await page.addInitScript(() => {
     window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ = 0;
     window.__GBDRAW_LOSAT_EXECUTOR__ = async () => {
@@ -586,6 +912,8 @@ test('real schema-2 protein cache survives save/load and migrates without LOSAT 
   const firstLayout = await inspectLayout(page);
   assertLayout(firstLayout);
   await assertSvgGeometryParity(page, await downloadSvg(page));
+  await assertHydratedDownloads(page);
+  await assertHydratedUtf8PromptBoundary(page);
 
   const migratedPath = await saveSession(page);
   const migratedSession = readSession(migratedPath);
@@ -604,4 +932,64 @@ test('real schema-2 protein cache survives save/load and migrates without LOSAT 
   const secondLayout = await inspectLayout(page);
   assertLayout(secondLayout);
   expect(secondLayout.geometrySignature).toBe(firstLayout.geometrySignature);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, v35FixturePath);
+
+  const v35PreGeneratePath = await saveSession(page);
+  const v35PreGenerateSession = readSession(v35PreGeneratePath);
+  assertV35CandidatesPreserved(v35PreGenerateSession, v35SourceSession);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, v35PreGeneratePath);
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.pyodideReady === true,
+    null,
+    { timeout: 240000 }
+  );
+  const v35UiBeforeCancel = await migrationUiSnapshot(page);
+  const canceledV35Run = await cancelDuringRender(page);
+  expect(canceledV35Run).toMatchObject({
+    result: { status: 'canceled' },
+    sawRendering: true,
+    cancelInvoked: true,
+    errorSummary: '',
+    executorCalls: 0,
+    authorityRestored: true
+  });
+  expect(await migrationUiSnapshot(page)).toEqual(v35UiBeforeCancel);
+  const v35UiBeforeRenderError = await migrationUiSnapshot(page);
+  const failedV35Run = await failRendererAfterMigration(page);
+  expect(failedV35Run).toMatchObject({
+    result: { status: 'error' },
+    authorityRestored: true,
+    executorCalls: 0
+  });
+  expect(failedV35Run.errorSummary).not.toBe('');
+  expect(await migrationUiSnapshot(page)).toEqual(v35UiBeforeRenderError);
+  assertExpectedTelemetry(await generateWithTelemetry(page), v35Expected);
+
+  const v35MigratedPath = await saveSession(page);
+  const v35MigratedSession = readSession(v35MigratedPath);
+  assertCurrentProteinArtifacts(v35MigratedSession, {
+    migrationExpected: v35Expected,
+    migrationSource: v35SourceSession,
+    migrationKind: 'v35'
+  });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, v35MigratedPath);
+  const expectedUploadBytes = await installUserUploadedTsv(page);
+  const uploadedSessionPath = await saveSession(page);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, uploadedSessionPath);
+  const restoredUpload = await readFirstUploadedTsv(page);
+  expect(restoredUpload).toEqual({
+    name: expected.downloads.userUploadedFilename,
+    bytes: expectedUploadBytes
+  });
 });

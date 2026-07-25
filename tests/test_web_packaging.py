@@ -21,7 +21,14 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session
+from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
+    LOSAT_DERIVED_CACHE_SCHEMA,
+    NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    PROTEIN_LOSAT_CACHE_SCHEMA,
+    load_session,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -84,7 +91,13 @@ GALLERY_LOSAT_CACHE_SESSION_FILES = {
 }
 GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+    "majanivirus_orthogroup.gbdraw-session.json.gz",
+    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
+
+
 def _load_verify_module():
     module_path = REPO_ROOT / "tools" / "verify_gui_offline.py"
     spec = importlib.util.spec_from_file_location("verify_gui_offline", module_path)
@@ -429,6 +442,42 @@ def test_web_gallery_session_migration() -> None:
     )
 
 
+def test_web_session_import_rejects_invalid_losat_cache_artifacts() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/session-losat-cache-validation.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_web_losat_cache_reference_validation() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/losat-cache.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_web_derived_losat_cache_identity_invalidation() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/run-analysis-derived-cache.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
 def test_web_losat_settings_preserve_requested_thread_count() -> None:
     node = shutil.which("node")
     if node is None:
@@ -764,8 +813,9 @@ def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:
     assert "legacyArtifacts?.proteinRawCandidates" in config_js
     assert "kind: 'derived-losatp-payload'" in config_js
     assert "buildLosatDerivedPayloadCachePayload({" in run_analysis_js
-    assert "getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey)" in run_analysis_js
-    assert "setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey" in run_analysis_js
+    assert "convertedPayload = getLosatDerivedCacheEntry(" in run_analysis_js
+    assert "setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {" in run_analysis_js
+    assert "manifest: proteinIdentityManifest.value" in run_analysis_js
 
 
 def test_web_losatp_orthogroup_and_collinear_blastp_omit_hsp_cap() -> None:
@@ -1042,7 +1092,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert '"format":"gbdraw-session"' in session_prefix
         version_match = re.search(r'"version":(\d+)', session_prefix)
         assert version_match is not None
-        assert int(version_match.group(1)) in {32, CURRENT_SESSION_VERSION}
+        assert int(version_match.group(1)) == CURRENT_SESSION_VERSION
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
         assert "window.parent" not in svg_source
@@ -1319,6 +1369,9 @@ def test_web_session_feature_metadata_recovery_source_contract() -> None:
 
 
 def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None:
+    observed_losat_cache_sessions = set()
+    observed_losat_derived_cache_sessions = set()
+
     for session_name in GALLERY_SESSION_FILES:
         session_path = GALLERY_ROOT / "sessions" / session_name
         session = load_session(session_path)
@@ -1328,6 +1381,13 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
             match
             for match in re.findall(
                 r"data-gbdraw-stable-feature-id=[\"']([^\"']+)[\"']",
+                svg_text,
+            )
+        }
+        rendered_feature_ids = {
+            re.sub(r"_record_\d+$", "", match)
+            for match in re.findall(
+                r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']",
                 svg_text,
             )
         }
@@ -1345,21 +1405,51 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
         collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
 
-        assert session.get("version") in {32, CURRENT_SESSION_VERSION}, session_name
+        assert session.get("version") == CURRENT_SESSION_VERSION, session_name
+        assert session.get("renderRequest", {}).get("schema") == 3, session_name
+        assert (
+            session.get("proteinIdentityManifest", {}).get("schema")
+            == PROTEIN_IDENTITY_MANIFEST_SCHEMA
+        ), session_name
         assert "files" not in session, session_name
         assert features, session_name
         assert session.get("results"), session_name
         assert "orthogroupState" in session, session_name
-        assert rendered_stable_feature_ids, session_name
-        assert rendered_stable_feature_ids <= feature_ids, session_name
+        resolved_rendered_feature_ids = (
+            rendered_stable_feature_ids or rendered_feature_ids
+        )
+        assert resolved_rendered_feature_ids, session_name
+        assert resolved_rendered_feature_ids <= feature_ids, session_name
         if session_name in GALLERY_EDITOR_STATE_SESSION_FILES:
             assert session.get("editorState"), session_name
-        if session_name in GALLERY_LOSAT_CACHE_SESSION_FILES:
-            assert session.get("losatCache", {}).get("entries"), session_name
-        if session_name in GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES:
-            assert session.get("losatDerivedCache", {}).get("entries"), session_name
+        losat_cache_entries = session.get("losatCache", {}).get("entries", [])
+        if losat_cache_entries:
+            observed_losat_cache_sessions.add(session_name)
+            for entry in losat_cache_entries:
+                expected_schema = (
+                    PROTEIN_LOSAT_CACHE_SCHEMA
+                    if entry.get("identityKind") == "protein"
+                    else NUCLEOTIDE_LOSAT_CACHE_SCHEMA
+                )
+                assert entry.get("schema") == expected_schema, session_name
+
+        losat_derived_cache_entries = session.get("losatDerivedCache", {}).get(
+            "entries", []
+        )
+        if losat_derived_cache_entries:
+            observed_losat_derived_cache_sessions.add(session_name)
+            assert all(
+                entry.get("schema") == LOSAT_DERIVED_CACHE_SCHEMA
+                for entry in losat_derived_cache_entries
+            ), session_name
         if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
             assert pairwise_ids or collinearity_ids, session_name
+
+    assert observed_losat_cache_sessions == GALLERY_LOSAT_CACHE_SESSION_FILES
+    assert (
+        observed_losat_derived_cache_sessions
+        == GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES
+    )
 
 
 def test_tobacco_gallery_session_keeps_chloroplast_region_annotations() -> None:
@@ -1434,6 +1524,7 @@ def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path
     check_path.write_text(
         f"""
         import {{ buildFeatureSequenceFastas }} from {module_path.as_uri()!r};
+        import {{ getFeatureCaption }} from {feature_utils_path.as_uri()!r};
 
         const assert = (condition, message) => {{
           if (!condition) throw new Error(message);
@@ -1482,6 +1573,41 @@ def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path
         );
         assert(fallback.aminoAcidFasta.startsWith('>LOC_1 fallback protein\\n'), fallback.aminoAcidFasta);
         assert(fallback.aminoAcidFasta.endsWith('\\nM'), fallback.aminoAcidFasta);
+
+        const runtimeHandle = `h_${{'a'.repeat(26)}}`;
+        const displaySafe = buildFeatureSequenceFastas({{
+          source_protein_id: '',
+          protein_id: runtimeHandle,
+          locus_tag: 'LOC_SAFE',
+          amino_acid_sequence: 'MK'
+        }});
+        assert(displaySafe.aminoAcidFasta.startsWith('>LOC_SAFE'), displaySafe.aminoAcidFasta);
+        assert(!displaySafe.aminoAcidFasta.includes(runtimeHandle), displaySafe.aminoAcidFasta);
+
+        const syntheticLabel = 'gbd_r0001_cds000001';
+        assert(
+          getFeatureCaption({{ label: syntheticLabel, type: 'CDS', start: 0, end: 9 }}) === 'CDS at 0..9',
+          'Synthetic feature label leaked into the caption'
+        );
+        assert(
+          getFeatureCaption({{
+            product: runtimeHandle,
+            locus_tag: 'LOC_CAPTION_SAFE'
+          }}) === 'LOC_CAPTION_SAFE',
+          'Internal product prevented a safe caption fallback'
+        );
+
+        const safeDescription = buildFeatureSequenceFastas({{
+          source_protein_id: 'WP_SAFE_DESCRIPTION.1',
+          product: runtimeHandle,
+          locus_tag: 'LOC_DESCRIPTION_SAFE',
+          amino_acid_sequence: 'MK'
+        }}).aminoAcidFasta;
+        assert(
+          safeDescription.startsWith('>WP_SAFE_DESCRIPTION.1 LOC_DESCRIPTION_SAFE\\n'),
+          safeDescription
+        );
+        assert(!safeDescription.includes(runtimeHandle), safeDescription);
         """,
         encoding="utf-8",
     )
@@ -1875,6 +2001,47 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
           popupMode: 'rich'
         }});
         assert(translationSearch.matches.join(',') === 'ftranslation', `Translation fallback failed: ${{JSON.stringify(translationSearch)}}`);
+
+        const runtimeHandle = `h_${{'a'.repeat(26)}}`;
+        const featureAnalysisId = `f_${{'b'.repeat(64)}}`;
+        const v35TransportId = `record@instance|alias~f_${{'c'.repeat(64)}}`;
+        const internalFeature = {{
+          svg_id: 'finternal',
+          type: 'CDS',
+          displayLabel: runtimeHandle,
+          label: featureAnalysisId,
+          sourceProteinId: v35TransportId,
+          proteinId: runtimeHandle,
+          qualifiers: {{
+            protein_id: [runtimeHandle, featureAnalysisId, v35TransportId],
+            locus_tag: ['WP_SAFE_SEARCH.1']
+          }},
+          orthogroupId: 'og_internal'
+        }};
+        const internalOrthogroups = [{{
+          id: 'og_internal',
+          members: [{{
+            featureSvgId: 'finternal',
+            displayProteinId: runtimeHandle,
+            sourceProteinId: featureAnalysisId,
+            label: v35TransportId,
+            locusTag: 'WP_SAFE_SEARCH.1'
+          }}]
+        }}];
+        const internalItems = featureSearchItems(
+          internalFeature,
+          'all',
+          '',
+          {{ popupMode: 'rich', orthogroupsById: new Map([['og_internal', internalOrthogroups[0]]]) }}
+        );
+        assert(
+          internalItems.some((item) => item.value === 'WP_SAFE_SEARCH.1'),
+          `Safe display ID missing: ${{JSON.stringify(internalItems)}}`
+        );
+        assert(
+          !internalItems.some((item) => [runtimeHandle, featureAnalysisId, v35TransportId].includes(item.value)),
+          `Internal protein ID leaked into GUI search: ${{JSON.stringify(internalItems)}}`
+        );
         """,
         encoding="utf-8",
     )
@@ -4039,7 +4206,8 @@ def test_web_session_uses_structured_depth_file_codec(tmp_path: Path) -> None:
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     assert "depth: await serializeDepthFile(seq.depth)" in config_source
     assert "c_depth: await serializeDepthFile(state.files.c_depth)" in config_source
-    assert "await downloadCompressedSession(sessionData, sessionFilename);" in config_source
+    assert "await downloadCompressedSession(" in config_source
+    assert "compactSessionFeatureCatalog(sessionData)" in config_source
 
 
 def test_web_config_persists_manual_qualifier_priority_rules() -> None:

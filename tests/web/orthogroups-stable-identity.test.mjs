@@ -47,14 +47,67 @@ globalThis.window = {
   }
 };
 let copiedText = '';
-globalThis.navigator = {
-  clipboard: {
-    writeText: async (value) => { copiedText = String(value); }
+Object.defineProperty(globalThis, 'navigator', {
+  configurable: true,
+  value: {
+    clipboard: {
+      writeText: async (value) => { copiedText = String(value); }
+    }
   }
-};
+});
 
 const { createOrthogroupEditor } = await import(
   pathToFileURL(join(tempDir, 'app', 'orthogroups.js'))
+);
+const {
+  isInternalProteinDisplayId,
+  resolveDisplayProteinId
+} = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
+
+assert.equal(isInternalProteinDisplayId(`h_${'c'.repeat(26)}`), true);
+assert.equal(isInternalProteinDisplayId(`f_${'d'.repeat(64)}`), true);
+assert.equal(
+  resolveDisplayProteinId(null, {
+    proteinId: `h_${'c'.repeat(26)}`,
+    label: 'display fallback'
+  }),
+  'display fallback'
+);
+assert.equal(
+  resolveDisplayProteinId(null, { proteinId: `h_${'c'.repeat(26)}` }),
+  ''
+);
+const runtimeHandle = `h_${'e'.repeat(26)}`;
+const featureAnalysisId = `f_${'f'.repeat(64)}`;
+const v35TransportId = `record@instance|alias~f_${'a'.repeat(64)}`;
+assert.equal(
+  resolveDisplayProteinId(
+    {
+      displayProteinId: runtimeHandle,
+      sourceProteinId: featureAnalysisId,
+      qualifiers: { protein_id: [v35TransportId] },
+      locusTag: 'WP_SAFE.1'
+    },
+    { label: runtimeHandle }
+  ),
+  'WP_SAFE.1'
+);
+assert.equal(
+  resolveDisplayProteinId(
+    {
+      displayProteinId: runtimeHandle,
+      sourceProteinId: featureAnalysisId,
+      qualifiers: { protein_id: [v35TransportId] }
+    },
+    { label: runtimeHandle }
+  ),
+  ''
+);
+assert.equal(
+  resolveDisplayProteinId({
+    qualifiers: { protein_id: [runtimeHandle, 'WP_ARRAY_FALLBACK.1'] }
+  }),
+  'WP_ARRAY_FALLBACK.1'
 );
 
 const ref = (value) => ({ value });
@@ -85,8 +138,18 @@ const svg = {
 const group = {
   id: 'og_1',
   members: [
-    { recordIndex: 0, recordId: 'record-a', featureSvgId: 'stable-x', proteinId: 'visible' },
-    { recordIndex: 1, recordId: 'record-b', featureSvgId: 'stable-x', proteinId: 'hidden' }
+    {
+      recordIndex: 0,
+      recordId: 'record-a',
+      featureSvgId: 'stable-x',
+      proteinId: `h_${'a'.repeat(26)}`
+    },
+    {
+      recordIndex: 1,
+      recordId: 'record-b',
+      featureSvgId: 'stable-x',
+      proteinId: `h_${'b'.repeat(26)}`
+    }
   ]
 };
 const state = {
@@ -112,18 +175,115 @@ const state = {
     }
   ]),
   biologicalFeatures: ref([
-    { fileIdx: 0, svg_id: 'stable-x', stable_svg_id: 'stable-x', nucleotide_sequence: 'AAAA' },
-    { fileIdx: 1, svg_id: 'stable-x', stable_svg_id: 'stable-x', nucleotide_sequence: 'CCCC' }
+    {
+      fileIdx: 0,
+      record_id: 'record-a',
+      svg_id: 'stable-x',
+      stable_svg_id: 'stable-x',
+      locus_tag: 'LOC_A',
+      nucleotide_sequence: 'AAAA',
+      amino_acid_sequence: 'MK'
+    },
+    {
+      fileIdx: 1,
+      record_id: 'record-b',
+      svg_id: 'stable-x',
+      stable_svg_id: 'stable-x',
+      locus_tag: 'LOC_B',
+      nucleotide_sequence: 'CCCC',
+      amino_acid_sequence: 'MP'
+    }
   ])
 };
 
 const editor = createOrthogroupEditor({ state, runAnalysis: null });
 const members = editor.getEnrichedOrthogroupMembers(group);
 assert.deepEqual(members.map((member) => member.nucleotideSequence), ['AAAA', 'CCCC']);
+assert.deepEqual(members.map((member) => member.displayProteinId), ['LOC_A', 'LOC_B']);
 assert.equal(editor.getOrthogroupSequenceCount(group, 'nt'), 2);
 await editor.copyOrthogroupSequences(group, 'nt');
 assert.match(copiedText, /AAAA/);
 assert.match(copiedText, /CCCC/);
+await editor.copyOrthogroupSequences(group, 'aa');
+assert.match(copiedText, />LOC_A\b/);
+assert.match(copiedText, />LOC_B\b/);
+assert.doesNotMatch(copiedText, /h_[a-z2-7]{26}/);
+
+const membersWithoutStableIds = editor.getEnrichedOrthogroupMembers({
+  id: 'og_no_stable_ids',
+  members: [
+    {
+      recordId: 'record-c',
+      proteinId: runtimeHandle,
+      sourceProteinId: 'WP_VISIBLE.1',
+      label: featureAnalysisId
+    },
+    {
+      recordId: 'record-d',
+      proteinId: runtimeHandle,
+      displayProteinId: featureAnalysisId,
+      sourceProteinId: v35TransportId,
+      label: runtimeHandle
+    }
+  ]
+});
+assert.deepEqual(
+  membersWithoutStableIds.map((member) => member.displayProteinId),
+  ['WP_VISIBLE.1', '']
+);
+
+const downloadedFilenames = [];
+globalThis.document = {
+  createElement: () => ({
+    addEventListener() {},
+    click() { downloadedFilenames.push(this.download); }
+  }),
+  body: {
+    appendChild() {},
+    removeChild() {}
+  }
+};
+Object.defineProperty(globalThis.URL, 'createObjectURL', {
+  configurable: true,
+  value: () => 'blob:orthogroup-test'
+});
+Object.defineProperty(globalThis.URL, 'revokeObjectURL', {
+  configurable: true,
+  value: () => {}
+});
+editor.downloadOrthogroupMemberSequence(
+  {
+    proteinId: runtimeHandle,
+    sourceProteinId: 'WP_DOWNLOAD.1',
+    aminoAcidSequence: 'MK'
+  },
+  'aa',
+  { id: 'og_download' }
+);
+editor.downloadOrthogroupMemberSequence(
+  {
+    proteinId: runtimeHandle,
+    stableFeatureSvgId: featureAnalysisId,
+    aminoAcidSequence: 'MK'
+  },
+  'aa',
+  { id: 'og_download' }
+);
+assert.deepEqual(downloadedFilenames, [
+  'og_download_WP_DOWNLOAD.1_aa.faa',
+  'og_download_member_aa.faa'
+]);
+assert.doesNotMatch(downloadedFilenames.join('\n'), /(?:h_[a-z2-7]{26}|f_[0-9a-f]{64})/);
+
+const indexSource = await readFile(join(repoRoot, 'gbdraw/web/index.html'), 'utf8');
+assert.doesNotMatch(
+  indexSource,
+  /member\.displayProteinId\s*\|\|\s*member\.(?:sourceProteinId|locusTag|label)/
+);
+assert.doesNotMatch(
+  indexSource,
+  /currentMember\.displayProteinId\s*\|\|\s*clickedOrthogroupDetail\.currentMember\.sourceProteinId/
+);
 
 editor.highlightOrthogroupById('og_1');
 assert.equal(visibleElement.getAttribute('stroke'), '#2563eb');

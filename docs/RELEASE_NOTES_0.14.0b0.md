@@ -23,12 +23,13 @@ and rendering components remain available from `gbdraw.api` for integrations.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
 
-## Stable LOSATP cache identity and session version 35
+## Compact LOSATP runtime handles and session version 36
 
-- Python and Web writers now emit session version 35 with canonical `renderRequest` schema 3. Readers accept versions 27 through 35; public typed conversion remains available for canonical versions 31 through 35.
-- Protein LOSATP QUERY/SUBJECT tokens use stable record-instance and CDS feature identities with readable, percent-encoded aliases. Upload filenames, modification times, session resource names, and reopen time no longer determine protein cache identity.
-- Current protein raw cache entries use schema 3, derived comparison payloads use schema 2, and the protein identity manifest uses schema 1. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
-- Imported schema-2 protein entries are isolated in a schema-1 legacy candidate envelope. Save-before-Generate preserves the envelope. Generation promotes a candidate copy-on-write only after verifying the complete FASTA content, program and arguments, directional pair, transport IDs, and feature mapping; an unverifiable candidate becomes a pair-local miss.
+- Python and Web writers now emit session version 36 with canonical `renderRequest` schema 3. Readers accept versions 27 through 36; public typed conversion remains available for canonical versions 31 through 36.
+- Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
+- Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
+- **Save Raw LOSAT TSV** hydrates generated protein results at download time: it resolves every internal handle through the manifest and replaces only QUERY and SUBJECT with readable, percent-encoded protein or feature aliases. Duplicate aliases receive deterministic short ordinals. Row order, columns 3–12, numeric text, comments, and line endings are preserved; an unresolved or wrong-binding handle aborts the download instead of exposing an internal ID. User-uploaded comparison TSV is never rewritten.
+- Version 35 remains a supported migration source with protein raw schema 3, derived schema 2, and identity manifest schema 1. Its long readable transport IDs are validated and quarantined losslessly, then verified protein results are rewritten copy-on-success to raw schema 4 and derived schema 3 is rebuilt without a LOSATP rerun. Versions 27–34 retain their existing schema-2 candidate path. Save-before-Generate preserves pending candidates, and an unverifiable candidate becomes only a pair-local miss.
 
 ## Feature underlay rendering and session version 34
 
@@ -242,12 +243,12 @@ New drawing code should prefer the top-level interface described above.
 
 ## Session API boundary
 
-The public session bridge accepts version 31 through 35 canonical documents.
+The public session bridge accepts version 31 through 36 canonical documents.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-Current writers emit version 35 and `renderRequest` schema 3. Versions 27 through 30 can be regenerated with `gbdraw circular --session` or
+Current writers emit version 36 and `renderRequest` schema 3. Versions 27 through 30 can be regenerated with `gbdraw circular --session` or
 `gbdraw linear --session`. Public typed conversion rejects them with
 `SessionVersionError` instead of reconstructing a request from `cliInvocation` or
 GUI state. The
