@@ -27,7 +27,7 @@ const { getFeatureCaption } = await import(
 
 const runtimeHandle = `h_${'a'.repeat(26)}`;
 const featureAnalysisId = `f_${'b'.repeat(64)}`;
-const v35TransportId = `record@instance|alias~f_${'c'.repeat(64)}`;
+const unsupportedHistoricalTransportId = `record@instance|alias~f_${'c'.repeat(64)}`;
 const legacyId = 'p_r_old_0_9_1_deadbeefdead';
 const generatedId = 'gbd_r0001_cds000001';
 
@@ -48,7 +48,7 @@ test('protein FASTA skips internal IDs and uses biological aliases', () => {
   for (const proteinId of [
     runtimeHandle,
     featureAnalysisId,
-    v35TransportId,
+    unsupportedHistoricalTransportId,
     legacyId,
     generatedId
   ]) {
@@ -66,7 +66,7 @@ test('feature captions ignore internal labels and use safe fallbacks', () => {
   for (const label of [
     runtimeHandle,
     featureAnalysisId,
-    v35TransportId,
+    unsupportedHistoricalTransportId,
     legacyId,
     generatedId
   ]) {
@@ -92,7 +92,7 @@ test('feature captions ignore internal labels and use safe fallbacks', () => {
   }), 'LOCUS_CAPTION_SAFE');
   assert.equal(getFeatureCaption({
     product: runtimeHandle,
-    gene: v35TransportId,
+    gene: unsupportedHistoricalTransportId,
     locus_tag: 'LOCUS_AFTER_INTERNAL_PRODUCT'
   }), 'LOCUS_AFTER_INTERNAL_PRODUCT');
 });
@@ -102,7 +102,7 @@ test('FASTA descriptions skip internal metadata and retain safe later candidates
     source_protein_id: 'WP_SAFE_DESCRIPTION.1',
     product: runtimeHandle,
     protein: featureAnalysisId,
-    gene: v35TransportId,
+    gene: unsupportedHistoricalTransportId,
     locus_tag: 'LOCUS_DESCRIPTION_SAFE',
     amino_acid_sequence: 'MK'
   }).aminoAcidFasta;
@@ -116,7 +116,7 @@ test('FASTA descriptions skip internal metadata and retain safe later candidates
     source_protein_id: 'WP_SAFE_HEADER.1',
     product: runtimeHandle,
     protein: featureAnalysisId,
-    gene: v35TransportId,
+    gene: unsupportedHistoricalTransportId,
     locus_tag: legacyId,
     name: generatedId,
     amino_acid_sequence: 'MK'

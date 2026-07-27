@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,9 +50,7 @@ class DiagramRunResult:
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] | None = None
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
-    legacy_protein_raw_v35_candidates: Mapping[str, Any] | None = None
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] | None = None
-    legacy_protein_derived_v35_evidence: tuple[Mapping[str, Any], ...] | None = None
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
     canonical_request: DiagramRequest | None = None
@@ -291,13 +288,7 @@ def save_session_sidecar_if_requested(
         losat_derived_cache_entries=run_result.losat_derived_cache_entries,
         protein_identity_manifest=run_result.protein_identity_manifest,
         legacy_protein_raw_candidates=run_result.legacy_protein_raw_candidates,
-        legacy_protein_raw_v35_candidates=(
-            run_result.legacy_protein_raw_v35_candidates
-        ),
         legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
-        legacy_protein_derived_v35_evidence=(
-            run_result.legacy_protein_derived_v35_evidence
-        ),
         canonical_request=run_result.canonical_request,
     )
     payload.pop("files", None)
@@ -429,24 +420,12 @@ def render_canonical_session_if_present(
                         for entry in rendered.legacy_protein_raw_candidates
                     ],
                 }
-            if rendered.legacy_protein_raw_v35_candidates:
-                legacy_artifacts["proteinRawV35Candidates"] = copy.deepcopy(
-                    dict(rendered.legacy_protein_raw_v35_candidates)
-                )
             if rendered.legacy_protein_derived_evidence:
                 legacy_artifacts["proteinDerivedEvidence"] = {
                     "schema": 1,
                     "entries": [
                         dict(entry)
                         for entry in rendered.legacy_protein_derived_evidence
-                    ],
-                }
-            if rendered.legacy_protein_derived_v35_evidence:
-                legacy_artifacts["proteinDerivedV35Evidence"] = {
-                    "schema": 1,
-                    "entries": [
-                        dict(entry)
-                        for entry in rendered.legacy_protein_derived_v35_evidence
                     ],
                 }
             if legacy_artifacts:

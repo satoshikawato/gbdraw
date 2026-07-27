@@ -1,10 +1,17 @@
 # LOSAT compact runtime handle migration implementation plan
 
+> **Historical, unmerged design:** The v35 compatibility path described below existed
+> only on a development branch and has been superseded. Session versions 34 and 35 are
+> not supported, and the raw-schema-3/derived-schema-2/manifest-schema-1 quarantine,
+> promotion, and long transport-ID rewrite have been removed. The supported readers
+> are v27–33 and v36; current artifacts use protein raw schema 4, derived schema 3, and
+> identity manifest schema 2. The remainder is retained only as design history.
+
 ## 0. 文書の位置づけ
 
 - 作成日: 2026-07-24
 - 最終更新: 2026-07-25
-- 状態: **実装・gallery更新・最終回帰検証完了**
+- 状態: **unmerged, superseded design の historical record**
 - 対象:
   - Web/CLI の protein LOSATP FASTA ID
   - raw LOSAT cache

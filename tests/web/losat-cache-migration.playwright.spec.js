@@ -11,15 +11,10 @@ const fixturePath = join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz'
 );
-const v35FixturePath = join(
-  fixtureDir,
-  'BGC0000708-BGC0000713.schema-v3.gbdraw-session.json.gz'
-);
 const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const v35Expected = expected.v35;
 const CURRENT_SESSION_VERSION = 36;
 const CURRENT_RENDER_REQUEST_SCHEMA = 3;
 const CURRENT_PROTEIN_RAW_SCHEMA = 4;
@@ -41,7 +36,6 @@ const contentTypes = {
 let server;
 let baseUrl;
 let sourceSession;
-let v35SourceSession;
 
 const expandedSessionBytes = (path) => {
   const bytes = readFileSync(path);
@@ -253,29 +247,6 @@ const assertLegacyCandidatesPreserved = (session) => {
   });
 };
 
-const assertV35CandidatesPreserved = (session, v35SourceSession) => {
-  assertCurrentSessionBoundary(session);
-  const rawEnvelope = session.legacyArtifacts?.proteinRawV35Candidates;
-  const candidates = rawEnvelope?.entries || [];
-  const derivedEnvelope = session.legacyArtifacts?.proteinDerivedV35Evidence;
-  expect(session.losatCache?.entries || []).toHaveLength(0);
-  expect(session.losatDerivedCache?.entries || []).toHaveLength(0);
-  expect(rawEnvelope?.schema).toBe(1);
-  expect(rawEnvelope?.sourceManifest).toEqual(v35SourceSession.proteinIdentityManifest);
-  expect(candidates).toHaveLength(v35Expected.storedRawEntries);
-  expect(candidates.every((candidate) => (
-    candidate.state === 'pending' &&
-    candidate.originalEntry?.schema === v35Expected.rawSchema &&
-    candidate.originalEntry?.program === 'blastp'
-  ))).toBe(true);
-  expect(candidates.map((candidate) => candidate.originalEntry))
-    .toEqual(v35SourceSession.losatCache?.entries || []);
-  expect(derivedEnvelope).toEqual({
-    schema: 1,
-    entries: v35SourceSession.losatDerivedCache?.entries || []
-  });
-};
-
 const assertRenamedZeroMtimeResources = (session) => {
   const genbankResources = Object.values(session.resources || {})
     .filter((resource) => resource?.kind === 'genbank');
@@ -292,30 +263,13 @@ const assertRenamedZeroMtimeResources = (session) => {
   ));
 };
 
-const rawTailSignature = (text) => String(text || '')
-  .split('\n')
-  .map((line) => {
-    const body = line.endsWith('\r') ? line.slice(0, -1) : line;
-    const ending = line.endsWith('\r') ? '\r' : '';
-    if (!body.trim() || body.trimStart().startsWith('#')) return line;
-    return `${body.split('\t').slice(2).join('\t')}${ending}`;
-  })
-  .join('\n');
-
-const assertCurrentProteinArtifacts = (
-  session,
-  {
-    migrationExpected = expected,
-    migrationSource = sourceSession,
-    migrationKind = 'schema2'
-  } = {}
-) => {
+const assertCurrentProteinArtifacts = (session) => {
   assertCurrentSessionBoundary(session, { requireDerived: true });
   const manifest = session.proteinIdentityManifest;
   const entries = session.losatCache?.entries || [];
   const derivedEntries = session.losatDerivedCache?.entries || [];
   expect(manifest?.schema).toBe(2);
-  expect(entries).toHaveLength(migrationExpected.totalPairs);
+  expect(entries).toHaveLength(expected.totalPairs);
   expect(entries.every((entry) => (
     entry?.schema === 4 &&
     entry?.kind === 'raw-losat' &&
@@ -328,38 +282,17 @@ const assertCurrentProteinArtifacts = (
     entry?.kind === 'derived-losatp-payload' &&
     entry?.idEncoding === 'runtime-handle-v1'
   ))).toBe(true);
-  if (migrationKind === 'schema2') {
-    const legacyCandidates = session.legacyArtifacts?.proteinRawCandidates?.entries || [];
-    expect(legacyCandidates)
-      .toHaveLength(migrationExpected.storedRawEntries - migrationExpected.totalPairs);
-    expect(legacyCandidates.every((candidate) => (
-      candidate.state === 'pending' &&
-      (migrationSource.losatCache?.entries || []).some(
-        (entry) => JSON.stringify(entry) === JSON.stringify(candidate.originalEntry)
-      )
-    ))).toBe(true);
-    expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || [])
-      .toEqual(migrationSource.losatDerivedCache?.entries || []);
-  } else {
-    expect(session.legacyArtifacts?.proteinRawV35Candidates?.entries || []).toEqual([]);
-    expect(
-      session.legacyArtifacts?.proteinRawV35Candidates?.sourceManifest ?? null
-    ).toBeNull();
-    expect(session.legacyArtifacts?.proteinDerivedV35Evidence?.entries || []).toEqual([]);
-    const sourceByPair = new Map(
-      (migrationSource.losatCache?.entries || []).map((entry) => [
-        `${entry.queryRecordInstanceKey}\0${entry.subjectRecordInstanceKey}`,
-        entry
-      ])
-    );
-    for (const entry of entries) {
-      const source = sourceByPair.get(
-        `${entry.queryRecordInstanceKey}\0${entry.subjectRecordInstanceKey}`
-      );
-      expect(source).toBeTruthy();
-      expect(rawTailSignature(entry.text)).toBe(rawTailSignature(source.text));
-    }
-  }
+  const legacyCandidates = session.legacyArtifacts?.proteinRawCandidates?.entries || [];
+  expect(legacyCandidates)
+    .toHaveLength(expected.storedRawEntries - expected.totalPairs);
+  expect(legacyCandidates.every((candidate) => (
+    candidate.state === 'pending' &&
+    (sourceSession.losatCache?.entries || []).some(
+      (entry) => JSON.stringify(entry) === JSON.stringify(candidate.originalEntry)
+    )
+  ))).toBe(true);
+  expect(session.legacyArtifacts?.proteinDerivedEvidence?.entries || [])
+    .toEqual(sourceSession.losatDerivedCache?.entries || []);
 
   const runtimeOwners = new Map();
   for (const [instanceKey, instance] of Object.entries(manifest.recordInstances || {})) {
@@ -465,9 +398,7 @@ const cancelDuringRender = async (page) => page.evaluate(async () => {
   const before = {
     proteinIdentityManifest: state.proteinIdentityManifest.value,
     legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
-    legacyProteinRawV35Candidates: state.legacyProteinRawV35Candidates.value,
     legacyProteinDerivedEvidence: state.legacyProteinDerivedEvidence.value,
-    legacyProteinDerivedV35Evidence: state.legacyProteinDerivedV35Evidence.value,
     losatCache: Array.from(state.losatCache.value.entries()),
     losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
     losatCacheInfo: state.losatCacheInfo.value
@@ -498,12 +429,8 @@ const cancelDuringRender = async (page) => page.evaluate(async () => {
       authorityRestored: (
         state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
         state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates &&
-        state.legacyProteinRawV35Candidates.value ===
-          before.legacyProteinRawV35Candidates &&
         state.legacyProteinDerivedEvidence.value ===
           before.legacyProteinDerivedEvidence &&
-        state.legacyProteinDerivedV35Evidence.value ===
-          before.legacyProteinDerivedV35Evidence &&
         sameMapEntries(before.losatCache, state.losatCache.value) &&
         sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value) &&
         state.losatCacheInfo.value === before.losatCacheInfo
@@ -520,9 +447,7 @@ const failRendererAfterMigration = async (page) => page.evaluate(async () => {
   const before = {
     proteinIdentityManifest: state.proteinIdentityManifest.value,
     legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
-    legacyProteinRawV35Candidates: state.legacyProteinRawV35Candidates.value,
     legacyProteinDerivedEvidence: state.legacyProteinDerivedEvidence.value,
-    legacyProteinDerivedV35Evidence: state.legacyProteinDerivedV35Evidence.value,
     losatCache: Array.from(state.losatCache.value.entries()),
     losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
     losatCacheInfo: state.losatCacheInfo.value
@@ -542,12 +467,8 @@ const failRendererAfterMigration = async (page) => page.evaluate(async () => {
       authorityRestored: (
         state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
         state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates &&
-        state.legacyProteinRawV35Candidates.value ===
-          before.legacyProteinRawV35Candidates &&
         state.legacyProteinDerivedEvidence.value ===
           before.legacyProteinDerivedEvidence &&
-        state.legacyProteinDerivedV35Evidence.value ===
-          before.legacyProteinDerivedV35Evidence &&
         sameMapEntries(before.losatCache, state.losatCache.value) &&
         sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value) &&
         state.losatCacheInfo.value === before.losatCacheInfo
@@ -815,7 +736,6 @@ const assertSvgGeometryParity = async (page, exportedPath) => {
 
 test.beforeAll(async () => {
   expect(existsSync(fixturePath)).toBe(true);
-  expect(existsSync(v35FixturePath)).toBe(true);
   const fixtureBytes = expandedSessionBytes(fixturePath);
   const fixture = JSON.parse(fixtureBytes.toString('utf8'));
   sourceSession = fixture;
@@ -823,16 +743,6 @@ test.beforeAll(async () => {
   expect(fixture.version).toBe(expected.sessionVersion);
   expect(fixture.renderRequest?.schema).toBe(expected.renderRequestSchema);
   expect(fixture.losatCache?.entries).toHaveLength(expected.storedRawEntries);
-  const v35FixtureBytes = expandedSessionBytes(v35FixturePath);
-  v35SourceSession = JSON.parse(v35FixtureBytes.toString('utf8'));
-  expect(createHash('sha256').update(v35FixtureBytes).digest('hex'))
-    .toBe(v35Expected.sourceSha256);
-  expect(v35SourceSession.version).toBe(v35Expected.sessionVersion);
-  expect(v35SourceSession.renderRequest?.schema).toBe(v35Expected.renderRequestSchema);
-  expect(v35SourceSession.losatCache?.entries).toHaveLength(v35Expected.storedRawEntries);
-  expect(v35SourceSession.losatCache.entries.every(
-    (entry) => entry.schema === v35Expected.rawSchema
-  )).toBe(true);
   await new Promise((resolveServer, rejectServer) => {
     server = createServer((request, response) => {
       const url = new URL(request.url || '/', 'http://127.0.0.1');
@@ -908,6 +818,26 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
     null,
     { timeout: 240000 }
   );
+  const legacyUiBeforeCancel = await migrationUiSnapshot(page);
+  const canceledLegacyRun = await cancelDuringRender(page);
+  expect(canceledLegacyRun).toMatchObject({
+    result: { status: 'canceled' },
+    sawRendering: true,
+    cancelInvoked: true,
+    errorSummary: '',
+    executorCalls: 0,
+    authorityRestored: true
+  });
+  expect(await migrationUiSnapshot(page)).toEqual(legacyUiBeforeCancel);
+  const legacyUiBeforeRenderError = await migrationUiSnapshot(page);
+  const failedLegacyRun = await failRendererAfterMigration(page);
+  expect(failedLegacyRun).toMatchObject({
+    result: { status: 'error' },
+    authorityRestored: true,
+    executorCalls: 0
+  });
+  expect(failedLegacyRun.errorSummary).not.toBe('');
+  expect(await migrationUiSnapshot(page)).toEqual(legacyUiBeforeRenderError);
   assertExpectedTelemetry(await generateWithTelemetry(page));
   const firstLayout = await inspectLayout(page);
   assertLayout(firstLayout);
@@ -933,55 +863,6 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   assertLayout(secondLayout);
   expect(secondLayout.geometrySignature).toBe(firstLayout.geometrySignature);
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, v35FixturePath);
-
-  const v35PreGeneratePath = await saveSession(page);
-  const v35PreGenerateSession = readSession(v35PreGeneratePath);
-  assertV35CandidatesPreserved(v35PreGenerateSession, v35SourceSession);
-
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, v35PreGeneratePath);
-  await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.pyodideReady === true,
-    null,
-    { timeout: 240000 }
-  );
-  const v35UiBeforeCancel = await migrationUiSnapshot(page);
-  const canceledV35Run = await cancelDuringRender(page);
-  expect(canceledV35Run).toMatchObject({
-    result: { status: 'canceled' },
-    sawRendering: true,
-    cancelInvoked: true,
-    errorSummary: '',
-    executorCalls: 0,
-    authorityRestored: true
-  });
-  expect(await migrationUiSnapshot(page)).toEqual(v35UiBeforeCancel);
-  const v35UiBeforeRenderError = await migrationUiSnapshot(page);
-  const failedV35Run = await failRendererAfterMigration(page);
-  expect(failedV35Run).toMatchObject({
-    result: { status: 'error' },
-    authorityRestored: true,
-    executorCalls: 0
-  });
-  expect(failedV35Run.errorSummary).not.toBe('');
-  expect(await migrationUiSnapshot(page)).toEqual(v35UiBeforeRenderError);
-  assertExpectedTelemetry(await generateWithTelemetry(page), v35Expected);
-
-  const v35MigratedPath = await saveSession(page);
-  const v35MigratedSession = readSession(v35MigratedPath);
-  assertCurrentProteinArtifacts(v35MigratedSession, {
-    migrationExpected: v35Expected,
-    migrationSource: v35SourceSession,
-    migrationKind: 'v35'
-  });
-
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, v35MigratedPath);
   const expectedUploadBytes = await installUserUploadedTsv(page);
   const uploadedSessionPath = await saveSession(page);
   await page.reload({ waitUntil: 'domcontentloaded' });

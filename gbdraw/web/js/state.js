@@ -598,13 +598,7 @@ const proteinIdentityManifest = ref({
   recordInstances: {}
 });
 const legacyProteinRawCandidates = ref({ schema: 1, entries: [] });
-const legacyProteinRawV35Candidates = ref({
-  schema: 1,
-  sourceManifest: null,
-  entries: []
-});
 const legacyProteinDerivedEvidence = ref({ schema: 1, entries: [] });
-const legacyProteinDerivedV35Evidence = ref({ schema: 1, entries: [] });
 const orthogroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
@@ -1173,9 +1167,7 @@ export const state = {
   losatDerivedCache,
   proteinIdentityManifest,
   legacyProteinRawCandidates,
-  legacyProteinRawV35Candidates,
   legacyProteinDerivedEvidence,
-  legacyProteinDerivedV35Evidence,
   orthogroups,
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,

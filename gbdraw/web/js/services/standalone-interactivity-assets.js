@@ -1,4 +1,6 @@
 // Shared standalone interactive SVG runtime/style assets.
+// The embedded display denylist retains an unsupported historical protein-ID
+// shape defensively; it is not a supported session migration path.
 
 export const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {

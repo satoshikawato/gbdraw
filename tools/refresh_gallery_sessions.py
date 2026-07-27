@@ -443,16 +443,6 @@ def _validate_staged_gallery_session(
         raise ValueError(
             f"{session_path.name} retained legacy protein raw candidates after refresh"
         )
-    v35_candidates = (
-        legacy_artifacts.get("proteinRawV35Candidates")
-        if isinstance(legacy_artifacts, Mapping)
-        else None
-    )
-    if isinstance(v35_candidates, Mapping) and v35_candidates.get("entries"):
-        raise ValueError(
-            f"{session_path.name} retained version-35 protein raw candidates "
-            "after refresh"
-        )
     protein_artifacts = {
         key: session.get(key)
         for key in (
@@ -477,7 +467,8 @@ def _validate_staged_gallery_session(
         serialized_protein_artifacts,
     ):
         raise ValueError(
-            f"{session_path.name} contains version-35 protein transport identifiers"
+            f"{session_path.name} contains unsupported long protein transport "
+            "identifiers"
         )
 
     def referenced_resource_ids(value: object):

@@ -827,14 +827,15 @@ const uniqueStandaloneMetadataValues = (value) => {
 
 const standaloneGeneratedProteinIdPattern =
   /^(?:h_[a-z2-7]{26}|f_[0-9a-f]{64}|gbd_r\d+_cds\d+|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$/i;
-const standaloneV35ProteinIdPattern = /@[^|]+\|.+~f_[0-9a-f]{64}$/i;
+// Keep unsupported historical shapes from leaking through display-only fallbacks.
+const standaloneUnsupportedHistoricalProteinIdPattern = /@[^|]+\|.+~f_[0-9a-f]{64}$/i;
 const standaloneGeneratedUnitIdPattern = /^gbd_r\d+_unit\d+$/i;
 
 const isStandaloneInternalDisplayId = (value) => {
   const text = firstStandaloneText(value);
   return Boolean(text && (
     standaloneGeneratedProteinIdPattern.test(text) ||
-    standaloneV35ProteinIdPattern.test(text) ||
+    standaloneUnsupportedHistoricalProteinIdPattern.test(text) ||
     standaloneGeneratedUnitIdPattern.test(text) ||
     /^p_r_/i.test(text)
   ));

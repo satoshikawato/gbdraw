@@ -1,13 +1,9 @@
 export const PROTEIN_LOSAT_CACHE_SCHEMA = 4;
-export const V35_PROTEIN_LOSAT_CACHE_SCHEMA = 3;
 export const NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2;
 export const LOSAT_DERIVED_CACHE_SCHEMA = 3;
-export const V35_LOSAT_DERIVED_CACHE_SCHEMA = 2;
 export const LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1;
 export const PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2;
-export const V35_PROTEIN_IDENTITY_MANIFEST_SCHEMA = 1;
 export const LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1;
-export const V35_PROTEIN_CANDIDATE_SCHEMA = 1;
 
 const LEGACY_CANDIDATE_STATES = new Set(['pending', 'promoted', 'rejected']);
 const LOSAT_OUTFMT6_COLUMN_COUNT = 12;
@@ -58,25 +54,6 @@ export const isProteinRawLosatCacheEntry = (entry) => (
   Boolean(entry.subjectRecordInstanceKey)
 );
 
-export const isV35ProteinRawLosatCacheEntry = (entry) => (
-  hasRawShape(entry) &&
-  entry.schema === V35_PROTEIN_LOSAT_CACHE_SCHEMA &&
-  entry.identityKind === 'protein' &&
-  String(entry.program || '').toLowerCase() === 'blastp' &&
-  typeof entry.queryProteinSetHash === 'string' &&
-  Boolean(entry.queryProteinSetHash) &&
-  typeof entry.subjectProteinSetHash === 'string' &&
-  Boolean(entry.subjectProteinSetHash) &&
-  typeof entry.queryBindingHash === 'string' &&
-  Boolean(entry.queryBindingHash) &&
-  typeof entry.subjectBindingHash === 'string' &&
-  Boolean(entry.subjectBindingHash) &&
-  typeof entry.queryRecordInstanceKey === 'string' &&
-  Boolean(entry.queryRecordInstanceKey) &&
-  typeof entry.subjectRecordInstanceKey === 'string' &&
-  Boolean(entry.subjectRecordInstanceKey)
-);
-
 export const isLegacyProteinRawLosatCacheEntry = (entry) => (
   hasRawShape(entry) &&
   entry.schema === NUCLEOTIDE_LOSAT_CACHE_SCHEMA &&
@@ -91,7 +68,6 @@ export const isNucleotideRawLosatCacheEntry = (entry) => {
 
 export const classifyRawLosatCacheEntry = (entry) => {
   if (isProteinRawLosatCacheEntry(entry)) return 'protein-current';
-  if (isV35ProteinRawLosatCacheEntry(entry)) return 'protein-v35';
   if (isNucleotideRawLosatCacheEntry(entry)) return 'nucleotide-current';
   if (isLegacyProteinRawLosatCacheEntry(entry)) return 'protein-legacy';
   return 'invalid';
@@ -108,10 +84,7 @@ export const isLosatDerivedCacheEntry = (entry, { allowLegacy = true } = {}) => 
     entry.schema === LOSAT_DERIVED_CACHE_SCHEMA ||
     (
       allowLegacy &&
-      (
-        entry.schema === V35_LOSAT_DERIVED_CACHE_SCHEMA ||
-        entry.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA
-      )
+      entry.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA
     )
   ) &&
   entry.kind === 'derived-losatp-payload' &&
@@ -152,68 +125,6 @@ export const emptyProteinIdentityManifest = () => ({
   recordAnalyses: {},
   recordInstances: {}
 });
-
-export const validateV35ProteinIdentityManifest = (manifest) => {
-  if (!isPlainObject(manifest) || manifest.schema !== V35_PROTEIN_IDENTITY_MANIFEST_SCHEMA) {
-    return false;
-  }
-  if (
-    !isPlainObject(manifest.proteinSets) ||
-    !isPlainObject(manifest.recordAnalyses) ||
-    !isPlainObject(manifest.recordInstances)
-  ) return false;
-
-  const proteinSetFeatureIds = new Map();
-  for (const [proteinSetHash, proteinSet] of Object.entries(manifest.proteinSets)) {
-    if (!proteinSetHash || !isPlainObject(proteinSet) || proteinSet.schema !== 1) return false;
-    if (!Array.isArray(proteinSet.proteins)) return false;
-    const featureIds = new Set();
-    for (const protein of proteinSet.proteins) {
-      const featureId = isPlainObject(protein) ? protein.featureAnalysisId : null;
-      if (
-        typeof featureId !== 'string' ||
-        !featureId.startsWith('f_') ||
-        featureIds.has(featureId)
-      ) return false;
-      featureIds.add(featureId);
-    }
-    proteinSetFeatureIds.set(proteinSetHash, featureIds);
-  }
-
-  const allTransportIds = new Set();
-  for (const analysis of Object.values(manifest.recordAnalyses)) {
-    if (!isPlainObject(analysis) || analysis.schema !== 1) return false;
-    if (
-      typeof analysis.proteinSetHash !== 'string' ||
-      !proteinSetFeatureIds.has(analysis.proteinSetHash)
-    ) {
-      return false;
-    }
-  }
-  for (const [instanceKey, instance] of Object.entries(manifest.recordInstances)) {
-    if (!instanceKey || !isPlainObject(instance) || instance.schema !== 1) return false;
-    if (!Object.prototype.hasOwnProperty.call(manifest.recordAnalyses, instance.recordAnalysisId)) {
-      return false;
-    }
-    if (typeof instance.bindingHash !== 'string' || !instance.bindingHash) return false;
-    if (!isPlainObject(instance.transportIds)) return false;
-    const analysis = manifest.recordAnalyses[instance.recordAnalysisId];
-    const expectedFeatureIds = proteinSetFeatureIds.get(analysis.proteinSetHash);
-    if (Object.keys(instance.transportIds).length !== expectedFeatureIds.size) return false;
-    for (const [featureId, transportId] of Object.entries(instance.transportIds)) {
-      if (!expectedFeatureIds.has(featureId)) return false;
-      if (
-        typeof transportId !== 'string' ||
-        !transportId ||
-        /\s/.test(transportId) ||
-        !transportId.endsWith(`~${featureId}`)
-      ) return false;
-      if (allTransportIds.has(transportId)) return false;
-      allTransportIds.add(transportId);
-    }
-  }
-  return true;
-};
 
 export const validateProteinIdentityManifest = (manifest) => {
   if (!isPlainObject(manifest) || manifest.schema !== PROTEIN_IDENTITY_MANIFEST_SCHEMA) {
@@ -325,50 +236,6 @@ export const mergeProteinIdentityManifests = (manifests) => {
   return merged;
 };
 
-export const buildV35ProteinReferenceMap = (sourceManifest, currentManifest) => {
-  if (
-    !validateV35ProteinIdentityManifest(sourceManifest) ||
-    !validateProteinIdentityManifest(currentManifest)
-  ) {
-    throw new Error('Cannot migrate protein references without valid version-35 and current manifests.');
-  }
-  const referenceMap = {};
-  for (const [instanceKey, sourceInstance] of Object.entries(sourceManifest.recordInstances)) {
-    const currentInstance = currentManifest.recordInstances[instanceKey];
-    if (!currentInstance) {
-      throw new Error(`Current protein manifest is missing record instance '${instanceKey}'.`);
-    }
-    const sourceAnalysis = sourceManifest.recordAnalyses[sourceInstance.recordAnalysisId];
-    const currentAnalysis = currentManifest.recordAnalyses[currentInstance.recordAnalysisId];
-    if (
-      !sourceAnalysis ||
-      !currentAnalysis ||
-      sourceAnalysis.proteinSetHash !== currentAnalysis.proteinSetHash
-    ) {
-      throw new Error(`Protein set changed for record instance '${instanceKey}'.`);
-    }
-    const sourceIds = sourceInstance.transportIds;
-    const currentIds = currentInstance.runtimeIds;
-    const featureIds = Object.keys(sourceIds);
-    if (
-      featureIds.length !== Object.keys(currentIds).length ||
-      featureIds.some((featureId) => !Object.prototype.hasOwnProperty.call(currentIds, featureId))
-    ) {
-      throw new Error(`Protein membership changed for record instance '${instanceKey}'.`);
-    }
-    featureIds.forEach((featureId) => {
-      const sourceId = sourceIds[featureId];
-      const runtimeHandle = currentIds[featureId];
-      const previous = referenceMap[sourceId];
-      if (previous && previous !== runtimeHandle) {
-        throw new Error(`Version-35 protein reference '${sourceId}' resolves ambiguously.`);
-      }
-      referenceMap[sourceId] = runtimeHandle;
-    });
-  }
-  return referenceMap;
-};
-
 export const validateProteinRawEntryReferences = (entry, manifest) => {
   if (!isProteinRawLosatCacheEntry(entry) || !validateProteinIdentityManifest(manifest)) {
     return false;
@@ -388,28 +255,6 @@ export const validateProteinRawEntryReferences = (entry, manifest) => {
     entry.text,
     new Set(Object.values(queryInstance.runtimeIds)),
     new Set(Object.values(subjectInstance.runtimeIds))
-  );
-};
-
-export const validateV35ProteinRawEntryReferences = (entry, manifest) => {
-  if (!isV35ProteinRawLosatCacheEntry(entry) || !validateV35ProteinIdentityManifest(manifest)) {
-    return false;
-  }
-  const queryInstance = manifest.recordInstances[entry.queryRecordInstanceKey];
-  const subjectInstance = manifest.recordInstances[entry.subjectRecordInstanceKey];
-  if (!queryInstance || !subjectInstance) return false;
-  if (queryInstance.bindingHash !== entry.queryBindingHash) return false;
-  if (subjectInstance.bindingHash !== entry.subjectBindingHash) return false;
-  const queryAnalysis = manifest.recordAnalyses[queryInstance.recordAnalysisId];
-  const subjectAnalysis = manifest.recordAnalyses[subjectInstance.recordAnalysisId];
-  if (
-    queryAnalysis?.proteinSetHash !== entry.queryProteinSetHash ||
-    subjectAnalysis?.proteinSetHash !== entry.subjectProteinSetHash
-  ) return false;
-  return rawProteinTextMatchesBindings(
-    entry.text,
-    new Set(Object.values(queryInstance.transportIds)),
-    new Set(Object.values(subjectInstance.transportIds))
   );
 };
 
@@ -484,6 +329,7 @@ const DERIVED_COMPOUND_EDGE_REFERENCE_KEYS = new Set([
 const RUNTIME_HANDLE_RE = /^h_[a-z2-7]{26}$/;
 const FEATURE_ANALYSIS_ID_RE = /(?:^|[^A-Za-z0-9_])f_[0-9a-f]{64}(?:$|[^A-Za-z0-9_])/;
 const LEGACY_PROTEIN_REFERENCE_RE = /(?:^|[^A-Za-z0-9._%+-])p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}(?:_[2-9][0-9]*)?(?:$|[^A-Za-z0-9._%+-])/;
+// Reject this unsupported historical shape defensively at the display boundary.
 const LONG_TRANSPORT_ID_RE = /(?:^|[^A-Za-z0-9._%-])(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+@(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+\|(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+~f_[0-9a-f]{64}(?:$|[^A-Za-z0-9._%-])/;
 const COMPOUND_SUPPORTING_EDGE_RE = /^(h_[a-z2-7]{26})->(h_[a-z2-7]{26}):[A-Za-z][A-Za-z0-9._-]*$/;
 const COMPOUND_PATH_EDGE_RE = /^[^:\s]+:\d+:(h_[a-z2-7]{26})->\d+:(h_[a-z2-7]{26}):[A-Za-z][A-Za-z0-9._-]*$/;
@@ -773,101 +619,4 @@ export const candidateOriginalEntries = (envelope, { states = ['pending'] } = {}
     .map((candidate, index) => ({ candidate, index }))
     .filter(({ candidate }) => acceptedStates.has(candidate.state))
     .map(({ candidate, index }) => ({ index, entry: cloneJson(candidate.originalEntry) }));
-};
-
-export const createV35ProteinCandidateEnvelope = (entries, sourceManifest) => {
-  if (!validateV35ProteinIdentityManifest(sourceManifest)) {
-    return {
-      schema: V35_PROTEIN_CANDIDATE_SCHEMA,
-      sourceManifest: null,
-      entries: []
-    };
-  }
-  const candidates = (Array.isArray(entries) ? entries : [])
-    .filter(isV35ProteinRawLosatCacheEntry)
-    .map((entry) => ({
-      state: 'pending',
-      originalEntry: cloneJson(entry),
-      rejectionReason: null
-    }));
-  return {
-    schema: V35_PROTEIN_CANDIDATE_SCHEMA,
-    sourceManifest: cloneJson(sourceManifest),
-    entries: candidates
-  };
-};
-
-export const normalizeV35ProteinCandidateEnvelope = (value) => {
-  if (
-    !isPlainObject(value) ||
-    value.schema !== V35_PROTEIN_CANDIDATE_SCHEMA ||
-    !validateV35ProteinIdentityManifest(value.sourceManifest)
-  ) {
-    return {
-      schema: V35_PROTEIN_CANDIDATE_SCHEMA,
-      sourceManifest: null,
-      entries: []
-    };
-  }
-  const sourceManifest = cloneJson(value.sourceManifest);
-  const entries = (Array.isArray(value.entries) ? value.entries : [])
-    .filter((candidate) => (
-      isPlainObject(candidate) &&
-      LEGACY_CANDIDATE_STATES.has(candidate.state) &&
-      isV35ProteinRawLosatCacheEntry(candidate.originalEntry)
-    ))
-    .map((candidate) => ({
-      state: candidate.state,
-      originalEntry: cloneJson(candidate.originalEntry),
-      rejectionReason: candidate.rejectionReason == null
-        ? null
-        : String(candidate.rejectionReason)
-    }));
-  return {
-    schema: V35_PROTEIN_CANDIDATE_SCHEMA,
-    sourceManifest,
-    entries
-  };
-};
-
-export const transitionV35ProteinCandidate = (
-  envelope,
-  candidateIndex,
-  nextState,
-  rejectionReason = null
-) => {
-  const normalized = normalizeV35ProteinCandidateEnvelope(envelope);
-  if (!LEGACY_CANDIDATE_STATES.has(nextState)) {
-    throw new Error(`Unsupported version-35 protein candidate state: ${nextState}`);
-  }
-  if (
-    !Number.isInteger(candidateIndex) ||
-    candidateIndex < 0 ||
-    candidateIndex >= normalized.entries.length
-  ) {
-    throw new Error('Version-35 protein candidate index is out of range.');
-  }
-  return {
-    ...normalized,
-    entries: normalized.entries.map((candidate, index) => (
-      index === candidateIndex
-        ? {
-            ...candidate,
-            state: nextState,
-            rejectionReason: nextState === 'rejected'
-              ? String(rejectionReason || 'Version-35 cache validation failed.')
-              : null
-          }
-        : candidate
-    ))
-  };
-};
-
-export const serializableV35ProteinCandidateEnvelope = (envelope) => {
-  const normalized = normalizeV35ProteinCandidateEnvelope(envelope);
-  if (!normalized.sourceManifest) return normalized;
-  return {
-    ...normalized,
-    entries: normalized.entries.filter((candidate) => candidate.state !== 'promoted')
-  };
 };

@@ -282,7 +282,7 @@ def test_preserve_gallery_cli_invocation_reports_missing_source_cli() -> None:
 
 def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() -> None:
     promoted = {
-        "version": 34,
+        "version": 33,
         "renderRequest": {"diagramOptions": {"palette": "curated"}},
         "config": {"labels": "curated"},
         "resources": {
@@ -354,7 +354,7 @@ def test_staged_gallery_validator_requires_current_artifact_schemas(
 
     _validate_staged_gallery_session(session_path, session)
 
-    stale_version = dict(session, version=34)
+    stale_version = dict(session, version=33)
     with pytest.raises(ValueError, match="expected 36"):
         _validate_staged_gallery_session(session_path, stale_version)
 

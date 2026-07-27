@@ -29,7 +29,7 @@ assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
 ].sort());
 
 const session = {
-  format: 'gbdraw-session', version: 33, createdAt: 'now', title: 'Canonical',
+  format: 'gbdraw-session', version: 36, createdAt: 'now', title: 'Canonical',
   renderRequest: {}, resources: {}, webFiles: {}, config: {}, files: {},
   ui: {
     mode: 'linear', legend: 'left', linearPlotTitlePosition: 'top', zoom: 1.5,
@@ -41,11 +41,16 @@ const session = {
   },
   editorState: { legend: { entries: [] } }, results: [{ name: 'preview', content: '<svg/>' }],
   orthogroupState: {}, losatCache: {}, losatDerivedCache: {},
-  proteinIdentityManifest: { schema: 1 },
+  proteinIdentityManifest: {
+    schema: 2,
+    proteinSets: {},
+    recordAnalyses: {},
+    recordInstances: {}
+  },
   legacyArtifacts: { proteinRawCandidates: { schema: 1, entries: [] } },
   cliInvocation: null
 };
-validateSessionAuthorityInventory(session, 33);
+validateSessionAuthorityInventory(session, 36);
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
   zoom: 1.5,
   canvasPan: { x: 3, y: 4 },
@@ -55,11 +60,14 @@ assert.deepEqual(projectArtifactState(session).features, {
   extractedFeatures: [{ id: 'f1' }]
 });
 assert.deepEqual(projectArtifactState(session).ui, { generatedLegendPosition: 'right' });
-assert.deepEqual(projectArtifactState(session).proteinIdentityManifest, { schema: 1 });
+assert.deepEqual(
+  projectArtifactState(session).proteinIdentityManifest,
+  session.proteinIdentityManifest
+);
 assert.deepEqual(projectArtifactState(session).legacyArtifacts, session.legacyArtifacts);
 assert.equal(projectDocumentMetadata(session).title, 'Canonical');
 assert.throws(
-  () => validateSessionAuthorityInventory({ ...session, unknownField: true }, 33),
+  () => validateSessionAuthorityInventory({ ...session, unknownField: true }, 36),
   /unclassified top-level field.*unknownField/
 );
 assert.doesNotThrow(() => validateSessionAuthorityInventory({ ...session, unknownField: true }, 30));

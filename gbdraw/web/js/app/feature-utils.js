@@ -78,7 +78,8 @@ const directFeatureValue = (feature, ...keys) => {
 
 const RUNTIME_PROTEIN_HANDLE_RE = /^h_[a-z2-7]{26}$/;
 const FEATURE_ANALYSIS_ID_RE = /^f_[0-9a-f]{64}$/;
-const V35_PROTEIN_TRANSPORT_ID_RE =
+// Keep unsupported historical shapes from leaking through display-only fallbacks.
+const UNSUPPORTED_HISTORICAL_PROTEIN_ID_RE =
   /@[^|]+\|.+~f_[0-9a-f]{64}$/;
 const GENERATED_PROTEIN_ID_RE =
   /^(?:gbd_r\d+_(?:cds\d+|unit\d+)|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$/i;
@@ -91,7 +92,7 @@ export const isInternalProteinDisplayId = (value) => {
       RUNTIME_PROTEIN_HANDLE_RE.test(text) ||
       FEATURE_ANALYSIS_ID_RE.test(text) ||
       text.startsWith('p_r_') ||
-      V35_PROTEIN_TRANSPORT_ID_RE.test(text) ||
+      UNSUPPORTED_HISTORICAL_PROTEIN_ID_RE.test(text) ||
       GENERATED_PROTEIN_ID_RE.test(text)
     )
   );

@@ -74,23 +74,17 @@ import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
-  V35_LOSAT_DERIVED_CACHE_SCHEMA,
   classifyRawLosatCacheEntry,
   createLegacyProteinCandidateEnvelope,
-  createV35ProteinCandidateEnvelope,
   emptyProteinIdentityManifest,
   isCurrentRawLosatCacheEntry,
   isLosatDerivedCacheEntry,
   normalizeLegacyProteinCandidateEnvelope,
-  normalizeV35ProteinCandidateEnvelope,
   proteinRuntimeIdSets,
   rawProteinTextMatchesBindings,
   serializableLegacyProteinCandidateEnvelope,
-  serializableV35ProteinCandidateEnvelope,
   validateDerivedProteinReferences,
   validateProteinRawEntryReferences,
-  validateV35ProteinRawEntryReferences,
-  validateV35ProteinIdentityManifest,
   validateProteinIdentityManifest
 } from '../app/losat-cache.js';
 import {
@@ -109,7 +103,7 @@ const { nextTick } = window.Vue;
 const SESSION_VERSION = 36;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 34, 35, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, SESSION_VERSION
 ]);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
@@ -934,42 +928,12 @@ const rejectInvalidLosatCacheKeys = (entries, owner, { requireKey = false } = {}
 };
 
 export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
-  if (sourceSessionVersion !== 35 && sourceSessionVersion !== SESSION_VERSION) return;
+  if (sourceSessionVersion !== SESSION_VERSION) return;
   const rawEntries = sessionArtifactEntries(data, 'losatCache');
   const derivedEntries = sessionArtifactEntries(data, 'losatDerivedCache');
   const manifest = data.proteinIdentityManifest;
   rejectInvalidLosatCacheKeys(rawEntries, 'LOSAT', { requireKey: true });
   rejectInvalidLosatCacheKeys(derivedEntries, 'derived LOSATP');
-
-  if (sourceSessionVersion === 35) {
-    const proteinEntries = rawEntries.filter(
-      (entry) => classifyRawLosatCacheEntry(entry) === 'protein-v35'
-    );
-    if (
-      rawEntries.some((entry) => ![
-        'protein-v35',
-        'nucleotide-current'
-      ].includes(classifyRawLosatCacheEntry(entry))) ||
-      (
-        manifest !== undefined &&
-        manifest !== null &&
-        !validateV35ProteinIdentityManifest(manifest)
-      ) ||
-      (proteinEntries.length > 0 && !validateV35ProteinIdentityManifest(manifest)) ||
-      proteinEntries.some(
-        (entry) => !validateV35ProteinRawEntryReferences(entry, manifest)
-      ) ||
-      derivedEntries.some(
-        (entry) => (
-          !isLosatDerivedCacheEntry(entry) ||
-          entry.schema !== V35_LOSAT_DERIVED_CACHE_SCHEMA
-        )
-      )
-    ) {
-      throw new Error('Session version 35 contains invalid protein LOSAT artifacts.');
-    }
-    return;
-  }
 
   if (!validateProteinIdentityManifest(manifest)) {
     throw new Error('Session version 36 requires a valid schema-2 protein manifest.');
@@ -1002,109 +966,27 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
   }
 };
 
-export const quarantineV35ProteinArtifacts = (data, sourceSessionVersion) => {
-  if (sourceSessionVersion !== 35) return data;
-  const migrated = cloneJsonData(data);
-  const rawEntries = Array.isArray(migrated.losatCache?.entries)
-    ? migrated.losatCache.entries
-    : [];
-  const v35ProteinEntries = rawEntries.filter(
-    (entry) => classifyRawLosatCacheEntry(entry) === 'protein-v35'
-  );
-  const legacyProteinEntries = rawEntries.filter(
-    (entry) => classifyRawLosatCacheEntry(entry) === 'protein-legacy'
-  );
-  const currentEntries = rawEntries.filter(
-    (entry) => classifyRawLosatCacheEntry(entry) === 'nucleotide-current'
-  );
-  const sourceManifest = migrated.proteinIdentityManifest;
-  if (
-    v35ProteinEntries.length > 0 &&
-    !validateV35ProteinIdentityManifest(sourceManifest)
-  ) {
-    throw new Error(
-      'Session version 35 protein cache requires a valid schema-1 identity manifest.'
-    );
-  }
-
-  const legacyArtifacts = isPlainObject(migrated.legacyArtifacts)
-    ? cloneJsonData(migrated.legacyArtifacts)
-    : {};
-  if (validateV35ProteinIdentityManifest(sourceManifest)) {
-    legacyArtifacts.proteinRawV35Candidates = createV35ProteinCandidateEnvelope(
-      v35ProteinEntries,
-      sourceManifest
-    );
-  }
-  if (legacyProteinEntries.length > 0) {
-    const imported = createLegacyProteinCandidateEnvelope(legacyProteinEntries);
-    const existing = normalizeLegacyProteinCandidateEnvelope(
-      legacyArtifacts.proteinRawCandidates
-    );
-    legacyArtifacts.proteinRawCandidates = {
-      schema: 1,
-      entries: [...existing.entries, ...imported.entries]
-    };
-  }
-
-  const derivedEntries = Array.isArray(migrated.losatDerivedCache?.entries)
-    ? migrated.losatDerivedCache.entries
-    : [];
-  const v35DerivedEntries = derivedEntries.filter(
-    (entry) => (
-      isLosatDerivedCacheEntry(entry) &&
-      entry.schema === V35_LOSAT_DERIVED_CACHE_SCHEMA
-    )
-  );
-  if (v35DerivedEntries.length > 0) {
-    legacyArtifacts.proteinDerivedV35Evidence = {
-      schema: 1,
-      entries: cloneJsonData(v35DerivedEntries)
-    };
-  }
-
-  migrated.losatCache = { entries: currentEntries };
-  migrated.losatDerivedCache = { entries: [] };
-  migrated.proteinIdentityManifest = emptyProteinIdentityManifest();
-  if (Object.keys(legacyArtifacts).length > 0) {
-    migrated.legacyArtifacts = legacyArtifacts;
-  }
-  return migrated;
-};
-
 export const buildSessionLegacyArtifacts = ({
   legacyRawCandidates,
-  legacyV35RawCandidates,
-  legacyDerivedEvidence,
-  legacyV35DerivedEvidence
+  legacyDerivedEvidence
 }) => {
   const legacyArtifacts = {};
   if (legacyRawCandidates?.entries?.length) {
     legacyArtifacts.proteinRawCandidates = legacyRawCandidates;
   }
-  if (legacyV35RawCandidates?.sourceManifest) {
-    legacyArtifacts.proteinRawV35Candidates = legacyV35RawCandidates;
-  }
   if (legacyDerivedEvidence?.entries?.length) {
     legacyArtifacts.proteinDerivedEvidence = legacyDerivedEvidence;
-  }
-  if (legacyV35DerivedEvidence?.entries?.length) {
-    legacyArtifacts.proteinDerivedV35Evidence = legacyV35DerivedEvidence;
   }
   return Object.keys(legacyArtifacts).length > 0 ? legacyArtifacts : null;
 };
 
 const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
-  const artifactsMigrated = quarantineV35ProteinArtifacts(
-    data,
-    sourceSessionVersion
-  );
   return {
-    ...artifactsMigrated,
+    ...data,
     version: SESSION_VERSION,
     config: migrateLegacyFeatureRenderingConfig(
       migrateImportedLinearTrackSlots(
-        artifactsMigrated.config,
+        data.config,
         sourceSessionVersion
       ),
       sourceSessionVersion <= 33
@@ -1994,11 +1876,7 @@ const serializeLosatCache = () => {
   return entries;
 };
 
-const applyLosatCache = (
-  entries,
-  legacyEnvelope = null,
-  v35Envelope = null
-) => {
+const applyLosatCache = (entries, legacyEnvelope = null) => {
   const map = new Map();
   const info = [];
   const legacyEntries = [];
@@ -2039,9 +1917,6 @@ const applyLosatCache = (
     schema: 1,
     entries: [...restoredEnvelope.entries, ...importedEnvelope.entries]
   };
-  state.legacyProteinRawV35Candidates.value = (
-    normalizeV35ProteinCandidateEnvelope(v35Envelope)
-  );
 };
 
 const pruneLosatDerivedCache = (map) => {
@@ -2088,41 +1963,15 @@ const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
     .map((entry) => cloneJsonData(entry))
 });
 
-const normalizeV35DerivedEvidence = (value, fallbackEntries = []) => ({
-  schema: 1,
-  entries: [
-    ...(
-      isPlainObject(value) && value.schema === 1 && Array.isArray(value.entries)
-        ? value.entries
-        : []
-    ),
-    ...fallbackEntries
-  ]
-    .filter((entry) => (
-      isLosatDerivedCacheEntry(entry) &&
-      entry.schema === V35_LOSAT_DERIVED_CACHE_SCHEMA
-    ))
-    .map((entry) => cloneJsonData(entry))
-});
-
-const applyLosatDerivedCache = (
-  entries,
-  legacyEvidence = null,
-  v35Evidence = null
-) => {
+const applyLosatDerivedCache = (entries, legacyEvidence = null) => {
   const map = new Map();
   const legacyEntries = [];
-  const v35Entries = [];
 
   if (Array.isArray(entries)) {
     entries.forEach((entry) => {
       if (!isLosatDerivedCacheEntry(entry)) return;
       if (entry.schema === 1) {
         legacyEntries.push(entry);
-        return;
-      }
-      if (entry.schema === V35_LOSAT_DERIVED_CACHE_SCHEMA) {
-        v35Entries.push(entry);
         return;
       }
       map.set(entry.key, {
@@ -2141,10 +1990,6 @@ const applyLosatDerivedCache = (
   state.legacyProteinDerivedEvidence.value = normalizeLegacyDerivedEvidence(
     legacyEvidence,
     legacyEntries
-  );
-  state.legacyProteinDerivedV35Evidence.value = normalizeV35DerivedEvidence(
-    v35Evidence,
-    v35Entries
   );
 };
 
@@ -2572,13 +2417,7 @@ const captureSessionImportSnapshot = () => ({
   losatDerivedCache: new Map(state.losatDerivedCache.value),
   proteinIdentityManifest: cloneJsonData(state.proteinIdentityManifest.value),
   legacyProteinRawCandidates: cloneJsonData(state.legacyProteinRawCandidates.value),
-  legacyProteinRawV35Candidates: cloneJsonData(
-    state.legacyProteinRawV35Candidates.value
-  ),
   legacyProteinDerivedEvidence: cloneJsonData(state.legacyProteinDerivedEvidence.value),
-  legacyProteinDerivedV35Evidence: cloneJsonData(
-    state.legacyProteinDerivedV35Evidence.value
-  ),
   losatCacheInfo: cloneJsonData(state.losatCacheInfo.value),
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value
@@ -2596,13 +2435,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
   state.proteinIdentityManifest.value = cloneJsonData(snapshot.proteinIdentityManifest);
   state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
-  state.legacyProteinRawV35Candidates.value = cloneJsonData(
-    snapshot.legacyProteinRawV35Candidates
-  );
   state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
-  state.legacyProteinDerivedV35Evidence.value = cloneJsonData(
-    snapshot.legacyProteinDerivedV35Evidence
-  );
   state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
   applyResultsData(snapshot.results, snapshot.ui);
   applyFeatureStateData(snapshot.features);
@@ -2639,13 +2472,7 @@ const resetSessionBaseline = () => {
   state.losatDerivedCache.value = new Map();
   state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
   state.legacyProteinRawCandidates.value = { schema: 1, entries: [] };
-  state.legacyProteinRawV35Candidates.value = {
-    schema: 1,
-    sourceManifest: null,
-    entries: []
-  };
   state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
-  state.legacyProteinDerivedV35Evidence.value = { schema: 1, entries: [] };
   state.losatCacheInfo.value = [];
   state.orthogroups.value = [];
   state.featureOrthogroupIndex.value = new Map();
@@ -3175,14 +3002,8 @@ export const exportSession = async (titleOverride = null) => {
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
   );
-  const legacyV35RawCandidates = serializableV35ProteinCandidateEnvelope(
-    state.legacyProteinRawV35Candidates.value
-  );
   const legacyDerivedEvidence = normalizeLegacyDerivedEvidence(
     state.legacyProteinDerivedEvidence.value
-  );
-  const legacyV35DerivedEvidence = normalizeV35DerivedEvidence(
-    state.legacyProteinDerivedV35Evidence.value
   );
   const sessionData = {
     format: 'gbdraw-session',
@@ -3263,9 +3084,7 @@ export const exportSession = async (titleOverride = null) => {
 
   const legacyArtifacts = buildSessionLegacyArtifacts({
     legacyRawCandidates,
-    legacyV35RawCandidates,
-    legacyDerivedEvidence,
-    legacyV35DerivedEvidence
+    legacyDerivedEvidence
   });
   if (legacyArtifacts) {
     sessionData.legacyArtifacts = legacyArtifacts;
@@ -3383,25 +3202,21 @@ export const importSession = async (e, options = {}) => {
     if (canonicalSession) {
       applyLosatCache(
         projectionResult.artifactState.losatCache?.entries,
-        projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
-        projectionResult.artifactState.legacyArtifacts?.proteinRawV35Candidates
+        projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates
       );
       applyLosatDerivedCache(
         projectionResult.artifactState.losatDerivedCache?.entries,
-        projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence,
-        projectionResult.artifactState.legacyArtifacts?.proteinDerivedV35Evidence
+        projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence
       );
       applyProteinIdentityManifest(projectionResult.artifactState.proteinIdentityManifest);
     } else {
       applyLosatCache(
         data.losatCache?.entries,
-        data.legacyArtifacts?.proteinRawCandidates,
-        data.legacyArtifacts?.proteinRawV35Candidates
+        data.legacyArtifacts?.proteinRawCandidates
       );
       applyLosatDerivedCache(
         data.losatDerivedCache?.entries,
-        data.legacyArtifacts?.proteinDerivedEvidence,
-        data.legacyArtifacts?.proteinDerivedV35Evidence
+        data.legacyArtifacts?.proteinDerivedEvidence
       );
       applyProteinIdentityManifest(data.proteinIdentityManifest);
     }

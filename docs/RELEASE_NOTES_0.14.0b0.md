@@ -25,19 +25,19 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 
 ## Compact LOSATP runtime handles and session version 36
 
-- Python and Web writers now emit session version 36 with canonical `renderRequest` schema 3. Readers accept versions 27 through 36; public typed conversion remains available for canonical versions 31 through 36.
+- Python and Web writers now emit session version 36 with canonical `renderRequest` schema 3. Readers accept versions 27–33 and 36; public typed conversion remains available for canonical versions 31–33 and 36. Versions 34 and 35 were branch-internal development formats and are not supported.
 - Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
 - Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
 - **Save Raw LOSAT TSV** hydrates generated protein results at download time: it resolves every internal handle through the manifest and replaces only QUERY and SUBJECT with readable, percent-encoded protein or feature aliases. Duplicate aliases receive deterministic short ordinals. Row order, columns 3–12, numeric text, comments, and line endings are preserved; an unresolved or wrong-binding handle aborts the download instead of exposing an internal ID. User-uploaded comparison TSV is never rewritten.
-- Version 35 remains a supported migration source with protein raw schema 3, derived schema 2, and identity manifest schema 1. Its long readable transport IDs are validated and quarantined losslessly, then verified protein results are rewritten copy-on-success to raw schema 4 and derived schema 3 is rebuilt without a LOSATP rerun. Versions 27–34 retain their existing schema-2 candidate path. Save-before-Generate preserves pending candidates, and an unverifiable candidate becomes only a pair-local miss.
+- Versions 27–33 retain their existing schema-2 protein candidate path and derived schema-1 evidence. Save-before-Generate preserves pending candidates, verified results are copied to raw schema 4, and an unverifiable candidate becomes only a pair-local miss.
 
-## Feature underlay rendering and session version 34
+## Feature underlay rendering
 
 - Feature rendering now accepts `arrow`, `rectangle`, or `underlay` through `--feature_shape`, Python `feature_shapes`, and the Web feature editor.
 - New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
 - Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
 - Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
-- Session version 34 and canonical request schema 3 record the new default. Older sessions and schema 1/2 requests with no repeat assignment migrate to `repeat_region=rectangle` so visual replay remains stable.
+- Session version 36 and canonical request schema 3 record the new default. Sessions 27–33 and schema 1/2 requests with no repeat assignment migrate to `repeat_region=rectangle` so visual replay remains stable.
 
 ## Python/Web session version 33
 
@@ -243,7 +243,7 @@ New drawing code should prefer the top-level interface described above.
 
 ## Session API boundary
 
-The public session bridge accepts version 31 through 36 canonical documents.
+The public session bridge accepts canonical documents from versions 31–33 and 36.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.

@@ -10,19 +10,6 @@
   "cacheMisses": 0,
   "uniqueJobs": 0,
   "workerCalls": 0,
-  "v35": {
-    "sourcePath": "tests/fixtures/sessions/BGC0000708-BGC0000713.schema-v3.gbdraw-session.json.gz",
-    "sourceSha256": "cb0b5a3ca1cfa398785f180f2f8429ff4fcd0b47c1cc4fd3ff61626560dd91f0",
-    "sessionVersion": 35,
-    "renderRequestSchema": 3,
-    "rawSchema": 3,
-    "storedRawEntries": 25,
-    "totalPairs": 25,
-    "cacheHits": 25,
-    "cacheMisses": 0,
-    "uniqueJobs": 0,
-    "workerCalls": 0
-  },
   "downloads": {
     "pairIndex": 0,
     "bulkEntryCount": 4,

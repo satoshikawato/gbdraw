@@ -1,5 +1,13 @@
 # LOSAT Runtime Handle Cache Identity and Linear Spacing Regression Implementation Plan
 
+> **Historical, unmerged design:** The session v34/v35 compatibility design described
+> below existed only on a development branch and has been superseded. Versions 34 and
+> 35 are not supported session inputs, and the v35 raw-schema-3/derived-schema-2/
+> manifest-schema-1 quarantine and promotion paths have been removed. The current
+> contract is session 36 with protein raw schema 4, derived schema 3, and identity
+> manifest schema 2; only the v27–33 schema-2 migration and current invariants remain
+> normative. The Linear spacing analysis remains applicable.
+
 - 作成日: 2026-07-21
 - 更新日: 2026-07-25
 - 対象: Web/CLI Linear の LOSATP cache identity、session version 27–35 読み込み、Linear record spacing
@@ -7,7 +15,7 @@
   derived cache schema 3、protein identity manifest schema 2
 - 非対象cache: nucleotide LOSAT は raw schema 2 を維持し、session内のprotein raw 4 /
   nucleotide raw 2混在を正式に扱う
-- 状態: compact runtime handle設計への更新、実装、最終検証完了
+- 状態: **unmerged, superseded design の historical record**
 - 関連設計: [`LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md`](LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md)、[`PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md`](PYTHON_SESSION_CANONICAL_REQUEST_PLAN.md)
 - 移行設計: [`LOSAT_COMPACT_RUNTIME_HANDLE_MIGRATION_IMPLEMENTATION_PLAN.md`](LOSAT_COMPACT_RUNTIME_HANDLE_MIGRATION_IMPLEMENTATION_PLAN.md)
 

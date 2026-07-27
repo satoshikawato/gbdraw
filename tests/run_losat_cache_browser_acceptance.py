@@ -24,9 +24,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 NODE_SPEC = REPO_ROOT / "tests" / "web" / "losat-cache-migration.playwright.spec.js"
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "sessions"
 FIXTURE_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
-V35_FIXTURE_PATH = (
-    FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v3.gbdraw-session.json.gz"
-)
 EXPECTED_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.expected.json"
 CURRENT_SESSION_VERSION = 36
 CURRENT_RENDER_REQUEST_SCHEMA = 3
@@ -293,7 +290,6 @@ def _load_expected() -> dict[str, Any]:
         "cacheMisses",
         "uniqueJobs",
         "workerCalls",
-        "v35",
         "downloads",
     }
     missing = sorted(required.difference(value))
@@ -654,71 +650,6 @@ def _assert_legacy_preserved(
     )
 
 
-def _assert_v35_preserved(
-    session: dict[str, Any],
-    source_session: dict[str, Any],
-    expected: dict[str, Any],
-    checks: AcceptanceChecks,
-) -> None:
-    _assert_current_session_boundary(session, checks, require_derived=False)
-    raw_envelope = (
-        session.get("legacyArtifacts", {})
-        .get("proteinRawV35Candidates", {})
-    )
-    candidates = raw_envelope.get("entries", [])
-    derived_envelope = (
-        session.get("legacyArtifacts", {})
-        .get("proteinDerivedV35Evidence", {})
-    )
-    checks.require(
-        session.get("losatCache", {}).get("entries", []) == [],
-        "A v35 protein entry leaked into the current cache.",
-    )
-    checks.require(
-        session.get("losatDerivedCache", {}).get("entries", []) == [],
-        "A v35 derived entry leaked into the current derived cache.",
-    )
-    checks.require(
-        raw_envelope.get("schema") == 1,
-        "The v35 candidate envelope is not schema 1.",
-    )
-    checks.require(
-        raw_envelope.get("sourceManifest")
-        == source_session.get("proteinIdentityManifest"),
-        "Load -> Save changed or lost the v35 source manifest.",
-    )
-    checks.require(
-        len(candidates) == expected["storedRawEntries"],
-        "Load -> Save lost a v35 raw candidate.",
-    )
-    checks.require(
-        all(
-            candidate.get("state") == "pending"
-            and candidate.get("originalEntry", {}).get("schema")
-            == expected["rawSchema"]
-            and candidate.get("originalEntry", {}).get("program") == "blastp"
-            for candidate in candidates
-        ),
-        "The saved v35 candidate envelope is not lossless.",
-    )
-    checks.require(
-        [candidate.get("originalEntry") for candidate in candidates]
-        == source_session.get("losatCache", {}).get("entries", []),
-        "Load -> Save changed a v35 raw candidate.",
-    )
-    checks.require(
-        derived_envelope
-        == {
-            "schema": 1,
-            "entries": source_session.get("losatDerivedCache", {}).get(
-                "entries",
-                [],
-            ),
-        },
-        "Load -> Save changed the quarantined v35 derived evidence.",
-    )
-
-
 def _assert_renamed_resources(session: dict[str, Any], checks: AcceptanceChecks) -> None:
     resources = [
         value
@@ -746,25 +677,11 @@ def _assert_renamed_resources(session: dict[str, Any], checks: AcceptanceChecks)
     )
 
 
-def _raw_tail_signature(text: object) -> str:
-    rows: list[str] = []
-    for line in str(text or "").split("\n"):
-        body = line[:-1] if line.endswith("\r") else line
-        ending = "\r" if line.endswith("\r") else ""
-        if not body.strip() or body.lstrip().startswith("#"):
-            rows.append(line)
-            continue
-        rows.append("\t".join(body.split("\t")[2:]) + ending)
-    return "\n".join(rows)
-
-
 def _assert_current_artifacts(
     session: dict[str, Any],
     source_session: dict[str, Any],
     expected: dict[str, Any],
     checks: AcceptanceChecks,
-    *,
-    migration_kind: str = "schema2",
 ) -> None:
     _assert_current_session_boundary(session, checks, require_derived=True)
     manifest = session.get("proteinIdentityManifest", {})
@@ -796,70 +713,31 @@ def _assert_current_artifacts(
         ),
         "The current derived cache contains a non-schema-3 protein payload.",
     )
-    if migration_kind == "schema2":
-        legacy_candidates = (
-            legacy_artifacts.get("proteinRawCandidates", {}).get("entries", [])
-        )
-        legacy_derived = (
-            legacy_artifacts.get("proteinDerivedEvidence", {}).get("entries", [])
-        )
-        checks.require(
-            len(legacy_candidates)
-            == expected["storedRawEntries"] - expected["totalPairs"],
-            "The saved session did not remove exactly the promoted legacy candidates.",
-        )
-        checks.require(
-            all(
-                candidate.get("state") == "pending"
-                and candidate.get("originalEntry")
-                in source_session.get("losatCache", {}).get("entries", [])
-                for candidate in legacy_candidates
-            ),
-            "A promoted or mutated legacy candidate remains in the saved envelope.",
-        )
-        checks.require(
-            legacy_derived
-            == source_session.get("losatDerivedCache", {}).get("entries", []),
-            "Pending-candidate derived evidence was not preserved losslessly.",
-        )
-    else:
-        v35_envelope = legacy_artifacts.get("proteinRawV35Candidates", {})
-        checks.require(
-            v35_envelope.get("entries", []) == []
-            and v35_envelope.get("sourceManifest") is None,
-            "Promoted v35 raw candidates or their source manifest remain.",
-        )
-        checks.require(
-            legacy_artifacts.get("proteinDerivedV35Evidence", {}).get(
-                "entries",
-                [],
-            )
-            == [],
-            "Promoted v35 derived evidence remains.",
-        )
-        source_by_pair = {
-            (
-                entry.get("queryRecordInstanceKey"),
-                entry.get("subjectRecordInstanceKey"),
-            ): entry
-            for entry in source_session.get("losatCache", {}).get("entries", [])
-        }
-        for entry in entries:
-            source_entry = source_by_pair.get(
-                (
-                    entry.get("queryRecordInstanceKey"),
-                    entry.get("subjectRecordInstanceKey"),
-                )
-            )
-            checks.require(
-                source_entry is not None,
-                "A promoted v35 pair does not resolve to its source entry.",
-            )
-            checks.require(
-                _raw_tail_signature(entry.get("text"))
-                == _raw_tail_signature(source_entry.get("text")),
-                "v35 promotion changed row order or columns 3-12.",
-            )
+    legacy_candidates = (
+        legacy_artifacts.get("proteinRawCandidates", {}).get("entries", [])
+    )
+    legacy_derived = (
+        legacy_artifacts.get("proteinDerivedEvidence", {}).get("entries", [])
+    )
+    checks.require(
+        len(legacy_candidates)
+        == expected["storedRawEntries"] - expected["totalPairs"],
+        "The saved session did not remove exactly the promoted legacy candidates.",
+    )
+    checks.require(
+        all(
+            candidate.get("state") == "pending"
+            and candidate.get("originalEntry")
+            in source_session.get("losatCache", {}).get("entries", [])
+            for candidate in legacy_candidates
+        ),
+        "A promoted or mutated legacy candidate remains in the saved envelope.",
+    )
+    checks.require(
+        legacy_derived
+        == source_session.get("losatDerivedCache", {}).get("entries", []),
+        "Pending-candidate derived evidence was not preserved losslessly.",
+    )
 
     record_analyses = manifest.get("recordAnalyses", {})
     instances = manifest.get("recordInstances", {})
@@ -1011,12 +889,8 @@ def _cancel_during_render(page: Any) -> dict[str, Any]:
           const before = {
             proteinIdentityManifest: state.proteinIdentityManifest.value,
             legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
-            legacyProteinRawV35Candidates:
-              state.legacyProteinRawV35Candidates.value,
             legacyProteinDerivedEvidence:
               state.legacyProteinDerivedEvidence.value,
-            legacyProteinDerivedV35Evidence:
-              state.legacyProteinDerivedV35Evidence.value,
             losatCache: Array.from(state.losatCache.value.entries()),
             losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
             losatCacheInfo: state.losatCacheInfo.value
@@ -1048,12 +922,8 @@ def _cancel_during_render(page: Any) -> dict[str, Any]:
                 state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
                 state.legacyProteinRawCandidates.value ===
                   before.legacyProteinRawCandidates &&
-                state.legacyProteinRawV35Candidates.value ===
-                  before.legacyProteinRawV35Candidates &&
                 state.legacyProteinDerivedEvidence.value ===
                   before.legacyProteinDerivedEvidence &&
-                state.legacyProteinDerivedV35Evidence.value ===
-                  before.legacyProteinDerivedV35Evidence &&
                 sameMapEntries(before.losatCache, state.losatCache.value) &&
                 sameMapEntries(
                   before.losatDerivedCache,
@@ -1077,12 +947,8 @@ def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
           const before = {
             proteinIdentityManifest: state.proteinIdentityManifest.value,
             legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
-            legacyProteinRawV35Candidates:
-              state.legacyProteinRawV35Candidates.value,
             legacyProteinDerivedEvidence:
               state.legacyProteinDerivedEvidence.value,
-            legacyProteinDerivedV35Evidence:
-              state.legacyProteinDerivedV35Evidence.value,
             losatCache: Array.from(state.losatCache.value.entries()),
             losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
             losatCacheInfo: state.losatCacheInfo.value
@@ -1103,12 +969,8 @@ def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
                 state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
                 state.legacyProteinRawCandidates.value ===
                   before.legacyProteinRawCandidates &&
-                state.legacyProteinRawV35Candidates.value ===
-                  before.legacyProteinRawV35Candidates &&
                 state.legacyProteinDerivedEvidence.value ===
                   before.legacyProteinDerivedEvidence &&
-                state.legacyProteinDerivedV35Evidence.value ===
-                  before.legacyProteinDerivedV35Evidence &&
                 sameMapEntries(before.losatCache, state.losatCache.value) &&
                 sameMapEntries(
                   before.losatDerivedCache,
@@ -1257,11 +1119,8 @@ def _run_python_adapter() -> int:
 
     checks = AcceptanceChecks()
     expected = _load_expected()
-    v35_expected = expected["v35"]
     fixture_bytes = gzip.decompress(FIXTURE_PATH.read_bytes())
     fixture = json.loads(fixture_bytes.decode("utf-8"))
-    v35_fixture_bytes = gzip.decompress(V35_FIXTURE_PATH.read_bytes())
-    v35_fixture = json.loads(v35_fixture_bytes.decode("utf-8"))
     checks.require(
         hashlib.sha256(fixture_bytes).hexdigest() == expected.get("sourceSha256"),
         "Legacy fixture SHA-256 does not match its acceptance oracle.",
@@ -1278,29 +1137,6 @@ def _run_python_adapter() -> int:
         len(fixture.get("losatCache", {}).get("entries", []))
         == expected["storedRawEntries"],
         "Legacy fixture raw-entry count does not match its acceptance oracle.",
-    )
-    checks.require(
-        hashlib.sha256(v35_fixture_bytes).hexdigest()
-        == v35_expected.get("sourceSha256"),
-        "v35 fixture SHA-256 does not match its acceptance oracle.",
-    )
-    checks.require(
-        v35_fixture.get("version") == v35_expected.get("sessionVersion"),
-        "v35 fixture session version does not match its acceptance oracle.",
-    )
-    checks.require(
-        v35_fixture.get("renderRequest", {}).get("schema")
-        == v35_expected.get("renderRequestSchema"),
-        "v35 fixture renderRequest schema does not match its acceptance oracle.",
-    )
-    v35_raw_entries = v35_fixture.get("losatCache", {}).get("entries", [])
-    checks.require(
-        len(v35_raw_entries) == v35_expected["storedRawEntries"]
-        and all(
-            entry.get("schema") == v35_expected["rawSchema"]
-            for entry in v35_raw_entries
-        ),
-        "v35 fixture raw entries do not match its acceptance oracle.",
     )
     print("Running LOSAT cache browser acceptance with Python Playwright.", flush=True)
     try:
@@ -1380,6 +1216,38 @@ def _run_python_adapter() -> int:
                 page.wait_for_function(
                     "() => window.__GBDRAW_APP__?.pyodideReady === true", timeout=240_000
                 )
+                legacy_ui_before_cancel = _migration_ui_snapshot(page)
+                canceled_legacy_run = _cancel_during_render(page)
+                checks.require(
+                    canceled_legacy_run.get("sawRendering")
+                    and canceled_legacy_run.get("cancelInvoked")
+                    and canceled_legacy_run.get("authorityRestored")
+                    and canceled_legacy_run.get("result") == {"status": "canceled"},
+                    "Legacy render cancellation did not roll migration back: "
+                    f"{canceled_legacy_run}",
+                )
+                checks.require(
+                    not canceled_legacy_run.get("errorSummary"),
+                    f"Legacy render cancellation surfaced an error: {canceled_legacy_run}",
+                )
+                checks.require(
+                    _migration_ui_snapshot(page) == legacy_ui_before_cancel,
+                    "Legacy UI references changed after the canceled migration.",
+                )
+                legacy_ui_before_render_error = _migration_ui_snapshot(page)
+                failed_legacy_run = _fail_renderer_after_migration(page)
+                checks.require(
+                    failed_legacy_run.get("result") == {"status": "error"}
+                    and failed_legacy_run.get("authorityRestored")
+                    and bool(failed_legacy_run.get("errorSummary"))
+                    and failed_legacy_run.get("executorCalls") == 0,
+                    "Legacy renderer failure did not roll migration back: "
+                    f"{failed_legacy_run}",
+                )
+                checks.require(
+                    _migration_ui_snapshot(page) == legacy_ui_before_render_error,
+                    "Legacy UI references changed after the failed render.",
+                )
                 _assert_telemetry(_generate(page), expected, checks)
                 first_layout = _inspect_layout(page)
                 _assert_layout(first_layout, checks)
@@ -1411,77 +1279,6 @@ def _run_python_adapter() -> int:
                     "Resolved BGC geometry changed after save/reload/regeneration.",
                 )
 
-                page.reload(wait_until="domcontentloaded")
-                page.wait_for_function("() => window.__GBDRAW_APP__")
-                _import_session(page, V35_FIXTURE_PATH, checks)
-
-                v35_before_generate_path = _save_session(page, checks)
-                v35_before_generate = _read_session(v35_before_generate_path)
-                _assert_v35_preserved(
-                    v35_before_generate,
-                    v35_fixture,
-                    v35_expected,
-                    checks,
-                )
-
-                page.reload(wait_until="domcontentloaded")
-                page.wait_for_function("() => window.__GBDRAW_APP__")
-                _import_session(page, v35_before_generate_path, checks)
-                page.wait_for_function(
-                    "() => window.__GBDRAW_APP__?.pyodideReady === true",
-                    timeout=240_000,
-                )
-                v35_ui_before_cancel = _migration_ui_snapshot(page)
-                canceled_v35_run = _cancel_during_render(page)
-                checks.require(
-                    canceled_v35_run.get("sawRendering")
-                    and canceled_v35_run.get("cancelInvoked")
-                    and canceled_v35_run.get("authorityRestored")
-                    and canceled_v35_run.get("result") == {"status": "canceled"},
-                    f"v35 render cancellation did not interrupt an active render: "
-                    f"{canceled_v35_run}",
-                )
-                checks.require(
-                    not canceled_v35_run.get("errorSummary"),
-                    f"v35 render cancellation surfaced an error: {canceled_v35_run}",
-                )
-                checks.require(
-                    _migration_ui_snapshot(page) == v35_ui_before_cancel,
-                    "v35 UI references changed after the canceled migration.",
-                )
-                v35_ui_before_render_error = _migration_ui_snapshot(page)
-                failed_v35_run = _fail_renderer_after_migration(page)
-                checks.require(
-                    failed_v35_run.get("result") == {"status": "error"}
-                    and failed_v35_run.get("authorityRestored")
-                    and bool(failed_v35_run.get("errorSummary"))
-                    and failed_v35_run.get("executorCalls") == 0,
-                    f"v35 renderer failure did not roll migration back: "
-                    f"{failed_v35_run}",
-                )
-                checks.require(
-                    _migration_ui_snapshot(page) == v35_ui_before_render_error,
-                    "v35 UI references changed after the failed render.",
-                )
-                _assert_telemetry(
-                    _generate(page),
-                    v35_expected,
-                    checks,
-                )
-
-                v35_migrated_path = _save_session(page, checks)
-                v35_migrated = _read_session(v35_migrated_path)
-                _assert_current_artifacts(
-                    v35_migrated,
-                    v35_fixture,
-                    v35_expected,
-                    checks,
-                    migration_kind="v35",
-                )
-
-                page.reload(wait_until="domcontentloaded")
-                page.wait_for_function("() => window.__GBDRAW_APP__")
-                _import_session(page, v35_migrated_path, checks)
                 expected_upload_bytes = _install_user_uploaded_tsv(page, expected)
                 uploaded_session_path = _save_session(page, checks)
                 page.reload(wait_until="domcontentloaded")
@@ -1522,7 +1319,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    for required in (NODE_SPEC, FIXTURE_PATH, V35_FIXTURE_PATH, EXPECTED_PATH):
+    for required in (NODE_SPEC, FIXTURE_PATH, EXPECTED_PATH):
         if not required.is_file():
             print(f"Required acceptance input is missing: {required}", file=sys.stderr)
             return 2

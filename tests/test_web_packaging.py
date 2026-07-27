@@ -2004,16 +2004,17 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
 
         const runtimeHandle = `h_${{'a'.repeat(26)}}`;
         const featureAnalysisId = `f_${{'b'.repeat(64)}}`;
-        const v35TransportId = `record@instance|alias~f_${{'c'.repeat(64)}}`;
+        // Unsupported historical long-ID shapes remain hidden at display boundaries.
+        const unsupportedLongTransportId = `record@instance|alias~f_${{'c'.repeat(64)}}`;
         const internalFeature = {{
           svg_id: 'finternal',
           type: 'CDS',
           displayLabel: runtimeHandle,
           label: featureAnalysisId,
-          sourceProteinId: v35TransportId,
+          sourceProteinId: unsupportedLongTransportId,
           proteinId: runtimeHandle,
           qualifiers: {{
-            protein_id: [runtimeHandle, featureAnalysisId, v35TransportId],
+            protein_id: [runtimeHandle, featureAnalysisId, unsupportedLongTransportId],
             locus_tag: ['WP_SAFE_SEARCH.1']
           }},
           orthogroupId: 'og_internal'
@@ -2024,7 +2025,7 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
             featureSvgId: 'finternal',
             displayProteinId: runtimeHandle,
             sourceProteinId: featureAnalysisId,
-            label: v35TransportId,
+            label: unsupportedLongTransportId,
             locusTag: 'WP_SAFE_SEARCH.1'
           }}]
         }}];
@@ -2039,7 +2040,7 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
           `Safe display ID missing: ${{JSON.stringify(internalItems)}}`
         );
         assert(
-          !internalItems.some((item) => [runtimeHandle, featureAnalysisId, v35TransportId].includes(item.value)),
+          !internalItems.some((item) => [runtimeHandle, featureAnalysisId, unsupportedLongTransportId].includes(item.value)),
           `Internal protein ID leaked into GUI search: ${{JSON.stringify(internalItems)}}`
         );
         """,

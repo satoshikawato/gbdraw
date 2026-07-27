@@ -97,7 +97,17 @@ const legacyProteinEntry = {
 assert.equal(cache.classifyRawLosatCacheEntry(proteinEntry), 'protein-current');
 assert.equal(cache.classifyRawLosatCacheEntry(nucleotideEntry), 'nucleotide-current');
 assert.equal(cache.classifyRawLosatCacheEntry(legacyProteinEntry), 'protein-legacy');
+assert.equal(
+  cache.classifyRawLosatCacheEntry({ ...proteinEntry, schema: 3 }),
+  'invalid',
+  'branch-internal protein raw schema 3 must not be accepted'
+);
 assert.equal(cache.validateProteinIdentityManifest(manifest), true);
+assert.equal(
+  cache.validateProteinIdentityManifest({ ...manifest, schema: 1 }),
+  false,
+  'branch-internal top-level manifest schema 1 must not be accepted'
+);
 assert.equal(cache.validateProteinRawEntryReferences(proteinEntry, manifest), true);
 const queryRuntimeIds = new Set([runtimeA]);
 const subjectRuntimeIds = new Set([runtimeB]);
@@ -219,48 +229,6 @@ assert.equal(
   null
 );
 
-const v35Manifest = {
-  schema: 1,
-  proteinSets: manifest.proteinSets,
-  recordAnalyses: manifest.recordAnalyses,
-  recordInstances: {
-    'record-1': {
-      schema: 1,
-      recordAnalysisId: 'sha256:analysis-a',
-      bindingHash: 'sha256:v35-binding-a',
-      transportIds: { [featureA]: `A@record-1|protein-a~${featureA}` }
-    },
-    'record-2': {
-      schema: 1,
-      recordAnalysisId: 'sha256:analysis-b',
-      bindingHash: 'sha256:v35-binding-b',
-      transportIds: { [featureB]: `B@record-2|protein-b~${featureB}` }
-    }
-  }
-};
-const v35ProteinEntry = {
-  schema: 3,
-  kind: 'raw-losat',
-  identityKind: 'protein',
-  key: 'v35-protein-key',
-  text: (
-    `A@record-1|protein-a~${featureA}\t` +
-    `B@record-2|protein-b~${featureB}\t100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n`
-  ),
-  program: 'blastp',
-  outfmt: '6',
-  args: [],
-  queryProteinSetHash: 'sha256:set-a',
-  subjectProteinSetHash: 'sha256:set-b',
-  queryBindingHash: 'sha256:v35-binding-a',
-  subjectBindingHash: 'sha256:v35-binding-b',
-  queryRecordInstanceKey: 'record-1',
-  subjectRecordInstanceKey: 'record-2'
-};
-assert.equal(cache.classifyRawLosatCacheEntry(v35ProteinEntry), 'protein-v35');
-assert.equal(cache.validateV35ProteinIdentityManifest(v35Manifest), true);
-assert.equal(cache.validateV35ProteinRawEntryReferences(v35ProteinEntry, v35Manifest), true);
-
 const outfmt6ColumnIndexes = new Map([
   'query',
   'subject',
@@ -282,7 +250,6 @@ const entryWithNumericCase = (entry, numericCase) => {
 };
 for (const numericCase of numericContract) {
   const currentCase = entryWithNumericCase(proteinEntry, numericCase);
-  const v35Case = entryWithNumericCase(v35ProteinEntry, numericCase);
   assert.equal(
     cache.rawProteinTextMatchesBindings(
       currentCase.text,
@@ -297,67 +264,7 @@ for (const numericCase of numericContract) {
     numericCase.valid,
     `${numericCase.name}: schema-4 validation`
   );
-  assert.equal(
-    cache.validateV35ProteinRawEntryReferences(v35Case, v35Manifest),
-    numericCase.valid,
-    `${numericCase.name}: version-35 validation`
-  );
 }
-
-assert.deepEqual(
-  cache.buildV35ProteinReferenceMap(v35Manifest, manifest),
-  {
-    [`A@record-1|protein-a~${featureA}`]: runtimeA,
-    [`B@record-2|protein-b~${featureB}`]: runtimeB
-  },
-  'version-35 UI references resolve from manifest authority without a raw entry'
-);
-assert.throws(
-  () => cache.buildV35ProteinReferenceMap(
-    v35Manifest,
-    {
-      ...manifest,
-      recordInstances: {
-        ...manifest.recordInstances,
-        'record-2': {
-          ...manifest.recordInstances['record-2'],
-          runtimeIds: {}
-        }
-      }
-    }
-  ),
-  /valid version-35 and current manifests|membership changed/,
-  'reference migration must fail closed when current membership changes'
-);
-const v35ManifestOnly = cache.createV35ProteinCandidateEnvelope([], v35Manifest);
-assert.deepEqual(v35ManifestOnly, {
-  schema: 1,
-  sourceManifest: v35Manifest,
-  entries: []
-});
-assert.deepEqual(
-  cache.serializableV35ProteinCandidateEnvelope(v35ManifestOnly),
-  v35ManifestOnly,
-  'source manifest authority must survive save-before-generate with zero raw candidates'
-);
-const v35Pending = cache.createV35ProteinCandidateEnvelope(
-  [v35ProteinEntry],
-  v35Manifest
-);
-assert.equal(v35Pending.entries.length, 1);
-assert.deepEqual(
-  cache.serializableV35ProteinCandidateEnvelope(v35Pending),
-  v35Pending
-);
-const v35Promoted = cache.transitionV35ProteinCandidate(
-  v35Pending,
-  0,
-  'promoted'
-);
-assert.equal(
-  cache.serializableV35ProteinCandidateEnvelope(v35Promoted).entries.length,
-  0
-);
 
 const pending = cache.createLegacyProteinCandidateEnvelope([legacyProteinEntry, nucleotideEntry]);
 assert.equal(pending.entries.length, 1);
@@ -377,8 +284,8 @@ assert.equal(cache.isLosatDerivedCacheEntry({
   schema: 1, kind: 'derived-losatp-payload', key: 'legacy-derived', payload: {}
 }), true);
 assert.equal(cache.isLosatDerivedCacheEntry({
-  schema: 2, kind: 'derived-losatp-payload', key: 'v35-derived', payload: {}
-}), true);
+  schema: 2, kind: 'derived-losatp-payload', key: 'unsupported-derived', payload: {}
+}), false);
 assert.equal(cache.isLosatDerivedCacheEntry({
   schema: 3,
   kind: 'derived-losatp-payload',

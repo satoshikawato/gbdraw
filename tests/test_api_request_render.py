@@ -12,16 +12,12 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite import Drawing
 
-import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 from gbdraw.analysis.collinearity import (
     CollinearityParameters,
     LosslessCollinearityParameters,
 )
 from gbdraw.analysis.protein_colinearity import (
-    OrthogroupMember,
-    OrthogroupResult,
-    build_losat_transport_id,
     extract_web_stable_cds_proteins,
 )
 from gbdraw.api.options import DiagramOptions
@@ -41,7 +37,6 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.linear_comparison import LinearComparison
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session_io import validate_current_session_artifacts
@@ -81,51 +76,6 @@ def _protein_record(record_id: str, protein_id: str) -> SeqRecord:
     return record
 
 
-def _v35_manifest_for_extraction(
-    extraction,
-    aliases_by_instance: dict[str, str],
-) -> tuple[dict[str, object], dict[str, str]]:
-    current = extraction.identity_manifest
-    assert current is not None
-    record_instances: dict[str, object] = {}
-    old_ids: dict[str, str] = {}
-    for instance_key, alias in aliases_by_instance.items():
-        current_binding = current.record_instances[instance_key]
-        analysis_id = str(current_binding["recordAnalysisId"])
-        analysis = current.record_analyses[analysis_id]
-        feature_id = next(iter(current_binding["runtimeIds"]))
-        old_id = build_losat_transport_id(
-            record_source_id=analysis["recordSourceId"],
-            record_instance_id=instance_key,
-            display_alias=alias,
-            feature_analysis_id=feature_id,
-        )
-        transport_ids = {feature_id: old_id}
-        binding_payload = {
-            "recordInstanceKey": instance_key,
-            "recordAnalysisId": analysis_id,
-            "transportIds": transport_ids,
-        }
-        record_instances[instance_key] = {
-            "schema": 1,
-            "recordAnalysisId": analysis_id,
-            "bindingHash": protein_colinearity_module._identity_sha256(
-                binding_payload
-            ),
-            "transportIds": transport_ids,
-        }
-        old_ids[instance_key] = old_id
-    return (
-        {
-            "schema": 1,
-            "proteinSets": current.protein_sets,
-            "recordAnalyses": current.record_analyses,
-            "recordInstances": record_instances,
-        },
-        old_ids,
-    )
-
-
 def test_rewrite_protein_artifact_references_rejects_key_collisions() -> None:
     with pytest.raises(ValidationError, match="duplicate key"):
         request_render_module.rewrite_protein_artifact_references(
@@ -135,18 +85,17 @@ def test_rewrite_protein_artifact_references_rejects_key_collisions() -> None:
 
 
 def test_rewrite_protein_artifact_references_updates_compound_legacy_ids() -> None:
-    legacy_id = "p_r_old_0_9_1_deadbeefdead"
-    feature_id = f"f_{'a' * 64}"
-    v35_id = f"record@instance|alias~{feature_id}"
+    query_id = "p_r_old_0_9_1_deadbeefdead"
+    subject_id = "p_r_other_10_19_1_cafebabecafe"
 
     rewritten = request_render_module.rewrite_protein_artifact_references(
         {
-            "query_protein_id": f"{legacy_id};{v35_id}",
-            "supporting_edge": f"{legacy_id}->{v35_id}:rbh",
+            "query_protein_id": f"{query_id};{subject_id}",
+            "supporting_edge": f"{query_id}->{subject_id}:rbh",
         },
         {
-            legacy_id: "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
-            v35_id: "h_bbbbbbbbbbbbbbbbbbbbbbbbbb",
+            query_id: "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+            subject_id: "h_bbbbbbbbbbbbbbbbbbbbbbbbbb",
         },
     )
 
@@ -201,8 +150,6 @@ def _derived_identity_test_context(
         nucleotide_entries=(),
         passthrough_derived_entries=(),
         legacy_candidates=(),
-        v35_candidates=None,
-        v35_derived_evidence=(),
         protein_id_map={},
         source_mode="collinear",
         warnings=(),
@@ -445,8 +392,6 @@ def test_empty_api_derived_result_passes_current_session_validation(
         nucleotide_entries=(),
         passthrough_derived_entries=(),
         legacy_candidates=(),
-        v35_candidates=None,
-        v35_derived_evidence=(),
         protein_id_map={},
         source_mode=mode,
         warnings=(),
@@ -629,141 +574,6 @@ def test_build_linear_request_uses_high_level_builder(
     assert prepared.mode == "linear"
     assert prepared.drawing is drawing
     assert captured == {"records": records, "options": request.options}
-
-
-def test_api_cli_render_migrates_manifest_only_v35_artifact_references(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    records = (
-        _protein_record("source-left", "current-left"),
-        _protein_record("source-right", "current-right"),
-    )
-    extraction = extract_web_stable_cds_proteins(
-        records,
-        record_instance_keys=("left", "right"),
-        record_source_ids=tuple(record.id for record in records),
-    )
-    source_manifest, old_ids = _v35_manifest_for_extraction(
-        extraction,
-        {"left": "old-left", "right": "old-right"},
-    )
-    comparison = DataFrame(
-        [
-            {
-                "query": old_ids["left"],
-                "subject": old_ids["right"],
-                "identity": 95.0,
-                "alignment_length": 2,
-                "mismatches": 0,
-                "gap_opens": 0,
-                "qstart": 1,
-                "qend": 2,
-                "sstart": 1,
-                "send": 2,
-                "evalue": 1e-20,
-                "bitscore": 80.0,
-                "query_protein_id": old_ids["left"],
-                "subject_protein_id": old_ids["right"],
-            }
-        ]
-    )
-    left_member = OrthogroupMember(
-        orthogroup_id="OG1",
-        protein_id=old_ids["left"],
-        record_index=0,
-        feature_index=0,
-        record_id=records[0].id,
-        label="Left",
-        start=0,
-        end=9,
-        strand=1,
-        feature_svg_id=None,
-        source_protein_id=old_ids["left"],
-    )
-    right_member = OrthogroupMember(
-        orthogroup_id="OG1",
-        protein_id=old_ids["right"],
-        record_index=1,
-        feature_index=0,
-        record_id=records[1].id,
-        label="Right",
-        start=0,
-        end=9,
-        strand=1,
-        feature_svg_id=None,
-        source_protein_id=old_ids["right"],
-    )
-    orthogroups = OrthogroupResult(
-        orthogroups={"OG1": [left_member, right_member]},
-        member_by_protein_id={
-            old_ids["left"]: left_member,
-            old_ids["right"]: right_member,
-        },
-    )
-    request = LinearDiagramRequest(
-        records=(
-            RecordInput(
-                source=InMemoryRecordSource(records[0]),
-                record_key="left",
-            ),
-            RecordInput(
-                source=InMemoryRecordSource(records[1]),
-                record_key="right",
-            ),
-        ),
-        options=DiagramOptions(
-            linear_comparisons=(LinearComparison(0, 1, comparison),),
-            orthogroups=orthogroups,
-        ),
-    )
-    artifacts = {
-        "legacyArtifacts": {
-            "proteinRawV35Candidates": {
-                "schema": 1,
-                "sourceManifest": source_manifest,
-                "entries": [],
-            }
-        }
-    }
-    def fail_losat(*_args, **_kwargs):
-        raise AssertionError("LOSAT must not run for precomputed artifacts")
-
-    monkeypatch.setattr(
-        protein_colinearity_module,
-        "run_losatp_blastp",
-        fail_losat,
-    )
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, **_kwargs: [],
-    )
-
-    rendered = render_request(request, session_artifacts=artifacts)
-
-    assert rendered.output_paths == ()
-    assert rendered.losat_cache_entries == ()
-    assert rendered.legacy_protein_raw_v35_candidates is None
-    assert set(rendered.protein_id_map or {}) == set(old_ids.values())
-    assert all(
-        runtime_handle.startswith("h_")
-        for runtime_handle in (rendered.protein_id_map or {}).values()
-    )
-    rewritten_options = rendered.request.options
-    rewritten_comparison = rewritten_options.linear_comparisons[0].matches.iloc[0]
-    assert rewritten_comparison["query"] == rendered.protein_id_map[old_ids["left"]]
-    assert (
-        rewritten_comparison["subject"]
-        == rendered.protein_id_map[old_ids["right"]]
-    )
-    rewritten_orthogroups = rewritten_options.orthogroups
-    assert set(rewritten_orthogroups.member_by_protein_id) == set(
-        rendered.protein_id_map.values()
-    )
-    assert len(rendered.losat_derived_cache_entries) == 1
-    serialized_derived = str(rendered.losat_derived_cache_entries)
-    assert old_ids["left"] not in serialized_derived
-    assert old_ids["right"] not in serialized_derived
 
 
 def test_render_request_passes_output_policy_and_returns_existing_paths(

@@ -11,8 +11,10 @@ globalThis.window = {
   DOMPurify: { sanitize: (value) => value }
 };
 globalThis.document = {};
+const alerts = [];
+globalThis.alert = (message) => alerts.push(String(message));
 
-const { validateSessionLosatArtifacts } = await import(
+const { importSession, validateSessionLosatArtifacts } = await import(
   '../../gbdraw/web/js/services/config.js'
 );
 
@@ -25,68 +27,59 @@ const rawEntry = (key) => ({
   text: ''
 });
 
-const proteinRawEntry = (key, version) => ({
-  schema: version === 35 ? 3 : 4,
+const proteinRawEntry = (key) => ({
+  schema: 4,
   kind: 'raw-losat',
-  ...(version === 36 ? { idEncoding: 'runtime-handle-v1' } : {}),
+  idEncoding: 'runtime-handle-v1',
   key,
   program: 'blastp',
   identityKind: 'protein',
   queryProteinSetHash: 'sha256:query',
   subjectProteinSetHash: 'sha256:subject',
-  ...(version === 35
-    ? {
-        queryBindingHash: 'sha256:query-binding',
-        subjectBindingHash: 'sha256:subject-binding'
-      }
-    : {
-        queryRuntimeBindingHash: 'sha256:query-binding',
-        subjectRuntimeBindingHash: 'sha256:subject-binding'
-      }),
+  queryRuntimeBindingHash: 'sha256:query-binding',
+  subjectRuntimeBindingHash: 'sha256:subject-binding',
   queryRecordInstanceKey: 'query',
   subjectRecordInstanceKey: 'subject',
   text: ''
 });
 
-const derivedEntry = (key, version) => ({
-  schema: version === 35 ? 2 : 3,
+const derivedEntry = (key) => ({
+  schema: 3,
   kind: 'derived-losatp-payload',
-  ...(version === 36 ? { idEncoding: 'runtime-handle-v1' } : {}),
+  idEncoding: 'runtime-handle-v1',
   key,
   payload: {}
 });
 
-const session = (version, rawEntries, derivedEntries) => ({
+const session = (rawEntries, derivedEntries) => ({
   losatCache: { entries: rawEntries },
   losatDerivedCache: { entries: derivedEntries },
-  proteinIdentityManifest: version === 36
-    ? {
-        schema: 2,
-        proteinSets: {},
-        recordAnalyses: {},
-        recordInstances: {}
-      }
-    : undefined
+  proteinIdentityManifest: {
+    schema: 2,
+    proteinSets: {},
+    recordAnalyses: {},
+    recordInstances: {}
+  }
 });
 
-for (const version of [35, 36]) {
-  test(`version-${version} import rejects duplicate raw LOSAT cache keys`, () => {
+const version = 36;
+{
+  test('version-36 import rejects duplicate raw LOSAT cache keys', () => {
     assert.throws(
       () => validateSessionLosatArtifacts(
-        session(version, [rawEntry('raw-key'), rawEntry('raw-key')], []),
+        session([rawEntry('raw-key'), rawEntry('raw-key')], []),
         version
       ),
       /Duplicate LOSAT cache key/
     );
   });
 
-  test(`version-${version} import rejects duplicate derived LOSATP cache keys`, () => {
+  test('version-36 import rejects duplicate derived LOSATP cache keys', () => {
     assert.throws(
       () => validateSessionLosatArtifacts(
-        session(
-          version,
-          [],
-          [derivedEntry('derived-key', version), derivedEntry('derived-key', version)]
+          session(
+            [],
+            [derivedEntry('derived-key'), derivedEntry('derived-key')]
         ),
         version
       ),
@@ -98,7 +91,7 @@ for (const version of [35, 36]) {
     test(`version-${version} import rejects a nucleotide raw cache key of ${String(invalidKey)}`, () => {
       assert.throws(
         () => validateSessionLosatArtifacts(
-          session(version, [rawEntry(invalidKey)], []),
+          session([rawEntry(invalidKey)], []),
           version
         ),
         /LOSAT cache entry at losatCache\.entries\[0\] requires a key/
@@ -109,7 +102,7 @@ for (const version of [35, 36]) {
   test(`version-${version} import rejects an empty protein raw cache key`, () => {
     assert.throws(
       () => validateSessionLosatArtifacts(
-        session(version, [proteinRawEntry('', version)], []),
+        session([proteinRawEntry('')], []),
         version
       ),
       /LOSAT cache entry at losatCache\.entries\[0\] requires a key/
@@ -118,7 +111,7 @@ for (const version of [35, 36]) {
 
   for (const field of ['losatCache', 'losatDerivedCache']) {
     test(`version-${version} import rejects a non-object ${field}`, () => {
-      const malformed = session(version, [], []);
+      const malformed = session([], []);
       malformed[field] = [];
       assert.throws(
         () => validateSessionLosatArtifacts(malformed, version),
@@ -127,7 +120,7 @@ for (const version of [35, 36]) {
     });
 
     test(`version-${version} import rejects a non-array ${field}.entries`, () => {
-      const malformed = session(version, [], []);
+      const malformed = session([], []);
       malformed[field] = { entries: null };
       assert.throws(
         () => validateSessionLosatArtifacts(malformed, version),
@@ -137,11 +130,39 @@ for (const version of [35, 36]) {
   }
 }
 
-test('version-35 import rejects a present-invalid manifest without protein cache entries', () => {
-  const malformed = session(35, [], []);
-  malformed.proteinIdentityManifest = {};
+test('version-36 import rejects branch-internal raw schema 3', () => {
+  const malformed = session([{ ...proteinRawEntry('raw-key'), schema: 3 }], []);
   assert.throws(
-    () => validateSessionLosatArtifacts(malformed, 35),
-    /Session version 35 contains invalid protein LOSAT artifacts/
+    () => validateSessionLosatArtifacts(malformed, 36),
+    /Session version 36 contains a non-current raw LOSAT entry/
   );
 });
+
+test('version-36 import rejects branch-internal derived schema 2', () => {
+  const malformed = session([], [{ ...derivedEntry('derived-key'), schema: 2 }]);
+  assert.throws(
+    () => validateSessionLosatArtifacts(malformed, 36),
+    /Session version 36 contains an invalid derived LOSATP entry/
+  );
+});
+
+for (const unsupportedVersion of [34, 35]) {
+  test(`session import rejects branch-internal version ${unsupportedVersion}`, async () => {
+    alerts.length = 0;
+    const file = new Blob([JSON.stringify({
+      format: 'gbdraw-session',
+      version: unsupportedVersion
+    })], { type: 'application/json' });
+    const event = { target: { files: [file], value: 'selected' } };
+    const result = await importSession(event);
+    assert.equal(result.status, 'error');
+    assert.match(
+      String(result.error?.message || ''),
+      new RegExp(`Unsupported session version: ${unsupportedVersion}`)
+    );
+    assert.deepEqual(alerts, [
+      `Failed to load session: Unsupported session version: ${unsupportedVersion}.`
+    ]);
+    assert.equal(event.target.value, '');
+  });
+}

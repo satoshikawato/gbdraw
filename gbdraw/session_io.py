@@ -32,18 +32,14 @@ SESSION_FORMAT = "gbdraw-session"
 CURRENT_SESSION_VERSION = 36
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 34, 35, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
 )
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
-V35_PROTEIN_LOSAT_CACHE_SCHEMA = 3
 NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
 LOSAT_DERIVED_CACHE_SCHEMA = 3
-V35_LOSAT_DERIVED_CACHE_SCHEMA = 2
 LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1
 PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
-V35_PROTEIN_IDENTITY_MANIFEST_SCHEMA = 1
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
-V35_PROTEIN_CANDIDATE_SCHEMA = 1
 FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
@@ -62,13 +58,6 @@ _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
     r"p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}"
     r"(?:_[2-9][0-9]*)?"
     r"(?![A-Za-z0-9._%+-])"
-)
-_LONG_PROTEIN_TRANSPORT_ID_RE = re.compile(
-    r"(?<![A-Za-z0-9._%-])"
-    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+@"
-    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+\|"
-    r"(?:[A-Za-z0-9._-]|%[0-9A-F]{2})+~f_[0-9a-f]{64}"
-    r"(?![A-Za-z0-9._%-])"
 )
 _DERIVED_SCALAR_PROTEIN_REFERENCE_KEYS = frozenset(
     {
@@ -594,9 +583,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         files = session.get("files")
         if files is None or not isinstance(files, Mapping):
             raise ValidationError("Session files are required for CLI regeneration.")
-    if version == 35:
-        validate_v35_session_artifacts(session)
-    elif version == CURRENT_SESSION_VERSION:
+    if version == CURRENT_SESSION_VERSION:
         validate_current_session_artifacts(session)
 
 
@@ -626,13 +613,10 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
     from .analysis.protein_colinearity import (
         is_legacy_protein_losat_cache_entry,
         is_protein_losat_cache_entry,
-        is_v35_protein_losat_cache_entry,
     )
 
     if is_protein_losat_cache_entry(entry):
         return "protein-current"
-    if is_v35_protein_losat_cache_entry(entry):
-        return "protein-v35"
     if is_legacy_protein_losat_cache_entry(entry):
         return "protein-legacy"
     if (
@@ -644,80 +628,6 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
     return "invalid"
 
 
-def validate_v35_session_artifacts(session: Mapping[str, Any]) -> None:
-    """Validate version-35 artifacts before lossless quarantine."""
-
-    cache_entries = _artifact_entries(session, "losatCache")
-    protein_entries: list[Mapping[str, Any]] = []
-    seen_cache_keys: set[str] = set()
-    for index, entry in enumerate(cache_entries):
-        classification = classify_raw_losat_cache_entry(entry)
-        if classification not in {"protein-v35", "nucleotide-current"}:
-            raise ValidationError(
-                "Session version 35 contains an invalid raw LOSAT cache entry at "
-                f"losatCache.entries[{index}]."
-            )
-        assert isinstance(entry, Mapping)
-        key = entry.get("key")
-        if not isinstance(key, str) or not key:
-            raise ValidationError(
-                f"LOSAT cache entry at losatCache.entries[{index}] requires a key."
-            )
-        if key in seen_cache_keys:
-            raise ValidationError(f"Duplicate LOSAT cache key: {key!r}.")
-        seen_cache_keys.add(key)
-        if classification == "protein-v35":
-            protein_entries.append(entry)
-
-    derived_entries = _artifact_entries(session, "losatDerivedCache")
-    seen_derived_keys: set[str] = set()
-    for index, entry in enumerate(derived_entries):
-        if not _is_derived_cache_entry(
-            entry, schema=V35_LOSAT_DERIVED_CACHE_SCHEMA
-        ):
-            raise ValidationError(
-                "Invalid version-35 derived LOSATP cache entry at "
-                f"losatDerivedCache.entries[{index}]."
-            )
-        assert isinstance(entry, Mapping)
-        key = str(entry["key"])
-        if key in seen_derived_keys:
-            raise ValidationError(f"Duplicate derived LOSATP cache key: {key!r}.")
-        seen_derived_keys.add(key)
-
-    manifest = session.get("proteinIdentityManifest")
-    if manifest is not None and not _is_valid_v35_protein_identity_manifest(manifest):
-        raise ValidationError("Invalid proteinIdentityManifest schema-1 artifact.")
-    if protein_entries and manifest is None:
-        raise ValidationError(
-            "Version-35 protein LOSATP cache entries require proteinIdentityManifest."
-        )
-    if protein_entries:
-        assert isinstance(manifest, Mapping)
-        from .analysis.protein_colinearity import (
-            validate_v35_protein_raw_entry_references,
-        )
-
-        for index, entry in enumerate(protein_entries):
-            if not validate_v35_protein_raw_entry_references(entry, manifest):
-                raise ValidationError(
-                    "Version-35 protein LOSATP cache entry does not resolve through "
-                    f"its manifest: losatCache.entries[{index}]."
-                )
-
-    legacy_artifacts = session.get("legacyArtifacts")
-    if legacy_artifacts is None:
-        return
-    if not isinstance(legacy_artifacts, Mapping):
-        raise ValidationError("Session legacyArtifacts must be an object when present.")
-    candidates = legacy_artifacts.get("proteinRawCandidates")
-    if candidates is not None:
-        _validate_legacy_protein_candidate_envelope(candidates)
-    derived_evidence = legacy_artifacts.get("proteinDerivedEvidence")
-    if derived_evidence is not None:
-        _validate_legacy_derived_evidence(derived_evidence)
-
-
 def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     """Validate version-36 cache, manifest, and legacy artifact boundaries."""
 
@@ -726,7 +636,7 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     seen_cache_keys: set[str] = set()
     for index, entry in enumerate(cache_entries):
         classification = classify_raw_losat_cache_entry(entry)
-        if classification in {"protein-legacy", "protein-v35"}:
+        if classification == "protein-legacy":
             raise ValidationError(
                 "Session version 36 cannot store legacy protein entries in losatCache; "
                 "use the matching legacyArtifacts candidate envelope."
@@ -792,15 +702,9 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     candidates = legacy_artifacts.get("proteinRawCandidates")
     if candidates is not None:
         _validate_legacy_protein_candidate_envelope(candidates)
-    v35_candidates = legacy_artifacts.get("proteinRawV35Candidates")
-    if v35_candidates is not None:
-        _validate_v35_protein_candidate_envelope(v35_candidates)
     derived_evidence = legacy_artifacts.get("proteinDerivedEvidence")
     if derived_evidence is not None:
         _validate_legacy_derived_evidence(derived_evidence)
-    v35_derived_evidence = legacy_artifacts.get("proteinDerivedV35Evidence")
-    if v35_derived_evidence is not None:
-        _validate_v35_derived_evidence(v35_derived_evidence)
 
 
 def normalize_current_session_artifacts(
@@ -810,9 +714,7 @@ def normalize_current_session_artifacts(
     losat_derived_cache_entries: Sequence[Mapping[str, Any]] | None = None,
     protein_identity_manifest: Mapping[str, Any] | None = None,
     legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] | None = None,
-    legacy_protein_raw_v35_candidates: Mapping[str, Any] | None = None,
     legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
-    legacy_protein_derived_v35_evidence: Sequence[Mapping[str, Any]] | None = None,
 ) -> None:
     """Normalize artifacts in-place for a current session writer.
 
@@ -825,14 +727,10 @@ def normalize_current_session_artifacts(
         if protein_identity_manifest is not None
         else session.get("proteinIdentityManifest")
     )
-    source_v35_manifest: Mapping[str, Any] | None = None
     if source_manifest is None:
         current_manifest = empty_protein_identity_manifest()
     elif _is_valid_protein_identity_manifest(source_manifest):
         current_manifest = _json_clone(source_manifest)
-    elif _is_valid_v35_protein_identity_manifest(source_manifest):
-        source_v35_manifest = source_manifest
-        current_manifest = empty_protein_identity_manifest()
     else:
         raise ValidationError("Cannot write an invalid proteinIdentityManifest.")
 
@@ -843,13 +741,10 @@ def normalize_current_session_artifacts(
     )
     current_raw_entries: list[dict[str, Any]] = []
     imported_legacy_entries: list[dict[str, Any]] = []
-    imported_v35_entries: list[dict[str, Any]] = []
     for index, entry in enumerate(source_raw_entries):
         classification = classify_raw_losat_cache_entry(entry)
         if classification in {"protein-current", "nucleotide-current"}:
             current_raw_entries.append(_json_clone(entry))
-        elif classification == "protein-v35":
-            imported_v35_entries.append(_json_clone(entry))
         elif classification == "protein-legacy":
             imported_legacy_entries.append(_json_clone(entry))
         else:
@@ -863,14 +758,9 @@ def normalize_current_session_artifacts(
     )
     current_derived_entries: list[dict[str, Any]] = []
     imported_derived_evidence: list[dict[str, Any]] = []
-    imported_v35_derived_evidence: list[dict[str, Any]] = []
     for index, entry in enumerate(source_derived_entries):
         if _is_current_derived_cache_entry(entry):
             current_derived_entries.append(_json_clone(entry))
-        elif _is_derived_cache_entry(
-            entry, schema=V35_LOSAT_DERIVED_CACHE_SCHEMA
-        ):
-            imported_v35_derived_evidence.append(_json_clone(entry))
         elif _is_derived_cache_entry(
             entry, schema=LEGACY_LOSAT_DERIVED_CACHE_SCHEMA
         ):
@@ -884,10 +774,12 @@ def normalize_current_session_artifacts(
     session["proteinIdentityManifest"] = current_manifest
 
     existing_legacy = session.get("legacyArtifacts")
-    normalized_legacy = (
-        _json_clone(existing_legacy) if isinstance(existing_legacy, Mapping) else {}
+    normalized_legacy: dict[str, Any] = {}
+    existing_candidates = (
+        existing_legacy.get("proteinRawCandidates")
+        if isinstance(existing_legacy, Mapping)
+        else None
     )
-    existing_candidates = normalized_legacy.get("proteinRawCandidates")
     candidate_entries = (
         list(legacy_protein_raw_candidates)
         if legacy_protein_raw_candidates is not None
@@ -910,54 +802,11 @@ def normalize_current_session_artifacts(
     else:
         normalized_legacy.pop("proteinRawCandidates", None)
 
-    existing_v35_candidates = normalized_legacy.get("proteinRawV35Candidates")
-    if legacy_protein_raw_v35_candidates is not None:
-        v35_source_manifest, v35_candidate_entries = _v35_candidate_parts(
-            legacy_protein_raw_v35_candidates
-        )
-    elif existing_v35_candidates is not None:
-        v35_source_manifest, v35_candidate_entries = _v35_candidate_parts(
-            existing_v35_candidates
-        )
-    else:
-        v35_source_manifest, v35_candidate_entries = None, []
-    if source_v35_manifest is not None:
-        if (
-            v35_source_manifest is not None
-            and v35_source_manifest != source_v35_manifest
-        ):
-            raise ValidationError(
-                "Version-35 protein candidates cannot combine different source manifests."
-            )
-        v35_source_manifest = source_v35_manifest
-    if imported_v35_entries:
-        if v35_source_manifest is None:
-            raise ValidationError(
-                "Version-35 protein raw entries require their schema-1 source manifest."
-            )
-        v35_candidate_entries.extend(
-            {
-                "state": "pending",
-                "originalEntry": entry,
-                "rejectionReason": None,
-            }
-            for entry in imported_v35_entries
-        )
-    serializable_v35_candidates = _normalize_v35_candidate_entries(
-        v35_candidate_entries,
-        source_manifest=v35_source_manifest,
+    existing_evidence = (
+        existing_legacy.get("proteinDerivedEvidence")
+        if isinstance(existing_legacy, Mapping)
+        else None
     )
-    if v35_source_manifest is not None:
-        assert v35_source_manifest is not None
-        normalized_legacy["proteinRawV35Candidates"] = {
-            "schema": V35_PROTEIN_CANDIDATE_SCHEMA,
-            "sourceManifest": _json_clone(v35_source_manifest),
-            "entries": serializable_v35_candidates,
-        }
-    else:
-        normalized_legacy.pop("proteinRawV35Candidates", None)
-
-    existing_evidence = normalized_legacy.get("proteinDerivedEvidence")
     evidence_entries = (
         list(legacy_protein_derived_evidence)
         if legacy_protein_derived_evidence is not None
@@ -972,22 +821,6 @@ def normalize_current_session_artifacts(
         }
     else:
         normalized_legacy.pop("proteinDerivedEvidence", None)
-
-    existing_v35_evidence = normalized_legacy.get("proteinDerivedV35Evidence")
-    v35_evidence_entries = (
-        list(legacy_protein_derived_v35_evidence)
-        if legacy_protein_derived_v35_evidence is not None
-        else _v35_derived_entries(existing_v35_evidence)
-    )
-    v35_evidence_entries.extend(imported_v35_derived_evidence)
-    normalized_v35_evidence = _normalize_v35_derived_entries(v35_evidence_entries)
-    if normalized_v35_evidence:
-        normalized_legacy["proteinDerivedV35Evidence"] = {
-            "schema": 1,
-            "entries": normalized_v35_evidence,
-        }
-    else:
-        normalized_legacy.pop("proteinDerivedV35Evidence", None)
 
     if normalized_legacy:
         session["legacyArtifacts"] = normalized_legacy
@@ -1038,20 +871,6 @@ def _is_valid_protein_identity_manifest(manifest: object) -> bool:
         )
 
         validate_protein_identity_manifest(manifest)
-    except (ImportError, ValidationError, TypeError, ValueError):
-        return False
-    return True
-
-
-def _is_valid_v35_protein_identity_manifest(manifest: object) -> bool:
-    if not isinstance(manifest, Mapping):
-        return False
-    try:
-        from .analysis.protein_colinearity import (
-            validate_legacy_protein_identity_manifest,
-        )
-
-        validate_legacy_protein_identity_manifest(manifest)
     except (ImportError, ValidationError, TypeError, ValueError):
         return False
     return True
@@ -1173,7 +992,6 @@ def _derived_entries_match_manifest(
     def forbidden_reference(value: str) -> bool:
         return (
             _LEGACY_PROTEIN_REFERENCE_RE.search(value) is not None
-            or _LONG_PROTEIN_TRANSPORT_ID_RE.search(value) is not None
             or _FEATURE_ANALYSIS_ID_RE.search(value) is not None
         )
 
@@ -1324,50 +1142,6 @@ def _validate_legacy_protein_candidate_envelope(envelope: object) -> None:
             )
 
 
-def _validate_v35_protein_candidate_envelope(envelope: object) -> None:
-    if (
-        not isinstance(envelope, Mapping)
-        or envelope.get("schema") != V35_PROTEIN_CANDIDATE_SCHEMA
-        or not _is_valid_v35_protein_identity_manifest(
-            envelope.get("sourceManifest")
-        )
-    ):
-        raise ValidationError("Invalid version-35 protein raw candidate envelope.")
-    entries = envelope.get("entries")
-    if not isinstance(entries, list):
-        raise ValidationError(
-            "Version-35 protein raw candidate entries must be an array."
-        )
-    source_manifest = envelope["sourceManifest"]
-    assert isinstance(source_manifest, Mapping)
-    from .analysis.protein_colinearity import (
-        validate_v35_protein_raw_entry_references,
-    )
-
-    for index, candidate in enumerate(entries):
-        original_entry = (
-            candidate.get("originalEntry")
-            if isinstance(candidate, Mapping)
-            else None
-        )
-        if (
-            not isinstance(candidate, Mapping)
-            or candidate.get("state") not in {"pending", "promoted", "rejected"}
-            or classify_raw_losat_cache_entry(original_entry) != "protein-v35"
-            or not isinstance(original_entry, Mapping)
-            or not validate_v35_protein_raw_entry_references(
-                original_entry, source_manifest
-            )
-            or (
-                candidate.get("rejectionReason") is not None
-                and not isinstance(candidate.get("rejectionReason"), str)
-            )
-        ):
-            raise ValidationError(
-                f"Invalid version-35 protein raw candidate at entries[{index}]."
-            )
-
-
 def _validate_legacy_derived_evidence(envelope: object) -> None:
     if not isinstance(envelope, Mapping) or envelope.get(
         "schema"
@@ -1379,20 +1153,6 @@ def _validate_legacy_derived_evidence(envelope: object) -> None:
         for entry in entries
     ):
         raise ValidationError("Invalid legacy protein derived evidence entries.")
-
-
-def _validate_v35_derived_evidence(envelope: object) -> None:
-    if (
-        not isinstance(envelope, Mapping)
-        or envelope.get("schema") != 1
-    ):
-        raise ValidationError("Invalid version-35 protein derived evidence envelope.")
-    entries = envelope.get("entries")
-    if not isinstance(entries, list) or not all(
-        _is_derived_cache_entry(entry, schema=V35_LOSAT_DERIVED_CACHE_SCHEMA)
-        for entry in entries
-    ):
-        raise ValidationError("Invalid version-35 protein derived evidence entries.")
 
 
 def _legacy_candidate_entries(envelope: object) -> list[Mapping[str, Any]]:
@@ -1427,51 +1187,6 @@ def _normalize_legacy_candidate_entries(
     return normalized
 
 
-def _v35_candidate_parts(
-    envelope: object,
-) -> tuple[Mapping[str, Any] | None, list[Mapping[str, Any]]]:
-    if envelope is None:
-        return None, []
-    _validate_v35_protein_candidate_envelope(envelope)
-    assert isinstance(envelope, Mapping)
-    source_manifest = envelope["sourceManifest"]
-    entries = envelope["entries"]
-    assert isinstance(source_manifest, Mapping)
-    assert isinstance(entries, list)
-    return source_manifest, list(entries)
-
-
-def _normalize_v35_candidate_entries(
-    entries: Sequence[Mapping[str, Any]],
-    *,
-    source_manifest: Mapping[str, Any] | None,
-) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    if entries and source_manifest is None:
-        raise ValidationError(
-            "Version-35 protein raw candidates require their source manifest."
-        )
-    for candidate in entries:
-        if not isinstance(candidate, Mapping) or candidate.get("state") == "promoted":
-            continue
-        probe = {
-            "schema": V35_PROTEIN_CANDIDATE_SCHEMA,
-            "sourceManifest": source_manifest,
-            "entries": [candidate],
-        }
-        _validate_v35_protein_candidate_envelope(probe)
-        clone = _json_clone(candidate)
-        fingerprint = json.dumps(
-            clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        )
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        normalized.append(clone)
-    return normalized
-
-
 def _legacy_derived_entries(envelope: object) -> list[Mapping[str, Any]]:
     if envelope is None:
         return []
@@ -1491,37 +1206,6 @@ def _normalize_legacy_derived_entries(
         ):
             raise ValidationError(
                 f"Invalid legacy derived LOSATP evidence at index {index}."
-            )
-        clone = _json_clone(entry)
-        fingerprint = json.dumps(
-            clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        )
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        normalized.append(clone)
-    return normalized
-
-
-def _v35_derived_entries(envelope: object) -> list[Mapping[str, Any]]:
-    if envelope is None:
-        return []
-    _validate_v35_derived_evidence(envelope)
-    assert isinstance(envelope, Mapping)
-    return list(envelope["entries"])
-
-
-def _normalize_v35_derived_entries(
-    entries: Sequence[Mapping[str, Any]],
-) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for index, entry in enumerate(entries):
-        if not _is_derived_cache_entry(
-            entry, schema=V35_LOSAT_DERIVED_CACHE_SCHEMA
-        ):
-            raise ValidationError(
-                f"Invalid version-35 derived LOSATP evidence at index {index}."
             )
         clone = _json_clone(entry)
         fingerprint = json.dumps(
@@ -1797,9 +1481,7 @@ def build_session_json(
     losat_derived_cache_entries: Sequence[Mapping[str, Any]] | None = None,
     protein_identity_manifest: Mapping[str, Any] | None = None,
     legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] | None = None,
-    legacy_protein_raw_v35_candidates: Mapping[str, Any] | None = None,
     legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
-    legacy_protein_derived_v35_evidence: Sequence[Mapping[str, Any]] | None = None,
     canonical_request: DiagramRequest | None = None,
 ) -> dict[str, Any]:
     """Build a GUI-loadable session JSON payload from a CLI run."""
@@ -1878,9 +1560,7 @@ def build_session_json(
         losat_derived_cache_entries=losat_derived_cache_entries,
         protein_identity_manifest=protein_identity_manifest,
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
-        legacy_protein_raw_v35_candidates=legacy_protein_raw_v35_candidates,
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
-        legacy_protein_derived_v35_evidence=legacy_protein_derived_v35_evidence,
     )
     validate_session(payload)
     return payload
@@ -4030,10 +3710,6 @@ __all__ = [
     "PROTEIN_LOSAT_CACHE_SCHEMA",
     "SESSION_FORMAT",
     "SUPPORTED_SESSION_VERSIONS",
-    "V35_LOSAT_DERIVED_CACHE_SCHEMA",
-    "V35_PROTEIN_CANDIDATE_SCHEMA",
-    "V35_PROTEIN_IDENTITY_MANIFEST_SCHEMA",
-    "V35_PROTEIN_LOSAT_CACHE_SCHEMA",
     "SessionBuildContext",
     "SessionFileBinding",
     "SessionRunSpec",
@@ -4055,6 +3731,5 @@ __all__ = [
     "session_to_cli_args",
     "validate_session",
     "validate_current_session_artifacts",
-    "validate_v35_session_artifacts",
     "write_session_json",
 ]

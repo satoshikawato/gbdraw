@@ -79,13 +79,13 @@ assert.equal(
 );
 const runtimeHandle = `h_${'e'.repeat(26)}`;
 const featureAnalysisId = `f_${'f'.repeat(64)}`;
-const v35TransportId = `record@instance|alias~f_${'a'.repeat(64)}`;
+const unsupportedHistoricalTransportId = `record@instance|alias~f_${'a'.repeat(64)}`;
 assert.equal(
   resolveDisplayProteinId(
     {
       displayProteinId: runtimeHandle,
       sourceProteinId: featureAnalysisId,
-      qualifiers: { protein_id: [v35TransportId] },
+      qualifiers: { protein_id: [unsupportedHistoricalTransportId] },
       locusTag: 'WP_SAFE.1'
     },
     { label: runtimeHandle }
@@ -97,7 +97,7 @@ assert.equal(
     {
       displayProteinId: runtimeHandle,
       sourceProteinId: featureAnalysisId,
-      qualifiers: { protein_id: [v35TransportId] }
+      qualifiers: { protein_id: [unsupportedHistoricalTransportId] }
     },
     { label: runtimeHandle }
   ),
@@ -222,7 +222,7 @@ const membersWithoutStableIds = editor.getEnrichedOrthogroupMembers({
       recordId: 'record-d',
       proteinId: runtimeHandle,
       displayProteinId: featureAnalysisId,
-      sourceProteinId: v35TransportId,
+      sourceProteinId: unsupportedHistoricalTransportId,
       label: runtimeHandle
     }
   ]
