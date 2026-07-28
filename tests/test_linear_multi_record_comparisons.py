@@ -11,9 +11,9 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
-    DiagramOptions,
     InMemoryRecordSource,
     LinearComparison,
+    LinearDiagramOptions,
     LinearDiagramRequest,
     LinearMultiRecordOptions,
     RecordInput,
@@ -271,7 +271,9 @@ def test_current_schema_preserves_record_keys_layout_and_explicit_endpoints(tmp_
             )
             for index, record in enumerate(_records(), start=1)
         ),
-        options=DiagramOptions(linear_comparisons=(_comparison(1, 2),)),
+        options=LinearDiagramOptions(
+            linear_comparisons=(_comparison(1, 2),)
+        ),
         layout=LinearMultiRecordOptions(
             record_gap_px=30,
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),

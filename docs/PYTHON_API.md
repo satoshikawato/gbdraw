@@ -53,8 +53,8 @@ The resulting circular diagram:
 ## The same function handles multiple circular records
 
 Pass a sequence to create a shared circular grid. `CircularLayout` is optional for
-multiple records; omit it to use the automatic layout. A layout passed with only one
-record raises `ValidationError` instead of being ignored.
+multiple records; omit it to use the automatic layout. You can also pass a layout
+with one record to produce an explicit 1×1 grid.
 
 ```python
 from gbdraw import CircularLayout
@@ -264,6 +264,14 @@ The former `plot_circular_diagram` / `plot_linear_diagram` save wrappers and
 package-level `gbdraw.render` aliases have been removed; use `Diagram.save`,
 `render_to_bytes`, or `save_figure_to` at their documented boundaries.
 
+Typed Circular requests accept `CircularDiagramOptions`, with
+`CircularTrackOptions` and `CircularOutputOptions` for mode-specific nested
+settings. Typed Linear requests use `LinearDiagramOptions`,
+`LinearTrackOptions`, and `LinearOutputOptions`. `CircularRequestPlan` and
+`LinearRequestPlan` normalize records, layout, and builder selection. The root
+`draw_circular` and `draw_linear` facade routes through these planners while
+remaining output-neutral.
+
 `RenderOutputRequest.output_prefix` preserves an explicit prefix exactly, including
 dots: `sample.v1` produces `sample.v1.svg`. In the Circular CLI, duplicate implicit
 record IDs in a separate-diagram batch receive deterministic suffixes. Saving a
@@ -279,10 +287,12 @@ current session. See the
 [session compatibility matrix](./PYTHON_SESSION_COMPATIBILITY_MATRIX.md) for the
 reader boundary.
 
-The next API iteration will complete the A1/A2 and O4 planner boundary, including
-explicit grid/batch requests, single-record Circular layout and neutral loading,
-and replacement of legacy `CollinearityParameters` with
-`LosslessCollinearityParameters`.
+Current canonical session replay reaches the same planners through
+`render_request`. The remaining migration covers fresh CLI/Web generation and
+legacy internal replay. Explicit grid/batch request forms, persisted grouping
+and its schema bump, mode-neutral loading, and replacement of legacy
+`CollinearityParameters` with `LosslessCollinearityParameters` remain future
+work.
 
 Pin a gbdraw version in reproducible pipelines and test representative output after
 upgrading. SVG geometry can change intentionally even when the Python call remains

@@ -20,11 +20,20 @@ from gbdraw.analysis.collinearity import (
 from gbdraw.analysis.protein_colinearity import (
     extract_web_stable_cds_proteins,
 )
-from gbdraw.api.options import DiagramOptions
+from gbdraw.api.options import (
+    CircularDiagramOptions,
+    CircularMultiRecordOptions,
+    LinearDiagramOptions,
+    LinearMultiRecordOptions,
+)
 from gbdraw.api.request_render import (
+    CircularRequestPlan,
+    LinearRequestPlan,
     PreparedDiagramRequest,
     build_request_diagram,
     normalize_request_records,
+    plan_circular_request,
+    plan_linear_request,
     render_request,
 )
 from gbdraw.api.requests import (
@@ -111,7 +120,7 @@ def test_rewrite_protein_artifact_references_updates_compound_legacy_ids() -> No
 
 def _derived_identity_test_context(
     *,
-    options: DiagramOptions | None = None,
+    options: LinearDiagramOptions | None = None,
 ) -> SimpleNamespace:
     records = (_seqrecord("a"), _seqrecord("b"))
     request = LinearDiagramRequest(
@@ -125,7 +134,7 @@ def _derived_identity_test_context(
                 record_key="record-2",
             ),
         ),
-        options=options or DiagramOptions(),
+        options=options or LinearDiagramOptions(),
     )
     drawing = Drawing("out.svg")
     drawing._gbdraw_resolved_protein_comparisons = [  # type: ignore[attr-defined]
@@ -184,7 +193,7 @@ def _derived_entry_for_params(
     params: CollinearityParameters | LosslessCollinearityParameters | None,
 ) -> dict[str, object]:
     context = _derived_identity_test_context(
-        options=DiagramOptions(collinearity_params=params)
+        options=LinearDiagramOptions(collinearity_params=params)
     )
     (entry,) = request_render_module._build_current_derived_entries(
         context.drawing,
@@ -379,7 +388,7 @@ def test_empty_api_derived_result_passes_current_session_validation(
             )
             for record, record_key in zip(records, record_keys, strict=True)
         ),
-        options=DiagramOptions(protein_blastp_mode=mode),
+        options=LinearDiagramOptions(protein_blastp_mode=mode),
     )
     drawing = Drawing("out.svg")
     drawing._gbdraw_resolved_protein_comparisons = [  # type: ignore[attr-defined]
@@ -518,6 +527,72 @@ def test_normalize_record_input_requires_one_resolved_record() -> None:
 
     with pytest.raises(ValidationError, match="exactly one record"):
         normalize_request_records(request)
+
+
+def test_mode_planners_return_validated_plan_types(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    circular_record = _seqrecord("circular")
+    linear_record = _seqrecord("linear")
+    circular_request = CircularDiagramRequest(
+        records=(_memory_input("circular"),),
+        options=CircularDiagramOptions(),
+        layout=CircularMultiRecordOptions(
+            multi_record_positions=("#1@1",),
+        ),
+    )
+    linear_request = LinearDiagramRequest(
+        records=(_memory_input("linear"),),
+        options=LinearDiagramOptions(),
+        layout=LinearMultiRecordOptions(),
+    )
+
+    monkeypatch.setattr(
+        request_render_module,
+        "normalize_request_records",
+        lambda request: (
+            circular_record
+            if isinstance(request, CircularDiagramRequest)
+            else linear_record,
+        ),
+    )
+
+    circular_plan = plan_circular_request(circular_request)
+    linear_plan = plan_linear_request(linear_request)
+
+    assert isinstance(circular_plan, CircularRequestPlan)
+    assert circular_plan.mode == "circular"
+    assert circular_plan.records == (circular_record,)
+    assert circular_plan.layout == circular_request.layout
+    assert isinstance(linear_plan, LinearRequestPlan)
+    assert linear_plan.mode == "linear"
+    assert linear_plan.records == (linear_record,)
+    assert linear_plan.layout == linear_request.layout
+
+
+def test_public_plan_values_reject_inconsistent_construction() -> None:
+    circular_request = CircularDiagramRequest(records=(_memory_input("circular"),))
+    circular_record = _seqrecord("circular")
+    linear_record = _seqrecord("linear")
+
+    with pytest.raises(ValidationError, match="record count"):
+        CircularRequestPlan(
+            request=circular_request,
+            records=(circular_record, _seqrecord("extra")),
+            layout=None,
+        )
+    with pytest.raises(ValidationError, match="layout presence"):
+        CircularRequestPlan(
+            request=circular_request,
+            records=(circular_record,),
+            layout=CircularMultiRecordOptions(),
+        )
+    with pytest.raises(ValidationError, match="LinearDiagramRequest"):
+        LinearRequestPlan(
+            request=circular_request,  # type: ignore[arg-type]
+            records=(linear_record,),
+            layout=None,
+        )
 
 
 def test_build_circular_request_derives_row_and_column_order(

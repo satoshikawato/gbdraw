@@ -4,6 +4,7 @@ import ast
 import copy
 import json
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -28,11 +29,14 @@ from gbdraw.annotations import (
     RegionAnnotationStyle,
 )
 from gbdraw.api.options import (
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
+    CircularOutputOptions,
+    CircularTrackOptions,
     ColorOptions,
-    DiagramOptions,
-    OutputOptions,
-    TrackOptions,
+    LinearDiagramOptions,
+    LinearOutputOptions,
+    LinearTrackOptions,
 )
 from gbdraw.api.config import load_default_config
 from gbdraw.api.request_render import render_request
@@ -86,6 +90,20 @@ def _materialize_resources(
 def _source_file(path: Path, content: str = "source\n") -> Path:
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def _payload_for_schema(
+    encoded: EncodedCanonicalRequest,
+    schema: int,
+) -> dict[str, Any]:
+    payload = copy.deepcopy(encoded.payload)
+    payload["schema"] = schema
+    if schema == 1:
+        payload["records"][0].pop("recordKey", None)
+    nested_output = payload["diagramOptions"].get("output")
+    if schema in {1, 2, 3} and nested_output is not None:
+        nested_output["outputPrefix"] = "ignored-legacy-prefix"
+    return payload
 
 
 def _table() -> pd.DataFrame:
@@ -147,12 +165,12 @@ def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Pat
                 ),
             ),
         ),
-        options=DiagramOptions(
+        options=CircularDiagramOptions(
             colors=ColorOptions(
                 color_table=table,
                 default_colors_palette="soft",
             ),
-            tracks=TrackOptions(
+            tracks=CircularTrackOptions(
                 circular_track_slots=(
                     CircularTrackSlot(
                         id="features",
@@ -169,7 +187,10 @@ def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Pat
             conservation_reference="query",
             species="Example species",
             evalue=1e-10,
-            output=OutputOptions(legend="left", plot_title_position="top"),
+            output=CircularOutputOptions(
+                legend="left",
+                plot_title_position="top",
+            ),
         ),
         layout=CircularMultiRecordOptions(
             multi_record_size_mode="auto",
@@ -217,13 +238,188 @@ def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Pat
     assert isinstance(decoded.options.feature_visibility_table, pd.DataFrame)
     assert isinstance(decoded.options.tracks.circular_track_slots[0], CircularTrackSlot)
     assert decoded.options.tracks.circular_track_slots[0].radius == ScalarSpec(0.8)
-    assert decoded.options.output == OutputOptions(
+    assert decoded.options.output == CircularOutputOptions(
         legend="left",
         plot_title_position="top",
     )
     assert decoded.output.output_prefix == "canonical-circular"
     assert decoded.records[1].region == parse_region_spec("1-100:rc")
     assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+@pytest.mark.parametrize("schema", sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS))
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_supported_schemas_restore_mode_specific_nested_option_types(
+    tmp_path: Path,
+    schema: int,
+    mode: str,
+) -> None:
+    source = _source_file(tmp_path / f"{mode}-{schema}.gbk")
+    record = RecordInput(source=GenBankInputSource(source))
+    if mode == "circular":
+        request = CircularDiagramRequest(
+            records=(record,),
+            options=CircularDiagramOptions(
+                tracks=CircularTrackOptions(center_reserved_radius=12),
+                output=CircularOutputOptions(
+                    legend="left",
+                    plot_title_position="top",
+                ),
+            ),
+            layout=CircularMultiRecordOptions(
+                multi_record_positions=("#1@1",),
+            ),
+        )
+    else:
+        request = LinearDiagramRequest(
+            records=(record,),
+            options=LinearDiagramOptions(
+                tracks=LinearTrackOptions(),
+                output=LinearOutputOptions(
+                    legend="left",
+                    plot_title_position="top",
+                ),
+            ),
+        )
+    encoded = encode_canonical_request(request)
+
+    decoded = decode_canonical_request(
+        _payload_for_schema(encoded, schema),
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / f"materialized-{mode}-{schema}",
+        ),
+        output_directory=tmp_path / f"output-{mode}-{schema}",
+    )
+
+    if mode == "circular":
+        assert isinstance(decoded, CircularDiagramRequest)
+        assert isinstance(decoded.options.tracks, CircularTrackOptions)
+        assert isinstance(decoded.options.output, CircularOutputOptions)
+        assert decoded.layout is not None
+        assert decoded.layout.multi_record_positions == ("#1@1",)
+    else:
+        assert isinstance(decoded, LinearDiagramRequest)
+        assert isinstance(decoded.options.tracks, LinearTrackOptions)
+        assert isinstance(decoded.options.output, LinearOutputOptions)
+
+
+@pytest.mark.parametrize("schema", sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS))
+@pytest.mark.parametrize(
+    ("mode", "field_name", "default_value"),
+    [
+        ("circular", "depthTrackHeights", None),
+        ("linear", "conservationReference", "auto"),
+    ],
+)
+def test_supported_schemas_ignore_wrong_mode_shared_defaults(
+    tmp_path: Path,
+    schema: int,
+    mode: str,
+    field_name: str,
+    default_value: object,
+) -> None:
+    source = _source_file(tmp_path / f"{mode}-{schema}.gbk")
+    record = RecordInput(source=GenBankInputSource(source))
+    request = (
+        CircularDiagramRequest(records=(record,))
+        if mode == "circular"
+        else LinearDiagramRequest(records=(record,))
+    )
+    encoded = encode_canonical_request(request)
+    payload = _payload_for_schema(encoded, schema)
+    payload["diagramOptions"][field_name] = default_value
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / f"materialized-{mode}-{schema}",
+        ),
+        output_directory=tmp_path / f"output-{mode}-{schema}",
+    )
+
+    assert isinstance(
+        decoded,
+        CircularDiagramRequest if mode == "circular" else LinearDiagramRequest,
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "field_name", "value"),
+    [
+        ("circular", "depthTrackHeights", [20]),
+        ("linear", "conservationReference", "query"),
+    ],
+)
+def test_schema4_rejects_nondefault_wrong_mode_shared_options(
+    tmp_path: Path,
+    mode: str,
+    field_name: str,
+    value: object,
+) -> None:
+    source = _source_file(tmp_path / f"{mode}.gbk")
+    record = RecordInput(source=GenBankInputSource(source))
+    request = (
+        CircularDiagramRequest(records=(record,))
+        if mode == "circular"
+        else LinearDiagramRequest(records=(record,))
+    )
+    encoded = encode_canonical_request(request)
+    payload = copy.deepcopy(encoded.payload)
+    payload["diagramOptions"][field_name] = value
+
+    with pytest.raises(CanonicalRequestDecodingError, match=field_name):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(
+                encoded,
+                tmp_path / f"materialized-{mode}",
+            ),
+            output_directory=tmp_path / f"output-{mode}",
+        )
+
+
+@pytest.mark.parametrize(
+    ("mode", "field_name", "value", "message"),
+    [
+        ("circular", "linearTrackAxisIndex", 0, "Linear track values"),
+        ("linear", "centerReservedRadius", 10, "Circular track values"),
+    ],
+)
+def test_schema4_rejects_populated_wrong_mode_track_fields(
+    tmp_path: Path,
+    mode: str,
+    field_name: str,
+    value: object,
+    message: str,
+) -> None:
+    source = _source_file(tmp_path / f"{mode}.gbk")
+    record = RecordInput(source=GenBankInputSource(source))
+    request = (
+        CircularDiagramRequest(
+            records=(record,),
+            options=CircularDiagramOptions(tracks=CircularTrackOptions()),
+        )
+        if mode == "circular"
+        else LinearDiagramRequest(
+            records=(record,),
+            options=LinearDiagramOptions(tracks=LinearTrackOptions()),
+        )
+    )
+    encoded = encode_canonical_request(request)
+    payload = copy.deepcopy(encoded.payload)
+    payload["diagramOptions"]["tracks"][field_name] = value
+
+    with pytest.raises(CanonicalRequestDecodingError, match=message):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(
+                encoded,
+                tmp_path / f"materialized-{mode}",
+            ),
+            output_directory=tmp_path / f"output-{mode}",
+        )
 
 
 def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
@@ -294,7 +490,7 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
             RecordInput(source=GenBankInputSource(gbk_a)),
             RecordInput(source=GenBankInputSource(gbk_b)),
         ),
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             blast_files=(str(nucleotide),),
             protein_comparisons=(protein_table,),
             orthogroups=orthogroups,
@@ -308,7 +504,10 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
             collinearity_unit_mode="locus",
             collinearity_search_scope="all",
             losatp_threads=2,
-            output=OutputOptions(legend="bottom", plot_title_position="bottom"),
+            output=LinearOutputOptions(
+                legend="bottom",
+                plot_title_position="bottom",
+            ),
         ),
         output=RenderOutputRequest(output_prefix="canonical-linear"),
     )
@@ -355,8 +554,11 @@ def test_schema3_nested_output_prefix_is_required_but_ignored(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            options=DiagramOptions(
-                output=OutputOptions(legend="left", plot_title_position="top"),
+            options=LinearDiagramOptions(
+                output=LinearOutputOptions(
+                    legend="left",
+                    plot_title_position="top",
+                ),
             ),
             output=RenderOutputRequest(output_prefix="outer-authority"),
         )
@@ -372,7 +574,7 @@ def test_schema3_nested_output_prefix_is_required_but_ignored(
     )
 
     assert decoded.output.output_prefix == "outer-authority"
-    assert decoded.options.output == OutputOptions(
+    assert decoded.options.output == LinearOutputOptions(
         legend="left",
         plot_title_position="top",
     )
@@ -396,7 +598,9 @@ def test_schema4_rejects_legacy_nested_output_prefix(tmp_path: Path) -> None:
     encoded = encode_canonical_request(
         CircularDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            options=DiagramOptions(output=OutputOptions(legend="none")),
+            options=CircularDiagramOptions(
+                output=CircularOutputOptions(legend="none")
+            ),
             output=RenderOutputRequest(output_prefix="outer-authority"),
         )
     )
@@ -420,8 +624,8 @@ def test_legacy_circular_schemas_migrate_removed_layout_values(
     encoded = encode_canonical_request(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=DiagramOptions(
-                tracks=TrackOptions(
+            options=CircularDiagramOptions(
+                tracks=CircularTrackOptions(
                     circular_track_slots=(
                         CircularTrackSlot(
                             id="gc_content",
@@ -493,8 +697,8 @@ def test_current_circular_writer_uses_only_canonical_layout_fields() -> None:
     encoded = encode_canonical_request(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=DiagramOptions(
-                tracks=TrackOptions(
+            options=CircularDiagramOptions(
+                tracks=CircularTrackOptions(
                     circular_track_slots=(
                         CircularTrackSlot(
                             id="gc_content",
@@ -522,8 +726,8 @@ def test_schema4_rejects_private_circular_track_params(tmp_path: Path) -> None:
     encoded = encode_canonical_request(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=DiagramOptions(
-                tracks=TrackOptions(
+            options=CircularDiagramOptions(
+                tracks=CircularTrackOptions(
                     circular_track_slots=(
                         CircularTrackSlot(
                             id="gc_content",
@@ -602,7 +806,7 @@ def test_schema3_migrates_removed_feature_table_field(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=DiagramOptions(feature_visibility_table=table),
+            options=LinearDiagramOptions(feature_visibility_table=table),
         )
     )
     payload = copy.deepcopy(encoded.payload)
@@ -663,7 +867,7 @@ def test_collinear_pipeline_ignores_legacy_derived_comparison_pairs(
             RecordInput(source=GenBankInputSource(gbk_a)),
             RecordInput(source=GenBankInputSource(gbk_b)),
         ),
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             protein_blastp_mode="collinear",
             collinearity_search_scope="all",
         ),
@@ -700,7 +904,7 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
     config = GbdrawConfig.from_dict(load_default_config())
     request = CircularDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
-        options=DiagramOptions(
+        options=CircularDiagramOptions(
             config=config,
             colors=ColorOptions(default_colors_file=str(table_file)),
             feature_visibility_table_file=str(table_file),
@@ -795,7 +999,7 @@ def test_annotation_targets_and_styles_round_trip(tmp_path: Path) -> None:
     )
     request = LinearDiagramRequest(
         records=(RecordInput(source=InMemoryRecordSource(record)),),
-        options=DiagramOptions(annotations=annotations),
+        options=LinearDiagramOptions(annotations=annotations),
     )
 
     encoded = encode_canonical_request(request)
@@ -1166,7 +1370,7 @@ def test_schema4_writer_rejects_retired_config_overrides(
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
     request = LinearDiagramRequest(
         records=(RecordInput(source=InMemoryRecordSource(record)),),
-        options=DiagramOptions(config_overrides=overrides),
+        options=LinearDiagramOptions(config_overrides=overrides),
     )
 
     with pytest.raises(CanonicalRequestEncodingError, match=retired):
@@ -1182,7 +1386,9 @@ def test_legacy_canonical_schema_preserves_repeat_rectangle_default(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=DiagramOptions(selected_features_set=("repeat_region",)),
+            options=LinearDiagramOptions(
+                selected_features_set=("repeat_region",)
+            ),
         )
     )
     payload = copy.deepcopy(encoded.payload)
@@ -1208,7 +1414,9 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
     default_encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=DiagramOptions(selected_features_set=("repeat_region",)),
+            options=LinearDiagramOptions(
+                selected_features_set=("repeat_region",)
+            ),
         )
     )
     default_decoded = decode_canonical_request(
@@ -1223,7 +1431,7 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
     explicit_encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=DiagramOptions(
+            options=LinearDiagramOptions(
                 selected_features_set=("repeat_region",),
                 feature_shapes={"repeat_region": "underlay"},
             ),
@@ -1309,15 +1517,15 @@ def test_encode_rejects_noncanonical_option_values(tmp_path: Path) -> None:
     source = _source_file(tmp_path / "record.gbk")
     invalid_type = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
-        options=DiagramOptions(window="10"),
+        options=LinearDiagramOptions(window="10"),
     )
     invalid_json = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
-        options=DiagramOptions(config_overrides={"bad": object()}),
+        options=LinearDiagramOptions(config_overrides={"bad": object()}),
     )
     empty_table = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
-        options=DiagramOptions(feature_visibility_table=pd.DataFrame()),
+        options=LinearDiagramOptions(feature_visibility_table=pd.DataFrame()),
     )
 
     with pytest.raises(CanonicalRequestEncodingError, match="typed contract"):

@@ -13,8 +13,10 @@ import gbdraw.circular as circular_cli
 import gbdraw.interface as interface
 import gbdraw.linear as linear_cli
 from gbdraw.api.options import (
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
     DiagramOptions,
+    LinearDiagramOptions,
     LinearMultiRecordOptions,
     TrackOptions,
     resolve_diagram_options_for_mode,
@@ -306,11 +308,14 @@ def test_identity_100_is_valid_at_every_fresh_entry(mode: str) -> None:
         alignment_length=0,
     )
     request_type = CircularDiagramRequest if mode == "circular" else LinearDiagramRequest
+    options_type = (
+        CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
+    )
     cli_module = circular_cli if mode == "circular" else linear_cli
 
     request = request_type(
         records=(_record_input(),),
-        options=DiagramOptions(identity=100),
+        options=options_type(identity=100),
     )
     cli_args = cli_module._get_args(["--gbk", "record.gbk", "--identity", "100"])
 
@@ -354,12 +359,10 @@ def test_wrong_mode_nested_values_fail_during_construction() -> None:
         interface.CircularOptions(
             depth_tracks=(interface.DepthTrackOptions("depth.tsv", height=20),)
         )
-    with pytest.raises(ValidationError, match="linear_track_slots"):
+    with pytest.raises(ValidationError, match="CircularDiagramOptions"):
         CircularDiagramRequest(
             records=(_record_input(),),
-            options=DiagramOptions(
-                tracks=TrackOptions(linear_track_slots=("features",))
-            ),
+            options=LinearDiagramOptions(),  # type: ignore[arg-type]
         )
     with pytest.raises(ValidationError, match="CircularTrackSlot"):
         interface.CircularTrackOptions(

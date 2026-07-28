@@ -35,11 +35,11 @@ from .api.diagram import (  # type: ignore[reportMissingImports]
 )
 from .api.options import (
     AnnotationOptions,
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
+    CircularOutputOptions,
+    CircularTrackOptions,
     ColorOptions,
-    DiagramOptions,
-    OutputOptions,
-    TrackOptions,
 )
 from .annotations import read_annotation_table
 from .api.requests import (
@@ -1330,20 +1330,20 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 RecordInput(source=InMemoryRecordSource(record))
                 for record in gb_records
             ),
-            options=DiagramOptions(
+            options=CircularDiagramOptions(
                 config=canonical_config,
                 colors=ColorOptions(
                     color_table=color_table,
                     default_colors=default_colors,
                     default_colors_palette=palette,
                 ),
-                tracks=TrackOptions(
+                tracks=CircularTrackOptions(
                     circular_track_slots=circular_track_slots_or_none,
                     circular_track_axis_index=circular_track_axis_index,
                     center_reserved_radius=center_reserved_radius,
                 ),
                 annotations=annotation_options,
-                output=OutputOptions(
+                output=CircularOutputOptions(
                     legend=legend,
                     plot_title_position=plot_title_position,
                 ),

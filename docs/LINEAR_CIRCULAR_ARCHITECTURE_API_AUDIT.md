@@ -8,6 +8,22 @@
 - Audited snapshot: current working tree as observed on 2026-07-28
 - Scope: Python public API, lower-level API, CLI, web app, request/session layer, configuration, layout, rendering, and contract tests
 
+## Implementation status
+
+This audit describes the 2026-07-28 baseline. Phase 0 and the Phase 1 core are
+now implemented. Typed requests use `CircularDiagramOptions` and
+`LinearDiagramOptions`, with mode-specific `CircularTrackOptions`,
+`LinearTrackOptions`, `CircularOutputOptions`, and `LinearOutputOptions`.
+`CircularRequestPlan` and `LinearRequestPlan` own normalized builder selection,
+the root drawing facade routes through those planners, and a one-record
+`CircularLayout` produces a valid 1×1 grid.
+
+Current canonical session replay reaches the planners through `render_request`.
+Fresh CLI/Web generation and legacy internal replay remain incomplete. Explicit
+Circular grid/batch request forms and persisted grouping, the corresponding
+schema bump, mode-neutral loading, and removal of legacy
+`CollinearityParameters` also remain future work.
+
 ## Executive summary
 
 Linear and Circular should not share one geometry implementation. Polar bands,
@@ -503,9 +519,9 @@ A sequence of Circular records does not have one cross-surface meaning:
   [`gbdraw/circular.py`](../gbdraw/circular.py#L211-L216),
   [`gbdraw/circular.py`](../gbdraw/circular.py#L1113-L1294).
 
-The root API also rejects a `CircularLayout` for one record, while the typed request
-accepts a one-record layout. These are user-visible output-cardinality and
-validation differences, not geometry requirements.
+At the audited baseline, the root API rejected a `CircularLayout` for one record
+while the typed request accepted it. The Phase 1 core resolved that mismatch:
+both paths now accept a one-record layout and produce a 1×1 grid.
 
 Add an explicit Circular grouping policy such as `separate` or `grid` to the
 canonical request layer. A `CircularBatchRequest` can preserve the CLI's established
@@ -612,6 +628,12 @@ refactor.
 3. Mark large assembler signatures and mixed `DiagramOptions` as advanced/internal
    compatibility APIs.
 4. Add mode-specific nested options and eager layout validation.
+
+The Phase 1 core completes root-facade routing, current canonical session replay,
+and item 4 through `CircularDiagramOptions`, `LinearDiagramOptions`, their
+mode-specific track and output bundles, and `CircularRequestPlan` /
+`LinearRequestPlan`. Fresh CLI/Web generation and legacy internal replay in item
+1 remain.
 
 ### Phase 2 — remove duplicated state and planners
 

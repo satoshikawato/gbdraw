@@ -8,11 +8,11 @@ from gbdraw.api import (
     AnnotationOptions,
     AnnotationSet,
     CoordinateSpan,
-    DiagramOptions,
     HatchStyle,
+    LinearDiagramOptions,
+    LinearTrackOptions,
     RegionAnnotation,
     RegionAnnotationStyle,
-    TrackOptions,
     LinearMultiRecordOptions,
     parse_record_selector,
 )
@@ -41,7 +41,7 @@ def test_linear_annotation_track_renders_metadata_and_hatch() -> None:
     )
     drawing = build_linear_diagram(
         [record],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             annotations=AnnotationOptions(sets=(AnnotationSet("regions", (annotation,)),))
         ),
     )
@@ -64,7 +64,7 @@ def test_linear_highlight_automatically_renders_behind_features() -> None:
     )
     drawing = build_linear_diagram(
         [record],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             annotations=AnnotationOptions(
                 sets=(AnnotationSet("regions", (annotation,)),)
             )
@@ -105,7 +105,7 @@ def test_linear_mixed_annotation_set_splits_highlight_from_lane_marks() -> None:
     )
     drawing = build_linear_diagram(
         [record],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             annotations=AnnotationOptions(
                 sets=(AnnotationSet("regions", annotations),)
             )
@@ -178,11 +178,11 @@ def test_linear_annotation_clip_policy_creates_clip_path() -> None:
     )
     drawing = build_linear_diagram(
         [record],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             annotations=AnnotationOptions(
                 sets=(AnnotationSet("regions", annotations),)
             ),
-            tracks=TrackOptions(
+            tracks=LinearTrackOptions(
                 linear_track_slots=(
                     "regions:annotations@set_id=regions,h=8px,overflow=clip",
                 ),
@@ -215,7 +215,7 @@ def test_annotation_hatch_is_used_in_shared_legend_preview() -> None:
     )
     drawing = build_linear_diagram(
         [record],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             annotations=AnnotationOptions(
                 sets=(AnnotationSet("regions", (annotation,)),)
             )

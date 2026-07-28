@@ -24,7 +24,7 @@ re-exports and compatibility aliases have been removed.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
 
-## Architecture/API Phase 0 and beta cleanup
+## Architecture/API Phase 0, Phase 1 core, and beta cleanup
 
 - Fresh Python, CLI, and Web requests now resolve one versioned mode profile.
   Circular defaults to comparison thresholds `1e-5` / `50` / `70` / `0` and
@@ -35,6 +35,12 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   e-value and bitscore must be finite and non-negative, identity must be finite
   and within `0..100`, and alignment length must be a non-negative integer.
   Identity `100` is valid.
+- Typed requests now use `CircularDiagramOptions` and `LinearDiagramOptions`.
+  Their mode-specific nested contracts are `CircularTrackOptions`,
+  `LinearTrackOptions`, `CircularOutputOptions`, and `LinearOutputOptions`.
+  `CircularRequestPlan` and `LinearRequestPlan` normalize builder selection, and
+  the root drawing facade and current canonical session replay route through
+  those planners. A one-record `CircularLayout` now produces a valid 1×1 grid.
 - Emitted SVG IDs are valid, unique, and deterministic for the same input,
   configuration, and gbdraw version. First-party interactivity uses
   `data-gbdraw-*` roles, record indexes, renderers, and orientations instead of
@@ -73,12 +79,13 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   `gbdraw.circular_diagram_components` were thin compatibility modules and have
   been removed. `gbdraw.api` no longer re-exports
   `DEFAULT_SELECTED_FEATURES`, the `assemble_*` / `build_*` helpers, or
-  `OutputOptions`. The obsolete `plot_circular_diagram` /
+  `DiagramOptions`, `TrackOptions`, and `OutputOptions`. The obsolete
+  `plot_circular_diagram` /
   `plot_linear_diagram` save wrappers and package-level `gbdraw.render`
   aliases were removed; use the root drawing facade, `render_to_bytes`, and
   `save_figure_to`. The CLI-only helpers remain internal to
   `gbdraw.render.export`. Typed request/render/session contracts,
-  `DiagramOptions`, and table APIs remain supported.
+  mode-specific diagram/track/output options, and table APIs remain supported.
 - Unused argument/session helpers, the old `suppress_gc_content_and_skew`
   config helper, the CairoSVG availability proxy, the no-op
   `labels.circular_horizontal` adapter, the unreachable `-i` / `--input`
@@ -88,7 +95,9 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   executable APIs no longer expose them.
 - `OutputOptions.output_prefix` was duplicate state and has been removed.
   `RenderOutputRequest.output_prefix` is the sole output-prefix owner for typed
-  request, CLI, and session execution. Drawing assembly is output-neutral.
+  request and session execution, and the root drawing facade is output-neutral.
+  The CLI export adapter still forwards its resolved prefix through internal
+  assembly until the remaining planner migration is complete.
 - Explicit output prefixes preserve dots, so `sample.v1` produces
   `sample.v1.svg`. Separate-diagram Circular batches assign deterministic
   suffixes to duplicate implicit record IDs instead of overwriting an earlier
@@ -96,10 +105,11 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   output until the typed request model can represent explicit batch grouping;
   use `--multi_record_canvas` or save each record separately.
 
-The next API iteration will complete the A1/A2 and O4 planner work, including
-explicit grid/batch requests, O4 single-record layout and neutral-loading
-boundaries, and removal of the legacy `CollinearityParameters` type in favor of
-`LosslessCollinearityParameters`.
+The remaining planner work covers fresh CLI/Web generation and legacy internal
+replay. Explicit grid/batch request forms, persisted grouping and its schema
+bump, mode-neutral loading, and removal of the legacy
+`CollinearityParameters` type in favor of `LosslessCollinearityParameters`
+remain future work.
 
 ## Compact LOSATP runtime handles and session version 36
 
@@ -279,10 +289,11 @@ unavailable. The strict contract applies to the explicit Python library helper
 
 ### Typed execution rejects options for the wrong mode
 
-Previously, a non-default option for the other drawing mode in a shared
-`DiagramOptions` bundle could be silently ignored. Typed request execution now
-raises `ValidationError` and names the incompatible fields. Root
-`CircularOptions` and `LinearOptions` avoid those fields at construction.
+Previously, a non-default option for the other drawing mode in the shared
+`DiagramOptions` bundle could be silently ignored. Typed requests now use
+`CircularDiagramOptions` or `LinearDiagramOptions`, so the incompatible fields
+are absent from the request contract. Root `CircularOptions` and `LinearOptions`
+also avoid those fields at construction.
 
 ## Added integration capabilities
 
@@ -301,8 +312,9 @@ integration work:
 - Circular track tables: `CircularTrackTable` and `read_circular_track_table`.
 - Label tables: `read_label_whitelist_table`,
   `read_qualifier_priority_table`, and `read_label_override_table`.
-- `DiagramOptions` fields for the DataFrame and file forms of label whitelist,
-  qualifier-priority, and label-override inputs.
+- `CircularDiagramOptions` and `LinearDiagramOptions` fields for the DataFrame
+  and file forms of label whitelist, qualifier-priority, and label-override
+  inputs.
 - Region annotation models, TSV loading, coordinate/feature resolution, Circular and Linear annotation track rendering, and interactive SVG annotation metadata.
 
 New drawing code should prefer the top-level interface described above.

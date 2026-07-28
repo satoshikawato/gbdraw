@@ -27,10 +27,10 @@ from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[re
 from .api.options import (
     AnnotationOptions,
     ColorOptions,
-    DiagramOptions,
+    LinearDiagramOptions,
     LinearMultiRecordOptions,
-    OutputOptions,
-    TrackOptions,
+    LinearOutputOptions,
+    LinearTrackOptions,
 )
 from .linear_comparison import LinearComparison
 from .layout.linear_multi_record import (
@@ -1911,19 +1911,19 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             )
             for index, record in enumerate(records)
         ),
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             config=canonical_config,
             colors=ColorOptions(
                 color_table=color_table,
                 default_colors=default_colors,
                 default_colors_palette=palette,
             ),
-            tracks=TrackOptions(
+            tracks=LinearTrackOptions(
                 linear_track_slots=linear_track_slot_specs,
                 linear_track_axis_index=linear_track_axis_index,
             ),
             annotations=annotation_options,
-            output=OutputOptions(
+            output=LinearOutputOptions(
                 legend=legend,
                 plot_title_position=plot_title_position,
             ),

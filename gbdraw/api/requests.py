@@ -18,11 +18,12 @@ from gbdraw.io.regions import RegionSpec
 from gbdraw.render.formats import ACCEPTED_FORMATS, normalize_format_token
 
 from .options import (
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
-    DiagramOptions,
+    LinearDiagramOptions,
     LinearMultiRecordOptions,
-    _validate_diagram_options_mode,
-    resolve_diagram_options_for_mode,
+    resolve_circular_diagram_options,
+    resolve_linear_diagram_options,
 )
 
 
@@ -312,19 +313,21 @@ class CircularDiagramRequest:
     """Materialized record inputs and options for a Circular render."""
 
     records: Sequence[RecordInput]
-    options: DiagramOptions = field(default_factory=DiagramOptions)
+    options: CircularDiagramOptions = field(default_factory=CircularDiagramOptions)
     layout: CircularMultiRecordOptions | None = None
     output: RenderOutputRequest = field(default_factory=RenderOutputRequest)
 
     def __post_init__(self) -> None:
         records = _request_records(self.records)
         object.__setattr__(self, "records", records)
-        if not isinstance(self.options, DiagramOptions):
-            raise ValidationError("Circular request options must be DiagramOptions.")
+        if not isinstance(self.options, CircularDiagramOptions):
+            raise ValidationError(
+                "Circular request options must be CircularDiagramOptions."
+            )
         object.__setattr__(
             self,
             "options",
-            resolve_diagram_options_for_mode(self.options, mode="circular"),
+            resolve_circular_diagram_options(self.options),
         )
         if self.layout is not None and not isinstance(
             self.layout, CircularMultiRecordOptions
@@ -334,10 +337,6 @@ class CircularDiagramRequest:
             object.__setattr__(self, "layout", CircularMultiRecordOptions())
         if not isinstance(self.output, RenderOutputRequest):
             raise ValidationError("Circular request output has an unsupported type.")
-        _validate_diagram_options_mode(
-            self.options,
-            mode="circular_multi" if self.layout is not None else "circular",
-        )
         _validate_circular_placements(records, layout=self.layout)
 
 
@@ -346,19 +345,21 @@ class LinearDiagramRequest:
     """Materialized record inputs and options for a Linear render."""
 
     records: Sequence[RecordInput]
-    options: DiagramOptions = field(default_factory=DiagramOptions)
+    options: LinearDiagramOptions = field(default_factory=LinearDiagramOptions)
     layout: LinearMultiRecordOptions | None = None
     output: RenderOutputRequest = field(default_factory=RenderOutputRequest)
 
     def __post_init__(self) -> None:
         records = _request_records(self.records)
         object.__setattr__(self, "records", records)
-        if not isinstance(self.options, DiagramOptions):
-            raise ValidationError("Linear request options must be DiagramOptions.")
+        if not isinstance(self.options, LinearDiagramOptions):
+            raise ValidationError(
+                "Linear request options must be LinearDiagramOptions."
+            )
         object.__setattr__(
             self,
             "options",
-            resolve_diagram_options_for_mode(self.options, mode="linear"),
+            resolve_linear_diagram_options(self.options),
         )
         if self.layout is not None and not isinstance(self.layout, LinearMultiRecordOptions):
             raise ValidationError("Linear request layout has an unsupported type.")
@@ -370,7 +371,6 @@ class LinearDiagramRequest:
                 "placement is supported only by circular multi-record requests."
             )
         _validate_linear_placements(records, layout=self.layout)
-        _validate_diagram_options_mode(self.options, mode="linear")
 
 
 DiagramRequest: TypeAlias = CircularDiagramRequest | LinearDiagramRequest

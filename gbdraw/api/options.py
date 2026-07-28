@@ -6,7 +6,7 @@ keyword arguments in assemble_* helpers. They are optional and additive.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 import math
 from numbers import Integral, Real
 from typing import Literal, Mapping, Sequence
@@ -21,9 +21,22 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityResult,
     CollinearitySearchScope,
     LosslessCollinearityParameters,
+    normalize_collinearity_anchor_mode,
+    normalize_collinearity_color_mode,
+    normalize_collinearity_search_scope,
 )
-from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
-from gbdraw.analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity_units import (  # type: ignore[reportMissingImports]
+    CollinearityUnitMode,
+    normalize_collinearity_unit_mode,
+)
+from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
+    normalize_conservation_reference,
+)
+from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+    OrthogroupResult,
+    normalize_orthogroup_membership_mode,
+    normalize_protein_blastp_mode,
+)
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.linear_comparison import LinearComparison
@@ -117,6 +130,36 @@ def _validate_center_reserved_radius(value: object, *, field_name: str) -> float
     return radius
 
 
+def _validate_positive_real(value: object, *, field_name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValidationError(f"{field_name} must be a finite number > 0 or None.")
+    try:
+        normalized = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValidationError(
+            f"{field_name} must be a finite number > 0 or None."
+        ) from exc
+    if not math.isfinite(normalized) or normalized <= 0:
+        raise ValidationError(f"{field_name} must be a finite number > 0 or None.")
+    return normalized
+
+
+def _validate_positive_int(
+    value: object,
+    *,
+    field_name: str,
+    allow_none: bool = False,
+) -> int | None:
+    if value is None and allow_none:
+        return None
+    if isinstance(value, bool) or not isinstance(value, Integral) or int(value) <= 0:
+        suffix = " or None" if allow_none else ""
+        raise ValidationError(f"{field_name} must be a positive integer{suffix}.")
+    return int(value)
+
+
 def _validate_sequence_elements(
     values: object,
     *,
@@ -158,8 +201,61 @@ def _validate_nested_sequence_elements(
 
 
 @dataclass(frozen=True)
+class CircularTrackOptions:
+    """Circular track layout options."""
+
+    circular_track_slots: Sequence[str | CircularTrackSlot] | None = None
+    circular_track_axis_index: int | None = None
+    center_reserved_radius: float | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "circular_track_axis_index",
+            _validate_track_configuration(
+                self.circular_track_slots,
+                axis_index=self.circular_track_axis_index,
+                mode="circular",
+                expected_type=CircularTrackSlot,
+                slots_field_name="circular_track_slots",
+                axis_field_name="circular_track_axis_index",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "center_reserved_radius",
+            _validate_center_reserved_radius(
+                self.center_reserved_radius,
+                field_name="center_reserved_radius",
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class LinearTrackOptions:
+    """Linear track layout options."""
+
+    linear_track_slots: Sequence[str | LinearTrackSlot] | None = None
+    linear_track_axis_index: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "linear_track_axis_index",
+            _validate_track_configuration(
+                self.linear_track_slots,
+                axis_index=self.linear_track_axis_index,
+                mode="linear",
+                expected_type=LinearTrackSlot,
+                slots_field_name="linear_track_slots",
+                axis_field_name="linear_track_axis_index",
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class TrackOptions:
-    """Track layout options."""
+    """Internal compatibility options for low-level assembly helpers."""
 
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None
     circular_track_axis_index: int | None = None
@@ -205,8 +301,36 @@ class TrackOptions:
 
 
 @dataclass(frozen=True)
+class CircularOutputOptions:
+    """Circular legend and title placement options."""
+
+    legend: str = "right"
+    plot_title_position: Literal["none", "top", "bottom"] | None = None
+
+    def __post_init__(self) -> None:
+        if self.plot_title_position not in {None, "none", "top", "bottom"}:
+            raise ValidationError(
+                "Circular plot_title_position must be one of: none, top, bottom."
+            )
+
+
+@dataclass(frozen=True)
+class LinearOutputOptions:
+    """Linear legend and title placement options."""
+
+    legend: str = "right"
+    plot_title_position: Literal["center", "top", "bottom"] | None = None
+
+    def __post_init__(self) -> None:
+        if self.plot_title_position not in {None, "center", "top", "bottom"}:
+            raise ValidationError(
+                "Linear plot_title_position must be one of: center, top, bottom."
+            )
+
+
+@dataclass(frozen=True)
 class OutputOptions:
-    """High-level output/layout options used by the assemblers."""
+    """Internal compatibility output options used by low-level assemblers."""
 
     legend: str = "right"
     plot_title_position: Literal["none", "center", "top", "bottom"] | None = None
@@ -330,7 +454,7 @@ class LinearMultiRecordOptions:
 
 @dataclass(frozen=True)
 class DiagramOptions:
-    """Bundled options for diagram assembly helpers."""
+    """Internal compatibility options for low-level assembly helpers."""
 
     config: GbdrawConfig | dict | None = None
     config_overrides: Mapping[str, object] | None = None
@@ -491,6 +615,269 @@ class DiagramOptions:
             )
 
 
+@dataclass(frozen=True)
+class _ModeDiagramOptions:
+    """Fields shared by the mode-specific typed request options."""
+
+    config: GbdrawConfig | dict | None = None
+    config_overrides: Mapping[str, object] | None = None
+    colors: ColorOptions | None = None
+    annotations: AnnotationOptions | None = None
+    selected_features_set: Sequence[str] | None = None
+    feature_visibility_table: DataFrame | None = None
+    feature_visibility_table_file: str | None = None
+    label_whitelist_table: DataFrame | None = None
+    label_whitelist_file: str | None = None
+    qualifier_priority_table: DataFrame | None = None
+    qualifier_priority_file: str | None = None
+    label_override_table: DataFrame | None = None
+    label_override_file: str | None = None
+    feature_shapes: Mapping[str, str] | None = None
+    dinucleotide: str = "GC"
+    window: int | None = None
+    step: int | None = None
+    depth_window: int | None = None
+    depth_step: int | None = None
+    depth_table: DataFrame | None = None
+    depth_file: str | None = None
+    depth_tables: Sequence[DataFrame] | None = None
+    depth_files: Sequence[str] | None = None
+    depth_track_tables: Sequence[Sequence[DataFrame | None]] | None = None
+    depth_track_files: Sequence[Sequence[str | None]] | None = None
+    depth_track_labels: Sequence[str] | None = None
+    depth_track_colors: Sequence[str] | None = None
+    depth_track_large_tick_intervals: Sequence[float | str | None] | None = None
+    depth_track_small_tick_intervals: Sequence[float | str | None] | None = None
+    depth_track_tick_font_sizes: Sequence[float | str | None] | None = None
+    plot_title: str | None = None
+    plot_title_font_size: float | None = None
+    evalue: float | None = None
+    bitscore: float | None = None
+    identity: float | None = None
+    alignment_length: int | None = None
+
+    def __post_init__(self) -> None:
+        # Keep this conversion private while low-level builders still consume the
+        # old shared object. It also centralizes validation during the migration.
+        common_values = {
+            item.name: getattr(self, item.name)
+            for item in fields(_ModeDiagramOptions)
+        }
+        validated = DiagramOptions(**common_values)
+        for item in fields(_ModeDiagramOptions):
+            object.__setattr__(self, item.name, getattr(validated, item.name))
+
+
+@dataclass(frozen=True)
+class CircularDiagramOptions(_ModeDiagramOptions):
+    """Options accepted by a Circular typed request."""
+
+    tracks: CircularTrackOptions | None = None
+    output: CircularOutputOptions | None = None
+    conservation_blast_files: Sequence[str] | None = None
+    conservation_dataframes: Sequence[DataFrame] | None = None
+    conservation_reference: Literal["query", "subject", "auto"] = "auto"
+    conservation_labels: Sequence[str] | None = None
+    conservation_colors: Sequence[str] | None = None
+    conservation_ring_width: float | None = None
+    conservation_ring_gap: float | None = None
+    keep_full_definition_with_plot_title: bool = False
+    species: str | None = None
+    strain: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.tracks is not None and not isinstance(
+            self.tracks,
+            CircularTrackOptions,
+        ):
+            raise ValidationError(
+                "tracks must be CircularTrackOptions or None."
+            )
+        if self.output is not None and not isinstance(
+            self.output,
+            CircularOutputOptions,
+        ):
+            raise ValidationError(
+                "output must be CircularOutputOptions or None."
+            )
+        _validate_sequence_elements(
+            self.conservation_dataframes,
+            field_name="conservation_dataframes",
+            element_type=DataFrame,
+        )
+        _validate_sequence_elements(
+            self.conservation_blast_files,
+            field_name="conservation_blast_files",
+            element_type=str,
+        )
+        _validate_sequence_elements(
+            self.conservation_labels,
+            field_name="conservation_labels",
+            element_type=str,
+        )
+        _validate_sequence_elements(
+            self.conservation_colors,
+            field_name="conservation_colors",
+            element_type=str,
+        )
+        object.__setattr__(
+            self,
+            "conservation_reference",
+            normalize_conservation_reference(self.conservation_reference),
+        )
+        for field_name in ("conservation_ring_width", "conservation_ring_gap"):
+            object.__setattr__(
+                self,
+                field_name,
+                _validate_positive_real(
+                    getattr(self, field_name),
+                    field_name=field_name,
+                ),
+            )
+
+
+@dataclass(frozen=True)
+class LinearDiagramOptions(_ModeDiagramOptions):
+    """Options accepted by a Linear typed request."""
+
+    tracks: LinearTrackOptions | None = None
+    output: LinearOutputOptions | None = None
+    depth_track_heights: Sequence[float | str | None] | None = None
+    blast_files: Sequence[str] | None = None
+    linear_comparisons: Sequence[LinearComparison] | None = None
+    protein_comparisons: Sequence[DataFrame] | None = None
+    orthogroups: OrthogroupResult | None = None
+    protein_blastp_mode: Literal[
+        "none",
+        "pairwise",
+        "orthogroup",
+        "collinear",
+    ] = "none"
+    protein_comparison_pairs: Sequence[tuple[int, int]] | None = None
+    pairwise_match_style: Literal["ribbon", "curve"] = "ribbon"
+    collinearity_blocks: (
+        CollinearityResult | Sequence[CollinearityBlock] | None
+    ) = None
+    collinearity_params: (
+        CollinearityParameters | LosslessCollinearityParameters | None
+    ) = None
+    collinearity_unit_mode: CollinearityUnitMode | str = "auto"
+    collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh"
+    collinearity_search_scope: CollinearitySearchScope | str = "adjacent"
+    collinearity_color_mode: CollinearityColorMode | str = "orientation"
+    losatp_bin: str = "losat"
+    ncbi_blastp_bin: str | None = None
+    losatp_threads: int | None = None
+    protein_blastp_max_hits: int = 5
+    protein_blastp_candidate_limit: int | None = None
+    orthogroup_membership_mode: Literal[
+        "anchor_core_v1"
+    ] | str = "anchor_core_v1"
+    orthogroup_member_max_hits: int = 5
+    collinear_max_paralog_links_per_orthogroup: int = 2
+    align_orthogroup_feature: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.tracks is not None and not isinstance(
+            self.tracks,
+            LinearTrackOptions,
+        ):
+            raise ValidationError(
+                "tracks must be LinearTrackOptions or None."
+            )
+        if self.output is not None and not isinstance(
+            self.output,
+            LinearOutputOptions,
+        ):
+            raise ValidationError(
+                "output must be LinearOutputOptions or None."
+            )
+        _validate_sequence_elements(
+            self.linear_comparisons,
+            field_name="linear_comparisons",
+            element_type=LinearComparison,
+        )
+        _validate_sequence_elements(
+            self.protein_comparisons,
+            field_name="protein_comparisons",
+            element_type=DataFrame,
+        )
+        if self.collinearity_params is not None and not isinstance(
+            self.collinearity_params,
+            (CollinearityParameters, LosslessCollinearityParameters),
+        ):
+            raise ValidationError(
+                "collinearity_params has an unsupported type."
+            )
+        if self.collinearity_params is not None:
+            self.collinearity_params.validate()
+        pairwise_match_style = str(self.pairwise_match_style).strip().lower()
+        if pairwise_match_style not in {"ribbon", "curve"}:
+            raise ValidationError(
+                "pairwise_match_style must be one of: ribbon, curve."
+            )
+        object.__setattr__(self, "pairwise_match_style", pairwise_match_style)
+        object.__setattr__(
+            self,
+            "protein_blastp_mode",
+            normalize_protein_blastp_mode(self.protein_blastp_mode),
+        )
+        object.__setattr__(
+            self,
+            "collinearity_unit_mode",
+            normalize_collinearity_unit_mode(str(self.collinearity_unit_mode)),
+        )
+        object.__setattr__(
+            self,
+            "collinearity_anchor_mode",
+            normalize_collinearity_anchor_mode(str(self.collinearity_anchor_mode)),
+        )
+        object.__setattr__(
+            self,
+            "collinearity_search_scope",
+            normalize_collinearity_search_scope(
+                str(self.collinearity_search_scope)
+            ),
+        )
+        object.__setattr__(
+            self,
+            "collinearity_color_mode",
+            normalize_collinearity_color_mode(str(self.collinearity_color_mode)),
+        )
+        object.__setattr__(
+            self,
+            "orthogroup_membership_mode",
+            normalize_orthogroup_membership_mode(
+                str(self.orthogroup_membership_mode)
+            ),
+        )
+        for field_name in (
+            "protein_blastp_max_hits",
+            "orthogroup_member_max_hits",
+            "collinear_max_paralog_links_per_orthogroup",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _validate_positive_int(
+                    getattr(self, field_name),
+                    field_name=field_name,
+                ),
+            )
+        for field_name in ("losatp_threads", "protein_blastp_candidate_limit"):
+            object.__setattr__(
+                self,
+                field_name,
+                _validate_positive_int(
+                    getattr(self, field_name),
+                    field_name=field_name,
+                    allow_none=True,
+                ),
+            )
+
+
 _DEFAULT_DIAGRAM_OPTIONS = DiagramOptions()
 _CIRCULAR_ONLY_DIAGRAM_OPTION_NAMES = (
     "conservation_blast_files",
@@ -582,15 +969,11 @@ def _validate_diagram_options_mode(
             )
 
 
-def resolve_diagram_options_for_mode(
-    options: DiagramOptions,
+def _resolve_options_for_mode(
+    options: DiagramOptions | CircularDiagramOptions | LinearDiagramOptions,
     *,
     mode: DiagramMode,
-) -> DiagramOptions:
-    """Resolve omitted fresh-request values through one mode profile."""
-
-    if not isinstance(options, DiagramOptions):
-        raise ValidationError("options must be DiagramOptions.")
+) -> DiagramOptions | CircularDiagramOptions | LinearDiagramOptions:
     profile = get_mode_profile(mode)
     thresholds = ComparisonThresholds(
         evalue=profile.comparison.evalue if options.evalue is None else options.evalue,
@@ -630,13 +1013,76 @@ def resolve_diagram_options_for_mode(
     )
 
 
+def resolve_diagram_options_for_mode(
+    options: DiagramOptions,
+    *,
+    mode: DiagramMode,
+) -> DiagramOptions:
+    """Resolve an internal shared option object through one mode profile."""
+
+    if not isinstance(options, DiagramOptions):
+        raise ValidationError("options must be DiagramOptions.")
+    return _resolve_options_for_mode(options, mode=mode)
+
+
+def resolve_circular_diagram_options(
+    options: CircularDiagramOptions,
+) -> CircularDiagramOptions:
+    """Resolve omitted Circular request values through the Circular profile."""
+
+    if not isinstance(options, CircularDiagramOptions):
+        raise ValidationError("options must be CircularDiagramOptions.")
+    return _resolve_options_for_mode(options, mode="circular")
+
+
+def resolve_linear_diagram_options(
+    options: LinearDiagramOptions,
+) -> LinearDiagramOptions:
+    """Resolve omitted Linear request values through the Linear profile."""
+
+    if not isinstance(options, LinearDiagramOptions):
+        raise ValidationError("options must be LinearDiagramOptions.")
+    return _resolve_options_for_mode(options, mode="linear")
+
+
+def _legacy_diagram_options(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+) -> DiagramOptions:
+    """Convert a strict request option object for an internal legacy builder."""
+
+    values = {item.name: getattr(options, item.name) for item in fields(options)}
+    tracks = values.get("tracks")
+    if isinstance(tracks, CircularTrackOptions):
+        values["tracks"] = TrackOptions(
+            circular_track_slots=tracks.circular_track_slots,
+            circular_track_axis_index=tracks.circular_track_axis_index,
+            center_reserved_radius=tracks.center_reserved_radius,
+        )
+    elif isinstance(tracks, LinearTrackOptions):
+        values["tracks"] = TrackOptions(
+            linear_track_slots=tracks.linear_track_slots,
+            linear_track_axis_index=tracks.linear_track_axis_index,
+        )
+    output = values.get("output")
+    if isinstance(output, (CircularOutputOptions, LinearOutputOptions)):
+        values["output"] = OutputOptions(
+            legend=output.legend,
+            plot_title_position=output.plot_title_position,
+        )
+    return DiagramOptions(**values)
+
+
 __all__ = [
+    "CircularDiagramOptions",
     "CircularMultiRecordOptions",
+    "CircularOutputOptions",
+    "CircularTrackOptions",
     "LinearMultiRecordOptions",
+    "LinearDiagramOptions",
+    "LinearOutputOptions",
+    "LinearTrackOptions",
     "AnnotationOptions",
     "ColorOptions",
-    "DiagramOptions",
-    "OutputOptions",
-    "TrackOptions",
-    "resolve_diagram_options_for_mode",
+    "resolve_circular_diagram_options",
+    "resolve_linear_diagram_options",
 ]

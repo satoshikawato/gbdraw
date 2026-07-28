@@ -50,11 +50,15 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
 )
 from .options import (
     AnnotationOptions,
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
+    CircularOutputOptions,
+    CircularTrackOptions,
     ColorOptions,
-    DiagramOptions,
+    LinearDiagramOptions,
     LinearMultiRecordOptions,
-    TrackOptions,
+    LinearOutputOptions,
+    LinearTrackOptions,
 )
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.linear_multi_record import LinearLayoutPlan, LinearRecordPlacement, RecordKey
@@ -76,10 +80,15 @@ from gbdraw.annotations import (
 )
 from .render import render_to_bytes, save_figure_to
 from .request_render import (
+    CircularRequestPlan,
+    DiagramRequestPlan,
+    LinearRequestPlan,
     PreparedDiagramRequest,
     RequestRenderResult,
     build_request_diagram,
     normalize_request_records,
+    plan_circular_request,
+    plan_linear_request,
     render_request,
 )
 from .requests import (
@@ -200,14 +209,18 @@ __all__ = [
     "read_annotation_table",
     "resolve_annotations",
     "CircularMultiRecordOptions",
+    "CircularDiagramOptions",
+    "CircularOutputOptions",
+    "CircularTrackOptions",
     "LinearMultiRecordOptions",
+    "LinearDiagramOptions",
+    "LinearOutputOptions",
+    "LinearTrackOptions",
     "LinearComparison",
     "LinearLayoutPlan",
     "LinearRecordPlacement",
     "RecordKey",
     "ColorOptions",
-    "DiagramOptions",
-    "TrackOptions",
     # render
     "InteractiveSvgContext",
     "build_interactive_svg_context",
@@ -225,10 +238,15 @@ __all__ = [
     "RecordInputSource",
     "RecordPresentation",
     "RenderOutputRequest",
+    "CircularRequestPlan",
+    "DiagramRequestPlan",
+    "LinearRequestPlan",
     "PreparedDiagramRequest",
     "RequestRenderResult",
     "build_request_diagram",
     "normalize_request_records",
+    "plan_circular_request",
+    "plan_linear_request",
     "render_request",
     # canonical sessions
     "MaterializedSession",

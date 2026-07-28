@@ -6,8 +6,8 @@ from xml.etree import ElementTree
 from gbdraw.api import (
     AnnotationOptions,
     AnnotationSet,
+    CircularDiagramOptions,
     CoordinateSpan,
-    DiagramOptions,
     RegionAnnotation,
     RegionAnnotationStyle,
     parse_record_selector,
@@ -95,7 +95,7 @@ def test_circular_origin_annotation_renders_two_safe_paths() -> None:
     )
     drawing = build_circular_diagram(
         record,
-        options=DiagramOptions(
+        options=CircularDiagramOptions(
             annotations=AnnotationOptions(sets=(AnnotationSet("regions", (annotation,)),))
         ),
     )
@@ -115,7 +115,7 @@ def test_circular_highlight_automatically_renders_behind_features() -> None:
     )
     drawing = build_circular_diagram(
         record,
-        options=DiagramOptions(
+        options=CircularDiagramOptions(
             annotations=AnnotationOptions(
                 sets=(AnnotationSet("regions", (annotation,)),)
             )
@@ -167,12 +167,12 @@ def test_circular_multi_record_annotations_bind_by_record_index() -> None:
             ),
         ),
     )
-    options = DiagramOptions(
+    options = CircularDiagramOptions(
         annotations=AnnotationOptions(sets=(annotations,))
     )
 
     multi_svg = build_circular_multi_diagram(records, options=options).tostring()
-    single_svg = build_circular_multi_diagram(records[:1], options=DiagramOptions(
+    single_svg = build_circular_multi_diagram(records[:1], options=CircularDiagramOptions(
         annotations=AnnotationOptions(
             sets=(AnnotationSet("regions", (annotations.annotations[0],)),)
         )

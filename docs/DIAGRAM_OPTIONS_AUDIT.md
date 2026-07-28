@@ -4,7 +4,8 @@
 
 - Date: 2026-07-14
 - Version: `0.14.0b0`
-- Audited contract: 71 fields in `gbdraw.api.DiagramOptions`
+- Audited contract: 71 fields in the historical
+  `gbdraw.api.options.DiagramOptions` compatibility type
 - Current contract: the two `feature_table*` aliases were removed by the
   2026-07-28 `O3.api=B` decision; use `feature_visibility_table*`
 

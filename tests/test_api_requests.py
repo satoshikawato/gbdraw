@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.api.options import CircularMultiRecordOptions, DiagramOptions
+from gbdraw.api.options import (
+    CircularDiagramOptions,
+    CircularMultiRecordOptions,
+    CircularOutputOptions,
+    LinearDiagramOptions,
+    LinearOutputOptions,
+)
 from gbdraw.api.requests import (
     CircularDiagramRequest,
     GenBankInputSource,
@@ -197,17 +204,83 @@ def test_requests_reject_empty_record_sequences() -> None:
         LinearDiagramRequest(records=())
 
 
-def test_requests_reuse_mode_specific_diagram_option_validation() -> None:
-    with pytest.raises(ValidationError, match="blast_files"):
+def test_requests_require_mode_specific_diagram_options() -> None:
+    with pytest.raises(ValidationError, match="CircularDiagramOptions"):
         CircularDiagramRequest(
             records=(_record(),),
-            options=DiagramOptions(blast_files=("comparison.tsv",)),
+            options=LinearDiagramOptions(),  # type: ignore[arg-type]
         )
-    with pytest.raises(ValidationError, match="conservation_blast_files"):
+    with pytest.raises(ValidationError, match="LinearDiagramOptions"):
         LinearDiagramRequest(
             records=(_record(),),
-            options=DiagramOptions(conservation_blast_files=("comparison.tsv",)),
+            options=CircularDiagramOptions(),  # type: ignore[arg-type]
         )
+
+
+def test_mode_specific_option_fields_do_not_overlap_other_mode_features() -> None:
+    circular_fields = {item.name for item in fields(CircularDiagramOptions)}
+    linear_fields = {item.name for item in fields(LinearDiagramOptions)}
+
+    assert {"blast_files", "protein_blastp_mode"}.isdisjoint(circular_fields)
+    assert {
+        "conservation_blast_files",
+        "conservation_reference",
+    }.isdisjoint(linear_fields)
+
+
+def test_mode_specific_output_options_reject_other_mode_title_positions() -> None:
+    with pytest.raises(ValidationError, match="Circular"):
+        CircularOutputOptions(plot_title_position="center")
+    with pytest.raises(ValidationError, match="Linear"):
+        LinearOutputOptions(plot_title_position="none")
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"conservation_reference": "invalid"},
+        {"conservation_ring_width": 0},
+        {"conservation_ring_gap": float("inf")},
+    ],
+)
+def test_circular_options_reject_invalid_mode_values(
+    kwargs: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        CircularDiagramOptions(**kwargs)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"protein_blastp_mode": "invalid"},
+        {"pairwise_match_style": "invalid"},
+        {"collinearity_unit_mode": "invalid"},
+        {"collinearity_anchor_mode": "invalid"},
+        {"collinearity_search_scope": "invalid"},
+        {"collinearity_color_mode": "invalid"},
+        {"orthogroup_membership_mode": "invalid"},
+        {"protein_blastp_max_hits": 0},
+        {"losatp_threads": 0},
+    ],
+)
+def test_linear_options_reject_invalid_mode_values(
+    kwargs: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        LinearDiagramOptions(**kwargs)
+
+
+def test_linear_options_normalize_supported_mode_aliases() -> None:
+    options = LinearDiagramOptions(
+        collinearity_anchor_mode="top1",
+        collinearity_color_mode="identity",
+        orthogroup_membership_mode="rbh",
+    )
+
+    assert options.collinearity_anchor_mode == "one_to_one"
+    assert options.collinearity_color_mode == "average_identity"
+    assert options.orthogroup_membership_mode == "anchor_core_v1"
 
 
 def test_render_output_request_normalizes_formats_and_paths() -> None:

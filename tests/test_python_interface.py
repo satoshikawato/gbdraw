@@ -9,7 +9,16 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw
+import gbdraw.api.request_render as request_render_module
 import gbdraw.interface as interface
+from gbdraw.api.options import (
+    CircularDiagramOptions,
+    CircularOutputOptions,
+    CircularTrackOptions as CircularRequestTrackOptions,
+    LinearDiagramOptions,
+    LinearOutputOptions,
+    LinearTrackOptions as LinearRequestTrackOptions,
+)
 from gbdraw.exceptions import ValidationError
 
 
@@ -55,29 +64,73 @@ def test_draw_circular_dispatches_from_record_count(
         calls.append(("multi", tuple(records), layout))
         return Drawing("multi.svg")
 
-    monkeypatch.setattr(interface, "_build_circular_diagram", fake_single)
-    monkeypatch.setattr(interface, "_build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
     monkeypatch.setattr(interface, "_interactive_context", lambda *_args, **_kwargs: None)
 
     one = _record("one")
     assert interface.draw_circular(one).mode == "circular"
-    assert calls[0][0:2] == ("single", one)
+    assert calls[0][0] == "single"
+    assert calls[0][1].id == "one"
+    assert isinstance(calls[0][2], CircularDiagramOptions)
 
     records = [one, _record("two")]
-    diagram = interface.draw_circular(
+    diagram = interface.draw_circular(records)
+    assert diagram.records == tuple(records)
+    assert calls[1][0] == "multi"
+    default_layout = calls[1][2]
+    assert default_layout.multi_record_size_mode == "auto"
+    assert default_layout.multi_record_positions is None
+
+    interface.draw_circular(
         records,
         layout=interface.CircularLayout(size="equal", positions=("#1@1", "#2@1")),
     )
-    assert diagram.records == tuple(records)
-    assert calls[1][0] == "multi"
-    legacy_layout = calls[1][2]
+    assert calls[2][0] == "multi"
+    legacy_layout = calls[2][2]
     assert legacy_layout.multi_record_size_mode == "equal"
     assert legacy_layout.multi_record_positions == ("#1@1", "#2@1")
 
 
-def test_draw_circular_rejects_grid_layout_for_one_record() -> None:
-    with pytest.raises(ValidationError, match="at least two records"):
-        interface.draw_circular(_record(), layout=interface.CircularLayout())
+def test_draw_circular_one_record_layout_reaches_grid_builder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_multi(records, *, options, layout):
+        captured["records"] = tuple(records)
+        captured["options"] = options
+        captured["layout"] = layout
+        return Drawing("grid.svg")
+
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(interface, "_interactive_context", lambda *_args, **_kwargs: None)
+
+    diagram = interface.draw_circular(
+        _record("one"),
+        layout=interface.CircularLayout(size="equal", positions=("#1@1",)),
+    )
+
+    assert diagram.mode == "circular"
+    assert [record.id for record in captured["records"]] == ["one"]
+    assert isinstance(captured["options"], CircularDiagramOptions)
+    assert captured["layout"].multi_record_size_mode == "equal"
+    assert captured["layout"].multi_record_positions == ("#1@1",)
+
+
+@pytest.mark.circular
+def test_draw_circular_one_record_layout_real_render() -> None:
+    record = _record("one")
+    record.annotations["molecule_type"] = "DNA"
+    record.annotations["topology"] = "circular"
+
+    diagram = interface.draw_circular(
+        record,
+        layout=interface.CircularLayout(size="equal", positions=("#1@1",)),
+    )
+
+    assert diagram.mode == "circular"
+    assert diagram.to_svg().startswith("<svg")
 
 
 def test_grouped_options_compile_to_the_existing_render_engine(
@@ -93,7 +146,7 @@ def test_grouped_options_compile_to_the_existing_render_engine(
         captured["options"] = options
         return Drawing("out.svg")
 
-    monkeypatch.setattr(interface, "_build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
     monkeypatch.setattr(interface, "_interactive_context", lambda *_args, **_kwargs: None)
 
     interface.draw_circular(
@@ -117,6 +170,9 @@ def test_grouped_options_compile_to_the_existing_render_engine(
     )
 
     options = captured["options"]
+    assert isinstance(options, CircularDiagramOptions)
+    assert isinstance(options.tracks, CircularRequestTrackOptions)
+    assert isinstance(options.output, CircularOutputOptions)
     assert options.selected_features_set == ("CDS",)
     assert options.colors.color_table is color_table
     assert options.feature_visibility_table_file == "visibility.tsv"
@@ -125,6 +181,39 @@ def test_grouped_options_compile_to_the_existing_render_engine(
     assert options.output.plot_title_position == "top"
     assert options.depth_track_files == [["depth.tsv"]]
     assert options.depth_track_labels == ["Coverage"]
+
+
+def test_draw_linear_routes_through_typed_request_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_linear(records, *, options, layout, **_kwargs):
+        captured["records"] = tuple(records)
+        captured["options"] = options
+        captured["layout"] = layout
+        return Drawing("linear.svg")
+
+    monkeypatch.setattr(request_render_module, "build_linear_diagram", fake_linear)
+    monkeypatch.setattr(interface, "_interactive_context", lambda *_args, **_kwargs: None)
+
+    diagram = interface.draw_linear(
+        [_record("one"), _record("two")],
+        options=interface.LinearOptions(
+            title=interface.TitleOptions(text="Linear", position="top"),
+        ),
+        layout=interface.LinearLayout(record_gap=30, positions=("#1@1", "#2@2")),
+    )
+
+    assert diagram.mode == "linear"
+    assert [record.id for record in captured["records"]] == ["one", "two"]
+    compiled = captured["options"]
+    assert isinstance(compiled, LinearDiagramOptions)
+    assert isinstance(compiled.tracks, LinearRequestTrackOptions)
+    assert isinstance(compiled.output, LinearOutputOptions)
+    assert compiled.output.plot_title_position == "top"
+    assert captured["layout"].record_gap_px == 30
+    assert captured["layout"].multi_record_positions == ("#1@1", "#2@2")
 
 
 def test_circular_companion_sequence_reaches_interactive_context() -> None:

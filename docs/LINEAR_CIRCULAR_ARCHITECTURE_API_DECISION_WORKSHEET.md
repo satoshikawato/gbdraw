@@ -3,7 +3,7 @@
 # Linear/Circular architecture and API decision worksheet
 
 - Date: 2026-07-28
-- Status: owner decisions recorded; Phase 0 and approved beta cleanup implemented
+- Status: owner decisions recorded; Phase 0, approved beta cleanup, and Phase 1 core implemented
 - Source: [`LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md`](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md)
 
 ## How to respond
@@ -387,7 +387,7 @@ ALL=A; O3.api=B
 
 ## Implementation record
 
-Implemented on 2026-07-28:
+Implemented through 2026-07-29:
 
 - Phase 0 now uses one versioned mode-profile source for Python, CLI, Web, and
   newly saved sessions; current entry points enforce the approved numeric and
@@ -406,7 +406,9 @@ Implemented on 2026-07-28:
   duplicate `OutputOptions.output_prefix`. CLI export implementations remain
   internal to `gbdraw.render.export`.
 - The canonical CLI is `--gc` / `--no-gc`, `--skew` / `--no-skew`, and
-  repeatable `--depth_track`. `RenderOutputRequest` alone owns output naming.
+  repeatable `--depth_track`. `RenderOutputRequest` alone owns output naming in
+  the typed request/session contract. The CLI export adapter still forwards the
+  same resolved prefix through internal assembly until its planner migration.
 - Fresh CLI/API entry points reject the retired `depth_tick_interval`,
   `feature_table`, and `collinear_max_gene_gap` names; Circular
   `multi_record_size_mode=sqrt`; Linear `label_placement=on_feature` and
@@ -433,13 +435,22 @@ Implemented on 2026-07-28:
   available deterministic `_2`, `_3`, ... suffix. A separate-diagram Circular
   batch that requests session output is rejected before diagram output until a
   typed batch request can represent that grouping.
+- The Phase 1 core uses `CircularDiagramOptions` and `LinearDiagramOptions` at
+  the typed request boundary. Their mode-specific nested contracts are
+  `CircularTrackOptions`, `LinearTrackOptions`, `CircularOutputOptions`, and
+  `LinearOutputOptions`. `CircularRequestPlan` and `LinearRequestPlan` own
+  normalized builder selection, and the root drawing facade now routes through
+  those planners. Current canonical session replay also reaches the planners
+  through `render_request`. A one-record `CircularLayout` is valid and produces
+  a 1×1 grid.
 
-The full A1/A2 and O4 planner work and the mode-specific typed-boundary
-migration remain for the next API iteration under `O6.delivery=A`. That
-iteration includes explicit grid/batch request forms, the remaining O4
-single-layout and neutral-loading work, and removal of the legacy
-`CollinearityParameters` type in favor of `LosslessCollinearityParameters`.
-`DiagramOptions` and the internal assembler implementations remain because
-current typed requests still require them; they are not compatibility aliases.
+The remaining A1 and O4 work under `O6.delivery=A` is to route fresh CLI/Web
+generation and legacy internal replay through the planners; add explicit grid
+and batch request forms with persisted grouping and the required schema bump;
+and complete mode-neutral loading. The legacy `CollinearityParameters` type also
+remains to be replaced by `LosslessCollinearityParameters`. `DiagramOptions` and
+the internal assembler implementations remain as an internal compatibility
+bridge while those entry points migrate; they are not the canonical typed
+request options.
 
 [Architecture/API audit](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md) | [Python API](./PYTHON_API.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md)

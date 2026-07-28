@@ -7,7 +7,12 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 import gbdraw.interface as interface
-from gbdraw.api.options import DiagramOptions, TrackOptions
+from gbdraw.api.options import (
+    CircularDiagramOptions,
+    CircularTrackOptions,
+    DiagramOptions,
+    TrackOptions,
+)
 from gbdraw.api.requests import (
     InMemoryRecordSource,
     LinearDiagramRequest,
@@ -110,14 +115,16 @@ def test_fresh_track_options_reject_private_circular_transport(
 
 
 def test_linear_request_rejects_valid_circular_only_track_bundle() -> None:
-    circular_tracks = TrackOptions(
+    circular_tracks = CircularTrackOptions(
         circular_track_slots=("conservation:sequence_conservation",)
     )
 
-    with pytest.raises(ValidationError, match="circular_track_slots"):
+    with pytest.raises(ValidationError, match="LinearDiagramOptions"):
         LinearDiagramRequest(
             records=(_record_input(),),
-            options=DiagramOptions(tracks=circular_tracks),
+            options=CircularDiagramOptions(
+                tracks=circular_tracks
+            ),  # type: ignore[arg-type]
         )
 
 

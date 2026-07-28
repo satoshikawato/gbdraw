@@ -8,7 +8,7 @@ import json
 import re
 from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, TypeAlias
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -50,7 +50,12 @@ from .diagram import (
     build_linear_diagram,
 )
 from .io import apply_region_specs, load_gbks, load_gff_fasta
-from .options import CircularMultiRecordOptions, DiagramOptions, LinearMultiRecordOptions
+from .options import (
+    CircularDiagramOptions,
+    CircularMultiRecordOptions,
+    LinearDiagramOptions,
+    LinearMultiRecordOptions,
+)
 from .render import save_figure_to
 from .requests import (
     CircularDiagramRequest,
@@ -97,6 +102,138 @@ class RequestRenderResult:
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] = ()
     protein_id_map: Mapping[str, str] | None = None
     warnings: tuple[str, ...] = ()
+
+
+def _validated_plan_records(
+    value: Sequence[SeqRecord],
+    *,
+    expected_count: int,
+) -> tuple[SeqRecord, ...]:
+    if isinstance(value, (str, bytes)):
+        raise ValidationError(
+            "Request plan records must be a sequence of SeqRecord values."
+        )
+    try:
+        records = tuple(value)
+    except TypeError as exc:
+        raise ValidationError(
+            "Request plan records must be a sequence of SeqRecord values."
+        ) from exc
+    if not records or not all(isinstance(record, SeqRecord) for record in records):
+        raise ValidationError(
+            "Request plan records must be a non-empty sequence of SeqRecord values."
+        )
+    if len(records) != expected_count:
+        raise ValidationError(
+            "Request plan record count must match the request record count."
+        )
+    return records
+
+
+@dataclass(frozen=True)
+class CircularRequestPlan:
+    """Normalized records, layout, and builder choice for a Circular request."""
+
+    request: CircularDiagramRequest
+    records: tuple[SeqRecord, ...]
+    layout: CircularMultiRecordOptions | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, CircularDiagramRequest):
+            raise ValidationError(
+                "CircularRequestPlan request must be CircularDiagramRequest."
+            )
+        object.__setattr__(
+            self,
+            "records",
+            _validated_plan_records(
+                self.records,
+                expected_count=len(self.request.records),
+            ),
+        )
+        if self.layout is not None and not isinstance(
+            self.layout,
+            CircularMultiRecordOptions,
+        ):
+            raise ValidationError(
+                "CircularRequestPlan layout must be CircularMultiRecordOptions or None."
+            )
+        if (self.layout is None) != (self.request.layout is None):
+            raise ValidationError(
+                "CircularRequestPlan layout presence must match the request."
+            )
+
+    @property
+    def mode(self) -> Literal["circular"]:
+        return "circular"
+
+    def build(self) -> Drawing:
+        if self.layout is None:
+            return build_circular_diagram(
+                self.records[0],
+                options=self.request.options,
+            )
+        return build_circular_multi_diagram(
+            self.records,
+            options=self.request.options,
+            layout=self.layout,
+        )
+
+
+@dataclass(frozen=True)
+class LinearRequestPlan:
+    """Normalized records, layout, and builder choice for a Linear request."""
+
+    request: LinearDiagramRequest
+    records: tuple[SeqRecord, ...]
+    layout: LinearMultiRecordOptions | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, LinearDiagramRequest):
+            raise ValidationError(
+                "LinearRequestPlan request must be LinearDiagramRequest."
+            )
+        object.__setattr__(
+            self,
+            "records",
+            _validated_plan_records(
+                self.records,
+                expected_count=len(self.request.records),
+            ),
+        )
+        if self.layout is not None and not isinstance(
+            self.layout,
+            LinearMultiRecordOptions,
+        ):
+            raise ValidationError(
+                "LinearRequestPlan layout must be LinearMultiRecordOptions or None."
+            )
+        if (self.layout is None) != (self.request.layout is None):
+            raise ValidationError(
+                "LinearRequestPlan layout presence must match the request."
+            )
+
+    @property
+    def mode(self) -> Literal["linear"]:
+        return "linear"
+
+    def build(
+        self,
+        *,
+        losatp_cache: LosatpCacheManager | None = None,
+        protein_extraction: ProteinExtractionResult | None = None,
+    ) -> Drawing:
+        kwargs: dict[str, Any] = {"options": self.request.options}
+        if self.layout is not None:
+            kwargs["layout"] = self.layout
+        if losatp_cache is not None:
+            kwargs["losatp_cache"] = losatp_cache
+        if protein_extraction is not None:
+            kwargs["protein_extraction"] = protein_extraction
+        return build_linear_diagram(self.records, **kwargs)
+
+
+DiagramRequestPlan: TypeAlias = CircularRequestPlan | LinearRequestPlan
 
 
 @dataclass(frozen=True)
@@ -278,6 +415,42 @@ def _linear_layout_with_record_placements(
         for index, presentation in positioned
     )
     return replace(layout, multi_record_positions=positions)
+
+
+def plan_circular_request(
+    request: CircularDiagramRequest,
+) -> CircularRequestPlan:
+    """Normalize a Circular request into one explicit builder plan."""
+
+    if not isinstance(request, CircularDiagramRequest):
+        raise ValidationError("request must be CircularDiagramRequest.")
+    return CircularRequestPlan(
+        request=request,
+        records=normalize_request_records(request),
+        layout=_layout_with_record_placements(request),
+    )
+
+
+def plan_linear_request(
+    request: LinearDiagramRequest,
+) -> LinearRequestPlan:
+    """Normalize a Linear request into one explicit builder plan."""
+
+    if not isinstance(request, LinearDiagramRequest):
+        raise ValidationError("request must be LinearDiagramRequest.")
+    return LinearRequestPlan(
+        request=request,
+        records=normalize_request_records(request),
+        layout=_linear_layout_with_record_placements(request),
+    )
+
+
+def _plan_request(request: DiagramRequest) -> DiagramRequestPlan:
+    if isinstance(request, CircularDiagramRequest):
+        return plan_circular_request(request)
+    if isinstance(request, LinearDiagramRequest):
+        return plan_linear_request(request)
+    raise ValidationError("Unsupported diagram request type.")
 
 
 def _empty_protein_identity_manifest() -> dict[str, Any]:
@@ -1096,7 +1269,9 @@ def build_request_diagram(
 ) -> PreparedDiagramRequest:
     """Normalize inputs and build a drawing through the high-level API owners."""
 
-    records = normalize_request_records(request)
+    plan = _plan_request(request)
+    request = plan.request
+    records = plan.records
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
@@ -1104,17 +1279,8 @@ def build_request_diagram(
     legacy_derived_evidence = _legacy_derived_evidence_entries(session_artifacts)
     protein_id_map: Mapping[str, str] = {}
     warnings: tuple[str, ...] = ()
-    if isinstance(request, CircularDiagramRequest):
-        layout = _layout_with_record_placements(request)
-        if layout is None:
-            drawing = build_circular_diagram(records[0], options=request.options)
-        else:
-            drawing = build_circular_multi_diagram(
-                records,
-                options=request.options,
-                layout=layout,
-            )
-        mode: Literal["circular", "linear"] = "circular"
+    if isinstance(plan, CircularRequestPlan):
+        drawing = plan.build()
         if session_artifacts is not None:
             raw_entries = _artifact_entries(session_artifacts, "losatCache")
             losat_cache_entries = tuple(
@@ -1149,24 +1315,18 @@ def build_request_diagram(
                 and source_manifest.get("schema") == 2
                 else _empty_protein_identity_manifest()
             )
-    elif isinstance(request, LinearDiagramRequest):
+    else:
         artifacts = _prepare_linear_artifacts(request, records, session_artifacts)
         request = artifacts.request
-        linear_layout = _linear_layout_with_record_placements(request)
-        build_kwargs: dict[str, Any] = {"options": request.options}
-        if artifacts.cache is not None:
-            build_kwargs["losatp_cache"] = artifacts.cache
-        if artifacts.extraction is not None:
-            build_kwargs["protein_extraction"] = artifacts.extraction
-        if linear_layout is None:
-            drawing = build_linear_diagram(records, **build_kwargs)
-        else:
-            drawing = build_linear_diagram(
-                records,
-                layout=linear_layout,
-                **build_kwargs,
-            )
-        mode = "linear"
+        plan = LinearRequestPlan(
+            request=request,
+            records=records,
+            layout=_linear_layout_with_record_placements(request),
+        )
+        drawing = plan.build(
+            losatp_cache=artifacts.cache,
+            protein_extraction=artifacts.extraction,
+        )
         protein_entries = (
             tuple(artifacts.cache.session_entries())
             if artifacts.cache is not None
@@ -1198,10 +1358,8 @@ def build_request_diagram(
         legacy_candidates = artifacts.legacy_candidates
         protein_id_map = artifacts.protein_id_map
         warnings = artifacts.warnings
-    else:  # pragma: no cover - normalize_request_records rejects this first.
-        raise ValidationError("Unsupported diagram request type.")
     return PreparedDiagramRequest(
-        mode=mode,
+        mode=plan.mode,
         request=request,
         records=records,
         drawing=drawing,
@@ -1215,7 +1373,9 @@ def build_request_diagram(
     )
 
 
-def _visibility_table(options: DiagramOptions) -> DataFrame | None:
+def _visibility_table(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+) -> DataFrame | None:
     table = options.feature_visibility_table
     file_path = options.feature_visibility_table_file
     if table is None and file_path is not None:
@@ -1223,7 +1383,9 @@ def _visibility_table(options: DiagramOptions) -> DataFrame | None:
     return table
 
 
-def _color_table(options: DiagramOptions) -> DataFrame | None:
+def _color_table(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+) -> DataFrame | None:
     colors = options.colors
     if colors is None or colors.color_table is not None:
         return colors.color_table if colors is not None else None
@@ -1254,7 +1416,11 @@ def _interactive_context(
         feature_visibility_table=_visibility_table(options),
         color_table=color_table,
         default_colors=default_colors,
-        orthogroups=options.orthogroups,
+        orthogroups=(
+            options.orthogroups
+            if isinstance(options, LinearDiagramOptions)
+            else None
+        ),
         linear_rendered_feature_ids=prepared.mode == "linear",
         annotations=options.annotations,
         mode=prepared.mode,
@@ -1273,7 +1439,7 @@ def render_request(
         if session_artifacts is None
         else build_request_diagram(request, session_artifacts=session_artifacts)
     )
-    output = request.output
+    output = prepared.request.output
     interactive_context = _interactive_context(prepared)
     paths = save_figure_to(
         prepared.drawing,
@@ -1305,10 +1471,15 @@ def render_request(
 
 
 __all__ = [
+    "CircularRequestPlan",
+    "DiagramRequestPlan",
+    "LinearRequestPlan",
     "PreparedDiagramRequest",
     "RequestRenderResult",
     "build_request_diagram",
     "normalize_request_records",
+    "plan_circular_request",
+    "plan_linear_request",
     "render_request",
     "rewrite_protein_artifact_references",
 ]

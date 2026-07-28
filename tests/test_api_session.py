@@ -11,9 +11,10 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
     CircularDiagramRequest,
-    DiagramOptions,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    LinearDiagramOptions,
+    LinearTrackOptions,
     LinearTrackSlot,
     RecordInput,
     RenderOutputRequest,
@@ -28,7 +29,6 @@ from gbdraw.api import (
     save_session_document,
     session_to_request,
     normalize_request_records,
-    TrackOptions,
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 
@@ -225,8 +225,8 @@ def test_v32_web_slot_specs_drop_only_legacy_feature_geometry(
     )
     request = LinearDiagramRequest(
         records=(_record(),),
-        options=DiagramOptions(
-            tracks=TrackOptions(
+        options=LinearDiagramOptions(
+            tracks=LinearTrackOptions(
                 linear_track_slots=canonical_slots,
                 linear_track_axis_index=1,
             )
@@ -277,8 +277,8 @@ def test_v32_structured_slots_preserve_non_feature_geometry_and_fields(
     )
     request = LinearDiagramRequest(
         records=(_record(),),
-        options=DiagramOptions(
-            tracks=TrackOptions(
+        options=LinearDiagramOptions(
+            tracks=LinearTrackOptions(
                 linear_track_slots=(numeric_slot, feature_slot),
                 linear_track_axis_index=1,
             )
@@ -320,8 +320,8 @@ def test_current_session_preserves_v2_feature_geometry(tmp_path: Path) -> None:
     )
     request = LinearDiagramRequest(
         records=(_record(),),
-        options=DiagramOptions(
-            tracks=TrackOptions(linear_track_slots=(feature_slot,))
+        options=LinearDiagramOptions(
+            tracks=LinearTrackOptions(linear_track_slots=(feature_slot,))
         ),
     )
     document = build_session_document(request)

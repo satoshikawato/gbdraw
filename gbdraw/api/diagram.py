@@ -77,11 +77,16 @@ from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     AnnotationOptions,
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
     DiagramOptions,
+    LinearDiagramOptions,
     LinearMultiRecordOptions,
+    _legacy_diagram_options,
     _validate_diagram_options_mode,
+    resolve_circular_diagram_options,
     resolve_diagram_options_for_mode,
+    resolve_linear_diagram_options,
 )
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.linear_multi_record import (
@@ -3886,17 +3891,48 @@ def assemble_circular_diagram_from_records(
     return merged_canvas
 
 
+def _circular_builder_options(
+    options: CircularDiagramOptions | DiagramOptions | None,
+) -> DiagramOptions:
+    if options is None:
+        return _legacy_diagram_options(
+            resolve_circular_diagram_options(CircularDiagramOptions())
+        )
+    if isinstance(options, CircularDiagramOptions):
+        return _legacy_diagram_options(
+            resolve_circular_diagram_options(options)
+        )
+    if isinstance(options, DiagramOptions):
+        return resolve_diagram_options_for_mode(options, mode="circular")
+    raise ValidationError(
+        "options must be CircularDiagramOptions or internal DiagramOptions."
+    )
+
+
+def _linear_builder_options(
+    options: LinearDiagramOptions | DiagramOptions | None,
+) -> DiagramOptions:
+    if options is None:
+        return _legacy_diagram_options(
+            resolve_linear_diagram_options(LinearDiagramOptions())
+        )
+    if isinstance(options, LinearDiagramOptions):
+        return _legacy_diagram_options(resolve_linear_diagram_options(options))
+    if isinstance(options, DiagramOptions):
+        return resolve_diagram_options_for_mode(options, mode="linear")
+    raise ValidationError(
+        "options must be LinearDiagramOptions or internal DiagramOptions."
+    )
+
+
 def build_circular_diagram(
     gb_record: SeqRecord,
     *,
-    options: DiagramOptions | None = None,
+    options: CircularDiagramOptions | DiagramOptions | None = None,
 ) -> Drawing:
-    """Build a circular diagram using bundled DiagramOptions."""
+    """Build a circular diagram using strict or internal compatibility options."""
 
-    options = resolve_diagram_options_for_mode(
-        DiagramOptions() if options is None else options,
-        mode="circular",
-    )
+    options = _circular_builder_options(options)
     _validate_diagram_options_mode(options, mode="circular")
     depth_table, depth_file = _resolve_single_circular_depth_options(options)
     colors = options.colors
@@ -3966,17 +4002,14 @@ def build_circular_diagram(
 def build_linear_diagram(
     records: Sequence[SeqRecord],
     *,
-    options: DiagramOptions | None = None,
+    options: LinearDiagramOptions | DiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
 ) -> Drawing:
-    """Build a linear diagram using bundled DiagramOptions."""
+    """Build a linear diagram using strict or internal compatibility options."""
 
-    options = resolve_diagram_options_for_mode(
-        DiagramOptions() if options is None else options,
-        mode="linear",
-    )
+    options = _linear_builder_options(options)
     _validate_diagram_options_mode(options, mode="linear")
     colors = options.colors
     output = options.output
@@ -4064,15 +4097,12 @@ def build_linear_diagram(
 def build_circular_multi_diagram(
     records: Sequence[SeqRecord],
     *,
-    options: DiagramOptions | None = None,
+    options: CircularDiagramOptions | DiagramOptions | None = None,
     layout: CircularMultiRecordOptions | None = None,
 ) -> Drawing:
-    """Build a circular multi-record canvas using bundled public options."""
+    """Build a circular grid using strict or internal compatibility options."""
 
-    options = resolve_diagram_options_for_mode(
-        DiagramOptions() if options is None else options,
-        mode="circular",
-    )
+    options = _circular_builder_options(options)
     _validate_diagram_options_mode(options, mode="circular_multi")
     if layout is not None and not isinstance(layout, CircularMultiRecordOptions):
         raise ValidationError(

@@ -189,7 +189,9 @@ def test_low_level_api_owners_are_explicit() -> None:
         "LinearCanvasConfigurator",
     }
     removed_convenience_reexports = {
+        "DiagramOptions",
         "OutputOptions",
+        "TrackOptions",
         "parse_formats",
         "save_figure",
     }
@@ -212,6 +214,20 @@ def test_low_level_api_owners_are_explicit() -> None:
     assert {"draw_circular", "draw_linear", "read_genbank", "read_gff"} <= set(
         public_api.__all__
     )
-    assert library_api.DiagramOptions is api_options.DiagramOptions
+    assert (
+        library_api.CircularDiagramOptions
+        is api_options.CircularDiagramOptions
+    )
+    assert library_api.LinearDiagramOptions is api_options.LinearDiagramOptions
+    assert {
+        "CircularDiagramOptions",
+        "CircularOutputOptions",
+        "CircularTrackOptions",
+        "LinearDiagramOptions",
+        "LinearOutputOptions",
+        "LinearTrackOptions",
+        "plan_circular_request",
+        "plan_linear_request",
+    } <= set(library_api.__all__)
     assert library_api.render_to_bytes is api_render.render_to_bytes
     assert library_api.save_figure_to is api_render.save_figure_to

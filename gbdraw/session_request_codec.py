@@ -59,12 +59,15 @@ from gbdraw.annotations import (
 )
 
 from .api.options import (
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
+    CircularOutputOptions,
+    CircularTrackOptions,
     ColorOptions,
-    DiagramOptions,
+    LinearDiagramOptions,
     LinearMultiRecordOptions,
-    OutputOptions,
-    TrackOptions,
+    LinearOutputOptions,
+    LinearTrackOptions,
 )
 from .api.requests import (
     CircularDiagramRequest,
@@ -87,7 +90,26 @@ _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TOP_LEVEL_FIELDS = frozenset(
     {"schema", "mode", "records", "diagramOptions", "layout", "comparisons", "output"}
 )
-_DEFAULT_OPTIONS = DiagramOptions()
+_DEFAULT_CIRCULAR_OPTIONS = CircularDiagramOptions()
+_DEFAULT_LINEAR_OPTIONS = LinearDiagramOptions()
+_SHARED_OPTION_WRONG_MODE_DEFAULTS = {
+    "circular": {
+        "depth_track_heights": None,
+        "pairwise_match_style": "ribbon",
+    },
+    "linear": {
+        "conservation_blast_files": None,
+        "conservation_dataframes": None,
+        "conservation_reference": "auto",
+        "conservation_labels": None,
+        "conservation_colors": None,
+        "conservation_ring_width": None,
+        "conservation_ring_gap": None,
+        "keep_full_definition_with_plot_title": False,
+        "species": None,
+        "strain": None,
+    },
+}
 _LEGACY_SPARSE_COMPARISON_DEFAULTS = {
     "evalue": 1e-5,
     "bitscore": 50.0,
@@ -411,7 +433,10 @@ def _decode_canonical_request(
     comparison_kwargs = _decode_comparisons(
         top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths
     )
-    options = DiagramOptions(**options_kwargs, **comparison_kwargs)
+    options_type = (
+        CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
+    )
+    options = options_type(**options_kwargs, **comparison_kwargs)
     _validate_dataclass_contract(options, path="diagramOptions", error="decode")
     output = _decode_output(top["output"], output_directory=output_directory)
 
@@ -751,17 +776,25 @@ def _decode_linear_layout(value: object) -> LinearMultiRecordOptions | None:
 
 
 def _encode_diagram_options(
-    options: DiagramOptions,
+    options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     resources: _ResourceBuilder,
 ) -> dict[str, Any]:
+    if isinstance(options, CircularDiagramOptions):
+        default_options = _DEFAULT_CIRCULAR_OPTIONS
+    elif isinstance(options, LinearDiagramOptions):
+        default_options = _DEFAULT_LINEAR_OPTIONS
+    else:
+        raise CanonicalRequestEncodingError(
+            "diagramOptions must use mode-specific options."
+        )
     result: dict[str, Any] = {}
-    for item in fields(DiagramOptions):
+    for item in fields(options):
         name = item.name
         if name in _COMPARISON_FIELDS:
             continue
         value = getattr(options, name)
-        default = getattr(_DEFAULT_OPTIONS, name)
+        default = getattr(default_options, name)
         if _same_default(value, default):
             continue
         result[_camel(name)] = _encode_option_value(name, value, resources=resources)
@@ -778,9 +811,17 @@ def _decode_diagram_options(
     payload = _object(value, path="renderRequest.diagramOptions")
     if schema in {1, 2, 3}:
         payload = _migrate_legacy_feature_visibility_fields(payload)
+    payload = dict(payload)
+    for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
+        key = _camel(name)
+        if key in payload and payload[key] == default:
+            payload.pop(key)
+    options_type = (
+        CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
+    )
     known = {
         _camel(item.name): item.name
-        for item in fields(DiagramOptions)
+        for item in fields(options_type)
         if item.name not in _COMPARISON_FIELDS
     }
     unknown = set(payload) - set(known)
@@ -794,6 +835,7 @@ def _decode_diagram_options(
         known[key]: _decode_option_value(
             known[key],
             raw,
+            mode=mode,
             schema=schema,
             resource_paths=resource_paths,
         )
@@ -978,6 +1020,7 @@ def _decode_option_value(
     name: str,
     value: object,
     *,
+    mode: Literal["circular", "linear"],
     schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> Any:
@@ -986,11 +1029,11 @@ def _decode_option_value(
     if name == "colors":
         return _decode_colors(value, resource_paths=resource_paths)
     if name == "tracks":
-        return _decode_tracks(value, schema=schema)
+        return _decode_tracks(value, mode=mode, schema=schema)
     if name == "annotations":
         return _decode_annotations(value, resource_paths=resource_paths)
     if name == "output":
-        return _decode_assembly_output(value, schema=schema)
+        return _decode_assembly_output(value, mode=mode, schema=schema)
     if name in _TABLE_FIELDS:
         return _decode_table_ref(value, name=name, resource_paths=resource_paths)
     if name in _FILE_FIELDS:
@@ -1117,18 +1160,37 @@ def _decode_colors(
 
 
 def _encode_tracks(value: object) -> dict[str, Any]:
-    if not isinstance(value, TrackOptions):
-        raise CanonicalRequestEncodingError("diagramOptions.tracks must be TrackOptions.")
+    if isinstance(value, CircularTrackOptions):
+        circular_slots = value.circular_track_slots
+        circular_axis_index = value.circular_track_axis_index
+        linear_slots = None
+        linear_axis_index = None
+        center_reserved_radius = value.center_reserved_radius
+    elif isinstance(value, LinearTrackOptions):
+        circular_slots = None
+        circular_axis_index = None
+        linear_slots = value.linear_track_slots
+        linear_axis_index = value.linear_track_axis_index
+        center_reserved_radius = None
+    else:
+        raise CanonicalRequestEncodingError(
+            "diagramOptions.tracks must use mode-specific track options."
+        )
     return {
-        "circularTrackSlots": _encode_track_slots(value.circular_track_slots),
-        "circularTrackAxisIndex": value.circular_track_axis_index,
-        "linearTrackSlots": _encode_track_slots(value.linear_track_slots),
-        "linearTrackAxisIndex": value.linear_track_axis_index,
-        "centerReservedRadius": value.center_reserved_radius,
+        "circularTrackSlots": _encode_track_slots(circular_slots),
+        "circularTrackAxisIndex": circular_axis_index,
+        "linearTrackSlots": _encode_track_slots(linear_slots),
+        "linearTrackAxisIndex": linear_axis_index,
+        "centerReservedRadius": center_reserved_radius,
     }
 
 
-def _decode_tracks(value: object, *, schema: int) -> TrackOptions:
+def _decode_tracks(
+    value: object,
+    *,
+    mode: Literal["circular", "linear"],
+    schema: int,
+) -> CircularTrackOptions | LinearTrackOptions:
     path = "renderRequest.diagramOptions.tracks"
     payload = _object(
         value,
@@ -1141,23 +1203,41 @@ def _decode_tracks(value: object, *, schema: int) -> TrackOptions:
             "centerReservedRadius",
         },
     )
-    result = TrackOptions(
-        circular_track_slots=_decode_track_slots(
-            payload["circularTrackSlots"],
-            mode="circular",
-            schema=schema,
-            path=f"{path}.circularTrackSlots",
-        ),
-        circular_track_axis_index=payload["circularTrackAxisIndex"],
-        linear_track_slots=_decode_track_slots(
-            payload["linearTrackSlots"],
-            mode="linear",
-            schema=schema,
-            path=f"{path}.linearTrackSlots",
-        ),
-        linear_track_axis_index=payload["linearTrackAxisIndex"],
-        center_reserved_radius=payload["centerReservedRadius"],
+    circular_slots = _decode_track_slots(
+        payload["circularTrackSlots"],
+        mode="circular",
+        schema=schema,
+        path=f"{path}.circularTrackSlots",
     )
+    linear_slots = _decode_track_slots(
+        payload["linearTrackSlots"],
+        mode="linear",
+        schema=schema,
+        path=f"{path}.linearTrackSlots",
+    )
+    if mode == "circular":
+        if linear_slots is not None or payload["linearTrackAxisIndex"] is not None:
+            raise CanonicalRequestDecodingError(
+                "A Circular request cannot contain Linear track values."
+            )
+        result: CircularTrackOptions | LinearTrackOptions = CircularTrackOptions(
+            circular_track_slots=circular_slots,
+            circular_track_axis_index=payload["circularTrackAxisIndex"],
+            center_reserved_radius=payload["centerReservedRadius"],
+        )
+    else:
+        if (
+            circular_slots is not None
+            or payload["circularTrackAxisIndex"] is not None
+            or payload["centerReservedRadius"] is not None
+        ):
+            raise CanonicalRequestDecodingError(
+                "A Linear request cannot contain Circular track values."
+            )
+        result = LinearTrackOptions(
+            linear_track_slots=linear_slots,
+            linear_track_axis_index=payload["linearTrackAxisIndex"],
+        )
     _validate_dataclass_contract(result, path="diagramOptions.tracks", error="decode")
     return result
 
@@ -1588,15 +1668,22 @@ def _decode_scalar_if_needed(value: object, *, path: str) -> object:
 
 
 def _encode_assembly_output(value: object) -> dict[str, Any]:
-    if not isinstance(value, OutputOptions):
-        raise CanonicalRequestEncodingError("diagramOptions.output must be OutputOptions.")
+    if not isinstance(value, (CircularOutputOptions, LinearOutputOptions)):
+        raise CanonicalRequestEncodingError(
+            "diagramOptions.output must use mode-specific output options."
+        )
     return {
         "legend": value.legend,
         "plotTitlePosition": value.plot_title_position,
     }
 
 
-def _decode_assembly_output(value: object, *, schema: int) -> OutputOptions:
+def _decode_assembly_output(
+    value: object,
+    *,
+    mode: Literal["circular", "linear"],
+    schema: int,
+) -> CircularOutputOptions | LinearOutputOptions:
     required = {"legend", "plotTitlePosition"}
     if schema in {1, 2, 3}:
         required.add("outputPrefix")
@@ -1605,7 +1692,10 @@ def _decode_assembly_output(value: object, *, schema: int) -> OutputOptions:
         path="renderRequest.diagramOptions.output",
         required=required,
     )
-    result = OutputOptions(
+    output_type = (
+        CircularOutputOptions if mode == "circular" else LinearOutputOptions
+    )
+    result = output_type(
         legend=payload["legend"],
         plot_title_position=payload["plotTitlePosition"],
     )
@@ -1676,13 +1766,17 @@ def _decode_resource_matrix(
 
 
 def _encode_comparisons(
-    options: DiagramOptions,
+    options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     mode: Literal["circular", "linear"],
     resources: _ResourceBuilder,
 ) -> list[dict[str, Any]]:
     if mode == "circular":
         return []
+    if not isinstance(options, LinearDiagramOptions):
+        raise CanonicalRequestEncodingError(
+            "Linear comparisons require LinearDiagramOptions."
+        )
     result: list[dict[str, Any]] = []
     for index, comparison in enumerate(options.linear_comparisons or (), start=1):
         ref = _table_ref(
@@ -1757,7 +1851,10 @@ def _encode_comparisons(
             }
         )
     if any(
-        not _same_default(getattr(options, name), getattr(_DEFAULT_OPTIONS, name))
+        not _same_default(
+            getattr(options, name),
+            getattr(_DEFAULT_LINEAR_OPTIONS, name),
+        )
         for name in _PIPELINE_FIELDS
     ) or options.protein_comparison_pairs is not None:
         settings = {

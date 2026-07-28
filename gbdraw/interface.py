@@ -27,21 +27,26 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
 )
 from gbdraw.annotations import AnnotationOptions
-from gbdraw.api.diagram import (
-    build_circular_diagram as _build_circular_diagram,
-    build_circular_multi_diagram as _build_circular_multi_diagram,
-    build_linear_diagram as _build_linear_diagram,
-)
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
 from gbdraw.api.options import (
+    CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
+    CircularOutputOptions as _CircularOutputOptions,
+    CircularTrackOptions as _CircularRequestTrackOptions,
     ColorOptions as _ColorOptions,
-    DiagramOptions as _DiagramOptions,
+    LinearDiagramOptions as _LinearDiagramOptions,
     LinearMultiRecordOptions as _LinearLayout,
-    OutputOptions as _OutputOptions,
-    TrackOptions as _TrackOptions,
+    LinearOutputOptions as _LinearOutputOptions,
+    LinearTrackOptions as _LinearRequestTrackOptions,
     _validate_center_reserved_radius,
     _validate_track_configuration,
+)
+from gbdraw.api.request_render import build_request_diagram as _build_request_diagram
+from gbdraw.api.requests import (
+    CircularDiagramRequest as _CircularDiagramRequest,
+    InMemoryRecordSource as _InMemoryRecordSource,
+    LinearDiagramRequest as _LinearDiagramRequest,
+    RecordInput as _RecordInput,
 )
 from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
@@ -641,10 +646,6 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
             default_colors_file=default_colors_file,
         ),
         "annotations": options.annotations,
-        "output": _OutputOptions(
-            legend=options.legend,
-            plot_title_position=options.title.position,
-        ),
         "selected_features_set": features.types,
         "feature_visibility_table": visibility_table,
         "feature_visibility_table_file": visibility_file,
@@ -671,12 +672,20 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
     return values
 
 
-def _circular_options(options: CircularOptions, *, record_count: int) -> _DiagramOptions:
+def _circular_options(
+    options: CircularOptions,
+    *,
+    record_count: int,
+) -> _CircularDiagramOptions:
     values = _base_options(options, record_count=record_count, mode="circular")
-    values["tracks"] = _TrackOptions(
+    values["tracks"] = _CircularRequestTrackOptions(
         circular_track_slots=options.tracks.slots,
         circular_track_axis_index=options.tracks.axis_index,
         center_reserved_radius=options.tracks.center_reserved_radius,
+    )
+    values["output"] = _CircularOutputOptions(
+        legend=options.legend,
+        plot_title_position=options.title.position,
     )
     conservation = options.conservation
     if conservation.tracks:
@@ -711,14 +720,22 @@ def _circular_options(options: CircularOptions, *, record_count: int) -> _Diagra
         strain=options.strain,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_title,
     )
-    return _DiagramOptions(**values)
+    return _CircularDiagramOptions(**values)
 
 
-def _linear_options(options: LinearOptions, *, record_count: int) -> _DiagramOptions:
+def _linear_options(
+    options: LinearOptions,
+    *,
+    record_count: int,
+) -> _LinearDiagramOptions:
     values = _base_options(options, record_count=record_count, mode="linear")
-    values["tracks"] = _TrackOptions(
+    values["tracks"] = _LinearRequestTrackOptions(
         linear_track_slots=options.tracks.slots,
         linear_track_axis_index=options.tracks.axis_index,
+    )
+    values["output"] = _LinearOutputOptions(
+        legend=options.legend,
+        plot_title_position=options.title.position,
     )
     comparisons = options.comparisons
     values.update(
@@ -745,14 +762,14 @@ def _linear_options(options: LinearOptions, *, record_count: int) -> _DiagramOpt
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
         align_orthogroup_feature=comparisons.align_feature,
     )
-    return _DiagramOptions(**values)
+    return _LinearDiagramOptions(**values)
 
 
 def _interactive_context(
     records: Sequence[SeqRecord],
     *,
     options: _CommonOptions,
-    legacy: _DiagramOptions,
+    legacy: _CircularDiagramOptions | _LinearDiagramOptions,
     mode: Literal["circular", "linear"],
 ) -> InteractiveSvgContext:
     visibility_table, visibility_file = _source(
@@ -788,7 +805,11 @@ def _interactive_context(
         feature_visibility_table=visibility_table,
         color_table=color_table,
         default_colors=default_colors,
-        orthogroups=legacy.orthogroups,
+        orthogroups=(
+            legacy.orthogroups
+            if isinstance(legacy, _LinearDiagramOptions)
+            else None
+        ),
         linear_rendered_feature_ids=mode == "linear",
         annotations=options.annotations,
         mode=mode,
@@ -810,25 +831,25 @@ def draw_circular(
         raise ValidationError("draw_circular options must be CircularOptions.")
     if layout is not None and not isinstance(layout, CircularLayout):
         raise ValidationError("draw_circular layout must be CircularLayout.")
-    if len(normalized) == 1 and layout is not None:
-        raise ValidationError("CircularLayout requires at least two records.")
-    legacy = _circular_options(options, record_count=len(normalized))
-    if len(normalized) == 1:
-        drawing = _build_circular_diagram(normalized[0], options=legacy)
-    else:
-        drawing = _build_circular_multi_diagram(
-            normalized,
-            options=legacy,
-            layout=(layout or CircularLayout())._legacy(),
+    compiled = _circular_options(options, record_count=len(normalized))
+    prepared = _build_request_diagram(
+        _CircularDiagramRequest(
+            records=tuple(
+                _RecordInput(source=_InMemoryRecordSource(record))
+                for record in normalized
+            ),
+            options=compiled,
+            layout=layout._legacy() if layout is not None else None,
         )
+    )
     return Diagram(
-        drawing,
+        prepared.drawing,
         mode="circular",
         records=normalized,
         interactive_context=_interactive_context(
-            normalized,
+            prepared.records,
             options=options,
-            legacy=legacy,
+            legacy=prepared.request.options,
             mode="circular",
         ),
     )
@@ -848,20 +869,25 @@ def draw_linear(
         raise ValidationError("draw_linear options must be LinearOptions.")
     if layout is not None and not isinstance(layout, LinearLayout):
         raise ValidationError("draw_linear layout must be LinearLayout.")
-    legacy = _linear_options(options, record_count=len(normalized))
-    drawing = _build_linear_diagram(
-        normalized,
-        options=legacy,
-        layout=layout._legacy() if layout is not None else None,
+    compiled = _linear_options(options, record_count=len(normalized))
+    prepared = _build_request_diagram(
+        _LinearDiagramRequest(
+            records=tuple(
+                _RecordInput(source=_InMemoryRecordSource(record))
+                for record in normalized
+            ),
+            options=compiled,
+            layout=layout._legacy() if layout is not None else None,
+        )
     )
     return Diagram(
-        drawing,
+        prepared.drawing,
         mode="linear",
         records=normalized,
         interactive_context=_interactive_context(
-            normalized,
+            prepared.records,
             options=options,
-            legacy=legacy,
+            legacy=prepared.request.options,
             mode="linear",
         ),
     )
