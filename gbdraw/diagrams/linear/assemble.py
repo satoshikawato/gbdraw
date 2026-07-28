@@ -865,34 +865,6 @@ def _linear_slot_footprints_for_record(
     return footprints, feature_center_y
 
 
-def _layout_with_preferred_origins(
-    layout: LinearTrackLayout,
-    preferred_origins: dict[str, float],
-) -> LinearTrackLayout:
-    if not preferred_origins:
-        return layout
-    return replace(
-        layout,
-        slots=tuple(
-            replace(slot, y_offset=float(preferred_origins.get(slot.id, slot.y_offset)))
-            for slot in layout.slots
-        ),
-    )
-
-
-def _default_preferred_origins(
-    layout: LinearTrackLayout,
-    canvas_config: LinearCanvasConfigurator,
-) -> dict[str, float]:
-    base = float(canvas_config.cds_padding) + float(canvas_config.vertical_padding)
-    axis_clearance = float(canvas_config.vertical_padding)
-    return {
-        slot.id: base + float(slot.y_offset) - axis_clearance
-        for slot in layout.slots
-        if slot.renderer in {"depth", "dinucleotide_content", "dinucleotide_skew"}
-    }
-
-
 def _resolved_linear_depth_heights(layout: LinearTrackLayout) -> dict[int, float]:
     heights: dict[int, float] = {}
     for slot in layout.slots:
@@ -1295,7 +1267,6 @@ def assemble_linear_diagram(
             records,
             depth_track_tables=[[table] for table in depth_tables],
         )
-    custom_linear_track_slots_requested = linear_track_slots is not None
     (
         linear_track_slots,
         resolved_annotations,
@@ -1510,11 +1481,6 @@ def assemble_linear_diagram(
         canvas_config=canvas_config,
         cfg=cfg,
     )
-    if not custom_linear_track_slots_requested:
-        linear_track_layout = _layout_with_preferred_origins(
-            linear_track_layout,
-            _default_preferred_origins(linear_track_layout, canvas_config),
-        )
     resolved_depth_heights_by_index = _resolved_linear_depth_heights(
         linear_track_layout
     )
@@ -1841,11 +1807,6 @@ def assemble_linear_diagram(
                 canvas_config=canvas_config,
                 cfg=cfg,
             )
-            if not custom_linear_track_slots_requested:
-                linear_track_layout = _layout_with_preferred_origins(
-                    linear_track_layout,
-                    _default_preferred_origins(linear_track_layout, canvas_config),
-                )
             resolved_depth_heights_by_index = _resolved_linear_depth_heights(
                 linear_track_layout
             )

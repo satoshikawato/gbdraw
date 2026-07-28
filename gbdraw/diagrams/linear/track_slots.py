@@ -133,8 +133,12 @@ def _slot_spacing(
         return max(0.0, _resolve_scalar_px(slot.spacing, 0.0))
     if slot.renderer == "depth":
         return max(0.0, float(canvas_config.configured_depth_padding))
-    if slot.renderer == "features":
-        return max(0.0, float(canvas_config.vertical_padding))
+    if slot.renderer in {
+        "features",
+        "dinucleotide_content",
+        "dinucleotide_skew",
+    }:
+        return max(0.0, float(canvas_config.configured_track_spacing))
     return 0.0
 
 
@@ -397,12 +401,43 @@ def _resolved_slot(
     )
 
 
+def _resolve_side_slot_origin(
+    *,
+    direction: str,
+    occupied_edge: float,
+    incoming_spacing: float,
+    local_reserve_band: VerticalBand,
+    preferred_origin: float | None,
+) -> float:
+    """Resolve one absolute preferred origin against the occupied reserve edge."""
+
+    spacing = max(0.0, float(incoming_spacing))
+    if direction == "above":
+        collision_origin = (
+            float(occupied_edge) - spacing - local_reserve_band.bottom_y
+        )
+        return (
+            collision_origin
+            if preferred_origin is None
+            else min(float(preferred_origin), collision_origin)
+        )
+    if direction == "below":
+        collision_origin = (
+            float(occupied_edge) + spacing - local_reserve_band.top_y
+        )
+        return (
+            collision_origin
+            if preferred_origin is None
+            else max(float(preferred_origin), collision_origin)
+        )
+    raise ValueError("direction must be 'above' or 'below'")
+
+
 def _pack_side_slots(
     tracks: Sequence[LinearResolvedTrack],
     *,
     direction: str,
     seed_band: VerticalBand,
-    axis_band: VerticalBand,
     footprints: Mapping[str, LinearSlotFootprint],
     overlays_by_anchor: Mapping[str, Sequence[tuple[float, LinearSlotFootprint]]],
     initial_spacing: float = 0.0,
@@ -413,7 +448,6 @@ def _pack_side_slots(
     ordered = list(reversed(tracks)) if direction == "above" else list(tracks)
     resolved: list[LinearResolvedSlot] = []
     occupied_edge = seed_band.top_y if direction == "above" else seed_band.bottom_y
-    preferred_inner_edge = axis_band.top_y if direction == "above" else axis_band.bottom_y
     spacing_from_inner = max(0.0, float(initial_spacing))
 
     prepared = [
@@ -441,26 +475,20 @@ def _pack_side_slots(
                 )
             )
             continue
-        preferred_band = footprint.reserve_band.translate(track.y_offset)
-        if direction == "above":
-            preferred_gap = max(0.0, preferred_inner_edge - preferred_band.bottom_y)
-            gap = spacing_from_inner if compact_missing else max(spacing_from_inner, preferred_gap)
-            packed_origin = occupied_edge - gap - footprint.reserve_band.bottom_y
-            origin_y = packed_origin if compact_missing else min(float(track.y_offset), packed_origin)
-        else:
-            preferred_gap = max(0.0, preferred_band.top_y - preferred_inner_edge)
-            gap = spacing_from_inner if compact_missing else max(spacing_from_inner, preferred_gap)
-            packed_origin = occupied_edge + gap - footprint.reserve_band.top_y
-            origin_y = packed_origin if compact_missing else max(float(track.y_offset), packed_origin)
+        origin_y = _resolve_side_slot_origin(
+            direction=direction,
+            occupied_edge=occupied_edge,
+            incoming_spacing=spacing_from_inner,
+            local_reserve_band=footprint.reserve_band,
+            preferred_origin=None if compact_missing else float(track.y_offset),
+        )
 
         item = _resolved_slot(track, footprint, origin_y)
         resolved.append(item)
         if direction == "above":
             occupied_edge = item.reserve_band.top_y
-            preferred_inner_edge = preferred_band.top_y
         else:
             occupied_edge = item.reserve_band.bottom_y
-            preferred_inner_edge = preferred_band.bottom_y
         spacing_from_inner = max(0.0, float(track.spacing_after_px))
 
     if direction == "above":
@@ -521,7 +549,6 @@ def resolve_linear_record_vertical_plan(
         above_tracks,
         direction="above",
         seed_band=seed_band,
-        axis_band=axis_band,
         footprints=footprint_map,
         overlays_by_anchor=overlays_by_anchor,
         initial_spacing=structural_spacing,
@@ -530,7 +557,6 @@ def resolve_linear_record_vertical_plan(
         below_tracks,
         direction="below",
         seed_band=seed_band,
-        axis_band=axis_band,
         footprints=footprint_map,
         overlays_by_anchor=overlays_by_anchor,
         initial_spacing=structural_spacing,

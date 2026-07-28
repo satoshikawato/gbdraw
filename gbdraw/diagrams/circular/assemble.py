@@ -387,6 +387,7 @@ def _serialize_circular_track_slot_geometry(
                 "recordIndex": int(record_index),
                 "recordId": record_id,
                 "recordLabel": record_id,
+                "axisRadiusPx": float(base_radius_px),
                 "slots": slots_payload,
             }
         ],

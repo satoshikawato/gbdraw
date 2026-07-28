@@ -92,6 +92,7 @@ class LinearCanvasConfig:
     vertical_offset: float
     horizontal_offset: float
     vertical_padding: float
+    track_spacing: float
     comparison_height: float
     canvas_padding: float
     definition_gap: float
@@ -141,6 +142,10 @@ class LinearCanvasConfig:
             vertical_offset=float(d["vertical_offset"]),
             horizontal_offset=float(d["horizontal_offset"]),
             vertical_padding=float(d["vertical_padding"]),
+            track_spacing=max(
+                0.0,
+                float(d.get("track_spacing", 0.0)),
+            ),
             comparison_height=_positive_finite_float(
                 d["comparison_height"], field_name="comparison_height"
             ),

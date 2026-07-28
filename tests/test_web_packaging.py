@@ -2961,7 +2961,8 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "if (form.suppress_gc) args.push('--suppress_gc');" in run_source
     assert "if (form.suppress_skew) args.push('--suppress_skew');" in run_source
     assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source
-    assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {" in run_source
+    assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type)" in run_source
+    assert "forceSplitLane" not in run_source
     assert "applyCircularTrackOrderPlacements(" in run_source
     assert "if (useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
@@ -3575,8 +3576,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const middleFeatureSpec = buildCircularTrackSlotSpec(
           middleFeature,
           defaultState.adv.nt,
-          defaultState.form.track_type,
-          {{ includeSide: false, forceSplitLane: true }}
+          defaultState.form.track_type
         );
         if (defaultState.form.track_type !== 'middle' || middleFeature?.side !== 'overlay' || middleFeature?.params?.lane_direction !== 'split') {{
           throw new Error(`Reset to Middle did not put Feature on the Axis: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);

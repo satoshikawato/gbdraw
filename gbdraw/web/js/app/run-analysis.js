@@ -2941,10 +2941,7 @@ json.dumps({
           circularTrackSlots.forEach((slot) => {
             args.push(
               '--circular_track_slot',
-              buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {
-                includeSide: false,
-                forceSplitLane: true
-              })
+              buildCircularTrackSlotSpec(slot, adv.nt, form.track_type)
             );
           });
           if (circularDepthEntries.length > 1) {

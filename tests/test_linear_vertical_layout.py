@@ -17,6 +17,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.linear.track_slots import (
     LinearSlotFootprint,
+    _resolve_side_slot_origin,
     resolve_linear_record_vertical_plan,
     resolve_linear_track_layout,
 )
@@ -329,9 +330,108 @@ def test_record_planner_reserves_middle_feature_band_before_depth() -> None:
     depth = plan.slot_by_id("depth")
     assert not features.reserve_band.intersects(depth.reserve_band)
     assert depth.reserve_band.top_y - features.reserve_band.bottom_y == pytest.approx(
-        canvas_config.vertical_padding
+        canvas_config.configured_track_spacing
     )
     assert plan.record_body_band == VerticalBand(-12.0, depth.reserve_band.bottom_y)
+
+
+@pytest.mark.parametrize(
+    (
+        "direction",
+        "occupied_edge",
+        "incoming_spacing",
+        "preferred_origin",
+        "expected_origin",
+    ),
+    [
+        ("above", -5.0, 0.0, -40.0, -40.0),
+        ("below", 5.0, 0.0, 40.0, 40.0),
+        ("above", -20.0, 3.0, -18.0, -33.0),
+        ("below", 20.0, 3.0, 18.0, 33.0),
+    ],
+)
+def test_side_slot_origin_uses_absolute_preference_and_spacing_once(
+    direction: str,
+    occupied_edge: float,
+    incoming_spacing: float,
+    preferred_origin: float,
+    expected_origin: float,
+) -> None:
+    assert _resolve_side_slot_origin(
+        direction=direction,
+        occupied_edge=occupied_edge,
+        incoming_spacing=incoming_spacing,
+        local_reserve_band=VerticalBand(-10.0, 10.0),
+        preferred_origin=preferred_origin,
+    ) == pytest.approx(expected_origin)
+
+
+def test_record_planner_feature_overlay_moves_numeric_only_for_protrusion() -> None:
+    spacing = 4.0
+    feature_band = VerticalBand(-10.0, 10.0)
+    content_band = VerticalBand(-10.0, 10.0)
+
+    def resolve(underlay_height: float | None):
+        slot_specs = [f"features:features@side=overlay,spacing={spacing}px"]
+        if underlay_height is not None:
+            slot_specs.append(
+                "underlay:annotations@side=overlay,h=20px,"
+                "anchor_slot=features,set_id=underlay,layer=underlay,z=-1"
+            )
+        slot_specs.append("content:gc_content@side=below,h=20px")
+        layout, _canvas_config = _base_layout(slot_specs)
+        footprints = {
+            "features": LinearSlotFootprint(feature_band, feature_band),
+            "content": LinearSlotFootprint(content_band, content_band),
+        }
+        if underlay_height is not None:
+            underlay_band = VerticalBand(0.0, underlay_height)
+            footprints["underlay"] = LinearSlotFootprint(
+                underlay_band,
+                underlay_band,
+            )
+        return resolve_linear_record_vertical_plan(
+            layout,
+            axis_band=VerticalBand(-0.5, 0.5),
+            footprints=footprints,
+        )
+
+    base_plan = resolve(None)
+    in_band_plan = resolve(20.0)
+    protruding_plan = resolve(30.0)
+    base_content = base_plan.slot_by_id("content")
+    in_band_content = in_band_plan.slot_by_id("content")
+    protruding_content = protruding_plan.slot_by_id("content")
+    protruding_underlay = protruding_plan.slot_by_id("underlay")
+
+    assert in_band_content.origin_y == pytest.approx(base_content.origin_y)
+    assert protruding_content.origin_y - base_content.origin_y == pytest.approx(10.0)
+    assert (
+        protruding_content.reserve_band.top_y
+        - protruding_underlay.reserve_band.bottom_y
+    ) == pytest.approx(spacing)
+
+
+@pytest.mark.parametrize("side", ["above", "below"])
+def test_record_planner_without_features_keeps_numeric_preferred_origin(
+    side: str,
+) -> None:
+    layout, _canvas_config = _base_layout(
+        [f"content:gc_content@side={side},h=20px"]
+    )
+    preferred_origin = layout.slots[0].y_offset
+    plan = resolve_linear_record_vertical_plan(
+        layout,
+        axis_band=VerticalBand(-0.5, 0.5),
+        footprints={
+            "content": LinearSlotFootprint(
+                VerticalBand(-10.0, 10.0),
+                VerticalBand(-10.0, 10.0),
+            ),
+        },
+    )
+
+    assert plan.slot_by_id("content").origin_y == pytest.approx(preferred_origin)
 
 
 def test_record_planner_missing_depth_has_no_paint_or_reserve() -> None:
@@ -359,6 +459,38 @@ def test_record_planner_missing_depth_has_no_paint_or_reserve() -> None:
     assert depth.paint_band is None
     assert depth.reserve_band.height == pytest.approx(0.0)
     assert plan.record_body_band == VerticalBand(-5.0, 5.0)
+
+
+def test_record_planner_missing_depth_compacts_following_numeric_track() -> None:
+    layout, canvas_config = _base_layout(
+        [
+            "features:features@side=overlay",
+            "depth:depth@side=below,h=20px",
+            "content:gc_content@side=below,h=20px",
+        ]
+    )
+    feature_band = VerticalBand(-5.0, 5.0)
+    plan = resolve_linear_record_vertical_plan(
+        layout,
+        axis_band=VerticalBand(-0.5, 0.5),
+        footprints={
+            "features": LinearSlotFootprint(feature_band, feature_band),
+            "depth": LinearSlotFootprint(
+                paint_band=None,
+                reserve_band=VerticalBand(0.0, 0.0),
+                data_available=False,
+            ),
+            "content": LinearSlotFootprint(
+                VerticalBand(-10.0, 10.0),
+                VerticalBand(-10.0, 10.0),
+            ),
+        },
+    )
+    content = plan.slot_by_id("content")
+
+    assert content.reserve_band.top_y - feature_band.bottom_y == pytest.approx(
+        canvas_config.configured_track_spacing
+    )
 
 
 def test_record_planner_comparison_band_uses_paint_not_empty_reserve() -> None:
@@ -396,7 +528,10 @@ def test_record_planner_packs_same_side_feature_and_depth_in_slot_order() -> Non
 
     features = plan.slot_by_id("features")
     depth = plan.slot_by_id("depth")
-    assert depth.reserve_band.top_y - features.reserve_band.bottom_y >= canvas_config.vertical_padding
+    assert (
+        depth.reserve_band.top_y - features.reserve_band.bottom_y
+        >= canvas_config.configured_track_spacing
+    )
 
 
 def test_record_planner_z_only_changes_paint_order_metadata() -> None:

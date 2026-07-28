@@ -34,6 +34,7 @@ width = 2000 # pixel
 vertical_offset = 50
 horizontal_offset = 120
 vertical_padding = 8
+track_spacing = 0
 comparison_height = 60
 canvas_padding = 50
 definition_gap = 20

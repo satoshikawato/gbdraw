@@ -854,6 +854,22 @@ def _sync_session_result_svg(
     if session.get("title") != example.id:
         session["title"] = example.id
         changed = True
+    run_metadata = session.get("runMetadata")
+    geometry = (
+        run_metadata.get("trackSlotGeometry")
+        if isinstance(run_metadata, dict)
+        else None
+    )
+    geometry_records = geometry.get("records") if isinstance(geometry, dict) else None
+    if isinstance(geometry_records, list):
+        for record in geometry_records:
+            if (
+                isinstance(record, dict)
+                and record.get("resultIndex") == 0
+                and record.get("resultName") != example.id
+            ):
+                record["resultName"] = example.id
+                changed = True
     if changed:
         write_session_json(example.session_path, session)
 
@@ -972,6 +988,7 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
         if example.interactive_step:
             entry["interactiveStep"] = example.interactive_step
         payload.append(entry)
+        del session, source
 
     payload.sort(key=lambda entry: int(entry["displayOrder"]))
 

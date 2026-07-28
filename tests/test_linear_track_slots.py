@@ -106,6 +106,23 @@ def _extract_group_fragment(svg_text: str, group_id: str) -> str:
     return match.group(0)
 
 
+def _resolved_slot_geometry(canvas, slot_id: str) -> dict[str, object]:
+    slots = canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    return next(slot for slot in slots if slot["slotId"] == slot_id)
+
+
+def _adjacent_band_gap(
+    inner: dict[str, object],
+    outer: dict[str, object],
+    band_key: str,
+) -> float:
+    inner_band = inner[band_key]
+    outer_band = outer[band_key]
+    assert isinstance(inner_band, dict)
+    assert isinstance(outer_band, dict)
+    return float(outer_band["topPx"]) - float(inner_band["bottomPx"])
+
+
 def test_parse_linear_track_slot_with_layout_fields() -> None:
     slot = parse_linear_track_slot("depth_1:depth@track_index=0,h=35px,spacing=8,z=2,side=below")
 
@@ -166,6 +183,16 @@ def test_linear_resolved_track_retains_spacing_after_px() -> None:
 
     assert depth_track.height == pytest.approx(10.0)
     assert depth_track.spacing_after_px == pytest.approx(8.0)
+
+
+def test_linear_track_spacing_falls_back_to_zero() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    linear_config = config_dict["canvas"]["linear"]
+    linear_config.pop("track_spacing")
+
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    assert cfg.canvas.linear.track_spacing == pytest.approx(0.0)
 
 
 def test_linear_track_slot_geometry_metadata_keeps_duplicate_record_instances() -> None:
@@ -238,6 +265,64 @@ def test_linear_record_plans_expand_only_records_with_extra_feature_lanes() -> N
 
     assert features[1]["reserveBand"]["bottomPx"] > features[0]["reserveBand"]["bottomPx"]
     assert depth[1]["resolvedOriginPx"] > depth[0]["resolvedOriginPx"]
+
+
+@pytest.mark.linear
+def test_default_middle_slots_match_explicit_geometry_and_shared_spacing() -> None:
+    overrides = {
+        "show_gc": True,
+        "show_skew": True,
+        "show_labels": False,
+        "strandedness": True,
+    }
+    default_canvas = assemble_linear_diagram_from_records(
+        [_record()],
+        legend="none",
+        config_overrides=overrides,
+    )
+    explicit_canvas = assemble_linear_diagram_from_records(
+        [_record()],
+        legend="none",
+        config_overrides=overrides,
+        linear_track_slots=[
+            "features:features@side=overlay",
+            "gc_content:dinucleotide_content@side=below,nt=GC",
+            "gc_skew:dinucleotide_skew@side=below,nt=GC",
+        ],
+    )
+    default_features = _resolved_slot_geometry(default_canvas, "features")
+    default_gc = _resolved_slot_geometry(default_canvas, "gc_content")
+    default_skew = _resolved_slot_geometry(default_canvas, "gc_skew")
+    explicit_features = _resolved_slot_geometry(explicit_canvas, "features")
+    explicit_gc = _resolved_slot_geometry(explicit_canvas, "gc_content")
+    explicit_skew = _resolved_slot_geometry(explicit_canvas, "gc_skew")
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+
+    assert default_features["reserveBand"] == pytest.approx(
+        explicit_features["reserveBand"]
+    )
+    assert default_gc["resolvedOriginPx"] == pytest.approx(
+        explicit_gc["resolvedOriginPx"]
+    )
+    assert default_gc["paintBand"] == pytest.approx(explicit_gc["paintBand"])
+    assert default_gc["reserveBand"] == pytest.approx(explicit_gc["reserveBand"])
+    assert default_skew["resolvedOriginPx"] == pytest.approx(
+        explicit_skew["resolvedOriginPx"]
+    )
+    assert default_skew["paintBand"] == pytest.approx(explicit_skew["paintBand"])
+    assert default_skew["reserveBand"] == pytest.approx(explicit_skew["reserveBand"])
+    assert cfg.canvas.linear.track_spacing == pytest.approx(0.0)
+    for band_key in ("paintBand", "reserveBand"):
+        assert _adjacent_band_gap(
+            default_features,
+            default_gc,
+            band_key,
+        ) == pytest.approx(cfg.canvas.linear.track_spacing)
+        assert _adjacent_band_gap(
+            default_gc,
+            default_skew,
+            band_key,
+        ) == pytest.approx(cfg.canvas.linear.track_spacing)
 
 
 def test_parse_linear_track_slot_aliases() -> None:

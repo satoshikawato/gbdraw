@@ -1,16 +1,33 @@
 from __future__ import annotations
 
 import base64
+from functools import cache
+import math
 import re
+from tempfile import TemporaryDirectory
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import pytest
 
+from gbdraw.api import (
+    build_request_diagram,
+    load_session_document,
+    materialize_session,
+    session_to_request,
+)
 from gbdraw.session_io import load_session
 from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
 
 
 _TAG_RE = re.compile(r"<[^>]+>")
+_SVG_NUMBER = r"-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+_PATH_POINT_RE = re.compile(
+    rf"[ML]\s*({_SVG_NUMBER})\s*,?\s*({_SVG_NUMBER})"
+)
+_TRANSLATE_RE = re.compile(
+    rf"^translate\(\s*({_SVG_NUMBER})\s*[, ]\s*({_SVG_NUMBER})\s*\)$"
+)
 
 
 def _example(example_id: str) -> GallerySessionExample:
@@ -63,7 +80,10 @@ def _option_resource_ref(
 
 
 def _visual_roots(
-    example: GallerySessionExample, session: dict[str, object]
+    example: GallerySessionExample,
+    session: dict[str, object],
+    *,
+    include_gallery: bool = False,
 ) -> tuple[tuple[str, ET.Element], ...]:
     results = session["results"]
     assert isinstance(results, list) and results
@@ -71,10 +91,15 @@ def _visual_roots(
     assert isinstance(result, dict)
     content = result.get("content")
     assert isinstance(content, str) and content
-    return (
+    roots = (
         ("session result", ET.fromstring(content)),
         ("gallery source", ET.parse(example.source_svg_path).getroot()),
     )
+    if include_gallery:
+        roots += (
+            ("gallery example", ET.parse(example.gallery_svg_path).getroot()),
+        )
+    return roots
 
 
 def _texts(root: ET.Element) -> list[str]:
@@ -88,6 +113,98 @@ def _texts(root: ET.Element) -> list[str]:
 
 def _plain_label(value: object) -> str:
     return _TAG_RE.sub("", str(value or "")).strip()
+
+
+def _group_translate_y(root: ET.Element, group_id: str) -> float:
+    group = next(
+        (element for element in root.iter() if element.get("id") == group_id),
+        None,
+    )
+    assert group is not None, group_id
+    transform = str(group.get("transform") or "")
+    match = _TRANSLATE_RE.fullmatch(transform)
+    assert match is not None, (group_id, transform)
+    return float(match.group(2))
+
+
+def _circular_axis_and_feature_band(
+    root: ET.Element,
+) -> tuple[float, float, float]:
+    axis = next(
+        (element for element in root.iter() if element.get("id") == "Axis"),
+        None,
+    )
+    assert axis is not None
+    axis_circle = next(
+        (element for element in axis.iter() if element.tag.endswith("circle")),
+        None,
+    )
+    assert axis_circle is not None
+
+    radii = [
+        math.hypot(float(x), float(y))
+        for element in root.iter()
+        if element.get("data-gbdraw-feature-id")
+        for path_data in [element.get("d")]
+        if path_data
+        for x, y in _PATH_POINT_RE.findall(path_data)
+    ]
+    assert radii
+    return float(axis_circle.get("r", "nan")), min(radii), max(radii)
+
+
+@cache
+def _materialized_track_geometry(example_id: str) -> dict[str, Any]:
+    example = _example(example_id)
+    document = load_session_document(example.session_path)
+    with TemporaryDirectory(prefix=f"gbdraw-gallery-{example_id}-") as output_dir:
+        with materialize_session(
+            document,
+            output_directory=output_dir,
+        ) as materialized:
+            prepared = build_request_diagram(
+                session_to_request(materialized),
+                session_artifacts=document.to_dict(),
+            )
+    geometry = getattr(prepared.drawing, "_gbdraw_track_slot_geometry", None)
+    assert isinstance(geometry, dict)
+    assert geometry.get("mode") == "linear"
+    return geometry
+
+
+def _local_track_geometry_signature(
+    geometry: dict[str, Any],
+) -> tuple[tuple[object, ...], ...]:
+    records = geometry.get("records")
+    assert isinstance(records, list)
+
+    def band_signature(value: object) -> tuple[float, float] | None:
+        if value is None:
+            return None
+        assert isinstance(value, dict)
+        return float(value["topPx"]), float(value["bottomPx"])
+
+    return tuple(
+        (
+            int(record["recordIndex"]),
+            str(record["recordId"]),
+            tuple(
+                (
+                    str(slot["slotId"]),
+                    str(slot["renderer"]),
+                    str(slot["side"]),
+                    float(slot["resolvedOriginPx"]),
+                    float(slot["heightPx"]),
+                    float(slot["spacingAfterPx"]),
+                    bool(slot["dataAvailable"]),
+                    band_signature(slot["paintBand"]),
+                    band_signature(slot["reserveBand"]),
+                )
+                for slot in record["slots"]
+            ),
+        )
+        for record in records
+    )
 
 
 def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels() -> None:
@@ -123,7 +240,11 @@ def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels() -> None:
     )
     assert "CDS\tgene" in _resource_text(session, priority_ref)
 
-    for location, root in _visual_roots(example, session):
+    for location, root in _visual_roots(
+        example,
+        session,
+        include_gallery=True,
+    ):
         group_ids = {element.get("id") for element in root.iter()}
         texts = set(_texts(root))
         fills = {element.get("fill") for element in root.iter()}
@@ -136,6 +257,32 @@ def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels() -> None:
             "#deaf6e",
             "#7294e3",
         } <= fills, location
+
+
+def test_hmmt_at_skew_session_and_visuals_keep_middle_feature_placement() -> None:
+    example, session = _session("HmmtDNA_ATskew")
+    request = _request(session)
+    options = request["diagramOptions"]
+    assert isinstance(options, dict)
+    tracks = options["tracks"]
+    assert isinstance(tracks, dict)
+    slots = tracks["circularTrackSlots"]
+    assert isinstance(slots, list)
+
+    feature_slot = next(
+        str(slot) for slot in slots if str(slot).startswith("features:features")
+    )
+    assert "lane_direction=split" in feature_slot
+
+    for location, root in _visual_roots(
+        example,
+        session,
+        include_gallery=True,
+    ):
+        axis_radius, feature_inner, feature_outer = (
+            _circular_axis_and_feature_band(root)
+        )
+        assert feature_inner < axis_radius < feature_outer, location
 
 
 def test_bgc_gallery_session_keeps_curated_presentation_and_styles() -> None:
@@ -382,3 +529,104 @@ def test_gallery_sessions_keep_precomputed_comparisons_and_orthogroups(
     assert isinstance(groups, list)
     assert len(groups) == orthogroup_count
     assert all(group.get("members") for group in groups)
+
+
+@pytest.mark.parametrize(
+    "example_id",
+    (
+        "hepatoplasmataceae_collinear",
+        "hepatoplasmataceae_orthogroup",
+    ),
+)
+def test_hepatoplasmataceae_gallery_keeps_shared_track_spacing(
+    example_id: str,
+) -> None:
+    example, session = _session(example_id)
+    request = _request(session)
+    options = request["diagramOptions"]
+    assert isinstance(options, dict)
+    config = options["config"]
+    assert isinstance(config, dict)
+    canvas = config["canvas"]
+    assert isinstance(canvas, dict)
+    linear = canvas["linear"]
+    assert isinstance(linear, dict)
+    declared_spacing = float(linear.get("track_spacing", 0.0))
+    assert declared_spacing == pytest.approx(0.0)
+
+    geometry = _materialized_track_geometry(example_id)
+    records = geometry["records"]
+    assert isinstance(records, list)
+    assert len(records) == 5
+
+    for record in records:
+        assert isinstance(record, dict)
+        slots = {
+            str(slot["slotId"]): slot
+            for slot in record["slots"]
+        }
+        features = slots["features"]
+        gc_content = slots["gc_content"]
+        gc_skew = slots["gc_skew"]
+        feature_reserve = features["reserveBand"]
+        gc_reserve = gc_content["reserveBand"]
+        skew_reserve = gc_skew["reserveBand"]
+        comparison_exclusion = record["comparisonExclusionBand"]
+        assert isinstance(feature_reserve, dict)
+        assert isinstance(gc_reserve, dict)
+        assert isinstance(skew_reserve, dict)
+        assert isinstance(comparison_exclusion, dict)
+        assert float(features["spacingAfterPx"]) == pytest.approx(declared_spacing)
+        assert float(gc_content["spacingAfterPx"]) == pytest.approx(declared_spacing)
+        assert (
+            float(gc_reserve["topPx"])
+            - float(feature_reserve["bottomPx"])
+        ) == pytest.approx(declared_spacing)
+        assert (
+            float(skew_reserve["topPx"])
+            - float(gc_reserve["bottomPx"])
+        ) == pytest.approx(declared_spacing)
+        assert (
+            float(comparison_exclusion["bottomPx"])
+            - float(skew_reserve["bottomPx"])
+        ) == pytest.approx(declared_spacing)
+
+    for location, root in _visual_roots(
+        example,
+        session,
+        include_gallery=True,
+    ):
+        for record in records:
+            record_index = int(record["recordIndex"])
+            record_number = record_index + 1
+            record_id = str(record["recordId"])
+            slots = {
+                str(slot["slotId"]): slot
+                for slot in record["slots"]
+            }
+            expected_group_y = {
+                f"{record_id}_record_{record_number}": float(record["axisYpx"]),
+                f"gc_content_record_{record_number}": float(
+                    slots["gc_content"]["finalYOffsetPx"]
+                ),
+                f"gc_skew_record_{record_number}": float(
+                    slots["gc_skew"]["finalYOffsetPx"]
+                ),
+            }
+            for group_id, expected_y in expected_group_y.items():
+                assert _group_translate_y(root, group_id) == pytest.approx(
+                    expected_y
+                ), (location, group_id)
+
+
+def test_hepatoplasmataceae_comparison_modes_share_record_local_track_geometry() -> None:
+    collinear = _materialized_track_geometry(
+        "hepatoplasmataceae_collinear"
+    )
+    orthogroup = _materialized_track_geometry(
+        "hepatoplasmataceae_orthogroup"
+    )
+
+    assert _local_track_geometry_signature(
+        collinear
+    ) == _local_track_geometry_signature(orthogroup)

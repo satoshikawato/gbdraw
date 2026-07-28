@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import copy
+import gc
 import gzip
 import json
+import math
 import os
 import re
 import shutil
@@ -34,6 +36,10 @@ from gbdraw.session_io import (  # noqa: E402
     write_session_json,
 )
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
+from gbdraw.tracks.circular import (  # noqa: E402
+    normalize_circular_track_slots_with_axis,
+    parse_circular_track_slots,
+)
 
 
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
@@ -43,6 +49,30 @@ VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
 VIBRIO_RAW_ENTRY_COUNT = 59
 VIBRIO_GZIP_HARD_LIMIT = 100_000_000
 VIBRIO_EXPANDED_HARD_LIMIT = 536_870_912
+GEOMETRY_TOLERANCE_PX = 1e-6
+LINEAR_SHARED_SPACING_RENDERERS = frozenset(
+    {"features", "dinucleotide_content", "dinucleotide_skew"}
+)
+REFRESHED_GALLERY_ARTIFACT_KEYS = (
+    "version",
+    "createdAt",
+    "results",
+    "features",
+    "editorState",
+    "orthogroupState",
+    "runMetadata",
+    "losatCache",
+    "losatDerivedCache",
+    "proteinIdentityManifest",
+    "legacyArtifacts",
+)
+SESSION_ENVELOPE_KEYS = (
+    "format",
+    "version",
+    "createdAt",
+    "renderRequest",
+    "resources",
+)
 
 
 def _directed_cross_pairs(
@@ -294,23 +324,13 @@ def _merge_refreshed_gallery_artifacts(
 ) -> dict[str, Any]:
     """Keep the promoted request authoritative while accepting fresh render artifacts."""
 
-    merged = copy.deepcopy(dict(promoted_session))
-    for key in (
-        "version",
-        "createdAt",
-        "results",
-        "features",
-        "editorState",
-        "orthogroupState",
-        "losatCache",
-        "losatDerivedCache",
-        "proteinIdentityManifest",
-        "legacyArtifacts",
-    ):
+    merged = dict(promoted_session)
+    for key in REFRESHED_GALLERY_ARTIFACT_KEYS:
         if key in refreshed_session:
-            merged[key] = copy.deepcopy(refreshed_session[key])
+            merged[key] = refreshed_session[key]
         elif key in {
             "editorState",
+            "runMetadata",
             "losatCache",
             "losatDerivedCache",
             "proteinIdentityManifest",
@@ -321,18 +341,260 @@ def _merge_refreshed_gallery_artifacts(
     refreshed_resources = refreshed_session.get("resources")
     promoted_resources = promoted_session.get("resources")
     merged["resources"] = {
-        **(
-            copy.deepcopy(dict(refreshed_resources))
-            if isinstance(refreshed_resources, Mapping)
-            else {}
-        ),
-        **(
-            copy.deepcopy(dict(promoted_resources))
-            if isinstance(promoted_resources, Mapping)
-            else {}
-        ),
+        **(dict(refreshed_resources) if isinstance(refreshed_resources, Mapping) else {}),
+        **(dict(promoted_resources) if isinstance(promoted_resources, Mapping) else {}),
     }
-    return merged
+    envelope = {
+        key: merged.pop(key)
+        for key in SESSION_ENVELOPE_KEYS
+        if key in merged
+    }
+    envelope.update(merged)
+    return envelope
+
+
+def _geometry_number(value: object) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Resolved track geometry has an invalid number") from exc
+    if not math.isfinite(number):
+        raise ValueError("Resolved track geometry has a non-finite number")
+    return number
+
+
+def _geometry_band(slot: Mapping[str, Any]) -> tuple[float, float]:
+    band = slot.get("reserveBand")
+    if not isinstance(band, Mapping):
+        raise ValueError("Resolved track geometry has no reserveBand")
+    top = _geometry_number(band.get("topPx"))
+    bottom = _geometry_number(band.get("bottomPx"))
+    if bottom + GEOMETRY_TOLERANCE_PX < top:
+        raise ValueError("Resolved track geometry has an inverted reserveBand")
+    return top, bottom
+
+
+def _geometry_records(geometry: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    records = geometry.get("records")
+    if (
+        not isinstance(records, list)
+        or not records
+        or any(not isinstance(record, Mapping) for record in records)
+    ):
+        raise ValueError("Resolved track geometry has no valid records")
+    return records
+
+
+def _request_tracks(request: Mapping[str, Any]) -> Mapping[str, Any]:
+    options = request.get("diagramOptions")
+    tracks = options.get("tracks") if isinstance(options, Mapping) else None
+    return tracks if isinstance(tracks, Mapping) else {}
+
+
+def _request_default_linear_track_spacing(
+    request: Mapping[str, Any],
+) -> float | None:
+    options = request.get("diagramOptions")
+    config = options.get("config") if isinstance(options, Mapping) else None
+    canvas = config.get("canvas") if isinstance(config, Mapping) else None
+    linear = canvas.get("linear") if isinstance(canvas, Mapping) else None
+    if not isinstance(linear, Mapping):
+        return None
+    if linear.get("track_spacing") is not None:
+        return max(0.0, _geometry_number(linear["track_spacing"]))
+    return 0.0
+
+
+def _linear_spacing_after(
+    slot: Mapping[str, Any],
+    *,
+    default_track_spacing: float | None,
+) -> float:
+    actual = max(0.0, _geometry_number(slot.get("spacingAfterPx")))
+    if (
+        default_track_spacing is not None
+        and slot.get("renderer") in LINEAR_SHARED_SPACING_RENDERERS
+    ):
+        if not math.isclose(
+            actual,
+            default_track_spacing,
+            rel_tol=1e-9,
+            abs_tol=GEOMETRY_TOLERANCE_PX,
+        ):
+            raise ValueError(
+                "Resolved Linear default spacing metadata is inconsistent "
+                f"at slot {slot.get('slotId')!r}"
+            )
+        return default_track_spacing
+    return actual
+
+
+def _validate_circular_feature_geometry(
+    request: Mapping[str, Any],
+    geometry: Mapping[str, Any],
+) -> None:
+    tracks = _request_tracks(request)
+    specs = tracks.get("circularTrackSlots")
+    if specs is None:
+        return
+    expected_slots = normalize_circular_track_slots_with_axis(
+        parse_circular_track_slots(specs),
+        tracks.get("circularTrackAxisIndex"),
+    )
+    expected_lanes = {
+        str(slot.id): str(slot.params.get("lane_direction") or "")
+        for slot in expected_slots
+        if slot.enabled and slot.renderer == "features"
+    }
+
+    for record in _geometry_records(geometry):
+        axis_radius = _geometry_number(record.get("axisRadiusPx"))
+        if axis_radius <= 0:
+            raise ValueError("Resolved circular track geometry has a nonpositive Axis")
+        slots = record.get("slots")
+        if not isinstance(slots, list):
+            raise ValueError("Resolved circular track geometry has no slots")
+        actual_features = {
+            str(slot.get("slotId")): slot
+            for slot in slots
+            if isinstance(slot, Mapping) and slot.get("renderer") == "features"
+        }
+        for slot_id, lane in expected_lanes.items():
+            actual = actual_features.get(slot_id)
+            if actual is None:
+                raise ValueError(
+                    f"Resolved circular Feature slot {slot_id!r} is missing"
+                )
+
+            center = (
+                _geometry_number(actual.get("radiusFactor"))
+                * axis_radius
+            )
+            half_width = 0.5 * _geometry_number(actual.get("widthPx"))
+            inner = center - half_width
+            outer = center + half_width
+            valid_band = {
+                "split": (
+                    inner < axis_radius - GEOMETRY_TOLERANCE_PX
+                    and outer > axis_radius + GEOMETRY_TOLERANCE_PX
+                ),
+                "inside": outer <= axis_radius + GEOMETRY_TOLERANCE_PX,
+                "outside": inner >= axis_radius - GEOMETRY_TOLERANCE_PX,
+            }.get(lane, False)
+            if not valid_band:
+                raise ValueError(
+                    f"Resolved circular Feature lane geometry for {slot_id!r} "
+                    f"is inconsistent with lane_direction={lane}"
+                )
+
+
+def _validate_linear_side_adjacency(
+    slots: list[Mapping[str, Any]],
+    *,
+    direction: str,
+    feature_band: tuple[float, float] | None,
+    feature_spacing: float,
+    exact_spacing: bool,
+    default_track_spacing: float | None,
+) -> None:
+    occupied_band = feature_band
+    incoming_spacing = max(0.0, feature_spacing)
+    for slot in sorted(
+        (slot for slot in slots if slot.get("side") == direction),
+        key=lambda slot: int(slot.get("slotIndex", -1)),
+        reverse=direction == "above",
+    ):
+        reserve_band = _geometry_band(slot)
+        if (
+            slot.get("paintBand") is None
+            and reserve_band[1] - reserve_band[0] <= GEOMETRY_TOLERANCE_PX
+        ):
+            continue
+        if occupied_band is None:
+            occupied_band = reserve_band
+            incoming_spacing = _linear_spacing_after(
+                slot,
+                default_track_spacing=default_track_spacing,
+            )
+            continue
+        gap = (
+            occupied_band[0] - reserve_band[1]
+            if direction == "above"
+            else reserve_band[0] - occupied_band[1]
+        )
+        if gap < incoming_spacing - GEOMETRY_TOLERANCE_PX:
+            raise ValueError(
+                "Resolved Linear adjacent reserve bands overlap or violate "
+                f"declared spacing at slot {slot.get('slotId')!r}"
+            )
+        if (
+            exact_spacing
+            and not math.isclose(
+                gap,
+                incoming_spacing,
+                rel_tol=1e-9,
+                abs_tol=GEOMETRY_TOLERANCE_PX,
+            )
+        ):
+            raise ValueError(
+                "Resolved Linear default adjacent reserve gap "
+                f"is inconsistent at slot {slot.get('slotId')!r}"
+            )
+        occupied_band = reserve_band
+        incoming_spacing = _linear_spacing_after(
+            slot,
+            default_track_spacing=default_track_spacing,
+        )
+
+
+def _validate_linear_reserve_geometry(
+    request: Mapping[str, Any],
+    geometry: Mapping[str, Any],
+) -> None:
+    default_layout = _request_tracks(request).get("linearTrackSlots") is None
+    default_track_spacing = (
+        _request_default_linear_track_spacing(request)
+        if default_layout
+        else None
+    )
+    for record in _geometry_records(geometry):
+        slots_value = record.get("slots")
+        if not isinstance(slots_value, list):
+            raise ValueError("Resolved Linear track geometry has no slots")
+        slots = [slot for slot in slots_value if isinstance(slot, Mapping)]
+        structural = [
+            slot
+            for slot in slots
+            if slot.get("side") == "overlay"
+            and slot.get("renderer") == "features"
+            and slot.get("dataAvailable") is not False
+            and slot.get("paintBand") is not None
+        ]
+        if structural:
+            feature_bands = [_geometry_band(slot) for slot in structural]
+            feature_band = (
+                min(top for top, _bottom in feature_bands),
+                max(bottom for _top, bottom in feature_bands),
+            )
+            feature_spacing = max(
+                _linear_spacing_after(
+                    slot,
+                    default_track_spacing=default_track_spacing,
+                )
+                for slot in structural
+            )
+        else:
+            feature_band = None
+            feature_spacing = 0.0
+        for direction in ("above", "below"):
+            _validate_linear_side_adjacency(
+                slots,
+                direction=direction,
+                feature_band=feature_band,
+                feature_spacing=feature_spacing,
+                exact_spacing=default_layout,
+                default_track_spacing=default_track_spacing,
+            )
 
 
 def _validate_staged_gallery_session(
@@ -340,6 +602,7 @@ def _validate_staged_gallery_session(
     session: dict[str, Any],
     *,
     artifact_path: Path | None = None,
+    require_track_geometry: bool = False,
 ) -> None:
     from tools.prepare_interactive_gallery_assets import (
         EXAMPLES,
@@ -355,6 +618,29 @@ def _validate_staged_gallery_session(
     request = session.get("renderRequest")
     if not isinstance(request, Mapping) or request.get("schema") != 3:
         raise ValueError(f"{session_path.name} has no canonical schema-3 render request")
+    run_metadata = session.get("runMetadata")
+    geometry = (
+        run_metadata.get("trackSlotGeometry")
+        if isinstance(run_metadata, Mapping)
+        else None
+    )
+    if require_track_geometry and not isinstance(geometry, Mapping):
+        raise ValueError(
+            f"{session_path.name} has no resolved track-slot run metadata"
+        )
+    if isinstance(geometry, Mapping):
+        if (
+            geometry.get("schema") != 1
+            or geometry.get("source") != "resolved"
+            or geometry.get("mode") != request.get("mode")
+        ):
+            raise ValueError(
+                f"{session_path.name} has invalid resolved track-slot run metadata"
+            )
+        if request["mode"] == "circular":
+            _validate_circular_feature_geometry(request, geometry)
+        elif request["mode"] == "linear":
+            _validate_linear_reserve_geometry(request, geometry)
     resources = session.get("resources")
     if not isinstance(resources, Mapping):
         raise ValueError(f"{session_path.name} has no canonical resources")
@@ -455,13 +741,13 @@ def _validate_staged_gallery_session(
             "proteinIdentityManifest",
         )
     }
-    if "p_r_" in json.dumps(protein_artifacts, ensure_ascii=False):
-        raise ValueError(
-            f"{session_path.name} contains unresolved legacy protein identifiers"
-        )
     serialized_protein_artifacts = json.dumps(
         protein_artifacts, ensure_ascii=False
     )
+    if "p_r_" in serialized_protein_artifacts:
+        raise ValueError(
+            f"{session_path.name} contains unresolved legacy protein identifiers"
+        )
     if re.search(
         r"@.+\|.+~f_[0-9a-f]{64}",
         serialized_protein_artifacts,
@@ -470,6 +756,7 @@ def _validate_staged_gallery_session(
             f"{session_path.name} contains unsupported long protein transport "
             "identifiers"
         )
+    del protein_artifacts, serialized_protein_artifacts
 
     def referenced_resource_ids(value: object):
         if isinstance(value, Mapping):
@@ -530,12 +817,34 @@ def _refresh_one_session(
         if not env.get("PYTHONPATH")
         else f"{REPO_ROOT}{os.pathsep}{env['PYTHONPATH']}"
     )
+    source_cli = _session_cli_invocation(session)
+    cli_source_session = (
+        {"cliInvocation": copy.deepcopy(dict(source_cli))}
+        if source_cli is not None
+        else {}
+    )
+    render_request = session.get("renderRequest")
+    is_canonical = (
+        isinstance(render_request, Mapping) and render_request.get("schema") == 3
+    )
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
         tmpdir_path = Path(tmpdir)
         source_session = tmpdir_path / f"source-{session_path.name}"
         write_session_json(source_session, session)
-        render_session = tmpdir_path / "promoted.gbdraw-session.json"
-        _promote_gallery_session(source_session, render_session, env=env)
+        if is_canonical:
+            render_session = source_session
+            promoted_payload = session
+        else:
+            render_session = tmpdir_path / "promoted.gbdraw-session.json"
+            del session
+            gc.collect()
+            _promote_gallery_session(source_session, render_session, env=env)
+            promoted_payload = load_session(render_session)
+        for key in REFRESHED_GALLERY_ARTIFACT_KEYS:
+            promoted_payload.pop(key, None)
+        if is_canonical:
+            del session
+        gc.collect()
         refreshed_session = tmpdir_path / session_path.name
         subprocess.run(
             [
@@ -556,18 +865,21 @@ def _refresh_one_session(
             env=env,
             check=True,
         )
-        promoted_payload = load_session(render_session)
+        rendered_payload = load_session(refreshed_session)
         refreshed_payload = _merge_refreshed_gallery_artifacts(
             promoted_payload,
-            load_session(refreshed_session),
+            rendered_payload,
         )
+        del promoted_payload, rendered_payload
+        gc.collect()
         _preserve_gallery_cli_invocation(
-            session,
+            cli_source_session,
             refreshed_payload,
             mode=mode,
         )
         write_session_json(refreshed_session, refreshed_payload)
-        load_session(refreshed_session)
+        del refreshed_payload
+        gc.collect()
         shutil.move(str(refreshed_session), destination_path or session_path)
 
 
@@ -600,7 +912,10 @@ def refresh_gallery_sessions(
                 session_path,
                 staged_session,
                 artifact_path=staged_path,
+                require_track_geometry=True,
             )
+            del staged_session
+            gc.collect()
             staged_paths.append((session_path, staged_path))
 
         for session_path, staged_path in staged_paths:

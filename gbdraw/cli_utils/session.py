@@ -463,6 +463,19 @@ def render_canonical_session_if_present(
                     dict(group) for group in interactive_context.orthogroups
                 ]
                 adjunct["orthogroupState"] = orthogroup_state
+            geometry_records = collect_track_slot_geometry_records(
+                rendered.drawing,
+                result_index=0,
+                result_name=str(request.output.output_prefix),
+            )
+            run_metadata = build_track_slot_geometry_run_metadata(
+                mode=mode,
+                records=geometry_records,
+            )
+            if run_metadata:
+                adjunct["runMetadata"] = run_metadata
+            else:
+                adjunct.pop("runMetadata", None)
             save_session_document(
                 sidecar_path,
                 request,

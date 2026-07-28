@@ -23,6 +23,13 @@ const {
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-track-slots.js'))
 );
+const {
+  buildCircularTrackSlotSpec,
+  parseCircularTrackSlotSpec,
+  resolveCircularTrackFeaturePlacement
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'circular-track-slots.js'))
+);
 const { validateTrackSlotBindingInvariants } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'track-slot-validation.js'))
 );
@@ -370,6 +377,77 @@ const circularSlotsDisabled = buildCanonicalSessionRequest({ state, filesData })
 assert.equal(circularSlotsDisabled.renderRequest.diagramOptions.tracks.circularTrackSlots, null);
 assert.equal(circularSlotsDisabled.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, null);
 state.adv.circular_track_slots_axis_index = null;
+
+const circularFeaturePresetCases = [
+  { preset: 'middle', laneDirection: 'split', side: 'overlay', axisIndex: 0 },
+  { preset: 'tuckin', laneDirection: 'inside', side: 'inside', axisIndex: 0 },
+  { preset: 'spreadout', laneDirection: 'outside', side: 'outside', axisIndex: 1 }
+];
+for (const { preset, laneDirection, side, axisIndex } of circularFeaturePresetCases) {
+  const featureSlot = {
+    id: 'features',
+    renderer: 'features',
+    enabled: true,
+    width: null,
+    radius: null,
+    spacing: null,
+    inner_gap_px: null,
+    outer_gap_px: null,
+    side,
+    z: 0,
+    params: { lane_direction: laneDirection }
+  };
+  assert.deepEqual(
+    resolveCircularTrackFeaturePlacement(featureSlot, preset),
+    { laneDirection, side }
+  );
+  const liveSpec = buildCircularTrackSlotSpec(featureSlot, state.adv.nt, preset);
+  assert.match(liveSpec, new RegExp(`(?:@|,)lane_direction=${laneDirection}(?:,|$)`));
+
+  state.form.track_type = preset;
+  state.adv.circular_track_slots_enabled = true;
+  state.adv.circular_track_slots_axis_index = axisIndex;
+  state.adv.circular_track_slots = [featureSlot];
+  const presetCanonical = buildCanonicalSessionRequest({ state, filesData });
+  const canonicalSpec = presetCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots[0];
+  assert.equal(canonicalSpec, liveSpec);
+
+  const presetProjection = projectCanonicalSessionRequest(presetCanonical);
+  const projectedFeature = presetProjection.config.adv.circular_track_slots[0];
+  assert.deepEqual(
+    resolveCircularTrackFeaturePlacement(projectedFeature, preset),
+    { laneDirection, side }
+  );
+  assert.equal(
+    buildCircularTrackSlotSpec(projectedFeature, state.adv.nt, preset),
+    canonicalSpec
+  );
+}
+
+for (const explicitLaneDirection of ['inside', 'outside', 'split']) {
+  const explicitSide = explicitLaneDirection === 'split' ? 'overlay' : explicitLaneDirection;
+  const explicitSlot = {
+    id: 'features',
+    renderer: 'features',
+    enabled: true,
+    side: explicitSide,
+    params: { lane_direction: explicitLaneDirection }
+  };
+  for (const preset of ['middle', 'tuckin', 'spreadout']) {
+    const spec = buildCircularTrackSlotSpec(explicitSlot, 'GC', preset);
+    assert.match(spec, new RegExp(`(?:@|,)lane_direction=${explicitLaneDirection}(?:,|$)`));
+    const parsed = parseCircularTrackSlotSpec(spec, 0, 'GC', preset);
+    assert.deepEqual(
+      resolveCircularTrackFeaturePlacement(parsed, preset),
+      { laneDirection: explicitLaneDirection, side: explicitSide }
+    );
+  }
+}
+
+state.form.track_type = 'tuckin';
+state.adv.circular_track_slots_enabled = false;
+state.adv.circular_track_slots_axis_index = null;
+state.adv.circular_track_slots = [];
 
 const legacyRepeatCanonical = structuredClone(canonical);
 legacyRepeatCanonical.renderRequest.schema = 2;

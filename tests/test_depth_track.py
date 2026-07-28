@@ -331,7 +331,7 @@ def test_linear_depth_gc_track_offsets_reserve_visual_gap() -> None:
     gc_bottom = canvas_config.gc_content_track_offset + (0.5 * canvas_config.gc_height)
 
     assert gc_top - depth_bottom == pytest.approx(cfg.canvas.linear.depth_padding)
-    assert skew_top == pytest.approx(gc_bottom)
+    assert skew_top - gc_bottom == pytest.approx(cfg.canvas.linear.track_spacing)
     assert canvas_config.depth_padding + canvas_config.gc_padding + canvas_config.skew_padding == pytest.approx(
         canvas_config.plot_tracks_height
     )
@@ -355,8 +355,11 @@ def test_linear_depth_gc_track_offsets_reserve_visual_gap() -> None:
     ) == pytest.approx(
         cfg.canvas.linear.depth_padding
     )
-    assert slots["gc_skew"]["reserveBand"]["topPx"] == pytest.approx(
-        slots["gc_content"]["reserveBand"]["bottomPx"]
+    assert (
+        slots["gc_skew"]["reserveBand"]["topPx"]
+        - slots["gc_content"]["reserveBand"]["bottomPx"]
+    ) == pytest.approx(
+        cfg.canvas.linear.track_spacing
     )
     assert depth_y == pytest.approx(geometry["axisYpx"] + slots["depth"]["resolvedOriginPx"])
     assert gc_y == pytest.approx(geometry["axisYpx"] + slots["gc_content"]["resolvedOriginPx"])

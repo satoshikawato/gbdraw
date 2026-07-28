@@ -354,11 +354,26 @@ const applyPlacementDefaults = (slot, placement = 'inside') => {
   }
 };
 
-const featureLaneForSlot = (slot, preset = 'tuckin') => {
+export const resolveCircularTrackFeaturePlacement = (slot, preset = 'tuckin') => {
   const params = cloneParams(slot?.params);
   const rawLane = normalizeOptionalText(params.lane_direction ?? params.lanes);
-  return normalizeLaneDirection(rawLane, laneDirectionForPreset(preset));
+  const explicitSide = normalizeOptionalPlacement(slot?.side);
+  const laneDirection = rawLane === null
+    ? (
+        explicitSide === null
+          ? laneDirectionForPreset(preset)
+          : laneDirectionForSide(explicitSide)
+      )
+    : normalizeLaneDirection(rawLane);
+  return {
+    laneDirection,
+    side: sideForLaneDirection(laneDirection)
+  };
 };
+
+const featureLaneForSlot = (slot, preset = 'tuckin') => (
+  resolveCircularTrackFeaturePlacement(slot, preset).laneDirection
+);
 
 const syncFeaturePlacement = (slot, preset = 'tuckin') => {
   if (!slot || slot.renderer !== 'features') return;
@@ -728,20 +743,21 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
   }
   if (renderer === 'features') {
     const rawLaneDirection = normalizeOptionalText(params.lane_direction ?? params.lanes);
+    delete params.lanes;
     if (rawLaneDirection === null) {
       delete params.lane_direction;
-      delete params.lanes;
-      if (side !== null) params.lane_direction = laneDirectionForSide(side);
-    } else {
-      const normalizedLaneDirection = normalizeLaneDirection(rawLaneDirection);
-      delete params.lanes;
-      if (normalizedLaneDirection === 'inside') {
-        params.lane_direction = 'inside';
-        side = 'inside';
-      } else {
-        params.lane_direction = normalizedLaneDirection;
-        side = sideForLaneDirection(params.lane_direction);
+      if (side !== null) {
+        const placement = resolveCircularTrackFeaturePlacement({ side, params }, preset);
+        params.lane_direction = placement.laneDirection;
+        side = placement.side;
       }
+    } else {
+      const placement = resolveCircularTrackFeaturePlacement({
+        side,
+        params: { ...params, lane_direction: rawLaneDirection }
+      }, preset);
+      params.lane_direction = placement.laneDirection;
+      side = placement.side;
     }
   }
   if (renderer === 'depth') {
@@ -845,21 +861,11 @@ const appendOption = (options, key, value) => {
 };
 
 export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuckin', optionsOverride = {}) => {
-  const sourceParams = cloneParams(slot?.params);
-  const sourceLaneDirection = normalizeOptionalText(sourceParams.lane_direction ?? sourceParams.lanes);
-  const sourceRequestsSplitLane = (
-    String(slot?.renderer || '').trim().toLowerCase() === 'features' &&
-    (
-      normalizeOptionalPlacement(slot?.side) === 'overlay' ||
-      (sourceLaneDirection !== null && normalizeLaneDirection(sourceLaneDirection) === 'split')
-    )
-  );
   const normalized = normalizeCircularTrackSlot(slot, 0, defaultNt, preset);
   const options = [];
   const params = normalized.params || {};
   const normalizedPreset = normalizeCircularTrackPreset(preset);
   const includeSide = optionsOverride?.includeSide !== false;
-  const forceSplitLane = optionsOverride?.forceSplitLane === true;
 
   if (!normalized.enabled) options.push('enabled=false');
   appendOption(options, 'w', normalized.width);
@@ -879,19 +885,8 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
       appendOption(options, 'preset', params.preset);
     }
   } else if (normalized.renderer === 'features') {
-    const laneDirection = normalizeOptionalText(params.lane_direction);
-    const effectiveLaneDirection = laneDirection !== null
-      ? normalizeLaneDirection(laneDirection)
-      : (sourceRequestsSplitLane ? 'split' : null);
-    if (
-      effectiveLaneDirection !== null &&
-      (
-        (forceSplitLane && effectiveLaneDirection === 'split') ||
-        effectiveLaneDirection !== laneDirectionForPreset(normalizedPreset)
-      )
-    ) {
-      appendOption(options, 'lane_direction', effectiveLaneDirection);
-    }
+    const placement = resolveCircularTrackFeaturePlacement(normalized, normalizedPreset);
+    appendOption(options, 'lane_direction', placement.laneDirection);
   } else if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
     const nt = normalizeOptionalText(params.nt);
     if (nt !== null && normalizeNt(nt) !== normalizeNt(defaultNt)) {

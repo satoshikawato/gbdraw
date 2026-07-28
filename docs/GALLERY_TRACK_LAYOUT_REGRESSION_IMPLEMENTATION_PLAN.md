@@ -11,6 +11,11 @@
   - [`LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md`](LINEAR_TRACK_OCCUPANCY_LAYOUT_IMPLEMENTATION_PLAN.md)
   - [`LOSAT_CACHE_IDENTITY_AND_LINEAR_SPACING_REGRESSION_IMPLEMENTATION_PLAN.md`](LOSAT_CACHE_IDENTITY_AND_LINEAR_SPACING_REGRESSION_IMPLEMENTATION_PLAN.md)
 
+> **実装時の受入条件更新 (2026-07-28):** 画面確認に基づき、Linear の最終 target は
+> Feature→GC content、GC content→GC skew、GC skew→comparison の3境界を共通の
+> `track_spacing = 0 px` にする。以下の 8 px は回帰調査時の旧 contract / baseline を示し、
+> 最終受入値ではない。
+
 ## 0. 結論
 
 今回の二つの表示不具合は、同じ Gallery 更新で表面化したが、根因は独立している。
@@ -245,6 +250,8 @@ palette、repeat-region underlay は主原因ではない。underlay は Feature
 7. missing Depth の compaction contract は維持し、今回の変更に便乗して再定義しない。
 8. comparison kind と record-row spacing は record-local Feature→GC geometry を変えない。
 9. renderer は引き続き resolved origin のみを使い、独自の Y 補正を持たない。
+10. Default の `track_spacing` は 0 px とし、Feature→GC、GC→skew、
+    skew→comparison exclusion boundary を同じ接触条件にする。
 
 ### 3.3 SOLID / DRY / KISS の適用
 
@@ -282,7 +289,7 @@ palette、repeat-region underlay は主原因ではない。underlay は Feature
    - default-only preferred-origin rewrite が Default と同値 explicit slots を不一致にする。
    - synthetic seed band に対し、`preferred_gap` 再加算が absolute preferred-origin contract と
      不一致になる。
-   - Feature composite→GC reserve gap が `vertical_padding` と許容誤差内で一致する。
+   - Feature composite→GC reserve gap が `track_spacing` と許容誤差内で一致する。
 6. no-feature、custom preferred origin、sparse Depth を修正前に characterization し、
    二つの Linear 変更を別々に適用しても意図した挙動を失わないことを確認する。
 
@@ -341,7 +348,7 @@ palette、repeat-region underlay は主原因ではない。underlay は Feature
 
 完了条件:
 
-- Middle + separate strands の Feature→GC reserve gap は 8 px。
+- Middle + separate strands の Feature→GC reserve gap は 0 px。
 - Default と同値 explicit slots が同じ geometry。
 - Feature lane が増えた record だけ、必要量だけ numeric tracks が外側へ移動する。
 - Above は Below の鏡像、Below は Feature と numeric が同じ側でも非衝突。
@@ -579,8 +586,8 @@ Chromium が sandbox error で起動できない場合は、同じ local browser
 
 ### Hepatoplasmataceae
 
-- 全 record の Feature composite reserve bottom→GC reserve top が既定 8 px。
-- GC→skew は宣言された spacing と一致し、非衝突・非 clipping。
+- 全 record の Feature composite reserve bottom→GC reserve top が既定 0 px。
+- GC→skew と skew→comparison exclusion boundary も 0 px で接し、clipping しない。
 - Default と同値 explicit slots の geometry が一致する。
 - collinear / orthogroup の record-local geometry が一致する。
 - comparison ribbon / link count / identity / metadata は変わらない。

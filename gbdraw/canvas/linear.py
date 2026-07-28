@@ -91,6 +91,7 @@ class LinearCanvasConfigurator:
     vertical_offset (float): Vertical offset for alignment.
     horizontal_offset (float): Horizontal offset for alignment.
     vertical_padding (float): Vertical padding between elements.
+    configured_track_spacing (float): Default spacing between linear data tracks.
     comparison_height (float): Height for comparison tracks.
     canvas_padding (float): Padding around the canvas.
     definition_gap (float): Minimum gap between definition text and record axis.
@@ -147,6 +148,7 @@ class LinearCanvasConfigurator:
         self.horizontal_offset: float = cfg.canvas.linear.horizontal_offset
         self.original_horizontal_offset = self.horizontal_offset
         self.vertical_padding: float = cfg.canvas.linear.vertical_padding
+        self.configured_track_spacing: float = cfg.canvas.linear.track_spacing
         self.has_comparisons: bool = has_comparisons
         # Store the configured comparison_height for BLAST ribbons
         self.configured_comparison_height: float = cfg.canvas.linear.comparison_height
@@ -251,6 +253,7 @@ class LinearCanvasConfigurator:
                     key="gc_content",
                     top_extent=gc_top_extent,
                     bottom_extent=gc_bottom_extent,
+                    gap_after=self.configured_track_spacing if self.show_skew else 0.0,
                 )
             )
         if self.show_skew:

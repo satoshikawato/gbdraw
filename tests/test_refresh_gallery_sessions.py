@@ -6,7 +6,15 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
+from gbdraw.api import (
+    CircularDiagramRequest,
+    InMemoryRecordSource,
+    RecordInput,
+    save_session_document,
+)
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -32,6 +40,7 @@ from tools.refresh_gallery_sessions import (
     _gallery_file_transaction,
     _merge_refreshed_gallery_artifacts,
     _preserve_gallery_cli_invocation,
+    _refresh_one_session,
     _session_path,
     _validate_gallery_session_inventory,
     _validate_staged_gallery_session,
@@ -282,7 +291,7 @@ def test_preserve_gallery_cli_invocation_reports_missing_source_cli() -> None:
 
 def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() -> None:
     promoted = {
-        "version": 33,
+        "format": "gbdraw-session",
         "renderRequest": {"diagramOptions": {"palette": "curated"}},
         "config": {"labels": "curated"},
         "resources": {
@@ -291,11 +300,15 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
         },
         "results": [{"content": "stale"}],
         "features": {"extractedFeatures": []},
+        "runMetadata": {"trackSlotGeometry": {"records": ["stale"]}},
         "losatCache": {"entries": [{"schema": 2, "program": "blastp"}]},
         "legacyArtifacts": {"proteinRawCandidates": {"schema": 1, "entries": ["old"]}},
+        "version": 33,
+        "createdAt": "old",
     }
     refreshed = {
         "version": 36,
+        "createdAt": "fresh",
         "renderRequest": {"diagramOptions": {"palette": "default"}},
         "config": {"labels": "lost"},
         "resources": {
@@ -305,6 +318,14 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
         "results": [{"content": "fresh"}],
         "features": {"extractedFeatures": [{"svg_id": "feature-1"}]},
         "orthogroupState": {"groups": [{"id": "og_1"}]},
+        "runMetadata": {
+            "trackSlotGeometry": {
+                "schema": 1,
+                "mode": "linear",
+                "source": "resolved",
+                "records": [{"recordIndex": 0}],
+            }
+        },
         "losatCache": {"entries": [{"schema": 4, "program": "blastp"}]},
         "losatDerivedCache": {"entries": [{"schema": 3}]},
         "proteinIdentityManifest": {
@@ -317,6 +338,13 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
 
     merged = _merge_refreshed_gallery_artifacts(promoted, refreshed)
 
+    assert list(merged)[:5] == [
+        "format",
+        "version",
+        "createdAt",
+        "renderRequest",
+        "resources",
+    ]
     assert merged["renderRequest"] == promoted["renderRequest"]
     assert merged["config"] == promoted["config"]
     assert merged["resources"]["curated"] == {"data": "promoted"}
@@ -325,11 +353,356 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
     assert merged["results"] == refreshed["results"]
     assert merged["features"] == refreshed["features"]
     assert merged["orthogroupState"] == refreshed["orthogroupState"]
+    assert merged["runMetadata"] == refreshed["runMetadata"]
     assert merged["version"] == 36
+    assert merged["createdAt"] == "fresh"
     assert merged["losatCache"] == refreshed["losatCache"]
     assert merged["losatDerivedCache"] == refreshed["losatDerivedCache"]
     assert merged["proteinIdentityManifest"] == refreshed["proteinIdentityManifest"]
     assert "legacyArtifacts" not in merged
+
+
+def _staged_geometry_session(
+    *,
+    mode: str,
+    records: list[dict[str, object]] | None,
+    tracks: dict[str, object] | None = None,
+) -> dict[str, object]:
+    request: dict[str, object] = {"schema": 3, "mode": mode}
+    options: dict[str, object] = {}
+    if mode == "linear":
+        options["config"] = {
+            "canvas": {
+                "linear": {
+                    "vertical_padding": 8.0,
+                }
+            }
+        }
+    if tracks is not None:
+        options["tracks"] = tracks
+    if options:
+        request["diagramOptions"] = options
+    session: dict[str, object] = {
+        "format": "gbdraw-session",
+        "version": CURRENT_SESSION_VERSION,
+        "renderRequest": request,
+        "resources": {},
+        "results": [{"name": "result", "content": "<svg></svg>"}],
+        "losatCache": {"entries": []},
+        "losatDerivedCache": {"entries": []},
+        "proteinIdentityManifest": {
+            "schema": PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+            "proteinSets": {},
+            "recordAnalyses": {},
+            "recordInstances": {},
+        },
+    }
+    if records is not None:
+        session["runMetadata"] = {
+            "trackSlotGeometry": {
+                "schema": 1,
+                "mode": mode,
+                "source": "resolved",
+                "records": records,
+            }
+        }
+    return session
+
+
+def _linear_geometry_record(
+    *,
+    feature_to_gc_gap: float = 0.0,
+    gc_to_skew_gap: float = 0.0,
+    feature_spacing: float = 0.0,
+    gc_spacing: float = 0.0,
+    skew_spacing: float = 0.0,
+) -> dict[str, object]:
+    local_top = -10.4
+    local_bottom = 10.4
+    feature_bottom = 12.5
+    gc_origin = feature_bottom + feature_to_gc_gap - local_top
+    gc_bottom = gc_origin + local_bottom
+    skew_origin = gc_bottom + gc_to_skew_gap - local_top
+    return {
+        "recordIndex": 0,
+        "recordId": "record",
+        "slots": [
+            {
+                "slotIndex": 0,
+                "slotId": "features",
+                "renderer": "features",
+                "side": "overlay",
+                "heightPx": 25.0,
+                "spacingAfterPx": feature_spacing,
+                "baseYOffsetPx": 0.0,
+                "resolvedOriginPx": 0.0,
+                "dataAvailable": True,
+                "paintBand": {"topPx": -12.0, "bottomPx": 12.0},
+                "reserveBand": {"topPx": -12.5, "bottomPx": 12.5},
+            },
+            {
+                "slotIndex": 1,
+                "slotId": "gc_content",
+                "renderer": "dinucleotide_content",
+                "side": "below",
+                "heightPx": 20.0,
+                "spacingAfterPx": gc_spacing,
+                "baseYOffsetPx": 18.0,
+                "resolvedOriginPx": gc_origin,
+                "dataAvailable": True,
+                "paintBand": {
+                    "topPx": gc_origin + local_top,
+                    "bottomPx": gc_origin + local_bottom,
+                },
+                "reserveBand": {
+                    "topPx": gc_origin + local_top,
+                    "bottomPx": gc_origin + local_bottom,
+                },
+            },
+            {
+                "slotIndex": 2,
+                "slotId": "gc_skew",
+                "renderer": "dinucleotide_skew",
+                "side": "below",
+                "heightPx": 20.0,
+                "spacingAfterPx": skew_spacing,
+                "baseYOffsetPx": 36.0,
+                "resolvedOriginPx": skew_origin,
+                "dataAvailable": True,
+                "paintBand": {
+                    "topPx": skew_origin + local_top,
+                    "bottomPx": skew_origin + local_bottom,
+                },
+                "reserveBand": {
+                    "topPx": skew_origin + local_top,
+                    "bottomPx": skew_origin + local_bottom,
+                },
+            },
+        ],
+    }
+
+
+def test_staged_gallery_validator_requires_fresh_track_geometry(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "missing-geometry.gbdraw-session.json"
+    session = _staged_geometry_session(mode="linear", records=None)
+
+    with pytest.raises(ValueError, match="no resolved track-slot run metadata"):
+        _validate_staged_gallery_session(
+            session_path,
+            session,
+            require_track_geometry=True,
+        )
+
+
+def test_staged_gallery_validator_rejects_circular_feature_lane_regression(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "circular-geometry.gbdraw-session.json"
+    tracks = {
+        "circularTrackSlots": [
+            "features:features@lane_direction=split",
+        ],
+        "circularTrackAxisIndex": 0,
+    }
+
+    valid_record = {
+        "recordIndex": 0,
+        "recordId": "record",
+        "axisRadiusPx": 100.0,
+        "slots": [
+            {
+                "slotIndex": 0,
+                "slotId": "features",
+                "renderer": "features",
+                "side": "overlay",
+                "widthPx": 20.0,
+                "radiusFactor": 1.0,
+            }
+        ],
+    }
+    _validate_staged_gallery_session(
+        session_path,
+        _staged_geometry_session(
+            mode="circular",
+            records=[valid_record],
+            tracks=tracks,
+        ),
+        require_track_geometry=True,
+    )
+
+    inside_record = {
+        **valid_record,
+        "slots": [
+            {
+                **valid_record["slots"][0],
+                "radiusFactor": 0.85,
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="circular Feature lane geometry"):
+        _validate_staged_gallery_session(
+            session_path,
+            _staged_geometry_session(
+                mode="circular",
+                records=[inside_record],
+                tracks=tracks,
+            ),
+            require_track_geometry=True,
+        )
+
+
+def test_staged_gallery_validator_rejects_linear_spacing_regression(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "linear-geometry.gbdraw-session.json"
+    _validate_staged_gallery_session(
+        session_path,
+        _staged_geometry_session(
+            mode="linear",
+            records=[_linear_geometry_record()],
+        ),
+        require_track_geometry=True,
+    )
+
+    for corrupt_record in (
+        _linear_geometry_record(feature_to_gc_gap=23.6),
+        _linear_geometry_record(gc_to_skew_gap=12.0),
+    ):
+        with pytest.raises(ValueError, match="default adjacent reserve gap"):
+            _validate_staged_gallery_session(
+                session_path,
+                _staged_geometry_session(
+                    mode="linear",
+                    records=[corrupt_record],
+                ),
+                require_track_geometry=True,
+            )
+
+    corrupt_metadata = _linear_geometry_record(
+        feature_to_gc_gap=23.6,
+        gc_to_skew_gap=12.0,
+    )
+    corrupt_metadata["slots"][0]["spacingAfterPx"] = 23.6
+    corrupt_metadata["slots"][1]["spacingAfterPx"] = 12.0
+    with pytest.raises(ValueError, match="default spacing metadata"):
+        _validate_staged_gallery_session(
+            session_path,
+            _staged_geometry_session(
+                mode="linear",
+                records=[corrupt_metadata],
+            ),
+            require_track_geometry=True,
+        )
+
+
+def test_staged_gallery_validator_skips_empty_feature_before_numeric_tracks(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "linear-featureless-geometry.gbdraw-session.json"
+    valid_record = _linear_geometry_record(feature_to_gc_gap=9.0)
+    feature = valid_record["slots"][0]
+    assert isinstance(feature, dict)
+    feature.update(
+        {
+            "dataAvailable": False,
+            "paintBand": None,
+            "reserveBand": {"topPx": 0.0, "bottomPx": 0.0},
+        }
+    )
+
+    _validate_staged_gallery_session(
+        session_path,
+        _staged_geometry_session(
+            mode="linear",
+            records=[valid_record],
+        ),
+        require_track_geometry=True,
+    )
+
+    invalid_record = _linear_geometry_record(
+        feature_to_gc_gap=9.0,
+        gc_to_skew_gap=12.0,
+    )
+    invalid_feature = invalid_record["slots"][0]
+    assert isinstance(invalid_feature, dict)
+    invalid_feature.update(feature)
+    with pytest.raises(ValueError, match="default adjacent reserve gap"):
+        _validate_staged_gallery_session(
+            session_path,
+            _staged_geometry_session(
+                mode="linear",
+                records=[invalid_record],
+            ),
+            require_track_geometry=True,
+        )
+
+
+def test_staged_gallery_validator_allows_custom_extra_spacing(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "linear-custom-geometry.gbdraw-session.json"
+    _validate_staged_gallery_session(
+        session_path,
+        _staged_geometry_session(
+            mode="linear",
+            records=[
+                _linear_geometry_record(
+                    feature_to_gc_gap=10.0,
+                    gc_to_skew_gap=8.0,
+                    feature_spacing=4.0,
+                    gc_spacing=4.0,
+                )
+            ],
+            tracks={"linearTrackSlots": []},
+        ),
+        require_track_geometry=True,
+    )
+
+    with pytest.raises(ValueError, match="overlap or violate declared spacing"):
+        _validate_staged_gallery_session(
+            session_path,
+            _staged_geometry_session(
+                mode="linear",
+                records=[
+                    _linear_geometry_record(
+                        gc_to_skew_gap=2.0,
+                        feature_spacing=4.0,
+                        gc_spacing=4.0,
+                    )
+                ],
+                tracks={"linearTrackSlots": []},
+            ),
+            require_track_geometry=True,
+        )
+
+
+def test_refresh_records_resolved_track_geometry(
+    tmp_path: Path,
+) -> None:
+    record = SeqRecord(
+        Seq("ATGCGCAT"),
+        id="record",
+        annotations={"molecule_type": "DNA"},
+    )
+    source = tmp_path / "source.gbdraw-session.json"
+    destination = tmp_path / "refreshed.gbdraw-session.json"
+    save_session_document(
+        source,
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+        ),
+    )
+
+    _refresh_one_session(source, destination_path=destination)
+
+    refreshed = load_session(destination)
+    geometry = refreshed["runMetadata"]["trackSlotGeometry"]
+    assert geometry["schema"] == 1
+    assert geometry["mode"] == "circular"
+    assert geometry["source"] == "resolved"
+    assert geometry["records"][0]["axisRadiusPx"] > 0
 
 
 def test_staged_gallery_validator_requires_current_artifact_schemas(
@@ -428,6 +801,46 @@ def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
     assert "_write_gallery_svg(example, session, source)" in source
     assert 'entry["tutorial"] = f"./tutorials/{example.id}.json"' in source
     assert 'entry["tutorialStatus"] = "ready"' in source
+
+
+def test_gallery_result_sync_updates_track_geometry_result_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    example = EXAMPLES[0]
+    session = {
+        "title": "out",
+        "results": [{"name": "out", "content": "<svg id='old'/>"}],
+        "runMetadata": {
+            "trackSlotGeometry": {
+                "records": [
+                    {"resultIndex": 0, "resultName": "out"},
+                    {"resultIndex": 1, "resultName": "other"},
+                ]
+            }
+        },
+    }
+    writes: list[Path] = []
+    monkeypatch.setattr(
+        gallery_assets_module,
+        "write_session_json",
+        lambda path, _payload: writes.append(path),
+    )
+
+    gallery_assets_module._sync_session_result_svg(
+        example,
+        session,
+        "<svg id='fresh'/>",
+    )
+
+    assert session["title"] == example.id
+    assert session["results"][0] == {
+        "name": example.id,
+        "content": "<svg id='fresh'/>",
+    }
+    records = session["runMetadata"]["trackSlotGeometry"]["records"]
+    assert records[0]["resultName"] == example.id
+    assert records[1]["resultName"] == "other"
+    assert writes == [example.session_path]
 
 
 def test_gallery_source_refresh_replaces_existing_svg_from_session(

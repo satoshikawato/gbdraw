@@ -177,6 +177,10 @@ assert.ok(hmmtOptions.tracks.circularTrackSlots.some((slot) => (
   slot.includes('legend_label=AT skew')
 )));
 assert.match(
+  hmmtOptions.tracks.circularTrackSlots.find((slot) => slot.startsWith('features:features')),
+  /(?:@|,)lane_direction=split(?:,|$)/
+);
+assert.match(
   resourceText(promotedHmmt, hmmtOptions.colors.defaultColorsFile),
   /CDS\t#84b9ec/
 );
